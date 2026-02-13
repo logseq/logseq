@@ -14,6 +14,8 @@ Related: Relates to `docs/agent-guide/012-logseq-cli-graph-storage.md`.
 
 Related: Relates to `docs/agent-guide/030-logseq-cli-db-graph-default-dir-locking.md`.
 
+Related: Owner-aware lifecycle follow-up is documented in `docs/agent-guide/034-db-worker-node-owner-process-management.md`.
+
 ## Problem statement
 
 The current desktop app uses an OPFS-backed SQLite worker in the renderer and periodically exports to disk through `persist-db/run-export-periodically!`.

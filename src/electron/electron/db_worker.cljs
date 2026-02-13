@@ -60,6 +60,10 @@
    :runtime-ready? (or runtime-ready? (fn [_runtime] (p/resolved true)))
    :state (atom (initial-state))})
 
+(defn- owned-runtime?
+  [runtime]
+  (not= false (:owned? runtime)))
+
 (defn ensure-window-stopped!
   [{:keys [state stop-daemon!]} window-id]
   (let [runtime* (atom nil)]
@@ -69,8 +73,10 @@
                (reset! runtime* runtime)
                next-state)))
     (if-let [runtime @runtime*]
-      (p/let [_ (stop-daemon! runtime)]
-        true)
+      (if (owned-runtime? runtime)
+        (p/let [_ (stop-daemon! runtime)]
+          true)
+        (p/resolved true))
       (p/resolved false))))
 
 (defn ensure-started!
@@ -88,8 +94,9 @@
                                (update-in [:repos repo :windows] (fnil conj #{}) window-id)
                                (assoc-in [:window->repo window-id] repo))))
             runtime)
-          (p/let [_ (-> (stop-daemon! runtime)
-                        (p/catch (fn [_] nil)))
+          (p/let [_ (when (owned-runtime? runtime)
+                      (-> (stop-daemon! runtime)
+                          (p/catch (fn [_] nil))))
                   runtime' (start-daemon! repo)]
             (swap! state
                    (fn [current]
@@ -139,15 +146,19 @@
                  (reset! runtime* runtime)
                  next-state)))
       (if-let [runtime @runtime*]
-        (p/let [_ (stop-daemon! runtime)]
-          true)
+        (if (owned-runtime? runtime)
+          (p/let [_ (stop-daemon! runtime)]
+            true)
+          (p/resolved true))
         (p/resolved false)))))
 
 (defn stop-all!
   [{:keys [state stop-daemon!]}]
   (let [entries (vals (:repos (ensure-state @state)))]
     (-> (p/all (map (fn [{:keys [runtime]}]
-                      (stop-daemon! runtime))
+                      (if (owned-runtime? runtime)
+                        (stop-daemon! runtime)
+                        (p/resolved true)))
                     entries))
         (p/then (fn [_]
                   (reset! state (initial-state))
@@ -155,14 +166,15 @@
 
 (defn- start-managed-daemon!
   [repo]
-  (p/let [config (cli-server/ensure-server! {} repo)]
+  (p/let [config (cli-server/ensure-server! {:owner-source :electron} repo)]
     {:repo repo
      :base-url (:base-url config)
-     :auth-token nil}))
+     :auth-token nil
+     :owned? (:owned? config)}))
 
 (defn- stop-managed-daemon!
   [{:keys [repo]}]
-  (p/let [result (cli-server/stop-server! {} repo)]
+  (p/let [result (cli-server/stop-server! {:owner-source :electron} repo)]
     (:ok? result)))
 
 (defonce manager
