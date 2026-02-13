@@ -177,6 +177,36 @@
                   "Host: 127.0.0.1  Port: 1234")
              result)))))
 
+(deftest test-human-output-server-list-includes-owner
+  (testing "server list shows owner column and value"
+    (let [result (format/format-result {:status :ok
+                                        :command :server-list
+                                        :data {:servers [{:repo "demo-repo"
+                                                          :status :ready
+                                                          :host "127.0.0.1"
+                                                          :port 1234
+                                                          :pid 9876
+                                                          :owner-source :cli}]}}
+                                       {:output-format nil})]
+      (is (= (str "REPO       STATUS  HOST       PORT  PID   OWNER\n"
+                  "demo-repo  :ready  127.0.0.1  1234  9876  :cli\n"
+                  "Count: 1")
+             result))))
+
+  (testing "server list falls back to placeholder when owner is missing"
+    (let [result (format/format-result {:status :ok
+                                        :command :server-list
+                                        :data {:servers [{:repo "demo-repo"
+                                                          :status :ready
+                                                          :host "127.0.0.1"
+                                                          :port 1234
+                                                          :pid 9876}]}}
+                                       {:output-format nil})]
+      (is (= (str "REPO       STATUS  HOST       PORT  PID   OWNER\n"
+                  "demo-repo  :ready  127.0.0.1  1234  9876  -\n"
+                  "Count: 1")
+             result)))))
+
 (deftest test-human-output-show
   (testing "show renders text payloads directly"
     (let [result (format/format-result {:status :ok
@@ -335,6 +365,26 @@
                                        {:output-format nil})]
       (is (= (str "Error (missing-graph): graph name is required\n"
                   "Hint: Use --repo <name>")
+             result))))
+
+  (testing "owner mismatch includes ownership hint"
+    (let [result (format/format-result {:status :error
+                                        :command :server-stop
+                                        :error {:code :server-owned-by-other
+                                                :message "server is owned by another process"}}
+                                       {:output-format nil})]
+      (is (= (str "Error (server-owned-by-other): server is owned by another process\n"
+                  "Hint: Retry from the process owner that started the server")
+             result))))
+
+  (testing "orphan timeout includes recovery hint"
+    (let [result (format/format-result {:status :error
+                                        :command :server-start
+                                        :error {:code :server-start-timeout-orphan
+                                                :message "db-worker-node failed to create lock"}}
+                                       {:output-format nil})]
+      (is (= (str "Error (server-start-timeout-orphan): db-worker-node failed to create lock\n"
+                  "Hint: Check and stop lingering db-worker-node processes, then retry")
              result)))))
 
 (deftest test-human-output-doctor
