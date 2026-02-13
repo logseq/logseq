@@ -55,11 +55,30 @@
           "EPERM" :no-permission
           :error)))))
 
+(def ^:private valid-owner-sources
+  #{:cli :electron :unknown})
+
+(defn normalize-owner-source
+  [owner-source]
+  (let [owner-source (cond
+                       (keyword? owner-source) owner-source
+                       (string? owner-source) (keyword owner-source)
+                       :else :unknown)]
+    (if (contains? valid-owner-sources owner-source)
+      owner-source
+      :unknown)))
+
+(defn- normalize-lock
+  [lock]
+  (when lock
+    (assoc lock :owner-source (normalize-owner-source (:owner-source lock)))))
+
 (defn read-lock
   [path]
   (when (and (seq path) (fs/existsSync path))
-    (js->clj (js/JSON.parse (.toString (fs/readFileSync path) "utf8"))
-             :keywordize-keys true)))
+    (normalize-lock
+     (js->clj (js/JSON.parse (.toString (fs/readFileSync path) "utf8"))
+              :keywordize-keys true))))
 
 (defn remove-lock!
   [path]
@@ -67,7 +86,7 @@
     (fs/unlinkSync path)))
 
 (defn create-lock!
-  [{:keys [data-dir repo host port]}]
+  [{:keys [data-dir repo host port owner-source]}]
   (p/create
    (fn [resolve reject]
      (try
@@ -85,6 +104,7 @@
                      :lock-id (str (random-uuid))
                      :host host
                      :port port
+                     :owner-source (normalize-owner-source owner-source)
                      :startedAt (.toISOString (js/Date.))}]
            (try
              (fs/writeFileSync fd (js/JSON.stringify (clj->js lock)))
@@ -106,8 +126,9 @@
                          (assoc :repo (:repo existing))
                          (assoc :pid (:pid existing))
                          (assoc :lock-id (or (:lock-id existing) (:lock-id lock)))
+                         (assoc :owner-source (normalize-owner-source (:owner-source existing)))
                          (assoc :startedAt (:startedAt existing)))
-                     lock)]
+                     (update lock :owner-source normalize-owner-source))]
          (fs/writeFileSync path (js/JSON.stringify (clj->js lock')))
          (resolve lock'))
        (catch :default e
@@ -159,12 +180,13 @@
       lock)))
 
 (defn ensure-lock!
-  [{:keys [data-dir repo host port]}]
+  [{:keys [data-dir repo host port owner-source]}]
   (let [data-dir (resolve-data-dir data-dir)
         path (lock-path data-dir repo)]
     (p/let [lock (create-lock! {:data-dir data-dir
                                 :repo repo
                                 :host host
-                                :port port})]
+                                :port port
+                                :owner-source owner-source})]
       {:path path
        :lock lock})))

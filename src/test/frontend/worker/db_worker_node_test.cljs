@@ -211,6 +211,46 @@
     (is (nil? (:auth-token result)))
     (is (= "/tmp/db-worker" (:data-dir result)))))
 
+(deftest db-worker-node-owner-source-cli-is-written-into-lock
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-owner-source-cli")
+               repo (str "logseq_db_owner_cli_" (subs (str (random-uuid)) 0 8))
+               lock-file (lock-path data-dir repo)]
+           (-> (p/let [{:keys [stop!]}
+                       (db-worker-node/start-daemon! {:data-dir data-dir
+                                                      :repo repo
+                                                      :owner-source :cli})
+                       _ (reset! daemon {:stop! stop!})
+                       lock-json (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))]
+                 (is (= "cli" (gobj/get lock-json "owner-source"))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
+
+(deftest db-worker-node-owner-source-electron-is-written-into-lock
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-owner-source-electron")
+               repo (str "logseq_db_owner_electron_" (subs (str (random-uuid)) 0 8))
+               lock-file (lock-path data-dir repo)]
+           (-> (p/let [{:keys [stop!]}
+                       (db-worker-node/start-daemon! {:data-dir data-dir
+                                                      :repo repo
+                                                      :owner-source :electron})
+                       _ (reset! daemon {:stop! stop!})
+                       lock-json (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))]
+                 (is (= "electron" (gobj/get lock-json "owner-source"))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
+
 (deftest db-worker-node-handle-event-encodes-sse-json-payload
   (let [handle-event! #'db-worker-node/handle-event!
         *sse-clients @#'db-worker-node/*sse-clients

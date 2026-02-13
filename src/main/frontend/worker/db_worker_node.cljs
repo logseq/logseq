@@ -49,10 +49,15 @@
         (case flag
           "--data-dir" (recur remaining (assoc opts :data-dir value))
           "--repo" (recur remaining (assoc opts :repo value))
+          "--owner-source" (recur remaining (assoc opts :owner-source value))
           "--rtc-ws-url" (recur remaining (assoc opts :rtc-ws-url value))
           "--log-level" (recur remaining (assoc opts :log-level value))
           "--help" (recur remaining (assoc opts :help? true))
           (recur remaining opts))))))
+
+(defn- normalize-owner-source
+  [owner-source]
+  (db-lock/normalize-owner-source owner-source))
 
 (defn- encode-event-payload
   [payload]
@@ -339,9 +344,10 @@
     file-path))
 
 (defn start-daemon!
-  [{:keys [data-dir repo rtc-ws-url log-level]}]
+  [{:keys [data-dir repo rtc-ws-url log-level owner-source]}]
   (let [host "127.0.0.1"
-        port 0]
+        port 0
+        owner-source (normalize-owner-source owner-source)]
     (if-not (seq repo)
       (p/rejected (ex-info "repo is required" {:code :missing-repo}))
       (try
@@ -363,7 +369,8 @@
                       {:keys [path lock]} (db-lock/ensure-lock! {:data-dir data-dir
                                                                  :repo repo
                                                                  :host host
-                                                                 :port port})
+                                                                 :port port
+                                                                 :owner-source owner-source})
                       _ (reset! *lock-info {:path path :lock lock})
                       _ (let [method-kw :thread-api/create-or-open-db
                               method-str (normalize-method-str method-kw)]
@@ -415,7 +422,7 @@
 
 (defn main
   []
-  (let [{:keys [data-dir repo rtc-ws-url help?] :as opts}
+  (let [{:keys [data-dir repo rtc-ws-url help? owner-source] :as opts}
         (parse-args (.-argv js/process))]
     (when help?
       (show-help!)
@@ -426,6 +433,7 @@
     (-> (p/let [{:keys [stop!] :as daemon}
                 (start-daemon! {:data-dir data-dir
                                 :repo repo
+                                :owner-source owner-source
                                 :rtc-ws-url rtc-ws-url
                                 :log-level (:log-level opts)})]
           (log/info :db-worker-node-ready {:host (:host daemon) :port (:port daemon)})

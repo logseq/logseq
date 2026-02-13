@@ -45,3 +45,46 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))
                      (done)))))))
+
+(deftest parse-process-args-reads-db-worker-flags
+  (let [command "node /tmp/db-worker-node.js --repo logseq_db_demo --data-dir /tmp/logseq/graphs --owner-source electron"
+        parsed (daemon/parse-process-args command)]
+    (is (= "logseq_db_demo" (:repo parsed)))
+    (is (= (node-path/resolve "/tmp/logseq/graphs") (:data-dir parsed)))
+    (is (= :electron (:owner-source parsed)))))
+
+(deftest find-orphan-processes-matches-repo-and-data-dir
+  (let [original-list daemon/list-db-worker-processes
+        target-dir (node-path/resolve "/tmp/logseq/graphs")
+        processes [{:pid 101 :repo "logseq_db_demo" :data-dir target-dir :owner-source :cli}
+                   {:pid 102 :repo "logseq_db_demo" :data-dir (node-path/resolve "/tmp/other") :owner-source :cli}
+                   {:pid 103 :repo "logseq_db_other" :data-dir target-dir :owner-source :electron}]]
+    (set! daemon/list-db-worker-processes (fn [] processes))
+    (try
+      (let [orphans (daemon/find-orphan-processes {:repo "logseq_db_demo"
+                                                   :data-dir "/tmp/logseq/graphs"})]
+        (is (= [101] (mapv :pid orphans))))
+      (finally
+        (set! daemon/list-db-worker-processes original-list)))))
+
+(deftest cleanup-orphan-processes-kills-matched-pids
+  (let [original-find daemon/find-orphan-processes
+        original-kill (.-kill js/process)
+        kill-calls (atom [])]
+    (set! daemon/find-orphan-processes
+          (fn [_]
+            [{:pid 90001} {:pid 90002}]))
+    (set! (.-kill js/process)
+          (fn [pid signal]
+            (swap! kill-calls conj [pid signal])
+            true))
+    (try
+      (let [{:keys [killed-pids]} (daemon/cleanup-orphan-processes! {:repo "logseq_db_demo"
+                                                                      :data-dir "/tmp/logseq/graphs"})]
+        (is (= [90001 90002] killed-pids))
+        (is (= [[90001 "SIGTERM"]
+                [90002 "SIGTERM"]]
+               @kill-calls)))
+      (finally
+        (set! daemon/find-orphan-processes original-find)
+        (set! (.-kill js/process) original-kill)))))
