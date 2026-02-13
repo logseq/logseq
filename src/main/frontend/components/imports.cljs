@@ -375,7 +375,8 @@
                    :set-ui-state state/set-state!
                    :<read-file (fn <read-file [file] (.text (:file-object file)))
                    :<get-file-stat (fn <get-file-stat [path]
-                                     (when (util/electron?)
+                                     ;; Ignore relative paths as we can't get their stats
+                                     (when (and (util/electron?) (path/absolute? path))
                                        (ipc/ipc :stat path)))
                    ;; config file options
                    :default-config config/config-default-content
