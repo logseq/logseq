@@ -6,35 +6,17 @@
             [clojure.string :as string]
             [logseq.cli.common.graph :as cli-common-graph]
             [logseq.cli.spec :as cli-spec]
-            [logseq.cli.style :as style]
             [logseq.cli.text-util :as cli-text-util]
             [nbb.error]
             [promesa.core :as p]))
 
-(defn- escape-regex
-  [value]
-  (string/replace value #"[\\.^$|?*+()\\[\\]{}]" "\\\\$&"))
-
-(defn- bold-command-names
-  [value commands]
-  (reduce (fn [acc command]
-            (let [pattern (re-pattern (str "(?m)^(\\s*)" (escape-regex command) "(\\s+)"))]
-              (string/replace acc pattern (fn [[_ prefix spacing]]
-                                            (str prefix (style/bold command) spacing)))))
-          value
-          commands))
-
 (defn- format-commands [{:keys [table]}]
-  (let [entries (->> table
-                     (filter (comp seq :cmds)))
-        rows (mapv (fn [{:keys [cmds desc spec]}]
-                     (cond-> [(str (string/join " " cmds)
-                                   (when spec " [options]"))]
-                       desc (conj desc)))
-                   entries)
-        commands (map (comp #(string/join " " %) :cmds) entries)]
-    (-> (cli/format-table {:rows rows})
-        (bold-command-names commands))))
+  (let [table (mapv (fn [{:keys [cmds desc spec]}]
+                      (cond-> [(str (string/join " " cmds)
+                                    (when spec " [options]"))]
+                        desc (conj desc)))
+                    (filter (comp seq :cmds) table))]
+    (cli/format-table {:rows table})))
 
 (def ^:private default-spec
   {:version {:coerce :boolean
@@ -43,10 +25,9 @@
 
 (declare table)
 (defn- print-general-help [_m]
-  (println (str "Usage: logseq [command] [options]\n\n"
-                (style/bold "Options") ":\n"
-                (style/bold-options (cli/format-opts {:spec default-spec}))))
-  (println (str "\n" (style/bold "Commands") ":\n" (format-commands {:table table}))))
+  (println (str "Usage: logseq [command] [options]\n\nOptions:\n"
+                (cli/format-opts {:spec default-spec})))
+  (println (str "\nCommands:\n" (format-commands {:table table}))))
 
 (defn- default-command
   [{{:keys [version]} :opts :as m}]
@@ -64,11 +45,10 @@
                   (str " " (string/join " "
                                         (map #(str "[" (name %) "]") (:args->opts cmd-map)))))
                 (when (:spec cmd-map)
-                  (str " [options]\n\n" (style/bold "Options") ":\n"
-                       (style/bold-options (cli/format-opts {:spec (:spec cmd-map)}))))
+                  (str " [options]\n\nOptions:\n"
+                       (cli/format-opts {:spec (:spec cmd-map)})))
                 (when (:description cmd-map)
-                  (str "\n\n" (style/bold "Description") ":\n"
-                       (cli-text-util/wrap-text (:description cmd-map) 80))))))
+                  (str "\n\nDescription:\n" (cli-text-util/wrap-text (:description cmd-map) 80))))))
 
 (defn- help-command [{{:keys [command help]} :opts}]
   (if-let [cmd-map (and command (some #(when (= command (first (:cmds %))) %) table))]
@@ -76,7 +56,7 @@
     ;; handle help --help
     (if-let [cmd-map (and help (some #(when (= "help" (first (:cmds %))) %) table))]
       (print-command-help "help" cmd-map)
-      (println (style/bold "Command") (pr-str command) "does not exist"))))
+      (println "Command" (pr-str command) "does not exist"))))
 
 (defn- lazy-load-fn
   "Lazy load fn to speed up start time. After nbb requires ~30 namespaces, start time gets close to 1s.
@@ -129,7 +109,7 @@
     :args->opts [:args] :require [:args] :coerce {:args []}
     :spec cli-spec/append}
    {:cmds ["mcp-server"] :desc "Run a MCP server"
-    :description "Run a MCP server against a local graph if --repo is given or against the current in-app graph. For the in-app graph, the API server must be on in the app. By default the MCP server runs as a HTTP Streamable server. Use --stdio to run it as a stdio server."
+    :description "Run a MCP server against a local graph if --graph is given or against the current in-app graph. For the in-app graph, the API server must be on in the app. By default the MCP server runs as a HTTP Streamable server. Use --stdio to run it as a stdio server."
     :fn (lazy-load-fn 'logseq.cli.commands.mcp-server/start)
     :spec cli-spec/mcp-server}
    {:cmds ["validate"] :desc "Validate DB graph"
@@ -166,12 +146,9 @@
                                  (if (and (= :org.babashka/cli type')
                                           (= :require cause))
                                    (do
-                                     (println (style/bold-keywords
-                                               (str "Error: Command missing required "
-                                                    (if (get-in data [:spec option]) "option" "argument")
-                                                    " "
-                                                    (style/bold (pr-str (name option))))
-                                               ["command" "option" "argument"]))
+                                     (println "Error: Command missing required"
+                                              (if (get-in data [:spec option]) "option" "argument")
+                                              (pr-str (name option)))
                                      (when-let [cmd-m (some #(when (= {:spec (:spec %)
                                                                        :require (:require %)}
                                                                       (select-keys data [:spec :require])) %) table)]
