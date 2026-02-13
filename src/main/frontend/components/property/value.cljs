@@ -813,7 +813,7 @@
                           result)))
         options (map (fn [node]
                        (let [node (if (:value node)
-                                    (assoc (:value node) :block/title (:label node))
+                                    (assoc (into {} (:value node)) :block/title (:label node))
                                     node)
                              id (:db/id node)
                              [header label] (if (integer? id)
@@ -845,7 +845,7 @@
                                                                        title))]]]
                                                   [header label]))
                                               [nil (:block/title node)])]
-                         (assoc node
+                         (assoc (into {} node)
                                 :icon (cond
                                         (ldb/class? node) "hash"
                                         (ldb/property? node) "letter-p"
