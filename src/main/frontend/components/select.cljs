@@ -31,7 +31,7 @@
               (or (:icon item)
                   (let [label (if (string? (:label item)) (:label item) "")]
                     (cond
-                      (string/starts-with? label "+ New option:")
+                      (string/starts-with? label "New option:")
                       "plus"
                       (string/starts-with? label "New tag:")
                       "plus"
@@ -42,11 +42,11 @@
    :icon-variant-fn (fn [item]
                       ;; Use :create variant for "New option:" and "New tag:" items
                       (let [label (if (string? (:label item)) (:label item) "")]
-                        (if (or (string/starts-with? label "+ New option:")
+                        (if (or (string/starts-with? label "New option:")
                                 (string/starts-with? label "New tag:"))
                           :create
                           :default)))
-   :new-item-patterns ["+ New option:" "New tag:" "Convert"]
+   :new-item-patterns ["New option:" "New tag:" "Convert"]
    :show-breadcrumbs? true
    :breadcrumb-fn (fn [item] (:header item))
    :on-pointer-down util/stop-propagation
@@ -147,7 +147,7 @@
                                   search-result')
                          search-result')
         new-option {:value @*input
-                    :label (str "+ New option: " @*input)}
+                    :label (str "New option: " @*input)}
         search-result (if (and show-new-when-not-exact-match?
                                (not exact-match?)
                                (not (string/blank? @*input))
