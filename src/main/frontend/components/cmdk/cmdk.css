@@ -8,3 +8,11 @@
 .ls-dialog-cmdk {
   @apply p-0 w-auto !max-w-fit overflow-hidden;
 }
+
+.cp__cmdk-current-page-badge {
+  @apply inline-flex items-center rounded-full border text-xs font-medium leading-none;
+  padding: 2px 8px;
+  color: var(--lx-gray-11, var(--ls-secondary-text-color, rgba(0, 0, 0, 0.7)));
+  background: var(--lx-gray-04, var(--ls-tertiary-background-color, rgba(0, 0, 0, 0.08)));
+  border-color: var(--lx-gray-06, var(--ls-border-color, rgba(0, 0, 0, 0.12)));
+}

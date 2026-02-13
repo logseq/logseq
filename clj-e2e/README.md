@@ -6,7 +6,7 @@ e2e tests for Logseq app.
 
 Before running tests, ensure the following:
 * The app's js and css assets are built and located at ../public/.
-* Those assets are served on http://localhost:3002/ via `bb serve`.
+* Those assets are served on http://localhost:3002/ via `bb serve` (or use `bb serve --port <port>` / `bb serve -p <port>` to use a different port).
 
 Then, run the project's tests:
 
