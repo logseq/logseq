@@ -17,6 +17,9 @@ Desktop + CLI shared semantics:
 - Disk SQLite under `~/logseq/graphs` is the source of truth; OPFS periodic export is not part of the desktop primary write path.
 - If a daemon already exists for the graph, CLI reuses it via lock-file discovery instead of starting a second writer.
 - If lock ownership is invalid or stale, startup cleans stale lock state before retrying.
+- Lock metadata includes an `owner-source` value (`cli`, `electron`, `unknown`) and lifecycle actions enforce owner boundaries.
+- `server stop` and `server restart` are owner-aware: CLI can only stop/restart servers it owns (or legacy `unknown` ownership).
+- If lock is missing but a matching orphan `db-worker-node` process still exists for the same repo/data-dir, startup performs orphan cleanup before retrying.
 
 ## Run the CLI
 
@@ -78,6 +81,11 @@ Server commands:
 - `server stop --repo <name>` - stop db-worker-node for a graph
 - `server restart --repo <name>` - restart db-worker-node for a graph
 - `doctor` - run runtime diagnostics for `db-worker-node.js`, `data-dir` permissions, and running server readiness
+
+Server ownership behavior:
+- `server stop` and `server restart` can return `server-owned-by-other` if the daemon was started by another owner source.
+- `server start` can return `server-start-timeout-orphan` when lock creation times out and orphan matching processes are detected.
+- `server list` human output includes an `OWNER` column, and `server status` / `server list` include owner metadata in structured output (`--output json|edn`).
 
 Inspect and edit commands:
 - `list page [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list pages

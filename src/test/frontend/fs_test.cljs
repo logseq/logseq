@@ -1,5 +1,5 @@
 (ns frontend.fs-test
-  (:require [clojure.test :refer [is use-fixtures]]
+  (:require [cljs.test :refer [is use-fixtures]]
             [frontend.test.node-fixtures :as node-fixtures]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [frontend.test.node-helper :as test-node-helper]

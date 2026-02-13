@@ -93,6 +93,8 @@
     :missing-query "Use --query <edn>"
     :unknown-query "Use `logseq query list` to see available queries"
     :data-dir-permission "Check filesystem permissions or set LOGSEQ_CLI_DATA_DIR"
+    :server-owned-by-other "Retry from the process owner that started the server"
+    :server-start-timeout-orphan "Check and stop lingering db-worker-node processes, then retry"
     nil))
 
 (defn- format-error
@@ -176,13 +178,14 @@
 (defn- format-server-list
   [servers]
   (format-counted-table
-   ["REPO" "STATUS" "HOST" "PORT" "PID"]
+   ["REPO" "STATUS" "HOST" "PORT" "PID" "OWNER"]
    (mapv (fn [server]
            [(:repo server)
             (:status server)
             (:host server)
             (:port server)
-            (:pid server)])
+            (:pid server)
+            (:owner-source server)])
          (or servers []))))
 
 (defn- format-query-results

@@ -139,3 +139,19 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))
+
+(deftest ensure-window-stopped-does-not-stop-external-runtime
+  (async done
+    (let [stop-calls (atom [])
+          manager (db-worker/create-manager
+                   {:start-daemon! (fn [repo]
+                                     (p/resolved (assoc (runtime repo) :owned? false)))
+                    :stop-daemon! (fn [rt]
+                                    (swap! stop-calls conj (:repo rt))
+                                    (p/resolved true))})]
+      (-> (p/let [_ (db-worker/ensure-started! manager "graph-a" :window-1)
+                  _ (db-worker/ensure-window-stopped! manager :window-1)]
+            (is (empty? @stop-calls)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))

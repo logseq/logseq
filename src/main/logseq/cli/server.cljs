@@ -61,6 +61,33 @@
   [{:keys [host port]}]
   (str "http://" host ":" port))
 
+(defn- normalize-owner-source
+  [owner-source]
+  (daemon/normalize-owner-source owner-source))
+
+(defn- requester-owner-source
+  [config]
+  (normalize-owner-source (or (:owner-source config) :cli)))
+
+(defn- lock-owner-source
+  [lock]
+  (normalize-owner-source (:owner-source lock)))
+
+(defn- owner-manageable?
+  [requester-owner lock-owner]
+  (or (= requester-owner lock-owner)
+      (and (= requester-owner :cli)
+           (= lock-owner :unknown))))
+
+(defn- owner-mismatch-error
+  [repo requester-owner lock-owner]
+  {:ok? false
+   :error {:code :server-owned-by-other
+           :message "server is owned by another process"
+           :repo repo
+           :owner-source lock-owner
+           :requester-owner-source requester-owner}})
+
 (defn- pid-status
   [pid]
   (daemon/pid-status pid))
@@ -98,31 +125,64 @@
   (daemon/ready? lock))
 
 (defn- spawn-server!
-  [{:keys [repo data-dir]}]
+  [{:keys [repo data-dir owner-source]}]
   (daemon/spawn-server! {:script (db-worker-script-path)
                          :repo repo
-                         :data-dir data-dir}))
+                         :data-dir data-dir
+                         :owner-source owner-source}))
+
+(defn- rewrite-lock-owner-source!
+  [path lock owner-source]
+  (let [lock' (assoc lock :owner-source (normalize-owner-source owner-source))]
+    (fs/writeFileSync path (js/JSON.stringify (clj->js lock')))
+    lock'))
 
 (defn- ensure-server-started!
   [config repo]
   (let [data-dir (resolve-data-dir config)
-        path (lock-path data-dir repo)]
+        path (lock-path data-dir repo)
+        requester-owner (requester-owner-source config)]
     (ensure-repo-dir! data-dir repo)
     (p/let [existing (read-lock path)
             _ (cleanup-stale-lock! path existing)
             _ (when (not (fs/existsSync path))
-                (spawn-server! {:repo repo :data-dir data-dir})
-                (wait-for-lock path))
-            lock (read-lock path)]
+                (daemon/cleanup-orphan-processes! {:repo repo
+                                                   :data-dir data-dir})
+                (spawn-server! {:repo repo
+                                :data-dir data-dir
+                                :owner-source requester-owner})
+                (-> (wait-for-lock path)
+                    (p/catch (fn [e]
+                               (if (= :timeout (:code (ex-data e)))
+                                 (let [orphans (daemon/find-orphan-processes {:repo repo
+                                                                              :data-dir data-dir})
+                                       pids (mapv :pid orphans)]
+                                   (throw (ex-info "db-worker-node failed to create lock"
+                                                   {:code :server-start-timeout-orphan
+                                                    :repo repo
+                                                    :pids pids})))
+                                 (throw e))))))
+            lock (read-lock path)
+            lock (if (and lock
+                          (= :cli requester-owner)
+                          (= :unknown (lock-owner-source lock)))
+                   (rewrite-lock-owner-source! path lock :cli)
+                   lock)]
       (when-not lock
         (throw (ex-info "db-worker-node failed to start" {:code :server-start-failed})))
       (p/let [_ (wait-for-ready lock)]
-        lock))))
+        (let [lock-owner (lock-owner-source lock)]
+          (assoc lock
+                 :owner-source lock-owner
+                 :owned? (owner-manageable? requester-owner lock-owner)))))))
 
 (defn ensure-server!
   [config repo]
   (p/let [lock (ensure-server-started! config repo)]
-    (assoc config :base-url (base-url lock))))
+    (assoc config
+           :base-url (base-url lock)
+           :owner-source (:owner-source lock)
+           :owned? (:owned? lock))))
 
 (defn- shutdown!
   [{:keys [host port]}]
@@ -136,55 +196,65 @@
 
 (defn stop-server!
   [config repo]
-  (let [data-dir (resolve-data-dir config)
+  (let [requester-owner (requester-owner-source config)
+        data-dir (resolve-data-dir config)
         path (lock-path data-dir repo)
         lock (read-lock path)]
     (if-not lock
       (p/resolved {:ok? false
                    :error {:code :server-not-found
                            :message "server is not running"}})
-      (-> (p/let [_ (shutdown! lock)]
+      (let [lock-owner (lock-owner-source lock)]
+        (if-not (owner-manageable? requester-owner lock-owner)
+          (p/resolved (owner-mismatch-error repo requester-owner lock-owner))
+          (-> (p/let [_ (shutdown! lock)]
             (wait-for (fn []
                         (p/resolved (not (fs/existsSync path))))
                       {:timeout-ms 5000
                        :interval-ms 200})
             {:ok? true
              :data {:repo repo}})
-          (p/catch (fn [_]
-                     (when (and (= :alive (pid-status (:pid lock)))
-                                (not= (:pid lock) (.-pid js/process)))
-                       (try
-                         (.kill js/process (:pid lock) "SIGTERM")
-                         (catch :default e
-                           (log/warn :cli-server-stop-sigterm-failed e))))
-                     (when (= :not-found (pid-status (:pid lock)))
-                       (remove-lock! path))
-                     (if (fs/existsSync path)
-                       {:ok? false
-                        :error {:code :server-stop-timeout
-                                :message "timed out stopping server"}}
-                       {:ok? true
-                        :data {:repo repo}})))))))
+              (p/catch (fn [_]
+                         (when (and (= :alive (pid-status (:pid lock)))
+                                    (not= (:pid lock) (.-pid js/process)))
+                           (try
+                             (.kill js/process (:pid lock) "SIGTERM")
+                             (catch :default e
+                               (log/warn :cli-server-stop-sigterm-failed e))))
+                         (when (= :not-found (pid-status (:pid lock)))
+                           (remove-lock! path))
+                         (if (fs/existsSync path)
+                           {:ok? false
+                            :error {:code :server-stop-timeout
+                                    :message "timed out stopping server"}}
+                           {:ok? true
+                            :data {:repo repo}})))))))))
 
 (defn start-server!
   [config repo]
-  (-> (p/let [_ (ensure-server-started! config repo)]
+  (-> (p/let [lock (ensure-server-started! config repo)]
         {:ok? true
-         :data {:repo repo}})
+         :data {:repo repo
+                :owner-source (:owner-source lock)
+                :owned? (:owned? lock)}})
       (p/catch (fn [e]
                  (let [data (ex-data e)
                        code (or (:code data) :server-start-failed)]
                    {:ok? false
                     :error (cond-> {:code code
                                     :message (or (.-message e) "failed to start server")}
-                             (:lock data) (assoc :lock (:lock data)))})))))
+                             (:lock data) (assoc :lock (:lock data))
+                             (:pids data) (assoc :pids (:pids data))
+                             (:repo data) (assoc :repo (:repo data)))})))))
 
 (defn restart-server!
   [config repo]
-  (-> (p/let [_ (stop-server! config repo)]
-        (start-server! config repo))
-      (p/catch (fn [_]
-                 (start-server! config repo)))))
+  (p/let [stop-result (stop-server! config repo)]
+    (if (:ok? stop-result)
+      (start-server! config repo)
+      (if (= :server-not-found (get-in stop-result [:error :code]))
+        (start-server! config repo)
+        stop-result))))
 
 (defn server-status
   [config repo]
@@ -202,6 +272,7 @@
                 :host (:host lock)
                 :port (:port lock)
                 :pid (:pid lock)
+                :owner-source (lock-owner-source lock)
                 :started-at (:startedAt lock)}}))))
 
 (defn list-servers
@@ -222,6 +293,7 @@
           :host (:host lock)
           :port (:port lock)
           :pid (:pid lock)
+          :owner-source (lock-owner-source lock)
           :status (if ready :ready :starting)})))))
 
 (defn list-graphs
