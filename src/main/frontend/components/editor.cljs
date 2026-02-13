@@ -263,7 +263,26 @@
            :on-enter (fn []
                        (page-handler/page-not-exists-handler input))
            :item-renderer-config
-           {:icon-fn (fn [block]
+           {:rich-icon-fn (fn [block]
+                            ;; Try direct icon from block first (search results come hydrated
+                            ;; from the worker DB and may not be findable via db/entity)
+                            (or (let [icon (:logseq.property/icon block)]
+                                  (when (and (map? icon) (not= :none (:type icon)))
+                                    icon))
+                                ;; Fallback: entity lookup for inheritance via get-node-icon
+                                (when-let [id (:block/uuid block)]
+                                  (when-let [e (db/entity [:block/uuid id])]
+                                    (or (let [icon (:logseq.property/icon e)]
+                                          (when (and (map? icon) (not= :none (:type icon)))
+                                            icon))
+                                        (try
+                                          (let [node-icon (icon-component/get-node-icon e)]
+                                            (when (and (map? node-icon)
+                                                       (not (and (= :image (:type node-icon))
+                                                                 (get-in node-icon [:data :empty?]))))
+                                              node-icon))
+                                          (catch :default _ nil)))))))
+            :icon-fn (fn [block]
                        (let [block' (if-let [id (:block/uuid block)]
                                       (if-let [e (db/entity [:block/uuid id])]
                                         (assoc e

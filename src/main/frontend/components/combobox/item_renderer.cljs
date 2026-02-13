@@ -5,6 +5,7 @@
   (:require
    [cljs.core.match :refer [match]]
    [clojure.string :as string]
+   [frontend.components.icon :as icon-component]
    [frontend.components.list-item-icon :as list-item-icon]
    [frontend.extensions.video.youtube :as youtube]
    [frontend.ui :as ui]
@@ -231,13 +232,25 @@
                highlighted-text)]
             highlighted-text))))))
 
+(defn- render-rich-icon
+  "Render a rich page icon (avatar, image, emoji, text) in a 20x20 container.
+   Returns nil if node-icon is not a map."
+  [node-icon]
+  (when (map? node-icon)
+    [:span.flex-shrink-0.inline-flex.items-center.justify-center
+     {:style {:width 20 :height 20}}
+     (icon-component/icon node-icon
+                          {:size (if (contains? #{:avatar :image} (:type node-icon)) 20 16)})]))
+
 (defn render-item
   "Unified item renderer for combobox components.
    Returns hiccup for rendering a combobox item.
-   
+
    Config options:
    - :icon-fn (fn [item] icon-name) or :icon-key :icon or :icon string
    - :icon-variant :default|:create|:raw|:checkbox or :icon-variant-fn (fn [item] variant)
+   - :rich-icon-fn (fn [item] icon-map-or-nil) - renders page icon (avatar/emoji/text/image)
+     between the type icon and text content. Return a map for rich rendering, nil to skip.
    - :show-breadcrumbs? boolean
    - :breadcrumb-fn (fn [item] breadcrumb-hiccup)
    - :new-item-patterns [\"New page:\" \"New option:\"] - patterns to detect new items
@@ -257,6 +270,13 @@
   [item chosen? config]
   (let [icon-name (extract-icon item config)
         icon-variant (extract-icon-variant item config)
+        ;; Evaluate rich-icon-fn eagerly in the let block (not inside hiccup)
+        ;; to avoid silent failures in React's render cycle
+        rich-icon-hiccup (when-let [f (:rich-icon-fn config)]
+                           (try
+                             (when-let [node-icon (f item)]
+                               (render-rich-icon node-icon))
+                             (catch :default _e nil)))
         item-header (:header item)
         header-fn-result (when (:header-fn config) ((:header-fn config) item))
         ;; If show-breadcrumbs? is true, use :header as breadcrumb, otherwise as header
@@ -275,12 +295,13 @@
         row-content [:div.flex.flex-row.items-center.justify-between.w-full
                      {:class (when chosen? "chosen")
                       :on-pointer-down (when (:on-pointer-down config) #((:on-pointer-down config) %))}
-                     ;; Left side: checkbox (multi-select), icon, content
+                     ;; Left side: checkbox (multi-select), type icon, page icon, content
                      [:div {:class (str "flex flex-row items-center " gap-class)}
                       (render-left-checkbox item chosen? config)
                       (when icon-name
                         (list-item-icon/root {:variant icon-variant
                                               :icon icon-name}))
+                      rich-icon-hiccup
                       (render-content item chosen? (assoc config :gap-size gap-size))]
                      ;; Right side: shortcut or checkbox (hover handled via CSS)
                      (or (render-right-shortcut item chosen? false config) ; Use false for hover, CSS will handle it
