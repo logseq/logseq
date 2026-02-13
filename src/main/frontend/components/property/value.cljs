@@ -940,9 +940,11 @@
 (rum/defc property-value-select-node < rum/static
   [block property opts
    {:keys [*show-new-property-config?]}]
-  (let [[initial-choices set-initial-choices!] (hooks/use-state nil)
+  (let [[_initial-choices set-initial-choices!] (hooks/use-state nil)
         [result set-result!] (hooks/use-state nil)
+        *initial-choices-ref (hooks/use-ref nil)
         set-result-and-initial-choices! (fn [value]
+                                          (set! (.-current *initial-choices-ref) value)
                                           (set-initial-choices! value)
                                           (set-result! value))
         input-opts (fn [_]
@@ -960,13 +962,15 @@
                      :input-opts input-opts
                      :on-input (fn [v]
                                  (if (string/blank? v)
-                                   (set-result! initial-choices)
+                                   (set-result! (.-current *initial-choices-ref))
                                    ;; TODO rank initial choices higher
                                    (p/let [result (search/block-search (state/get-current-repo) v {:enable-snippet? false
                                                                                                    :built-in? false})]
                                      (set-result! result))))
                      :add-new-choice! (fn [new-choice]
-                                        (set-initial-choices! (conj (vec initial-choices) new-choice))))
+                                        (let [new-choices (conj (vec (.-current *initial-choices-ref)) new-choice)]
+                                          (set! (.-current *initial-choices-ref) new-choices)
+                                          (set-initial-choices! new-choices))))
         repo (state/get-current-repo)
         classes (:logseq.property/classes property)
         class? (= :class (:logseq.property/type property))
@@ -989,7 +993,9 @@
 
          :else
          (p/let [result (db-async/<get-property-values (:db/ident property))]
-           (set-result-and-initial-choices! result))))
+           (if (seq result)
+             (set-result-and-initial-choices! result)
+             (set-result-and-initial-choices! (ldb/get-recent-updated-pages (db/get-db)))))))
      [])
 
     (select-node property opts' result)))
