@@ -138,10 +138,16 @@
 (def read_plugin_storage_file
   (fn [plugin-id file assets?]
     (let [plugin-id (util/node-path.basename plugin-id)
-          sub-root  (util/node-path.join "storages" plugin-id)]
-      (if (true? assets?)
-        (read_assetsdir_file file sub-root)
-        (read_dotdir_file file sub-root)))))
+          sub-root  (util/node-path.join "storages" plugin-id)
+          task      (if (true? assets?)
+                      (read_assetsdir_file file sub-root)
+                      (read_dotdir_file file sub-root))]
+      (-> task
+          (p/catch
+           (fn [error]
+             (if (= "file not existed" (ex-message error))
+               nil
+               (p/rejected error))))))))
 
 (def unlink_plugin_storage_file
   (fn [plugin-id file assets?]
