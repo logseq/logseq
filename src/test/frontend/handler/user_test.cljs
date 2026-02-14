@@ -1,6 +1,7 @@
 (ns frontend.handler.user-test
   (:require [cljs.test :refer [deftest is testing]]
             [electron.ipc :as ipc]
+            [frontend.config :as config]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -120,3 +121,25 @@
               (is (zero? @invoke-calls*)))))
         (finally
           (reset! state/*db-worker old-worker))))))
+
+(deftest rtc-group-allows-db-sync-local-mode-test
+  (testing "local db sync mode exposes sync UI without group membership"
+    (with-redefs [config/db-sync-local? true
+                  config/get-custom-sync-server-url (constantly nil)
+                  state/user-groups (constantly #{})]
+      (is (true? (user-handler/rtc-group?))))))
+
+(deftest rtc-group-still-requires-sync-access-outside-local-mode-test
+  (testing "without local mode, access still comes from custom URL or groups"
+    (with-redefs [config/db-sync-local? false
+                  config/get-custom-sync-server-url (constantly nil)
+                  state/user-groups (constantly #{})]
+      (is (false? (user-handler/rtc-group?)))))
+  (with-redefs [config/db-sync-local? false
+                config/get-custom-sync-server-url (constantly "https://sync.example")
+                state/user-groups (constantly #{})]
+    (is (true? (user-handler/rtc-group?))))
+  (with-redefs [config/db-sync-local? false
+                config/get-custom-sync-server-url (constantly nil)
+                state/user-groups (constantly #{"rtc_2025_07_10"})]
+    (is (true? (user-handler/rtc-group?)))))
