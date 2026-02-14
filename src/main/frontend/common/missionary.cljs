@@ -27,49 +27,48 @@
   [& flows]
   (m/ap (m/?> (m/?> (count flows) (m/seed flows)))))
 
-(def never-flow (m/ap (m/? m/never)))
-
-(def delays (reductions * 1000 (repeat 2)))
-
-(def ^:private retry-sentinel (js-obj))
-(defn backoff
-  "Retry task when it throw exception `(get ex-data :missionary/retry)`
+(comment
+  (def never-flow (m/ap (m/? m/never)))
+  (def delays (reductions * 1000 (repeat 2)))
+  (def ^:private retry-sentinel (js-obj))
+  (defn backoff
+    "Retry task when it throw exception `(get ex-data :missionary/retry)`
   :delay-seq - retry delay-msecs
   :reset-flow - retry immediately when getting value from flow and reset delays to init state"
-  [{:keys [delay-seq reset-flow]
-    :or {delay-seq (take 4 delays)
-         reset-flow never-flow}}
-   task]
-  (let [reset-flow* (mix reset-flow never-flow)]
-    (m/sp
-      (loop [[delay & rest-delays] (seq delay-seq)]
-        (let [r (try
-                  (m/? task)
-                  (catch :default e
-                    (if (and (some-> e ex-data :missionary/retry)
-                             (pos-int? delay))
-                      (let [delay-or-reset
-                            (m/? (m/race (m/sleep delay :delay)
-                                         (m/reduce (fn [_ r] (when r (reduced :reset))) nil
-                                                   (->> (continue-flow reset-flow*)
-                                                        (m/eduction (drop 1) (take 1))))))
-                            rest-delays*
-                            (case delay-or-reset
-                              :delay
-                              (do (println :missionary/retry "after" delay "ms (" (ex-message e) ")")
-                                  rest-delays)
-                              :reset
-                              (do (println :missionary/retry  "retry now (" (ex-message e) ")")
-                                  delay-seq))]
-                        [retry-sentinel rest-delays*])
-                      (throw e))))]
-          (if (and (vector? r)
-                   (first r) ;; if delete this `(first r)`,
+    [{:keys [delay-seq reset-flow]
+      :or {delay-seq (take 4 delays)
+           reset-flow never-flow}}
+     task]
+    (let [reset-flow* (mix reset-flow never-flow)]
+      (m/sp
+        (loop [[delay & rest-delays] (seq delay-seq)]
+          (let [r (try
+                    (m/? task)
+                    (catch :default e
+                      (if (and (some-> e ex-data :missionary/retry)
+                               (pos-int? delay))
+                        (let [delay-or-reset
+                              (m/? (m/race (m/sleep delay :delay)
+                                           (m/reduce (fn [_ r] (when r (reduced :reset))) nil
+                                                     (->> (continue-flow reset-flow*)
+                                                          (m/eduction (drop 1) (take 1))))))
+                              rest-delays*
+                              (case delay-or-reset
+                                :delay
+                                (do (println :missionary/retry "after" delay "ms (" (ex-message e) ")")
+                                    rest-delays)
+                                :reset
+                                (do (println :missionary/retry  "retry now (" (ex-message e) ")")
+                                    delay-seq))]
+                          [retry-sentinel rest-delays*])
+                        (throw e))))]
+            (if (and (vector? r)
+                     (first r) ;; if delete this `(first r)`,
                        ;; the code continues to the next line even if r=0...
                        ;; I suspect it's a bug in missionary.
-                   (identical? retry-sentinel (first r)))
-            (recur (second r))
-            r))))))
+                     (identical? retry-sentinel (first r)))
+              (recur (second r))
+              r)))))))
 
 (defn clock
   "Return a flow that emits `value` every `interval-ms`."
@@ -84,16 +83,17 @@
          (recur))))
     (continue-flow value))))
 
-(defn concurrent-exec-flow
-  "Return a flow.
+(comment
+  (defn concurrent-exec-flow
+    "Return a flow.
   Concurrent exec `f` on `flow` with max concurrent count `par`.
   - `(f v)` return a task.
   - `v` is value from `flow`"
-  [par flow f]
-  (assert (pos-int? par))
-  (m/ap
-    (let [v (m/?> par flow)]
-      (m/? (f v)))))
+    [par flow f]
+    (assert (pos-int? par))
+    (m/ap
+      (let [v (m/?> par flow)]
+        (m/? (f v))))))
 
 (defn debounce
   [duration-ms flow]

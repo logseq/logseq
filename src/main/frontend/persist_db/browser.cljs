@@ -4,7 +4,6 @@
    This interface uses clj data format as input."
   (:require ["comlink" :as Comlink]
             [electron.ipc :as ipc]
-            [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :as thread-api]
             [frontend.config :as config]
             [frontend.db :as db]
@@ -17,7 +16,6 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
-            [missionary.core :as m]
             [promesa.core :as p]))
 
 (defn- ask-persist-permission!
@@ -26,31 +24,6 @@
     (if persistent?
       (log/info :storage-persistent "Storage will not be cleared unless from explicit user action")
       (log/warn :opfs-storage-may-be-cleared "OPFS storage may be cleared by the browser under storage pressure."))))
-
-(defn- sync-app-state!
-  []
-  (let [state-flow
-        (->> (m/watch state/state)
-             (m/eduction
-              (map #(select-keys % [:git/current-repo :config
-                                    :auth/id-token :auth/access-token :auth/refresh-token
-                                    :user/info]))
-              (dedupe)))
-        <init-sync-done? (p/deferred)
-        task (m/reduce
-              (constantly nil)
-              (m/ap
-                (let [m (m/?> (m/relieve state-flow))]
-                  (when (and (contains? m :git/current-repo)
-                             (nil? (:git/current-repo m)))
-                    (log/error :sync-app-state
-                               [m (select-keys @state/state
-                                               [:git/current-repo
-                                                :auth/id-token :auth/access-token :auth/refresh-token])]))
-                  (c.m/<? (state/<invoke-db-worker :thread-api/sync-app-state m))
-                  (p/resolve! <init-sync-done?))))]
-    (c.m/run-task* task)
-    <init-sync-done?))
 
 (defn get-route-data
   [route-match]
@@ -139,8 +112,12 @@
        (Comlink/expose #js{"remoteInvoke" thread-api/remote-function} worker)
        (worker-handler/handle-message! worker wrapped-worker)
        (reset! state/*db-worker wrapped-worker)
-       (-> (p/let [_ (state/<invoke-db-worker :thread-api/init config/RTC-WS-URL)
-                   _ (sync-app-state!)
+       (-> (p/let [_ (state/<invoke-db-worker :thread-api/init)
+                   _ (state/<invoke-db-worker :thread-api/set-db-sync-config
+                                              {:enabled? true
+                                               :ws-url config/db-sync-ws-url
+                                               :http-base config/db-sync-http-base})
+                   _ (state/pub-event! [:rtc/sync-app-state])
                    _ (log/info "init worker spent" (str (- (util/time-ms) t1) "ms"))
                    _ (sync-ui-state!)
                    _ (ask-persist-permission!)

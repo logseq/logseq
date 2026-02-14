@@ -5,14 +5,17 @@
             [frontend.commands :as commands]
             [frontend.components.editor :as editor]
             [frontend.components.export :as export]
+            [frontend.components.icon :as icon-component]
             [frontend.components.page-menu :as page-menu]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.reaction :as reaction-handler]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -142,6 +145,26 @@
                      (editor-handler/open-block-in-sidebar! block-id))}
         (t :content/open-in-sidebar)
         (shui/dropdown-menu-shortcut "⇧+click"))
+
+       (shui/dropdown-menu-sub
+        (shui/dropdown-menu-sub-trigger
+         "Add reaction")
+        (shui/dropdown-menu-sub-content
+         [:div.p-1
+          (icon-component/icon-search
+           {:on-chosen (fn [_e icon]
+                         (let [emoji-id (:id icon)
+                               emoji? (= :emoji (:type icon))]
+                           (if emoji?
+                             (do
+                               (reaction-handler/toggle-reaction! block-id emoji-id)
+                               (state/hide-custom-context-menu!)
+                               (shui/popup-hide!))
+                             (notification/show! "Please pick an emoji reaction." :warning))))
+            :tabs [[:emoji "Emojis"]]
+            :default-tab :emoji
+            :show-used? true
+            :icon-value nil})]))
 
        (shui/dropdown-menu-separator)
 

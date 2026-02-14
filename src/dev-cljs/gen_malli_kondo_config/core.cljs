@@ -5,7 +5,6 @@
             [malli.clj-kondo :as mc]
             [malli.instrument]))
 
-
 (defn main [& _args]
   (collect-schema)
   (println (mc/linter-config (mc/collect-cljs)))

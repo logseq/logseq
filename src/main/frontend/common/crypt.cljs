@@ -255,49 +255,6 @@
              (<= 2 (count maybe-encrypted-package)))
     (<decrypt-text aes-key maybe-encrypted-package)))
 
-(defn <encrypt-map
-  [aes-key encrypt-attr-set m]
-  (assert (map? m))
-  (reduce
-   (fn [map-p encrypt-attr]
-     (p/let [m map-p]
-       (if-let [v (get m encrypt-attr)]
-         (p/let [v' (p/chain (<encrypt-text aes-key v) ldb/write-transit-str)]
-           (assoc m encrypt-attr v'))
-         m)))
-   (p/promise m) encrypt-attr-set))
-
-(defn <encrypt-av-coll
-  "see also `rtc-schema/av-schema`"
-  [aes-key encrypt-attr-set av-coll]
-  (p/all
-   (mapv
-    (fn [[a v & others]]
-      (p/let [v' (if (and (contains? encrypt-attr-set a)
-                          (string? v))
-                   (p/chain (<encrypt-text aes-key v) ldb/write-transit-str)
-                   v)]
-        (apply conj [a v'] others)))
-    av-coll)))
-
-(defn <decrypt-map
-  [aes-key encrypt-attr-set m]
-  (assert (map? m))
-  (reduce
-   (fn [map-p encrypt-attr]
-     (p/let [m map-p]
-       (if-let [v (get m encrypt-attr)]
-         (if (string? v)
-           (->
-            (p/let [v' (<decrypt-text-if-encrypted aes-key (ldb/read-transit-str v))]
-              (if v'
-                (assoc m encrypt-attr v')
-                m))
-            (p/catch (fn [e] (ex-info "decrypt map" {:m m :decrypt-attr encrypt-attr} e))))
-           m)
-         m)))
-   (p/promise m) encrypt-attr-set))
-
 (defn <encrypt-text-by-text-password
   [text-password text]
   (assert (and (string? text-password) (string? text)))

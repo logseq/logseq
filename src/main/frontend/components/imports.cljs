@@ -66,17 +66,20 @@
                  [".md" ".markdown" ".org" ".js" ".edn" ".css"]))))))))
 
 (defn- finished-cb
-  []
+  [& {:keys [reload?]
+      :or {reload? true}}]
   (state/pub-event! [:graph/sync-context])
   (notification/show! "Import finished!" :success)
   (shui/dialog-close! :import-indicator)
   (route-handler/redirect-to-home!)
   (if util/web-platform?
-    (js/window.location.reload)
+    (if reload?
+      (js/window.location.reload)
+      (js/setTimeout ui-handler/re-render-root! 500))
     (js/setTimeout ui-handler/re-render-root! 500)))
 
 (defn- lsq-import-handler
-  [e & {:keys [sqlite? debug-transit? graph-name db-edn?]}]
+  [e & {:keys [sqlite? sqlite-zip? debug-transit? graph-name db-edn?]}]
   (let [file      (first (array-seq (.-files (.-target e))))]
     (cond
       sqlite?
@@ -100,6 +103,20 @@
                                        (prn :debug :aborted)
                                        (js/console.error e)))
             (.readAsArrayBuffer reader file))))
+
+      sqlite-zip?
+      (let [graph-name (string/trim graph-name)]
+        (cond
+          (string/blank? graph-name)
+          (notification/show! "Empty graph name." :error)
+
+          (repo-handler/graph-already-exists? graph-name)
+          (notification/show! "Please specify another name as another graph with this name already exists!" :error)
+
+          :else
+          (db-import-handler/import-from-sqlite-zip! file graph-name
+                                                     (fn []
+                                                       (finished-cb {:reload? false})))))
 
       (or debug-transit? db-edn?)
       (let [graph-name (string/trim graph-name)]
@@ -358,7 +375,8 @@
                    :set-ui-state state/set-state!
                    :<read-file (fn <read-file [file] (.text (:file-object file)))
                    :<get-file-stat (fn <get-file-stat [path]
-                                     (when (util/electron?)
+                                     ;; Ignore relative paths as we can't get their stats
+                                     (when (and (util/electron?) (path/absolute? path))
                                        (ipc/ipc :stat path)))
                    ;; config file options
                    :default-config config/config-default-content
@@ -418,11 +436,12 @@
 
 (rum/defc indicator-progress < rum/reactive
   []
-  (let [{:keys [total current-idx current-page]} (state/sub :graph/importing-state)
+  (let [{:keys [total current-idx current-page label]} (state/sub :graph/importing-state)
+        label (or label (t :importing))
         left-label (if (and current-idx total (= current-idx total))
                      [:div.flex.flex-row.font-bold "Loading ..."]
                      [:div.flex.flex-row.font-bold
-                      (t :importing)
+                      label
                       [:div.hidden.md:flex.flex-row
                        [:span.mr-1 ": "]
                        [:div.text-ellipsis-wrapper {:style {:max-width 300}}
@@ -473,6 +492,19 @@
              :on-change (fn [e]
                           (shui/dialog-open!
                            #(set-graph-name-dialog e {:sqlite? true})))}]]
+
+          [:label.action-input.flex.items-center.mx-2.my-2
+           [:span.as-flex-center [:i (svg/logo 28)]]
+           [:span.flex.flex-col
+            [[:strong "SQLite + assets (.zip)"]
+             [:small "Import a zip containing db.sqlite and an assets folder"]]]
+           [:input.absolute.hidden
+            {:id "import-sqlite-zip"
+             :type "file"
+             :accept ".zip"
+             :on-change (fn [e]
+                          (shui/dialog-open!
+                           #(set-graph-name-dialog e {:sqlite-zip? true})))}]]
 
           (when-not (util/mobile?)
             [:label.action-input.flex.items-center.mx-2.my-2

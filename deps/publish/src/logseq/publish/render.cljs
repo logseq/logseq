@@ -908,7 +908,7 @@
 (defn block-display-node [block ctx depth]
   (let [display-type (:logseq.property.node/display-type block)
         asset-node' (when (:logseq.property.asset/type block)
-                     (asset-node block ctx))]
+                      (asset-node block ctx))]
     (case display-type
       :asset asset-node'
       :code

@@ -6,7 +6,7 @@ on:
       branch:
         description: "Git branch to build & deploy"
         required: true
-        default: "feat/worker-sync"
+        default: "master"
 
 env:
   CLOJURE_VERSION: "1.11.1.1413"

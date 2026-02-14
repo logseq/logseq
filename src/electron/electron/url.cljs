@@ -1,9 +1,9 @@
 (ns electron.url
-  (:require [electron.handler :as handler]
+  (:require [clojure.string :as string]
+            [electron.handler :as handler]
             [electron.state :as state]
-            [electron.window :as win]
             [electron.utils :refer [send-to-renderer send-to-focused-renderer] :as utils]
-            [clojure.string :as string]
+            [electron.window :as win]
             [promesa.core :as p]))
 
 ;; Keep same as main/frontend.util.url

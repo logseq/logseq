@@ -106,12 +106,13 @@ main.ls-fold-button-on-right {
     .page-blocks-inner {
       margin-left: 0 !important;
     }
+  }
 
-    .block-control-wrap {
+  .block-control-wrap {
       /* hack for toggling enable-opts */
       height: 23px;
       background: transparent;
-    }
+      position: static;
   }
 
   .block-main-container {

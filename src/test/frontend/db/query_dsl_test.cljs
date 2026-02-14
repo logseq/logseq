@@ -699,5 +699,4 @@
     '[:find (pull ?b [*])
       :where
       [?b :block/name]]
-    (frontend.db/get-db test-helper/test-db)))
-  )
+    (frontend.db/get-db test-helper/test-db))))

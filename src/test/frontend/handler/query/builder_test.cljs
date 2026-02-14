@@ -1,6 +1,6 @@
 (ns frontend.handler.query.builder-test
-  (:require [frontend.handler.query.builder :as query-builder]
-            [clojure.test :refer [deftest is]]))
+  (:require [clojure.test :refer [deftest is]]
+            [frontend.handler.query.builder :as query-builder]))
 
 (deftest builder
   (let [q []]

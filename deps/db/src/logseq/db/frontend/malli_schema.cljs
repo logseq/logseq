@@ -126,7 +126,9 @@
    #{:logseq.property/created-from-property :logseq.property/value
      :logseq.property.history/scalar-value :logseq.property.history/block
      :logseq.property.history/property :logseq.property.history/ref-value
-     :logseq.property.class/extends}))
+     :logseq.property.class/extends
+     :logseq.property.reaction/emoji-id
+     :logseq.property.reaction/target}))
 
 (defn- property-entity->map
   "Provide the minimal number of property attributes to validate the property
@@ -431,6 +433,18 @@
     (remove #(#{:block/title :logseq.property/created-from-property} (first %)) block-attrs)
     page-or-block-attrs)))
 
+(def reaction-entity
+  "A reaction entity referencing a target node"
+  (vec
+   [:map {:error/path ["reaction-entity"]}
+    [:block/uuid :uuid]
+    [:logseq.property.reaction/emoji-id :string]
+    [:logseq.property.reaction/target :int]
+    [:block/properties {:optional true} block-properties]
+    [:block/created-at :int]
+    [:block/tx-id {:optional true} :int]
+    [:block/refs {:optional true} [:set :int]]]))
+
 (def property-history-block*
   [:map
    [:block/uuid :uuid]
@@ -540,6 +554,8 @@
   (let [d (if (:block/uuid ent) (d/entity db [:block/uuid (:block/uuid ent)]) ent)
         ;; order matters as some block types are a subset of others e.g. :whiteboard
         dispatch-key (cond
+                       (:logseq.property.reaction/target d)
+                       :reaction-entity
                        (entity-util/property? d)
                        :property
                        (entity-util/class? d)
@@ -576,6 +592,7 @@
     :class class-page
     :hidden hidden-page
     :normal-page normal-page
+    :reaction-entity reaction-entity
     :property-history-block property-history-block
     :closed-value-block closed-value-block
     :property-value-block property-value-block

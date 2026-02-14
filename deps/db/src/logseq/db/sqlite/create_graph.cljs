@@ -222,7 +222,7 @@
 (defn build-db-initial-data
   "Builds tx of initial data for a new graph including key values, initial files,
    built-in properties and built-in classes"
-  [config-content & {:keys [import-type graph-git-sha]}]
+  [config-content & {:keys [import-type graph-git-sha remote-graph?]}]
   (assert (string? config-content))
   (let [initial-data (cond->
                       [(sqlite-util/kv :logseq.kv/db-type "db")
@@ -236,9 +236,11 @@
                        (into (sqlite-util/import-tx import-type))
                        graph-git-sha
                        (conj (sqlite-util/kv :logseq.kv/graph-git-sha graph-git-sha))
+                       remote-graph?
+                       (conj (sqlite-util/kv :logseq.kv/graph-remote? remote-graph?))
                        true
                        (conj (sqlite-util/kv :logseq.kv/local-graph-uuid
-                                             (uuid (str "loc" (subs (str (common-uuid/gen-uuid)) 3))))))
+                                             (uuid (str "00000000" (subs (str (common-uuid/gen-uuid)) 8))))))
         initial-files (build-initial-files config-content)
         {properties-tx :tx :keys [properties]} (build-initial-properties)
         db-ident->properties (zipmap (map :db/ident properties) properties)

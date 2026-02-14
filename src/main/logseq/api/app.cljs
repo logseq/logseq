@@ -8,7 +8,6 @@
             [frontend.db.utils :as db-utils]
             [frontend.handler.command-palette :as palette-handler]
             [frontend.handler.config :as config-handler]
-            [frontend.handler.export :as export-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]

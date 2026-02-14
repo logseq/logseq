@@ -13,12 +13,11 @@
     (text-util/get-string-all-indexes "a.c a.c ab" "a." {})
     [0 4]
 
-    (text-util/get-string-all-indexes "abc" "" { :before? true })
+    (text-util/get-string-all-indexes "abc" "" {:before? true})
     [0]
 
-    (text-util/get-string-all-indexes "abc" "" { :before? false })
-    [3]
-    ))
+    (text-util/get-string-all-indexes "abc" "" {:before? false})
+    [3]))
 
 (deftest test-wrapped-by
   (are [x y] (= x y)
@@ -35,5 +34,4 @@
     (map #(text-util/wrapped-by? "prop::value" % "" "::") (take 12 (range)))
 
     '(false false false false false false true true true true true true)
-    (map #(text-util/wrapped-by? "prop::value" % "::" "") (take 12 (range)))
-    ))
+    (map #(text-util/wrapped-by? "prop::value" % "::" "") (take 12 (range)))))
