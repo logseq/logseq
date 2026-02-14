@@ -73,7 +73,7 @@
 
 (defn img-formats
   []
-  #{:gif :svg :jpeg :ico :png :jpg :bmp :webp})
+  #{:gif :svg :jpeg :ico :png :jpg :bmp :webp :avif :cr2})
 
 (defonce block-pattern "-")
 
