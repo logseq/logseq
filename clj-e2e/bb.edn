@@ -1,7 +1,8 @@
 {:deps {org.babashka/http-server {:mvn/version "0.1.13"}
         org.babashka/cli {:mvn/version "0.2.23"}}
  :tasks
- {:requires ([babashka.cli :as cli])
+ {:requires ([babashka.cli :as cli]
+             [babashka.process :as bp])
   :init (def cli-opts (cli/parse-opts *command-line-args* {:coerce {:port :int :headers :edn}}))
 
   serve {:doc "Serve static assets"
@@ -24,11 +25,25 @@
                         :task (do (clojure "-M:test -n logseq.e2e.rtc-extra-part2-test")
                                   (System/exit 0))}
 
+  rtc-extra-part2-asset-test {:doc "run only the asset restore regression (fast iteration)"
+                              :task (let [env (merge (into {} (System/getenv))
+                                                     {"LOGSEQ_E2E_ONLY_ASSET_RESTORE" "1"
+                                                      "LOGSEQ_E2E_FAST" "1"
+                                                      "LOGSEQ_E2E_REUSE_RTC_GRAPH" "1"})
+                                          res (deref (bp/process ["clojure" "-M:test" "-n" "logseq.e2e.rtc-extra-part2-test"]
+                                                                 {:env env
+                                                                  :out :inherit
+                                                                  :err :inherit}))]
+                                      (System/exit (:exit res)))}
+
   -run-rtc-extra-test {:depends [serve prn rtc-extra-test]}
   run-rtc-extra-test {:task (run '-run-rtc-extra-test {:parallel true})}
 
   -run-rtc-extra-part2-test {:depends [serve prn rtc-extra-part2-test]}
   run-rtc-extra-part2-test {:task (run '-run-rtc-extra-part2-test {:parallel true})}
+
+  -run-rtc-extra-part2-asset-test {:depends [serve prn rtc-extra-part2-asset-test]}
+  run-rtc-extra-part2-asset-test {:task (run '-run-rtc-extra-part2-asset-test {:parallel true})}
 
   -dev {:depends [serve prn test]}
 

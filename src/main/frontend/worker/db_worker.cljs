@@ -611,6 +611,62 @@
        ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? true
                                                                        :datoms datoms})
        (db-sync/rehydrate-large-titles-from-db! repo graph-id)
+       ;; Snapshot restore only brings back the DB. Assets live in remote storage,
+       ;; so proactively pull any missing ones to avoid an empty assets/ dir after
+       ;; (delete local graph -> download from remote).
+       (p/let [conn (worker-state/get-datascript-conn repo)
+               db (some-> conn deref)
+	               assets (when db
+	                        (->> (d/datoms db :avet :logseq.property.asset/type)
+	                             (keep (fn [datom]
+	                                     (let [ent (d/entity db (:e datom))
+	                                           asset-uuid (:block/uuid ent)
+	                                           asset-type (:logseq.property.asset/type ent)
+	                                           external-url (:logseq.property.asset/external-url ent)]
+	                                       ;; Snapshot restore may not include `remote-metadata`, but
+	                                       ;; the asset can still be fetched from remote storage by
+	                                       ;; graph-id + uuid + type.
+	                                       (when (and asset-uuid (seq asset-type) (nil? external-url))
+	                                         {:asset-uuid asset-uuid
+	                                          :asset-type asset-type}))))
+	                             (common-util/distinct-by :asset-uuid)
+	                             (vec)))
+               _ (when (seq assets)
+                   (rtc-log-and-state/rtc-log :rtc.asset.log/initial-download-missing-assets
+                                              {:sub-type :download-progress
+                                               :graph-uuid graph-id
+                                               :message (str "Checking " (count assets) " assets")}))]
+         (when (seq assets)
+           (p/loop [remaining assets
+                    downloaded 0]
+             (if (empty? remaining)
+               (rtc-log-and-state/rtc-log :rtc.asset.log/initial-download-missing-assets
+                                          {:sub-type :download-completed
+                                           :graph-uuid graph-id
+                                           :message (str "Downloaded missing assets: " downloaded)})
+               (let [batch (take 10 remaining)
+                     remaining* (drop 10 remaining)]
+                 (p/let [results (p/all
+                                  (mapv (fn [{:keys [asset-uuid asset-type]}]
+                                          (-> (db-sync/<download-remote-asset-if-missing!
+                                               repo
+                                               {:graph-id graph-id
+                                                :asset-uuid asset-uuid
+                                                :asset-type asset-type})
+                                              (p/catch (fn [e]
+                                                         (log/error :db-sync/restore-asset-failed
+                                                                    {:repo repo
+                                                                     :asset-uuid asset-uuid
+                                                                     :asset-type asset-type
+                                                                     :error e})
+                                                         false))))
+                                        batch))
+                        downloaded (+ downloaded (count (filter true? results)))]
+                    (rtc-log-and-state/rtc-log :rtc.asset.log/initial-download-missing-assets
+                                               {:sub-type :download-progress
+                                                :graph-uuid graph-id
+                                                :message (str "Downloading missing assets: " downloaded "/" (count assets))})
+                    (p/recur (vec remaining*) downloaded)))))))
        (rtc-log-and-state/rtc-log :rtc.log/download
                                   {:sub-type :download-completed
                                    :graph-uuid graph-id

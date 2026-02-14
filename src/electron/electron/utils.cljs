@@ -198,7 +198,8 @@
 
 (defn read-file-raw
   [path]
-  (fs/readFileSync path))
+  (when (fs/existsSync path)
+    (fs/readFileSync path)))
 
 (defn read-file
   [path]

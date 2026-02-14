@@ -27,9 +27,20 @@
   ;; Question: what's the best way to close all the popups?
   ;; close popup, exit editing
   ;; (repl/pause)
-  (util/search title)
-  (w/click [(ws/text "Create page") (ws/nth= "0")])
-  (util/wait-editor-visible))
+  (let [create-q (ws/text "Create page")]
+    (try
+      (util/search title)
+      ;; In fast iteration mode, the cmdk list can take a beat to populate.
+      (w/wait-for create-q {:timeout 30000})
+      (w/click [create-q (ws/nth= "0")])
+      (util/wait-editor-visible)
+      (catch TimeoutError _e
+        ;; Retry once, cmdk occasionally loses focus.
+        (k/esc)
+        (util/search title)
+        (w/wait-for create-q {:timeout 30000})
+        (w/click [create-q (ws/nth= "0")])
+        (util/wait-editor-visible)))))
 
 (defn delete-page
   [page-name]

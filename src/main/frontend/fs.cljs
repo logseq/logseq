@@ -121,7 +121,8 @@
     (if (util/electron?)
       (let [assets-dir (path/path-join repo-dir common-config/local-assets-dir)
             file-path (path/path-join assets-dir file-name)]
-        (write-file! file-path data))
+        (p/let [_ (mkdir-recur! assets-dir)]
+          (write-file! file-path data)))
       (let [file-path (path/path-join common-config/local-assets-dir file-name)]
         (write-plain-text-file! repo repo-dir file-path data {:skip-transact? true
                                                               :skip-compare? true})))))
