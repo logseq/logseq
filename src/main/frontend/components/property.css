@@ -63,7 +63,7 @@
 
 .ls-properties-area {
   .property-pair {
-    @apply flex flex-row flex-wrap space-x-1;
+    @apply flex flex-row flex-nowrap space-x-1;
 
     .jtrigger-view {
       > .jtrigger-id {
@@ -78,7 +78,8 @@
     }
 
     .property-k {
-      @apply inline-block overflow-hidden text-ellipsis whitespace-nowrap leading-[26px];
+      @apply inline-block overflow-hidden leading-[26px];
+      word-break: break-word;
 
       .jtrigger {
         &-id {
@@ -299,10 +300,16 @@ a.control-link {
 }
 
 .property-key {
+  position: relative;
+  align-self: stretch;
   font-size: 15px;
-  /* Same height with one-line block container */
-  min-width: 160px;
+  /* Unified column width driven by CSS variable, resizable via drag handle */
+  width: var(--ls-property-key-width, 160px);
+  min-width: 80px;
+  max-width: 50%;
+  flex-shrink: 0;
   min-height: 28px;
+  padding-right: 16px;
 
   h1.title, h2.title {
     border-bottom: 0;
@@ -318,9 +325,17 @@ a.control-link {
   }
 }
 
+/* Block-level: clamp key width to 40% of container for narrow blocks */
+.ls-block .ls-properties-area .property-key {
+  width: min(var(--ls-property-key-width, 160px), 40%);
+}
+
 .ls-card-item {
     .property-key, .property-value-container {
         min-width: initial;
+    }
+    .property-key {
+        width: auto;
     }
 }
 
@@ -524,4 +539,73 @@ a.control-link {
       @apply py-1;
     }
   }
+}
+
+/* Per-row resize handle — invisible click target */
+.property-row-resizer {
+  position: absolute;
+  right: -5px;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  cursor: col-resize;
+  z-index: 1;
+  user-select: none;
+  touch-action: none;
+}
+
+/* Thin visible line (3px) — invisible at rest */
+.property-row-resizer::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 1.5px;
+  opacity: 0;
+  background-color: var(--lx-gray-08, var(--rx-gray-08));
+  transition: opacity 0.15s, background-color 0.15s;
+}
+
+/* Handle hover — gray, clearly visible */
+.property-row-resizer:hover::before {
+  opacity: 0.7;
+}
+
+/* Keyboard focus — same as hover */
+.property-row-resizer:focus-visible::before {
+  opacity: 0.7;
+}
+
+/* Active drag — blue accent */
+.property-row-resizer.is-active::before {
+  opacity: 1;
+  background-color: hsl(var(--primary) / 0.9);
+  transition: none;
+}
+
+/* During drag: sibling handles show as muted gray guides */
+html.is-resizing-buf .property-row-resizer::before {
+  opacity: 0.4;
+  background-color: hsl(var(--primary) / 0.4);
+}
+
+/* Active handle overrides siblings — blue */
+html.is-resizing-buf .property-row-resizer.is-active::before {
+  opacity: 1;
+  background-color: hsl(var(--primary) / 0.9);
+}
+
+/* Touch devices: always slightly visible (no hover available) */
+@media (hover: none) and (pointer: coarse) {
+  .property-row-resizer::before {
+    opacity: 0.3;
+  }
+}
+
+/* Hidden in card/embed contexts */
+.ls-card-item .property-row-resizer {
+  display: none;
 }

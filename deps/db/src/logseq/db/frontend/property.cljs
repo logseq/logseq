@@ -533,6 +533,10 @@
                                              :cardinality :many
                                              :hide? true
                                              :public? false}}
+     :logseq.property/property-key-width {:title "Property key column width"
+                                          :schema {:type :raw-number
+                                                   :hide? true
+                                                   :public? false}}
      :logseq.property/view-for {:title "This view belongs to"
                                 :schema
                                 {:type :node

@@ -297,7 +297,8 @@
    ;; 65.26: Update default-icon property type from :default to :map so it can store map values
    ["65.26" {:fix (fn [db]
                     (when-let [property (d/entity db :logseq.property.class/default-icon)]
-                      [[:db/add (:db/id property) :logseq.property/type :map]]))}]])
+                      [[:db/add (:db/id property) :logseq.property/type :map]]))}]
+   ["65.27" {:properties [:logseq.property/property-key-width]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

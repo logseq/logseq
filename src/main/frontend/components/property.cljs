@@ -1,7 +1,9 @@
 (ns frontend.components.property
   "Block properties management."
-  (:require [clojure.set :as set]
+  (:require [cljs-bean.core :as bean]
+            [clojure.set :as set]
             [clojure.string :as string]
+            [dommy.core :as dom]
             [frontend.components.dnd :as dnd]
             [frontend.components.icon :as icon-component]
             [frontend.components.property.config :as property-config]
@@ -80,7 +82,7 @@
    [:span.bullet-container
     (cond
       (= type :default) [:span.bullet]
-      :else             [:span.property-bullet.property-bullet-bordered-square])]])
+      :else [:span.property-bullet.property-bullet-bordered-square])]])
 
 (defn- <add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context."
@@ -408,8 +410,119 @@
        (blocks-container config entities)]
       [:span.opacity-60 "Empty"])))
 
+(rum/defc property-row-resizer
+  "Per-row draggable resize handle for property key column width.
+  Uses atoms for drag state and calls on-resize! directly via ref
+  to avoid React state batching issues. Syncs all handles in the
+  properties area during drag via DOM querySelectorAll."
+  [on-resize!]
+  (let [*el (rum/use-ref nil)
+        *on-resize-ref (rum/use-ref on-resize!)
+        add-resizing-class #(dom/add-class! js/document.documentElement "is-resizing-buf")
+        remove-resizing-class #(dom/remove-class! js/document.documentElement "is-resizing-buf")]
+
+    ;; Keep on-resize! ref in sync with latest prop
+    (rum/set-ref! *on-resize-ref on-resize!)
+
+    ;; Setup interact.js draggable — ONE TIME
+    (hooks/use-effect!
+     (fn []
+       (when-let [el (and (fn? js/window.interact) (rum/deref *el))]
+         (let [*start-width (atom nil)
+               *dx (atom 0)
+               min-width 80
+               max-width 500
+               sync-handles! (fn [dx-val]
+                               (let [transform (if (zero? dx-val)
+                                                 ""
+                                                 (str "translate3D(" dx-val "px, 0, 0)"))]
+                                 (doseq [handle (array-seq (.querySelectorAll js/document ".property-row-resizer"))]
+                                   (dom/set-style! handle :transform transform))))
+               interact-instance
+               (-> (js/interact el)
+                   (.draggable
+                    (bean/->js
+                     {:listeners
+                      {:start (fn []
+                                (let [property-key-el (.closest el ".property-key")
+                                      current-w (if property-key-el
+                                                  (.-offsetWidth property-key-el)
+                                                  160)]
+                                  (reset! *start-width current-w)
+                                  (reset! *dx 0)
+                                  (dom/add-class! el "is-active")))
+                       :move (fn [^js e]
+                               (let [raw-dx (.-dx e)
+                                     prev-dx @*dx
+                                     to-dx (+ prev-dx raw-dx)
+                                     start-w @*start-width
+                                     max-dx (- max-width start-w)
+                                     min-dx (- min-width start-w)
+                                     clamped (cond
+                                               (< to-dx min-dx) min-dx
+                                               (> to-dx max-dx) max-dx
+                                               :else to-dx)]
+                                 (reset! *dx clamped)
+                                 (sync-handles! clamped)))
+                       :end (fn []
+                              (let [dx-val @*dx
+                                    start-w @*start-width]
+                                (when (number? start-w)
+                                  (let [w (js/Math.round (+ dx-val start-w))
+                                        final-w (cond
+                                                  (< w min-width) min-width
+                                                  (> w max-width) max-width
+                                                  :else w)]
+                                    ;; Optimistic: set CSS variable on ALL property areas (global setting)
+                                    (let [width-str (str final-w "px")]
+                                      (doseq [area (array-seq (.querySelectorAll js/document ".ls-properties-area"))]
+                                        (.setProperty (.-style area) "--ls-property-key-width" width-str)))
+                                    ;; Persist to database
+                                    ((rum/deref *on-resize-ref) final-w)))
+                                ;; Always cleanup
+                                (sync-handles! 0)
+                                (reset! *start-width nil)
+                                (reset! *dx 0)
+                                (dom/remove-class! el "is-active")))}}))
+                   (.styleCursor false)
+                   (.on "dragstart" add-resizing-class)
+                   (.on "dragend" remove-resizing-class)
+                   (.on "mousedown" util/stop-propagation))]
+           ;; Cleanup on unmount
+           (fn [] (.unset interact-instance)))))
+     [])
+
+    ;; Render
+    [:span.property-row-resizer
+     {:ref *el
+      :role "separator"
+      :aria-orientation "vertical"
+      :aria-label "Resize property key column"
+      :tab-index 0
+      :data-no-dnd true
+      :on-click (fn [e] (.stopPropagation e))
+      :on-double-click (fn [e]
+                         (.stopPropagation e)
+                         ((rum/deref *on-resize-ref) nil))
+      :on-key-down (fn [^js e]
+                     (let [step 10
+                           code (.-code e)
+                           delta (case code
+                                   "ArrowLeft" (- step)
+                                   "ArrowRight" step
+                                   nil)]
+                       (when delta
+                         (.preventDefault e)
+                         (let [property-key-el (.closest (.-currentTarget e) ".property-key")
+                               current-w (if property-key-el
+                                           (.-offsetWidth property-key-el)
+                                           160)
+                               new-w (+ current-w delta)]
+                           (when (and (>= new-w 80) (<= new-w 500))
+                             ((rum/deref *on-resize-ref) new-w))))))}]))
+
 (rum/defc bidirectional-properties-section < rum/static
-  [bidirectional-properties]
+  [bidirectional-properties resize-handle]
   (when (seq bidirectional-properties)
     (for [{:keys [class title entities]} bidirectional-properties]
       [:div.property-pair.items-start {:key (str "bidirectional-" title)}
@@ -423,7 +536,9 @@
                          (util/stop e)
                          (route-handler/redirect-to-page! (:block/uuid class)))}
             title]
-           [:div.property-k.flex.select-none.w-full title])]]
+           [:div.property-k.flex.select-none.w-full title])]
+        (when resize-handle
+          (property-row-resizer (:on-resize! resize-handle)))]
        [:div.ls-block.property-value-container.flex.flex-row.gap-1.items-start
         [:div.property-value.flex.flex-1
          (bidirectional-values-cp entities)]]])))
@@ -481,7 +596,7 @@
           [:div.flex.flex-row.items-center.property-key.gap-1
            (when-not (:db/id property)
              (property-key-bullet nil :default))
-           (if (:db/id property)                              ; property exists already
+           (if (:db/id property) ; property exists already
              (property-key-cp block property opts)
              [:div property-key])])
         [:div.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
@@ -587,8 +702,14 @@
                :data-property-title (:block/title property)
                :data-property-type (name type)}
          (if (seq sortable-opts)
-           (dnd/sortable-item (assoc sortable-opts :class "property-key") property-key-cp')
-           [:div.property-key property-key-cp'])
+           (dnd/sortable-item (assoc sortable-opts :class "property-key")
+                              [:<> property-key-cp'
+                               (when-let [rh (:resize-handle opts)]
+                                 (property-row-resizer (:on-resize! rh)))])
+           [:div.property-key
+            property-key-cp'
+            (when-let [rh (:resize-handle opts)]
+              (property-row-resizer (:on-resize! rh)))])
 
          (let [property-desc (when-not (= (:db/ident property) :logseq.property/description)
                                (:logseq.property/description property))]
@@ -819,35 +940,61 @@
                                         full-properties)
                                 (remove (fn [[k _v]] (= k :logseq.property.class/properties))))
                page? (entity-util/page? block)
-               class? (entity-util/class? block)]
+               class? (entity-util/class? block)
+               stored-width (ldb/get-key-value (db/get-db) :logseq.kv/property-key-width)]
            [:div.ls-properties-area
             {:id id
              :class (util/classnames [{:ls-page-properties page?}])
+             :style (when stored-width {"--ls-property-key-width" (str stored-width "px")})
              :tab-index 0}
-            [:<>
-             (properties-section block properties' opts)
-             (bidirectional-properties-section bidirectional-properties)
+            (let [resize-handle (when (not config/publishing?)
+                                  {:on-resize! (fn [new-width]
+                                                 (if (some? new-width)
+                                                   (db/transact! [(ldb/kv :logseq.kv/property-key-width new-width)])
+                                                   (db/transact! [[:db/retractEntity :logseq.kv/property-key-width]])))})
+                  opts-with-resize (cond-> opts
+                                     resize-handle (assoc :resize-handle resize-handle))]
+              [:<>
+               (if class?
+                 ;; Class/tag page: wrap own properties in "Tag Settings" section
+                 (when (seq properties')
+                   [:div.flex.flex-col.gap-1
+                    [:div {:style {:font-size 15}}
+                     [:div.property-pair
+                      [:div.property-key.text-sm
+                       [:div.property-key-inner
+                        [:div.property-icon (shui/tabler-icon "settings" {:size 16 :class "opacity-50"})]
+                        [:span.property-k "Tag Settings"]]]]
+                     [:div.text-muted-foreground {:style {:margin-left 26}}
+                      "Settings that control the behavior of this tag."]]
+                    [:div.ml-4
+                     (properties-section block properties' opts-with-resize)
+                     (bidirectional-properties-section bidirectional-properties resize-handle)]])
+                 ;; Non-class page: render normally
+                 [:<>
+                  (properties-section block properties' opts-with-resize)
+                  (bidirectional-properties-section bidirectional-properties resize-handle)])
 
-             (when-not class?
-               (hidden-properties-cp block hidden-properties
-                                     (assoc opts :root-block? root-block?)))
+               (when-not class?
+                 (hidden-properties-cp block hidden-properties
+                                       (assoc opts :root-block? root-block?)))
 
-             (when (and page? (not class?))
-               (rum/with-key (new-property block opts) (str id "-add-property")))
+               (when (and page? (not class?))
+                 (rum/with-key (new-property block opts) (str id "-add-property")))
 
-             (when class?
-               (let [properties (->> (:logseq.property.class/properties block)
-                                     (map (fn [e] [(:db/ident e)])))
-                     opts' (assoc opts :class-schema? true)]
-                 [:div.flex.flex-col.gap-1
-                  [:div {:style {:font-size 15}}
-                   [:div.property-pair
-                    [:div.property-key.text-sm
-                     (property-key-cp block (db/entity :logseq.property.class/properties) {})]]
-                   [:div.text-muted-foreground {:style {:margin-left 26}}
-                    "Tag properties are inherited by all nodes using the tag. For example, each #Task node inherits 'Status' and 'Priority'."]]
-                  [:div.ml-4
-                   (properties-section block properties opts')
-                   (hidden-properties-cp block hidden-properties
-                                         (assoc opts :root-block? root-block?))
-                   (rum/with-key (new-property block opts') (str id "-class-add-property"))]]))]])))]))
+               (when class?
+                 (let [properties (->> (:logseq.property.class/properties block)
+                                       (map (fn [e] [(:db/ident e)])))
+                       opts' (assoc opts-with-resize :class-schema? true)]
+                   [:div.flex.flex-col.gap-1
+                    [:div {:style {:font-size 15}}
+                     [:div.property-pair
+                      [:div.property-key.text-sm
+                       (property-key-cp block (db/entity :logseq.property.class/properties) {})]]
+                     [:div.text-muted-foreground {:style {:margin-left 26}}
+                      "Tag properties are inherited by all nodes using the tag. For example, each #Task node inherits 'Status' and 'Priority'."]]
+                    [:div.ml-4
+                     (properties-section block properties opts')
+                     (hidden-properties-cp block hidden-properties
+                                           (assoc opts :root-block? root-block?))
+                     (rum/with-key (new-property block opts') (str id "-class-add-property"))]]))])])))]))

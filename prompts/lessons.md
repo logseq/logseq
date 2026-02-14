@@ -1,0 +1,1 @@
+/Users/jakob/Documents/logseq-dev/prompts/lessons.md
