@@ -430,6 +430,7 @@
        (when-let [el (and (fn? js/window.interact) (rum/deref *el))]
          (let [*start-width (atom nil)
                *dx (atom 0)
+               *effective-max (atom 500)
                min-width 80
                max-width 500
                sync-handles! (fn [dx-val]
@@ -447,8 +448,15 @@
                                 (let [property-key-el (.closest el ".property-key")
                                       current-w (if property-key-el
                                                   (.-offsetWidth property-key-el)
-                                                  160)]
+                                                  160)
+                                      ;; Compute effective max from CSS percentage constraints
+                                      properties-area (.closest el ".ls-properties-area")
+                                      container-w (if properties-area (.-offsetWidth properties-area) 1000)
+                                      in-block? (some? (.closest el ".ls-block .ls-properties-area"))
+                                      pct-cap (if in-block? 0.4 0.5)
+                                      eff-max (min max-width (js/Math.floor (* container-w pct-cap)))]
                                   (reset! *start-width current-w)
+                                  (reset! *effective-max eff-max)
                                   (reset! *dx 0)
                                   (dom/add-class! el "is-active")))
                        :move (fn [^js e]
@@ -456,12 +464,16 @@
                                      prev-dx @*dx
                                      to-dx (+ prev-dx raw-dx)
                                      start-w @*start-width
-                                     max-dx (- max-width start-w)
+                                     max-dx (- @*effective-max start-w)
                                      min-dx (- min-width start-w)
                                      clamped (cond
                                                (< to-dx min-dx) min-dx
                                                (> to-dx max-dx) max-dx
-                                               :else to-dx)]
+                                               :else to-dx)
+                                     at-limit? (not= clamped to-dx)]
+                                 (if at-limit?
+                                   (dom/add-class! el "at-limit")
+                                   (dom/remove-class! el "at-limit"))
                                  (reset! *dx clamped)
                                  (sync-handles! clamped)))
                        :end (fn []
@@ -469,9 +481,10 @@
                                     start-w @*start-width]
                                 (when (number? start-w)
                                   (let [w (js/Math.round (+ dx-val start-w))
+                                        eff-max @*effective-max
                                         final-w (cond
                                                   (< w min-width) min-width
-                                                  (> w max-width) max-width
+                                                  (> w eff-max) eff-max
                                                   :else w)]
                                     ;; Optimistic: set CSS variable on ALL property areas (global setting)
                                     (let [width-str (str final-w "px")]
@@ -483,7 +496,8 @@
                                 (sync-handles! 0)
                                 (reset! *start-width nil)
                                 (reset! *dx 0)
-                                (dom/remove-class! el "is-active")))}}))
+                                (dom/remove-class! el "is-active")
+                                (dom/remove-class! el "at-limit")))}}))
                    (.styleCursor false)
                    (.on "dragstart" add-resizing-class)
                    (.on "dragend" remove-resizing-class)
@@ -513,12 +527,19 @@
                                    nil)]
                        (when delta
                          (.preventDefault e)
-                         (let [property-key-el (.closest (.-currentTarget e) ".property-key")
+                         (let [current-el (.-currentTarget e)
+                               property-key-el (.closest current-el ".property-key")
                                current-w (if property-key-el
                                            (.-offsetWidth property-key-el)
                                            160)
+                               ;; Compute effective max from CSS percentage constraints
+                               properties-area (.closest current-el ".ls-properties-area")
+                               container-w (if properties-area (.-offsetWidth properties-area) 1000)
+                               in-block? (some? (.closest current-el ".ls-block .ls-properties-area"))
+                               pct-cap (if in-block? 0.4 0.5)
+                               eff-max (min 500 (js/Math.floor (* container-w pct-cap)))
                                new-w (+ current-w delta)]
-                           (when (and (>= new-w 80) (<= new-w 500))
+                           (when (and (>= new-w 80) (<= new-w eff-max))
                              ((rum/deref *on-resize-ref) new-w))))))}]))
 
 (rum/defc bidirectional-properties-section < rum/static

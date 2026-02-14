@@ -617,6 +617,29 @@ html.is-resizing-buf .property-row-resizer.is-active::before {
   border-radius: 0;
 }
 
+/* At min/max limit — desaturated + thicker to signal boundary */
+html.is-resizing-buf .property-row-resizer.is-active.at-limit::before {
+  background-color: hsl(var(--primary) / 0.35);
+  width: 5px;
+  transition: none;
+}
+
+/* Siblings stay unchanged during limit — no alarm cascade */
+
+@media (prefers-reduced-motion: reduce) {
+  .property-row-resizer::before {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .property-row-resizer.is-active.at-limit::before {
+    forced-color-adjust: none;
+    background-color: GrayText;
+    width: 5px;
+  }
+}
+
 /* Touch devices: always slightly visible (no hover available) */
 @media (hover: none) and (pointer: coarse) {
   .property-row-resizer::before {
