@@ -296,7 +296,7 @@ a.control-link {
 }
 
 .ls-page-properties .property-key, .ls-properties-area .property-key {
-  @apply flex flex-col justify-center;
+  @apply flex flex-col justify-start;
 }
 
 .property-key {
@@ -309,6 +309,7 @@ a.control-link {
   max-width: 50%;
   flex-shrink: 0;
   min-height: 28px;
+  padding-top: 1px;
   padding-right: 16px;
 
   h1.title, h2.title {
@@ -340,13 +341,29 @@ a.control-link {
 }
 
 .property-key-inner {
-  @apply flex flex-row items-center gap-1 relative;
+  @apply flex flex-row items-start gap-1 relative;
 
-  .property-icon {
+  > .property-icon {
     @apply flex items-center;
+    margin-top: 5px; /* centers icon with first text line */
     svg {
         width: 16px;
         height: 16px;
+    }
+  }
+
+  /* Fix: .property-key sets font-size: 15px, making .bullet-container (1em)
+     resolve to 15x15. Override to 16px to match value-side and fit 16x16 icons. */
+  .bullet-container {
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    line-height: 0;
+
+    > .property-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
   }
 
@@ -586,16 +603,18 @@ a.control-link {
   transition: none;
 }
 
-/* During drag: sibling handles show as muted gray guides */
+/* During drag: all handles form a continuous square-ended column line */
 html.is-resizing-buf .property-row-resizer::before {
-  opacity: 0.4;
+  opacity: 1;
   background-color: hsl(var(--primary) / 0.4);
+  border-radius: 0;
 }
 
-/* Active handle overrides siblings — blue */
+/* Active handle overrides siblings — solid blue */
 html.is-resizing-buf .property-row-resizer.is-active::before {
   opacity: 1;
   background-color: hsl(var(--primary) / 0.9);
+  border-radius: 0;
 }
 
 /* Touch devices: always slightly visible (no hover available) */
