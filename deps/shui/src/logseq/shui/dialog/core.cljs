@@ -123,14 +123,35 @@
   (doseq [{:keys [id]} @*modals]
     (close! id)))
 
+(defn transition-to!
+  "Replace a modal's content in-place with a crossfade animation.
+   Keeps the dialog container, overlay, and position stable.
+   Optionally merges new-opts into the modal config (e.g. :close-btn?, :content-props)."
+  [id new-content & [new-opts]]
+  (when-let [[index config] (get-modal id)]
+    (let [new-config (merge config
+                            (dissoc new-opts :id)
+                            {:content new-content
+                             :prev-content (:content config)
+                             :transitioning? true})]
+      (swap! *modals assoc index new-config))))
+
+(defn clear-transition!
+  "Remove transition state from a modal after crossfade completes."
+  [id]
+  (when-let [[index config] (get-modal id)]
+    (swap! *modals assoc index (dissoc config :prev-content :transitioning?))))
+
 ;; components
 (rum/defc modal-inner
   [config]
   (let [{:keys [id title description content footer on-open-change align open?
-                auto-width? close-btn? root-props content-props]} config
+                auto-width? close-btn? root-props content-props
+                prev-content transitioning?]} config
         props (dissoc config
                       :id :title :description :content :footer :auto-width? :close-btn?
-                      :close :align :on-open-change :open? :root-props :content-props)
+                      :close :align :on-open-change :open? :root-props :content-props
+                      :prev-content :transitioning?)
         props (assoc-in props [:overlay-props :data-align] (name (or align :center)))]
 
     (hooks/use-effect!
@@ -165,8 +186,19 @@
         (dialog-title {:class (when (nil? title) "hidden")} title)
         (when description (dialog-description description))
 
-        (when content
-          [:div.ui__dialog-main-content content])
+        (when (or content prev-content)
+          [:div.ui__dialog-main-content
+           {:class (when transitioning? "relative overflow-hidden")}
+           ;; Exit: old content fading out (absolute positioned, on top)
+           (when (and transitioning? prev-content)
+             [:div {:class "absolute inset-0 z-10 dialog-phase-exit pointer-events-none"
+                    :on-animation-end (fn [] (clear-transition! id))}
+              prev-content])
+           ;; Enter: new content fading in
+           (when content
+             [:div {:class (cond-> "h-full"
+                             transitioning? (str " dialog-phase-enter"))}
+              content])])
 
         (when footer
           (dialog-footer footer)))))))

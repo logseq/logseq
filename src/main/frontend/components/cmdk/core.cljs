@@ -5,6 +5,7 @@
             [frontend.components.block :as block]
             [frontend.components.cmdk.list-item :as list-item]
             [frontend.components.icon :as icon]
+            [frontend.components.page :as component-page]
             [frontend.components.wikidata :as wikidata]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -96,26 +97,45 @@
              (not (#{"config.edn" "custom.js" "custom.css"} q))
              (not config/publishing?))
     (let [class? (string/starts-with? q "#")
+          has-inline-tag? (and (not class?) (string/includes? q " #"))
+          ;; Parse "PageName #Tag1 #Tag2" pattern
+          [object-page-name object-tag-names]
+          (when has-inline-tag?
+            (let [parts (string/split q #" #")
+                  pn (string/trim (first parts))
+                  tns (->> (rest parts) (map string/trim) (remove string/blank?) vec)]
+              (when (and (not (string/blank? pn)) (seq tns))
+                [pn tns])))
+          create-object? (some? object-page-name)
           class-name (get-class-from-input q)
           class (let [class (db/get-case-page class-name)]
                   (when (ldb/class? class)
                     class))]
-      (->> [{:text (cond
-                     class "Configure tag"
-                     class? "Create tag"
-                     :else "Create page")
-             :icon (if class "settings" "new-page")
-             :icon-theme :gray
-             :info (cond
-                     class
-                     (str "Configure #" class-name)
-                     class?
-                     (str "Create tag called '" class-name "'")
-                     :else
-                     (str "Create page called '" q "'"))
-             :source-create :page
-             :class class}]
-           (remove nil?)))))
+      (if create-object?
+        [{:text (str "Create as #" (string/join ", #" object-tag-names))
+          :icon "new-page"
+          :icon-theme :gray
+          :info (str "Create page called '" object-page-name "'")
+          :source-create :page
+          :create-object? true
+          :page-name object-page-name
+          :tag-names object-tag-names}]
+        (->> [{:text (cond
+                       class "Configure tag"
+                       class? "Create tag"
+                       :else "Create page")
+               :icon (if class "settings" "new-page")
+               :icon-theme :gray
+               :info (cond
+                       class
+                       (str "Configure #" class-name)
+                       class?
+                       (str "Create tag called '" class-name "'")
+                       :else
+                       (str "Create page called '" q "'"))
+               :source-create :page
+               :class class}]
+             (remove nil?))))))
 
 ;; Take the results, decide how many items to show, and order the results appropriately
 (defn state->results-ordered [state search-mode]
@@ -696,22 +716,45 @@
       (when-not (contains? dont-close-commands (:id command))
         (shui/dialog-close! :ls-dialog-cmdk)))))
 
-(defmethod handle-action :create [_ state _event]
-  (let [item (state->highlighted-item state)
-        !input (::input state)
-        create-class? (string/starts-with? @!input "#")
-        create-page? (= :page (:source-create item))
-        class (when create-class? (get-class-from-input @!input))]
-    (if (and (= (:text item) "Configure tag") (:class item))
-      (state/pub-event! [:dialog/show-block (:class item) {:tag-dialog? true}])
-      (p/let [result (cond
-                       create-class?
-                       (db-page-handler/<create-class! class
-                                                       {:redirect? false})
-                       create-page? (page-handler/<create! @!input {:redirect? true}))]
-        (shui/dialog-close! :ls-dialog-cmdk)
-        (when (and create-class? result)
-          (state/pub-event! [:dialog/show-block result {:tag-dialog? true}]))))))
+(rum/defc page-dialog-footer
+  [block {:keys [open-label] :or {open-label "Open tag page"}}]
+  [:div.flex.w-full.items-center.justify-between.px-3.py-2.gap-2.bg-gray-03.border-t.border-gray-05
+   ;; Left: tip
+   [:div.text-sm.leading-6
+    [:div.flex.flex-row.gap-1.items-center
+     [:span.font-medium.text-gray-12 "Tip:"]
+     [:div.flex.flex-row.gap-1.items-center.opacity-50
+      [:span "Press"]
+      (shui/shortcut ["cmd" "j"] {:style :combo :interactive? false :aria-hidden? true})
+      [:span "to jump to a property"]]]]
+
+   ;; Right: action buttons
+   [:div.flex.items-center.gap-2
+    ;; More dropdown
+    (shui/dropdown-menu
+     (shui/dropdown-menu-trigger
+      {:asChild true}
+      (shui/button {:variant :ghost :size :sm :class "opacity-60 hover:opacity-100"}
+                   "More"))
+     (shui/dropdown-menu-content
+      {:align "end" :side "top"}
+      (shui/dropdown-menu-item
+       {:on-click (fn []
+                    (shui/dialog-close!)
+                    (route-handler/redirect-to-page! (:block/uuid block)))}
+       open-label)
+      (shui/dropdown-menu-item
+       {:on-click (fn []
+                    (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :page)
+                    (shui/dialog-close!))}
+       "Open in sidebar")))
+
+    ;; Primary action: Done
+    (shui/button
+     {:variant :default
+      :size :sm
+      :on-click #(shui/dialog-close!)}
+     "Done")]])
 
 (defn- <ensure-class-exists!
   "Ensure a class with the given title exists. Creates it if not found.
@@ -732,6 +775,56 @@
            default-icon))
         (js/console.log "[wikidata] Created new class:" class-title "with default-icon:" (get wikidata/class->default-icon class-title))
         new-class))))
+
+(defmethod handle-action :create [_ state _event]
+  (let [item (state->highlighted-item state)
+        !input (::input state)
+        create-class? (string/starts-with? @!input "#")
+        create-object? (:create-object? item)
+        create-page? (and (= :page (:source-create item)) (not create-object?))
+        class (when create-class? (get-class-from-input @!input))
+        page-dialog-content (fn [block opts]
+                              [:div.w-full.h-full.flex.flex-col
+                               [:div.px-16.py-8.flex-1.min-h-0.overflow-y-auto
+                                (component-page/page-container block {:tag-dialog? true})]
+                               (page-dialog-footer block opts)])]
+    (cond
+      ;; Configure existing tag — synchronous morph
+      (and (= (:text item) "Configure tag") (:class item))
+      (shui/dialog-transition-to! :ls-dialog-cmdk
+                                  (page-dialog-content (:class item) {})
+                                  {:close-btn? true})
+
+      ;; Create object page ("PageName #Tag") — async create, then morph
+      create-object?
+      (let [page-name (:page-name item)
+            tag-names (:tag-names item)]
+        (p/let [tag-entities (p/all (mapv <ensure-class-exists! tag-names))
+                page (page-handler/<create! page-name {:redirect? false})]
+          (when page
+            ;; Apply tags (works for both new and existing pages)
+            (doseq [tag-entity (remove nil? tag-entities)]
+              (db-property-handler/set-block-property!
+               (:block/uuid page) :block/tags (:db/id tag-entity)))
+            ;; Morph CMD+K into object page dialog
+            (shui/dialog-transition-to! :ls-dialog-cmdk
+                                        (page-dialog-content page {:open-label "Open page"})
+                                        {:close-btn? true}))))
+
+      ;; Create new tag or page — async
+      :else
+      (p/let [result (cond
+                       create-class?
+                       (db-page-handler/<create-class! class
+                                                       {:redirect? false})
+                       create-page? (page-handler/<create! @!input {:redirect? true}))]
+        (if (and create-class? result)
+          ;; Morph CMD+K into tag settings
+          (shui/dialog-transition-to! :ls-dialog-cmdk
+                                      (page-dialog-content result {})
+                                      {:close-btn? true})
+          ;; Non-class creation (page): just close CMD+K
+          (shui/dialog-close! :ls-dialog-cmdk))))))
 
 (defn- get-page-by-wikidata-id
   "Find an existing page that was created from the given Wikidata entity."
@@ -1314,7 +1407,7 @@
                     :class (cond-> "w-full h-full relative flex flex-col justify-start"
                              (not sidebar?) (str " rounded-lg"))}
      (input-row state all-items opts)
-     [:div {:class (cond-> "w-full flex-1 overflow-y-auto min-h-[65dvh] max-h-[65dvh]"
+     [:div {:class (cond-> "w-full flex-1 overflow-y-auto"
                      (not sidebar?) (str " pb-14"))
             :ref #(let [*ref (::scroll-container-ref state)]
                     (when-not @*ref (reset! *ref %)))
@@ -1345,7 +1438,7 @@
      (when-not sidebar? (hints state))]))
 
 (rum/defc cmdk-modal [props]
-  [:div {:class "cp__cmdk__modal rounded-lg w-[90dvw] max-w-4xl relative"
+  [:div {:class "cp__cmdk__modal rounded-lg w-[90dvw] max-w-4xl relative h-full"
          :data-keep-selection true}
    (cmdk props)])
 

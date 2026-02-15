@@ -264,6 +264,26 @@ div[data-radix-popper-content-wrapper] {
   }
 }
 
+/* Dialog content crossfade for transition-to! */
+@keyframes dialogContentFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes dialogContentFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.dialog-phase-exit {
+  animation: dialogContentFadeOut 200ms ease-out forwards;
+}
+
+.dialog-phase-enter {
+  opacity: 0;
+  animation: dialogContentFadeIn 200ms ease-in 100ms forwards;
+}
+
 .ui__alert-dialog-content {
   &[data-mode=confirm] {
     .ui__alert-dialog-footer {

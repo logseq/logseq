@@ -6,5 +6,13 @@
 }
 
 .ls-dialog-cmdk {
-  @apply p-0 w-auto !max-w-fit overflow-hidden;
+  @apply p-0 overflow-hidden flex flex-col;
+  width: 90dvw !important;
+  max-width: 56rem !important; /* 4xl */
+  height: 75dvh !important;
+
+  > .ui__dialog-main-content {
+    @apply flex-1 min-h-0;
+  }
+
 }

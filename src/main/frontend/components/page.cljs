@@ -462,7 +462,7 @@
           (when show-tabs?
             (tabs page {:current-page? option :sidebar? sidebar?}))
 
-          (when (not tag-dialog?)
+          (when (or (not tag-dialog?) (not class-page?))
             [:div.ls-page-blocks
              {:style {:margin-left (if (util/mobile?) 0 -20)}
               :class (when-not (or sidebar? (util/capacitor?))

@@ -838,7 +838,7 @@
         id (::id state)
         db-id (:db/id (::block state))
         block (db/sub-block db-id)
-        show-properties? (or sidebar-properties? tag-dialog?)
+        show-properties? (or sidebar-properties? (and tag-dialog? page-title?))
         show-empty-and-hidden-properties? (let [{:keys [mode show? ids]} (state/sub :ui/show-empty-and-hidden-properties?)]
                                             (and show?
                                                  (or (= mode :global)

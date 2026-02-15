@@ -3280,7 +3280,7 @@
            (block-positioned-properties config block :block-below))]])
 
      (when (and (not (:library? config))
-                (or (:tag-dialog? config)
+                (or (and (:tag-dialog? config) (:page-title? config))
                     (and
                      (not collapsed?)
                      (not (or table? property?)))))
