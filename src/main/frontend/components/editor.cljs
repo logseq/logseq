@@ -347,9 +347,12 @@
          (when (and db-tag?
                     (not (string/blank? q))
                     (not= "page" (string/lower-case q)))
-           [:p.px-1.opacity-50.text-sm.flex.items-center.gap-1
-            (shui/shortcut ["cmd" "return"] {:interactive? false})
-            [:span " to display this tag inline instead of at the end of this node."]])]))))
+           [:div.hints {:style {:padding-block "2px" :min-height 0}}
+            [:p.text-sm.leading-5
+             [:span.font-medium.text-gray-12 "Tip: "]
+             [:span.opacity-50.hover:opacity-100
+              (shui/shortcut ["cmd" "return"] {:interactive? false})
+              " to display this tag inline instead of at the end of this node."]]])]))))
 
 (rum/defcs page-search < rum/reactive
   {:init (fn [state]

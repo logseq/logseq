@@ -718,6 +718,13 @@
       (when-not (contains? dont-close-commands (:id command))
         (shui/dialog-close! :ls-dialog-cmdk)))))
 
+(rum/defc hint-tip
+  "Renders a tip line: flex row with shortcut badges and trailing text.
+   Children should end with a .hints-tip-tail element for ellipsis truncation."
+  [& children]
+  (into [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100]
+        children))
+
 (rum/defc contextual-tip []
   (let [[editing _] (hooks/use-atom (:editor/editing? @state/state))
         is-editing? (boolean (seq editing))
@@ -738,16 +745,16 @@
              #(js/clearTimeout t)))))
      [is-editing?])
     [:div.text-sm.leading-6
-     [:div.flex.flex-row.gap-1.items-center.tip-rotate
-      {:key (if show-saved? :saved :shortcut)}
-      (if show-saved?
-        [:div.flex.flex-row.gap-1.items-center.opacity-50
-         (icon/icon "circle-check" {:size 14})
-         [:span.hints-tip-tail "Changes saved automatically"]]
-        [:div.flex.flex-row.gap-1.items-center.opacity-50
-         [:span "Press"]
-         (shui/shortcut ["cmd" "j"] {:style :combo :interactive? false :aria-hidden? true})
-         [:span.hints-tip-tail "to jump to a property"]])]]))
+     [:div.flex.flex-row.gap-1.items-center
+      [:span.font-medium.text-gray-12 "Tip:"]
+      [:div.tip-rotate
+       {:key (if show-saved? :saved :shortcut)}
+       (if show-saved?
+         (hint-tip (icon/icon "circle-check" {:size 14})
+                   [:span.hints-tip-tail "Changes saved automatically"])
+         (hint-tip [:span "Press"]
+                   (shui/shortcut ["cmd" "j"] {:style :combo :interactive? false :aria-hidden? true})
+                   [:span.hints-tip-tail "to jump to a property"]))]]]))
 
 (rum/defc hint-button
   [text shortcut opts]
@@ -800,6 +807,61 @@
         (when shortcut
           (shui/shortcut shortcut {:style :combo :interactive? false :aria-hidden? true}))])))))
 
+(rum/defc action-bar
+  "Shared action bar with responsive collapse. Renders a tip on the left,
+   primary button (rightmost) and secondary buttons that auto-collapse
+   into a 'More' dropdown when space is tight.
+
+   Props:
+     :tip        - Rum element for the left side
+     :primary    - {:text :shortcut :on-click} for the primary (rightmost) button
+     :secondary  - vec of {:text :shortcut :icon :icon-extension? :on-click}
+     :cache-key  - optional value; when it changes, the cached expanded width resets"
+  [{:keys [tip primary secondary cache-key]}]
+  (let [*container-ref (rum/use-ref nil)
+        *actions-ref (rum/use-ref nil)
+        *expanded-w (rum/use-ref nil)
+        *prev-cache-key (rum/use-ref nil)
+        [collapsed? set-collapsed!] (rum/use-state false)
+
+        _ (hooks/use-effect!
+           (fn []
+             (when (not= cache-key (rum/deref *prev-cache-key))
+               (rum/set-ref! *expanded-w nil)
+               (rum/set-ref! *prev-cache-key cache-key))
+             (when-let [container (rum/deref *container-ref)]
+               (let [check (fn []
+                             (when-let [actions (rum/deref *actions-ref)]
+                               (when (and (not collapsed?)
+                                          (> (.-offsetWidth actions) 0))
+                                 (rum/set-ref! *expanded-w (.-offsetWidth actions))))
+                             (let [ew (or (rum/deref *expanded-w) 0)
+                                   min-tip-w 300
+                                   gap 8
+                                   needed (+ min-tip-w ew gap)]
+                               (set-collapsed! (> needed (.-clientWidth container)))))
+                     ob (js/ResizeObserver. check)]
+                 (check)
+                 (.observe ob container)
+                 #(.disconnect ob))))
+           [cache-key collapsed?])]
+
+    [:div.hints {:ref *container-ref}
+     ;; Left: tip
+     [:div.hints-tip.text-sm.leading-6 tip]
+
+     ;; Right: action buttons
+     [:div.hints-actions {:ref *actions-ref}
+      (when (seq secondary)
+        (if collapsed?
+          (hints-more-dropdown secondary)
+          [:<>
+           (for [b secondary]
+             (hint-button (:text b) (:shortcut b)
+                          {:key (:text b) :on-click (:on-click b)}))]))
+      (hint-button (:text primary) (:shortcut primary)
+                   {:primary? true :on-click (:on-click primary)})]]))
+
 (rum/defc page-dialog-footer
   [block {:keys [open-label] :or {open-label "Open tag page"}}]
   ;; Register keyboard shortcuts for footer actions
@@ -810,14 +872,12 @@
                            shift? (.-shiftKey e)
                            key (.-key e)]
                        (cond
-                          ;; Cmd+Shift+O → Open page (navigate away)
                          (and meta? shift? (= key "o"))
                          (do (.preventDefault e)
                              (.stopPropagation e)
                              (shui/dialog-close!)
                              (route-handler/redirect-to-page! (:block/uuid block)))
 
-                          ;; Cmd+Shift+Enter → Open in sidebar
                          (and meta? shift? (= key "Enter"))
                          (do (.preventDefault e)
                              (.stopPropagation e)
@@ -827,69 +887,22 @@
        #(.removeEventListener js/document "keydown" handler)))
    [])
 
-  (let [*container-ref (rum/use-ref nil)
-        *actions-ref (rum/use-ref nil)
-        *expanded-w (rum/use-ref nil)
-        [collapsed? set-collapsed!] (rum/use-state false)
-
-        ;; ResizeObserver: collapse when expanded buttons + minimum tip space
-        ;; exceed container width. Uses a fixed tip width (300px) instead of
-        ;; scrollWidth measurement, which is broken by overflow:hidden on
-        ;; intermediate containers. This is stable and oscillation-free.
-        _ (hooks/use-effect!
-           (fn []
-             (when-let [container (rum/deref *container-ref)]
-               (let [check (fn []
-                             ;; Cache expanded actions width while visible
-                             (when-let [actions (rum/deref *actions-ref)]
-                               (when (and (not collapsed?)
-                                          (> (.-offsetWidth actions) 0))
-                                 (rum/set-ref! *expanded-w (.-offsetWidth actions))))
-                             (let [ew (or (rum/deref *expanded-w) 0)
-                                   min-tip-w 300
-                                   gap 8 ;; gap-2 = 0.5rem = 8px
-                                   needed (+ min-tip-w ew gap)]
-                               (set-collapsed! (> needed (.-clientWidth container)))))
-                     ob (js/ResizeObserver. check)]
-                 (check)
-                 (.observe ob container)
-                 #(.disconnect ob))))
-           [collapsed?])
-
-        secondary [{:text open-label
-                    :icon "open-as-page"
-                    :icon-extension? true
-                    :shortcut ["cmd" "shift" "o"]
-                    :on-click (fn []
-                                (shui/dialog-close!)
-                                (route-handler/redirect-to-page! (:block/uuid block)))}
-                   {:text "Open in sidebar"
-                    :icon "move-to-sidebar-right"
-                    :icon-extension? true
-                    :shortcut ["cmd" "shift" "return"]
-                    :on-click (fn []
-                                (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :page)
-                                (shui/dialog-close!))}]]
-
-    [:div.flex.w-full.items-center.justify-between.px-3.py-2.gap-2.bg-gray-03.border-t.border-gray-05
-     {:ref *container-ref}
-     ;; Left: contextual tip
-     [:div.hints-tip
-      (contextual-tip)]
-
-     ;; Right: action buttons (same pattern as hints bar)
-     [:div.hints-actions {:ref *actions-ref}
-      ;; Secondary: inline or collapsed into "More" dropdown
-      (if collapsed?
-        (hints-more-dropdown secondary)
-        [:<>
-         (for [b secondary]
-           (hint-button (:text b) (:shortcut b)
-                        {:key (:text b) :on-click (:on-click b)}))])
-
-      ;; Primary: always visible, rightmost
-      (hint-button "Done" "esc" {:primary? true :on-click #(shui/dialog-close!)})]]))
-
+  (action-bar
+   {:tip (contextual-tip)
+    :primary {:text "Done" :shortcut "esc"
+              :on-click #(shui/dialog-close!)}
+    :secondary [{:text open-label
+                 :icon "open-as-page" :icon-extension? true
+                 :shortcut ["cmd" "shift" "o"]
+                 :on-click (fn []
+                             (shui/dialog-close!)
+                             (route-handler/redirect-to-page! (:block/uuid block)))}
+                {:text "Open in sidebar"
+                 :icon "move-to-sidebar-right" :icon-extension? true
+                 :shortcut ["cmd" "shift" "return"]
+                 :on-click (fn []
+                             (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :page)
+                             (shui/dialog-close!))}]}))
 (defn- <ensure-class-exists!
   "Ensure a class with the given title exists. Creates it if not found.
    If creating a new class, sets the default-icon from wikidata/class->default-icon.
@@ -1396,13 +1409,8 @@
 (defn rand-tip
   []
   (rand-nth
-   [[:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
-     [:div "Type"]
-     (shui/shortcut "/")
-     [:div.hints-tip-tail "to filter search results"]]
-    [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
-     (shui/shortcut ["mod" "enter"] {:style :combo})
-     [:div.hints-tip-tail "to open search in the sidebar"]]]))
+   [(hint-tip [:span "Type"] (shui/shortcut "/") [:span.hints-tip-tail "to filter search results"])
+    (hint-tip (shui/shortcut ["mod" "enter"] {:style :combo}) [:span.hints-tip-tail "to open search in the sidebar"])]))
 
 (rum/defcs tip <
   {:init (fn [state]
@@ -1411,10 +1419,7 @@
   (let [filter' @(::filter state)]
     (cond
       filter'
-      [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
-       [:div "Type"]
-       (shui/shortcut "esc" {:tiled false})
-       [:div.hints-tip-tail "to clear search filter"]]
+      (hint-tip [:span "Type"] (shui/shortcut "esc" {:tiled false}) [:span.hints-tip-tail "to clear search filter"])
 
       :else
       (::rand-tip inner-state))))
@@ -1422,79 +1427,33 @@
 (rum/defc hints
   [state]
   (let [action (state->action state)
-        *container-ref (rum/use-ref nil)
-        *actions-ref (rum/use-ref nil)
-        *expanded-w (rum/use-ref nil)
-        [collapsed? set-collapsed!] (rum/use-state false)
-
-        ;; ResizeObserver: collapse when the tip's minimum comfortable width
-        ;; plus the expanded actions width exceeds the container.
-        ;; Uses a fixed min-tip-w constant instead of scrollWidth (which is
-        ;; broken by overflow:hidden on intermediate flex containers).
-        _ (hooks/use-effect!
-           (fn []
-             (when-let [container (rum/deref *container-ref)]
-               (let [check (fn []
-                             ;; Cache expanded actions width while visible
-                             (when-let [actions (rum/deref *actions-ref)]
-                               (when (and (not collapsed?)
-                                          (> (.-offsetWidth actions) 0))
-                                 (rum/set-ref! *expanded-w (.-offsetWidth actions))))
-                             (let [ew (or (rum/deref *expanded-w) 0)
-                                   min-tip-w 300
-                                   gap 8 ;; gap-2 = 0.5rem = 8px
-                                   needed (+ min-tip-w ew gap)]
-                               (set-collapsed! (> needed (.-clientWidth container)))))
-                     ob (js/ResizeObserver. check)]
-                 (check)
-                 (.observe ob container)
-                 #(.disconnect ob))))
-           [collapsed?])
-
-        ;; Button data factory
         make-button (fn [text shortcut & {:as opts}]
-                      {:text text
-                       :shortcut shortcut
+                      {:text text :shortcut shortcut
                        :on-click #(handle-action action (assoc state :opts opts) %)})
 
-        ;; Define buttons per action
         {:keys [primary secondary]}
         (case action
           :open
           {:primary (make-button "Open" ["return"])
-           :secondary (cond-> [(make-button "Open in sidebar" ["shift" "return"] {:open-sidebar? true})]
-                        (:source-block @(::highlighted-item state))
+           :secondary (cond-> [(make-button "Open in sidebar" ["shift" "return"]
+                                            {:open-sidebar? true})]
+                        (:source-block (state->highlighted-item state))
                         (conj (make-button "Copy ref" ["cmd" "c"])))}
-
-          :search             {:primary (make-button "Search" ["return"]) :secondary []}
-          :trigger            {:primary (make-button "Trigger" ["return"]) :secondary []}
-          :create             {:primary (make-button "Create" ["return"]) :secondary []}
-          :filter             {:primary (make-button "Filter" ["return"]) :secondary []}
+          :search               {:primary (make-button "Search" ["return"]) :secondary []}
+          :trigger              {:primary (make-button "Trigger" ["return"]) :secondary []}
+          :create               {:primary (make-button "Create" ["return"]) :secondary []}
+          :filter               {:primary (make-button "Filter" ["return"]) :secondary []}
           :create-from-wikidata {:primary (make-button "Create" ["return"]) :secondary []}
           {:primary nil :secondary []})]
 
     (when (and action primary)
-      [:div.hints {:ref *container-ref}
-       ;; Left: tip
-       [:div.hints-tip.text-sm.leading-6
-        [:div.flex.flex-row.gap-1.items-center
-         [:div.font-medium.text-gray-12 "Tip:"]
-         (tip state)]]
-
-       ;; Right: action buttons
-       [:div.hints-actions.hidden.md:flex {:ref *actions-ref}
-        ;; Secondary buttons: inline or collapsed into "More" dropdown
-        (when (seq secondary)
-          (if collapsed?
-            (hints-more-dropdown secondary)
-            [:<>
-             (for [b secondary]
-               (hint-button (:text b) (:shortcut b)
-                            {:key (:text b) :on-click (:on-click b)}))]))
-
-        ;; Primary button: always visible, rightmost
-        (hint-button (:text primary) (:shortcut primary)
-                     {:primary? true :on-click (:on-click primary)})]])))
+      (action-bar
+       {:tip [:div.flex.flex-row.gap-1.items-center
+              [:span.font-medium.text-gray-12 "Tip:"]
+              (tip state)]
+        :primary primary
+        :secondary secondary
+        :cache-key action}))))
 
 (rum/defc search-only
   [state group-name]

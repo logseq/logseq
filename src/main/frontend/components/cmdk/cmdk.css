@@ -1,9 +1,8 @@
-.cp__cmdk {
-  > .hints {
-    @apply flex w-full px-3 py-2 gap-2 justify-between items-center
-    bg-gray-03 border-t border-gray-05;
-    min-height: 45px;
-  }
+/* Action bar: shared by CMD+K hints, page dialog footer, and tag popover */
+.hints {
+  @apply flex w-full px-3 py-2 gap-2 justify-between items-center
+  bg-gray-03 border-t border-gray-05;
+  min-height: 45px;
 }
 
 .hints-actions {

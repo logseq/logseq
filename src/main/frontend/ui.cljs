@@ -499,11 +499,23 @@
       (.removeEventListener js/window "visibilitychange" clear-all))))
 
 (defn setup-viewport-listeners! []
-  (when-let [^js vw (gobj/get js/window "visualViewport")]
-    (let [handler #(state/set-state! :ui/viewport {:width (.-width vw) :height (.-height vw) :scale (.-scale vw)})]
-      (.addEventListener js/window.visualViewport "resize" handler)
-      (handler)
-      #(.removeEventListener js/window.visualViewport "resize" handler))))
+  (let [;; Track visual viewport dimensions
+        vp-teardown
+        (when-let [^js vw (gobj/get js/window "visualViewport")]
+          (let [handler #(state/set-state! :ui/viewport {:width (.-width vw) :height (.-height vw) :scale (.-scale vw)})]
+            (.addEventListener js/window.visualViewport "resize" handler)
+            (handler)
+            #(.removeEventListener js/window.visualViewport "resize" handler)))
+
+        ;; Auto-close left sidebar when viewport crosses below sm breakpoint
+        mql (js/window.matchMedia "(max-width: 639px)")
+        mql-handler (fn [e]
+                      (when (.-matches e)
+                        (state/set-left-sidebar-open! false)))]
+    (.addEventListener mql "change" mql-handler)
+    (fn []
+      (when vp-teardown (vp-teardown))
+      (.removeEventListener mql "change" mql-handler))))
 
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)
