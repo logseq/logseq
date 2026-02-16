@@ -184,7 +184,7 @@
                (when (= title (item-title item)) item)))
        item-id))
 
-(deftest test-cli-graph-list
+(deftest ^:long test-cli-graph-list
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -198,7 +198,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-data-dir-permission-error
+(deftest ^:long test-cli-data-dir-permission-error
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-readonly")]
            (fs/chmodSync data-dir 365)
@@ -215,7 +215,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-graph-create-readonly-graph-dir
+(deftest ^:long test-cli-graph-create-readonly-graph-dir
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-graph-readonly")
                repo "readonly-graph"
@@ -236,7 +236,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-graph-create-and-info
+(deftest ^:long test-cli-graph-create-and-info
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -259,7 +259,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-list-add-show-remove
+(deftest ^:long test-cli-list-add-show-remove
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -302,7 +302,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-add-block-rewrites-page-ref
+(deftest ^:long test-cli-add-block-rewrites-page-ref
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-ref-rewrite")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -347,7 +347,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-add-block-keeps-uuid-ref
+(deftest ^:long test-cli-add-block-keeps-uuid-ref
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-uuid-ref")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -398,7 +398,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-add-block-missing-uuid-ref-errors
+(deftest ^:long test-cli-add-block-missing-uuid-ref-errors
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-missing-uuid-ref")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -423,7 +423,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-add-tags-and-properties-by-name
+(deftest ^:long test-cli-add-tags-and-properties-by-name
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-tags")]
            (-> (p/let [{:keys [cfg-path repo]} (setup-tags-graph data-dir)
@@ -498,7 +498,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-add-tags-and-properties-by-id
+(deftest ^:long test-cli-add-tags-and-properties-by-id
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-tags-id")]
            (-> (p/let [{:keys [cfg-path repo]} (setup-tags-graph data-dir)
@@ -547,7 +547,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-show-properties-human-output
+(deftest ^:long test-cli-show-properties-human-output
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-show-properties")
                repo "show-properties-graph"
@@ -605,7 +605,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-verbose-logs-to-stderr
+(deftest ^:long test-cli-verbose-logs-to-stderr
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-verbose")
                repo "verbose-graph"]
@@ -626,7 +626,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-update-tags-and-properties
+(deftest ^:long test-cli-update-tags-and-properties
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-update-tags")]
            (-> (p/let [{:keys [cfg-path repo]} (setup-tags-graph data-dir)
@@ -668,7 +668,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-add-tags-rejects-missing-tag
+(deftest ^:long test-cli-add-tags-rejects-missing-tag
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-tags-missing")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -697,7 +697,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-query
+(deftest ^:long test-cli-query
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-query")
                query-text "[:find ?e :in $ ?title :where [?e :block/title ?title]]"]
@@ -735,7 +735,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-query-task-search
+(deftest ^:long test-cli-query-task-search
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-task-query")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -803,7 +803,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-query-list-status-priority
+(deftest ^:long test-cli-query-list-status-priority
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-status-query")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -856,7 +856,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-query-recent-updated
+(deftest ^:long test-cli-query-recent-updated
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-recent-updated")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -953,7 +953,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-show-resolve-nested-uuid-refs
+(deftest ^:long test-cli-show-resolve-nested-uuid-refs
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-nested-refs")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -989,7 +989,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-show-linked-references-json
+(deftest ^:long test-cli-show-linked-references-json
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-linked-refs")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -1033,7 +1033,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-update-block-move
+(deftest ^:long test-cli-update-block-move
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-move")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -1066,7 +1066,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-add-block-pos-ordering
+(deftest ^:long test-cli-add-block-pos-ordering
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-add-pos")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -1095,7 +1095,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-output-formats-graph-list
+(deftest ^:long test-cli-output-formats-graph-list
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -1114,7 +1114,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-list-outputs-include-id
+(deftest ^:long test-cli-list-outputs-include-id
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -1141,7 +1141,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-list-page-human-output
+(deftest ^:long test-cli-list-page-human-output
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -1159,7 +1159,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-show-page-block-by-id-and-uuid
+(deftest ^:long test-cli-show-page-block-by-id-and-uuid
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -1198,7 +1198,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-show-multi-id
+(deftest ^:long test-cli-show-multi-id
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-multi-id")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -1270,7 +1270,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-show-multi-id-filters-contained
+(deftest ^:long test-cli-show-multi-id-filters-contained
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-multi-id-contained")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -1324,7 +1324,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-query-human-output-pipes-to-show
+(deftest ^:long test-cli-query-human-output-pipes-to-show
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-query-pipe")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -1398,7 +1398,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-query-human-output-pipes-to-show-stdin
+(deftest ^:long test-cli-query-human-output-pipes-to-show-stdin
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-query-stdin")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -1460,7 +1460,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-show-linked-references
+(deftest ^:long test-cli-show-linked-references
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-linked-refs")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -1501,7 +1501,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-graph-export-import-edn
+(deftest ^:long test-cli-graph-export-import-edn
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-export-edn")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -1540,7 +1540,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-graph-export-import-sqlite
+(deftest ^:long test-cli-graph-export-import-sqlite
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-export-sqlite")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
