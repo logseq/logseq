@@ -45,6 +45,23 @@
   }
 }
 
+/* Dropdown menu items: grayscale dimming for non-highlighted Radix items */
+.ui__dropdown-menu-item,
+.ui__dropdown-menu-sub-trigger {
+  @apply transition-all duration-75 ease-in;
+}
+
+.ui__dropdown-menu-content:has([data-highlighted])
+  :is(.ui__dropdown-menu-item, .ui__dropdown-menu-sub-trigger):not([data-highlighted]) {
+  @apply opacity-80 grayscale;
+}
+
+/* Dropdown menu icons: one shade dimmer than text for visual hierarchy */
+.ui__dropdown-menu-item .ui__icon,
+.ui__dropdown-menu-sub-trigger .ui__icon {
+  color: var(--lx-gray-11, var(--rx-gray-11));
+}
+
 /* General dropdown menu-link styles - opacity and grayscale for unselected items */
 /* Apply to all dropdown contexts (ui__dropdown-menu-content, menu-links-wrapper, etc.) */
 .ui__dropdown-menu-content .menu-link-wrap .menu-link:not(.chosen),
