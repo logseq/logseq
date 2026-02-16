@@ -8,7 +8,7 @@ Architecture: Centralize graph directory resolution and lock ownership checks so
 Tech Stack: ClojureScript, Node.js `fs` and `path`, promesa, logseq-cli command pipeline, db-worker-node daemon, existing lock file protocol.
 
 Related: Builds on `docs/agent-guide/019-logseq-cli-data-dir-permissions.md`.
-Related: Supercedes `docs/agent-guide/020-logseq-cli-default-paths-move.md`.
+Related: Supersedes `docs/agent-guide/020-logseq-cli-default-paths-move.md`.
 Related: Relates to `docs/agent-guide/012-logseq-cli-graph-storage.md`.
 
 ## Problem statement
