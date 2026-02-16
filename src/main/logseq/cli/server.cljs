@@ -5,6 +5,7 @@
             ["path" :as node-path]
             [clojure.string :as string]
             [frontend.worker.db-worker-node-lock :as db-lock]
+            [logseq.common.config :as common-config]
             [logseq.db-worker.daemon :as daemon]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
@@ -306,4 +307,7 @@
          (map (fn [^js dirent]
                 (db-lock/decode-canonical-graph-dir-key (.-name dirent))))
          (filter some?)
+         (remove (fn [s]
+                   (or (= s common-config/unlinked-graphs-dir)
+                       (string/starts-with? s common-config/file-version-prefix))))
          (vec))))
