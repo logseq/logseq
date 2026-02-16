@@ -27,7 +27,7 @@
             [logseq.api.block :as api-block]
             [logseq.api.db-based :as db-based-api]
             [logseq.common.path :as path]
-            [logseq.outliner.property :as outlier-property]
+            [logseq.outliner.property :as outliner-property]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.sdk.core]
@@ -445,7 +445,7 @@
 (defn- get-block-classes-properties-has-default-value
   [block-id]
   (when-let [classes-properties
-             (some-> (outlier-property/get-block-classes-properties (db/get-db) block-id)
+             (some-> (outliner-property/get-block-classes-properties (db/get-db) block-id)
                      :classes-properties)]
     (let [properties (->> classes-properties
                           (filter :logseq.property/default-value)
