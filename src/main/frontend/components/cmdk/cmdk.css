@@ -1,8 +1,51 @@
 .cp__cmdk {
   > .hints {
-    @apply flex w-full px-3 py-2 gap-2 justify-between
+    @apply flex w-full px-3 py-2 gap-2 justify-between items-center
     bg-gray-03 border-t border-gray-05;
+    min-height: 45px;
   }
+}
+
+.hints-actions {
+  @apply flex items-center gap-2;
+  flex-shrink: 0;
+}
+
+/* Tip text: never wraps, truncates only the trailing text (.hints-tip-tail).
+   Every flex ancestor in the chain needs overflow:hidden + min-width:0
+   so the width constraint propagates down to the ellipsis element. */
+.hints-tip {
+  overflow: hidden;
+  min-width: 0;
+}
+
+.hints-tip,
+.hints-tip * {
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* Propagate overflow clipping through all intermediate containers */
+.hints-tip > *,
+.hints-tip > * > *,
+.hints-tip > * > * > * {
+  overflow: hidden;
+}
+
+/* Leaf text spans and shortcut badges never shrink.
+   :not(.hints-tip-tail) prevents this from overriding the tail rule. */
+.hints-tip span:not(.hints-tip-tail) {
+  flex-shrink: 0;
+}
+
+/* Only the trailing text truncates with ellipsis.
+   .hints-tip prefix gives specificity 0,0,2,0 which beats
+   .hints-tip span (0,0,1,1) so flex-shrink:1 actually applies. */
+.hints-tip .hints-tip-tail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 .ls-dialog-cmdk {
@@ -16,3 +59,20 @@
   }
 
 }
+
+/* Rotating tip fade-in */
+@keyframes tipFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.tip-rotate {
+  animation: tipFadeIn 300ms ease-in;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tip-rotate {
+    animation: none;
+  }
+}
+

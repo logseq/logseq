@@ -211,7 +211,8 @@
                                                        filtered
                                                        (take (get-group-limit :wikidata-entities) filtered))]
                                   (when (or (seq wikidata-items) (= :loading wikidata-status))
-                                    ["From Web" :wikidata-entities wikidata-items]))
+                                    ["From Web" :wikidata-entities
+                                     (with-meta (vec wikidata-items) {:filtered-total (count filtered)})]))
                        ;; Show Nodes above From Web when local pages match the query
                        has-local-matches?
                        (if (< (count (string/trim input)) 3)
@@ -254,7 +255,8 @@
        group-key
        (if (= group-key :create)
          (count group-items)
-         (count (get-in results [group-key :items])))
+         (or (:filtered-total (meta group-items))
+             (count (get-in results [group-key :items]))))
        (mapv #(assoc % :item-index (vswap! index inc)) group-items)])))
 
 (defn state->highlighted-item [state]
@@ -716,45 +718,177 @@
       (when-not (contains? dont-close-commands (:id command))
         (shui/dialog-close! :ls-dialog-cmdk)))))
 
+(rum/defc contextual-tip []
+  (let [[editing _] (hooks/use-atom (:editor/editing? @state/state))
+        is-editing? (boolean (seq editing))
+        !has-edited (rum/use-ref false)
+        !prev-editing (rum/use-ref false)
+        !timer (rum/use-ref nil)
+        [show-saved? set-show-saved!] (rum/use-state false)]
+    (hooks/use-effect!
+     (fn []
+       (let [was-editing? (.-current !prev-editing)]
+         (set! (.-current !prev-editing) is-editing?)
+         (when is-editing?
+           (set! (.-current !has-edited) true))
+         (when (and was-editing? (not is-editing?) (.-current !has-edited))
+           (set-show-saved! true)
+           (let [t (js/setTimeout #(set-show-saved! false) 3000)]
+             (set! (.-current !timer) t)
+             #(js/clearTimeout t)))))
+     [is-editing?])
+    [:div.text-sm.leading-6
+     [:div.flex.flex-row.gap-1.items-center.tip-rotate
+      {:key (if show-saved? :saved :shortcut)}
+      (if show-saved?
+        [:div.flex.flex-row.gap-1.items-center.opacity-50
+         (icon/icon "circle-check" {:size 14})
+         [:span.hints-tip-tail "Changes saved automatically"]]
+        [:div.flex.flex-row.gap-1.items-center.opacity-50
+         [:span "Press"]
+         (shui/shortcut ["cmd" "j"] {:style :combo :interactive? false :aria-hidden? true})
+         [:span.hints-tip-tail "to jump to a property"]])]]))
+
+(rum/defc hint-button
+  [text shortcut opts]
+  (let [primary? (:primary? opts)
+        opts (dissoc opts :primary?)]
+    (shui/button
+     (merge {:class (if primary?
+                      "hint-button"
+                      "hint-button text-gray-11 hover:text-gray-12")
+             :variant (if primary? :secondary :ghost)
+             :size :sm}
+            opts)
+     [[:span text]
+      (when (not-empty shortcut)
+        (let [has-modifier? (and (coll? shortcut)
+                                 (some #(#{"shift" "ctrl" "alt" "cmd" "mod" "⌘" "⌥" "⌃"}
+                                         (string/lower-case (str %)))
+                                       shortcut))
+              style (if (and (> (count shortcut) 1) has-modifier?)
+                      :combo
+                      :auto)]
+          (shui/shortcut shortcut {:style style
+                                   :interactive? false
+                                   :aria-hidden? true})))])))
+
+(rum/defc hints-more-dropdown
+  [items]
+  (shui/dropdown-menu
+   (shui/dropdown-menu-trigger
+    {:asChild true}
+    (shui/button {:variant :ghost :size :sm
+                  :class "hint-button text-gray-11 hover:text-gray-12"}
+                 [[:span.flex.items-center.gap-1
+                   (icon/icon "dots-vertical" {:size 15})
+                   "More"
+                   (icon/icon "chevron-down" {:size 14})]]))
+   (shui/dropdown-menu-content
+    {:align "end" :side "top"
+     :onOpenAutoFocus (fn [e]
+                        (.preventDefault e)
+                        (when-let [first-item (.. e -currentTarget (querySelector "[role=menuitem]"))]
+                          (.focus first-item)))}
+    (for [{:keys [text icon icon-extension? shortcut on-click]} items]
+      (shui/dropdown-menu-item
+       {:key text :on-click on-click}
+       [:div.flex.items-center.justify-between.w-full.gap-4
+        [:span.flex.items-center.gap-2
+         (when icon (icon/icon icon {:size 16 :extension? icon-extension?}))
+         text]
+        (when shortcut
+          (shui/shortcut shortcut {:style :combo :interactive? false :aria-hidden? true}))])))))
+
 (rum/defc page-dialog-footer
   [block {:keys [open-label] :or {open-label "Open tag page"}}]
-  [:div.flex.w-full.items-center.justify-between.px-3.py-2.gap-2.bg-gray-03.border-t.border-gray-05
-   ;; Left: tip
-   [:div.text-sm.leading-6
-    [:div.flex.flex-row.gap-1.items-center
-     [:span.font-medium.text-gray-12 "Tip:"]
-     [:div.flex.flex-row.gap-1.items-center.opacity-50
-      [:span "Press"]
-      (shui/shortcut ["cmd" "j"] {:style :combo :interactive? false :aria-hidden? true})
-      [:span "to jump to a property"]]]]
+  ;; Register keyboard shortcuts for footer actions
+  (hooks/use-effect!
+   (fn []
+     (let [handler (fn [e]
+                     (let [meta? (util/meta-key? e)
+                           shift? (.-shiftKey e)
+                           key (.-key e)]
+                       (cond
+                          ;; Cmd+Shift+O → Open page (navigate away)
+                         (and meta? shift? (= key "o"))
+                         (do (.preventDefault e)
+                             (.stopPropagation e)
+                             (shui/dialog-close!)
+                             (route-handler/redirect-to-page! (:block/uuid block)))
 
-   ;; Right: action buttons
-   [:div.flex.items-center.gap-2
-    ;; More dropdown
-    (shui/dropdown-menu
-     (shui/dropdown-menu-trigger
-      {:asChild true}
-      (shui/button {:variant :ghost :size :sm :class "opacity-60 hover:opacity-100"}
-                   "More"))
-     (shui/dropdown-menu-content
-      {:align "end" :side "top"}
-      (shui/dropdown-menu-item
-       {:on-click (fn []
-                    (shui/dialog-close!)
-                    (route-handler/redirect-to-page! (:block/uuid block)))}
-       open-label)
-      (shui/dropdown-menu-item
-       {:on-click (fn []
-                    (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :page)
-                    (shui/dialog-close!))}
-       "Open in sidebar")))
+                          ;; Cmd+Shift+Enter → Open in sidebar
+                         (and meta? shift? (= key "Enter"))
+                         (do (.preventDefault e)
+                             (.stopPropagation e)
+                             (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :page)
+                             (shui/dialog-close!)))))]
+       (.addEventListener js/document "keydown" handler)
+       #(.removeEventListener js/document "keydown" handler)))
+   [])
 
-    ;; Primary action: Done
-    (shui/button
-     {:variant :default
-      :size :sm
-      :on-click #(shui/dialog-close!)}
-     "Done")]])
+  (let [*container-ref (rum/use-ref nil)
+        *actions-ref (rum/use-ref nil)
+        *expanded-w (rum/use-ref nil)
+        [collapsed? set-collapsed!] (rum/use-state false)
+
+        ;; ResizeObserver: collapse when expanded buttons + minimum tip space
+        ;; exceed container width. Uses a fixed tip width (300px) instead of
+        ;; scrollWidth measurement, which is broken by overflow:hidden on
+        ;; intermediate containers. This is stable and oscillation-free.
+        _ (hooks/use-effect!
+           (fn []
+             (when-let [container (rum/deref *container-ref)]
+               (let [check (fn []
+                             ;; Cache expanded actions width while visible
+                             (when-let [actions (rum/deref *actions-ref)]
+                               (when (and (not collapsed?)
+                                          (> (.-offsetWidth actions) 0))
+                                 (rum/set-ref! *expanded-w (.-offsetWidth actions))))
+                             (let [ew (or (rum/deref *expanded-w) 0)
+                                   min-tip-w 300
+                                   gap 8 ;; gap-2 = 0.5rem = 8px
+                                   needed (+ min-tip-w ew gap)]
+                               (set-collapsed! (> needed (.-clientWidth container)))))
+                     ob (js/ResizeObserver. check)]
+                 (check)
+                 (.observe ob container)
+                 #(.disconnect ob))))
+           [collapsed?])
+
+        secondary [{:text open-label
+                    :icon "open-as-page"
+                    :icon-extension? true
+                    :shortcut ["cmd" "shift" "o"]
+                    :on-click (fn []
+                                (shui/dialog-close!)
+                                (route-handler/redirect-to-page! (:block/uuid block)))}
+                   {:text "Open in sidebar"
+                    :icon "move-to-sidebar-right"
+                    :icon-extension? true
+                    :shortcut ["cmd" "shift" "return"]
+                    :on-click (fn []
+                                (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :page)
+                                (shui/dialog-close!))}]]
+
+    [:div.flex.w-full.items-center.justify-between.px-3.py-2.gap-2.bg-gray-03.border-t.border-gray-05
+     {:ref *container-ref}
+     ;; Left: contextual tip
+     [:div.hints-tip
+      (contextual-tip)]
+
+     ;; Right: action buttons (same pattern as hints bar)
+     [:div.hints-actions {:ref *actions-ref}
+      ;; Secondary: inline or collapsed into "More" dropdown
+      (if collapsed?
+        (hints-more-dropdown secondary)
+        [:<>
+         (for [b secondary]
+           (hint-button (:text b) (:shortcut b)
+                        {:key (:text b) :on-click (:on-click b)}))])
+
+      ;; Primary: always visible, rightmost
+      (hint-button "Done" "esc" {:primary? true :on-click #(shui/dialog-close!)})]]))
 
 (defn- <ensure-class-exists!
   "Ensure a class with the given title exists. Creates it if not found.
@@ -784,7 +918,7 @@
         create-page? (and (= :page (:source-create item)) (not create-object?))
         class (when create-class? (get-class-from-input @!input))
         page-dialog-content (fn [block opts]
-                              [:div.w-full.h-full.flex.flex-col
+                              [:div.w-full.h-full.flex.flex-col.bg-gray-02
                                [:div.px-16.py-8.flex-1.min-h-0.overflow-y-auto
                                 (component-page/page-container block {:tag-dialog? true})]
                                (page-dialog-footer block opts)])]
@@ -793,7 +927,9 @@
       (and (= (:text item) "Configure tag") (:class item))
       (shui/dialog-transition-to! :ls-dialog-cmdk
                                   (page-dialog-content (:class item) {})
-                                  {:close-btn? true})
+                                  {:close-btn? true
+                                   :onEscapeKeyDown (fn [_e]
+                                                      (shui/dialog-close! :ls-dialog-cmdk))})
 
       ;; Create object page ("PageName #Tag") — async create, then morph
       create-object?
@@ -809,7 +945,9 @@
             ;; Morph CMD+K into object page dialog
             (shui/dialog-transition-to! :ls-dialog-cmdk
                                         (page-dialog-content page {:open-label "Open page"})
-                                        {:close-btn? true}))))
+                                        {:close-btn? true
+                                         :onEscapeKeyDown (fn [_e]
+                                                            (shui/dialog-close! :ls-dialog-cmdk))}))))
 
       ;; Create new tag or page — async
       :else
@@ -822,20 +960,26 @@
           ;; Morph CMD+K into tag settings
           (shui/dialog-transition-to! :ls-dialog-cmdk
                                       (page-dialog-content result {})
-                                      {:close-btn? true})
+                                      {:close-btn? true
+                                       :onEscapeKeyDown (fn [_e]
+                                                          (shui/dialog-close! :ls-dialog-cmdk))})
           ;; Non-class creation (page): just close CMD+K
           (shui/dialog-close! :ls-dialog-cmdk))))))
 
 (defn- get-page-by-wikidata-id
   "Find an existing page that was created from the given Wikidata entity."
   [qid]
-  (when-let [db (db/get-db)]
-    (some->> (d/q '[:find [?p ...]
-                    :in $ ?qid
-                    :where [?p :logseq.property/wikidata-id ?qid]]
-                  db qid)
-             first
-             (db/entity))))
+  (try
+    (when-let [db (db/get-db)]
+      (some->> (d/q '[:find [?p ...]
+                      :in $ ?qid
+                      :where [?p :logseq.property/wikidata-id ?qid]]
+                    db qid)
+               first
+               (db/entity)))
+    (catch :default e
+      (js/console.warn "[wikidata-create] Dedup query failed, proceeding with creation:" (.-message e))
+      nil)))
 
 (defn- <set-wikidata-icon!
   "Download Wikidata image and set as page icon.
@@ -876,39 +1020,41 @@
         (if-let [existing-page (get-page-by-wikidata-id qid)]
           (route-handler/redirect-to-page! (:block/uuid existing-page))
           ;; No match — create new page
-          (p/let [entity-data (wikidata/<fetch-full-entity qid)]
-            (when entity-data
-              (let [{:keys [class image properties]} entity-data
-                    class-title (:title class)]
-                (p/let [class-entity (when class-title
-                                       (<ensure-class-exists! class-title))
-                        page (page-handler/<create! label {:redirect? false})]
-                  (when page
-                    ;; Store Wikidata Q-ID for future deduplication
-                    (db-property-handler/set-block-property!
-                     (:block/uuid page)
-                     :logseq.property/wikidata-id
-                     qid)
-                    (when class-entity
-                      (db-property-handler/set-block-property!
-                       (:block/uuid page)
-                       :block/tags
-                       (:db/id class-entity)))
-                    (swap! icon/*image-fetch-attempted conj (:db/id page))
-                    (swap! icon/*avatar-fetch-attempted conj (:db/id page))
-                    (route-handler/redirect-to-page! (:block/uuid page))
-                    (when image
-                      (<set-wikidata-icon! (:db/id page) image label class-title))
-                    (when (seq properties)
-                      (state/pub-event! [:wikidata/show-import-panel
-                                         {:page page
-                                          :properties properties
-                                          :entity-data entity-data}]))
-                    (js/console.log "[wikidata] Created page from Wikidata:" label
-                                    "\n  Q-ID:" qid
-                                    "\n  Class:" class-title
-                                    "\n  Has image:" (boolean image)
-                                    "\n  Properties available:" (count properties))))))))))))
+          (-> (p/let [entity-data (wikidata/<fetch-full-entity qid)]
+                (when entity-data
+                  (let [{:keys [class image properties]} entity-data
+                        class-title (:title class)]
+                    (p/let [class-entity (when class-title
+                                           (<ensure-class-exists! class-title))
+                            page (page-handler/<create! label {:redirect? false})]
+                      (when page
+                        ;; Store Wikidata Q-ID for future deduplication
+                        (db-property-handler/set-block-property!
+                         (:block/uuid page)
+                         :logseq.property/wikidata-id
+                         qid)
+                        (when class-entity
+                          (db-property-handler/set-block-property!
+                           (:block/uuid page)
+                           :block/tags
+                           (:db/id class-entity)))
+                        (swap! icon/*image-fetch-attempted conj (:db/id page))
+                        (swap! icon/*avatar-fetch-attempted conj (:db/id page))
+                        (route-handler/redirect-to-page! (:block/uuid page))
+                        (when image
+                          (<set-wikidata-icon! (:db/id page) image label class-title))
+                        (when (seq properties)
+                          (state/pub-event! [:wikidata/show-import-panel
+                                             {:page page
+                                              :properties properties
+                                              :entity-data entity-data}]))
+                        (js/console.log "[wikidata] Created page from Wikidata:" label
+                                        "\n  Q-ID:" qid
+                                        "\n  Class:" class-title
+                                        "\n  Has image:" (boolean image)
+                                        "\n  Properties available:" (count properties)))))))
+              (p/catch (fn [err]
+                         (js/console.error "[wikidata-create] Error in creation flow:" err)))))))))
 
 (defn- get-filter-user-input
   [input]
@@ -965,13 +1111,13 @@
 (rum/defcs result-group
   < rum/reactive
   (rum/local false ::mouse-active?)
-  [state' state title group visible-items first-item sidebar?]
-  (let [{:keys [show items]} (some-> state ::results deref group)
+  [state' state title group total-count visible-items first-item sidebar?]
+  (let [{:keys [show]} (some-> state ::results deref group)
         highlighted-item (or @(::highlighted-item state) first-item)
         *mouse-active? (::mouse-active? state')
         filter' @(::filter state)
         can-show-less? (< (get-group-limit group) (count visible-items))
-        can-show-more? (< (count visible-items) (count items))
+        can-show-more? (< (count visible-items) total-count)
         show-less #(swap! (::results state) assoc-in [group :show] :less)
         show-more #(swap! (::results state) assoc-in [group :show] :more)]
     [:<>
@@ -994,9 +1140,9 @@
             [:<>
              [:span "·"]
              [:span {:style {:font-size "0.7rem"}}
-              (if (<= 100 (count items))
+              (if (<= 100 total-count)
                 (str "99+")
-                (count items))]
+                total-count)]
              (when (or can-show-more? can-show-less?)
                (ui/icon (if (= show :more) "chevron-down" "chevron-right") {:size 14}))])]
 
@@ -1253,10 +1399,10 @@
    [[:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
      [:div "Type"]
      (shui/shortcut "/")
-     [:div "to filter search results"]]
+     [:div.hints-tip-tail "to filter search results"]]
     [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
      (shui/shortcut ["mod" "enter"] {:style :combo})
-     [:div "to open search in the sidebar"]]]))
+     [:div.hints-tip-tail "to open search in the sidebar"]]]))
 
 (rum/defcs tip <
   {:init (fn [state]
@@ -1268,71 +1414,87 @@
       [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
        [:div "Type"]
        (shui/shortcut "esc" {:tiled false})
-       [:div "to clear search filter"]]
+       [:div.hints-tip-tail "to clear search filter"]]
 
       :else
       (::rand-tip inner-state))))
 
-(rum/defc hint-button
-  [text shortcut opts]
-  (shui/button
-   (merge {:class "hint-button [&>span:first-child]:hover:opacity-100 opacity-40 hover:opacity-80"
-           :variant :ghost
-           :size :sm}
-          opts)
-   [[:span.opacity-60 text]
-     ;; shortcut
-    (when (not-empty shortcut)
-      (let [has-modifier? (and (coll? shortcut)
-                               (some #(#{"shift" "ctrl" "alt" "cmd" "mod" "⌘" "⌥" "⌃"}
-                                       (string/lower-case (str %)))
-                                     shortcut))
-            style (if (and (> (count shortcut) 1) has-modifier?)
-                    :combo
-                    :auto)]
-        (shui/shortcut shortcut {:style style
-                                 :interactive? false
-                                 :aria-hidden? true})))]))
-
 (rum/defc hints
   [state]
   (let [action (state->action state)
-        button-fn (fn [text shortcut & {:as opts}]
-                    (hint-button text shortcut
-                                 {:on-click #(handle-action action (assoc state :opts opts) %)
-                                  :muted true}))]
-    (when action
-      [:div.hints
-       [:div.text-sm.leading-6
+        *container-ref (rum/use-ref nil)
+        *actions-ref (rum/use-ref nil)
+        *expanded-w (rum/use-ref nil)
+        [collapsed? set-collapsed!] (rum/use-state false)
+
+        ;; ResizeObserver: collapse when the tip's minimum comfortable width
+        ;; plus the expanded actions width exceeds the container.
+        ;; Uses a fixed min-tip-w constant instead of scrollWidth (which is
+        ;; broken by overflow:hidden on intermediate flex containers).
+        _ (hooks/use-effect!
+           (fn []
+             (when-let [container (rum/deref *container-ref)]
+               (let [check (fn []
+                             ;; Cache expanded actions width while visible
+                             (when-let [actions (rum/deref *actions-ref)]
+                               (when (and (not collapsed?)
+                                          (> (.-offsetWidth actions) 0))
+                                 (rum/set-ref! *expanded-w (.-offsetWidth actions))))
+                             (let [ew (or (rum/deref *expanded-w) 0)
+                                   min-tip-w 300
+                                   gap 8 ;; gap-2 = 0.5rem = 8px
+                                   needed (+ min-tip-w ew gap)]
+                               (set-collapsed! (> needed (.-clientWidth container)))))
+                     ob (js/ResizeObserver. check)]
+                 (check)
+                 (.observe ob container)
+                 #(.disconnect ob))))
+           [collapsed?])
+
+        ;; Button data factory
+        make-button (fn [text shortcut & {:as opts}]
+                      {:text text
+                       :shortcut shortcut
+                       :on-click #(handle-action action (assoc state :opts opts) %)})
+
+        ;; Define buttons per action
+        {:keys [primary secondary]}
+        (case action
+          :open
+          {:primary (make-button "Open" ["return"])
+           :secondary (cond-> [(make-button "Open in sidebar" ["shift" "return"] {:open-sidebar? true})]
+                        (:source-block @(::highlighted-item state))
+                        (conj (make-button "Copy ref" ["cmd" "c"])))}
+
+          :search             {:primary (make-button "Search" ["return"]) :secondary []}
+          :trigger            {:primary (make-button "Trigger" ["return"]) :secondary []}
+          :create             {:primary (make-button "Create" ["return"]) :secondary []}
+          :filter             {:primary (make-button "Filter" ["return"]) :secondary []}
+          :create-from-wikidata {:primary (make-button "Create" ["return"]) :secondary []}
+          {:primary nil :secondary []})]
+
+    (when (and action primary)
+      [:div.hints {:ref *container-ref}
+       ;; Left: tip
+       [:div.hints-tip.text-sm.leading-6
         [:div.flex.flex-row.gap-1.items-center
          [:div.font-medium.text-gray-12 "Tip:"]
          (tip state)]]
 
-       [:div.gap-2.hidden.md:flex {:style {:margin-right -6}}
-        (case action
-          :open
-          [:<>
-           (button-fn "Open" ["return"])
-           (button-fn "Open in sidebar" ["shift" "return"] {:open-sidebar? true})
-           (when (:source-block @(::highlighted-item state)) (button-fn "Copy ref" ["cmd" "c"]))]
+       ;; Right: action buttons
+       [:div.hints-actions.hidden.md:flex {:ref *actions-ref}
+        ;; Secondary buttons: inline or collapsed into "More" dropdown
+        (when (seq secondary)
+          (if collapsed?
+            (hints-more-dropdown secondary)
+            [:<>
+             (for [b secondary]
+               (hint-button (:text b) (:shortcut b)
+                            {:key (:text b) :on-click (:on-click b)}))]))
 
-          :search
-          [:<>
-           (button-fn "Search" ["return"])]
-
-          :trigger
-          [:<>
-           (button-fn "Trigger" ["return"])]
-
-          :create
-          [:<>
-           (button-fn "Create" ["return"])]
-
-          :filter
-          [:<>
-           (button-fn "Filter" ["return"])]
-
-          nil)]])))
+        ;; Primary button: always visible, rightmost
+        (hint-button (:text primary) (:shortcut primary)
+                     {:primary? true :on-click (:on-click primary)})]])))
 
 (rum/defc search-only
   [state group-name]
@@ -1429,9 +1591,9 @@
                                            (= group-key :create))))))
                    results-ordered)]
         (if (seq items)
-          (for [[group-name group-key _group-count group-items] items]
+          (for [[group-name group-key group-count group-items] items]
             (let [title (string/capitalize group-name)]
-              (result-group state title group-key group-items first-item sidebar?)))
+              (result-group state title group-key group-count group-items first-item sidebar?)))
           [:div.flex.flex-col.p-4.opacity-50
            (when-not (string/blank? @*input)
              "No matched results")]))]
