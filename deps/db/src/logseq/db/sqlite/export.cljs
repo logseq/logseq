@@ -60,22 +60,23 @@
                                      :as options}]
   (let [;; nbb-compatible version of db-property/property-value-content
         property-value-content (or (block-title pvalue)
-                                   (:logseq.property/value pvalue))]
+                                   (:logseq.property/value pvalue))
+        ;; TODO: Add support for ref properties here and in sqlite.build
+        build-properties
+        (some->> ent-properties
+                 (keep (fn [[k v]]
+                         (let [prop-type (:logseq.property/type (d/entity db k))]
+                           (when-not (contains? db-property-type/all-ref-property-types prop-type)
+                             [k v]))))
+                 (into {}))]
     (if (or (seq ent-properties) (seq (:block/tags pvalue)) (include-pvalue-uuid-fn (:block/uuid pvalue)))
       (cond-> {:build/property-value :block
                :block/title property-value-content}
         (seq (:block/tags pvalue))
         (assoc :build/tags (->build-tags (:block/tags pvalue)))
 
-        (seq ent-properties)
-        (assoc :build/properties
-               ;; TODO: Add support for ref properties here and in sqlite.build
-               (->> ent-properties
-                    (keep (fn [[k v]]
-                            (let [prop-type (:logseq.property/type (d/entity db k))]
-                              (when-not (contains? db-property-type/all-ref-property-types prop-type)
-                                [k v]))))
-                    (into {})))
+        (seq build-properties)
+        (assoc :build/properties build-properties)
 
         (include-pvalue-uuid-fn (:block/uuid pvalue))
         (assoc :block/uuid (:block/uuid pvalue) :build/keep-uuid? true)
@@ -170,11 +171,12 @@
       (->> properties-config-by-ent
            (map (fn [[ent build-property]]
                   (let [ent-properties (apply dissoc (db-property/properties ent)
-                                              (into db-property/schema-properties db-property/public-db-attribute-properties))]
+                                              (into db-property/schema-properties db-property/public-db-attribute-properties))
+                        build-properties (buildable-properties db ent-properties properties-config options)]
                     [(:db/ident ent)
                      (cond-> build-property
-                       (seq ent-properties)
-                       (assoc :build/properties (buildable-properties db ent-properties properties-config options)))])))
+                       (seq build-properties)
+                       (assoc :build/properties build-properties))])))
            (into {}))
       properties-config)))
 
@@ -254,6 +256,8 @@
         build-tags (when (seq (:block/tags entity)) (->build-tags (:block/tags entity)))
         new-properties (when-not (or shallow-copy? exclude-ontology?)
                          (build-node-properties db entity ent-properties (dissoc options :shallow-copy? :include-uuid-fn)))
+        build-properties (when (and (not shallow-copy?) (seq ent-properties))
+                           (buildable-properties db ent-properties (merge properties new-properties) options))
         build-node (cond-> {:block/title (block-title entity)}
                      (some? (:block/collapsed? entity))
                      (assoc :block/collapsed? (:block/collapsed? entity))
@@ -265,9 +269,8 @@
                      (merge (select-keys entity [:block/created-at :block/updated-at]))
                      (and (not shallow-copy?) (seq build-tags))
                      (assoc :build/tags build-tags)
-                     (and (not shallow-copy?) (seq ent-properties))
-                     (assoc :build/properties
-                            (buildable-properties db ent-properties (merge properties new-properties) options)))
+                     (seq build-properties)
+                     (assoc :build/properties build-properties))
         new-classes (when-not (or shallow-copy? exclude-ontology?)
                       (build-node-classes db build-node (:block/tags entity) new-properties))]
     (cond-> {:node build-node}
@@ -666,11 +669,12 @@
              (map (fn [ent]
                     (let [ent-properties (apply dissoc (db-property/properties ent) :logseq.property.class/extends db-property/public-db-attribute-properties)]
                       (vector (:db/ident ent)
-                              (cond-> (build-export-class ent options)
-                                (seq ent-properties)
-                                (assoc :build/properties
-                                       (-> (buildable-properties db ent-properties properties options)
-                                           (dissoc :logseq.property.class/properties))))))))
+                              (let [build-properties
+                                    (-> (buildable-properties db ent-properties properties options)
+                                        (dissoc :logseq.property.class/properties))]
+                                (cond-> (build-export-class ent options)
+                                  (seq build-properties)
+                                  (assoc :build/properties build-properties)))))))
              (into {}))]
     (cond-> {}
       (seq properties)
@@ -899,7 +903,7 @@
                                                   (::kv-values m))))]
     ;; Only ignore patch if initial version is > 64.8 since this fix started with 64.9
     (if (some-> initial-version (db-schema/compare-schema-version {:major 64 :minor 8}) pos?)
-      m
+       m
       (walk/postwalk
        (fn [e]
          (if (and (keyword? e) (some-> (namespace e) (string/starts-with? "user.")))
