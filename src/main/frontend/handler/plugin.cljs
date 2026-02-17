@@ -1298,19 +1298,27 @@
                   (.on "ready" (fn [^js perf-table]
                                  (when-let [plugins (and perf-table (.entries perf-table))]
                                    (->> plugins
-                                     (keep
-                                       (fn [[_k ^js v]]
-                                         (when-let [end (and (some-> v (.-o) (.-disabled) (not))
-                                                          (.-e v))]
-                                           (when (and (number? end)
-                                                   ;; valid end time
-                                                   (> end 0)
-                                                   ;; greater than 6s
-                                                   (> (- end (.-s v)) 6000))
-                                             v))))
-                                     ((fn [perfs]
-                                        (doseq [perf perfs]
-                                          (state/pub-event! [:plugin/loader-perf-tip (bean/->clj perf)])))))))))
+                                        (keep
+                                         (fn [[_k ^js v]]
+                                           (when-let [end (and (some-> v (.-o) (.-disabled) (not))
+                                                               (.-e v))]
+                                             (when (and (number? end)
+                                                        ;; valid end time
+                                                        (> end 0)
+                                                        ;; greater than 6s
+                                                        (> (- end (.-s v)) 6000))
+                                               v))))
+                                        ((fn [perfs]
+                                           (doseq [perf perfs]
+                                             (state/pub-event! [:plugin/loader-perf-tip (bean/->clj perf)]))))))
+                                 ;; Auto-uninstall deprecated logseq-tabs plugin now that we have built-in tabs
+                                 (when-let [_tabs-plugin (get-in @state/state [:plugin/installed-plugins :logseq-tabs])]
+                                   (when (util/electron?)
+                                     (ipc/ipc :uninstallMarketPlugin "logseq-tabs"))
+                                   (notification/show!
+                                    "The logseq-tabs plugin has been automatically uninstalled. Logseq now has built-in tabs support!"
+                                    :success
+                                    false)))))
 
               default-plugins (get-user-default-plugins)
               [plugins0, plugins-async] (if (and (seq default-plugins)
@@ -1338,27 +1346,12 @@
         (log/error :setup-plugin-system-error e)
         (state/set-state! :plugin/indicator-text (t :plugin/fatal-error e))))))
 
-(defn- uninstall-deprecated-tabs-plugin!
-  "Automatically uninstall the logseq-tabs plugin since we now have built-in tabs support."
-  []
-  (js/setTimeout
-   (fn []
-     (when-let [tabs-plugin (get-in @state/state [:plugin/installed-plugins :logseq-tabs])]
-       (when (util/electron?)
-         (ipc/ipc :uninstallMarketPlugin "logseq-tabs"))
-       (notification/show!
-        "The logseq-tabs plugin has been automatically uninstalled. Logseq now has built-in tabs support!"
-        :success
-        false)))
-   500))
-
 (defn setup!
   "setup plugin core handler"
   []
   (when config/lsp-enabled?
     (setup-global-apis-for-web!)
-    (init-plugins!)
-    (uninstall-deprecated-tabs-plugin!)))
+    (init-plugins!)))
 
 (comment
   {:pending (count (:plugin/updates-pending @state/state))
