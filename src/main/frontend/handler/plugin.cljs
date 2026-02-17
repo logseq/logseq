@@ -942,7 +942,15 @@
                                                v))))
                                         ((fn [perfs]
                                            (doseq [perf perfs]
-                                             (state/pub-event! [:plugin/loader-perf-tip (bean/->clj perf)])))))))))
+                                             (state/pub-event! [:plugin/loader-perf-tip (bean/->clj perf)]))))))
+                                 ;; Auto-uninstall deprecated logseq-tabs plugin now that we have built-in tabs
+                                 (when-let [tabs-plugin (get-in @state/state [:plugin/installed-plugins :logseq-tabs])]
+                                   (when (util/electron?)
+                                     (ipc/ipc :uninstallMarketPlugin "logseq-tabs"))
+                                   (notification/show!
+                                    "The logseq-tabs plugin has been automatically uninstalled. Logseq now has built-in tabs support!"
+                                    :success
+                                    false)))))
 
               default-plugins (get-user-default-plugins)
               [plugins0, plugins-async] (if (and (seq default-plugins)
@@ -970,27 +978,12 @@
          (log/error :setup-plugin-system-error e)
          (state/set-state! :plugin/indicator-text (str "Fatal: " e))))))
 
-(defn- uninstall-deprecated-tabs-plugin!
-  "Automatically uninstall the logseq-tabs plugin since we now have built-in tabs support."
-  []
-  (js/setTimeout
-   (fn []
-     (when-let [tabs-plugin (get-in @state/state [:plugin/installed-plugins :logseq-tabs])]
-       (when (util/electron?)
-         (ipc/ipc :uninstallMarketPlugin "logseq-tabs"))
-       (notification/show!
-        "The logseq-tabs plugin has been automatically uninstalled. Logseq now has built-in tabs support!"
-        :success
-        false)))
-   500))
-
 (defn setup!
   "setup plugin core handler"
   []
   (when config/lsp-enabled?
     (setup-global-apis-for-web!)
-    (init-plugins!)
-    (uninstall-deprecated-tabs-plugin!)))
+    (init-plugins!)))
 
 (comment
   {:pending (count (:plugin/updates-pending @state/state))

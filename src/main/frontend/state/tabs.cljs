@@ -96,3 +96,20 @@
                             :page-name page-name
                             :page-uuid page-uuid
                             :title (or title page-name (str page-uuid))})))
+
+(defn reorder-tabs!
+  "Reorder tabs by moving a tab from one index to another"
+  [from-index to-index]
+  (let [tabs (get-tabs)]
+    (when (and (>= from-index 0)
+               (< from-index (count tabs))
+               (>= to-index 0)
+               (< to-index (count tabs))
+               (not= from-index to-index))
+      (let [tab (nth tabs from-index)
+            without-tab (vec (concat (subvec (vec tabs) 0 from-index)
+                                     (subvec (vec tabs) (inc from-index))))
+            reordered (vec (concat (subvec without-tab 0 to-index)
+                                   [tab]
+                                   (subvec without-tab to-index)))]
+        (swap! state/state assoc-in [:tabs/tabs-list] reordered)))))

@@ -23,13 +23,13 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 6px 8px;
   min-width: 80px;
   max-width: 160px;
   flex: 1 1 auto;
   background: transparent;
   border-radius: 6px;
-  cursor: pointer;
+  cursor: grab;
   transition: background 0.1s, opacity 0.1s;
   -webkit-app-region: no-drag;
   opacity: 0.7;
@@ -45,6 +45,15 @@
   background: var(--ls-primary-background-color);
   opacity: 1;
   border: 1px solid var(--lx-gray-05, var(--ls-tertiary-border-color, var(--rx-gray-05)));
+}
+
+.tab-item.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+
+.tab-item.drag-over {
+  border-left: 2px solid var(--ls-link-text-color);
 }
 
 .tab-title {
