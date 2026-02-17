@@ -55,7 +55,7 @@
 }
 
 #main-content-container {
-  @apply sm:py-8 py-2 sm:pl-8 sm:pr-4;
+  @apply pt-6 pb-8 sm:pl-8 sm:pr-4 pr-2;
 }
 
 .left-sidebar-inner {

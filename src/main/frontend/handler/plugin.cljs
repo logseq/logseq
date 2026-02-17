@@ -970,12 +970,27 @@
          (log/error :setup-plugin-system-error e)
          (state/set-state! :plugin/indicator-text (str "Fatal: " e))))))
 
+(defn- uninstall-deprecated-tabs-plugin!
+  "Automatically uninstall the logseq-tabs plugin since we now have built-in tabs support."
+  []
+  (js/setTimeout
+   (fn []
+     (when-let [tabs-plugin (get-in @state/state [:plugin/installed-plugins :logseq-tabs])]
+       (when (util/electron?)
+         (ipc/ipc :uninstallMarketPlugin "logseq-tabs"))
+       (notification/show!
+        "The logseq-tabs plugin has been automatically uninstalled. Logseq now has built-in tabs support!"
+        :success
+        false)))
+   500))
+
 (defn setup!
   "setup plugin core handler"
   []
   (when config/lsp-enabled?
     (setup-global-apis-for-web!)
-    (init-plugins!)))
+    (init-plugins!)
+    (uninstall-deprecated-tabs-plugin!)))
 
 (comment
   {:pending (count (:plugin/updates-pending @state/state))

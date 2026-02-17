@@ -559,4 +559,16 @@
   :dev/gc-graph "(Dev) Garbage collect graph (remove unused data in SQLite)"
   :dev/rtc-stop "(Dev) RTC Stop"
   :dev/rtc-start "(Dev) RTC Start"
-  :window/close "Close window"}}
+  :window/close "Close window"
+  :tab/close-active "Close current tab"
+  :tab/switch-to-1 "Switch to tab 1"
+  :tab/switch-to-2 "Switch to tab 2"
+  :tab/switch-to-3 "Switch to tab 3"
+  :tab/switch-to-4 "Switch to tab 4"
+  :tab/switch-to-5 "Switch to tab 5"
+  :tab/switch-to-6 "Switch to tab 6"
+  :tab/switch-to-7 "Switch to tab 7"
+  :tab/switch-to-8 "Switch to tab 8"
+  :tab/switch-to-last "Switch to last tab"
+  :tab/switch-to-prev "Switch to previous tab"
+  :tab/switch-to-next "Switch to next tab"}}

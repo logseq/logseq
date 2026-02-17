@@ -1,14 +1,17 @@
 .cp__header {
-  @apply shadow z-10 flex items-center justify-between sticky top-0 left-0 right-0 leading-none whitespace-nowrap;
+  @apply shadow z-10 flex items-center sticky top-0 left-0 right-0 leading-none whitespace-nowrap;
 
   -webkit-app-region: drag;
 
   padding-top: calc(var(--ls-headbar-inner-top-padding));
   margin-top: var(--ls-win32-title-bar-height);
   height: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding));
+  gap: 0;
 
   > .l {
-    @apply pl-2 h-full min-w-[var(--ls-left-sidebar-width)];
+    @apply pl-2 h-full;
+    flex-shrink: 0;
+    transition: min-width 0.3s;
 
     > div {
       @apply items-center;
@@ -16,7 +19,8 @@
   }
 
   > .r {
-    @apply flex flex-1 items-center justify-end pr-1.5;
+    @apply flex items-center justify-end pr-1.5;
+    flex-shrink: 0;
   }
 
   > .l, > .r {
@@ -110,6 +114,13 @@
 
 .is-electron.is-mac.is-fullscreen .cp__header > .l {
   padding-left: 1rem;
+}
+
+/* Sidebar expansion handling */
+.ls-left-sidebar-open .cp__header > .l {
+  @screen sm {
+    min-width: var(--ls-left-sidebar-width);
+  }
 }
 
 /* Workaround for Linux Intel GPU text rendering issue GH#7233 */

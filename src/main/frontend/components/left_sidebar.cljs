@@ -15,6 +15,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.tabs :as tabs-handler]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.state :as state]
@@ -82,9 +83,17 @@
          (cond->
           {:on-click
            (fn [e]
-             (if (gobj/get e "shiftKey")
-               (open-in-sidebar)
-               (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?})))
+             (let [cmd-key? (or (.-metaKey e) (.-ctrlKey e))
+                   shift? (gobj/get e "shiftKey")]
+               (cond
+                 (and cmd-key? (not shift?))
+                 (tabs-handler/open-tab-by-page! (:block/uuid page) {:new-tab? true})
+                 
+                 shift?
+                 (open-in-sidebar)
+                 
+                 :else
+                 (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?}))))
            :on-context-menu (fn [^js e]
                               (shui/popup-show! e (x-menu-content)
                                                 {:as-dropdown? true
@@ -226,9 +235,17 @@
                            (or (= route-name :all-journals) (= route-name :home)))
               :title (t :left-side-bar/journals)
               :on-click-handler (fn [e]
-                                  (if (gobj/get e "shiftKey")
-                                    (route-handler/sidebar-journals!)
-                                    (route-handler/go-to-journals!)))
+                                  (let [cmd-key? (or (.-metaKey e) (.-ctrlKey e))
+                                        shift? (gobj/get e "shiftKey")]
+                                    (cond
+                                      (and cmd-key? (not shift?))
+                                      (tabs-handler/open-all-journals-in-tab!)
+                                      
+                                      shift?
+                                      (route-handler/sidebar-journals!)
+                                      
+                                      :else
+                                      (route-handler/go-to-journals!))))
               :icon "calendar"
               :shortcut :go/journals}))))
 

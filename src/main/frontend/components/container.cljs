@@ -10,6 +10,7 @@
             [frontend.components.left-sidebar :as app-left-sidebar]
             [frontend.components.plugins :as plugins]
             [frontend.components.right-sidebar :as right-sidebar]
+            [frontend.components.tabs :as tabs]
             [frontend.components.theme :as theme]
             [frontend.components.window-controls :as window-controls]
             [frontend.config :as config]
@@ -74,7 +75,9 @@
       {:left-sidebar-open? left-sidebar-open?
        :route-match route-match})
 
-     [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row.outline-none.relative
+     ;; Main content (tabs moved to top level after header)
+     [:div.flex-1.flex.flex-col
+      [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center.flex-row.outline-none.relative
 
       {:tabIndex "-1"
        :data-is-margin-less-pages margin-less-pages?}
@@ -105,7 +108,7 @@
                                     margin-less-pages? 0
                                     onboarding-and-home? 0
                                     :else 120)}}
-          main-content])]]]))
+          main-content])]]]]))
 
 (defonce sidebar-inited? (atom false))
 
@@ -443,6 +446,7 @@
                         :route-match route-match
                         :default-home default-home
                         :new-block-mode new-block-mode})
+        
         (when (util/electron?)
           (find-in-page/search))
 

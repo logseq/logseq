@@ -14,6 +14,7 @@
             [frontend.components.server :as server]
             [frontend.components.settings :as settings]
             [frontend.components.svg :as svg]
+            [frontend.components.tabs :as tabs]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -413,10 +414,11 @@
                                 (state/set-left-sidebar-open! false))
                               (state/pub-event! [:go/search]))}
               (ui/icon "search" {:size ui/icon-size})])))]]
+     
+     ;; Tab bar between left menu and right controls
+     (tabs/tab-bar)
 
-     [:div.r.flex.drag-region.justify-between.items-center.gap-2.overflow-x-hidden.w-full
-      [:div.flex.flex-1
-       (block-breadcrumb (state/get-current-page))]
+     [:div.r.flex.drag-region.items-center.gap-2
       [:div.flex.items-center
        (when (and current-repo
                   (ldb/get-graph-rtc-uuid (db/get-db))
