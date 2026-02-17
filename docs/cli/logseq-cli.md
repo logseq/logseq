@@ -6,7 +6,10 @@ The Logseq CLI is a Node.js program compiled from ClojureScript that connects to
 
 ```bash
 clojure -M:cljs compile logseq-cli db-worker-node
+yarn db-worker-node:release:bundle
 ```
+
+`yarn db-worker-node:release:bundle` compiles and bundles `db-worker-node` with `@vercel/ncc`, and writes a standalone runtime to `dist/db-worker-node.js` plus adjacent runtime assets (for example `dist/build/Release/better_sqlite3.node`).
 
 ## db-worker-node lifecycle
 
@@ -80,7 +83,7 @@ Server commands:
 - `server start --repo <name>` - start db-worker-node for a graph
 - `server stop --repo <name>` - stop db-worker-node for a graph
 - `server restart --repo <name>` - restart db-worker-node for a graph
-- `doctor` - run runtime diagnostics for `db-worker-node.js`, `data-dir` permissions, and running server readiness
+- `doctor [--dev-script]` - run runtime diagnostics for `db-worker-node.js`, `data-dir` permissions, and running server readiness (`--dev-script` checks `static/db-worker-node.js` explicitly)
 
 Server ownership behavior:
 - `server stop` and `server restart` can return `server-owned-by-other` if the daemon was started by another owner source.
@@ -137,10 +140,11 @@ Output formats:
 - Human output is plain text. List/search commands render tables with a final `Count: N` line. For list and search subcommands, the ID column uses `:db/id` (not UUID). If `:db/ident` exists, an `IDENT` column is included. Search table columns are `ID` and `TITLE`. Block titles can include multiple lines; multi-line rows align additional lines under the `TITLE` column. Times such as list `UPDATED-AT`/`CREATED-AT` and `graph info` `Created at` are shown in human-friendly relative form. Errors include error codes and may include a `Hint:` line. Use `--output json|edn` for structured output.
 - `doctor` output includes overall status (`ok`, `warning`, `error`) and per-check rows for `db-worker-script`, `data-dir`, and `running-servers`. For scripting, `--output json|edn` keeps the structured check payload.
 - Common doctor failures:
-  - `doctor-script-missing`: `db-worker-node.js` runtime target is missing (typically `static/db-worker-node.js`; `dist/db-worker-node.js` is only the wrapper entry).
+  - `doctor-script-missing`: `db-worker-node.js` runtime target is missing (default target: `dist/db-worker-node.js`; use `doctor --dev-script` to check `static/db-worker-node.js`).
   - `doctor-script-unreadable`: script path exists but is not a readable file.
   - `data-dir-permission`: configured data dir is not readable or writable.
   - `doctor-server-not-ready`: one or more lock-discovered servers are still in `:starting` state (warning).
+  - If bundled runtime startup fails with native module load errors, rebuild with `yarn db-worker-node:release:bundle` and confirm `dist/db-worker-node-assets.json` and listed assets are present next to `dist/db-worker-node.js`.
 - `query` human output returns a plain string (the query result rendered via `pr-str`), which is convenient for pipelines like `logseq query ... | xargs logseq show --id`.
 - Built-in named queries currently include `block-search`, `task-search`, `recent-updated`, `list-status`, and `list-priority`. Use `query list` to see the full set for your config.
 - Show and search outputs resolve block reference UUIDs inside text, replacing `[[<uuid>]]` with the referenced block content. Nested references are resolved recursively up to 10 levels to avoid excessive expansion. For example: `[[<uuid1>]]` → `[[some text [[<uuid2>]]]]` and then `<uuid2>` is also replaced.
@@ -169,5 +173,6 @@ node ./dist/logseq.js search "hello"
 node ./dist/logseq.js show --page TestPage --output json
 node ./dist/logseq.js server list
 node ./dist/logseq.js doctor
+node ./dist/logseq.js doctor --dev-script
 node ./dist/logseq.js doctor --output json
 ```
