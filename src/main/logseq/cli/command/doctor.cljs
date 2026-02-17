@@ -8,12 +8,20 @@
             [promesa.core :as p]))
 
 (def entries
-  [(core/command-entry ["doctor"] :doctor "Run runtime diagnostics" {})])
+  [(core/command-entry ["doctor"]
+                       :doctor
+                       "Run runtime diagnostics"
+                       {:dev-script {:desc "Check static/db-worker-node.js instead of bundled dist runtime"
+                                     :coerce :boolean}})])
 
 (defn build-action
-  []
-  {:ok? true
-   :action {:type :doctor}})
+  ([]
+   (build-action {}))
+  ([options]
+   {:ok? true
+    :action (cond-> {:type :doctor}
+              (:dev-script options)
+              (assoc :script-path (cli-server/db-worker-dev-script-path)))}))
 
 (defn- doctor-error
   [checks code message]

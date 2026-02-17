@@ -56,6 +56,10 @@
 
 (defn db-worker-runtime-script-path
   []
+  (db-worker-script-path))
+
+(defn db-worker-dev-script-path
+  []
   (node-path/join js/__dirname "../static/db-worker-node.js"))
 
 (defn- base-url
