@@ -116,7 +116,7 @@
                        (set! cli-server/list-servers orig-list-servers)
                        (done)))))))
 
-(deftest test-execute-doctor-default-script-checks-static-runtime-target
+(deftest test-execute-doctor-default-script-checks-packaged-runtime-target
   (async done
          (let [orig-ensure-data-dir! data-dir/ensure-data-dir!
                orig-list-servers cli-server/list-servers]
@@ -126,6 +126,27 @@
                                                 {:data-dir "/tmp/logseq-doctor"})
                        checked-path (get-in result [:data :checks 0 :path])]
                  (is (= :ok (:status result)))
+                 (is (= (cli-server/db-worker-script-path) checked-path))
+                 (is (string/ends-with? checked-path "/dist/db-worker-node.js")))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! data-dir/ensure-data-dir! orig-ensure-data-dir!)
+                            (set! cli-server/list-servers orig-list-servers)
+                            (done)))))))
+
+(deftest test-execute-doctor-explicit-script-path-checks-static-runtime-target
+  (async done
+         (let [orig-ensure-data-dir! data-dir/ensure-data-dir!
+               orig-list-servers cli-server/list-servers]
+           (set! data-dir/ensure-data-dir! (fn [_] "/tmp/logseq-doctor"))
+           (set! cli-server/list-servers (fn [_] (p/resolved [])))
+           (-> (p/let [result (commands/execute {:type :doctor
+                                                 :script-path (cli-server/db-worker-dev-script-path)}
+                                                {:data-dir "/tmp/logseq-doctor"})
+                       checked-path (get-in result [:data :checks 0 :path])]
+                 (is (= :ok (:status result)))
+                 (is (= (cli-server/db-worker-dev-script-path) checked-path))
                  (is (string/ends-with? checked-path "/static/db-worker-node.js")))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))

@@ -378,7 +378,7 @@
         (show-command/build-action options repo)
 
         :doctor
-        (doctor-command/build-action)
+        (doctor-command/build-action options)
 
         {:ok? false
          :error {:code :unknown-command
