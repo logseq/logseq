@@ -933,3 +933,21 @@
     (test-import-existing-page {:existing-pages-keep-properties? true}
                                {:logseq.property/description "first description"
                                 :logseq.property/exclude-from-graph-view true})))
+
+(deftest build-export-omits-empty-build-properties
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/p1 {:logseq.property/type :default}}
+               :classes {:user.class/C1 {:build/class-properties [:user.property/p1]}}
+               :pages-and-blocks [{:page {:block/title "page1"}
+                                   :blocks [{:block/title "b1"
+                                             :build/tags [:user.class/C1]}]}]})
+        export-edn (sqlite-export/build-export @conn {:export-type :graph
+                                                      :graph-options {:exclude-built-in-pages? true}})
+        empty-build-properties (atom [])]
+    (walk/postwalk (fn [e]
+                     (when (and (map? e) (= {} (:build/properties e)))
+                       (swap! empty-build-properties conj e))
+                     e)
+                   export-edn)
+    (is (empty? @empty-build-properties)
+        "Export should omit :build/properties when it would otherwise be an empty map")))
