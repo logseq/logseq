@@ -40,6 +40,10 @@
         expected (node-path/join data-dir "demo" "db-worker.lock")]
     (is (= expected (cli-server/lock-path data-dir repo)))))
 
+(deftest db-worker-runtime-script-path-defaults-to-packaged-dist-target
+  (is (= (node-path/join js/__dirname "../dist/db-worker-node.js")
+         (cli-server/db-worker-runtime-script-path))))
+
 
 (deftest ensure-server-repairs-stale-lock
   (async done

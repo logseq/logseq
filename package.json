@@ -7,8 +7,7 @@
         "logseq": "dist/logseq.js"
     },
     "files": [
-        "dist/logseq.js",
-        "static/db-worker-node.js",
+        "dist/",
         "static/logseq-cli.js"
     ],
     "engines": {
@@ -20,6 +19,7 @@
         "@capacitor/cli": "7.2.0",
         "@jcesarmobile/ssl-skip": "^0.4.0",
         "@playwright/test": "=1.51.0",
+        "@vercel/ncc": "0.38.3",
         "@tailwindcss/aspect-ratio": "0.4.2",
         "@tailwindcss/forms": "0.5.3",
         "@tailwindcss/typography": "0.5.7",
@@ -102,6 +102,12 @@
         "cljs:release-publishing": "clojure -M:cljs release app publishing",
         "cljs:test": "clojure -M:test compile test",
         "cljs:run-test": "node static/tests.js",
+        "db-worker-node:compile": "clojure -M:cljs compile db-worker-node",
+        "db-worker-node:release": "clojure -M:cljs release db-worker-node",
+        "db-worker-node:ncc": "ncc build static/db-worker-node.js --out dist/.db-worker-node-ncc --asset-builds",
+        "db-worker-node:bundle:normalize": "node ./scripts/build-db-worker-node-bundle.mjs",
+        "db-worker-node:release:bundle": "run-s db-worker-node:release db-worker-node:ncc db-worker-node:bundle:normalize",
+        "db-worker-node:compile:bundle": "run-s db-worker-node:compile db-worker-node:ncc db-worker-node:bundle:normalize",
         "cljs:dev-release-app": "clojure -M:cljs release app db-worker db-worker-node inference-worker --config-merge \"{:closure-defines {frontend.config/DEV-RELEASE true}}\"",
         "cljs:dev-release-electron": "clojure -M:cljs release app db-worker db-worker-node inference-worker electron --debug --config-merge \"{:closure-defines {frontend.config/DEV-RELEASE true}}\" && clojure -M:cljs release publishing",
         "cljs:debug": "clojure -M:cljs release app db-worker db-worker-node inference-worker --debug",

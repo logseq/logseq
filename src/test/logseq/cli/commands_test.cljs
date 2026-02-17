@@ -290,7 +290,13 @@
   (testing "doctor command parses"
     (let [result (commands/parse-args ["doctor"])]
       (is (true? (:ok? result)))
-      (is (= :doctor (:command result))))))
+      (is (= :doctor (:command result)))))
+
+  (testing "doctor command parses explicit dev script option"
+    (let [result (commands/parse-args ["doctor" "--dev-script"])]
+      (is (true? (:ok? result)))
+      (is (= :doctor (:command result)))
+      (is (= true (get-in result [:options :dev-script]))))))
 
 (deftest test-tree->text-format
   (testing "show tree text uses db/id with tree glyphs"
@@ -1157,7 +1163,15 @@
     (let [parsed {:ok? true :command :doctor :options {}}
           result (commands/build-action parsed {})]
       (is (true? (:ok? result)))
-      (is (= :doctor (get-in result [:action :type]))))))
+      (is (= :doctor (get-in result [:action :type])))))
+
+  (testing "doctor dev script option builds explicit static runtime action"
+    (let [parsed {:ok? true :command :doctor :options {:dev-script true}}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :doctor (get-in result [:action :type])))
+      (is (= (cli-server/db-worker-dev-script-path)
+             (get-in result [:action :script-path]))))))
 
 (deftest test-build-action-inspect-edit
   (testing "list page requires repo"

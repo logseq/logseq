@@ -77,3 +77,8 @@ clj-e2e/e2e-dump
 .dir-locals.el
 .projectile
 *.map
+/dist/db-worker-node.js
+/dist/build/
+/dist/db-worker-node-assets.json
+/dist/*.wasm
+/dist/cljs-runtime/

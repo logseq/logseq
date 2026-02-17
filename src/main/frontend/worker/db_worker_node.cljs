@@ -3,6 +3,7 @@
   (:require ["fs" :as fs]
             ["http" :as http]
             ["path" :as node-path]
+            [clojure.string :as string]
             [frontend.worker.db-core :as db-core]
             [frontend.worker.db-worker-node-lock :as db-lock]
             [frontend.worker.platform.node :as platform-node]
@@ -446,8 +447,24 @@
             (.on js/process "SIGTERM" shutdown)))
         (p/catch (fn [error]
                    (let [data (ex-data error)
+                         code (:code data)
                          message (or (.-message error) (str error))]
-                     (when (= :data-dir-permission (:code data))
+                     (cond
+                       (= :data-dir-permission code)
                        (.error js/console message)
-                       (.exit js/process 1))
-                     (throw error)))))))
+
+                       (or (string/includes? message ".node")
+                           (string/includes? message "Cannot find module")
+                           (string/includes? message "bindings file"))
+                       (.error js/console
+                               (str "db-worker-node failed to start: missing native bundle asset. "
+                                    "Rebuild with `yarn db-worker-node:release:bundle` and ensure "
+                                    "`dist/db-worker-node-assets.json` assets are next to `db-worker-node.js`. "
+                                    "Root error: "
+                                    message))
+
+                       :else
+                       (.error js/console (str "db-worker-node failed to start: " message)))
+                     (when-let [stack (.-stack error)]
+                       (.error js/console stack))
+                     (.exit js/process 1)))))))
