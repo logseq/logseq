@@ -4,11 +4,13 @@
             [datascript.core :as d]
             [frontend.components.block :as block]
             [frontend.components.cmdk.list-item :as list-item]
+            [frontend.components.combobox :as combobox]
             [frontend.components.icon :as icon]
             [frontend.components.page :as component-page]
             [frontend.components.wikidata :as wikidata]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
@@ -33,6 +35,7 @@
             [frontend.util.text :as text-util]
             [goog.functions :as gfun]
             [goog.object :as gobj]
+            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
@@ -1334,6 +1337,10 @@
                                     (util/stop-propagation e))
       (and meta? (= keyname "o"))
       (open-current-item-link state)
+      ;; Cmd+E = switch to capture mode
+      (and meta? (= keyname "e"))
+      (do (util/stop e)
+          (state/pub-event! [:go/capture]))
       (= keyname "/") (do
                         (shui/shortcut-press! "/" true)
                         nil) ; Don't prevent default, allow typing
@@ -1566,3 +1573,256 @@
 (rum/defc cmdk-block [props]
   [:div {:class "cp__cmdk__block rounded-md"}
    (cmdk props)])
+
+;; ============================================================
+;; Capture mode — block quick capture inside the CMD+K shell
+;; ============================================================
+
+(rum/defc capture-page-blocks
+  "Renders the full block editor for the staging page."
+  [page]
+  (let [[scroll-container set-scroll-container] (rum/use-state nil)
+        *ref (rum/use-ref nil)]
+    (hooks/use-effect!
+     #(set-scroll-container (rum/deref *ref))
+     [])
+    [:div.capture-editor
+     {:ref *ref}
+     (when scroll-container
+       (component-page/page-blocks-cp page {:scroll-container scroll-container}))]))
+
+(defn- make-target-page-items
+  "Build grouped items for the target page picker combobox.
+   When input is blank: Dates + Favorites + Recent.
+   When searching: flat fuzzy-matched results."
+  [input]
+  (let [blank? (string/blank? input)]
+    (if blank?
+      (let [today-page (db/get-page (date/today))
+            yesterday-page (db/get-page (date/yesterday))
+            tomorrow-page (db/get-page (date/tomorrow))
+            favorites (page-handler/get-favorites)
+            recent-pages (ldb/get-recent-updated-pages (db/get-db))
+            date-items (keep (fn [[page label]]
+                               (when page
+                                 {:value (:db/id page)
+                                  :label label
+                                  :icon "calendar"
+                                  :data page
+                                  :group "Dates"}))
+                             [[today-page (str "Today \u2014 " (:block/title today-page))]
+                              [tomorrow-page (str "Tomorrow \u2014 " (:block/title tomorrow-page))]
+                              [yesterday-page (str "Yesterday \u2014 " (:block/title yesterday-page))]])
+            fav-items (map (fn [page]
+                             {:value (:db/id page)
+                              :label (:block/title page)
+                              :icon (get-page-icon page)
+                              :data page
+                              :group "Favorites"})
+                           favorites)
+            recent-items (map (fn [page]
+                                {:value (:db/id page)
+                                 :label (:block/title page)
+                                 :icon (get-page-icon page)
+                                 :data page
+                                 :group "Recent"})
+                              (take 8 recent-pages))]
+        (vec (concat date-items fav-items recent-items)))
+      ;; Search mode: fuzzy match all pages
+      (let [results (search/fuzzy-search (ldb/get-all-pages (db/get-db)) input
+                                         {:extract-fn :block/title :limit 12})]
+        (mapv (fn [page]
+                {:value (:db/id page)
+                 :label (:block/title page)
+                 :icon (get-page-icon page)
+                 :data page})
+              results)))))
+
+(rum/defc target-page-picker-content
+  "Popover content for selecting a target page using the combobox component."
+  [set-target-page! popup-id]
+  (let [[input set-input!] (rum/use-state "")
+        *input-ref (rum/use-ref nil)
+        items (make-target-page-items input)]
+    ;; Radix dropdown menu steals focus on open, so autoFocus alone doesn't work.
+    ;; Delay .focus() to run after Radix's focus management settles.
+    (hooks/use-effect!
+     (fn []
+       (let [t (js/setTimeout #(some-> (rum/deref *input-ref) (.focus)) 50)]
+         #(js/clearTimeout t)))
+     [])
+    [:div.target-page-picker
+     [:div.px-1.pt-1
+      (shui/input {:ref *input-ref
+                   :placeholder "Search pages..."
+                   :value input
+                   :class "h-8 text-sm bg-transparent border-0 ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 outline-none focus:outline-none shadow-none"
+                   :on-change #(set-input! (util/evalue %))
+                   :on-key-down (fn [e]
+                                  (when (= (util/ekey e) "Escape")
+                                    (util/stop e)
+                                    (shui/popup-hide! popup-id)))})]
+     (shui/select-separator)
+     (combobox/combobox
+      items
+      {:grouped? (string/blank? input)
+       :show-search-input? false
+       :on-chosen (fn [item _e]
+                    (when-let [page (:data item)]
+                      (set-target-page! page)
+                      (shui/popup-hide! popup-id)))
+       :item-render (fn [item _chosen?]
+                      [:div.flex.items-center.gap-2
+                       (icon/icon (or (:icon item) "file") {:size 14})
+                       [:span (:label item)]])
+       :empty-placeholder [:div.px-3.py-2.text-sm.text-gray-11
+                           "No pages found"]})]))
+
+(rum/defc capture-toolbar
+  "Top toolbar for capture mode: mode dropdown + target page picker."
+  [target-page set-target-page!]
+  (let [target-title (if (string? target-page)
+                       target-page
+                       (:block/title target-page))
+        target-icon (if (string? target-page)
+                      "file"
+                      (get-page-icon target-page))]
+    [:div.capture-toolbar
+     ;; Mode dropdown (Phase 1: only "Quick capture", extensible for Phase 2+)
+     (shui/dropdown-menu
+      (shui/dropdown-menu-trigger
+       {:asChild true}
+       (shui/button {:variant :ghost :size :sm :class "mode-dropdown"}
+                    (icon/icon "note-plus" {:size 16})
+                    [:span "Quick capture"]
+                    (icon/icon "chevron-down" {:size 14})))
+      (shui/dropdown-menu-content
+       {:align "start" :side "bottom"}
+       (shui/dropdown-menu-item
+        {:class "gap-2"}
+        (icon/icon "note-plus" {:size 16})
+        "Quick capture"
+        [:span.ml-auto (icon/icon "check" {:size 14})])))
+
+     ;; "Add to" label + target page pill
+     [:div.flex.items-center.gap-1.5.ml-2
+      [:span.target-label "Add to"]
+      (shui/button {:variant :ghost :size :sm :class "target-pill"
+                    :on-click (fn [e]
+                                (shui/popup-show!
+                                 (.-target e)
+                                 (fn [{:keys [id]}]
+                                   (target-page-picker-content set-target-page! id))
+                                 {:id :target-page-picker
+                                  :align :start}))}
+                   (icon/icon target-icon {:size 14})
+                   [:span target-title]
+                   (icon/icon "chevron-down" {:size 12}))]]))
+
+(rum/defc capture-action-bar
+  "Bottom action bar for capture mode."
+  [target-page]
+  (action-bar
+   {:tip (contextual-tip)
+    :primary {:text "Done" :shortcut ["mod" "e"]
+              :on-click #(editor-handler/capture-commit-blocks!
+                          (or target-page (db/get-page (date/today))))}
+    :secondary [{:text "Open target page"
+                 :icon "open-as-page" :icon-extension? true
+                 :shortcut ["cmd" "shift" "o"]
+                 :on-click (fn []
+                             (shui/dialog-close! :ls-dialog-cmdk)
+                             (when target-page
+                               (route-handler/redirect-to-page! (:block/uuid target-page))))}
+                {:text "Open in sidebar"
+                 :icon "move-to-sidebar-right" :icon-extension? true
+                 :shortcut ["cmd" "shift" "return"]
+                 :on-click (fn []
+                             (when target-page
+                               (state/sidebar-add-block! (state/get-current-repo) (:db/id target-page) :page))
+                             (shui/dialog-close! :ls-dialog-cmdk))}
+                {:text "Discard draft"
+                 :icon "trash"
+                 :on-click #(editor-handler/discard-capture-draft!)}]}))
+
+(rum/defc capture-mode-content
+  "Main capture mode view rendered inside the CMD+K dialog shell.
+   Uses dialog-transition-to! to morph the CMD+K content in place."
+  []
+  (let [[target-page set-target-page!] (rum/use-state nil)
+        ;; Wrap in an atom-like for child component reads
+        *target-page (rum/use-ref nil)
+        _ (rum/set-ref! *target-page target-page)
+        add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
+
+    ;; Initialize target page to today's journal
+    (hooks/use-effect!
+     (fn []
+       (when-not target-page
+         (when-let [today (db/get-page (date/today))]
+           (set-target-page! today))))
+     [])
+
+    ;; NOTE: Unlike CMD+K search mode, capture mode does NOT call
+    ;; shortcut/unlisten-all! — the block editor needs shortcuts like
+    ;; Enter (new-block), Tab (indent), Shift+Tab (outdent) to work.
+    ;; Our capture-phase keydown handler (below) intercepts Cmd+E, Esc,
+    ;; etc. before the shortcut system sees them.
+
+    ;; Auto-focus block editor on mount
+    (hooks/use-effect!
+     (fn []
+       (js/setTimeout #(editor-handler/quick-add-open-last-block!) 150))
+     [])
+
+    ;; Capture-mode keydown handler
+    (hooks/use-effect!
+     (fn []
+       (let [handler (fn [e]
+                       (let [meta? (util/meta-key? e)
+                             shift? (.-shiftKey e)
+                             key (.-key e)]
+                         (cond
+                           ;; Cmd+E = Done (commit blocks to target)
+                           (and meta? (= key "e"))
+                           (do (.preventDefault e)
+                               (.stopPropagation e)
+                               (editor-handler/capture-commit-blocks!
+                                (or (rum/deref *target-page) (db/get-page (date/today)))))
+
+                           ;; Esc = close without committing (draft preserved)
+                           (= key "Escape")
+                           (do (.preventDefault e)
+                               (.stopPropagation e)
+                               (shui/dialog-close! :ls-dialog-cmdk))
+
+                           ;; Cmd+Shift+O = open target page
+                           (and meta? shift? (= key "o"))
+                           (do (.preventDefault e)
+                               (.stopPropagation e)
+                               (shui/dialog-close! :ls-dialog-cmdk)
+                               (when-let [page (rum/deref *target-page)]
+                                 (route-handler/redirect-to-page! (:block/uuid page))))
+
+                           ;; Cmd+Shift+Enter = open target in sidebar
+                           (and meta? shift? (= key "Enter"))
+                           (do (.preventDefault e)
+                               (.stopPropagation e)
+                               (when-let [page (rum/deref *target-page)]
+                                 (state/sidebar-add-block! (state/get-current-repo) (:db/id page) :page))
+                               (shui/dialog-close! :ls-dialog-cmdk)))))]
+         (.addEventListener js/document "keydown" handler true)
+         #(.removeEventListener js/document "keydown" handler true)))
+     [])
+
+    ;; Render
+    [:div.w-full.h-full.flex.flex-col.bg-gray-02.rounded-lg
+     {:data-keep-selection true}
+     ;; Toolbar: mode dropdown + "Attached to" + target page
+     (capture-toolbar target-page set-target-page!)
+     ;; Block editor area
+     [:div.flex-1.min-h-0.overflow-y-auto
+      (when add-page
+        (capture-page-blocks add-page))]
+     ;; Action bar
+     (capture-action-bar target-page)]))

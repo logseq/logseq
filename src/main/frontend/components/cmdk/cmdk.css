@@ -75,3 +75,33 @@
   }
 }
 
+/* Capture mode toolbar */
+.capture-toolbar {
+  @apply flex items-center gap-2 px-4 py-2.5 border-b border-gray-06 bg-gray-02;
+  min-height: 48px;
+}
+
+.capture-toolbar .mode-dropdown {
+  @apply flex items-center gap-1 text-sm font-medium;
+}
+
+.capture-toolbar .target-label {
+  @apply text-sm text-gray-11;
+}
+
+.capture-toolbar .target-pill {
+  @apply flex items-center gap-1.5 px-2.5 py-1 rounded-md text-sm;
+  @apply bg-gray-04 hover:bg-gray-05 cursor-pointer transition-colors;
+}
+
+/* Capture editor area */
+.capture-editor {
+  @apply flex-1 min-h-0 overflow-y-auto px-6 py-4;
+}
+
+/* Target page picker popover */
+.target-page-picker {
+  min-width: 280px;
+  max-width: 360px;
+}
+

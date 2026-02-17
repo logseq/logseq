@@ -434,7 +434,7 @@
 
    :editor/quick-add                        {:binding (if mac? "mod+e" "mod+alt+e")
                                              :inactive config/publishing?
-                                             :fn      editor-handler/quick-add}
+                                             :fn      editor-handler/quick-add-or-capture}
    :editor/jump                             {:binding "mod+j"
                                              :fn      jump-handler/jump-to}
 

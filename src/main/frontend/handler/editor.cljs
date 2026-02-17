@@ -21,6 +21,7 @@
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
             [frontend.handler.common.editor :as editor-common-handler]
+            [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.export.text :as export-text]
@@ -3549,12 +3550,6 @@
                                     :container-id :unknown-container
                                     :replace-empty-target? false}))))))
 
-(defn show-quick-add
-  []
-  (p/do!
-   (quick-add-ensure-new-block-exists!)
-   (state/pub-event! [:dialog/quick-add])))
-
 (defn quick-add-blocks!
   []
   (let [today (db/get-page (date/today))
@@ -3572,12 +3567,6 @@
           (shui/popup-hide!)
           (when (seq children)
             (notification/show! "Blocks added to today!" :success))))))))
-
-(defn quick-add
-  []
-  (if (shui-dialog/get-modal :ls-dialog-quick-add)
-    (quick-add-blocks!)
-    (show-quick-add)))
 
 (defn get-user-quick-add-blocks
   "Get quick add blocks for the current user if logged in"
@@ -3604,3 +3593,48 @@
     (when (seq blocks)
       (let [block (last (ldb/sort-by-order blocks))]
         (edit-block! block :max {:container-id :unknown-container})))))
+
+(defn capture-commit-blocks!
+  "Move blocks from the staging page to a target page.
+   `target-page` can be a db entity or a string (page will be created)."
+  [target-page]
+  (p/do!
+   (save-current-block!)
+   (p/let [target (if (string? target-page)
+                    (page-common-handler/<create! target-page {:redirect? false})
+                    target-page)]
+     (when target
+       (let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)
+             children (:block/_parent (db/entity (:db/id add-page)))
+             non-empty (seq (remove #(string/blank? (:block/title %)) children))]
+         (p/do!
+          (when non-empty
+            (if-let [last-child (last (ldb/sort-by-order (:block/_parent target)))]
+              (move-blocks! non-empty last-child {:sibling? true})
+              (move-blocks! non-empty target {:sibling? false})))
+          (shui/dialog-close! :ls-dialog-cmdk)
+          (shui/popup-hide!)
+          (when non-empty
+            (let [page-title (:block/title target)]
+              (notification/show!
+               [:span "Blocks added to "
+                [:a.font-medium
+                 {:on-click #(route-handler/redirect-to-page! (:block/uuid target))}
+                 page-title]
+                "!"]
+               :success)))))))))
+
+(defn discard-capture-draft!
+  "Delete all blocks on the staging page and close the dialog."
+  []
+  (let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)
+        children (:block/_parent (db/entity (:db/id add-page)))]
+    (when (seq children)
+      (doseq [child children]
+        (delete-block-aux! child)))
+    (shui/dialog-close! :ls-dialog-cmdk)))
+
+(defn quick-add-or-capture
+  "Cmd+E handler: opens CMD+K in capture mode."
+  []
+  (state/pub-event! [:go/capture]))

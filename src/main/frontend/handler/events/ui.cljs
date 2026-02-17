@@ -8,14 +8,13 @@
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugin]
             [frontend.components.property.dialog :as property-dialog]
-            [frontend.components.quick-add :as quick-add]
-            [frontend.components.wikidata-import :as wikidata-import]
             [frontend.components.repo :as repo]
             [frontend.components.select :as select]
             [frontend.components.selection :as selection]
             [frontend.components.settings :as settings]
             [frontend.components.shell :as shell]
             [frontend.components.user.login :as login]
+            [frontend.components.wikidata-import :as wikidata-import]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
@@ -46,6 +45,24 @@
       :content-props {:class "ls-dialog-cmdk"}
       :close-btn? false
       :onEscapeKeyDown (fn [e] (.preventDefault e))})))
+
+(defmethod events/handle :go/capture [_]
+  (p/do!
+   (editor-handler/quick-add-ensure-new-block-exists!)
+   (if (editor-handler/dialog-exists? :ls-dialog-cmdk)
+     ;; CMD+K already open — morph content into capture mode
+     (shui/dialog-transition-to! :ls-dialog-cmdk
+                                 (fn [_] (cmdk/capture-mode-content))
+                                 {:close-btn? false
+                                  :onEscapeKeyDown (fn [e] (.preventDefault e))})
+     ;; Open CMD+K fresh with capture mode content
+     (shui/dialog-open!
+      (fn [_] (cmdk/capture-mode-content))
+      {:id :ls-dialog-cmdk
+       :align :top
+       :content-props {:class "ls-dialog-cmdk"}
+       :close-btn? false
+       :onEscapeKeyDown (fn [e] (.preventDefault e))}))))
 
 (defmethod events/handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
@@ -312,15 +329,6 @@
    {:id :ls-dialog-block
     :align :top
     :content-props {:class "ls-dialog-block"}
-    :onEscapeKeyDown (fn [e] (.preventDefault e))}))
-
-(defmethod events/handle :dialog/quick-add [_]
-  (shui/dialog-open!
-   [:div.w-full.h-full
-    (quick-add/quick-add)]
-   {:id :ls-dialog-quick-add
-    :align :top
-    :content-props {:class "ls-dialog-quick-add"}
     :onEscapeKeyDown (fn [e] (.preventDefault e))}))
 
 (defmethod events/handle :wikidata/show-import-panel [[_ opts]]
