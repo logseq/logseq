@@ -103,5 +103,6 @@
 .target-page-picker {
   min-width: 280px;
   max-width: 360px;
+  padding-bottom: 4px;
 }
 

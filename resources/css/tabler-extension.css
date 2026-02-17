@@ -8,7 +8,7 @@
 
  @font-face {
   font-family: 'tabler-icons-extension';
-  src: url('../fonts/tabler-icons-extension.woff2?mxgthk') format('woff2');
+  src: url('../fonts/tabler-icons-extension.woff2?ruexrk') format('woff2');
   font-style: normal;
   font-weight: 400;
 }
@@ -40,114 +40,246 @@
   content: "\ea03";
 }
 
-.tie-block-search::before {
+.tie-block-embed::before {
   content: "\ea04";
 }
 
-.tie-cloud-exclamation::before {
+.tie-block-filter::before {
   content: "\ea05";
 }
 
-.tie-connector::before {
+.tie-block-ref::before {
   content: "\ea06";
 }
 
-.tie-group::before {
+.tie-block-search::before {
   content: "\ea07";
 }
 
-.tie-h-auto::before {
+.tie-calendar-dots::before {
   content: "\ea08";
 }
 
-.tie-heading-off::before {
+.tie-cloud-exclamation::before {
   content: "\ea09";
 }
 
-.tie-internal-link::before {
+.tie-connector::before {
   content: "\ea0a";
 }
 
-.tie-link-to-block::before {
+.tie-deselect-all::before {
   content: "\ea0b";
 }
 
-.tie-link-to-page::before {
+.tie-group::before {
   content: "\ea0c";
 }
 
-.tie-link-to-whiteboard::before {
+.tie-h-auto::before {
   content: "\ea0d";
 }
 
-.tie-move-to-sidebar-right::before {
+.tie-heading-off::before {
   content: "\ea0e";
 }
 
-.tie-new-block::before {
+.tie-html-embed::before {
   content: "\ea0f";
 }
 
-.tie-new-page::before {
+.tie-internal-link::before {
   content: "\ea10";
 }
 
-.tie-new-whiteboard::before {
+.tie-link-to-block::before {
   content: "\ea11";
 }
 
-.tie-new-whiteboard-element::before {
+.tie-link-to-page::before {
   content: "\ea12";
 }
 
-.tie-object-compact::before {
+.tie-link-to-whiteboard::before {
   content: "\ea13";
 }
 
-.tie-object-expanded::before {
+.tie-move-to-sidebar-right::before {
   content: "\ea14";
 }
 
-.tie-open-as-page::before {
+.tie-new-block::before {
   content: "\ea15";
 }
 
-.tie-page::before {
+.tie-new-class::before {
   content: "\ea16";
 }
 
-.tie-page-search::before {
+.tie-new-object::before {
   content: "\ea17";
 }
 
-.tie-references-hide::before {
+.tie-new-page::before {
   content: "\ea18";
 }
 
-.tie-references-show::before {
+.tie-new-whiteboard::before {
   content: "\ea19";
 }
 
-.tie-select-cursor::before {
+.tie-new-whiteboard-element::before {
   content: "\ea1a";
 }
 
-.tie-text::before {
+.tie-numbered-children::before {
   content: "\ea1b";
 }
 
-.tie-ungroup::before {
+.tie-numbered-parents::before {
   content: "\ea1c";
 }
 
-.tie-whiteboard::before {
+.tie-object-compact::before {
   content: "\ea1d";
 }
 
-.tie-whiteboard-element::before {
+.tie-object-expanded::before {
   content: "\ea1e";
 }
 
-.tie-whiteboard-search::before {
+.tie-open-as-page::before {
   content: "\ea1f";
+}
+
+.tie-page::before {
+  content: "\ea20";
+}
+
+.tie-page-embed::before {
+  content: "\ea21";
+}
+
+.tie-page-filter::before {
+  content: "\ea22";
+}
+
+.tie-page-ref::before {
+  content: "\ea23";
+}
+
+.tie-page-search::before {
+  content: "\ea24";
+}
+
+.tie-paste-as-link::before {
+  content: "\ea25";
+}
+
+.tie-photo-link::before {
+  content: "\ea26";
+}
+
+.tie-priority-lvl-high::before {
+  content: "\ea27";
+}
+
+.tie-priority-lvl-low::before {
+  content: "\ea28";
+}
+
+.tie-priority-lvl-medium::before {
+  content: "\ea29";
+}
+
+.tie-priority-lvl-none::before {
+  content: "\ea2a";
+}
+
+.tie-priority-lvl-urgent::before {
+  content: "\ea2b";
+}
+
+.tie-property::before {
+  content: "\ea2c";
+}
+
+.tie-query::before {
+  content: "\ea2d";
+}
+
+.tie-query-code::before {
+  content: "\ea2e";
+}
+
+.tie-references-hide::before {
+  content: "\ea2f";
+}
+
+.tie-references-show::before {
+  content: "\ea30";
+}
+
+.tie-reset-password::before {
+  content: "\ea31";
+}
+
+.tie-select-all::before {
+  content: "\ea32";
+}
+
+.tie-select-cursor::before {
+  content: "\ea33";
+}
+
+.tie-stack-pop::before {
+  content: "\ea34";
+}
+
+.tie-stack-pull::before {
+  content: "\ea35";
+}
+
+.tie-text::before {
+  content: "\ea36";
+}
+
+.tie-tomorrow::before {
+  content: "\ea37";
+}
+
+.tie-ungroup::before {
+  content: "\ea38";
+}
+
+.tie-video-embed::before {
+  content: "\ea39";
+}
+
+.tie-whiteboard::before {
+  content: "\ea3a";
+}
+
+.tie-whiteboard-element::before {
+  content: "\ea3b";
+}
+
+.tie-whiteboard-filter::before {
+  content: "\ea3c";
+}
+
+.tie-whiteboard-search::before {
+  content: "\ea3d";
+}
+
+.tie-x-embed::before {
+  content: "\ea3e";
+}
+
+.tie-yesterday::before {
+  content: "\ea3f";
+}
+
+.tie-zoom-to-fit::before {
+  content: "\ea40";
 }

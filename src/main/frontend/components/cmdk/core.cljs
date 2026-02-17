@@ -6,6 +6,7 @@
             [frontend.components.cmdk.list-item :as list-item]
             [frontend.components.combobox :as combobox]
             [frontend.components.icon :as icon]
+            [frontend.components.list-item-icon :as list-item-icon]
             [frontend.components.page :as component-page]
             [frontend.components.wikidata :as wikidata]
             [frontend.config :as config]
@@ -971,15 +972,15 @@
                        create-class?
                        (db-page-handler/<create-class! class
                                                        {:redirect? false})
-                       create-page? (page-handler/<create! @!input {:redirect? true}))]
-        (if (and create-class? result)
-          ;; Morph CMD+K into tag settings
+                       create-page? (page-handler/<create! @!input {:redirect? false}))]
+        (if result
+          ;; Morph CMD+K into page/tag preview
           (shui/dialog-transition-to! :ls-dialog-cmdk
-                                      (page-dialog-content result {})
+                                      (page-dialog-content result
+                                                           (when create-page? {:open-label "Open page"}))
                                       {:close-btn? true
                                        :onEscapeKeyDown (fn [_e]
                                                           (shui/dialog-close! :ls-dialog-cmdk))})
-          ;; Non-class creation (page): just close CMD+K
           (shui/dialog-close! :ls-dialog-cmdk))))))
 
 (defn- get-page-by-wikidata-id
@@ -1591,10 +1592,62 @@
      (when scroll-container
        (component-page/page-blocks-cp page {:scroll-container scroll-container}))]))
 
+(defn- make-target-create-items
+  "When input doesn't match an existing page, return a create item for the combobox.
+   Supports: plain page, #ClassName tag, PageName #Tag1 #Tag2 object."
+  [input]
+  (when (and (not (string/blank? input))
+             (not (#{"config.edn" "custom.js" "custom.css"} input))
+             (not config/publishing?))
+    (let [class?          (string/starts-with? input "#")
+          has-inline-tag? (and (not class?) (string/includes? input " #"))
+          class-name      (when class? (get-class-from-input input))
+          [object-page-name object-tag-names]
+          (when has-inline-tag?
+            (let [parts (string/split input #" #")
+                  pn    (string/trim (first parts))
+                  tns   (->> (rest parts) (map string/trim) (remove string/blank?) vec)]
+              (when (and (not (string/blank? pn)) (seq tns))
+                [pn tns])))
+          effective-name (cond
+                           (and class? (seq class-name)) class-name
+                           (some? object-page-name) object-page-name
+                           :else input)]
+      (when (and (not (string/blank? effective-name))
+                 (nil? (db/get-page effective-name)))
+        (cond
+          (and class? (seq class-name))
+          [{:value "create-class"
+            :label (str "New tag: \"" class-name "\"")
+            :create-label "New tag:"
+            :create-quoted (str "\"" class-name "\"")
+            :icon "hash"
+            :create-type :class
+            :create-name class-name}]
+
+          (some? object-page-name)
+          [{:value "create-object"
+            :label (str "New page: \"" object-page-name "\" as #" (string/join ", #" object-tag-names))
+            :create-label "New page:"
+            :create-quoted (str "\"" object-page-name "\" as #" (string/join ", #" object-tag-names))
+            :icon "plus"
+            :create-type :object
+            :create-name object-page-name
+            :create-tags object-tag-names}]
+
+          :else
+          [{:value "create-page"
+            :label (str "New page: \"" effective-name "\"")
+            :create-label "New page:"
+            :create-quoted (str "\"" effective-name "\"")
+            :icon "plus"
+            :create-type :page
+            :create-name effective-name}])))))
+
 (defn- make-target-page-items
   "Build grouped items for the target page picker combobox.
    When input is blank: Dates + Favorites + Recent.
-   When searching: flat fuzzy-matched results."
+   When searching: flat fuzzy-matched results + optional create item."
   [input]
   (let [blank? (string/blank? input)]
     (if blank?
@@ -1628,15 +1681,16 @@
                                  :group "Recent"})
                               (take 8 recent-pages))]
         (vec (concat date-items fav-items recent-items)))
-      ;; Search mode: fuzzy match all pages
+      ;; Search mode: fuzzy match all pages + optional create item
       (let [results (search/fuzzy-search (ldb/get-all-pages (db/get-db)) input
-                                         {:extract-fn :block/title :limit 12})]
-        (mapv (fn [page]
-                {:value (:db/id page)
-                 :label (:block/title page)
-                 :icon (get-page-icon page)
-                 :data page})
-              results)))))
+                                         {:extract-fn :block/title :limit 12})
+            search-items (mapv (fn [page]
+                                 {:value (:db/id page)
+                                  :label (:block/title page)
+                                  :icon (get-page-icon page)
+                                  :data page})
+                               results)]
+        (into search-items (make-target-create-items input))))))
 
 (rum/defc target-page-picker-content
   "Popover content for selecting a target page using the combobox component."
@@ -1668,13 +1722,47 @@
       {:grouped? (string/blank? input)
        :show-search-input? false
        :on-chosen (fn [item _e]
-                    (when-let [page (:data item)]
-                      (set-target-page! page)
-                      (shui/popup-hide! popup-id)))
+                    (if-let [create-type (:create-type item)]
+                      (let [name (:create-name item)]
+                        (case create-type
+                          :page
+                          (p/let [page (page-handler/<create! name {:redirect? false})]
+                            (when page
+                              (set-target-page! page)
+                              (shui/popup-hide! popup-id)))
+
+                          :class
+                          (-> (p/let [page (db-page-handler/<create-class! name {:redirect? false})]
+                                (when page
+                                  (set-target-page! page)
+                                  (shui/popup-hide! popup-id)))
+                              (p/catch (fn [_] nil)))
+
+                          :object
+                          (p/let [tag-entities (p/all (mapv #(<ensure-class-exists! %) (:create-tags item)))
+                                  page (page-handler/<create! name {:redirect? false})]
+                            (when page
+                              (doseq [tag-entity (remove nil? tag-entities)]
+                                (db-property-handler/set-block-property!
+                                 (:block/uuid page) :block/tags (:db/id tag-entity)))
+                              (set-target-page! page)
+                              (shui/popup-hide! popup-id)))
+
+                          nil))
+                      ;; Existing page selected
+                      (when-let [page (:data item)]
+                        (set-target-page! page)
+                        (shui/popup-hide! popup-id))))
        :item-render (fn [item _chosen?]
-                      [:div.flex.items-center.gap-2
-                       (icon/icon (or (:icon item) "file") {:size 14})
-                       [:span (:label item)]])
+                      (if (:create-type item)
+                        [:div.flex.flex-row.items-center.gap-3
+                         (list-item-icon/root {:variant :create :icon "plus"})
+                         [:div.flex.flex-row.items-center.whitespace-nowrap.gap-1
+                          [:span.text-gray-12 (:create-label item)]
+                          [:span.text-gray-11 (:create-quoted item)]]]
+                        [:div.flex.items-center.gap-2
+                         (icon/icon (or (:icon item) "file") {:size 14})
+                         [:span (:label item)]]))
        :empty-placeholder [:div.px-3.py-2.text-sm.text-gray-11
                            "No pages found"]})]))
 
