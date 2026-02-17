@@ -16,6 +16,7 @@
             [frontend.components.server :as server]
             [frontend.components.settings :as settings]
             [frontend.components.svg :as svg]
+            [frontend.components.tabs :as tabs]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
@@ -419,30 +420,30 @@
                              (util/scroll-to-top true))))
       :style           {:fontSize 50}}
      [:div.l.flex.items-center.drag-region
-      left-menu
-      (if (mobile-util/native-platform?)
-        ;; back button for mobile
-        (when-not (or (state/home?) custom-home-page?)
-          (ui/with-shortcut :go/backward "bottom"
-            [:button.it.navigation.nav-left.button.icon.opacity-70
-             {:on-click #(js/window.history.back)}
-             (ui/icon "chevron-left" {:size 26})]
-            (t :header/go-back)))
-        ;; search button for non-mobile
-        (when current-repo
-          (ui/with-shortcut :go/search "right"
-            [:button.button.icon#search-button
-             {:data-keep-selection true
-              :on-click #(do (when (or (mobile-util/native-android?)
-                                       (mobile-util/native-iphone?))
-                               (state/set-left-sidebar-open! false))
-                             (state/pub-event! [:go/search]))}
-             (ui/icon "search" {:size ui/icon-size})]
-            (t :nav/search))))]
+      [left-menu
+       (if (mobile-util/native-platform?)
+         ;; back button for mobile
+         (when-not (or (state/home?) custom-home-page?)
+           (ui/with-shortcut :go/backward "bottom"
+             [:button.it.navigation.nav-left.button.icon.opacity-70
+              {:title (t :header/go-back) :on-click #(js/window.history.back)}
+              (ui/icon "chevron-left" {:size 26})]))
+         ;; search button for non-mobile
+         (when current-repo
+           (ui/with-shortcut :go/search "right"
+             [:button.button.icon#search-button
+              {:data-keep-selection true
+               :title (t :header/search)
+               :on-click #(do (when (or (mobile-util/native-android?)
+                                        (mobile-util/native-iphone?))
+                                (state/set-left-sidebar-open! false))
+                              (state/pub-event! [:go/search]))}
+              (ui/icon "search" {:size ui/icon-size})])))]]
 
-     [:div.r.flex.drag-region.justify-between.items-center.gap-2.overflow-x-hidden.w-full
-      [:div.flex.flex-1
-       (block-breadcrumb (state/get-current-page))]
+     ;; Tab bar between left menu and right controls
+     (tabs/tab-bar)
+
+     [:div.r.flex.drag-region.items-center.gap-2
       [:div.flex.items-center
        (when (and current-repo
                   (ldb/get-graph-rtc-uuid (db/get-db))
