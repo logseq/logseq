@@ -77,12 +77,12 @@
 
 /* Capture mode toolbar */
 .capture-toolbar {
-  @apply flex items-center gap-2 px-4 py-2.5 border-b border-gray-06 bg-gray-02;
+  @apply flex items-center gap-2 px-4 py-2.5;
   min-height: 48px;
-}
-
-.capture-toolbar .mode-dropdown {
-  @apply flex items-center gap-1 text-sm font-medium;
+  background: linear-gradient(to top, transparent 0%,
+    color-mix(in srgb, var(--lx-gray-03) 30%, transparent) 30%,
+    color-mix(in srgb, var(--lx-gray-03) 70%, transparent) 60%,
+    var(--lx-gray-03) 100%);
 }
 
 .capture-toolbar .target-label {

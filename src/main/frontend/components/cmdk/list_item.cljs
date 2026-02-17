@@ -88,7 +88,7 @@
                              segs))
           [:span normal-text])))))
 
-(rum/defc root [{:keys [group icon icon-theme query text text-tags info shortcut value-label value
+(rum/defc root [{:keys [group icon icon-theme icon-extension? query text text-tags info shortcut value-label value
                         title highlighted on-highlight on-highlight-dep header on-click hls-page?
                         hoverable compact rounded on-mouse-enter component-opts source-page source-create source-block
                         ;; Wikidata preview props
@@ -142,7 +142,8 @@
          (shui/tabler-icon icon {:size "14" :class ""})]
         ;; Use new list-item-icon component for all other cases
         (list-item-icon/root {:variant icon-variant
-                              :icon icon}))
+                              :icon icon
+                              :extension? icon-extension?}))
       ;; Wikidata preview image (shows next to icon for :avatar/:image types)
       (when (and source-wikidata preview-icon-type)
         (wikidata-preview-icon {:icon-type preview-icon-type

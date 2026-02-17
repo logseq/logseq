@@ -8,7 +8,7 @@
 
  @font-face {
   font-family: 'tabler-icons-extension';
-  src: url('../fonts/tabler-icons-extension.woff2?ruexrk') format('woff2');
+  src: url('../fonts/tabler-icons-extension.woff2?v2026a') format('woff2');
   font-style: normal;
   font-weight: 400;
 }
@@ -28,258 +28,196 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+
 .tie-add-link::before {
   content: "\ea01";
 }
-
 .tie-app-feature::before {
   content: "\ea02";
 }
-
 .tie-block::before {
   content: "\ea03";
 }
-
 .tie-block-embed::before {
   content: "\ea04";
 }
-
 .tie-block-filter::before {
   content: "\ea05";
 }
-
 .tie-block-ref::before {
   content: "\ea06";
 }
-
 .tie-block-search::before {
   content: "\ea07";
 }
-
 .tie-calendar-dots::before {
   content: "\ea08";
 }
-
 .tie-cloud-exclamation::before {
   content: "\ea09";
 }
-
 .tie-connector::before {
   content: "\ea0a";
 }
-
 .tie-deselect-all::before {
   content: "\ea0b";
 }
-
 .tie-group::before {
   content: "\ea0c";
 }
-
 .tie-h-auto::before {
   content: "\ea0d";
 }
-
 .tie-heading-off::before {
   content: "\ea0e";
 }
-
 .tie-html-embed::before {
   content: "\ea0f";
 }
-
 .tie-internal-link::before {
   content: "\ea10";
 }
-
 .tie-link-to-block::before {
   content: "\ea11";
 }
-
 .tie-link-to-page::before {
   content: "\ea12";
 }
-
 .tie-link-to-whiteboard::before {
   content: "\ea13";
 }
-
 .tie-move-to-sidebar-right::before {
   content: "\ea14";
 }
-
 .tie-new-block::before {
   content: "\ea15";
 }
-
 .tie-new-class::before {
   content: "\ea16";
 }
-
 .tie-new-object::before {
   content: "\ea17";
 }
-
 .tie-new-page::before {
   content: "\ea18";
 }
-
 .tie-new-whiteboard::before {
   content: "\ea19";
 }
-
 .tie-new-whiteboard-element::before {
   content: "\ea1a";
 }
-
 .tie-numbered-children::before {
   content: "\ea1b";
 }
-
 .tie-numbered-parents::before {
   content: "\ea1c";
 }
-
 .tie-object-compact::before {
   content: "\ea1d";
 }
-
 .tie-object-expanded::before {
   content: "\ea1e";
 }
-
 .tie-open-as-page::before {
   content: "\ea1f";
 }
-
 .tie-page::before {
   content: "\ea20";
 }
-
 .tie-page-embed::before {
   content: "\ea21";
 }
-
 .tie-page-filter::before {
   content: "\ea22";
 }
-
 .tie-page-ref::before {
   content: "\ea23";
 }
-
 .tie-page-search::before {
   content: "\ea24";
 }
-
 .tie-paste-as-link::before {
   content: "\ea25";
 }
-
 .tie-photo-link::before {
   content: "\ea26";
 }
-
 .tie-priority-lvl-high::before {
   content: "\ea27";
 }
-
 .tie-priority-lvl-low::before {
   content: "\ea28";
 }
-
 .tie-priority-lvl-medium::before {
   content: "\ea29";
 }
-
 .tie-priority-lvl-none::before {
   content: "\ea2a";
 }
-
 .tie-priority-lvl-urgent::before {
   content: "\ea2b";
 }
-
 .tie-property::before {
   content: "\ea2c";
 }
-
 .tie-query::before {
   content: "\ea2d";
 }
-
 .tie-query-code::before {
   content: "\ea2e";
 }
-
 .tie-references-hide::before {
   content: "\ea2f";
 }
-
 .tie-references-show::before {
   content: "\ea30";
 }
-
 .tie-reset-password::before {
   content: "\ea31";
 }
-
 .tie-select-all::before {
   content: "\ea32";
 }
-
 .tie-select-cursor::before {
   content: "\ea33";
 }
-
 .tie-stack-pop::before {
   content: "\ea34";
 }
-
 .tie-stack-pull::before {
   content: "\ea35";
 }
-
 .tie-text::before {
   content: "\ea36";
 }
-
 .tie-tomorrow::before {
   content: "\ea37";
 }
-
 .tie-ungroup::before {
   content: "\ea38";
 }
-
 .tie-video-embed::before {
   content: "\ea39";
 }
-
 .tie-whiteboard::before {
   content: "\ea3a";
 }
-
 .tie-whiteboard-element::before {
   content: "\ea3b";
 }
-
 .tie-whiteboard-filter::before {
   content: "\ea3c";
 }
-
 .tie-whiteboard-search::before {
   content: "\ea3d";
 }
-
 .tie-x-embed::before {
   content: "\ea3e";
 }
-
 .tie-yesterday::before {
   content: "\ea3f";
 }
-
 .tie-zoom-to-fit::before {
   content: "\ea40";
 }

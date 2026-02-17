@@ -117,7 +117,8 @@
                     class))]
       (if create-object?
         [{:text (str "Create as #" (string/join ", #" object-tag-names))
-          :icon "new-page"
+          :icon "new-object"
+          :icon-extension? true
           :icon-theme :gray
           :info (str "Create page called '" object-page-name "'")
           :source-create :page
@@ -128,7 +129,11 @@
                        class "Configure tag"
                        class? "Create tag"
                        :else "Create page")
-               :icon (if class "settings" "new-page")
+               :icon (cond
+                       class "settings"
+                       class? "new-class"
+                       :else "new-page")
+               :icon-extension? (not class)
                :icon-theme :gray
                :info (cond
                        class
@@ -1621,7 +1626,7 @@
             :label (str "New tag: \"" class-name "\"")
             :create-label "New tag:"
             :create-quoted (str "\"" class-name "\"")
-            :icon "hash"
+            :icon "new-class"
             :create-type :class
             :create-name class-name}]
 
@@ -1630,7 +1635,7 @@
             :label (str "New page: \"" object-page-name "\" as #" (string/join ", #" object-tag-names))
             :create-label "New page:"
             :create-quoted (str "\"" object-page-name "\" as #" (string/join ", #" object-tag-names))
-            :icon "plus"
+            :icon "new-object"
             :create-type :object
             :create-name object-page-name
             :create-tags object-tag-names}]
@@ -1640,7 +1645,7 @@
             :label (str "New page: \"" effective-name "\"")
             :create-label "New page:"
             :create-quoted (str "\"" effective-name "\"")
-            :icon "plus"
+            :icon "new-page"
             :create-type :page
             :create-name effective-name}])))))
 
@@ -1756,7 +1761,9 @@
        :item-render (fn [item _chosen?]
                       (if (:create-type item)
                         [:div.flex.flex-row.items-center.gap-3
-                         (list-item-icon/root {:variant :create :icon "plus"})
+                         (list-item-icon/root {:variant :create
+                                               :icon (:icon item)
+                                               :extension? true})
                          [:div.flex.flex-row.items-center.whitespace-nowrap.gap-1
                           [:span.text-gray-12 (:create-label item)]
                           [:span.text-gray-11 (:create-quoted item)]]]
@@ -1776,25 +1783,9 @@
                       "file"
                       (get-page-icon target-page))]
     [:div.capture-toolbar
-     ;; Mode dropdown (Phase 1: only "Quick capture", extensible for Phase 2+)
-     (shui/dropdown-menu
-      (shui/dropdown-menu-trigger
-       {:asChild true}
-       (shui/button {:variant :ghost :size :sm :class "mode-dropdown"}
-                    (icon/icon "note-plus" {:size 16})
-                    [:span "Quick capture"]
-                    (icon/icon "chevron-down" {:size 14})))
-      (shui/dropdown-menu-content
-       {:align "start" :side "bottom"}
-       (shui/dropdown-menu-item
-        {:class "gap-2"}
-        (icon/icon "note-plus" {:size 16})
-        "Quick capture"
-        [:span.ml-auto (icon/icon "check" {:size 14})])))
-
-     ;; "Add to" label + target page pill
-     [:div.flex.items-center.gap-1.5.ml-2
-      [:span.target-label "Add to"]
+     ;; Target page picker
+     [:div.flex.items-center.gap-1.5
+      [:span.target-label "Add to:"]
       (shui/button {:variant :ghost :size :sm :class "target-pill"
                     :on-click (fn [e]
                                 (shui/popup-show!
