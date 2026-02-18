@@ -774,6 +774,7 @@
                       "hint-button"
                       "hint-button text-gray-11 hover:text-gray-12")
              :variant (if primary? :secondary :ghost)
+             :depth (when primary? 1)
              :size :sm}
             opts)
      [[:span text]
