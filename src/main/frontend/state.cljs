@@ -669,10 +669,6 @@ Similar to re-frame subscriptions"
   []
   (:ui/auto-hide-tabs-typing? @state))
 
-(defn toggle-auto-hide-tabs-typing!
-  []
-  (update-state! :ui/auto-hide-tabs-typing? not))
-
 (defn doc-mode-enter-for-new-line?
   []
   (and (document-mode?)
@@ -1456,6 +1452,10 @@ Similar to re-frame subscriptions"
 (defn toggle-wide-mode!
   []
   (update-state! :ui/wide-mode? not))
+
+(defn toggle-auto-hide-tabs-typing!
+  []
+  (update-state! :ui/auto-hide-tabs-typing? not))
 
 (defn set-online!
   [value]
