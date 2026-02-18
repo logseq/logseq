@@ -151,7 +151,10 @@
 
 /* Page title */
 .preview-page-title {
-  border-bottom: 1px solid var(--lx-gray-05, var(--ls-border-color));
+  background: linear-gradient(to top, transparent 0%,
+    color-mix(in srgb, var(--lx-gray-03) 30%, transparent) 30%,
+    color-mix(in srgb, var(--lx-gray-03) 70%, transparent) 60%,
+    var(--lx-gray-03) 100%);
 }
 
 /* Block list */
@@ -204,15 +207,23 @@
   overflow-x: auto;
 }
 
-/* Block highlight for auto-scroll target */
+/* Block highlight for auto-scroll target.
+   Uses a keyframe animation that flashes brighter then settles to a persistent
+   subtle tint.  The class is never removed, so the highlight stays visible no
+   matter how long the user pauses before reading -- essential during rapid
+   arrow-key scanning where a fade-out would leave nothing visible. */
+@keyframes cmdk-highlight-settle {
+  0%   { background: var(--lx-accent-04-alpha, rgba(59, 130, 246, 0.22)); }
+  100% { background: var(--lx-accent-03-alpha, rgba(59, 130, 246, 0.12)); }
+}
+
 .cmdk-preview-highlight {
-  background: var(--lx-accent-03-alpha, rgba(59, 130, 246, 0.12));
   border-radius: 4px;
-  transition: background 1.5s ease-out;
+  animation: cmdk-highlight-settle 600ms ease-out forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .cmdk-results-list { transition: none; }
-  .cmdk-preview-highlight { transition: none; }
+  .cmdk-preview-highlight { animation: none; background: var(--lx-accent-03-alpha, rgba(59, 130, 246, 0.12)); }
 }
 

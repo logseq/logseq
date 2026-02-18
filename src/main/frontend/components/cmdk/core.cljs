@@ -440,11 +440,10 @@
    filtered out (property blocks)."
   [page-entity]
   (let [preview-config {:preview? true :disable-preview? true}
-        max-depth 5
-        max-blocks 50
+        max-blocks 200
         *count (atom 0)
         walk (fn walk [parent depth]
-               (when (and (<= depth max-depth) (< @*count max-blocks))
+               (when (< @*count max-blocks)
                  (let [children (ldb/sort-by-order
                                  (if (= depth 1)
                                    ;; At page level: try regular blocks first, fall back to raw
@@ -468,6 +467,59 @@
     [:div.preview-blocks
      (or (walk page-entity 1)
          [:div.p-4.text-gray-11.text-sm.italic "Empty page"])]))
+
+(defn- preview-class-objects-list
+  "Renders the object list once data is available. Pure render function."
+  [all-objects]
+  (let [total (count all-objects)
+        max-items 25
+        sorted (->> all-objects
+                    (sort-by :block/updated-at >)
+                    (take max-items))
+        remaining (- total max-items)]
+    [:div.preview-blocks
+     (if (zero? total)
+       [:div.p-4.text-gray-11.text-sm.italic "No objects"]
+       [:<>
+        [:div.px-3.pt-2.pb-1.text-xs.text-gray-11
+         (str total " " (if (= total 1) "object" "objects"))]
+        (for [obj sorted]
+          (let [node-icon (icon/get-node-icon obj)
+                title (or (:block/title obj) "Untitled")]
+            [:div.preview-block {:key (str (:block/uuid obj))}
+             [:div.preview-block-content.flex.items-center.gap-2
+              [:span.flex-shrink-0.flex.items-center.justify-center
+               {:style {:width 18 :height 18}}
+               (if (string? node-icon)
+                 (shui/tabler-icon node-icon {:size 14})
+                 (when (map? node-icon)
+                   (icon/icon node-icon {:size 14})))]
+              [:span.truncate title]]]))
+        (when (pos? remaining)
+          [:div.px-3.py-1.text-xs.text-gray-11.italic
+           (str "+" remaining " more")])])]))
+
+(rum/defc preview-class-objects
+  "Async-loads objects tagged with a class from the DB worker, then renders a
+   lightweight list. The main-thread DB is a lazy subset, so (:block/_tags class)
+   is typically empty until we explicitly fetch from the worker."
+  [class-entity]
+  (let [class-id (:db/id class-entity)
+        [objects set-objects!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (-> (db-async/<get-tag-objects (state/get-current-repo) class-id)
+           (p/then (fn [_]
+                     ;; Objects are now transacted into main-thread DB.
+                     ;; Re-query locally for live Datascript entities.
+                     (set-objects! (model/get-class-objects
+                                    (state/get-current-repo) class-id)))))
+       js/undefined)
+     [class-id])
+    (if (nil? objects)
+      [:div.preview-blocks
+       [:div.p-4.text-gray-11.text-sm.italic "Loading..."]]
+      (preview-class-objects-list objects))))
 
 (defn- get-page-icon
   "Returns a string icon name for the entity type."
@@ -1619,7 +1671,10 @@
                                  (p/then (fn [_] (set-page-entity! entity)))))))))
            js/undefined)))
      [source-uuid source-eid])
-    ;; Auto-scroll to matched block (for block search results)
+    ;; Auto-scroll to matched block (for block search results).
+    ;; The highlight class is applied and never removed -- the CSS animation
+    ;; handles the visual pulse (bright → subtle) and the subtle tint persists
+    ;; so the user can always see which block matched, even after pausing.
     (hooks/use-effect!
      (fn []
        (when (and block-uuid (rum/deref *container))
@@ -1628,11 +1683,11 @@
                     (when-let [el (.querySelector (rum/deref *container)
                                                   (str "[data-block-uuid='" block-uuid "']"))]
                       (.scrollIntoView el #js {:block "center"})
-                      (.add (.-classList el) "cmdk-preview-highlight")
-                      (js/setTimeout
-                       #(when (.-classList el)
-                          (.remove (.-classList el) "cmdk-preview-highlight"))
-                       2000)))
+                      ;; Remove then re-add in the next frame to restart the CSS
+                      ;; animation when the same block is highlighted again.
+                      (.remove (.-classList el) "cmdk-preview-highlight")
+                      (js/requestAnimationFrame
+                       #(.add (.-classList el) "cmdk-preview-highlight"))))
                   50)]
            #(js/clearTimeout t)))
        js/undefined)
@@ -1642,7 +1697,9 @@
        [:div
         [:div.preview-page-title.px-4.pt-3.pb-2
          [:span.text-lg.font-bold (:block/title page-entity)]]
-        (preview-page-blocks page-entity)])]))
+        (if (ldb/class? page-entity)
+          (preview-class-objects page-entity)
+          (preview-page-blocks page-entity))])]))
 
 (rum/defc input-row
   [state all-items opts]
