@@ -733,6 +733,7 @@
           {:file/path "logseq/publish.js"
            :file/content ""}]
          :build-existing-tx? true}
+        ;; Some of these built-ins are only here to make assertions pass
         built-in-pages
         [{:page {:block/title "Library" :build/properties {:logseq.property/built-in? true}}
           :blocks []}
@@ -762,12 +763,11 @@
 
 (deftest ^:long import-graph
   (let [original-data (build-original-graph-data)
-        conn (db-test/create-conn-with-blocks (dissoc original-data ::sqlite-export/graph-files))
+        conn (db-test/create-conn-with-upsertable-blocks original-data)
         ;; set to an unobtainable version to test this ident
         _ (d/transact! conn [{:db/ident :logseq.kv/schema-version :kv/value {:major 1 :minor 0}}])
         original-kv-values (remove #(= :logseq.kv/schema-version (:db/ident %))
                                    (d/q '[:find [(pull ?b [:db/ident :kv/value]) ...] :where [?b :kv/value]] @conn))
-        _ (d/transact! conn (::sqlite-export/graph-files original-data))
         conn2 (db-test/create-conn)
         imported-graph (export-graph-and-import-to-another-graph conn conn2 {})]
 
@@ -805,8 +805,7 @@
                                     (mapv #(let [now (js/Date.)]
                                              (merge % {:file/created-at now :file/last-modified-at now}))
                                           files))))
-        conn (db-test/create-conn-with-blocks (dissoc original-data ::sqlite-export/graph-files))
-        _ (d/transact! conn (::sqlite-export/graph-files original-data))
+        conn (db-test/create-conn-with-upsertable-blocks original-data)
         conn2 (db-test/create-conn)
         imported-graph (export-graph-and-import-to-another-graph conn conn2 {:include-timestamps? true})]
 
@@ -820,8 +819,7 @@
 
 (deftest ^:long import-graph-with-exclude-namespaces
   (let [original-data (build-original-graph-data {:exclude-namespaces? true})
-        conn (db-test/create-conn-with-blocks (dissoc original-data ::sqlite-export/graph-files))
-        _ (d/transact! conn (::sqlite-export/graph-files original-data))
+        conn (db-test/create-conn-with-upsertable-blocks original-data)
         conn2 (db-test/create-conn-with-blocks
                {:properties (update-vals (:properties original-data) #(dissoc % :build/properties))
                 :classes (update-vals (:classes original-data) #(dissoc % :build/properties))})
@@ -834,10 +832,8 @@
         "All :file/path entities are imported")))
 
 (deftest ^:long graph-is-idempotent-across-import-and-export
-  ;; FIXME: built-in pages should be idempotent across export and import
-  (let [original-data (build-original-graph-data {:add-built-in-pages? false})
-        conn (db-test/create-conn-with-blocks (dissoc original-data ::sqlite-export/graph-files))
-        _ (d/transact! conn (::sqlite-export/graph-files original-data))
+  (let [original-data (build-original-graph-data)
+        conn (db-test/create-conn-with-upsertable-blocks original-data)
         export-map (sqlite-export/build-export @conn {:export-type :graph})
         valid-result (sqlite-export/validate-export export-map)
         _ (assert (not (:error valid-result)) "No error when importing export-map into new graph")
