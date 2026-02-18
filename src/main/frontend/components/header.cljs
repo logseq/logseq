@@ -32,7 +32,6 @@
             [frontend.util :as util]
             [frontend.version :refer [version]]
             [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
             [logseq.common.version :as build-version]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
