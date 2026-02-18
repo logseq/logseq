@@ -39,6 +39,13 @@
   (when (and @typing? (or (.-ctrlKey e) (.-metaKey e)))
     (reveal-tabs!)))
 
+(defn- on-doc-pointerdown [e]
+  ;; Any interaction inside the left sidebar should reveal tabs
+  (when @typing?
+    (when-let [sidebar (.getElementById js/document "left-sidebar")]
+      (when (.contains sidebar (.-target e))
+        (reveal-tabs!)))))
+
 (defn- on-tabs-mouse-enter [_e]
   (when @typing?
     (reveal-tabs!)))
@@ -142,10 +149,12 @@
                      {:did-mount    (fn [state]
                                       (.addEventListener js/document "focusin" on-doc-focusin)
                                       (.addEventListener js/document "keydown" on-doc-keydown)
+                                      (.addEventListener js/document "pointerdown" on-doc-pointerdown)
                                       state)
                       :will-unmount (fn [state]
                                       (.removeEventListener js/document "focusin" on-doc-focusin)
                                       (.removeEventListener js/document "keydown" on-doc-keydown)
+                                      (.removeEventListener js/document "pointerdown" on-doc-pointerdown)
                                       (when @hide-timer (js/clearTimeout @hide-timer) (reset! hide-timer nil))
                                       (reset! typing? false)
                                       state)}
