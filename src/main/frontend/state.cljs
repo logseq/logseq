@@ -781,6 +781,10 @@ should be done through this fn in order to get global config and config defaults
   []
   (:ui/auto-expand-block-refs? (get-config)))
 
+(defn auto-hide-tabs-typing?
+  []
+  (:ui/auto-hide-tabs-typing? (sub-config)))
+
 (defn doc-mode-enter-for-new-line?
   []
   (and (document-mode?)
