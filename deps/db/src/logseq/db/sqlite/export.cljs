@@ -19,7 +19,7 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.db.test.helper :as db-test]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [medley.core :as medley]))
 
 ;; Export fns
@@ -1062,7 +1062,7 @@
     (merge-export-maps export-map {:pages-and-blocks pages-and-blocks})))
 
 (defn build-import
-  "Given an entity's export map, build the import tx to create it. In addition to standard sqlite.build keys,
+  "Given an export map, build the import tx to create it. In addition to standard sqlite.build keys,
    an export map can have the following namespaced keys:
    * ::export-type - Keyword indicating export type
    * ::block - Block map for a :block export
@@ -1071,7 +1071,7 @@
    * ::auto-include-namespaces - A set of parent namespaces to include from properties and classes
      for a :graph export. See :exclude-namespaces in build-graph-export for a similar option
    * ::import-options - A map of options that alters importing behavior. Has the following keys:
-     * :existing-pages-keep-properties? - Boolean which disables upsert of :build/properties on
+     * :existing-pages-keep-properties? - Boolean which allows existing pages to keep existing properties
 
    This fn then returns a map of txs to transact with the following keys:
    * :init-tx - Txs that must be transacted first, usually because they define new properties
@@ -1098,12 +1098,20 @@
                                          (::kv-values export-map'')))))
         (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map''))))))
 
+(defn create-conn
+  "Create a conn for a DB graph seeded with initial data"
+  []
+  (let [conn (d/create-conn db-schema/schema)
+        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))]
+    (entity-plus/reset-immutable-entities-cache!)
+    conn))
+
 (defn validate-export
   "Validates an export by creating an in-memory DB graph, importing the EDN and validating the graph.
    Returns a map with a readable :error key if any error occurs"
   [export-edn]
   (try
-    (let [import-conn (db-test/create-conn)
+    (let [import-conn (create-conn)
           {:keys [init-tx block-props-tx misc-tx] :as _txs} (build-import export-edn @import-conn {})
           _ (d/transact! import-conn (concat init-tx block-props-tx misc-tx))
           validation (db-validate/validate-local-db! @import-conn)]
