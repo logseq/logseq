@@ -664,6 +664,10 @@ Similar to re-frame subscriptions"
   []
   (:ui/auto-expand-block-refs? (sub-config)))
 
+(defn auto-hide-tabs-typing?
+  []
+  (:ui/auto-hide-tabs-typing? (sub-config)))
+
 (defn doc-mode-enter-for-new-line?
   []
   (and (document-mode?)
