@@ -1,18 +1,16 @@
 (ns frontend.handler.tabs
   "Handler for tabs operations"
-  (:require [frontend.date :as date]
-            [frontend.db :as db]
+  (:require [frontend.db :as db]
             [frontend.handler.route :as route-handler]
             [frontend.handler.window :as window-handler]
             [frontend.state :as state]
             [frontend.state.tabs :as tabs-state]
             [frontend.util :as util]
-            [logseq.db :as ldb]
-            [promesa.core :as p]))
+[promesa.core :as p]))
 
 (defn open-tab-by-page!
   "Open a page in a new tab or switch to existing tab"
-  [page-uuid-or-name {:keys [new-tab?] :or {new-tab? false}}]
+  [page-uuid-or-name _opts]
   (when page-uuid-or-name
     (p/let [page (db/get-page page-uuid-or-name)
             page-id (:db/id page)
@@ -39,7 +37,6 @@
   "Close a tab. If it's the last tab, navigate to Journals page"
   [tab-id]
   (let [active-id (tabs-state/get-active-tab-id)
-        tab (tabs-state/get-tab-by-id tab-id)
         tabs (tabs-state/get-tabs)
         tab-index (.indexOf (mapv :id tabs) tab-id)]
     (if (= (count tabs) 1)
@@ -97,24 +94,6 @@
                                                               :page-uuid nil
                                                               :title "Journals")])
       (route-handler/redirect! {:to :all-journals}))))
-
-(defn update-current-tab-title!
-  "Update the title of the currently active tab"
-  [new-title]
-  (when-let [active-id (tabs-state/get-active-tab-id)]
-    (tabs-state/update-tab! active-id {:title new-title})))
-
-(defn tabs-enabled?
-  "Check if tabs feature is enabled"
-  []
-  (seq (tabs-state/get-tabs)))
-
-(defn open-journal-in-tab!
-  "Open today's journal in a new tab"
-  []
-  (let [today (date/today)]
-    (when today
-      (open-tab-by-page! today {:new-tab? true}))))
 
 (defn open-all-journals-in-tab!
   "Open the all-journals page in a new tab or update current tab"

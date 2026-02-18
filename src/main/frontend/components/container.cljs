@@ -10,7 +10,6 @@
             [frontend.components.left-sidebar :as app-left-sidebar]
             [frontend.components.plugins :as plugins]
             [frontend.components.right-sidebar :as right-sidebar]
-            [frontend.components.tabs :as tabs]
             [frontend.components.theme :as theme]
             [frontend.components.window-controls :as window-controls]
             [frontend.config :as config]

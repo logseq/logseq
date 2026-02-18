@@ -5,7 +5,6 @@
             [clojure.string :as string]
             [dommy.core :as d]
             [frontend.common.missionary :as c.m]
-            [frontend.components.block :as component-block]
             [frontend.components.export :as export]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
@@ -30,7 +29,6 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.version :refer [version]]
-            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -333,20 +331,6 @@
   []
   (when (state/sub :ui/toggle-highlight-recent-blocks?)
     (recent-slider-inner)))
-
-(rum/defc block-breadcrumb
-  [page-name]
-  (when-let [page (when (and page-name (common-util/uuid-string? page-name))
-                    (db/entity [:block/uuid (uuid page-name)]))]
-    ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
-    (when (and (if config/publishing? (not (state/sub :db/restoring?)) true)
-               (ldb/page? page) (:block/parent page))
-      [:div.ls-block-breadcrumb
-       [:div.text-sm
-        (component-block/breadcrumb {}
-                                    (state/get-current-repo)
-                                    (:block/uuid page)
-                                    {:header? true})]])))
 
 (rum/defc semantic-search-progressing
   [repo]
