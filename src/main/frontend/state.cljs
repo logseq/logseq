@@ -786,10 +786,6 @@ should be done through this fn in order to get global config and config defaults
   []
   (:ui/auto-hide-tabs-typing? @state))
 
-(defn toggle-auto-hide-tabs-typing!
-  []
-  (update-state! :ui/auto-hide-tabs-typing? not))
-
 (defn doc-mode-enter-for-new-line?
   []
   (and (document-mode?)
@@ -1575,6 +1571,10 @@ should be done through this fn in order to get global config and config defaults
 (defn toggle-wide-mode!
   []
   (update-state! :ui/wide-mode? not))
+
+(defn toggle-auto-hide-tabs-typing!
+  []
+  (update-state! :ui/auto-hide-tabs-typing? not))
 
 (defn set-online!
   [value]
