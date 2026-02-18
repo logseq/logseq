@@ -18,6 +18,7 @@
 (s/def :zotero/setting-profile string?)
 (s/def ::commands-history (s/coll-of map?))
 (s/def :ui/wide-mode boolean?)
+(s/def :ui/auto-hide-tabs-typing boolean?)
 (s/def :git/current-repo string?)
 (s/def ::preferred-language string?)
 (s/def ::developer-mode string?) ;; Funny string boolean
@@ -57,6 +58,7 @@
             :zotero/setting-profile
             ::commands-history
             :ui/wide-mode
+            :ui/auto-hide-tabs-typing
             :git/current-repo
             ::preferred-language
             ::developer-mode

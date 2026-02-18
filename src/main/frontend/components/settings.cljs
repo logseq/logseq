@@ -425,7 +425,7 @@
            (ui/tooltip [:span.flex.px-2 (svg/info)]
                        [:span.block.w-64 "Auto hides the tabs when typing, visible again when you're trying to switch tabs: either using mouse pointer or keyboard shortcuts."])]
           auto-hide-tabs-typing?
-          config-handler/toggle-auto-hide-tabs-typing!))
+          ui-handler/toggle-auto-hide-tabs-typing!))
 
 (defn auto-expand-row [t auto-expand-block-refs?]
   (toggle "auto_expand_block_refs"
@@ -641,7 +641,7 @@
         enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
         show-brackets? (state/show-brackets?)
         wide-mode? (state/sub :ui/wide-mode?)
-        auto-hide-tabs-typing? (state/auto-hide-tabs-typing?)]
+        auto-hide-tabs-typing? (state/sub :ui/auto-hide-tabs-typing?)]
 
     [:div.panel-wrap.is-editor
      (date-format-row t preferred-date-format)

@@ -115,6 +115,7 @@
       :ui/system-theme?                      ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
       :ui/custom-theme                       (or (storage/get :ui/custom-theme) {:light {:mode "light"} :dark {:mode "dark"}})
       :ui/wide-mode?                         (storage/get :ui/wide-mode)
+      :ui/auto-hide-tabs-typing?             (storage/get :ui/auto-hide-tabs-typing)
       :ui/radix-color                        (storage/get :ui/radix-color)
       :ui/editor-font                        (storage/get :ui/editor-font)
 
@@ -666,7 +667,11 @@ Similar to re-frame subscriptions"
 
 (defn auto-hide-tabs-typing?
   []
-  (:ui/auto-hide-tabs-typing? (sub-config)))
+  (:ui/auto-hide-tabs-typing? @state))
+
+(defn toggle-auto-hide-tabs-typing!
+  []
+  (update-state! :ui/auto-hide-tabs-typing? not))
 
 (defn doc-mode-enter-for-new-line?
   []

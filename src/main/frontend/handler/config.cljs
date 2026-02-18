@@ -55,6 +55,3 @@
   (let [preferred-pasting-file? (state/preferred-pasting-file?)]
     (set-config! :editor/preferred-pasting-file? (not preferred-pasting-file?))))
 
-(defn toggle-auto-hide-tabs-typing! []
-  (let [v (state/auto-hide-tabs-typing?)]
-    (set-config! :ui/auto-hide-tabs-typing? (not v))))
