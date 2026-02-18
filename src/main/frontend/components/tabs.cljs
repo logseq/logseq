@@ -162,7 +162,7 @@
   (let [drag-state    (::drag-state state)
         tabs          (tabs-state/sub-tabs)
         active-tab-id (tabs-state/sub-active-tab-id)
-        auto-hide?    (state/auto-hide-tabs-typing?)
+        auto-hide?    (state/sub :ui/auto-hide-tabs-typing?)
         is-typing?    (rum/react typing?)
         hidden?       (and auto-hide? is-typing?)]
     [:div.tabs-container
