@@ -80,13 +80,15 @@
         _ (sqlite-build/create-blocks conn opts)]
     conn))
 
-(defn create-conn-with-upsertable-blocks
-  "Create conn like create-conn-with-blocks but also handles upserting existing built-in entities"
+(defn create-conn-with-import-map
+  "Create a conn with create-conn and then create/upsert entities using sqlite-export/build-import.
+   Unlike create-conn-with-blocks, this fn can upsert existing entities"
   [export-map]
   (let [conn (create-conn)
         {:keys [init-tx block-props-tx misc-tx]}
-        ;; Handle graph-files separately b/c build-import can't upsert them
         (sqlite-export/build-import (dissoc export-map ::sqlite-export/graph-files) @conn {})
         _ (d/transact! conn (concat init-tx block-props-tx misc-tx))
-        _ (d/transact! conn (::sqlite-export/graph-files export-map))]
+        ;; Handle graph-files separately b/c build-import can't upsert them
+        _ (when (::sqlite-export/graph-files export-map)
+            (d/transact! conn (::sqlite-export/graph-files export-map)))]
     conn))
