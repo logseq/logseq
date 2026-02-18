@@ -423,7 +423,7 @@
   (toggle "auto_hide_tabs_typing"
           ["Auto hide tabs when typing"
            (ui/tooltip [:span.flex.px-2 (svg/info)]
-                       [:span.block.w-64 "Auto hides the tabs list when typing, brings back the visibility when you switch the tab (keyboard shortcuts) or move the cursor over it."])]
+                       [:span.block.w-64 "Auto hides the tabs when typing, visible again when you're trying to switch tabs: either using mouse pointer or keyboard shortcuts."])]
           auto-hide-tabs-typing?
           config-handler/toggle-auto-hide-tabs-typing!))
 
