@@ -106,3 +106,113 @@
   padding-bottom: 4px;
 }
 
+/* ============================================================
+   Preview split layout
+   ============================================================ */
+.cmdk-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.cmdk-results-list {
+  flex: 1 1 100%;
+  min-width: 0;
+  overflow-y: auto;
+  transition: flex-basis 100ms ease-out;
+}
+
+.cmdk-has-preview .cmdk-results-list {
+  flex-basis: 50%;
+}
+
+.cmdk-preview-container {
+  flex: 0 1 50%;
+  min-width: 0;
+  max-width: 50%;
+  border-left: 1px solid var(--lx-gray-06, var(--ls-border-color));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  background: var(--lx-gray-02, var(--ls-secondary-background-color));
+}
+
+.cmdk-preview-pane {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Suppress clicks on content but allow scrolling on the pane */
+.cmdk-preview-pane > * {
+  pointer-events: none;
+}
+
+/* Page title */
+.preview-page-title {
+  border-bottom: 1px solid var(--lx-gray-05, var(--ls-border-color));
+}
+
+/* Block list */
+.preview-blocks {
+  padding: 0 0.5rem 1rem;
+}
+
+.preview-block {
+  padding: 1px 0;
+}
+
+.preview-block-content {
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.preview-bullet {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lx-gray-08, var(--ls-block-bullet-color));
+  flex-shrink: 0;
+  margin-top: 0.45em;
+}
+
+.preview-bullet.collapsed {
+  background: var(--lx-accent-09, var(--ls-link-text-color));
+}
+
+.preview-block-body {
+  margin-top: 2px;
+  font-size: 0.82rem;
+  color: var(--lx-gray-11, var(--ls-secondary-text-color));
+}
+
+.preview-block-body .is-paragraph {
+  margin: 0.25em 0;
+}
+
+/* Code blocks in preview */
+.preview-block-body .cp__fenced-code-block {
+  margin: 0.25em 0;
+}
+
+.preview-block-body .cp__fenced-code-block pre {
+  font-size: 0.8rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+  background: var(--lx-gray-03, var(--ls-secondary-background-color));
+  overflow-x: auto;
+}
+
+/* Block highlight for auto-scroll target */
+.cmdk-preview-highlight {
+  background: var(--lx-accent-03-alpha, rgba(59, 130, 246, 0.12));
+  border-radius: 4px;
+  transition: background 1.5s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cmdk-results-list { transition: none; }
+  .cmdk-preview-highlight { transition: none; }
+}
+

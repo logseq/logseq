@@ -16,6 +16,7 @@
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
             [frontend.extensions.pdf.utils :as pdf-utils]
+            [frontend.format.block :as format-block]
             [frontend.handler.block :as block-handler]
             [frontend.handler.command-palette :as cp-handler]
             [frontend.handler.db-based.page :as db-page-handler]
@@ -29,6 +30,7 @@
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.search :as search]
             [frontend.state :as state]
+            [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.page :as page-util]
@@ -37,6 +39,7 @@
             [goog.functions :as gfun]
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
+            [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
@@ -288,6 +291,184 @@
           (:source-theme highlighted-item) :theme
           :else nil)))
 
+(defn- previewable-item?
+  "Returns true for items that can show a page preview (pages and blocks)."
+  [item]
+  (and (some? item)
+       (some? (:source-block item))
+       (nil? (:source-create item))
+       (nil? (:source-wikidata item))))
+
+(defn- preview-page-entity
+  "Returns the page entity to preview for a given item.
+   Resolves the full entity from the source-block, then determines the page to preview.
+   For page/object/tag items: returns the entity itself.
+   For block items: returns the block's parent page.
+   For alias items: returns the original page."
+  [item]
+  (when (previewable-item? item)
+    (let [source (:source-block item)
+          alias-page (:alias item)
+          ;; Resolve the full entity — prefer :db/id (integer, survives worker serialization)
+          ;; then fall back to :block/uuid for items that are already full entities
+          entity (or (when-let [eid (:db/id source)]
+                       (db/entity eid))
+                     (when-let [uuid (:block/uuid source)]
+                       (db/entity [:block/uuid uuid])))]
+      (js/console.log "[preview] source-block:"
+                      (pr-str (select-keys source [:db/id :block/uuid :block/name :page?]))
+                      "entity:" (some? entity)
+                      "entity-name:" (:block/name entity)
+                      "entity-title:" (:block/title entity))
+      (or
+       ;; Alias: resolve to original page
+       (when alias-page
+         (or (when-let [uuid (:block/uuid alias-page)] (db/entity [:block/uuid uuid]))
+             (when (:block/name alias-page) (db/get-page (:block/name alias-page)))))
+       ;; Entity is a page-like thing (has :block/name or no :block/page pointing elsewhere)
+       ;; → preview the entity itself
+       (when (and entity (:block/name entity)) entity)
+       ;; Entity is a block (has :block/page pointing to a parent page)
+       ;; → preview the parent page
+       (when-let [page (:block/page entity)]
+         (when (not= (:db/id page) (:db/id entity))
+           page))
+       ;; Entity itself as final fallback (objects without :block/name)
+       entity))))
+
+;; ---------------------------------------------------------------------------
+;; Lightweight preview renderer
+;; ---------------------------------------------------------------------------
+
+(defn- preview-body-element
+  "Renders a single body AST element for the lightweight preview.
+   Intercepts Heading (which normally calls block-container) and Src (CodeMirror)
+   with safe lightweight alternatives. All other cases delegate to markup-element-cp."
+  [config item]
+  (case (first item)
+    "Heading" (let [h (second item)]
+                (block/->elem (keyword (str "h" (min (:level h) 6)))
+                              (block/map-inline config (:title h))))
+    "Src"     (let [{:keys [lines language]} (second item)]
+                [:div.cp__fenced-code-block
+                 {:data-lang (some-> language util/safe-lower-case)}
+                 [:pre.code-block.pre-wrap-white-space
+                  [:code (apply str lines)]]])
+    (block/markup-element-cp config item)))
+
+(defn- preview-asset-block
+  "Renders an asset block (image/audio/video) with synchronous file:// URL."
+  [block]
+  (let [ext    (:logseq.property.asset/type block)
+        ext-kw (keyword ext)
+        uuid   (:block/uuid block)
+        repo-dir (config/get-repo-dir (state/get-current-repo))
+        file-url (path/prepend-protocol "file:" (path/path-join repo-dir "assets" (str uuid "." ext)))
+        width  (or (get-in block [:logseq.property.asset/resize-metadata :width])
+                   (:logseq.property.asset/width block)
+                   250)]
+    (cond
+      (contains? (common-config/img-formats) ext-kw)
+      [:img.rounded-sm {:src file-url :loading "lazy" :width width
+                        :style {:max-width "100%" :height "auto"}}]
+
+      (contains? config/audio-formats ext-kw)
+      [:audio {:src file-url :controls true}]
+
+      (contains? config/video-formats ext-kw)
+      [:video {:src file-url :controls true :width width}]
+
+      :else
+      [:div.text-sm.text-gray-11 (str (:block/title block) "." ext)])))
+
+(defn- preview-block
+  "Renders a single block in the lightweight preview."
+  [preview-config block depth]
+  (let [uuid (:block/uuid block)]
+    (cond
+      ;; Asset block (pasted image/audio/video)
+      (ldb/asset? block)
+      [:div.preview-block {:data-block-uuid (str uuid)
+                           :style {:padding-left (str (* (dec depth) 20) "px")}}
+       (preview-asset-block block)]
+
+      ;; Embed (block link) — show linked block title only
+      (:block/link block)
+      (let [linked (:block/link block)
+            parsed (format-block/parse-title-and-body
+                    (:block/uuid linked) :markdown (:block/title linked))]
+        [:div.preview-block {:data-block-uuid (str uuid)
+                             :style {:padding-left (str (* (dec depth) 20) "px")}}
+         [:div.preview-block-content.flex.items-baseline.gap-1
+          [:span.preview-bullet]
+          [:span.flex-1.min-w-0
+           (when-let [ast (:block.temp/ast-title parsed)]
+             (block/map-inline preview-config ast))]]])
+
+      ;; Query block — placeholder
+      (some->> (:block/tags block) seq
+               (some #(= :logseq.class/Query (:db/ident %))))
+      [:div.preview-block {:data-block-uuid (str uuid)
+                           :style {:padding-left (str (* (dec depth) 20) "px")}}
+       [:div.preview-block-content.flex.items-baseline.gap-1.text-gray-11
+        [:span.preview-bullet]
+        (shui/tabler-icon "search" {:size 14})
+        [:span.italic "Query"]]]
+
+      ;; Regular block
+      :else
+      (let [parsed (format-block/parse-title-and-body
+                    (:block/uuid block) :markdown (:block/title block))
+            ast-title (:block.temp/ast-title parsed)
+            ast-body (:block.temp/ast-body parsed)
+            has-children? (boolean (seq (:block/_parent block)))
+            collapsed? (:block/collapsed? block)]
+        [:div.preview-block {:data-block-uuid (str uuid)
+                             :style {:padding-left (str (* (dec depth) 20) "px")}}
+         [:div.preview-block-content.flex.items-baseline.gap-1
+          [:span.preview-bullet {:class (when (and has-children? collapsed?) "collapsed")}]
+          [:span.flex-1.min-w-0
+           (when ast-title (block/map-inline preview-config ast-title))]]
+         (when (seq ast-body)
+           [:div.preview-block-body
+            (keep #(preview-body-element preview-config %) ast-body)])]))))
+
+(defn- preview-page-blocks
+  "Renders a lightweight page preview by walking the block tree.
+   Uses entity-based lazy traversal — only touches blocks actually rendered.
+   Falls back to :block/_raw-parent for object pages whose regular blocks are
+   filtered out (property blocks)."
+  [page-entity]
+  (let [preview-config {:preview? true :disable-preview? true}
+        max-depth 5
+        max-blocks 50
+        *count (atom 0)
+        walk (fn walk [parent depth]
+               (when (and (<= depth max-depth) (< @*count max-blocks))
+                 (let [children (ldb/sort-by-order
+                                 (if (= depth 1)
+                                   ;; At page level: try regular blocks first, fall back to raw
+                                   (or (seq (:block/_parent parent))
+                                       (:block/_raw-parent parent))
+                                   ;; Nested: always use regular blocks
+                                   (:block/_parent parent)))]
+                   (->> children
+                        (keep (fn [block]
+                                (when (< @*count max-blocks)
+                                  (when-not (string/blank? (:block/title block))
+                                    (swap! *count inc)
+                                    (let [collapsed? (:block/collapsed? block)
+                                          child-elements (when-not collapsed?
+                                                           (walk block (inc depth)))]
+                                      [:div {:key (str (:block/uuid block))}
+                                       (preview-block preview-config block depth)
+                                       (when (seq child-elements)
+                                         child-elements)])))))
+                        seq))))]
+    [:div.preview-blocks
+     (or (walk page-entity 1)
+         [:div.p-4.text-gray-11.text-sm.italic "Empty page"])]))
+
 (defn- get-page-icon
   "Returns a string icon name for the entity type."
   [entity]
@@ -302,17 +483,20 @@
 (defmethod load-results :initial [_ state]
   (when-let [db (db/get-db)]
     (let [!results (::results state)
-          recent-pages (map (fn [block]
-                              (let [tags (block-handler/visible-tags block)
-                                    text (block-handler/block-unique-title block {:with-tags? false})
-                                    icon (get-page-icon block)]
-                                (cond-> {:icon icon
-                                         :icon-theme :gray
-                                         :text text
-                                         :source-block block}
-                                  (seq tags)
-                                  (assoc :text-tags (string/join ", " (keep (fn [t] (when-let [title (:block/title t)] (str "#" title))) tags))))))
-                            (ldb/get-recent-updated-pages db))]
+          recent-pages (keep (fn [block]
+                               ;; Guard against stale entities from worker→main-thread sync lag
+                               ;; (e.g. recently deleted pages whose retraction hasn't arrived yet)
+                               (when (and (:block/title block) (:block/uuid block))
+                                 (let [tags (block-handler/visible-tags block)
+                                       text (block-handler/block-unique-title block {:with-tags? false})
+                                       icon (get-page-icon block)]
+                                   (cond-> {:icon icon
+                                            :icon-theme :gray
+                                            :text text
+                                            :source-block block}
+                                     (seq tags)
+                                     (assoc :text-tags (string/join ", " (keep (fn [t] (when-let [title (:block/title t)] (str "#" title))) tags)))))))
+                             (ldb/get-recent-updated-pages db))]
       (reset! !results (assoc-in default-results [:recently-updated-pages :items] recent-pages)))))
 
 ;; The commands search uses the command-palette handler
@@ -1377,6 +1561,91 @@
       :else
       "What are you looking for?")))
 
+(rum/defc preview-debounce-tracker
+  "Debounces the highlighted item to avoid rapid preview show/hide.
+   Uses a ref to store the latest value, read at fire time to prevent stale closures."
+  [state]
+  (let [highlighted-item @(::highlighted-item state)
+        *debounced (::preview-debounced-item state)
+        *timer (hooks/use-ref nil)
+        *latest (hooks/use-ref highlighted-item)]
+    ;; Always keep latest ref in sync
+    (set! (.-current *latest) highlighted-item)
+    (hooks/use-effect!
+     (fn []
+       (when-let [t (.-current *timer)] (js/clearTimeout t))
+       (set! (.-current *timer)
+             (js/setTimeout
+              (fn []
+                ;; Read the ref at fire time, not closure-creation time
+                (let [current (.-current *latest)]
+                  (if (previewable-item? current)
+                    (reset! *debounced current)
+                    (reset! *debounced nil))))
+              60))
+       #(when-let [t (.-current *timer)] (js/clearTimeout t)))
+     [highlighted-item])
+    nil))
+
+(rum/defc preview-pane
+  "Renders a lightweight static page preview.
+   Tries synchronous entity resolution first, falls back to async loading
+   from the DB worker for entities not yet in the main-thread Datascript DB."
+  [item]
+  (let [source (:source-block item)
+        source-uuid (:block/uuid source)
+        source-eid (:db/id source)
+        ;; Try synchronous resolution (works for entities already in main-thread DB)
+        sync-entity (preview-page-entity item)
+        [page-entity set-page-entity!] (hooks/use-state sync-entity)
+        block-uuid (when (and source (not (:page? source)))
+                     (:block/uuid source))
+        *container (rum/use-ref nil)]
+    ;; Async-load entity from worker if not in main-thread DB
+    (hooks/use-effect!
+     (fn []
+       (if sync-entity
+         (do (set-page-entity! sync-entity) js/undefined)
+         (when-let [id (or source-uuid source-eid)]
+           (-> (db-async/<get-block (state/get-current-repo) id
+                                    {:children? true})
+               (p/then (fn [_]
+                         ;; Entity is now transacted into main-thread DB, retry resolution
+                         (let [entity (preview-page-entity item)]
+                           (when entity
+                             ;; Also load children for the resolved page (in case it's
+                             ;; a different entity than what we loaded, e.g. block's parent page)
+                             (-> (db-async/<get-block (state/get-current-repo)
+                                                      (:block/uuid entity)
+                                                      {:children? true})
+                                 (p/then (fn [_] (set-page-entity! entity)))))))))
+           js/undefined)))
+     [source-uuid source-eid])
+    ;; Auto-scroll to matched block (for block search results)
+    (hooks/use-effect!
+     (fn []
+       (when (and block-uuid (rum/deref *container))
+         (let [t (js/setTimeout
+                  (fn []
+                    (when-let [el (.querySelector (rum/deref *container)
+                                                  (str "[data-block-uuid='" block-uuid "']"))]
+                      (.scrollIntoView el #js {:block "center"})
+                      (.add (.-classList el) "cmdk-preview-highlight")
+                      (js/setTimeout
+                       #(when (.-classList el)
+                          (.remove (.-classList el) "cmdk-preview-highlight"))
+                       2000)))
+                  50)]
+           #(js/clearTimeout t)))
+       js/undefined)
+     [(:db/id page-entity) block-uuid])
+    [:div.cmdk-preview-pane {:ref *container}
+     (when page-entity
+       [:div
+        [:div.preview-page-title.px-4.pt-3.pb-2
+         [:span.text-lg.font-bold (:block/title page-entity)]]
+        (preview-page-blocks page-entity)])]))
+
 (rum/defc input-row
   [state all-items opts]
   (let [highlighted-item @(::highlighted-item state)
@@ -1398,27 +1667,53 @@
                          (when (and highlighted-item (= -1 (.indexOf all-items (dissoc highlighted-item :mouse-enter-triggered-highlight))))
                            (reset! (::highlighted-item state) nil)))
                        [all-items])
+    ;; Auto-set highlighted item to first result when nil (on open & after search)
+    (hooks/use-effect! (fn []
+                         (when (and (nil? highlighted-item) (seq all-items))
+                           (reset! (::highlighted-item state) (first all-items)))
+                         js/undefined)
+                       [highlighted-item (first all-items)])
     (hooks/use-effect! (fn [] (load-results :default state)) [])
-    [:div {:class "bg-gray-02 border-b border-1 border-gray-07"}
-     [:input.cp__cmdk-search-input
-      {:class "text-xl bg-transparent border-none w-full outline-none px-3 py-3"
-       :auto-focus true
-       :autoComplete "off"
-       :autoCapitalize "off"
-       :placeholder (input-placeholder false)
-       :ref #(when-not @input-ref (reset! input-ref %))
-       :on-change debounced-on-change
-       :on-blur (fn [_e]
-                  (when-let [on-blur (:on-input-blur opts)]
-                    (on-blur input)))
-       :on-composition-end (gfun/debounce (fn [e] (handle-input-change state e)) 100)
-       :on-key-down (fn [e]
-                      (case (util/ekey e)
-                        "Esc"
-                        (when-not @(::filter state)
-                          (shui/dialog-close!))
-                        nil))
-       :default-value input}]]))
+    (let [sidebar? (:sidebar? opts)
+          preview-enabled? @(::preview-enabled? state)]
+      [:div {:class "bg-gray-02 border-b border-1 border-gray-07 flex items-center"}
+       [:input.cp__cmdk-search-input
+        {:class "text-xl bg-transparent border-none w-full outline-none px-3 py-3 flex-1"
+         :auto-focus true
+         :autoComplete "off"
+         :autoCapitalize "off"
+         :placeholder (input-placeholder false)
+         :ref #(when-not @input-ref (reset! input-ref %))
+         :on-change debounced-on-change
+         :on-blur (fn [_e]
+                    (when-let [on-blur (:on-input-blur opts)]
+                      (on-blur input)))
+         :on-composition-end (gfun/debounce (fn [e] (handle-input-change state e)) 100)
+         :on-key-down (fn [e]
+                        (case (util/ekey e)
+                          "Esc"
+                          (when-not @(::filter state)
+                            (shui/dialog-close!))
+                          nil))
+         :default-value input}]
+       (when-not sidebar?
+         (shui/button
+          {:variant (if preview-enabled? :secondary :ghost)
+           :size :sm
+           :class (str "mr-2 px-1.5"
+                       (if preview-enabled?
+                         " opacity-100"
+                         " opacity-50 hover:opacity-100"))
+           :title (if preview-enabled? "Hide preview" "Show preview")
+           :on-click (fn []
+                       (let [new-val (not @(::preview-enabled? state))]
+                         (reset! (::preview-enabled? state) new-val)
+                         (storage/set :cmdk-preview-pane? new-val)))
+           :data-button "icon"}
+          (shui/tabler-icon "layout-sidebar-right"
+                            (cond-> {:size 16}
+                              preview-enabled?
+                              (assoc :style {:color "var(--lx-accent-09, var(--ls-link-text-color))"})))))])))
 
 (defn rand-tip
   []
@@ -1508,7 +1803,9 @@
                                       (not (:sidebar? opts)))
                                (atom {:group search-mode})
                                (atom nil))
-                    ::input (atom (or (:initial-input opts) "")))))
+                    ::input (atom (or (:initial-input opts) ""))
+                    ::preview-enabled? (atom (boolean (storage/get :cmdk-preview-pane?)))
+                    ::preview-debounced-item (atom nil))))
    :will-unmount (fn [state]
                    (state/set-state! :search/mode nil)
                    (state/set-state! :search/args nil)
@@ -1532,44 +1829,61 @@
   [state {:keys [sidebar?] :as opts}]
   (let [*input (::input state)
         search-mode (state/sub :search/mode)
+        ;; Explicit rum/react tracking to ensure cmdk re-renders when these atoms change
+        _results (rum/react (::results state))
+        _highlighted (rum/react (::highlighted-item state))
         group-filter (or (when (and (not (contains? #{:global :graph} search-mode)) (not (:sidebar? opts)))
                            search-mode)
                          (:group (rum/react (::filter state))))
         results-ordered (state->results-ordered state search-mode)
         all-items (mapcat last results-ordered)
-        first-item (first all-items)]
+        first-item (first all-items)
+        preview-enabled? (rum/react (::preview-enabled? state))
+        debounced-item (rum/react (::preview-debounced-item state))
+        show-preview? (and preview-enabled?
+                           (previewable-item? debounced-item)
+                           (not sidebar?))]
     [:div.cp__cmdk {:ref #(when-not @(::ref state) (reset! (::ref state) %))
                     :class (cond-> "w-full h-full relative flex flex-col justify-start"
-                             (not sidebar?) (str " rounded-lg"))}
+                             (not sidebar?) (str " rounded-lg")
+                             show-preview? (str " cmdk-has-preview"))}
      (input-row state all-items opts)
-     [:div {:class (cond-> "w-full flex-1 overflow-y-auto"
-                     (not sidebar?) (str " pb-14"))
-            :ref #(let [*ref (::scroll-container-ref state)]
-                    (when-not @*ref (reset! *ref %)))
-            :style {:background "var(--lx-gray-02)"
-                    :scroll-padding-block 32}}
+     (preview-debounce-tracker state)
+     [:div.cmdk-body
+      [:div.cmdk-results-list
+       {:class (when-not sidebar? "pb-14")
+        :ref #(let [*ref (::scroll-container-ref state)]
+                (when-not @*ref (reset! *ref %)))
+        :style {:background "var(--lx-gray-02)"
+                :scroll-padding-block 32}}
 
-      (when group-filter
-        [:div.flex.flex-col.px-3.py-1.opacity-70.text-sm
-         (search-only state (string/capitalize (name group-filter)))])
+       (when group-filter
+         [:div.flex.flex-col.px-3.py-1.opacity-70.text-sm
+          (search-only state (string/capitalize (name group-filter)))])
 
-      (let [items (filter
-                   (fn [[_group-name group-key group-count _group-items]]
-                     (and (not= 0 group-count)
-                          (if-not group-filter true
-                                  (or (= group-filter group-key)
-                                      (and (= group-filter :nodes)
-                                           (= group-key :current-page))
-                                      (and (contains? #{:create} group-filter)
-                                           (= group-key :create))))))
-                   results-ordered)]
-        (if (seq items)
-          (for [[group-name group-key group-count group-items] items]
-            (let [title (string/capitalize group-name)]
-              (result-group state title group-key group-count group-items first-item sidebar?)))
-          [:div.flex.flex-col.p-4.opacity-50
-           (when-not (string/blank? @*input)
-             "No matched results")]))]
+       (let [items (filter
+                    (fn [[_group-name group-key group-count _group-items]]
+                      (and (not= 0 group-count)
+                           (if-not group-filter true
+                                   (or (= group-filter group-key)
+                                       (and (= group-filter :nodes)
+                                            (= group-key :current-page))
+                                       (and (contains? #{:create} group-filter)
+                                            (= group-key :create))))))
+                    results-ordered)]
+         (if (seq items)
+           (for [[group-name group-key group-count group-items] items]
+             (let [title (string/capitalize group-name)]
+               (result-group state title group-key group-count group-items first-item sidebar?)))
+           [:div.flex.flex-col.p-4.opacity-50
+            (when-not (string/blank? @*input)
+              "No matched results")]))]
+      (when show-preview?
+        [:div.cmdk-preview-container
+         {:on-click (fn [e]
+                      (.preventDefault e)
+                      (handle-action :open state nil))}
+         (preview-pane debounced-item)])]
      (when-not sidebar? (hints state))]))
 
 (rum/defc cmdk-modal [props]

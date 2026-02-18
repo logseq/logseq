@@ -23,6 +23,7 @@
 (s/def ::developer-mode string?) ;; Funny string boolean
 (s/def :document/mode? boolean?)
 (s/def :ui/shortcut-tooltip? boolean?)
+(s/def :ui/cmdk-preview-pane? boolean?)
 (s/def :ui/recent-pages map?)
 (s/def :copy/export-block-text-indent-style string?)
 (s/def :copy/export-block-text-remove-options set?)
@@ -62,6 +63,7 @@
             ::developer-mode
             :document/mode?
             :ui/shortcut-tooltip?
+            :ui/cmdk-preview-pane?
             :copy/export-block-text-indent-style
             :copy/export-block-text-remove-options
             :copy/export-block-text-other-options]))
