@@ -1143,13 +1143,11 @@
       (let [page-name (:page-name item)
             tag-names (:tag-names item)]
         (p/let [tag-entities (p/all (mapv <ensure-class-exists! tag-names))
-                page (page-handler/<create! page-name {:redirect? false})]
+                ;; Pass tags to <create! so page + tags are a single transaction
+                page (page-handler/<create! page-name
+                                            {:redirect? false
+                                             :tags (vec (keep :block/uuid tag-entities))})]
           (when page
-            ;; Apply tags (works for both new and existing pages)
-            (doseq [tag-entity (remove nil? tag-entities)]
-              (db-property-handler/set-block-property!
-               (:block/uuid page) :block/tags (:db/id tag-entity)))
-            ;; Morph CMD+K into object page dialog
             (shui/dialog-transition-to! :ls-dialog-cmdk
                                         (page-dialog-content page {:open-label "Open page"})
                                         {:close-btn? true
@@ -2060,11 +2058,10 @@
 
                           :object
                           (p/let [tag-entities (p/all (mapv #(<ensure-class-exists! %) (:create-tags item)))
-                                  page (page-handler/<create! name {:redirect? false})]
+                                  page (page-handler/<create! name
+                                                              {:redirect? false
+                                                               :tags (vec (keep :block/uuid tag-entities))})]
                             (when page
-                              (doseq [tag-entity (remove nil? tag-entities)]
-                                (db-property-handler/set-block-property!
-                                 (:block/uuid page) :block/tags (:db/id tag-entity)))
                               (set-target-page! page)
                               (shui/popup-hide! popup-id)))
 
