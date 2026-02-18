@@ -7,6 +7,7 @@
             [datascript.core :as d]
             [dommy.core :as dom]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
             [frontend.handler.config :as config-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
@@ -70,6 +71,12 @@
                    [_page-name page-uuid] (ui-outliner-tx/transact!
                                            {:outliner-op :create-page}
                                            (outliner-op/create-page! title' options'))
+                   ;; Sync the new page from worker → main-thread DB before querying.
+                   ;; transact! resolves when the worker completes, but the main-thread
+                   ;; Datascript may not have the entity yet (async broadcast).
+                   _ (when page-uuid
+                       (db-async/<get-block (state/get-current-repo) page-uuid
+                                            {:children? false}))
                    page (db/get-page (or page-uuid title'))]
              (when redirect?
                (route-handler/redirect-to-page! page-uuid)
