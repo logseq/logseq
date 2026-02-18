@@ -78,7 +78,8 @@
           "Existing page didn't get updated"))))
 
 (defn- export-graph-and-import-to-another-graph
-  "Exports graph and imports it to a 2nd graph, validates it and then exports the 2nd graph"
+  "Exports graph and imports it to a 2nd graph, validates it and then exports the 2nd graph.
+   This is similar to create-conn-with-import-map but works with existing conn"
   [export-conn import-conn export-options]
   (let [{:keys [init-tx block-props-tx misc-tx] :as _txs}
         (-> (sqlite-export/build-export @export-conn {:export-type :graph :graph-options export-options})
@@ -518,12 +519,8 @@
           :user.class/MyClass2 {:build/class-extends [:user.class/MyClass]
                                 :build/properties {:logseq.property/description "tests child class"}}}}
         conn (db-test/create-conn-with-blocks original-data)
-        conn2 (db-test/create-conn)
-        {:keys [init-tx block-props-tx] :as _txs}
-        (-> (sqlite-export/build-export @conn {:export-type :graph-ontology})
-            (sqlite-export/build-import @conn2 {}))
-        ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! conn2 (concat init-tx block-props-tx))
+        conn2 (db-test/create-conn-with-import-map
+               (sqlite-export/build-export @conn {:export-type :graph-ontology}))
         _ (validate-db @conn2)
         imported-ontology (sqlite-export/build-export @conn2 {:export-type :graph-ontology})]
 
@@ -550,12 +547,8 @@
                              (db-test/find-block-by-content db "b1")]
                             (remove nil?)
                             (mapv #(vector :block/uuid (:block/uuid %)))))
-        conn2 (db-test/create-conn)
-        {:keys [init-tx block-props-tx] :as _txs}
-        (-> (sqlite-export/build-export @conn {:export-type :view-nodes :rows (get-node-ids @conn)})
-            (sqlite-export/build-import @conn2 {}))
-        ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! conn2 (concat init-tx block-props-tx))
+        conn2 (db-test/create-conn-with-import-map
+               (sqlite-export/build-export @conn {:export-type :view-nodes :rows (get-node-ids @conn)}))
         _ (validate-db @conn2)
         imported-nodes (sqlite-export/build-export @conn2 {:export-type :view-nodes
                                                            :rows (get-node-ids @conn2)})]
@@ -585,12 +578,8 @@
                              (db-test/find-page-by-title db "page2")]
                             (remove nil?)
                             (mapv #(vector :block/uuid (:block/uuid %)))))
-        conn2 (db-test/create-conn)
-        {:keys [init-tx block-props-tx] :as _txs}
-        (-> (sqlite-export/build-export @conn {:export-type :selected-nodes :node-ids (get-node-ids @conn)})
-            (sqlite-export/build-import @conn2 {}))
-        ;; _ (cljs.pprint/pprint _txs)
-        _ (d/transact! conn2 (concat init-tx block-props-tx))
+        conn2 (db-test/create-conn-with-import-map
+               (sqlite-export/build-export @conn {:export-type :selected-nodes :node-ids (get-node-ids @conn)}))
         _ (validate-db @conn2)
         imported-nodes (sqlite-export/build-export @conn2 {:export-type :selected-nodes :node-ids (get-node-ids @conn2)})]
 
@@ -763,7 +752,7 @@
 
 (deftest ^:long import-graph
   (let [original-data (build-original-graph-data)
-        conn (db-test/create-conn-with-upsertable-blocks original-data)
+        conn (db-test/create-conn-with-import-map original-data)
         ;; set to an unobtainable version to test this ident
         _ (d/transact! conn [{:db/ident :logseq.kv/schema-version :kv/value {:major 1 :minor 0}}])
         original-kv-values (remove #(= :logseq.kv/schema-version (:db/ident %))
@@ -805,7 +794,7 @@
                                     (mapv #(let [now (js/Date.)]
                                              (merge % {:file/created-at now :file/last-modified-at now}))
                                           files))))
-        conn (db-test/create-conn-with-upsertable-blocks original-data)
+        conn (db-test/create-conn-with-import-map original-data)
         conn2 (db-test/create-conn)
         imported-graph (export-graph-and-import-to-another-graph conn conn2 {:include-timestamps? true})]
 
@@ -819,7 +808,7 @@
 
 (deftest ^:long import-graph-with-exclude-namespaces
   (let [original-data (build-original-graph-data {:exclude-namespaces? true})
-        conn (db-test/create-conn-with-upsertable-blocks original-data)
+        conn (db-test/create-conn-with-import-map original-data)
         conn2 (db-test/create-conn-with-blocks
                {:properties (update-vals (:properties original-data) #(dissoc % :build/properties))
                 :classes (update-vals (:classes original-data) #(dissoc % :build/properties))})
@@ -833,7 +822,7 @@
 
 (deftest ^:long graph-is-idempotent-across-import-and-export
   (let [original-data (build-original-graph-data)
-        conn (db-test/create-conn-with-upsertable-blocks original-data)
+        conn (db-test/create-conn-with-import-map original-data)
         export-map (sqlite-export/build-export @conn {:export-type :graph})
         valid-result (sqlite-export/validate-export export-map)
         _ (assert (not (:error valid-result)) "No error when importing export-map into new graph")
