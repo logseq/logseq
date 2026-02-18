@@ -2,6 +2,7 @@
   "Builds sqlite.build EDN to represent nodes in a graph-agnostic way.
    Useful for exporting and importing across DB graphs"
   (:require [cljs.pprint :as pprint]
+            [clojure.data :as data]
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
@@ -903,7 +904,7 @@
                                                   (::kv-values m))))]
     ;; Only ignore patch if initial version is > 64.8 since this fix started with 64.9
     (if (some-> initial-version (db-schema/compare-schema-version {:major 64 :minor 8}) pos?)
-       m
+      m
       (walk/postwalk
        (fn [e]
          (if (and (keyword? e) (some-> (namespace e) (string/starts-with? "user.")))
@@ -1106,10 +1107,45 @@
           {:keys [init-tx block-props-tx misc-tx] :as _txs} (build-import export-edn @import-conn {})
           _ (d/transact! import-conn (concat init-tx block-props-tx misc-tx))
           validation (db-validate/validate-local-db! @import-conn)]
-      (when-let [errors (seq (:errors validation))]
-        (js/console.error "Exported EDN has the following invalid errors when imported into a new graph:")
-        (pprint/pprint errors)
-        {:error (str "The exported EDN has " (count errors) " validation error(s)")}))
+      (if-let [errors (seq (:errors validation))]
+        (do
+          (js/console.error "Exported EDN has the following invalid errors when imported into a new graph:")
+          (pprint/pprint errors)
+          {:error (str "The exported EDN has " (count errors) " validation error(s)")})
+        {:db @import-conn}))
     (catch :default e
       (js/console.error "Unexpected export-edn validation error:" e)
       {:error (str "The exported EDN is unexpectedly invalid: " (pr-str (ex-message e)))})))
+
+(defn- prepare-export-to-diff
+  "This prepares a graph's exported edn to be diffed with another"
+  [m]
+  (-> m
+      ;; TODO: Fix order of these :build/* keys
+      (update :classes update-vals (fn [m]
+                                     (cond-> m
+                                       (:build/class-extends m)
+                                       (update :build/class-extends sort)
+                                       (:build/class-properties m)
+                                       (update :build/class-properties sort))))
+      (update :properties update-vals (fn [m]
+                                        (cond-> m
+                                          (:build/property-classes m)
+                                          (update :build/property-classes sort))))
+      (update ::kv-values
+              (fn [kvs]
+                (->> kvs
+                     ;; Ignore extra metadata that a copied graph can add
+                     (remove #(#{:logseq.kv/import-type :logseq.kv/imported-at :logseq.kv/local-graph-uuid}
+                               (:db/ident %)))
+                     (sort-by :db/ident)
+                     vec)))))
+
+(defn diff-exports
+  "Given two graph export edns, return a vector of diffs when there is a diff and nil when there is
+   no diff between the two"
+  [export-map export-map2]
+  (let [diff (->> (data/diff (prepare-export-to-diff export-map) (prepare-export-to-diff export-map2))
+                  butlast)]
+    (when-not (= [nil nil] diff)
+      diff)))
