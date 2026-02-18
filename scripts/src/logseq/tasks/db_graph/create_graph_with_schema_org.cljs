@@ -335,8 +335,9 @@
 
 (defn- write-export-file [db]
   (let [export-map* (sqlite-export/build-export db {:export-type :graph-ontology})
-        ;; Modify export to provide stable diff like diff-graphs.
-        ;; Remove this when export has stable sort order for these keys
+        ;; Modify export to provide stable diff like prepare-export-to-diff
+        ;; TODO: Remove this when prepare-export-to-diff TODO is done i.e.
+        ;; when export has stable sort order for these keys
         export-map (-> export-map*
                        (update :classes update-vals
                                (fn [m]

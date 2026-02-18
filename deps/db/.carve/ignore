@@ -27,6 +27,8 @@ logseq.db.sqlite.export/validate-export
 ;; API
 logseq.db.sqlite.export/build-import
 ;; API
+logseq.db.sqlite.export/diff-exports
+;; API
 logseq.db.common.view/get-property-values
 ;; API
 logseq.db.common.view/get-view-data
