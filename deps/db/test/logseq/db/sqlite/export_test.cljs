@@ -954,3 +954,53 @@
                    export-edn)
     (is (empty? @empty-build-properties)
         "Export should omit :build/properties when it would otherwise be an empty map")))
+
+(deftest import-graph-with-assets
+  (let [asset-uuid (random-uuid)
+        asset2-uuid (random-uuid)
+        original-data
+        {:pages-and-blocks
+         [{:page {:block/title "page1"}
+           :blocks [{:block/title "asset block"
+                     :block/uuid asset-uuid
+                     :build/keep-uuid? true
+                     :build/tags [:logseq.class/Asset]
+                     :build/properties {:logseq.property.asset/type "pdf"
+                                        :logseq.property.asset/checksum "abc"
+                                        :logseq.property.asset/size 42}}
+                    {:block/title "annotation block"
+                     :build/tags [:logseq.class/Pdf-annotation]
+                     :build/properties {:logseq.property/asset [:block/uuid asset-uuid]}}]}
+          {:page {:block/title "page2"}
+           :blocks [{:block/title "asset image block"
+                     :block/uuid asset2-uuid
+                     :build/keep-uuid? true
+                     :build/tags [:logseq.class/Asset]
+                     :build/properties {:logseq.property.asset/type "png"
+                                        :logseq.property.asset/checksum "img-checksum"
+                                        :logseq.property.asset/width 100
+                                        :logseq.property.asset/height 200
+                                        :logseq.property.asset/size 300}}
+                    {:block/title "annotation with image"
+                     :build/tags [:logseq.class/Pdf-annotation]
+                     :build/properties {:logseq.property.pdf/hl-image [:block/uuid asset2-uuid]}}]}]}
+        conn (db-test/create-conn-with-blocks original-data)
+        conn2 (db-test/create-conn)
+        imported-graph (export-graph-and-import-to-another-graph conn conn2 {:exclude-built-in-pages? true})
+        annotation-block (->> (:pages-and-blocks imported-graph)
+                              (mapcat :blocks)
+                              (filter map?)
+                              (some #(when (= "annotation block" (:block/title %)) %)))
+        annotation-image (->> (:pages-and-blocks imported-graph)
+                              (mapcat :blocks)
+                              (filter map?)
+                              (some #(when (= "annotation with image" (:block/title %)) %)))]
+    ;; (cljs.pprint/pprint (butlast (clojure.data/diff (sort-pages-and-blocks (:pages-and-blocks original-data))
+    ;;                                                 (:pages-and-blocks imported-graph))))
+    (is (= (sort-pages-and-blocks (:pages-and-blocks original-data)) (:pages-and-blocks imported-graph)))
+    (is (= [:block/uuid asset-uuid]
+           (get-in annotation-block [:build/properties :logseq.property/asset]))
+        ":logseq.property/asset should export as a uuid ref")
+    (is (= [:block/uuid asset2-uuid]
+           (get-in annotation-image [:build/properties :logseq.property.pdf/hl-image]))
+        ":logseq.property.pdf/hl-image should export as a uuid ref")))
