@@ -17,24 +17,34 @@
 (defn- build-export-options [options]
   (cond-> {:export-type (:export-type options)}
     (= :graph (:export-type options))
-    (assoc :graph-options (dissoc options :file :export-type :graph))))
+    (assoc :graph-options
+           (select-keys options [:include-timestamps? :exclude-namespaces :exclude-files? :exclude-built-in-pages?]))))
 
 (defn- validate-export
-  [export-map {:keys [catch-validation-errors?]}]
+  [export-map {:keys [catch-validation-errors? roundtrip] :as options}]
   (println "Validating export which can take awhile on large graphs ...")
-  (if-let [error (:error (sqlite-export/validate-export export-map))]
-    (if catch-validation-errors?
-      (js/console.error error)
-      (cli-util/error error))
-    (println "Valid export!")))
+  (let [{:keys [error db]} (sqlite-export/validate-export export-map)]
+    (if error
+      (if catch-validation-errors?
+        (js/console.error error)
+        (cli-util/error error))
+      (println "Valid export!"))
+    (when roundtrip
+      (let [export-map2 (sqlite-export/build-export db (build-export-options options))
+            diff (sqlite-export/diff-exports export-map export-map2)]
+        (if diff
+          (do (println "The exported EDN's have the following diff:")
+              (pprint/pprint diff)
+              (js/process.exit 1))
+          (println "The exported EDN roundtrips successfully!"))))))
 
-(defn- local-export [{{:keys [graph validate] :as options} :opts}]
+(defn- local-export [{{:keys [graph validate roundtrip] :as options} :opts}]
   (when-not graph
     (cli-util/error "Command missing required option 'graph'"))
   (if (fs/existsSync (cli-util/get-graph-path graph))
     (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
           export-map (sqlite-export/build-export @conn (build-export-options options))]
-      (when validate
+      (when (or validate roundtrip)
         (validate-export export-map options))
       (write-export-edn-map export-map options))
     (cli-util/error "Graph" (pr-str graph) "does not exist")))

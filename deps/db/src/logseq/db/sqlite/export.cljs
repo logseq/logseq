@@ -2,6 +2,7 @@
   "Builds sqlite.build EDN to represent nodes in a graph-agnostic way.
    Useful for exporting and importing across DB graphs"
   (:require [cljs.pprint :as pprint]
+            [clojure.data :as data]
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
@@ -18,7 +19,7 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.db.test.helper :as db-test]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [medley.core :as medley]))
 
 ;; Export fns
@@ -60,22 +61,23 @@
                                      :as options}]
   (let [;; nbb-compatible version of db-property/property-value-content
         property-value-content (or (block-title pvalue)
-                                   (:logseq.property/value pvalue))]
+                                   (:logseq.property/value pvalue))
+        ;; TODO: Add support for ref properties here and in sqlite.build
+        build-properties
+        (some->> ent-properties
+                 (keep (fn [[k v]]
+                         (let [prop-type (:logseq.property/type (d/entity db k))]
+                           (when-not (contains? db-property-type/all-ref-property-types prop-type)
+                             [k v]))))
+                 (into {}))]
     (if (or (seq ent-properties) (seq (:block/tags pvalue)) (include-pvalue-uuid-fn (:block/uuid pvalue)))
       (cond-> {:build/property-value :block
                :block/title property-value-content}
         (seq (:block/tags pvalue))
         (assoc :build/tags (->build-tags (:block/tags pvalue)))
 
-        (seq ent-properties)
-        (assoc :build/properties
-               ;; TODO: Add support for ref properties here and in sqlite.build
-               (->> ent-properties
-                    (keep (fn [[k v]]
-                            (let [prop-type (:logseq.property/type (d/entity db k))]
-                              (when-not (contains? db-property-type/all-ref-property-types prop-type)
-                                [k v]))))
-                    (into {})))
+        (seq build-properties)
+        (assoc :build/properties build-properties)
 
         (include-pvalue-uuid-fn (:block/uuid pvalue))
         (assoc :block/uuid (:block/uuid pvalue) :build/keep-uuid? true)
@@ -170,11 +172,12 @@
       (->> properties-config-by-ent
            (map (fn [[ent build-property]]
                   (let [ent-properties (apply dissoc (db-property/properties ent)
-                                              (into db-property/schema-properties db-property/public-db-attribute-properties))]
+                                              (into db-property/schema-properties db-property/public-db-attribute-properties))
+                        build-properties (buildable-properties db ent-properties properties-config options)]
                     [(:db/ident ent)
                      (cond-> build-property
-                       (seq ent-properties)
-                       (assoc :build/properties (buildable-properties db ent-properties properties-config options)))])))
+                       (seq build-properties)
+                       (assoc :build/properties build-properties))])))
            (into {}))
       properties-config)))
 
@@ -254,6 +257,8 @@
         build-tags (when (seq (:block/tags entity)) (->build-tags (:block/tags entity)))
         new-properties (when-not (or shallow-copy? exclude-ontology?)
                          (build-node-properties db entity ent-properties (dissoc options :shallow-copy? :include-uuid-fn)))
+        build-properties (when (and (not shallow-copy?) (seq ent-properties))
+                           (buildable-properties db ent-properties (merge properties new-properties) options))
         build-node (cond-> {:block/title (block-title entity)}
                      (some? (:block/collapsed? entity))
                      (assoc :block/collapsed? (:block/collapsed? entity))
@@ -265,9 +270,8 @@
                      (merge (select-keys entity [:block/created-at :block/updated-at]))
                      (and (not shallow-copy?) (seq build-tags))
                      (assoc :build/tags build-tags)
-                     (and (not shallow-copy?) (seq ent-properties))
-                     (assoc :build/properties
-                            (buildable-properties db ent-properties (merge properties new-properties) options)))
+                     (seq build-properties)
+                     (assoc :build/properties build-properties))
         new-classes (when-not (or shallow-copy? exclude-ontology?)
                       (build-node-classes db build-node (:block/tags entity) new-properties))]
     (cond-> {:node build-node}
@@ -666,11 +670,12 @@
              (map (fn [ent]
                     (let [ent-properties (apply dissoc (db-property/properties ent) :logseq.property.class/extends db-property/public-db-attribute-properties)]
                       (vector (:db/ident ent)
-                              (cond-> (build-export-class ent options)
-                                (seq ent-properties)
-                                (assoc :build/properties
-                                       (-> (buildable-properties db ent-properties properties options)
-                                           (dissoc :logseq.property.class/properties))))))))
+                              (let [build-properties
+                                    (-> (buildable-properties db ent-properties properties options)
+                                        (dissoc :logseq.property.class/properties))]
+                                (cond-> (build-export-class ent options)
+                                  (seq build-properties)
+                                  (assoc :build/properties build-properties)))))))
              (into {}))]
     (cond-> {}
       (seq properties)
@@ -1057,7 +1062,7 @@
     (merge-export-maps export-map {:pages-and-blocks pages-and-blocks})))
 
 (defn build-import
-  "Given an entity's export map, build the import tx to create it. In addition to standard sqlite.build keys,
+  "Given an export map, build the import tx to create it. In addition to standard sqlite.build keys,
    an export map can have the following namespaced keys:
    * ::export-type - Keyword indicating export type
    * ::block - Block map for a :block export
@@ -1066,7 +1071,7 @@
    * ::auto-include-namespaces - A set of parent namespaces to include from properties and classes
      for a :graph export. See :exclude-namespaces in build-graph-export for a similar option
    * ::import-options - A map of options that alters importing behavior. Has the following keys:
-     * :existing-pages-keep-properties? - Boolean which disables upsert of :build/properties on
+     * :existing-pages-keep-properties? - Boolean which allows existing pages to keep existing properties
 
    This fn then returns a map of txs to transact with the following keys:
    * :init-tx - Txs that must be transacted first, usually because they define new properties
@@ -1093,19 +1098,62 @@
                                          (::kv-values export-map'')))))
         (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map''))))))
 
+(defn create-conn
+  "Create a conn for a DB graph seeded with initial data"
+  []
+  (let [conn (d/create-conn db-schema/schema)
+        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))]
+    (entity-plus/reset-immutable-entities-cache!)
+    conn))
+
 (defn validate-export
   "Validates an export by creating an in-memory DB graph, importing the EDN and validating the graph.
    Returns a map with a readable :error key if any error occurs"
   [export-edn]
   (try
-    (let [import-conn (db-test/create-conn)
+    (let [import-conn (create-conn)
           {:keys [init-tx block-props-tx misc-tx] :as _txs} (build-import export-edn @import-conn {})
           _ (d/transact! import-conn (concat init-tx block-props-tx misc-tx))
           validation (db-validate/validate-local-db! @import-conn)]
-      (when-let [errors (seq (:errors validation))]
-        (js/console.error "Exported EDN has the following invalid errors when imported into a new graph:")
-        (pprint/pprint errors)
-        {:error (str "The exported EDN has " (count errors) " validation error(s)")}))
+      (if-let [errors (seq (:errors validation))]
+        (do
+          (js/console.error "Exported EDN has the following invalid errors when imported into a new graph:")
+          (pprint/pprint errors)
+          {:error (str "The exported EDN has " (count errors) " validation error(s)")})
+        {:db @import-conn}))
     (catch :default e
       (js/console.error "Unexpected export-edn validation error:" e)
       {:error (str "The exported EDN is unexpectedly invalid: " (pr-str (ex-message e)))})))
+
+(defn- prepare-export-to-diff
+  "This prepares a graph's exported edn to be diffed with another"
+  [m]
+  (-> m
+      ;; TODO: Fix order of these :build/* keys
+      (update :classes update-vals (fn [m]
+                                     (cond-> m
+                                       (:build/class-extends m)
+                                       (update :build/class-extends sort)
+                                       (:build/class-properties m)
+                                       (update :build/class-properties sort))))
+      (update :properties update-vals (fn [m]
+                                        (cond-> m
+                                          (:build/property-classes m)
+                                          (update :build/property-classes sort))))
+      (update ::kv-values
+              (fn [kvs]
+                (->> kvs
+                     ;; Ignore extra metadata that a copied graph can add
+                     (remove #(#{:logseq.kv/import-type :logseq.kv/imported-at :logseq.kv/local-graph-uuid}
+                               (:db/ident %)))
+                     (sort-by :db/ident)
+                     vec)))))
+
+(defn diff-exports
+  "Given two graph export edns, return a vector of diffs when there is a diff and nil when there is
+   no diff between the two"
+  [export-map export-map2]
+  (let [diff (->> (data/diff (prepare-export-to-diff export-map) (prepare-export-to-diff export-map2))
+                  butlast)]
+    (when-not (= [nil nil] diff)
+      diff)))

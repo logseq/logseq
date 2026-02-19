@@ -89,12 +89,6 @@
    :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
                 "yarn -s nbb-logseq -cp src:../outliner/src:script script/create_graph.cljs" *command-line-args*)}
 
-  dev:diff-graphs
-  {:doc "Diffs two DB graphs"
-   :requires ([babashka.fs :as fs])
-   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
-                "yarn -s nbb-logseq script/diff_graphs.cljs" *command-line-args*)}
-
   dev:import
   {:doc "Import a file graph to db graph"
    :requires ([babashka.fs :as fs])
