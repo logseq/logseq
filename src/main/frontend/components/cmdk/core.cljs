@@ -433,17 +433,39 @@
            [:div.preview-block-body
             (keep #(preview-body-element preview-config %) ast-body)])]))))
 
+(def ^:private skeleton-lines
+  "Varied widths and indent levels for the preview skeleton."
+  [[70 0] [85 0] [55 20] [40 20] [60 20]
+   [75 0] [50 0] [90 20] [65 20] [80 0]])
+
+(defn- preview-skeleton
+  "Renders an outliner-shaped skeleton placeholder during async entity loading."
+  []
+  [:div
+   [:div.px-4.pt-3.pb-2
+    (shui/skeleton {:class "h-5 w-2/5"})]
+   [:div.preview-blocks
+    (for [[i [width indent]] (map-indexed vector skeleton-lines)]
+      [:div.preview-block {:key i
+                           :style {:padding-left (str indent "px")}}
+       [:div.preview-block-content.flex.items-baseline.gap-1
+        [:span.preview-bullet]
+        (shui/skeleton {:class "h-3" :style {:width (str width "%")}})]])]])
+
 (defn- preview-page-blocks
   "Renders a lightweight page preview by walking the block tree.
    Uses entity-based lazy traversal — only touches blocks actually rendered.
    Falls back to :block/_raw-parent for object pages whose regular blocks are
-   filtered out (property blocks)."
-  [page-entity]
+   filtered out (property blocks).
+   When highlight-block-uuid is provided, the walk continues past the safety cap
+   until the target block is found — guaranteeing it is in the DOM for scrollIntoView."
+  [page-entity & {:keys [highlight-block-uuid]}]
   (let [preview-config {:preview? true :disable-preview? true}
-        max-blocks 200
+        max-blocks 2000
         *count (atom 0)
+        *found-target? (atom (nil? highlight-block-uuid))
         walk (fn walk [parent depth]
-               (when (< @*count max-blocks)
+               (when (or (< @*count max-blocks) (not @*found-target?))
                  (let [children (ldb/sort-by-order
                                  (if (= depth 1)
                                    ;; At page level: try regular blocks first, fall back to raw
@@ -453,9 +475,11 @@
                                    (:block/_parent parent)))]
                    (->> children
                         (keep (fn [block]
-                                (when (< @*count max-blocks)
+                                (when (or (< @*count max-blocks) (not @*found-target?))
                                   (when-not (string/blank? (:block/title block))
                                     (swap! *count inc)
+                                    (when (= (:block/uuid block) highlight-block-uuid)
+                                      (reset! *found-target? true))
                                     (let [collapsed? (:block/collapsed? block)
                                           child-elements (when-not collapsed?
                                                            (walk block (inc depth)))]
@@ -472,7 +496,7 @@
   "Renders the object list once data is available. Pure render function."
   [all-objects]
   (let [total (count all-objects)
-        max-items 25
+        max-items 500
         sorted (->> all-objects
                     (sort-by :block/updated-at >)
                     (take max-items))
@@ -1680,26 +1704,50 @@
        (when (and block-uuid (rum/deref *container))
          (let [t (js/setTimeout
                   (fn []
-                    (when-let [el (.querySelector (rum/deref *container)
-                                                  (str "[data-block-uuid='" block-uuid "']"))]
-                      (.scrollIntoView el #js {:block "center"})
-                      ;; Remove then re-add in the next frame to restart the CSS
-                      ;; animation when the same block is highlighted again.
-                      (.remove (.-classList el) "cmdk-preview-highlight")
-                      (js/requestAnimationFrame
-                       #(.add (.-classList el) "cmdk-preview-highlight"))))
+                    (let [container (rum/deref *container)
+                          ;; Try direct match first; fall back to nearest visible ancestor
+                          ;; (handles blocks hidden under a collapsed parent)
+                          el (or (.querySelector container
+                                                 (str "[data-block-uuid='" block-uuid "']"))
+                                 (when-let [block-entity (db/entity [:block/uuid block-uuid])]
+                                   (loop [parent (:block/parent block-entity)]
+                                     (when (and parent (:block/uuid parent))
+                                       (or (.querySelector container
+                                                           (str "[data-block-uuid='"
+                                                                (:block/uuid parent) "']"))
+                                           (recur (:block/parent parent)))))))]
+                      (when el
+                        (.scrollIntoView el #js {:block "center"})
+                        ;; Remove then re-add in the next frame to restart the CSS
+                        ;; animation when the same block is highlighted again.
+                        (.remove (.-classList el) "cmdk-preview-highlight")
+                        (js/requestAnimationFrame
+                         #(.add (.-classList el) "cmdk-preview-highlight")))))
                   50)]
            #(js/clearTimeout t)))
        js/undefined)
      [(:db/id page-entity) block-uuid])
+    ;; Toggle .has-overflow so the CSS bottom-fade gradient only shows when scrollable
+    (hooks/use-effect!
+     (fn []
+       (when-let [el (rum/deref *container)]
+         (let [check #(let [overflows? (> (.-scrollHeight el) (.-clientHeight el))]
+                        (.toggle (.-classList el) "has-overflow" overflows?))
+               ro (js/ResizeObserver. check)]
+           (check)
+           (.observe ro el)
+           #(.disconnect ro))))
+     [(:db/id page-entity)])
     [:div.cmdk-preview-pane {:ref *container}
-     (when page-entity
-       [:div
+     (if page-entity
+       [:div.cmdk-preview-content
         [:div.preview-page-title.px-4.pt-3.pb-2
          [:span.text-lg.font-bold (:block/title page-entity)]]
         (if (ldb/class? page-entity)
           (preview-class-objects page-entity)
-          (preview-page-blocks page-entity))])]))
+          (preview-page-blocks page-entity
+                               :highlight-block-uuid block-uuid))]
+       (preview-skeleton))]))
 
 (rum/defc input-row
   [state all-items opts]

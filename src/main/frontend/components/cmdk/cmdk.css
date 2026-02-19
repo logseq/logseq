@@ -222,8 +222,33 @@
   animation: cmdk-highlight-settle 600ms ease-out forwards;
 }
 
+/* Fade-in when content replaces skeleton */
+@keyframes cmdk-content-appear {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.cmdk-preview-content {
+  animation: cmdk-content-appear 150ms ease-out;
+}
+
+/* Soft bottom fade – only shown when content overflows (JS toggles .has-overflow) */
+.cmdk-preview-pane.has-overflow::after {
+  content: '';
+  position: sticky;
+  bottom: 0;
+  display: block;
+  height: 40px;
+  background: linear-gradient(to top,
+    var(--lx-gray-02, var(--ls-secondary-background-color)) 0%,
+    transparent 100%);
+  pointer-events: none;
+  margin-top: -40px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cmdk-results-list { transition: none; }
   .cmdk-preview-highlight { animation: none; background: var(--lx-accent-03-alpha, rgba(59, 130, 246, 0.12)); }
+  .cmdk-preview-content { animation: none; }
 }
 
