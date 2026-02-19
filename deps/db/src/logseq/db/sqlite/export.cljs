@@ -1119,7 +1119,8 @@
         (do
           (js/console.error "Exported EDN has the following invalid errors when imported into a new graph:")
           (pprint/pprint errors)
-          {:error (str "The exported EDN has " (count errors) " validation error(s)")})
+          {:error (str "The exported EDN has " (count errors) " validation error(s)")
+           :db @import-conn})
         {:db @import-conn}))
     (catch :default e
       (js/console.error "Unexpected export-edn validation error:" e)
