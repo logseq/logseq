@@ -114,8 +114,10 @@
                                          ;; Reasonable default for properties like logseq.property/default-value
                                          {:entity :number})
                                      built-in-type)]
-        {:db/ident k
-         :logseq.property/type built-in-type'}))
+        ;; Don't build property value entity if values are :block/uuid refs
+        (when (if (set? v) (not (vector? (first v))) (not (vector? v)))
+          {:db/ident k
+           :logseq.property/type built-in-type'})))
     (when (and (db-property-type/value-ref-property-types (get-in properties-config [k :logseq.property/type]))
                ;; Don't build property value entity if values are :block/uuid refs
                (if (set? v) (not (vector? (first v))) (not (vector? v))))
