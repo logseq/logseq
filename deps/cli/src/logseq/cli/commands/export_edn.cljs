@@ -35,7 +35,7 @@
         (if diff
           (do (println "The exported EDN's have the following diff:")
               (pprint/pprint diff)
-              (js/process.exit 1))
+              (when-not catch-validation-errors? (js/process.exit 1)))
           (println "The exported EDN roundtrips successfully!"))))))
 
 (defn- local-export [{{:keys [graph validate roundtrip] :as options} :opts}]
