@@ -1803,7 +1803,7 @@
          (shui/button
           {:variant (if preview-enabled? :secondary :ghost)
            :size :sm
-           :class (str "mr-2 px-1.5"
+           :class (str "mr-3 px-1.5"
                        (if preview-enabled?
                          " opacity-100"
                          " opacity-50 hover:opacity-100"))
