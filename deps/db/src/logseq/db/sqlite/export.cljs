@@ -15,12 +15,10 @@
             [logseq.db.frontend.db :as db-db]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [medley.core :as medley]))
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
 ;; Export fns
 ;; ==========
@@ -60,27 +58,19 @@
         (entity-util/journal? pvalue)
         [:build/page {:build/journal (:block/journal-day pvalue)}]))
 
-(defn- build-pvalue-entity-default [db ent-properties pvalue
+(defn- build-pvalue-entity-default [ent-properties pvalue
                                     {:keys [include-pvalue-uuid-fn]
                                      :or {include-pvalue-uuid-fn (constantly false)}
                                      :as options}]
-  (let [property-value-content' (property-value-content pvalue)
-        ;; TODO: Add support for ref properties here and in sqlite.build
-        build-properties
-        (some->> ent-properties
-                 (keep (fn [[k v]]
-                         (let [prop-type (:logseq.property/type (d/entity db k))]
-                           (when-not (contains? db-property-type/all-ref-property-types prop-type)
-                             [k v]))))
-                 (into {}))]
+  (let [property-value-content' (property-value-content pvalue)]
     (if (or (seq ent-properties) (seq (:block/tags pvalue)) (include-pvalue-uuid-fn (:block/uuid pvalue)))
       (cond-> {:build/property-value :block
                :block/title property-value-content'}
         (seq (:block/tags pvalue))
         (assoc :build/tags (->build-tags (:block/tags pvalue)))
 
-        (seq build-properties)
-        (assoc :build/properties build-properties)
+        (seq ent-properties)
+        (assoc :build/properties ent-properties)
 
         (include-pvalue-uuid-fn (:block/uuid pvalue))
         (assoc :block/uuid (:block/uuid pvalue) :build/keep-uuid? true)
@@ -107,14 +97,12 @@
                   ;; Use metadata to distinguish from block references that don't exist like closed values
                   ^::existing-property-value? [:block/uuid (:block/uuid pvalue)])
                 (or (:db/ident pvalue)
-                    (let [ent-properties* (->> (apply dissoc (db-property/properties pvalue)
-                                                      :logseq.property/value :logseq.property/created-from-property
-                                                      db-property/public-db-attribute-properties)
-                                               ;; TODO: Allow user properties when sqlite.build supports it
-                                               (medley/filter-keys db-property/internal-property?))
+                    (let [ent-properties* (apply dissoc (db-property/properties pvalue)
+                                                 :logseq.property/value :logseq.property/created-from-property
+                                                 db-property/public-db-attribute-properties)
                           ent-properties (when (and (not (:block/closed-value-property pvalue)) (seq ent-properties*))
                                            (buildable-properties db' ent-properties* properties-config' options'))]
-                      (build-pvalue-entity-default db ent-properties pvalue options'))))))]
+                      (build-pvalue-entity-default ent-properties pvalue options'))))))]
     (->> (apply dissoc ent-properties ignored-properties)
          (map (fn [[k v]]
                 [k
@@ -241,10 +229,22 @@
 
 (defn- build-node-properties
   [db entity ent-properties {:keys [properties] :as options}]
-  (let [new-user-property-ids (->> (keys ent-properties)
+  (let [collect-nested-property-ids
+        (fn collect-nested-property-ids [v]
+          (cond
+            (and (de/entity? v) (:logseq.property/created-from-property v))
+            (let [pvalue-properties (apply dissoc (db-property/properties v) db-property/public-db-attribute-properties)]
+              (concat (keys pvalue-properties)
+                      (mapcat collect-nested-property-ids (vals pvalue-properties))))
+            (set? v)
+            (mapcat collect-nested-property-ids v)
+            :else
+            []))
+        new-user-property-ids (->> (keys ent-properties)
                                    (concat (->> (:block/tags entity)
                                                 (mapcat :logseq.property.class/properties)
                                                 (map :db/ident)))
+                                   (concat (mapcat collect-nested-property-ids (vals ent-properties)))
                                    ;; Built-in properties and any possible modifications are not exported
                                    (remove db-property/logseq-property?)
                                    (remove #(get properties %)))]

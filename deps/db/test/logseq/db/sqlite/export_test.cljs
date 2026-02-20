@@ -285,6 +285,8 @@
                        :build/keep-uuid? true
                        :build/property-classes [:user.class/NodeClass]}
                       :user.property/p2
+                      {:logseq.property/type :default}
+                      :user.property/p3
                       {:logseq.property/type :default}}
          :extract-content-refs? false
          :pages-and-blocks
@@ -304,6 +306,7 @@
                     {:block/title "block with a pvalue that has a :block/uuid"
                      :build/properties {:user.property/p2 {:build/property-value :block
                                                            :block/title "property value block"
+                                                           :build/properties {:user.property/p3 "woot"}
                                                            :block/uuid pvalue-block-uuid
                                                            :build/keep-uuid? true}}}]}
           {:page {:block/title "page with block ref"}
