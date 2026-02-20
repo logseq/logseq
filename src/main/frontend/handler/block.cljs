@@ -145,7 +145,7 @@
   (if-let [icon (let [i (:logseq.property/icon block)] (when (not= :none (:type i)) i))]
     (let [photo? (contains? #{:avatar :image} (:type icon))
           icon-size (if photo? 20 16)]
-      [:div.flex.flex-row.items-baseline.gap-2
+      [:span.inline-flex.flex-row.items-baseline.gap-2
        [:span.icon-inline.self-center.inline-flex.items-center.justify-center.flex-shrink-0
         {:style {:width 20 :height 20}}
         (icon-cp icon {:size icon-size :color? true})]

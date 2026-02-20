@@ -152,14 +152,14 @@
       [:div.flex.flex-1.flex-col
        (when title
          [:div.text-sm.pb-2.font-bold.text-gray-11 (highlight-query title)])
-       [:div {:class "text-sm font-medium text-gray-12 flex items-baseline"}
+       [:div {:class "text-sm font-medium text-gray-12"}
         (block-handler/block-title-with-icon source-block
                                              (highlight-query text)
                                              icon-component/icon)
         (when text-tags
-          [:span.page-tag-suffix.ml-1 (highlight-query text-tags)])
+          [:span.page-tag-suffix.whitespace-nowrap.ml-1 (highlight-query text-tags)])
         (when info
-          [:span.text-xs.text-gray-11 " — " (highlight-query info)])]]
+          [:span.text-xs.text-gray-11.whitespace-nowrap " — " (highlight-query info)])]]
       (when (or value-label value)
         [:div {:class "text-xs"}
          (when (and value-label value)

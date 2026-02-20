@@ -511,14 +511,14 @@
           (let [node-icon (icon/get-node-icon obj)
                 title (or (:block/title obj) "Untitled")]
             [:div.preview-block {:key (str (:block/uuid obj))}
-             [:div.preview-block-content.flex.items-center.gap-2
-              [:span.flex-shrink-0.flex.items-center.justify-center
+             [:div.preview-block-content.flex.items-start.gap-2
+              [:span.flex-shrink-0.flex.items-center.justify-center.mt-0.5
                {:style {:width 18 :height 18}}
                (if (string? node-icon)
                  (shui/tabler-icon node-icon {:size 14})
                  (when (map? node-icon)
                    (icon/icon node-icon {:size 14})))]
-              [:span.truncate title]]]))
+              [:span.flex-1.min-w-0 title]]]))
         (when (pos? remaining)
           [:div.px-3.py-1.text-xs.text-gray-11.italic
            (str "+" remaining " more")])])]))
