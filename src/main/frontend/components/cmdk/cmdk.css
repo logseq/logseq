@@ -246,6 +246,22 @@
   margin-top: -40px;
 }
 
+/* Wikilink styling in CMD+K results */
+.cmdk-results-list .page-reference:hover {
+  background: transparent;
+}
+
+/* Non-selected items: grey page refs for greyscale hierarchy */
+.cmdk-results-list .page-ref {
+  color: var(--lx-gray-11);
+}
+
+/* Hovered or selected item: restore accent color */
+.cmdk-results-list .is-hovered .page-ref,
+.cmdk-results-list .bg-gray-03-alpha .page-ref {
+  color: var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary)/.8)));
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cmdk-results-list { transition: none; }
   .cmdk-preview-highlight { animation: none; background: var(--lx-accent-03-alpha, rgba(59, 130, 246, 0.12)); }

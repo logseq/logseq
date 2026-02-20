@@ -624,16 +624,16 @@
   "Return hiccup of highlighted content FTS result"
   [content q]
   (when-not (or (string/blank? content) (string/blank? q))
-    [:div (loop [content content ;; why recur? because there might be multiple matches
-                 result []]
-            (let [[b-cut hl-cut e-cut] (text-util/cut-by content "$pfts_2lqh>$" "$<pfts_2lqh$")
-                  hiccups-add [[:span b-cut]
-                               [:span {:class "ui__list-item-highlighted-span"} hl-cut]]
-                  hiccups-add (remove nil? hiccups-add)
-                  new-result (concat result hiccups-add)]
-              (if-not (string/blank? e-cut)
-                (recur e-cut new-result)
-                new-result)))]))
+    [:span (loop [content content ;; why recur? because there might be multiple matches
+                  result []]
+             (let [[b-cut hl-cut e-cut] (text-util/cut-by content "$pfts_2lqh>$" "$<pfts_2lqh$")
+                   hiccups-add [[:span b-cut]
+                                [:span {:class "ui__list-item-highlighted-span"} hl-cut]]
+                   hiccups-add (remove nil? hiccups-add)
+                   new-result (concat result hiccups-add)]
+               (if-not (string/blank? e-cut)
+                 (recur e-cut new-result)
+                 new-result)))]))
 
 (defn page-item
   [repo page input]
@@ -647,17 +647,14 @@
                         (:alias page))
         icon (get-page-icon entity)
         alias-title (:block/title source-page)
-        full-title (block-handler/block-unique-title entity {:alias alias-title})
-        fts? (string/includes? (or full-title "") "$pfts_2lqh>$")
-        tags (when-not fts? (block-handler/visible-tags entity))
-        base-title (if fts?
-                     full-title
-                     (block-handler/block-unique-title entity {:with-tags? false :alias alias-title}))]
+        tags (block-handler/visible-tags entity)
+        base-title (block-handler/block-unique-title entity {:with-tags? false :alias alias-title})
+        fts? (string/includes? (or base-title "") "$pfts_2lqh>$")]
     (cond-> (hash-map :icon icon
                       :icon-theme :gray
                       :text (if fts?
-                              [:span {"data-testid" full-title}
-                               (highlight-content-query full-title input)]
+                              [:span {"data-testid" base-title}
+                               (highlight-content-query base-title input)]
                               base-title)
                       :header (when (:block/parent entity)
                                 (block/breadcrumb {:disable-preview? true
@@ -671,17 +668,20 @@
 (defn block-item
   [repo block current-page input]
   (let [id (:block/uuid block)
-        text (block-handler/block-unique-title block)
+        tags (block-handler/visible-tags block)
+        text (block-handler/block-unique-title block {:with-tags? false})
         icon "letter-n"]
-    {:icon icon
-     :icon-theme :gray
-     :text (highlight-content-query text input)
-     :header (block/breadcrumb {:disable-preview? true
-                                :search? true} repo id
-                               {:disabled? true})
-     :current-page? (when-let [page-id (:block/page block)]
-                      (= page-id (:block/uuid current-page)))
-     :source-block block}))
+    (cond-> {:icon icon
+             :icon-theme :gray
+             :text (highlight-content-query text input)
+             :header (block/breadcrumb {:disable-preview? true
+                                        :search? true} repo id
+                                       {:disabled? true})
+             :current-page? (when-let [page-id (:block/page block)]
+                              (= page-id (:block/uuid current-page)))
+             :source-block block}
+      (seq tags)
+      (assoc :text-tags (string/join ", " (keep (fn [t] (when-let [title (:block/title t)] (str "#" title))) tags))))))
 
 ;; The blocks search action uses an existing handler
 (defmethod load-results :nodes [group state]

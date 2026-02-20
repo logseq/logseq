@@ -88,6 +88,123 @@
                              segs))
           [:span normal-text])))))
 
+;; =============================================================================
+;; Wikilink Styling for [[Page References]]
+;; =============================================================================
+
+(defn- find-wikilink-regions
+  "Find all non-nested [[...]] positions in text.
+   Returns [{:start N :open-end N :close-start N :end N} ...]"
+  [text]
+  (let [re (js/RegExp. "\\[\\[([^\\[\\]]*?)\\]\\]" "g")]
+    (loop [results []]
+      (if-let [m (.exec re text)]
+        (let [start (.-index m)
+              end (+ start (.-length (aget m 0)))]
+          (recur (conj results {:start start
+                                :open-end (+ start 2)
+                                :close-start (- end 2)
+                                :end end})))
+        results))))
+
+(defn- extract-segments
+  "Extract text segments with positions from hiccup children."
+  [children]
+  (loop [cs (seq children), pos 0, result []]
+    (if-not cs
+      result
+      (let [c (first cs)
+            [text attrs] (cond
+                           (string? c) [c nil]
+                           (and (vector? c) (= :span (first c)))
+                           (if (map? (second c))
+                             [(nth c 2 "") (second c)]
+                             [(second c) nil])
+                           :else ["" nil])
+            text (or text "")
+            end (+ pos (count text))]
+        (recur (next cs) end (conj result {:text text :attrs attrs :start pos :end end}))))))
+
+(defn- style-wikilinks
+  "Post-process hiccup to style [[wikilinks]] with .page-reference, .bracket, and .page-ref classes.
+   Works on output from both highlight-query* and highlight-content-query."
+  [hiccup]
+  (if-not (and (vector? hiccup) (= :span (first hiccup)))
+    hiccup
+    (let [;; Normalize: handle both [:span a b c] and [:span (lazy-seq)] forms
+          has-attrs? (map? (second hiccup))
+          outer-attrs (when has-attrs? (second hiccup))
+          raw (if has-attrs? (subvec hiccup 2) (subvec hiccup 1))
+          children (if (and (= 1 (count raw))
+                            (sequential? (first raw))
+                            (not (vector? (first raw)))
+                            (not (string? (first raw))))
+                     (vec (first raw))
+                     (vec raw))
+          segments (extract-segments children)
+          full-text (apply str (map :text segments))
+          regions (find-wikilink-regions full-text)]
+      (if (empty? regions)
+        hiccup
+        (let [;; Build zones partitioning full text into typed intervals
+              zones (loop [pos 0, rs (seq regions), ri 0, zones []]
+                      (if-not rs
+                        (cond-> zones
+                          (< pos (count full-text))
+                          (conj {:start pos :end (count full-text) :type :plain :wl nil}))
+                        (let [{:keys [start open-end close-start end]} (first rs)]
+                          (recur end (next rs) (inc ri)
+                                 (cond-> zones
+                                   (< pos start)
+                                   (conj {:start pos :end start :type :plain :wl nil})
+                                   true
+                                   (conj {:start start :end open-end :type :bracket :wl ri})
+                                   (< open-end close-start)
+                                   (conj {:start open-end :end close-start :type :page-ref :wl ri})
+                                   true
+                                   (conj {:start close-start :end end :type :bracket :wl ri}))))))
+              ;; Two-pointer: slice segments at zone boundaries
+              pieces (loop [si 0, zi 0, pieces []]
+                       (if (or (>= si (count segments)) (>= zi (count zones)))
+                         pieces
+                         (let [seg (nth segments si)
+                               zone (nth zones zi)
+                               os (max (:start seg) (:start zone))
+                               oe (min (:end seg) (:end zone))]
+                           (if (>= os oe)
+                             (if (< (:end seg) (:end zone))
+                               (recur (inc si) zi pieces)
+                               (recur si (inc zi) pieces))
+                             (recur (if (>= oe (:end seg)) (inc si) si)
+                                    (if (>= oe (:end zone)) (inc zi) zi)
+                                    (conj pieces {:text (subs (:text seg)
+                                                              (- os (:start seg))
+                                                              (- oe (:start seg)))
+                                                  :attrs (:attrs seg)
+                                                  :type (:type zone)
+                                                  :wl (:wl zone)}))))))
+              ;; Group by wikilink and emit hiccup
+              new-children
+              (mapcat
+               (fn [group]
+                 (if (nil? (:wl (first group)))
+                   (keep (fn [{:keys [text attrs]}]
+                           (when (seq text)
+                             (if attrs [:span attrs text] [:span text])))
+                         group)
+                   (let [inner (keep (fn [{:keys [text attrs type]}]
+                                       (when (seq text)
+                                         (if (= :bracket type)
+                                           [:span.bracket text]
+                                           (if attrs
+                                             [:span.page-ref attrs text]
+                                             [:span.page-ref text]))))
+                                     group)]
+                     (when (seq inner)
+                       [(into [:span.page-reference] inner)]))))
+               (partition-by :wl pieces))]
+          (into (if outer-attrs [:span outer-attrs] [:span]) new-children))))))
+
 (rum/defc root [{:keys [group icon icon-theme icon-extension? query text text-tags info shortcut value-label value
                         title highlighted on-highlight on-highlight-dep header on-click hls-page?
                         hoverable compact rounded on-mouse-enter component-opts source-page source-create source-block
@@ -117,11 +234,13 @@
            {:style {:opacity (if highlighted 1 0.8)}
             :class (cond-> "flex flex-col transition-opacity"
                      highlighted (str " !opacity-100 bg-gray-03-alpha dark:bg-gray-04-alpha")
-                     hoverable (str " transition-all duration-50 ease-in !opacity-75 hover:!opacity-100 hover:cursor-pointer hover:bg-gradient-to-r hover:from-gray-03-alpha hover:to-gray-01-alpha from-0% to-100%")
+                     hoverable (str " transition-all duration-50 ease-in hover:!opacity-100 hover:cursor-pointer hover:bg-gradient-to-r hover:from-gray-03-alpha hover:to-gray-01-alpha from-0% to-100%")
+                     (and hoverable (not highlighted)) (str " !opacity-75")
                      (and hoverable rounded) (str " !rounded-lg")
                      (not compact) (str " py-4 px-6 gap-1")
                      compact (str " py-1.5 px-3 gap-0.5")
-                     (not highlighted) (str " "))
+                     (not highlighted) (str " ")
+                     hover? (str " is-hovered"))
             :ref ref
             :on-click (when on-click on-click)
             :on-mouse-over #(set-hover? true)
@@ -154,7 +273,7 @@
          [:div.text-sm.pb-2.font-bold.text-gray-11 (highlight-query title)])
        [:div {:class "text-sm font-medium text-gray-12"}
         (block-handler/block-title-with-icon source-block
-                                             (highlight-query text)
+                                             (style-wikilinks (highlight-query text))
                                              icon-component/icon)
         (when text-tags
           [:span.page-tag-suffix.whitespace-nowrap.ml-1 (highlight-query text-tags)])
