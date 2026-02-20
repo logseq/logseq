@@ -277,6 +277,70 @@
     @errors))
 
 ;; =============================================================================
+;; Stats reporting
+;; =============================================================================
+
+(defn- block-depth
+  "Compute the max nesting depth of a block (1 = leaf, 2 = has children, etc.)."
+  [block]
+  (if-let [children (:build/children block)]
+    (inc (apply max (map block-depth children)))
+    1))
+
+(defn- count-all-blocks
+  "Count total blocks including nested children."
+  [block]
+  (inc (reduce + 0 (map count-all-blocks (or (:build/children block) [])))))
+
+(defn- collect-all-text
+  "Collect all :block/title text from a block and its children."
+  [block]
+  (cons (:block/title block)
+        (mapcat collect-all-text (or (:build/children block) []))))
+
+(defn- report-stats
+  "Print depth distribution, block count stats, and em dash count for journal entries."
+  [pages-and-blocks]
+  (let [journal-entries (filter #(:build/journal (:page %)) pages-and-blocks)
+        non-empty (filter #(seq (:blocks %)) journal-entries)
+        empty-count (- (count journal-entries) (count non-empty))
+        ;; Per-day stats
+        day-stats (map (fn [entry]
+                         (let [blocks (:blocks entry)
+                               top-level (count blocks)
+                               max-depth (apply max (map block-depth blocks))
+                               total-blocks (reduce + (map count-all-blocks blocks))]
+                           {:top-level top-level :max-depth max-depth :total-blocks total-blocks}))
+                       non-empty)
+        total-non-empty (count non-empty)
+        ;; Depth distribution
+        depth-freq (frequencies (map :max-depth day-stats))
+        depth-3+ (count (filter #(>= (:max-depth %) 3) day-stats))
+        depth-4+ (count (filter #(>= (:max-depth %) 4) day-stats))
+        ;; Block counts
+        top-level-counts (map :top-level day-stats)
+        avg-top (when (pos? total-non-empty)
+                  (/ (reduce + top-level-counts) (double total-non-empty)))
+        max-top (when (seq top-level-counts) (apply max top-level-counts))
+        ;; Em dash count
+        all-texts (mapcat (fn [entry] (mapcat collect-all-text (:blocks entry))) non-empty)
+        em-dash-count (reduce + (map #(count (re-seq #"\u2014" (or % ""))) all-texts))]
+    (println "\n--- Journal Stats ---")
+    (println (str "  Days: " (count journal-entries) " total, " total-non-empty " non-empty, " empty-count " empty"))
+    (println "  Depth distribution:")
+    (doseq [[d c] (sort depth-freq)]
+      (let [pct (Math/round (* 100 (/ c (double total-non-empty))))]
+        (println (str "    depth " d ": " c " days (" pct "%)"))))
+    (println (str "  Blocks/day: avg " (Math/round avg-top) ", max " max-top))
+    (println (str "  Em dashes: " em-dash-count))
+    (when (and (pos? total-non-empty) (< (/ depth-3+ (double total-non-empty)) 0.15))
+      (println (str "  WARNING: Only " depth-3+ "/" total-non-empty " days have depth 3+ (target: >=15%)")))
+    (when (and (pos? total-non-empty) (< (/ depth-4+ (double total-non-empty)) 0.05))
+      (println (str "  WARNING: Only " depth-4+ "/" total-non-empty " days have depth 4+ (target: >=5%)")))
+    (when (> em-dash-count 30)
+      (println (str "  WARNING: High em dash count (" em-dash-count "). Target: <30 across all journals.")))))
+
+;; =============================================================================
 ;; Assembly
 ;; =============================================================================
 
@@ -360,7 +424,8 @@
           block-count (reduce + (map #(count (:blocks % [])) (:pages-and-blocks assembled)))
           class-count (count (:classes assembled))]
       (println (str "Assembled " page-count " pages, " block-count " blocks, "
-                    class-count " classes → " output-path)))))
+                    class-count " classes → " output-path))
+      (report-stats (:pages-and-blocks assembled)))))
 
 (when (= nbb/*file* (nbb/invoked-file))
   (-main *command-line-args*))

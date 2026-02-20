@@ -73,22 +73,60 @@ The graph appears at `~/logseq/graphs/my-demo/db.sqlite`, discoverable by localh
 
 ### Journal entries
 
+Three examples showing the full range of depth and structure:
+
 ```json
-[
-  {"date": 20250815, "blocks": [
-    {"text": "Quick sync with [[Sarah Chen]] about [[Collaborative Workspaces]]"},
-    {"text": "Sprint Planning", "tags": ["Meeting"],
-     "properties": {"attendees": ["Sarah Chen", "James Liu"], "agenda": "Review priorities"},
-     "children": [
-       {"text": "Agreed to focus on API refactor first"},
-       {"text": "[[James Liu]] will handle the migration piece"}
+// SHALLOW DAY: 1-2 flat blocks, no children. Quick capture.
+{"date": 20250823, "blocks": [
+  {"text": "Quiet Saturday. Finished [[The Momentum Principle]]."}
+]}
+
+// STANDARD DAY: 3-5 blocks, light nesting (depth 2).
+{"date": 20250825, "blocks": [
+  {"text": "Reviewed [[Priya Sharma]]'s mockups for the permissions modal"},
+  {"text": "1:1 with [[James Liu]]", "tags": ["Meeting"],
+   "properties": {"attendees": ["James Liu"], "agenda": "Sprint 15 prep"},
+   "children": [
+     {"text": "Sprint 14 velocity was 26 points, below target"},
+     {"text": "Agreed to reduce scope on the editor rewrite"}
+   ]},
+  {"text": "Update PRD for [[Collaborative Workspaces]] phase 2", "task": {"status": "doing", "priority": "high"}}
+]}
+
+// EMPTY DAY: must still appear in the array.
+{"date": 20250824}
+
+// DEEP DAY: 6+ blocks, depth 3-4, children of children of children.
+{"date": 20250826, "blocks": [
+  {"text": "Q3 planning review with [[Diana Reyes]]", "tags": ["Meeting"],
+   "properties": {"attendees": ["Diana Reyes", "James Liu", "David Park", "Priya Sharma"], "agenda": "Q3 progress and Q4 preview"},
+   "children": [
+     {"text": "[[Collaborative Workspaces]] beta launch", "children": [
+       {"text": "Editor rewrite on track. [[Tom Nguyen]] estimates 2 more sprints."},
+       {"text": "Permissions model still needs design review", "children": [
+         {"text": "[[Priya Sharma]] will schedule a design critique for Thursday"},
+         {"text": "Need to resolve 'workspace admin vs org admin' question first"}
+       ]},
+       {"text": "Beta access list: 12 teams from [[Crestline Data]] and [[Novaform]]"}
      ]},
-    {"text": "Review PR #847", "task": {"status": "todo", "priority": "medium"}},
-    {"text": "Finish quarterly report", "task": {"status": "doing", "priority": "high", "deadline": 20250820}}
-  ]},
-  {"date": 20250816},
-  {"date": 20250817, "blocks": [{"text": "Started reading [[The Adjacent Room]]"}]}
-]
+     {"text": "[[Smart Notifications Revamp]] status", "children": [
+       {"text": "Phase 1 (notification center redesign) shipping next week"},
+       {"text": "Phase 2 (smart grouping) blocked on ML pipeline", "children": [
+         {"text": "[[Marcus Webb]] says the pipeline needs a dedicated infra sprint"},
+         {"text": "Diana suggested we timebox to 2 weeks and reassess"}
+       ]}
+     ]},
+     {"text": "Headcount: open PM role still in pipeline. Diana wants to close by end of August."}
+   ]},
+  {"text": "Grabbed lunch with [[Yuki Tanaka]]. She's interested in transitioning to a PM track."},
+  {"text": "Write up Q3 planning notes and share with team", "task": {"status": "todo", "priority": "medium"}},
+  {"text": "Caught up on [[Lenny's Newsletter]]. The piece on 'product sense' interviews resonated."},
+  {"text": "Idea: what if we offered workspace templates as a growth lever?", "tags": ["Idea"], "children": [
+    {"text": "Similar to Notion's template gallery. Could drive adoption."},
+    {"text": "Would need to be curated initially, then open to community contributions."},
+    {"text": "Mention to [[Diana Reyes]] in next 1:1"}
+  ]}
+]}
 ```
 
 ### Critical rules
@@ -105,6 +143,14 @@ The graph appears at `~/logseq/graphs/my-demo/db.sqlite`, discoverable by localh
 ### Content quality guidelines
 
 - **Vary day types**: ~20% empty, 15% minimal (1-2 blocks), 15% meeting-heavy, 15% task-focused, 8% reflection, 7% reading notes, 20% mixed
+- **Vary block depth and structure**: Real notes have wildly varying structure. Target this distribution across each 2-month batch:
+  - ~15% shallow days: 1-2 flat blocks, no children (quick capture, weekends)
+  - ~25% standard days: 3-5 blocks, 1-2 have children with depth 2
+  - ~20% busy days: 4-7 blocks, depth 2-3, some children have their own children
+  - ~10% deep days: 5-8 blocks, depth 3-4, sub-discussions spawning sub-points (see "deep day" example above)
+  - ~10% marathon days: 8-12+ blocks, mixed depths, a packed day with multiple meetings and tasks
+  - **Hard floor**: at least 15% of non-empty days MUST have depth 3+, at least 5% MUST have depth 4+
+- **Writing style**: Avoid em dashes (—). LLMs overuse them but real note-takers rarely do. Use periods, commas, colons, semicolons, or parentheses instead. Or split the aside into a child block. An occasional em dash is fine, but they should be rare (fewer than 10 across an entire 2-month batch).
 - **Use realistic PM language**: sprint planning, stakeholder alignment, PRD reviews, design critiques, 1:1s, retros
 - **Cross-reference liberally**: mention people, projects, books, tools, ideas naturally
 - **Include personal life**: friend meetups, family calls, book reading, subscription content, hobby mentions
