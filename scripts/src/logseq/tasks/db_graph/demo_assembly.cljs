@@ -228,6 +228,30 @@
   [journal-data ontology closed-value-index]
   (mapv #(convert-journal-day % ontology closed-value-index) journal-data))
 
+(defn- parse-journal-file
+  "Parse a journal JSON file, handling both old format (bare array of entries)
+   and new format (object with :entries and optional :new-people).
+   Returns {:entries [...] :new-people [...]}."
+  [path]
+  (let [data (read-json path)]
+    (if (vector? data)
+      ;; Old format: bare array of day entries
+      {:entries data :new-people []}
+      ;; New format: object with :entries and optional :new-people
+      {:entries (or (:entries data) [])
+       :new-people (or (vec (:new-people data)) [])})))
+
+(defn- convert-new-people
+  "Convert new-people declarations from journal files into cast-style page entries.
+   Uses the same conversion as cast entities."
+  [new-people-list ontology closed-value-index]
+  (when (seq new-people-list)
+    (println (str "\n--- Emergent Characters ---"))
+    (println (str "  " (count new-people-list) " new people declared in journal files:"))
+    (doseq [p new-people-list]
+      (println (str "    " (:name p) " (" (first (:tags p)) ")")))
+    (mapv #(convert-cast-entity % ontology closed-value-index) new-people-list)))
+
 ;; =============================================================================
 ;; Block object reference rewriting
 ;; =============================================================================
@@ -536,13 +560,17 @@
         journal-files (filter #(and (string/ends-with? % ".json")
                                     (not (string/starts-with? % "01-")))
                               files)
-        journal-pages (mapcat (fn [f]
-                                (let [data (read-json (node-path/join dir f))]
-                                  (convert-journals data ontology closed-value-index)))
+        parsed-journals (mapv (fn [f] (parse-journal-file (node-path/join dir f)))
                               journal-files)
+        journal-pages (mapcat (fn [{:keys [entries]}]
+                                (convert-journals entries ontology closed-value-index))
+                              parsed-journals)
+        ;; Collect and convert new-people from all journal files
+        all-new-people (mapcat :new-people parsed-journals)
+        new-people-pages (or (convert-new-people all-new-people ontology closed-value-index) [])
         ;; Rewrite block object refs: assign UUIDs to block objects and
         ;; convert [[block-object-title]] → [[uuid]] to prevent duplicate pages
-        all-pages (rewrite-block-object-refs (vec (concat cast-pages journal-pages)))
+        all-pages (rewrite-block-object-refs (vec (concat cast-pages new-people-pages journal-pages)))
         ;; Assemble final EDN
         assembled (cond-> {:auto-create-ontology? true
                            :properties  (:properties ontology)

@@ -83,7 +83,7 @@ The graph appears at `~/logseq/graphs/my-demo/db.sqlite`, discoverable by localh
 
 ### Journal entries
 
-Three examples showing the full range of depth and structure (Operator/PM flavored; adapt entity names, tags, and properties to match the chosen archetype):
+Three examples showing the full range of depth and structure (Operator/PM flavored; adapt entity names, tags, and properties to match the chosen archetype). Note: these show individual day entries inside the `"entries"` array:
 
 ```json
 // SHALLOW DAY: 1-2 flat blocks, no children. Quick capture.
@@ -143,12 +143,39 @@ Three examples showing the full range of depth and structure (Operator/PM flavor
 
 - **Every day in the range must appear** (empty days: `{"date": 20250816}`)
 - **Use `[[wiki links]]`** for cross-references in `text` — use EXACT names from cast-manifest.txt
+- **Only reference people from the cast manifest.** Do NOT invent character names that aren't in the manifest. If your narrative organically introduces a new recurring character (e.g., hiring an RA, a new collaborator), declare them in the `new-people` array (see below).
 - **`tags`**: Array of class names (e.g., `["Meeting"]`, `["Reflection"]`). See **Tag placement rules** below.
 - **`properties`**: Object with property keys matching the ontology. Node properties use arrays of names: `"attendees": ["Sarah Chen", "James Liu"]`
 - **`task`**: Shorthand for built-in Task class. Status: `backlog`, `todo`, `doing`, `in-review`, `done`, `canceled`. Priority: `low`, `medium`, `high`, `urgent`
 - **`children`**: Nested blocks (recursive, same format)
 - **Closed value strings must match exactly**: `"Active"`, `"Backlog"`, `"Paused"`, `"Done"` for project-status; `"Reading"`, `"Completed"`, `"Want to Read"`, `"Abandoned"` for reading-status; etc.
 - **Dates are integers**: `YYYYMMDD` format (e.g., `20250815`)
+
+### Journal file format
+
+Each journal batch file is a JSON **object** (not a bare array) with two keys:
+
+```json
+{
+  "new-people": [
+    {"name": "Maya Rodriguez", "tags": ["Person"],
+     "properties": {"role": "Research Assistant", "institution": "Stanford University"}}
+  ],
+  "entries": [
+    {"date": 20260110, "blocks": [...]},
+    {"date": 20260111}
+  ]
+}
+```
+
+- **`entries`** (required): Array of journal day objects (same format as before).
+- **`new-people`** (optional): Array of emergent characters introduced organically during this batch. Each entry has the same format as a cast entity (`name`, `tags`, `properties`). The assembly pipeline creates proper tagged pages for them.
+
+**Emergent character rules:**
+- When the narrative organically introduces a new recurring person (hiring, a visiting scholar, etc.), declare them in `new-people` with appropriate tags and properties.
+- **Before they officially join**, mention them as plain text (e.g., "Maya Rodriguez: sophomore, neuroscience major"). This represents the phase where they're hypothetical candidates being discussed.
+- **Once they officially join** (hired, enrolled, introduced), switch to `[[wiki links]]` (e.g., `[[Maya Rodriguez]]'s first day`). This is the moment they become a real entity in the graph.
+- The transition from plain text to wiki link creates a natural narrative arc: discussion → decision → integration.
 
 ### Tag placement rules
 
@@ -215,6 +242,7 @@ Tags on journal blocks create **objects**. Each archetype's `*-class-placement` 
 **Block object guidelines for journals**:
 - Aim for 5-10 block objects per 2-month batch across mixed classes (a few new books/articles discovered, a few new ideas captured)
 - Block object titles should be clean entity names, not narrative sentences
+- **Never prefix entity names with their class name.** The tag already communicates the type. Write `"Combine VR with fMRI for ecologically valid memory paradigms"` not `"Idea: Combine VR with fMRI..."`. Write `"RSA Methods Comparison"` not `"Lit Note: RSA Methods Comparison"`. This applies everywhere: cast entities, block objects, and wiki link targets.
 - The parent block provides context (who recommended it, where you found it, what prompted the thought)
 
 ### Content quality guidelines
