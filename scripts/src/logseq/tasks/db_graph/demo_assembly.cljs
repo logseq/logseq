@@ -11,9 +11,9 @@
   (:require ["fs" :as fs]
             ["path" :as node-path]
             [babashka.cli :as cli]
+            [cljs.pprint :as pprint]
             [clojure.edn :as edn]
             [clojure.string :as string]
-            [cljs.pprint :as pprint]
             [nbb.core :as nbb]))
 
 ;; =============================================================================
@@ -229,6 +229,105 @@
   (mapv #(convert-journal-day % ontology closed-value-index) journal-data))
 
 ;; =============================================================================
+;; Block object reference rewriting
+;; =============================================================================
+;; When a block object (a tagged block in a journal entry, e.g. a #Book) is
+;; later referenced via [[wiki link]], the build system's add-new-pages-from-refs
+;; creates a duplicate plain page because it doesn't know about block objects.
+;;
+;; Fix: assign stable UUIDs to block objects, then rewrite [[Name]] → [[uuid]]
+;; in all block titles so the build system resolves them to the block, not a page.
+
+(defn- collect-block-object-titles
+  "Walk blocks recursively, collecting titles of block objects (blocks with
+   :build/tags that aren't solely :logseq.class/Task)."
+  [blocks]
+  (mapcat (fn [block]
+            (let [tags (:build/tags block)
+                  non-task-tags (when (seq tags)
+                                  (seq (remove #(= % :logseq.class/Task) tags)))
+                  own (when non-task-tags
+                        [(:block/title block)])
+                  child-results (collect-block-object-titles
+                                 (or (:build/children block) []))]
+              (concat own child-results)))
+          blocks))
+
+(defn- build-block-object-index
+  "Build a {title → uuid} map for all block objects across all pages-and-blocks."
+  [pages-and-blocks]
+  (let [all-titles (mapcat (fn [{:keys [blocks]}]
+                             (collect-block-object-titles (or blocks [])))
+                           pages-and-blocks)]
+    (into {} (map (fn [title] [title (random-uuid)]) (distinct all-titles)))))
+
+(defn- rewrite-title-refs
+  "Replace [[block-object-title]] with [[uuid]] in a block title string.
+   Returns {:title new-title :rewrites count}."
+  [title block-object-index]
+  (if (and title (string/includes? title "[["))
+    (let [rewrites (atom 0)
+          new-title (string/replace title #"\[\[(.*?)\]\]"
+                                    (fn [[full-match inner]]
+                                      (if-let [uuid (get block-object-index inner)]
+                                        (do (swap! rewrites inc)
+                                            (str "[[" uuid "]]"))
+                                        full-match)))]
+      {:title new-title :rewrites @rewrites})
+    {:title title :rewrites 0}))
+
+(defn- rewrite-block
+  "Assign UUID to block object and rewrite wiki link refs in title.
+   Recurses into children. Returns {:block updated-block :rewrites count}."
+  [block block-object-index]
+  (let [tags (:build/tags block)
+        non-task-tags (when (seq tags)
+                        (seq (remove #(= % :logseq.class/Task) tags)))
+        ;; Assign UUID if this is a block object
+        block (if (and non-task-tags
+                       (get block-object-index (:block/title block)))
+                (assoc block
+                       :block/uuid (get block-object-index (:block/title block))
+                       :build/keep-uuid? true)
+                block)
+        ;; Rewrite wiki links in title
+        {:keys [title rewrites]} (rewrite-title-refs (:block/title block) block-object-index)
+        block (assoc block :block/title title)
+        ;; Recurse into children
+        child-results (when (:build/children block)
+                        (mapv #(rewrite-block % block-object-index)
+                              (:build/children block)))
+        child-rewrites (reduce + 0 (map :rewrites (or child-results [])))
+        block (if child-results
+                (assoc block :build/children (mapv :block child-results))
+                block)]
+    {:block block :rewrites (+ rewrites child-rewrites)}))
+
+(defn- rewrite-block-object-refs
+  "Post-process all pages-and-blocks to:
+   1. Assign stable UUIDs to block objects (tagged blocks in journals)
+   2. Rewrite [[block-object-title]] → [[uuid]] in all block titles
+   This prevents the build system from creating duplicate plain pages."
+  [pages-and-blocks]
+  (let [block-object-index (build-block-object-index pages-and-blocks)]
+    (if (empty? block-object-index)
+      pages-and-blocks
+      (let [total-rewrites (atom 0)
+            result (mapv (fn [entry]
+                           (if (:blocks entry)
+                             (let [results (mapv #(rewrite-block % block-object-index)
+                                                 (:blocks entry))
+                                   entry-rewrites (reduce + 0 (map :rewrites results))]
+                               (swap! total-rewrites + entry-rewrites)
+                               (assoc entry :blocks (mapv :block results)))
+                             entry))
+                         pages-and-blocks)]
+        (println (str "\n--- Block Object Ref Rewriting ---"))
+        (println (str "  Indexed " (count block-object-index) " block objects"))
+        (println (str "  Rewrote " @total-rewrites " [[wiki links]] → [[uuid]] refs"))
+        result))))
+
+;; =============================================================================
 ;; Validation
 ;; =============================================================================
 
@@ -258,6 +357,61 @@
 
     :else nil))
 
+(defn- collect-journal-block-tags
+  "Collect all tags used on journal blocks (including nested children).
+   Returns a seq of {:tag keyword :text string :date int}."
+  [pages-and-blocks]
+  (letfn [(walk-block [block date-int]
+            (let [tags (:build/tags block)
+                  title (:block/title block)
+                  own (keep (fn [t]
+                              (when-not (= t :logseq.class/Task)
+                                {:tag t :text title :date date-int}))
+                            tags)
+                  child-results (mapcat #(walk-block % date-int)
+                                        (or (:build/children block) []))]
+              (concat own child-results)))]
+    (mapcat (fn [{:keys [page blocks]}]
+              (when-let [date (:build/journal page)]
+                (mapcat #(walk-block % date) (or blocks []))))
+            pages-and-blocks)))
+
+(defn- validate-journal-tags
+  "Validate that journal blocks don't use page-only tags.
+   Uses class-placement from the ontology if present.
+   Returns a vector of warning strings and prints block object stats."
+  [pages-and-blocks ontology]
+  (let [class-placement (:class-placement ontology)
+        page-only-tags (or (:page-only class-placement) #{})
+        block-only-tags (or (:block-only class-placement) #{})
+        mixed-tags (or (:mixed class-placement) #{})
+        all-tag-usages (collect-journal-block-tags pages-and-blocks)
+        warnings (atom [])
+        stripped-count (atom 0)
+        block-object-counts (atom {})]
+    (when (seq page-only-tags)
+      (doseq [{:keys [tag text date]} all-tag-usages]
+        (cond
+          ;; Page-only tag on a journal block — always wrong
+          (page-only-tags tag)
+          (do (swap! stripped-count inc)
+              (swap! warnings conj
+                     (str "WARNING: Page-only tag " tag " on journal block \""
+                          (subs text 0 (min 60 (count text))) "\" (date " date ")")))
+
+          ;; Block-only or mixed tag — this is a valid block object
+          (or (block-only-tags tag) (mixed-tags tag))
+          (swap! block-object-counts update tag (fnil inc 0)))))
+    ;; Print block object stats
+    (when (seq @block-object-counts)
+      (println "\n--- Block Objects in Journals ---")
+      (doseq [[tag cnt] (sort-by (comp str key) @block-object-counts)]
+        (println (str "  " tag ": " cnt " block objects")))
+      (println (str "  Total: " (reduce + (vals @block-object-counts)) " block objects")))
+    (when (pos? @stripped-count)
+      (println (str "\n  " @stripped-count " page-only tags found on journal blocks (see warnings)")))
+    @warnings))
+
 (defn- validate-assembled
   "Validate the assembled EDN before writing. Returns a vector of error strings."
   [assembled]
@@ -274,6 +428,10 @@
       (when-not (page-names ref)
         (swap! errors conj (str "WARNING: Referenced page not found in cast: " ref
                                 " (will be auto-created as plain page)"))))
+    ;; Check journal block tags against class-placement
+    (let [ontology-with-placement {:class-placement (:class-placement assembled)}
+          tag-warnings (validate-journal-tags pages-and-blocks ontology-with-placement)]
+      (swap! errors into tag-warnings))
     @errors))
 
 ;; =============================================================================
@@ -382,11 +540,17 @@
                                 (let [data (read-json (node-path/join dir f))]
                                   (convert-journals data ontology closed-value-index)))
                               journal-files)
+        ;; Rewrite block object refs: assign UUIDs to block objects and
+        ;; convert [[block-object-title]] → [[uuid]] to prevent duplicate pages
+        all-pages (rewrite-block-object-refs (vec (concat cast-pages journal-pages)))
         ;; Assemble final EDN
-        assembled {:auto-create-ontology? true
-                   :properties  (:properties ontology)
-                   :classes     (:classes ontology)
-                   :pages-and-blocks (vec (concat cast-pages journal-pages))}]
+        assembled (cond-> {:auto-create-ontology? true
+                           :properties  (:properties ontology)
+                           :classes     (:classes ontology)
+                           :pages-and-blocks all-pages}
+                    ;; Pass through class-placement for validation (not consumed by sqlite.build)
+                    (:class-placement ontology)
+                    (assoc :class-placement (:class-placement ontology)))]
     assembled))
 
 ;; =============================================================================
@@ -418,8 +582,8 @@
       (doseq [e errors]
         (println " " e))
       (println))
-    ;; Write assembled EDN
-    (fs/writeFileSync output-path (with-out-str (pprint/pprint assembled)))
+    ;; Write assembled EDN (strip class-placement — only used for validation)
+    (fs/writeFileSync output-path (with-out-str (pprint/pprint (dissoc assembled :class-placement))))
     (let [page-count (count (:pages-and-blocks assembled))
           block-count (reduce + (map #(count (:blocks % [])) (:pages-and-blocks assembled)))
           class-count (count (:classes assembled))]

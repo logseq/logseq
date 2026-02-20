@@ -156,7 +156,7 @@
 
                              :else
                              v)})]
-                      (if (set? v) (set (map build-pvalue v)) (build-pvalue v)))])))
+                    (if (set? v) (set (map build-pvalue v)) (build-pvalue v)))])))
        ((fn [x]
           (db-property-build/build-property-values-tx-m new-block x {:pvalue-map? true})))))
 
@@ -287,10 +287,11 @@
                     (mapcat
                      (fn [[class-name {:build/keys [class-properties] :as class-m}]]
                        (let [db-ident (get-ident all-idents class-name)
+                             class-title (or (:block/title class-m) (name class-name))
                              new-block
                              (sqlite-util/build-new-class
-                              {:block/name (common-util/page-name-sanity-lc (name class-name))
-                               :block/title (name class-name)
+                              {:block/name (common-util/page-name-sanity-lc class-title)
+                               :block/title class-title
                                :block/uuid (or (:block/uuid class-m)
                                                (common-uuid/gen-uuid :db-ident-block-uuid db-ident))
                                :db/ident db-ident
@@ -304,7 +305,7 @@
                            (conj
                             (merge
                              new-block
-                             (dissoc class-m :build/properties :build/class-extends :build/class-parent :build/class-properties :build/keep-uuid?)
+                             (dissoc class-m :build/properties :build/class-extends :build/class-parent :build/class-properties :build/keep-uuid? :block/title)
                              (when-let [props (not-empty (:build/properties class-m))]
                                (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m))
                                                    uuid-maps all-idents options))
@@ -368,7 +369,8 @@
     [:build/properties {:optional true} User-properties]
     [:build/class-extends {:optional true} [:vector Class]]
     [:build/class-properties {:optional true} [:vector Property]]
-    [:build/keep-uuid? {:optional true} :boolean]]])
+    [:build/keep-uuid? {:optional true} :boolean]
+    [:block/title {:optional true} :string]]])
 
 (def Options
   [:map

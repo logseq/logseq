@@ -4,45 +4,55 @@ Generate a realistic demo graph for Logseq DB using the file-based pipeline.
 
 ## Overview
 
-This command generates a ~300-page realistic demo graph with 6 months of journal entries, people, projects, books, meetings, tasks, and cross-references. The graph uses the **Operator/PM archetype** — a product manager who uses Logseq for daily work.
+This command generates a ~300-page realistic demo graph with 6 months of journal entries, people, projects, books, meetings, tasks, and cross-references.
+
+## Step 0: Choose Archetype
+
+Ask the user which archetype to generate (or use the one they specified):
+
+| Archetype | Description | Key tags |
+|-----------|-------------|----------|
+| **Operator/PM** | Product manager: meetings, projects, OKRs, decisions | Meeting, Project, OKR, Decision |
+| **Student** | University student: courses, study groups, assignments | Course, Study Group, Lecture, Semester Goal |
+| **Researcher** | PhD/academic: papers, experiments, grants, conferences | Research Project, Paper, Experiment, Grant |
+| **Writer** | Writer/creator: drafts, characters, world building, submissions | Writing Project, Draft, Character, Submission |
+| **Developer** | Software dev: architecture decisions, sprints, bugs, tech notes | Architecture Decision, Sprint, Bug Report, Tech Note |
+
+The archetype determines which `*-properties`, `*-classes`, `*-cast-spec`, `*-timeline-spec`, and `*-journal-patterns` to use from `demo_archetypes.cljs`. All archetypes follow the same pipeline below.
 
 ## Prerequisites
 
 Read these files before generating:
 
-1. **Archetype definitions**: `deps/db/src/logseq/db/demo_archetypes.cljs` — Properties, classes, cast spec, timeline, journal patterns
-2. **Assembly script**: `scripts/src/logseq/tasks/db_graph/demo_assembly.cljs` — JSON→EDN conversion logic
-3. **Cast manifest** (if regenerating journals only): `.context/demo-graphs/operator/cast-manifest.txt`
+1. **Archetype definitions**: `deps/db/src/logseq/db/demo_archetypes.cljs` -- Properties, classes, cast spec, timeline, journal patterns
+2. **Assembly script**: `scripts/src/logseq/tasks/db_graph/demo_assembly.cljs` -- JSON->EDN conversion logic
+3. **Cast manifest** (if regenerating journals only): `.context/demo-graphs/<archetype>/cast-manifest.txt`
 
 ## Pipeline
 
-All intermediate files go in `.context/demo-graphs/operator/` (gitignored).
+All intermediate files go in `.context/demo-graphs/<archetype>/` (gitignored). Replace `<archetype>` with the chosen archetype name (e.g., `operator`, `student`, `researcher`, `writer`, `developer`).
 
 ### Step 1: Write Ontology (deterministic)
 
-Copy `:properties` and `:classes` from `operator-properties` and `operator-classes` in `demo_archetypes.cljs` into EDN format:
+Copy `:properties`, `:classes`, and `:class-placement` from the archetype definitions in `demo_archetypes.cljs` into EDN format:
 
 ```
-.context/demo-graphs/operator/00-ontology.edn
+.context/demo-graphs/<archetype>/00-ontology.edn
 ```
 
-Format: `{:properties {...} :classes {...}}`
+Format: `{:properties {...} :classes {...} :class-placement {:page-only #{...} :block-only #{...} :mixed #{...}}}`
+
+The `:class-placement` map is used by the assembly script for tag validation.
 
 ### Step 2: Generate Cast (1 agent)
 
-Generate `01-cast.json` — a JSON array of entities. Each entity:
+Generate `01-cast.json` -- a JSON array of entities. Each entity:
 
 ```json
 {"name": "Sarah Chen", "tags": ["Person"], "properties": {"role": "Senior PM", "email": "sarah@example.com", "company": "Meridian Labs"}}
 ```
 
-Target counts from `operator-cast-spec`:
-- 25 people (10 coworkers, 4 reports, 3 executives, 4 friends, 2 family, 2 external)
-- 12 authors
-- 4 companies (1 employer, 2 clients, 1 partner)
-- 7 projects (mix of active, backlog, paused, done)
-- 14 books (mix of completed, reading, want to read, abandoned)
-- 6 tools, 4 subscriptions, 10 ideas, 4 OKRs, 3 decisions
+Target counts come from `<archetype>-cast-spec` in `demo_archetypes.cljs`. Read the cast spec and generate entities matching those counts and mix ratios.
 
 ### Step 3: Extract Cast Manifest
 
@@ -50,21 +60,21 @@ Create `cast-manifest.txt` from the cast — a flat list of all names and roles,
 
 ### Step 4: Generate Journals (parallel agents)
 
-Launch 3 agents in parallel, each generating 2 months of journals:
+Launch 3 agents in parallel, each generating 2 months of journals. The phase names and activity levels come from `<archetype>-timeline-spec` in `demo_archetypes.cljs`:
 
-| File | Months | Phase | Activity |
-|------|--------|-------|----------|
-| `02-journals-aug-sep.json` | Aug–Sep 2025 | Onboarding & Q3 kickoff | High |
-| `03-journals-oct-nov.json` | Oct–Nov 2025 | Deep execution | Medium |
-| `04-journals-dec-jan.json` | Dec 2025–Jan 2026 | Q4 wrap-up & holidays | Low |
+| File | Months | Activity |
+|------|--------|----------|
+| `02-journals-batch1.json` | Months 1–2 | High |
+| `03-journals-batch2.json` | Months 3–4 | Medium |
+| `04-journals-batch3.json` | Months 5–6 | Low |
 
-Each agent reads `cast-manifest.txt` and the archetype definitions.
+Each agent reads `cast-manifest.txt`, the archetype definitions, `<archetype>-journal-patterns` for day-type weights, and `<archetype>-class-placement` for tag placement rules.
 
 ### Step 5: Assemble & Import
 
 ```bash
-bb dev:assemble-demo .context/demo-graphs/operator/
-bb dev:create my-demo .context/demo-graphs/operator/assembled.edn
+bb dev:assemble-demo .context/demo-graphs/<archetype>/
+bb dev:create my-demo .context/demo-graphs/<archetype>/assembled.edn
 ```
 
 The graph appears at `~/logseq/graphs/my-demo/db.sqlite`, discoverable by localhost:3001 or :3003.
@@ -73,7 +83,7 @@ The graph appears at `~/logseq/graphs/my-demo/db.sqlite`, discoverable by localh
 
 ### Journal entries
 
-Three examples showing the full range of depth and structure:
+Three examples showing the full range of depth and structure (Operator/PM flavored; adapt entity names, tags, and properties to match the chosen archetype):
 
 ```json
 // SHALLOW DAY: 1-2 flat blocks, no children. Quick capture.
@@ -133,12 +143,79 @@ Three examples showing the full range of depth and structure:
 
 - **Every day in the range must appear** (empty days: `{"date": 20250816}`)
 - **Use `[[wiki links]]`** for cross-references in `text` — use EXACT names from cast-manifest.txt
-- **`tags`**: Array of class names (e.g., `["Meeting"]`, `["Reflection"]`)
+- **`tags`**: Array of class names (e.g., `["Meeting"]`, `["Reflection"]`). See **Tag placement rules** below.
 - **`properties`**: Object with property keys matching the ontology. Node properties use arrays of names: `"attendees": ["Sarah Chen", "James Liu"]`
 - **`task`**: Shorthand for built-in Task class. Status: `backlog`, `todo`, `doing`, `in-review`, `done`, `canceled`. Priority: `low`, `medium`, `high`, `urgent`
 - **`children`**: Nested blocks (recursive, same format)
 - **Closed value strings must match exactly**: `"Active"`, `"Backlog"`, `"Paused"`, `"Done"` for project-status; `"Reading"`, `"Completed"`, `"Want to Read"`, `"Abandoned"` for reading-status; etc.
 - **Dates are integers**: `YYYYMMDD` format (e.g., `20250815`)
+
+### Tag placement rules
+
+Tags on journal blocks create **objects**. Each archetype's `*-class-placement` in `demo_archetypes.cljs` declares three categories. Read them before generating journals.
+
+**Page-only classes** — entities exist as pages in the cast. Journal blocks reference them via `[[wiki links]]` but NEVER tag themselves with these classes.
+
+```json
+// WRONG: tagging a journal block with a page-only class
+{"text": "Read 3 chapters of [[Frankenstein]]", "tags": ["Book"]}
+
+// WRONG: tagging a block that mentions a person
+{"text": "Met with [[Dr. Helen Marcus]] about research", "tags": ["Professor"]}
+
+// RIGHT: just use wiki links to reference existing pages
+{"text": "Read 3 chapters of [[Frankenstein]]"}
+{"text": "Met with [[Dr. Helen Marcus]] about research"}
+```
+
+**Block-only classes** — never in the cast. Born as tagged blocks inside journal entries. The block IS the object:
+
+```json
+// The block IS a meeting (Operator)
+{"text": "1:1 with [[James Liu]]", "tags": ["Meeting"],
+ "properties": {"attendees": ["James Liu"], "agenda": "Sprint 15 prep"}}
+
+// The block IS a lecture note (Student)
+{"text": "CS 201 lecture: binary search trees and AVL rotations", "tags": ["Lecture"],
+ "properties": {"subject": "Data Structures & Algorithms (CS 201)", "location": "CS Building 104"}}
+
+// The block IS a reflection
+{"text": "Feeling more confident about the material after today's study session", "tags": ["Reflection"]}
+```
+
+**Mixed classes** — substantial instances are pages in the cast; lightweight instances are born as tagged **block objects** in journals. Use the **parent/child pattern**: narrative context goes in the parent block, the clean entity name goes in a tagged child block.
+
+```json
+// NEW Book discovered — child block is the clean object
+{"text": "Sam recommended a great programming book",
+ "children": [
+   {"text": "The Pragmatic Programmer", "tags": ["Book"],
+    "properties": {"reading-status": "Want to Read"}}
+ ]}
+
+// NEW article found while browsing
+{"text": "Found an interesting article on spaced repetition",
+ "children": [
+   {"text": "Effective Spaced Repetition", "tags": ["Read"],
+    "properties": {"reading-status": "Reading"}}
+ ]}
+
+// NEW Idea captured in the moment
+{"text": "Had a thought during the lecture",
+ "children": [
+   {"text": "What if we gamified the flashcard review process?", "tags": ["Idea"]}
+ ]}
+
+// EXISTING book from cast — just reference it, NO tag
+{"text": "Finished [[Frankenstein]]. Loved the ending."}
+```
+
+**The key rule**: If the text contains a `[[wiki link]]` to an existing cast entity, do NOT tag the block with that entity's class. Tags create new objects; wiki links reference existing ones.
+
+**Block object guidelines for journals**:
+- Aim for 5-10 block objects per 2-month batch across mixed classes (a few new books/articles discovered, a few new ideas captured)
+- Block object titles should be clean entity names, not narrative sentences
+- The parent block provides context (who recommended it, where you found it, what prompted the thought)
 
 ### Content quality guidelines
 
@@ -151,8 +228,9 @@ Three examples showing the full range of depth and structure:
   - ~10% marathon days: 8-12+ blocks, mixed depths, a packed day with multiple meetings and tasks
   - **Hard floor**: at least 15% of non-empty days MUST have depth 3+, at least 5% MUST have depth 4+
 - **Writing style**: Avoid em dashes (—). LLMs overuse them but real note-takers rarely do. Use periods, commas, colons, semicolons, or parentheses instead. Or split the aside into a child block. An occasional em dash is fine, but they should be rare (fewer than 10 across an entire 2-month batch).
-- **Use realistic PM language**: sprint planning, stakeholder alignment, PRD reviews, design critiques, 1:1s, retros
-- **Cross-reference liberally**: mention people, projects, books, tools, ideas naturally
+- **Use realistic language for the archetype**: e.g., PM language for Operator (sprint planning, PRD reviews, 1:1s), academic language for Researcher (literature reviews, grant proposals), etc.
+- **Cross-reference liberally**: mention people, projects, books, tools, ideas naturally via `[[wiki links]]`
+- **Create block objects**: each 2-month batch should birth 5-10 new block objects using the parent/child pattern (new books/articles discovered, new ideas captured, one-off events). These appear alongside cast pages in class tables, creating a realistic mix.
 - **Include personal life**: friend meetups, family calls, book reading, subscription content, hobby mentions
 - **Progress arcs**: projects should evolve over months (kickoff → progress → blockers → resolution)
 - **Activity levels**: high (Aug-Sep onboarding), medium (Oct-Nov execution), low (Dec-Jan holidays)
