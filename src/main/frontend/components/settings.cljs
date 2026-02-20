@@ -658,7 +658,8 @@
      (when-not (or (util/mobile?) (mobile-util/native-platform?))
        (tooltip-row t enable-tooltip?))
      (enable-all-pages-public-row t enable-all-pages-public?)
-     (auto-hide-tabs-typing-row auto-hide-tabs-typing?)]))
+     (when-not (mobile-util/native-platform?)
+       (auto-hide-tabs-typing-row auto-hide-tabs-typing?))]))
 
 (rum/defc settings-advanced < rum/reactive
   []

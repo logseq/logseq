@@ -399,8 +399,11 @@
                               (state/pub-event! [:go/search]))}
               (ui/icon "search" {:size ui/icon-size})])))]]
      
-     ;; Tab bar between left menu and right controls
-     (tabs/tab-bar)
+     ;; Tab bar between left menu and right controls (desktop/web only);
+     ;; on mobile, render a drag-region spacer to keep .r pushed right.
+     (if (mobile-util/native-platform?)
+       [:div.flex-1.drag-region]
+       (tabs/tab-bar))
 
      [:div.r.flex.drag-region.items-center.gap-2
       [:div.flex.items-center
