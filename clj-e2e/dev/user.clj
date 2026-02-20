@@ -14,6 +14,7 @@
             [logseq.e2e.multi-tabs-basic-test]
             [logseq.e2e.outliner-basic-test]
             [logseq.e2e.plugins-basic-test]
+            [logseq.e2e.plugins-marketplace-test]
             [logseq.e2e.property-basic-test]
             [logseq.e2e.property-scoped-choices-test]
             [logseq.e2e.reference-basic-test]
@@ -88,6 +89,11 @@
   (->> (future (run-tests 'logseq.e2e.plugins-basic-test))
        (swap! *futures assoc :plugins-test)))
 
+(defn run-plugins-marketplace-test
+  []
+  (->> (future (run-tests 'logseq.e2e.plugins-marketplace-test))
+       (swap! *futures assoc :plugins-marketplace-test)))
+
 (defn run-rtc-extra-test
   []
   (->> (future (run-tests 'logseq.e2e.rtc-extra-test))
@@ -130,38 +136,38 @@
 (defn start
   []
   (future
-    (fixtures/open-page
-     repl/pause
-     {:headless false})))
+   (fixtures/open-page
+    repl/pause
+    {:headless false})))
 
 (comment
 
-  ;; You can call or put `(repl/pause)` in any test to pause the tests,
-  ;; this allows us to continue experimenting with the current page.
-  (repl/pause)
+ ;; You can call or put `(repl/pause)` in any test to pause the tests,
+ ;; this allows us to continue experimenting with the current page.
+ (repl/pause)
 
-  ;; To resume the tests, close the page/context/browser
-  (repl/resume)
+ ;; To resume the tests, close the page/context/browser
+ (repl/resume)
 
-  ;; Run specific test
-  (future (run-test logseq.e2e.commands-test/new-property-test))
+ ;; Run specific test
+ (future (run-test logseq.e2e.commands-test/new-property-test))
 
-  ;; after the test has been paused, you can do anything with the current page like this
-  (repl/with-page
-    (w/wait-for (first (util/get-edit-block-container))
-                {:state :detached}))
+ ;; after the test has been paused, you can do anything with the current page like this
+ (repl/with-page
+  (w/wait-for (first (util/get-edit-block-container))
+              {:state :detached}))
 
-  (run-tests 'logseq.e2e.commands-basic-test
-             'logseq.e2e.multi-tabs-basic-test
-             'logseq.e2e.outliner-basic-test
-             'logseq.e2e.rtc-basic-test)
+ (run-tests 'logseq.e2e.commands-basic-test
+            'logseq.e2e.multi-tabs-basic-test
+            'logseq.e2e.outliner-basic-test
+            'logseq.e2e.rtc-basic-test)
 
-  (do
-    (reset! config/*headless true)
-    (reset! config/*slow-mo 10)
-    (run-tests 'logseq.e2e.reference-basic-test)
-    (dotimes [i 10]
-      (run-tests 'logseq.e2e.reference-basic-test)))
+ (do
+   (reset! config/*headless true)
+   (reset! config/*slow-mo 10)
+   (run-tests 'logseq.e2e.reference-basic-test)
+   (dotimes [i 10]
+     (run-tests 'logseq.e2e.reference-basic-test)))
 
-  ;;
-  )
+ ;;
+ )

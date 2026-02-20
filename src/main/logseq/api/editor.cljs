@@ -27,6 +27,7 @@
             [logseq.api.block :as api-block]
             [logseq.api.db-based :as db-based-api]
             [logseq.common.path :as path]
+            [logseq.outliner.property :as outliner-property]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.sdk.core]
@@ -441,35 +442,56 @@
                      key (api-block/get-db-ident-from-property-name key this)]
                  (property-handler/remove-block-property! block-uuid key))))))
 
+(defn- get-block-classes-properties-has-default-value
+  [block-id]
+  (when-let [classes-properties
+             (some-> (outliner-property/get-block-classes-properties (db/get-db) block-id)
+                     :classes-properties)]
+    (let [properties (->> classes-properties
+                          (filter :logseq.property/default-value)
+                          (map (fn [property]
+                                 [(:db/ident property)
+                                  (:logseq.property/default-value property)])))
+          properties (into {} properties)]
+      properties)))
+
+(defn- get-all-block-properties
+  [id]
+  (p/let [block (<get-block id {:children? false})]
+    (when-let [own-properties (:block/properties block)]
+      (let [classes-properties (get-block-classes-properties-has-default-value (:db/id block))
+            properties (if (seq classes-properties)
+                         (merge classes-properties own-properties)
+                         own-properties)]
+        properties))))
+
 (defn get_block_property
   [id key]
   (this-as this
-           (p/let [block (<get-block id {:children? false})]
-             (when-let [properties (some-> block (:block/uuid) (db-model/get-block-by-uuid) (:block/properties))]
-               (when (seq properties)
-                 (let [property-name (api-block/sanitize-user-property-name key)
-                       ident (api-block/get-db-ident-from-property-name property-name this)
-                       property-value (or (get properties property-name)
-                                          (get properties (keyword property-name))
-                                          (get properties ident))
-                       property-value (if-let [property-id (:db/id property-value)]
-                                        (db/pull property-id) property-value)
-                       property-value (cond-> property-value
-                                        (map? property-value)
-                                        (assoc
-                                         :value (or (:logseq.property/value property-value)
-                                                    (:block/title property-value))
-                                         :ident ident))
-                       parsed-value (api-block/parse-property-json-value-if-need ident property-value)]
-                   (or parsed-value
-                       (bean/->js (sdk-utils/normalize-keyword-for-json property-value)))))))))
+    (p/let [properties (get-all-block-properties id)]
+      (when (seq properties)
+        (let [property-name (api-block/sanitize-user-property-name key)
+              ident (api-block/get-db-ident-from-property-name property-name this)
+              property-value (or (get properties property-name)
+                                 (get properties (keyword property-name))
+                                 (get properties ident))
+              property-value (if-let [property-id (:db/id property-value)]
+                               (db/pull property-id) property-value)
+              property-value (cond-> property-value
+                                     (map? property-value)
+                                     (assoc
+                                       :value (or (:logseq.property/value property-value)
+                                                  (:block/title property-value))
+                                       :ident ident))
+              parsed-value (api-block/parse-property-json-value-if-need ident property-value)]
+          (or parsed-value
+              (sdk-utils/result->js property-value)))))))
 
 (def get_block_properties
   (fn [id]
-    (p/let [block (<get-block id {:children? false})]
-      (when block
-        (let [properties (api-block/into-readable-db-properties (:block/properties block))]
-          (sdk-utils/result->js properties))))))
+    (p/let [properties (get-all-block-properties id)]
+      (when-let [properties (some-> properties (api-block/into-readable-db-properties))]
+        (sdk-utils/result->js properties)))))
 
 (defn get_page_properties
   [id-or-page-name]

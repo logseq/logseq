@@ -5,7 +5,7 @@ import {
   PluginLogger,
   safeSnakeCase,
   safetyPathJoin, normalizeKeyStr,
-} from './helpers'
+} from './common'
 import { LSPluginCaller } from './LSPlugin.caller'
 import * as callableAPIs from './callable.apis'
 import {

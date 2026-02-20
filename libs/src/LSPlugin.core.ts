@@ -21,8 +21,8 @@ import {
   injectTheme,
   cleanInjectedUI,
   PluginLogger,
-} from './helpers'
-import * as pluginHelpers from './helpers'
+} from './common'
+import * as pluginHelpers from './common'
 import DOMPurify from 'dompurify'
 import Debug from 'debug'
 import {
@@ -719,7 +719,7 @@ class PluginLocal extends EventEmitter<
     return layouts || {}
   }
 
-  async _saveLayoutsData(data) {
+  async _saveLayoutsData(data: any) {
     const key = this.id + '_layouts'
     await invokeHostExportedApi('save_plugin_user_settings', key, data)
   }

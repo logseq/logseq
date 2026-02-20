@@ -1,6 +1,6 @@
 import { LSPluginUser } from '../LSPlugin.user'
 import { PluginLocal } from '../LSPlugin.core'
-import { safeSnakeCase } from '../helpers'
+import { safeSnakeCase } from '../common'
 
 /**
  * WARN: These are some experience features and might be adjusted at any time.
@@ -93,6 +93,37 @@ export class LSPluginExperiments {
       key,
       opts
     )
+  }
+
+  registerHostedRenderer(
+    key: string,
+    opts: {
+      title?: string,
+      subs?: Array<string>
+      type?: string,
+      render: (props: {}) => any
+    }
+  ) {
+    return this.invokeExperMethod(
+      'registerHostedRenderer',
+      this.ctx.baseInfo.id,
+      key,
+      opts
+    )
+  }
+
+  registerSidebarRenderer(
+    key: string,
+    opts: {
+      title?: string,
+      subs?: Array<string>
+      render: (props: {}) => any,
+      [k: string]: any
+    }
+  ) {
+    key = `_sidebar.${key}`
+    opts.type = 'sidebar'
+    return this.registerHostedRenderer(key, opts)
   }
 
   registerRouteRenderer(

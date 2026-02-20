@@ -2,7 +2,7 @@ import Debug from 'debug'
 import { Postmate, Model, ParentAPI, ChildAPI } from './postmate'
 import EventEmitter from 'eventemitter3'
 import { PluginLocal } from './LSPlugin.core'
-import { deferred, IS_DEV } from './helpers'
+import { deferred, IS_DEV } from './common'
 import { LSPluginShadowFrame } from './LSPlugin.shadow'
 
 const debug = Debug('LSPlugin:caller')
@@ -32,6 +32,7 @@ class LSPluginCaller extends EventEmitter {
 
   private _status?: 'pending' | 'timeout'
   private _userModel: any = {}
+  private _syncGCTimer: any = null
 
   private _call?: (
     type: string,
@@ -70,13 +71,12 @@ class LSPluginCaller extends EventEmitter {
     const caller = this
     const isShadowMode = this._pluginLocal != null
 
-    let syncGCTimer: any = 0
     let syncTag = 0
     const syncActors = new Map<number, DeferredActor>()
     const readyDeferred = deferred(1000 * 60)
 
     const model: any = this._extendUserModel({
-      [LSPMSG_READY]: async (baseInfo) => {
+      [LSPMSG_READY]: async (baseInfo: any) => {
         // dynamically setup common msg handler
         model[LSPMSGFn(baseInfo?.pid)] = ({
           type,
@@ -149,8 +149,8 @@ class LSPluginCaller extends EventEmitter {
     this._status = 'pending'
 
     await handshake
-      .then((refParent: ChildAPI) => {
-        this._child = refParent
+      .then((childRefParent: ChildAPI) => {
+        this._child = childRefParent
         this._connected = true
 
         this._call = async (type, payload = {}, actor) => {
@@ -163,7 +163,7 @@ class LSPluginCaller extends EventEmitter {
             debug(`async call #${tag}`)
           }
 
-          refParent.emit(LSPMSGFn(model.baseInfo.id), { type, payload })
+          childRefParent.emit(LSPMSGFn(model.baseInfo.id), { type, payload })
 
           return actor?.promise as Promise<any>
         }
@@ -172,12 +172,12 @@ class LSPluginCaller extends EventEmitter {
           try {
             model[type](payload)
           } catch (e) {
-            debug(`[model method] #${type} not existed`)
+            debug(`call user model(${type}) not exist. #${this._debugTag}`)
           }
         }
 
         // actors GC
-        syncGCTimer = setInterval(() => {
+        this._syncGCTimer = setInterval(() => {
           if (syncActors.size > 100) {
             for (const [k, v] of syncActors) {
               if (v.settled) {
@@ -249,7 +249,7 @@ class LSPluginCaller extends EventEmitter {
             ? `${Math.min((left * 100) / vw, 99)}%`
             : `${left}px`
 
-        // 45 is height of headbar
+        // 45 is height of head bar
         top = Math.max(top, 45)
         top =
           typeof vh === 'number'
@@ -276,6 +276,8 @@ class LSPluginCaller extends EventEmitter {
       classListArray: ['lsp-iframe-sandbox'],
       model: { baseInfo: JSON.parse(JSON.stringify(pl.toJSON())) },
       allow: pl.options.allow,
+      // for optimized postmate message
+      enableMessageChannel: true
     })
 
     let handshake = pt.sendHandshake()
@@ -291,12 +293,12 @@ class LSPluginCaller extends EventEmitter {
       }, 8 * 1000) // 8 secs
 
       handshake
-        .then((refChild: ParentAPI) => {
-          this._parent = refChild
+        .then((parentRefChild: ParentAPI) => {
+          this._parent = parentRefChild
           this._connected = true
           this.emit('connected')
 
-          refChild.on(LSPMSGFn(pl.id), ({ type, payload }: any) => {
+          parentRefChild.on(LSPMSGFn(pl.id), ({ type, payload }: any) => {
             debug(`[user -> *host] `, type, payload)
 
             this._pluginLocal?.emit(type, payload || {})
@@ -305,7 +307,7 @@ class LSPluginCaller extends EventEmitter {
 
           this._call = async (...args: any) => {
             // parent all will get message before handshake
-            refChild.call(LSPMSGFn(pl.id), {
+            parentRefChild.call(LSPMSGFn(pl.id), {
               type: args[0],
               payload: Object.assign(args[1] || {}, {
                 $$pid: pl.id,
@@ -315,12 +317,12 @@ class LSPluginCaller extends EventEmitter {
 
           this._callUserModel = async (type, ...payloads: any[]) => {
             if (type.startsWith(FLAG_AWAIT)) {
-              return await refChild.get(
+              return await parentRefChild.get(
                 type.replace(FLAG_AWAIT, ''),
                 ...payloads
               )
             } else {
-              refChild.call(type, payloads?.[0])
+              parentRefChild.call(type, payloads?.[0])
             }
           }
 
@@ -418,7 +420,7 @@ class LSPluginCaller extends EventEmitter {
     let root: HTMLElement = null
     if (this._parent) {
       root = this._getSandboxIframeContainer()
-      await this._parent.destroy()
+      this._parent.destroy()
     }
 
     if (this._shadow) {
@@ -426,7 +428,13 @@ class LSPluginCaller extends EventEmitter {
       this._shadow.destroy()
     }
 
-    root?.parentNode.removeChild(root)
+    root?.parentNode?.removeChild(root)
+
+    // clear GC timer
+    if (this._syncGCTimer) {
+      clearInterval(this._syncGCTimer)
+      this._syncGCTimer = null
+    }
   }
 }
 
