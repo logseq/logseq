@@ -393,6 +393,9 @@
    :go/keyboard-shortcuts                   {:binding "g s"
                                              :fn      #(state/pub-event! [:modal/keymap])}
 
+   :go/today                                {:binding []
+                                             :fn      journal-handler/go-to-today!}
+
    :go/tomorrow                             {:binding "g t"
                                              :fn      journal-handler/go-to-tomorrow!}
 
@@ -674,6 +677,7 @@
           :go/graph-view
           :go/all-graphs
           :go/keyboard-shortcuts
+          :go/today
           :go/tomorrow
           :go/next-journal
           :go/prev-journal
@@ -771,6 +775,7 @@
      :go/graph-view
      :go/all-graphs
      :go/flashcards
+     :go/today
      :go/tomorrow
      :go/next-journal
      :go/prev-journal
