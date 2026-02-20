@@ -36,6 +36,11 @@
   [ent]
   (or (:block/raw-title ent) (:block/title ent)))
 
+;; nbb-compatible version of db-property/property-value-content
+(defn- property-value-content [pvalue]
+  (or (block-title pvalue)
+      (:logseq.property/value pvalue)))
+
 (defn- shallow-copy-page
   "Given a page or journal entity, shallow copies it e.g. no properties or tags info included.
    Pages that are shallow copied are at the edges of export and help keep the export size reasonable and
@@ -59,9 +64,7 @@
                                     {:keys [include-pvalue-uuid-fn]
                                      :or {include-pvalue-uuid-fn (constantly false)}
                                      :as options}]
-  (let [;; nbb-compatible version of db-property/property-value-content
-        property-value-content (or (block-title pvalue)
-                                   (:logseq.property/value pvalue))
+  (let [property-value-content' (property-value-content pvalue)
         ;; TODO: Add support for ref properties here and in sqlite.build
         build-properties
         (some->> ent-properties
@@ -72,7 +75,7 @@
                  (into {}))]
     (if (or (seq ent-properties) (seq (:block/tags pvalue)) (include-pvalue-uuid-fn (:block/uuid pvalue)))
       (cond-> {:build/property-value :block
-               :block/title property-value-content}
+               :block/title property-value-content'}
         (seq (:block/tags pvalue))
         (assoc :build/tags (->build-tags (:block/tags pvalue)))
 
@@ -84,7 +87,7 @@
 
         (:include-timestamps? options)
         (merge (select-keys pvalue [:block/created-at :block/updated-at])))
-      property-value-content)))
+      property-value-content')))
 
 (defonce ignored-properties [:logseq.property/created-by-ref :logseq.property.embedding/hnsw-label-updated-at])
 
@@ -96,7 +99,8 @@
             [db' property-ent pvalue properties-config' {:keys [property-value-uuids?] :as options'}]
             (if-let [build-page (and (not property-value-uuids?) (build-pvalue-entity-for-build-page pvalue))]
               build-page
-              (if (contains? #{:node :date} (:logseq.property/type property-ent))
+              (if (and (contains? #{:node :date :entity} (:logseq.property/type property-ent))
+                       (not= :logseq.property/default-value (:db/ident property-ent)))
                 ;; Idents take precedence over uuid because they keep data graph-agnostic
                 (if (:db/ident pvalue)
                   (:db/ident pvalue)
@@ -259,7 +263,7 @@
                          (build-node-properties db entity ent-properties (dissoc options :shallow-copy? :include-uuid-fn)))
         build-properties (when (and (not shallow-copy?) (seq ent-properties))
                            (buildable-properties db ent-properties (merge properties new-properties) options))
-        build-node (cond-> {:block/title (block-title entity)}
+        build-node (cond-> {:block/title (property-value-content entity)}
                      (some? (:block/collapsed? entity))
                      (assoc :block/collapsed? (:block/collapsed? entity))
                      (:block/link entity)
@@ -1119,7 +1123,8 @@
         (do
           (js/console.error "Exported EDN has the following invalid errors when imported into a new graph:")
           (pprint/pprint errors)
-          {:error (str "The exported EDN has " (count errors) " validation error(s)")})
+          {:error (str "The exported EDN has " (count errors) " validation error(s)")
+           :db @import-conn})
         {:db @import-conn}))
     (catch :default e
       (js/console.error "Unexpected export-edn validation error:" e)
