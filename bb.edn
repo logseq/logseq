@@ -89,6 +89,12 @@
    :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
                 "yarn -s nbb-logseq -cp src:../outliner/src:script script/create_graph.cljs" *command-line-args*)}
 
+  dev:assemble-demo
+  {:doc "Assemble demo graph intermediate files (JSON+EDN) into assembled.edn"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq -cp src:../../scripts/src ../../scripts/src/logseq/tasks/db_graph/demo_assembly.cljs" *command-line-args*)}
+
   dev:diff-graphs
   {:doc "Diffs two DB graphs"
    :requires ([babashka.fs :as fs])

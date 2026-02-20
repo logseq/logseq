@@ -27,6 +27,7 @@ cljs-test-runner-out
 .lein-*
 .nrepl-*
 .DS_Store
+.context/
 report.html
 strings.csv
 
