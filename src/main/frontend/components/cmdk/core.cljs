@@ -128,32 +128,35 @@
           :create-object? true
           :page-name object-page-name
           :tag-names object-tag-names}]
-        (->> [{:text (cond
-                       class "Configure tag"
-                       class? "Create tag"
-                       :else "Create page")
-               :icon (cond
-                       class "settings"
-                       class? "new-class"
-                       :else "new-page")
-               :icon-extension? (not class)
-               :icon-theme :gray
-               :info (cond
-                       class
-                       (str "Configure #" class-name)
-                       class?
-                       (str "Create tag called '" class-name "'")
-                       :else
-                       (str "Create page called '" q "'"))
-               :source-create :page
-               :class class}]
-             (remove nil?))))))
+        ;; For #-prefixed input: show "Configure tag" (existing) or "Create tag" (new).
+        ;; For plain input: show "Create page" only when the page doesn't already exist.
+        (when (or class? class (nil? (db/get-case-page q)))
+          [{:text (cond
+                    class "Configure tag"
+                    class? "Create tag"
+                    :else "Create page")
+            :icon (cond
+                    class "settings"
+                    class? "new-class"
+                    :else "new-page")
+            :icon-extension? (not class)
+            :icon-theme :gray
+            :info (cond
+                    class
+                    (str "Configure #" class-name)
+                    class?
+                    (str "Create tag called '" class-name "'")
+                    :else
+                    (str "Create page called '" q "'"))
+            :source-create :page
+            :class class}])))))
 
 ;; Take the results, decide how many items to show, and order the results appropriately
 (defn state->results-ordered [state search-mode]
   (let [sidebar? (:sidebar? (last (:rum/args state)))
         results @(::results state)
         input @(::input state)
+        normalized-input (string/replace input #"^#+" "")
         filter' @(::filter state)
         filter-group (:group filter')
         index (volatile! -1)
@@ -169,11 +172,12 @@
                             :else
                             (take (get-group-limit group) items))))
         node-exists? (let [blocks-result (keep :source-block (get-in results [:nodes :items]))]
-                       (when-not (string/blank? input)
+                       (when-not (string/blank? normalized-input)
                          (some (fn [block]
                                  (and
                                   (:page? block)
-                                  (= input (util/page-name-sanity-lc (:block.temp/original-title block))))) blocks-result)))
+                                  (= (util/page-name-sanity-lc normalized-input)
+                                     (util/page-name-sanity-lc (:block.temp/original-title block))))) blocks-result)))
         existing-page-names (let [blocks-result (keep :source-block (get-in results [:nodes :items]))]
                               (->> blocks-result
                                    (filter :page?)
@@ -192,8 +196,8 @@
                   ["Nodes" :nodes (visible-items :nodes)]]
 
                  include-slash?
-                 [(when-not node-exists?
-                    ["Create" :create (create-items input)])
+                 [(when-let [items (create-items input)]
+                    ["Create" :create items])
 
                   ["Current page" :current-page (visible-items :current-page)]
                   ["Nodes" :nodes (visible-items :nodes)]
@@ -206,8 +210,8 @@
                   [(if (= filter-group :current-page) "Current page" (name filter-group))
                    filter-group
                    (visible-items filter-group)]
-                  (when-not node-exists?
-                    ["Create" :create (create-items input)])]
+                  (when-let [items (create-items input)]
+                    ["Create" :create items])]
 
                  :else
                  (let [;; "From Web" section - Wikidata entity search results
@@ -229,7 +233,7 @@
                        has-local-matches?
                        (if (< (count (string/trim input)) 3)
                          true ;; Short queries: always Nodes first
-                         (let [query-words (string/split (string/lower-case (string/trim input)) #"\s+")
+                         (let [query-words (string/split (string/lower-case (string/trim normalized-input)) #"\s+")
                                system-prefix? (fn [title-lc]
                                                 (or (string/starts-with? title-lc "wikidata-")
                                                     (string/starts-with? title-lc "avatar-")))]
@@ -245,8 +249,8 @@
                                                       query-words))))))
                                  (visible-items :nodes))))]
                    (->>
-                    [(when-not node-exists?
-                       ["Create" :create (create-items input)])
+                    [(when-let [items (create-items input)]
+                       ["Create" :create items])
                      (if has-local-matches?
                        ["Current page" :current-page (visible-items :current-page)]
                        from-web)
