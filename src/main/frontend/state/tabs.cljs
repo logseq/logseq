@@ -1,8 +1,14 @@
 (ns frontend.state.tabs
   "State management for tabs feature"
-  (:require [frontend.state :as state]
+  (:require [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]
             [frontend.util :as util]
             [rum.core :as rum]))
+
+(defn tabs-enabled?
+  "Tabs are only available on desktop (Electron) and web platforms, not on mobile native (iOS/Android)."
+  []
+  (not (mobile-util/native-platform?)))
 
 (defn generate-tab-id []
   (str (random-uuid)))
@@ -78,9 +84,9 @@
                  (get-tabs))))
 
 (defn init-tabs!
-  "Initialize tabs feature with a default tab"
+  "Initialize tabs feature with a default tab (desktop/web only)"
   []
-  (when (empty? (get-tabs))
+  (when (and (tabs-enabled?) (empty? (get-tabs)))
     (let [tab-id (generate-tab-id)
           initial-tab {:id tab-id
                        :page-id nil
