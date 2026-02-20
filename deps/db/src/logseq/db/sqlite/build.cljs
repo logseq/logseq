@@ -126,6 +126,45 @@
          :original-property-id k
          :logseq.property/type prop-type}))))
 
+(declare ->property-value-tx-m)
+
+(defn- build-pvalue [properties-config all-idents closed-value-id v]
+  (let [pvalue-uuid (or (:block/uuid v) (random-uuid))
+        nested-pvalue-tx-m
+        (when (seq (:build/properties v))
+          (some-> (->property-value-tx-m {:block/uuid pvalue-uuid}
+                                         (:build/properties v)
+                                         properties-config
+                                         all-idents)
+                  ;; add :db/id to ensure datascript consistently creates this new tx
+                  (update-vals (fn [prop-val]
+                                 (cond
+                                   (map? prop-val)
+                                   (assoc prop-val :db/id (new-db-id))
+                                   (set? prop-val)
+                                   (set (map #(if (map? %)
+                                                (assoc % :db/id (new-db-id))
+                                                %)
+                                             prop-val))
+                                   :else
+                                   prop-val)))))]
+    {:attributes
+     (when (:build/property-value v)
+       (merge (:build/properties v)
+              nested-pvalue-tx-m
+              {:block/tags (mapv #(hash-map :db/ident (get-ident all-idents %))
+                                 (:build/tags v))}
+              (select-keys v [:block/created-at :block/updated-at])
+              {:block/uuid pvalue-uuid}))
+     :value
+     (cond
+       closed-value-id
+       closed-value-id
+       (:build/property-value v)
+       (or (:logseq.property/value v) (:block/title v))
+       :else
+       v)}))
+
 (defn- ->property-value-tx-m
   "Given a new block and its properties, creates a map of properties which have values of property value tx.
    This map is used for both creating the new property values and then adding them to a block.
@@ -140,25 +179,8 @@
                                                                (when (= (:value item) v)
                                                                  (:uuid item)))
                                                              (get property :build/closed-values)))
-                        build-pvalue
-                        (fn build-pvalue [v]
-                          {:attributes
-                           (when (:build/property-value v)
-                             (merge (:build/properties v)
-                                    {:block/tags (mapv #(hash-map :db/ident (get-ident all-idents %))
-                                                       (:build/tags v))}
-                                    (select-keys v [:block/created-at :block/updated-at :block/uuid])))
-                           :value
-                           (cond
-                             closed-value-id
-                             closed-value-id
-
-                             (:build/property-value v)
-                             (or (:logseq.property/value v) (:block/title v))
-
-                             :else
-                             v)})]
-                    (if (set? v) (set (map build-pvalue v)) (build-pvalue v)))])))
+                        build-pvalue' #(build-pvalue properties-config all-idents closed-value-id %)]
+                    (if (set? v) (set (map build-pvalue' v)) (build-pvalue' v)))])))
        ((fn [x]
           (db-property-build/build-property-values-tx-m new-block x {:pvalue-map? true})))))
 
@@ -394,15 +416,21 @@
                                    (map #(-> (:blocks %) vec (conj (:page %))))
                                    (mapcat (fn build-node-props-vec [nodes]
                                              (mapcat (fn [m]
-                                                       (if-let [pvalue-pages
-                                                                (->> (vals (:build/properties m))
-                                                                     (mapcat #(if (set? %) % [%]))
-                                                                     (filter page-prop-value?)
-                                                                     (map second)
-                                                                     seq)]
-                                                         (into (vec (:build/properties m))
-                                                               (build-node-props-vec pvalue-pages))
-                                                         (:build/properties m)))
+                                                       (let [nested-pvalue-pages
+                                                             (->> (vals (:build/properties m))
+                                                                  (mapcat #(if (set? %) % [%]))
+                                                                  (keep #(cond
+                                                                           (page-prop-value? %)
+                                                                           (second %)
+                                                                           (and (map? %) (:build/property-value %))
+                                                                           %
+                                                                           :else
+                                                                           nil))
+                                                                  seq)]
+                                                         (if nested-pvalue-pages
+                                                           (into (vec (:build/properties m))
+                                                                 (build-node-props-vec nested-pvalue-pages))
+                                                           (:build/properties m))))
                                                      nodes)))
                                    set)
         property-properties (->> (vals properties)
