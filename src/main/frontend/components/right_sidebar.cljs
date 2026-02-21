@@ -7,6 +7,7 @@
             [frontend.components.onboarding :as onboarding]
             [frontend.components.page :as page]
             [frontend.components.profiler :as profiler]
+            [frontend.components.repl :as repl-ui]
             [frontend.components.shortcut-help :as shortcut-help]
             [frontend.components.vector-search.sidebar :as vector-search]
             [frontend.config :as config]
@@ -93,7 +94,7 @@
   [repo idx db-id block-type *db-id init-key]
   (->
    (p/do!
-    (when-not (contains? #{:contents :search} block-type)
+    (when-not (contains? #{:contents :search :repl} block-type)
       (db-async/<get-block repo db-id))
     (let [lookup (cond
                    (integer? db-id) db-id
@@ -154,6 +155,10 @@
         :vector-search
         [[:.flex.items-center (ui/icon "file-search" {:class "text-md mr-2"}) "(Dev) VectorSearch"]
          (vector-search/vector-search-sidebar)]
+
+        :repl
+        [[:.flex.items-center (ui/icon "terminal-2" {:class "text-md mr-2"}) "REPL"]
+         (repl-ui/repl-sidebar)]
 
         ["" [:span]])))
    (p/catch (fn [error]
@@ -458,7 +463,12 @@
           [:div.text-sm
            [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                                        (state/sidebar-add-block! repo "profiler" :profiler))}
-            "(Dev) Profiler"]])]]
+            "(Dev) Profiler"]])
+        (when (state/sub [:ui/developer-mode?])
+          [:div.text-sm
+           [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+                                                                       (state/sidebar-add-block! repo "repl" :repl))}
+            "(Dev) REPL"]])]]
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing.px-2
        (if @*anim-finished?
