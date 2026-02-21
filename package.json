@@ -62,7 +62,7 @@
         "release-mobile": "run-s gulp:buildMobile cljs:release-mobile webpack-mobile-build",
         "dev-release-app": "run-s gulp:build cljs:dev-release-app webpack-app-build",
         "dev-electron-app": "gulp electron",
-        "release-electron": "run-s gulp:build && yarn webpack-app-build && gulp electronMaker",
+        "release-electron": "run-s gulp:build && gulp electronMaker",
         "debug-electron": "cd static/ && yarn electron:debug",
         "webpack-watch": "webpack --watch",
         "webpack-app-watch": "npx webpack --watch --config-name app",
