@@ -13,6 +13,7 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
+            [frontend.state.tabs :as tabs-state]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
@@ -37,6 +38,16 @@
    (redirect-to-home! true))
   ([pub-event?]
    (when pub-event? (state/pub-event! [:redirect-to-home]))
+   ;; Update current tab to show Journals/Home
+   (let [existing-tab (tabs-state/find-tab-by-page "all-journals")]
+     (if existing-tab
+       ;; Switch to existing all-journals tab
+       (tabs-state/set-active-tab-id! (:id existing-tab))
+       ;; Update current active tab
+       (tabs-state/update-active-tab! {:page-id nil
+                                       :page-name "all-journals"
+                                       :page-uuid nil
+                                       :title "Journals"})))
    (redirect! {:to :home})))
 
 (defn redirect-to-all-pages!
@@ -74,7 +85,7 @@
   "`page-name` can be a block uuid or name, prefer to use uuid than name when possible"
   ([page-name]
    (redirect-to-page! page-name {}))
-  ([page-name {:keys [anchor push click-from-recent? block-id ignore-alias?]
+  ([page-name {:keys [anchor push click-from-recent? block-id ignore-alias? skip-auto-tab?]
                :or {click-from-recent? false}
                :as opts}]
    (when (or (uuid? page-name)
@@ -89,6 +100,19 @@
            (do
              (when-let [db-id (:db/id page)]
                (recent-handler/add-page-to-recent! db-id click-from-recent?))
+             ;; Update current active tab or switch to existing tab with this page
+             (when (and page (not skip-auto-tab?))
+               (let [page-uuid (:block/uuid page)
+                     page-name-lc (:block/name page)
+                     existing-tab (tabs-state/find-tab-by-page (or page-uuid page-name-lc))]
+                 (if existing-tab
+                   ;; Tab exists - switch to it
+                   (tabs-state/set-active-tab-id! (:id existing-tab))
+                   ;; No tab exists - update current active tab with new page
+                   (tabs-state/update-active-tab! {:page-id (:db/id page)
+                                                   :page-name page-name-lc
+                                                   :page-uuid page-uuid
+                                                   :title (or (:block/title page) page-name-lc (str page-uuid))}))))
              (let [m (cond->
                       (default-page-route (str page-name))
 
@@ -182,6 +206,35 @@
   (swap! state/state assoc :route-match route)
   (update-page-title! route)
   (update-page-label! route)
+  ;; Update tabs when navigating via history (forward/back)
+  (when-let [route-name (get-in route [:data :name])]
+    (cond
+      ;; Handle page route
+      (= route-name :page)
+      (when-let [page-name (get-in route [:path-params :name])]
+        (when-let [page (db/get-page page-name)]
+          (let [page-uuid (:block/uuid page)
+                page-name-lc (:block/name page)
+                existing-tab (tabs-state/find-tab-by-page (or page-uuid page-name-lc))]
+            (if existing-tab
+              ;; Tab exists - switch to it
+              (tabs-state/set-active-tab-id! (:id existing-tab))
+              ;; No tab exists - update current active tab with new page
+              (tabs-state/update-active-tab! {:page-id (:db/id page)
+                                              :page-name page-name-lc
+                                              :page-uuid page-uuid
+                                              :title (or (:block/title page) page-name-lc (str page-uuid))})))))
+      ;; Handle home/journals route
+      (or (= route-name :home) (= route-name :all-journals))
+      (let [existing-tab (tabs-state/find-tab-by-page "all-journals")]
+        (if existing-tab
+          ;; Switch to existing all-journals tab
+          (tabs-state/set-active-tab-id! (:id existing-tab))
+          ;; Update current active tab with Journals info
+          (tabs-state/update-active-tab! {:page-id nil
+                                          :page-name "all-journals"
+                                          :page-uuid nil
+                                          :title "Journals"})))))
   (when-let [anchor (get-in route [:query-params :anchor])]
     (jump-to-anchor! anchor)))
 
@@ -212,5 +265,15 @@
   (let [route (if (state/custom-home-page?)
                 :all-journals
                 :home)]
+    ;; Always update current tab to show Journals when navigating to journals
+    (let [existing-tab (tabs-state/find-tab-by-page "all-journals")]
+      (if existing-tab
+        ;; Switch to existing all-journals tab
+        (tabs-state/set-active-tab-id! (:id existing-tab))
+        ;; Update current active tab with Journals info
+        (tabs-state/update-active-tab! {:page-id nil
+                                        :page-name "all-journals"
+                                        :page-uuid nil
+                                        :title "Journals"})))
     (redirect! {:to route}))
   (util/scroll-to-top))

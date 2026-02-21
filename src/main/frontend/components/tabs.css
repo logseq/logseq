@@ -1,0 +1,107 @@
+/* Tab bar styles */
+.tabs-container {
+  display: flex;
+  flex: 1 1 0%;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-app-region: drag;
+}
+
+/* Keep the container pointer-events active so on-mouse-enter fires for reveal.
+   Only disable clicks on the tab items themselves. */
+.tabs-container.tabs-typing-hidden {
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.tabs-container.tabs-typing-hidden .tabs-bar {
+  pointer-events: none;
+}
+
+.tabs-bar {
+  display: flex;
+  align-items: center;
+  height: 38px;
+  min-width: 0;
+  overflow: visible;
+  gap: 2px;
+  padding: 0 0 0 4px;
+  -webkit-app-region: drag;
+  background: transparent;
+  width: 100%;
+}
+
+.tab-item {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 6px 6px 8px;
+  min-width: 40px;
+  max-width: 200px;
+  flex: 1 1 0%;
+  background: transparent;
+  border-radius: 6px;
+  cursor: grab;
+  transition: background 0.1s, opacity 0.1s;
+  -webkit-app-region: no-drag;
+  opacity: 0.7;
+  border: 1px solid transparent;
+}
+
+.tab-item:not(.active):hover {
+  background: var(
+    --lx-gray-04,
+    var(--ls-quaternary-background-color, var(--rx-gray-04))
+  );
+  opacity: 1;
+}
+
+.tab-item.active {
+  background: var(--ls-primary-background-color);
+  opacity: 1;
+  border: 1px solid
+    var(--lx-gray-05, var(--ls-tertiary-border-color, var(--rx-gray-05)));
+}
+
+.tab-item.chrome-dragging {
+  cursor: grabbing;
+  opacity: 1;
+  user-select: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.tab-title {
+  flex: 1 1 0%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.2s, background 0.2s;
+}
+
+/* Show close button on active tab */
+.tab-item.active .tab-close {
+  opacity: 0.6;
+}
+
+/* Show close button on hover for any tab */
+.tab-item:hover .tab-close {
+  opacity: 0.6;
+}
+
+.tab-close:hover {
+  opacity: 1 !important;
+  background: var(--ls-quaternary-background-color);
+}

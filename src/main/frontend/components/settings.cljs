@@ -419,6 +419,14 @@
           preferred-pasting-file?
           config-handler/toggle-preferred-pasting-file!))
 
+(defn auto-hide-tabs-typing-row [auto-hide-tabs-typing?]
+  (toggle "auto_hide_tabs_typing"
+          ["Auto hide tabs when typing"
+           (ui/tooltip [:span.flex.px-2 (svg/info)]
+                       [:span.block.w-64 "Auto hides the tabs when typing, visible again when you're trying to switch tabs: either using mouse pointer or keyboard shortcuts."])]
+          auto-hide-tabs-typing?
+          ui-handler/toggle-auto-hide-tabs-typing!))
+
 (defn auto-expand-row [t auto-expand-block-refs?]
   (toggle "auto_expand_block_refs"
           [(t :settings-page/auto-expand-block-refs)
@@ -632,7 +640,8 @@
         enable-tooltip? (state/enable-tooltip?)
         enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
         show-brackets? (state/show-brackets?)
-        wide-mode? (state/sub :ui/wide-mode?)]
+        wide-mode? (state/sub :ui/wide-mode?)
+        auto-hide-tabs-typing? (state/sub :ui/auto-hide-tabs-typing?)]
 
     [:div.panel-wrap.is-editor
      (date-format-row t preferred-date-format)
@@ -648,7 +657,8 @@
        (shortcut-tooltip-row t enable-shortcut-tooltip?))
      (when-not (or (util/mobile?) (mobile-util/native-platform?))
        (tooltip-row t enable-tooltip?))
-     (enable-all-pages-public-row t enable-all-pages-public?)]))
+     (enable-all-pages-public-row t enable-all-pages-public?)
+     (auto-hide-tabs-typing-row auto-hide-tabs-typing?)]))
 
 (rum/defc settings-advanced < rum/reactive
   []

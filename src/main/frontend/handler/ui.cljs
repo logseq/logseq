@@ -162,6 +162,11 @@
   (storage/set :ui/wide-mode (not (state/get-wide-mode?)))
   (state/toggle-wide-mode!))
 
+(defn toggle-auto-hide-tabs-typing!
+  []
+  (storage/set :ui/auto-hide-tabs-typing (not (state/auto-hide-tabs-typing?)))
+  (state/toggle-auto-hide-tabs-typing!))
+
 ;; auto-complete
 (defn- reorder-matched
   "Reorder matched if grouped"

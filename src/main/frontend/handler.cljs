@@ -37,6 +37,7 @@
             [frontend.persist-db :as persist-db]
             [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
+            [frontend.state.tabs :as tabs-state]
             [frontend.util :as util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -142,6 +143,9 @@
 
     (i18n/start)
     (instrument/init)
+    
+    ;; Initialize tabs feature
+    (tabs-state/init-tabs!)
 
     (react/run-custom-queries-when-idle!)
 

@@ -52,6 +52,7 @@
             [frontend.handler.reaction :as reaction-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
+            [frontend.handler.tabs :as tabs-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mixins :as mixins]
@@ -560,8 +561,14 @@
             source-page (and (not ignore-alias?)
                              (or (first (:block/_alias page-entity))
                                  (db-async/<get-block-source (state/get-current-repo) (:db/id page-entity))))
-            page (or source-page page-entity)]
+            page (or source-page page-entity)
+            cmd-key? (or (.-metaKey e) (.-ctrlKey e))]
       (cond
+        ;; Cmd+click or Ctrl+click - open in new tab
+        (and cmd-key? page (not (.-shiftKey e)))
+        (tabs-handler/open-tab-by-page! (or (:block/uuid page) (:block/name page))
+                                        {:new-tab? true})
+        
         (gobj/get e "shiftKey")
         (when page
           (state/sidebar-add-block!
