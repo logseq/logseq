@@ -7,7 +7,14 @@
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.property :as db-property]
-            [logseq.outliner.datascript-report :as ds-report]))
+            [logseq.outliner.datascript-report :as ds-report]
+            [lambdaisland.glogi :as log]
+            [lambdaisland.glogi.console :as glogi-console]))
+
+
+(glogi-console/install!)
+
+
 
 (defn filter-deleted-blocks
   [datoms]
@@ -83,13 +90,21 @@
 
 (defn ^:api page-or-object?-helper
   [block]
-  (and (de/entity? block)
+  (do
+    (do
+      (log/info :helper-block block)
+      (if (de/entity? block) (log/info :ent "Y") (log/info :ent "n"))
+      (if (ldb/page? block) (log/info :pag "Y") (log/info :pag "n"))
+      (if (ldb/object? block) (log/info :obj "Y") (log/info :obj "n"))
+      )
+  
+    (and (de/entity? block)
        (or (ldb/page? block)
            (ldb/object? block))
        ;; Don't allow :default property value objects to reference their
        ;; parent block as they are dependent on their block for display
        ;; and look weirdly recursive - https://github.com/logseq/db-test/issues/36
-       (not (:logseq.property/created-from-property block))))
+       (not (:logseq.property/created-from-property block)))) )
 
 (defn db-rebuild-block-refs
   "Rebuild block refs for DB graphs, should returns ids"
@@ -109,15 +124,26 @@
         page-or-object? (or page-or-object?-memoized page-or-object?-helper)
         property-value-refs (->> properties
                                  (mapcat (fn [[property v]]
+                                          (do
+                                            (log/info :CHECKING_PROP property)
                                            (cond
                                              (and (coll? v) (every? page-or-object? v))
-                                             (map :db/id v)
+                                             (do 
+                                             (log/info :MULT (map :block/title v))
+                                             (map :db/id v))
 
+                                             
                                              (page-or-object? v)
-                                             [(:db/id v)]
-
+                                             (do 
+                                             (log/info :UNO (:block/title v))
+                                             [(:db/id v)])
+											
+                                             ;; DEBUG only single node properties
+                                             (not (page-or-object? v))
+                                             (log/info :noFUNKO (:block/title v))
+											
                                              :else
-                                             (build-journal-refs-for-datetime-properties db property v)))))
+                                             (build-journal-refs-for-datetime-properties db property v))))))
         property-refs (concat property-key-refs property-value-refs)
         content-refs (block-content-refs db block)]
     (->> (concat (map ref->eid (:block/tags block))
@@ -130,7 +156,8 @@
                       (identical? block-db-id (:db/id (d/entity db %)))))
          ;; Remove alias ref to avoid recursive display bugs
          (remove #(some (fn [alias-id] (identical? alias-id %)) (map :db/id (:block/alias block))))
-         (remove nil?))))
+         (remove nil?)
+		 (#(do (log/info :please property-value-refs) property-value-refs)) )))
 
 (defn- rebuild-block-refs-tx
   [{:keys [db-after]} blocks]
