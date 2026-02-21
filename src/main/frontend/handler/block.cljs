@@ -94,8 +94,9 @@
 (defn block-unique-title
   "Multiple pages/objects may have the same `:block/title`.
    Notice: this doesn't prevent for pages/objects that have the same tag or created by different clients."
-  [block & {:keys [with-tags? alias]
-            :or {with-tags? true}}]
+  [block & {:keys [with-tags? alias truncate?]
+            :or {with-tags? true
+                 truncate? true}}]
   (if (ldb/built-in? block)
     (:block/title block)
     (let [block-e (cond
@@ -105,16 +106,20 @@
                     (db/entity [:block/uuid (:block/uuid block)])
                     :else
                     block)
-          tags (remove (fn [t]
-                         (or (some-> (:block/raw-title block-e) (ldb/inline-tag? t))
-                             (ldb/private-tags (:db/ident t))))
-                       (map (fn [tag] (if (number? tag) (db/entity tag) tag)) (:block/tags block)))
-          title (cond
-                  (ldb/class? block)
-                  (ldb/get-class-title-with-extends block)
-
-                  (and with-tags? (seq tags))
-                  (str (:block/title block)
+          class? (ldb/class? block)
+          tags (when (and with-tags? (not class?))
+                 (remove (fn [t]
+                           (or (some-> (:block/raw-title block-e) (ldb/inline-tag? t))
+                               (ldb/private-tags (:db/ident t))))
+                         (map (fn [tag] (if (number? tag) (db/entity tag) tag)) (:block/tags block))))
+          base-title (if class?
+                       (ldb/get-class-title-with-extends block)
+                       (:block/title block))
+          trunc-title (if (and truncate? base-title (> (count base-title) 256))
+                        (subs base-title 0 256)
+                        base-title)
+          title (if (seq tags)
+                  (str (or trunc-title "")
                        " "
                        (string/join
                         ", "
@@ -122,10 +127,9 @@
                                 (when-let [title (:block/title tag)]
                                   (str "#" title)))
                               tags)))
-                  :else
-                  (:block/title block))]
+                  trunc-title)]
       (when title
-        (str (subs title 0 256)
+        (str title
              (when alias
                (str " -> alias: " alias)))))))
 
