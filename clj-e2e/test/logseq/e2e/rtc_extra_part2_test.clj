@@ -1,16 +1,22 @@
 (ns logseq.e2e.rtc-extra-part2-test
   (:require [clojure.java.io :as io]
-            [clojure.test :refer [deftest testing is use-fixtures run-test]]
+            [clojure.string :as string]
+            [clojure.test :as t :refer [deftest testing is use-fixtures run-test]]
             [jsonista.core :as json]
             [logseq.e2e.block :as b]
             [logseq.e2e.const :refer [*page1 *page2 *graph-name*]]
+            [logseq.e2e.assets :as e2e-assets]
             [logseq.e2e.fixtures :as fixtures]
             [logseq.e2e.graph :as graph]
+            [logseq.e2e.keyboard :as k]
             [logseq.e2e.page :as page]
             [logseq.e2e.rtc :as rtc]
             [logseq.e2e.util :as util]
             [wally.main :as w]
             [wally.repl :as repl]))
+
+(def ^:private only-asset-restore-test?
+  (= "1" (System/getenv "LOGSEQ_E2E_ONLY_ASSET_RESTORE")))
 
 (use-fixtures :once
   fixtures/open-2-pages
@@ -20,6 +26,16 @@
   fixtures/new-logseq-page-in-rtc)
 
 ;;; https://github.com/logseq/db-test/issues/651
+(defn test-ns-hook
+  []
+  (let [ns-obj (the-ns 'logseq.e2e.rtc-extra-part2-test)]
+    (if only-asset-restore-test?
+      (let [v (ns-resolve ns-obj 'asset-blocks-validate-after-init-downloaded-test)]
+        (when-not (var? v)
+          (throw (ex-info "missing asset restore test var" {:var v})))
+        (t/test-vars [v]))
+      (t/test-all-vars ns-obj))))
+
 (deftest issue-651-block-title-double-transit-encoded-test
   (testing "
 1. create pages named \"bbb\", \"aaa\", and turn these pages into tag
@@ -110,16 +126,47 @@ wait for 5-10 seconds, will found that \"aaa/bbb\" became \"aaa/<encrypted-strin
 - remove local graph in client2
 - re-download the remote graph in client2
 - compare asset-blocks data in both clients"
-    (let [asset-file "../assets/icon.png"
-          page-title (w/with-page @*page1 (page/get-page-name))]
+    (let [temp-asset-path (java.nio.file.Files/createTempFile
+                           "logseq-e2e-asset-"
+                           ".txt"
+                           (into-array java.nio.file.attribute.FileAttribute []))
+          _ (spit (.toFile temp-asset-path)
+                  (str "logseq e2e asset " (System/currentTimeMillis)))
+          asset-path temp-asset-path
+          page-title (w/with-page @*page1 (page/get-page-name))
+          asset-block-uuid* (atom nil)
+          asset-filename* (atom nil)]
       (w/with-page @*page1
         (let [p (w/get-page)]
-          (.onFileChooser p (reify java.util.function.Consumer
-                              (accept [_ fc]
-                                (.setFiles fc (into-array java.nio.file.Path [(java.nio.file.Paths/get asset-file (into-array String []))])))))
-          (b/new-block "asset block")
-          (util/input-command "Upload an asset")
-          (w/wait-for ".ls-block img")))
+          ;; Create a new empty block first. Asset insert behaves differently
+          ;; based on whether the current block is empty.
+          (b/open-last-block)
+          (k/enter)
+          (util/wait-editor-visible)
+          (let [before (e2e-assets/list-assets *graph-name*)
+                chooser (.waitForFileChooser
+                         p
+                         (reify Runnable
+                           (run [_]
+                             (util/input-command "Upload an asset"))))]
+            (.setFiles chooser (into-array java.nio.file.Path [asset-path]))
+            ;; Prefer inspecting lightning-fs directly. UI rendering can lag,
+            ;; and reused graphs can already contain older assets.
+            (let [filename (e2e-assets/wait-for-new-asset! *graph-name* before 60000)
+                  asset-block-uuid (some-> filename (string/replace #"\.[^.]+$" ""))]
+              (reset! asset-block-uuid* asset-block-uuid)
+              (reset! asset-filename* filename)
+              (is (string? asset-block-uuid)
+                  (pr-str {:graph *graph-name*
+                           :asset-block-uuid asset-block-uuid
+                           :assets-before (vec before)
+                           :assets (e2e-assets/list-assets *graph-name*)}))
+              ;; Local sanity: the uploader should have written bytes locally.
+              (is (true? (e2e-assets/wait-for-asset! *graph-name* filename 60000))
+                  (pr-str {:graph *graph-name*
+                           :asset-block-uuid asset-block-uuid
+                           :asset-filename filename
+                           :assets (e2e-assets/list-assets *graph-name*)}))))))
 
       (let [{:keys [remote-tx]}
             (w/with-page @*page1
@@ -129,14 +176,45 @@ wait for 5-10 seconds, will found that \"aaa/bbb\" became \"aaa/<encrypted-strin
           (rtc/wait-tx-update-to remote-tx)))
 
       (w/with-page @*page2
-        (graph/remove-local-graph *graph-name*)
-        (graph/wait-for-remote-graph *graph-name*)
-        (graph/switch-graph *graph-name* true false)
-        (page/goto-page page-title)
-        (w/wait-for ".ls-block img")
-        (is (some? (.getAttribute (w/-query ".ls-block img") "src"))))
+        (let [asset-filename @asset-filename*
+              asset-block-uuid @asset-block-uuid*]
+          (is (string? asset-filename))
+          ;; Precondition: the asset *block* is synced to client2. The bytes may
+          ;; or may not have been downloaded yet, depending on the build.
+          (page/goto-page page-title)
+          (w/wait-for (format ".ls-block[blockid='%s']" asset-block-uuid)
+                      {:timeout 60000})
 
-      (rtc/validate-graphs-in-2-pw-pages))))
+          (graph/remove-local-graph *graph-name*)
+          (e2e-assets/clear-assets-dir! *graph-name*)
+          (is (not (some #(= asset-filename %) (e2e-assets/list-assets *graph-name*)))
+              (pr-str {:graph *graph-name* :asset-filename asset-filename}))
+
+          (graph/wait-for-remote-graph *graph-name*)
+          (graph/switch-graph *graph-name* true true)
+
+          ;; Regression assertion: assets should be restored as part of the
+          ;; download flow (no "visit each asset page to trigger download").
+          (let [preloaded? (e2e-assets/wait-for-asset! *graph-name* asset-filename 120000)]
+            (when-not preloaded?
+              (page/goto-page page-title)
+              (let [demand-loaded? (e2e-assets/wait-for-asset! *graph-name* asset-filename 60000)]
+                (is (true? preloaded?)
+                    (pr-str {:graph *graph-name*
+                             :asset-block-uuid asset-block-uuid
+                             :asset-filename asset-filename
+                             :reason (if demand-loaded?
+                                       :downloaded-only-after-page-visit
+                                       :asset-never-downloaded)
+                             :assets (e2e-assets/list-assets *graph-name*)}))))
+
+            (page/goto-page page-title)
+            ;; UI sanity: the asset block is present on the page.
+            (w/wait-for (format ".ls-block[blockid='%s']" asset-block-uuid)
+                        {:timeout 60000}))))
+
+      (when-not only-asset-restore-test?
+        (rtc/validate-graphs-in-2-pw-pages)))))
 
 (deftest issue-683-paste-large-block-test
   (testing "Copying and pasting a large block of text into sync-ed graph causes sync to fail"

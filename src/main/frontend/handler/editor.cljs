@@ -1235,7 +1235,8 @@
       (let [value (string/trim value)]
         ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
         ;; maybe we shouldn't save in "will-unmount" event?
-        (save-block-if-changed! block value opts)))))
+        (when-not (and (ldb/asset? entity) (string/blank? value))
+          (save-block-if-changed! block value opts))))))
 
 (defn save-block!
   ([repo block-or-uuid content]
@@ -1318,7 +1319,8 @@
           [file external-url] (if (string? file) [nil file] [file external-url])
           file-name (node-path/basename (or (some-> file (.-name)) (str external-url)))
           file-name-without-ext* (db-asset/asset-name->title file-name)
-          file-name-without-ext (if (= file-name-without-ext* "image")
+          file-name-without-ext (if (or (= file-name-without-ext* "image")
+                                        (string/blank? file-name-without-ext*))
                                   (date/get-date-time-string-2)
                                   file-name-without-ext*)
           checksum (some-> (or file external-url) (assets-handler/get-file-checksum))
@@ -1347,7 +1349,8 @@
          (when file
            (let [file-path (str block-id "." ext)]
              (db-based-write-asset! repo file-path file)))
-         {:block/title (or title file-name-without-ext)
+         {:block/title (or (some-> title util/trim-safe not-empty)
+                           file-name-without-ext)
           :block/uuid block-id
           :logseq.property.asset/type ext
           :logseq.property.asset/external-url external-url

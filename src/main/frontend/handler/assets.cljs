@@ -226,7 +226,9 @@
   (let [repo-dir (config/get-repo-dir repo)
         file-path (path/path-join common-config/local-assets-dir
                                   (str asset-block-id "." asset-type))]
-    (fs/read-file-raw repo-dir file-path {})))
+    (p/let [data (fs/read-file-raw repo-dir file-path {})]
+      (or data
+          (throw (ex-info "file not existed" {:path file-path}))))))
 
 (defn <get-asset-file-metadata
   [repo asset-block-id asset-type]
