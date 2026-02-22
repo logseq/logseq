@@ -1,6 +1,7 @@
 (ns frontend.extensions.graph
   (:require [cljs-bean.core :as bean]
             [frontend.extensions.graph.pixi :as pixi]
+            [frontend.extensions.graph.position-cache :as position-cache]
             [frontend.handler.route :as route-handler]
             [frontend.colors :as colors]
             [frontend.db :as db]
@@ -56,6 +57,7 @@
                           (select-keys (first (:rum/args new-state))
                                        [:nodes :links :dark? :link-dist :charge-strength :charge-range])))
    :will-unmount (fn [state]
+                   (position-cache/capture-positions! (:nodes @pixi/*graph-instance))
                    (reset! pixi/*graph-instance nil)
                    state)}
   [state _opts]
