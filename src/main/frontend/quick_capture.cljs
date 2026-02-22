@@ -29,6 +29,9 @@
           redirect-page? (get-in (state/get-config)
                                  [:quick-capture-options :redirect-page?]
                                  false)
+          prettify-url? (get-in (state/get-config)
+                                [:quick-capture-option :prettify-url?]
+                                true)
           today-page (string/lower-case today)
           current-page (state/get-current-page) ;; empty when in journals page
           default-page (get-in (state/get-config)
@@ -58,10 +61,10 @@
                  (string/blank? url)
                  title
 
-                 (boolean (text-util/get-matched-video url))
+                 (and prettify-url? (boolean (text-util/get-matched-video url)))
                  (str title " {{video " url "}}")
 
-                 (is-tweet-link url)
+                 (and prettify-url? (is-tweet-link url))
                  (util/format "{{twitter %s}}" url)
 
                  (= title url)
