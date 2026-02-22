@@ -74,7 +74,7 @@
     "postcss": "^8.4.31",
     "postcss-loader": "^7.3.3",
     "postcss-nesting": "^12.0.1",
-    "storybook": "^7.5.3",
+    "storybook": "^7.6.21",
     "string-width": "4.2.0",
     "strip-ansi": "^6",
     "style-loader": "3.3.1"
