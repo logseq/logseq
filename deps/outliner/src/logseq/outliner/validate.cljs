@@ -126,6 +126,7 @@
 (defn validate-block-title
   "Validates a block title when it has changed for a ldb/page? or tagged node"
   [db new-title existing-block-entity]
+  ;; TODO: this function doesnt do anything for objects (tagged nodes), it only validates pages (maybe it shouldnt validate objects at all?, look at https://github.com/logseq/logseq/pull/12407)
   (validate-unique-by-name-and-tags db new-title existing-block-entity)
   (validate-disallow-page-with-journal-name new-title existing-block-entity))
 

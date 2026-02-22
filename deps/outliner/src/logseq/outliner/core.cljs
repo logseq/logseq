@@ -276,6 +276,7 @@
                    (or (ldb/page? block-entity) (ldb/object? block-entity))
                    (:block/title m)
                    (not= (:block/title m) (:block/title block-entity)))
+              ;; TODO: this function doesnt do anything for objects (tagged nodes), it only validates pages (maybe it shouldnt validate objects at all?, look at https://github.com/logseq/logseq/pull/12407)
               (outliner-validate/validate-block-title db (:block/title m) block-entity))]
       ;; Ensure block UUID never changes
       (let [e (d/entity db db-id)]
