@@ -84,9 +84,7 @@
 (defn ^:api page-or-object?-helper
   [block]
   (and (de/entity? block)
-       (or (ldb/page? block)
-           (ldb/object? block)
-           (:block/uuid block))
+       (ldb/normal-block? block)
        ;; Don't allow :default property value objects to reference their
        ;; parent block as they are dependent on their block for display
        ;; and look weirdly recursive - https://github.com/logseq/db-test/issues/36
