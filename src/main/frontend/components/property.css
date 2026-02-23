@@ -331,6 +331,18 @@ a.control-link {
   width: min(var(--ls-property-key-width, 160px), 40%);
 }
 
+/* Right-align property key/value dividers across indentation levels on tag pages.
+   Each level subtracts its cumulative indent so all right edges form one vertical line. */
+.ls-properties-area .tag-properties-content .property-key {
+  width: calc(var(--ls-property-key-width, 160px) - 22px);
+  max-width: none;
+}
+
+.ls-properties-area .tag-properties-content .inherited-properties-scaffold .property-key {
+  width: calc(var(--ls-property-key-width, 160px) - 45px);
+  max-width: none;
+}
+
 .ls-card-item {
     .property-key, .property-value-container {
         min-width: initial;
@@ -650,4 +662,50 @@ html.is-resizing-buf .property-row-resizer.is-active.at-limit::before {
 /* Hidden in card/embed contexts */
 .ls-card-item .property-row-resizer {
   display: none;
+}
+
+/* Inherited property group — header + collapsible properties */
+.inherited-group-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  margin-bottom: 2px;
+}
+
+/* Collapse toggle in left gutter — 16x16 box matching property icons */
+.inherited-collapse-toggle {
+  width: 16px;
+  height: 16px;
+  margin-left: -20px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.inherited-collapse-toggle svg {
+  margin-left: 0 !important;
+}
+
+/* Reveal on header hover or direct hover */
+.inherited-group-header:hover .inherited-collapse-toggle,
+.inherited-collapse-toggle:hover {
+  opacity: 0.5;
+}
+
+/* Always visible when group is collapsed */
+.inherited-group:has(.ls-foldable-content.is-collapsed) .inherited-collapse-toggle {
+  opacity: 0.5;
+}
+
+/* Scaffolding line for inherited properties */
+.inherited-properties-scaffold {
+  border-left: 1px solid;
+  border-left-color: var(--lx-gray-04-alpha, var(--ls-guideline-color, var(--rx-gray-04-alpha)));
+  padding-left: 12px;
+  margin-left: 10px;
 }

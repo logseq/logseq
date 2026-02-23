@@ -431,7 +431,7 @@
          (let [*start-width (atom nil)
                *dx (atom 0)
                *effective-max (atom 500)
-               min-width 80
+               min-width 124
                max-width 500
                sync-handles! (fn [dx-val]
                                (let [transform (if (zero? dx-val)
@@ -446,11 +446,18 @@
                      {:listeners
                       {:start (fn []
                                 (let [property-key-el (.closest el ".property-key")
-                                      current-w (if property-key-el
-                                                  (.-offsetWidth property-key-el)
-                                                  160)
-                                      ;; Compute effective max from CSS percentage constraints
+                                      ;; Read base width from CSS variable (not offsetWidth,
+                                      ;; which includes calc() adjustments for indented levels)
                                       properties-area (.closest el ".ls-properties-area")
+                                      css-var (when properties-area
+                                                (.getPropertyValue (.-style properties-area)
+                                                                   "--ls-property-key-width"))
+                                      current-w (or (when (and css-var (not (string/blank? css-var)))
+                                                      (let [v (js/parseInt css-var 10)]
+                                                        (when (js/isFinite v) v)))
+                                                    (when property-key-el
+                                                      (.-offsetWidth property-key-el))
+                                                    160)
                                       container-w (if properties-area (.-offsetWidth properties-area) 1000)
                                       in-block? (some? (.closest el ".ls-block .ls-properties-area"))
                                       pct-cap (if in-block? 0.4 0.5)
@@ -490,7 +497,9 @@
                                     (let [width-str (str final-w "px")]
                                       (doseq [area (array-seq (.querySelectorAll js/document ".ls-properties-area"))]
                                         (.setProperty (.-style area) "--ls-property-key-width" width-str)))
-                                    ;; Persist to database
+                                    ;; Persist to localStorage (survives reload immediately)
+                                    ;; and to database (for in-session reactivity)
+                                    (js/localStorage.setItem "ls-property-key-width" (str final-w))
                                     ((rum/deref *on-resize-ref) final-w)))
                                 ;; Always cleanup
                                 (sync-handles! 0)
@@ -517,6 +526,7 @@
       :on-click (fn [e] (.stopPropagation e))
       :on-double-click (fn [e]
                          (.stopPropagation e)
+                         (js/localStorage.removeItem "ls-property-key-width")
                          ((rum/deref *on-resize-ref) nil))
       :on-key-down (fn [^js e]
                      (let [step 10
@@ -529,17 +539,26 @@
                          (.preventDefault e)
                          (let [current-el (.-currentTarget e)
                                property-key-el (.closest current-el ".property-key")
-                               current-w (if property-key-el
-                                           (.-offsetWidth property-key-el)
-                                           160)
-                               ;; Compute effective max from CSS percentage constraints
+                               ;; Read base width from CSS variable (not offsetWidth,
+                               ;; which includes calc() adjustments for indented levels)
                                properties-area (.closest current-el ".ls-properties-area")
+                               css-var (when properties-area
+                                         (.getPropertyValue (.-style properties-area)
+                                                            "--ls-property-key-width"))
+                               current-w (or (when (and css-var (not (string/blank? css-var)))
+                                               (let [v (js/parseInt css-var 10)]
+                                                 (when (js/isFinite v) v)))
+                                             (when property-key-el
+                                               (.-offsetWidth property-key-el))
+                                             160)
+                               ;; Compute effective max from CSS percentage constraints
                                container-w (if properties-area (.-offsetWidth properties-area) 1000)
                                in-block? (some? (.closest current-el ".ls-block .ls-properties-area"))
                                pct-cap (if in-block? 0.4 0.5)
                                eff-max (min 500 (js/Math.floor (* container-w pct-cap)))
                                new-w (+ current-w delta)]
-                           (when (and (>= new-w 80) (<= new-w eff-max))
+                           (when (and (>= new-w 124) (<= new-w eff-max))
+                             (js/localStorage.setItem "ls-property-key-width" (str new-w))
                              ((rum/deref *on-resize-ref) new-w))))))}]))
 
 (rum/defc bidirectional-properties-section < rum/static
@@ -830,6 +849,7 @@
 
 (rum/defcs ^:large-vars/cleanup-todo properties-area < rum/reactive db-mixins/query
   (rum/local nil ::bidirectional-properties)
+  (rum/local #{} ::collapsed-parents)
   {:init (fn [state]
            (let [target-block (first (:rum/args state))
                  block (resolve-linked-block-if-exists target-block)]
@@ -838,6 +858,7 @@
                     ::block block)))}
   [state _target-block {:keys [page-title? journal-page? sidebar-properties? tag-dialog?] :as opts}]
   (let [*bidirectional-properties (::bidirectional-properties state)
+        *collapsed-parents (::collapsed-parents state)
         bidirectional-properties @*bidirectional-properties
         id (::id state)
         db-id (:db/id (::block state))
@@ -992,7 +1013,10 @@
                                                (remove (fn [[k _]] (= k :logseq.property.class/extends)))
                                                (remove (fn [[k _]] (contains? tag-settings-set k)))))
                page? (entity-util/page? block)
-               stored-width (ldb/get-key-value (db/get-db) :logseq.kv/property-key-width)]
+               stored-width (or (when-let [ls-val (js/localStorage.getItem "ls-property-key-width")]
+                                  (let [v (js/parseInt ls-val 10)]
+                                    (when (js/isFinite v) v)))
+                                (ldb/get-key-value (db/get-db) :logseq.kv/property-key-width))]
            [:div.ls-properties-area
             {:id id
              :class (util/classnames [{:ls-page-properties page?}])
@@ -1007,9 +1031,9 @@
                                      resize-handle (assoc :resize-handle resize-handle))]
               [:<>
                (if class?
-                 ;; Unified tag properties area
+                 ;; Tag properties area for class pages
                  [:<>
-                  ;; 1. Extends row (always shown for class pages)
+                  ;; 1. Extends row (outside Tag Properties — not a property that shows on tagged nodes)
                   (when extends-property
                     (let [[k v] extends-property]
                       (property-cp block k v opts-with-resize)))
@@ -1019,12 +1043,12 @@
                     [:div.mt-2
                      (properties-section block remaining-own-properties opts-with-resize)])
 
-                  ;; 3. Tag Properties — unified section with inherited + own properties
+                  ;; 3. Tag Properties section
                   (let [tag-props (->> (:logseq.property.class/properties block)
                                        (map (fn [e] [(:db/ident e)])))
                         opts' (assoc opts-with-resize :class-schema? true)
                         tag-name (:block/title block)]
-                    [:div.flex.flex-col.gap-1 {:class (when has-meaningful-extends? "mt-2")}
+                    [:div.flex.flex-col.gap-1.mt-2
                      [:div {:style {:font-size 15}}
                       [:div.property-pair
                        [:div.property-key.text-sm
@@ -1034,30 +1058,40 @@
                        [:span.text-gray-11
                         (str "#" tag-name)]
                        "."]]
-                     [:div.ml-4
-                      ;; Inherited properties (read-only, grouped by source)
+                     [:div.tag-properties-content {:style {:margin-left 22}}
+                      ;; Inherited properties (per-parent collapsible groups with scaffolding)
                       (when (and has-meaningful-extends? (seq inherited-properties-by-class))
-                        [:div.mb-2
-                         (for [{:keys [class properties]} inherited-properties-by-class]
-                           (let [class-title (:block/title class)
-                                 class-uuid (:block/uuid class)]
-                             [:div {:key (str "inherited-" (:db/id class))}
-                              [:div.text-xs.text-muted-foreground.mt-2
-                               {:style {:margin-left 6}}
+                        (for [{:keys [class properties]} inherited-properties-by-class]
+                          (let [class-title (:block/title class)
+                                class-uuid (:block/uuid class)
+                                class-id (:db/id class)
+                                collapsed? (contains? @*collapsed-parents class-id)]
+                            [:div.inherited-group {:key (str "inherited-" class-id)}
+                             [:div.inherited-group-header
+                              [:a.inherited-collapse-toggle
+                               {:on-click (fn [e]
+                                            (util/stop-propagation e)
+                                            (swap! *collapsed-parents
+                                                   (fn [s] (if (contains? s class-id)
+                                                             (disj s class-id)
+                                                             (conj s class-id)))))}
+                               [:span.control-show.cursor-pointer
+                                (ui/rotating-arrow collapsed?)]]
+                              [:span.text-xs.text-muted-foreground
                                "Inherited from "
                                [:a.cursor-pointer
                                 {:on-click (fn [] (route-handler/redirect-to-page! class-uuid))
                                  :style {:color "var(--lx-accent-11, var(--ls-link-text-color))"}}
-                                (str "#" class-title)]]
-                              [:div {:aria-readonly "true"}
-                               (properties-section block
-                                                   (mapv (fn [p] [p (get block p)]) properties)
-                                                   (assoc opts-with-resize :inherited? true))]]))])
+                                (str "#" class-title)]]]
+                             [:div.ls-foldable-content
+                              {:class (when collapsed? "is-collapsed")}
+                              [:div.ls-foldable-content-inner
+                               [:div.inherited-properties-scaffold
+                                [:div {:aria-readonly "true"}
+                                 (properties-section block
+                                                     (mapv (fn [p] [p (get block p)]) properties)
+                                                     (assoc opts-with-resize :inherited? true))]]]]])))
                       ;; Own tag properties
-                      (when has-meaningful-extends?
-                        [:div.text-xs.text-muted-foreground.mt-2
-                         {:style {:margin-left 6}}
-                         "Defined here"])
                       (properties-section block tag-props opts')
                       (bidirectional-properties-section bidirectional-properties resize-handle)
                       (hidden-properties-cp block hidden-properties
@@ -1076,3 +1110,4 @@
 
                (when (and page? (not class?))
                  (rum/with-key (new-property block opts) (str id "-add-property")))])])))]))
+
