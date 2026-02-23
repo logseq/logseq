@@ -25,8 +25,10 @@
       (.chdir js/process "/")
       (spawn-server! {:repo "logseq_db_spawn_test"
                       :data-dir "/tmp/logseq-db-worker"})
-      (is (= (node-path/join js/__dirname "../dist/db-worker-node.js")
+      (is (= (.-execPath js/process)
              (:cmd @captured)))
+      (is (= (node-path/join js/__dirname "../dist/db-worker-node.js")
+             (first (:args @captured))))
       (is (some #{"--repo"} (:args @captured)))
       (is (some #{"--data-dir"} (:args @captured)))
       (is (not-any? #{"--host" "--port"} (:args @captured)))
