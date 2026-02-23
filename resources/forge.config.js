@@ -5,6 +5,7 @@ module.exports = {
   packagerConfig: {
     name: 'Logseq',
     icon: './icons/logseq_big_sur.icns',
+    extraResource: [path.resolve(__dirname, '../dist')],
     buildVersion: "88",
     appBundleId: "com.logseq.logseq",
     protocols: [
