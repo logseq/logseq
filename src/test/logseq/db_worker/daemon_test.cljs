@@ -20,11 +20,13 @@
       (daemon/spawn-server! {:script "/tmp/db-worker-node.js"
                              :repo "logseq_db_spawn_helper_test"
                              :data-dir "/tmp/logseq-db-worker"})
-      (is (= "/tmp/db-worker-node.js" (:cmd @captured)))
+      (is (= (.-execPath js/process) (:cmd @captured)))
+      (is (= "/tmp/db-worker-node.js" (first (:args @captured))))
       (is (some #{"--repo"} (:args @captured)))
       (is (some #{"--data-dir"} (:args @captured)))
       (is (not-any? #{"--host" "--port"} (:args @captured)))
       (is (= true (get-in @captured [:opts :detached])))
+      (is (= "1" (get-in @captured [:opts :env :ELECTRON_RUN_AS_NODE])))
       (finally
         (set! (.-spawn child-process) original-spawn)))))
 
