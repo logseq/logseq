@@ -184,7 +184,9 @@
     (merge (select-keys class-ent [:block/created-at :block/updated-at]))
     (and (:logseq.property.class/properties class-ent) (not shallow-copy?))
     (assoc :build/class-properties
-           (mapv :db/ident (:logseq.property.class/properties class-ent)))
+           (->> (:logseq.property.class/properties class-ent)
+                (sort-by :block/order)
+                (mapv :db/ident)))
     (and (not shallow-copy?) include-alias? (:block/alias class-ent))
     (assoc :block/alias (set (map #(vector :block/uuid (:block/uuid %)) (:block/alias class-ent))))
     ;; It's caller's responsibility to ensure parent is included in final export
@@ -1138,9 +1140,7 @@
       (update :classes update-vals (fn [m]
                                      (cond-> m
                                        (:build/class-extends m)
-                                       (update :build/class-extends sort)
-                                       (:build/class-properties m)
-                                       (update :build/class-properties sort))))
+                                       (update :build/class-extends sort))))
       (update :properties update-vals (fn [m]
                                         (cond-> m
                                           (:build/property-classes m)
