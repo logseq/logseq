@@ -173,7 +173,7 @@
   }
 }
 
-.property-key a, .ls-new-property a {
+.property-key a {
     color: var(--ls-primary-text-color);
 }
 

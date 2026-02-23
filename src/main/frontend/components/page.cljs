@@ -271,7 +271,19 @@
        (ldb/property? page)
        "Configure"
        :else
-       "Set property"))]])
+       "Set property"))
+
+    (when (ldb/class? page)
+      (shui/button
+       {:variant :ghost
+        :size :sm
+        :class "px-2 py-0 h-6 text-xs text-muted-foreground"
+        :on-click (fn [e]
+                    (shui/popup-show! (.-target e)
+                                      (fn [] (property-config/tag-settings-dropdown page))
+                                      {:content-props {:class "ls-property-dropdown as-root"}
+                                       :align :start :as-dropdown? true :dropdown-menu? true}))}
+       "Tag settings"))]])
 
 (rum/defc db-page-title
   [page {:keys [sidebar? journals? container-id tag-dialog?]}]

@@ -1,6 +1,7 @@
 (ns frontend.components.page-menu
   (:require [frontend.commands :as commands]
             [frontend.components.export :as export]
+            [frontend.components.property.config :as property-config]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -146,6 +147,16 @@
             {:title (t :page/convert-tag-to-page)
              :options {:on-click (fn []
                                    (db-page-handler/convert-tag-to-page! page))}})
+
+          (when (and (ldb/class? page) (not (:logseq.property/built-in? page)))
+            {:title "Tag settings"
+             :options {:on-click (fn []
+                                   (let [target (js/document.querySelector ".ls-page-title-actions")]
+                                     (when target
+                                       (shui/popup-show! target
+                                                         (fn [] (property-config/tag-settings-dropdown page))
+                                                         {:content-props {:class "ls-property-dropdown as-root"}
+                                                          :align :start :as-dropdown? true :dropdown-menu? true}))))}})
 
           (when developer-mode?
             {:title   (t :dev/show-page-data)

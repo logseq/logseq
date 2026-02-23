@@ -663,8 +663,8 @@
     (let [add-new-property! (fn [e]
                               (state/pub-event! [:editor/new-property (merge opts {:block block
                                                                                    :target (.-target e)})]))]
-      [:div.ls-new-property {:style {:margin-left 7 :margin-top 1 :font-size 15}}
-       [:a.flex.jtrigger
+      [:div.ls-new-property {:style {:margin-left 2 :margin-top 1 :font-size 15}}
+       [:a.flex.jtrigger.text-gray-11.hover:text-foreground
         {:tab-index 0
          :on-click add-new-property!
          :on-key-press (fn [e]
@@ -672,7 +672,7 @@
                            (.preventDefault e)
                            (add-new-property! e)))}
         [:div.flex.flex-row.items-center.shrink-0
-         (ui/icon "plus" {:size 15 :class "opacity-50"})
+         (ui/icon "plus" {:size 16})
          [:div.ml-1 {:style {:margin-top 1}}
           "Add property"]]]])))
 
@@ -693,7 +693,7 @@
 (rum/defc property-cp <
   rum/reactive
   db-mixins/query
-  [block k v {:keys [inline-text page-cp sortable-opts] :as opts}]
+  [block k v {:keys [inline-text page-cp sortable-opts inherited?] :as opts}]
   (when (keyword? k)
     (when-let [property (db/sub-block (:db/id (db/entity k)))]
       (let [type (get property :logseq.property/type :default)
@@ -710,16 +710,20 @@
             datetime? (= type :datetime)
             checkbox? (= type :checkbox)
             number-type? (= type :number)
+            ;; Strip sortable-opts for inherited properties to prevent DnD registration
+            sortable-opts (when-not inherited? sortable-opts)
             property-key-cp' (property-key-cp block property (assoc (select-keys opts [:class-schema?])
                                                                     :block? block?
                                                                     :inline-text inline-text
                                                                     :page-cp page-cp))]
         [:div {:key (str "property-pair-" (:db/id block) "-" (:db/id property))
-               :class (cond
-                        (or date? datetime? checkbox? number-type?)
-                        "property-pair items-center"
-                        :else
-                        "property-pair items-start")
+               :class (str (cond
+                             (or date? datetime? checkbox? number-type?)
+                             "property-pair items-center"
+                             :else
+                             "property-pair items-start")
+                           (when inherited? " text-muted-foreground"))
+               :tab-index (when inherited? "-1")
                :data-property-title (:block/title property)
                :data-property-type (name type)}
          (if (seq sortable-opts)
@@ -843,18 +847,7 @@
                                             (and show?
                                                  (or (= mode :global)
                                                      (and (set? ids) (contains? ids (:block/uuid block))))))
-        properties (cond-> (:block/properties block)
-                     (and (ldb/class? block)
-                          (not (ldb/built-in? block)))
-                     (-> (assoc :logseq.property.class/enable-bidirectional?
-                                (:logseq.property.class/enable-bidirectional? block))
-                         (assoc :logseq.property.class/default-icon
-                                (:logseq.property.class/default-icon block)))
-                     ;; Show icon properties on built-in classes too
-                     (and (ldb/class? block)
-                          (ldb/built-in? block))
-                     (assoc :logseq.property.class/default-icon
-                            (:logseq.property.class/default-icon block)))
+        properties (:block/properties block)
         remove-built-in-or-other-position-properties
         (fn [properties show-in-hidden-properties?]
           (remove (fn [property]
@@ -884,8 +877,7 @@
         state-hide-empty-properties? (:ui/hide-empty-properties? (state/get-config))
         ;; This section produces own-properties and full-hidden-properties
         ;; Class properties that should always show even when empty
-        always-show-class-properties #{:logseq.property.class/enable-bidirectional?
-                                       :logseq.property.class/default-icon}
+        always-show-class-properties #{}
         hide-with-property-id (fn [property-id]
                                 (let [property (db/entity property-id)]
                                   (boolean
@@ -939,6 +931,36 @@
         hidden-properties (-> (concat block-hidden-properties
                                       (filter property-hide-f (map (fn [p] [p (get block p)]) class-properties)))
                               (remove-built-in-or-other-position-properties true))
+        ;; Inherited properties grouped by source ancestor (for tag pages)
+        class? (entity-util/class? block)
+        inherited-properties-by-class
+        (when class?
+          (let [extends (ldb/get-class-extends block)]
+            ;; Subscribe to ancestor entities for reactivity
+            (doseq [ancestor extends] (db/sub-block (:db/id ancestor)))
+            (loop [ancestors extends
+                   seen #{}
+                   result []]
+              (if-let [ancestor (first ancestors)]
+                (let [props (->> (db-property/get-class-ordered-properties ancestor)
+                                 (map :db/ident)
+                                 (remove seen)
+                                 (remove #{:logseq.property/icon :logseq.property/query
+                                           :logseq.property.class/properties
+                                           :logseq.property.class/extends
+                                           :logseq.property.class/enable-bidirectional?
+                                           :logseq.property.class/default-icon}))]
+                  (recur (rest ancestors)
+                         (into seen (set props))
+                         (if (seq props)
+                           (conj result {:class ancestor :properties props})
+                           result)))
+                result))))
+        has-meaningful-extends?
+        (and class?
+             (seq (:logseq.property.class/extends block))
+             (not-every? #(contains? #{:logseq.class/Root :logseq.class/Tag} (:db/ident %))
+                         (:logseq.property.class/extends block)))
         root-block? (or (= (str (:block/uuid block))
                            (state/get-current-page))
                         (and (= (str (:block/uuid block)) (:id opts))
@@ -957,11 +979,19 @@
 
          :else
          (let [remove-properties #{:logseq.property/icon :logseq.property/query}
+               tag-settings-set #{:logseq.property.class/enable-bidirectional?
+                                  :logseq.property.class/default-icon}
                properties' (->> (remove (fn [[k _v]] (contains? remove-properties k))
                                         full-properties)
                                 (remove (fn [[k _v]] (= k :logseq.property.class/properties))))
+               ;; For class pages, separate Extends from settings properties
+               extends-property (when class?
+                                  (first (filter (fn [[k _]] (= k :logseq.property.class/extends)) properties')))
+               remaining-own-properties (when class?
+                                          (->> properties'
+                                               (remove (fn [[k _]] (= k :logseq.property.class/extends)))
+                                               (remove (fn [[k _]] (contains? tag-settings-set k)))))
                page? (entity-util/page? block)
-               class? (entity-util/class? block)
                stored-width (ldb/get-key-value (db/get-db) :logseq.kv/property-key-width)]
            [:div.ls-properties-area
             {:id id
@@ -977,20 +1007,64 @@
                                      resize-handle (assoc :resize-handle resize-handle))]
               [:<>
                (if class?
-                 ;; Class/tag page: wrap own properties in "Tag Settings" section
-                 (when (seq properties')
-                   [:div.flex.flex-col.gap-1
-                    [:div {:style {:font-size 15}}
-                     [:div.property-pair
-                      [:div.property-key.text-sm
-                       [:div.property-key-inner
-                        [:div.property-icon (shui/tabler-icon "settings" {:size 16 :class "opacity-50"})]
-                        [:span.property-k "Tag Settings"]]]]
-                     [:div.text-muted-foreground {:style {:margin-left 26}}
-                      "Settings that control the behavior of this tag."]]
-                    [:div.ml-4
-                     (properties-section block properties' opts-with-resize)
-                     (bidirectional-properties-section bidirectional-properties resize-handle)]])
+                 ;; Unified tag properties area
+                 [:<>
+                  ;; 1. Extends row (always shown for class pages)
+                  (when extends-property
+                    (let [[k v] extends-property]
+                      (property-cp block k v opts-with-resize)))
+
+                  ;; 2. Any remaining own properties (not extends, not settings)
+                  (when (seq remaining-own-properties)
+                    [:div.mt-2
+                     (properties-section block remaining-own-properties opts-with-resize)])
+
+                  ;; 3. Tag Properties — unified section with inherited + own properties
+                  (let [tag-props (->> (:logseq.property.class/properties block)
+                                       (map (fn [e] [(:db/ident e)])))
+                        opts' (assoc opts-with-resize :class-schema? true)
+                        tag-name (:block/title block)]
+                    [:div.flex.flex-col.gap-1 {:class (when has-meaningful-extends? "mt-2")}
+                     [:div {:style {:font-size 15}}
+                      [:div.property-pair
+                       [:div.property-key.text-sm
+                        (property-key-cp block (db/entity :logseq.property.class/properties) {})]]
+                      [:div.text-muted-foreground {:style {:margin-left 22}}
+                       "These properties will show up on all nodes tagged with "
+                       [:span.text-gray-11
+                        (str "#" tag-name)]
+                       "."]]
+                     [:div.ml-4
+                      ;; Inherited properties (read-only, grouped by source)
+                      (when (and has-meaningful-extends? (seq inherited-properties-by-class))
+                        [:div.mb-2
+                         (for [{:keys [class properties]} inherited-properties-by-class]
+                           (let [class-title (:block/title class)
+                                 class-uuid (:block/uuid class)]
+                             [:div {:key (str "inherited-" (:db/id class))}
+                              [:div.text-xs.text-muted-foreground.mt-2
+                               {:style {:margin-left 6}}
+                               "Inherited from "
+                               [:a.cursor-pointer
+                                {:on-click (fn [] (route-handler/redirect-to-page! class-uuid))
+                                 :style {:color "var(--lx-accent-11, var(--ls-link-text-color))"}}
+                                (str "#" class-title)]]
+                              [:div {:aria-readonly "true"}
+                               (properties-section block
+                                                   (mapv (fn [p] [p (get block p)]) properties)
+                                                   (assoc opts-with-resize :inherited? true))]]))])
+                      ;; Own tag properties
+                      (when has-meaningful-extends?
+                        [:div.text-xs.text-muted-foreground.mt-2
+                         {:style {:margin-left 6}}
+                         "Defined here"])
+                      (properties-section block tag-props opts')
+                      (bidirectional-properties-section bidirectional-properties resize-handle)
+                      (hidden-properties-cp block hidden-properties
+                                            (assoc opts :root-block? root-block?))
+                      [:div.mt-2
+                       (rum/with-key (new-property block opts') (str id "-class-add-property"))]]])]
+
                  ;; Non-class page: render normally
                  [:<>
                   (properties-section block properties' opts-with-resize)
@@ -1001,21 +1075,4 @@
                                        (assoc opts :root-block? root-block?)))
 
                (when (and page? (not class?))
-                 (rum/with-key (new-property block opts) (str id "-add-property")))
-
-               (when class?
-                 (let [properties (->> (:logseq.property.class/properties block)
-                                       (map (fn [e] [(:db/ident e)])))
-                       opts' (assoc opts-with-resize :class-schema? true)]
-                   [:div.flex.flex-col.gap-1
-                    [:div {:style {:font-size 15}}
-                     [:div.property-pair
-                      [:div.property-key.text-sm
-                       (property-key-cp block (db/entity :logseq.property.class/properties) {})]]
-                     [:div.text-muted-foreground {:style {:margin-left 26}}
-                      "Tag properties are inherited by all nodes using the tag. For example, each #Task node inherits 'Status' and 'Priority'."]]
-                    [:div.ml-4
-                     (properties-section block properties opts')
-                     (hidden-properties-cp block hidden-properties
-                                           (assoc opts :root-block? root-block?))
-                     (rum/with-key (new-property block opts') (str id "-class-add-property"))]]))])])))]))
+                 (rum/with-key (new-property block opts) (str id "-add-property")))])])))]))

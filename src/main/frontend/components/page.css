@@ -93,7 +93,8 @@
   }
 
   .ls-page-title-actions {
-    &:has(button[data-popup-active]) {
+    &:has(button[data-popup-active]),
+    &:focus-within {
       @apply opacity-100;
     }
   }

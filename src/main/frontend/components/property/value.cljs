@@ -1715,14 +1715,36 @@
                      "Fix it!")]
        (let [empty-value? (when (coll? v) (= :logseq.property/empty-placeholder (:db/ident (first v))))
              closed-values? (seq (:property/closed-values property))
+             inherited? (:inherited? opts)
              value-cp [:div.property-value-inner
                        {:data-type type
                         :class (str (when empty-value? "empty-value")
                                     (when-not (:other-position? opts) " w-full"))
-                        :on-pointer-down (fn [e]
-                                           (when-not (some-> (.-target e) (.closest "[data-radix-popper-content-wrapper]"))
-                                             (state/clear-selection!)))}
+                        :on-pointer-down (when-not inherited?
+                                           (fn [e]
+                                             (when-not (some-> (.-target e) (.closest "[data-radix-popper-content-wrapper]"))
+                                               (state/clear-selection!))))}
                        (cond
+                         inherited?
+                         (if (and multiple-values? (coll? v) (not empty-value?))
+                           ;; Show multiple values as read-only text
+                           [:div.flex.flex-row.items-center.flex-wrap.gap-1
+                            (for [item (if (set? v) (seq v) [v])]
+                              (let [content (or (:block/title item)
+                                                (db-property/property-value-content item)
+                                                (str item))]
+                                [:span {:key (str (:db/id item))} content]))]
+                           ;; Show single value as read-only text
+                           (let [content (cond
+                                           (entity-map? v)
+                                           (or (:block/title v)
+                                               (db-property/property-value-content v)
+                                               (str v))
+                                           (some? v) (str v)
+                                           :else nil)]
+                             (when content
+                               [:span content])))
+
                          (and multiple-values? (contains? #{:default :url} type) (not closed-values?) (not editing?))
                          (property-normal-block-value block property v opts)
 
