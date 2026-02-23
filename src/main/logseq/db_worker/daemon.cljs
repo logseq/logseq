@@ -256,10 +256,14 @@
 (defn spawn-server!
   [{:keys [script repo data-dir owner-source]}]
   (let [owner-source (normalize-owner-source owner-source)
-        args #js ["--repo" repo "--data-dir" data-dir "--owner-source" (name owner-source)]
-        child (.spawn child-process script args #js {:detached true
-                                                     :stdio "ignore"})]
-    (when-not script
-      (log/warn :db-worker-daemon/missing-script {:repo repo :data-dir data-dir}))
-    (.unref child)
-    child))
+        args #js [script "--repo" repo "--data-dir" data-dir "--owner-source" (name owner-source)]
+        env (js/Object.assign #js {} (.-env js/process) #js {:ELECTRON_RUN_AS_NODE "1"})]
+    (if-not script
+      (do
+        (log/warn :db-worker-daemon/missing-script {:repo repo :data-dir data-dir})
+        nil)
+      (let [child (.spawn child-process (.-execPath js/process) args #js {:detached true
+                                                                           :stdio "ignore"
+                                                                           :env env})]
+        (.unref child)
+        child))))

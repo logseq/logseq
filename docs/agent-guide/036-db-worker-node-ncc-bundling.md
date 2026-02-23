@@ -21,6 +21,8 @@ This wrapper model keeps runtime coupled to workspace layout and to `node_module
 
 We need a deterministic packaging path that produces one runnable artifact plus copied native assets, and we need to verify that artifact works when `node_modules` is absent.
 
+Electron release packaging also needs to include the db-worker standalone bundle step, so `yarn release-electron` always ships the same packaged runtime artifact.
+
 The solution must keep existing CLI and Electron daemon orchestration behavior unchanged, including lock-file semantics, owner-source semantics, and health endpoint behavior.
 
 ## Current packaging map
@@ -32,6 +34,7 @@ The solution must keep existing CLI and Electron daemon orchestration behavior u
 | Daemon spawn | `/Users/rcmerci/gh-repos/logseq/src/main/logseq/cli/server.cljs` spawns `../dist/db-worker-node.js`. | Spawn path is stable, but executable is not standalone. |
 | Doctor check | `/Users/rcmerci/gh-repos/logseq/src/main/logseq/cli/command/doctor.cljs` checks `../static/db-worker-node.js` by default. | Diagnostic target does not match the intended distributable runtime. |
 | Package manifest | `/Users/rcmerci/gh-repos/logseq/package.json` includes `static/db-worker-node.js` in `files`. | Published package does not guarantee standalone daemon artifact contract. |
+| Electron release | `yarn release-electron` does not guarantee db-worker bundle refresh before packaging. | Desktop release artifact can drift from standalone db-worker bundle contract. |
 
 ## Target packaging map
 
@@ -42,6 +45,7 @@ The solution must keep existing CLI and Electron daemon orchestration behavior u
 | Doctor check | Doctor defaults to the same packaged runtime path used for spawn, and does not auto-fallback to static runtime. | Doctor check path matches runtime path in tests and manual runs. |
 | Dev flow | Fast local dev command remains available using `static/db-worker-node.js` for watch and debug workflows. | `yarn db-worker-node:compile` and `node ./static/db-worker-node.js` still work during development. |
 | Publish flow | Package `files` include standalone runtime assets required by ncc output. | Installed package can execute daemon without extra dependency install. |
+| Electron release | `yarn release-electron` runs db-worker bundle build before Electron packaging steps. | Electron release artifact includes the same standalone db-worker runtime contract. |
 
 ## Integration sketch
 
@@ -92,7 +96,8 @@ NOTE: I will write *all* tests before I add any implementation behavior.
 11. Add a dedicated script in `/Users/rcmerci/gh-repos/logseq/package.json` to normalize ncc output into `/Users/rcmerci/gh-repos/logseq/dist/db-worker-node.js` with adjacent assets preserved.
 12. If script complexity is non-trivial, add `/Users/rcmerci/gh-repos/logseq/scripts/build-db-worker-node-bundle.mjs` to encapsulate output normalization and deterministic cleanup.
 13. Add or update `yarn` scripts in `/Users/rcmerci/gh-repos/logseq/package.json` for one-command bundle build and optional local run of the bundled artifact.
-14. Run `yarn db-worker-node:release:bundle` and verify `dist/db-worker-node.js` is regenerated with executable permissions preserved.
+14. Update `yarn release-electron` in `/Users/rcmerci/gh-repos/logseq/package.json` so it includes `db-worker-node:release:bundle` before Electron packaging.
+15. Run `yarn db-worker-node:release:bundle` and verify `dist/db-worker-node.js` is regenerated with executable permissions preserved.
 
 ### Phase 3: Align runtime path and diagnostics.
 
@@ -101,34 +106,35 @@ NOTE: I will write *all* tests before I add any implementation behavior.
 17. Update `/Users/rcmerci/gh-repos/logseq/src/main/logseq/cli/command/doctor.cljs` to default-check the same packaged runtime path used by spawn.
 18. Add an explicit action option in `/Users/rcmerci/gh-repos/logseq/src/main/logseq/cli/command/doctor.cljs` for fallback static-path diagnostics used only for development troubleshooting.
 19. Ensure doctor failure codes remain stable as `:doctor-script-missing` and `:doctor-script-unreadable`.
-20. Re-run `yarn cljs:test && yarn cljs:run-test -v 'logseq.cli.server-test'` and `yarn cljs:test && yarn cljs:run-test -v 'logseq.cli.command.doctor-test'` to make the new path contract green.
+21. Re-run `yarn cljs:test && yarn cljs:run-test -v 'logseq.cli.server-test'` and `yarn cljs:test && yarn cljs:run-test -v 'logseq.cli.command.doctor-test'` to make the new path contract green.
 
 ### Phase 4: Package manifest and docs alignment.
 
-21. Update `files` in `/Users/rcmerci/gh-repos/logseq/package.json` so packaged runtime includes `dist/db-worker-node.js` and ncc-emitted adjacent assets.
-22. Keep `static/db-worker-node.js` inclusion only if required for development workflows, and document that distinction explicitly.
-23. Update `/Users/rcmerci/gh-repos/logseq/docs/cli/logseq-cli.md` build instructions to include the ncc bundle command and standalone runtime expectations.
-24. Update daemon runtime notes in `/Users/rcmerci/gh-repos/logseq/docs/cli/logseq-cli.md` so `doctor` references packaged runtime as primary target.
-25. Add troubleshooting notes for native module asset copy behavior from ncc output.
+22. Update `files` in `/Users/rcmerci/gh-repos/logseq/package.json` so packaged runtime includes `dist/db-worker-node.js` and ncc-emitted adjacent assets.
+23. Keep `static/db-worker-node.js` inclusion only if required for development workflows, and document that distinction explicitly.
+24. Update `/Users/rcmerci/gh-repos/logseq/docs/cli/logseq-cli.md` build instructions to include the ncc bundle command and standalone runtime expectations.
+25. Update daemon runtime notes in `/Users/rcmerci/gh-repos/logseq/docs/cli/logseq-cli.md` so `doctor` references packaged runtime as primary target.
+26. Add troubleshooting notes for native module asset copy behavior from ncc output.
 
 ### Phase 5: Standalone runtime behavior verification.
 
-26. Implement bundle smoke test setup in `/Users/rcmerci/gh-repos/logseq/src/test/logseq/db_worker/ncc_bundle_test.cljs` to copy only bundle artifacts into a temp directory with no `node_modules`.
-27. In that test, spawn `node ./db-worker-node.js --repo <repo> --data-dir <tmp>` from the bundle-only directory.
-28. In that test, poll `/healthz` and `/readyz` and assert both return HTTP 200 after startup.
-29. In that test, invoke `/v1/shutdown` and assert process exits and lock file is cleaned or becomes stale-removable.
-30. In that test, assert failure output is actionable if native binary asset is missing, to guard accidental packaging regressions.
-31. Run `yarn cljs:test && yarn cljs:run-test -v 'logseq.db-worker.ncc-bundle-test'` and make it green.
+27. Implement bundle smoke test setup in `/Users/rcmerci/gh-repos/logseq/src/test/logseq/db_worker/ncc_bundle_test.cljs` to copy only bundle artifacts into a temp directory with no `node_modules`.
+28. In that test, spawn `node ./db-worker-node.js --repo <repo> --data-dir <tmp>` from the bundle-only directory.
+29. In that test, poll `/healthz` and `/readyz` and assert both return HTTP 200 after startup.
+30. In that test, invoke `/v1/shutdown` and assert process exits and lock file is cleaned or becomes stale-removable.
+31. In that test, assert failure output is actionable if native binary asset is missing, to guard accidental packaging regressions.
+32. Run `yarn cljs:test && yarn cljs:run-test -v 'logseq.db-worker.ncc-bundle-test'` and make it green.
 
 ### Phase 6: Final validation and review checklist.
 
-32. Run `yarn cljs:test && yarn cljs:run-test -v 'logseq.cli.server-test'` and confirm zero failures and zero errors.
-33. Run `yarn cljs:test && yarn cljs:run-test -v 'logseq.cli.command.doctor-test'` and confirm zero failures and zero errors.
-34. Run `yarn cljs:test && yarn cljs:run-test -v 'logseq.db-worker.ncc-bundle-test'` and confirm zero failures and zero errors.
-35. Run `yarn db-worker-node:compile` and verify `static/db-worker-node.js` remains valid for local dev flow.
-36. Run `yarn db-worker-node:release:bundle` and verify `dist/db-worker-node.js` starts successfully with `node dist/db-worker-node.js --help`.
-37. Run `yarn cljs:lint && yarn test` and confirm repository review checklist passes.
-38. Validate changed code against `@prompts/review.md` before merge.
+33. Run `yarn cljs:test && yarn cljs:run-test -v 'logseq.cli.server-test'` and confirm zero failures and zero errors.
+34. Run `yarn cljs:test && yarn cljs:run-test -v 'logseq.cli.command.doctor-test'` and confirm zero failures and zero errors.
+35. Run `yarn cljs:test && yarn cljs:run-test -v 'logseq.db-worker.ncc-bundle-test'` and confirm zero failures and zero errors.
+36. Run `yarn db-worker-node:compile` and verify `static/db-worker-node.js` remains valid for local dev flow.
+37. Run `yarn db-worker-node:release:bundle` and verify `dist/db-worker-node.js` starts successfully with `node dist/db-worker-node.js --help`.
+38. Run `yarn release-electron` and verify the script execution includes `db-worker-node:release:bundle` before Electron packaging steps.
+39. Run `yarn cljs:lint && yarn test` and confirm repository review checklist passes.
+40. Validate changed code against `@prompts/review.md` before merge.
 
 ## Edge cases to validate during implementation
 
@@ -139,6 +145,7 @@ NOTE: I will write *all* tests before I add any implementation behavior.
 | Developer runs doctor in source workspace before bundle build. | Doctor reports missing packaged artifact by default, and only checks static runtime when explicitly requested. |
 | `dist/db-worker-node.js` exists but is not readable or is a directory. | Doctor returns `:doctor-script-unreadable` with path detail. |
 | Bundle build is run twice. | Build output remains deterministic and stale ncc artifacts are cleaned safely. |
+| `yarn release-electron` is run directly. | Release flow still builds db-worker standalone bundle before Electron packaging artifacts are produced. |
 | CLI and Electron share lock for same repo under bundled runtime. | Existing ownership and lock semantics remain unchanged from current behavior. |
 
 ## Verification commands and expected outputs
@@ -149,6 +156,7 @@ yarn cljs:test && yarn cljs:run-test -v 'logseq.cli.command.doctor-test'
 yarn cljs:test && yarn cljs:run-test -v 'logseq.db-worker.ncc-bundle-test'
 yarn db-worker-node:compile
 yarn db-worker-node:release:bundle
+yarn release-electron
 node dist/db-worker-node.js --help
 yarn cljs:lint && yarn test
 ```
