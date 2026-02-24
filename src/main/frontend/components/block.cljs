@@ -3090,7 +3090,7 @@
                                                   :id "hash"})
                                                (when (ldb/property? block)
                                                  {:type :tabler-icon
-                                                  :id "letter-p"})))]
+                                                  :id "property"})))]
                         [:div.ls-page-icon.flex.self-start
                          (icon-component/icon-picker icon
                                                      {:on-chosen (fn [_e icon]

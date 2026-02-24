@@ -519,7 +519,9 @@
               [:span.flex-shrink-0.flex.items-center.justify-center.mt-0.5
                {:style {:width 18 :height 18}}
                (if (string? node-icon)
-                 (shui/tabler-icon node-icon {:size 14})
+                 (shui/tabler-icon node-icon (cond-> {:size 14}
+                                               (#{"property" "child-node" "page-property" "node"} node-icon)
+                                               (assoc :extension? true)))
                  (when (map? node-icon)
                    (icon/icon node-icon {:size 14})))]
               [:span.flex-1.min-w-0 title]]]))
@@ -554,7 +556,7 @@
   [entity]
   (cond
     (ldb/class? entity) "hash"
-    (ldb/property? entity) "letter-p"
+    (ldb/property? entity) "property"
     :else "file"))
 
 ;; Each result group has it's own load-results function

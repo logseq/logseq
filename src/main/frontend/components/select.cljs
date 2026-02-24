@@ -38,7 +38,7 @@
                       (string/starts-with? label "Convert")
                       "file" ; Page icon for convert items
                       :else
-                      "letter-p")))) ; Default to property icon
+                      "property")))) ; Default to property icon
    :icon-variant-fn (fn [item]
                       ;; Use :create variant for "New option:" and "New tag:" items
                       (let [label (if (string? (:label item)) (:label item) "")]
@@ -54,7 +54,8 @@
 
 (rum/defc search-input
   [*input {:keys [prompt-key input-default-placeholder input-opts on-input]}]
-  (let [[input set-input!] (hooks/use-state @*input)]
+  (let [[input set-input!] (hooks/use-state @*input)
+        *input-ref (hooks/use-ref nil)]
     (hooks/use-effect!
      (fn []
        (reset! *input input)
@@ -67,12 +68,21 @@
          (set-input! "")))
      [(hooks/use-debounced-value @*input 100)])
 
+    ;; Programmatic focus with delay — more reliable than HTML5 autofocus
+    ;; inside nested popups/modals where focus race conditions occur
+    (hooks/use-effect!
+     (fn []
+       (when-not (util/mobile?)
+         (let [t (js/setTimeout #(some-> (hooks/deref *input-ref) (.focus)) 50)]
+           #(js/clearTimeout t))))
+     [])
+
     [:div.input-wrap
      [:input.cp__select-input.w-full
       (merge {:type "text"
+              :ref *input-ref
               :class "!p-1.5"
               :placeholder (or input-default-placeholder (t prompt-key))
-              :auto-focus (not (util/mobile?))
               :value input
               :on-change (fn [e]
                            (let [v (util/evalue e)]

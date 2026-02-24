@@ -848,7 +848,7 @@
                          (assoc (into {} node)
                                 :icon (cond
                                         (ldb/class? node) "hash"
-                                        (ldb/property? node) "letter-p"
+                                        (ldb/property? node) "property"
                                         (db/page? node) "file"
                                         :else "letter-n")
                                 :header header

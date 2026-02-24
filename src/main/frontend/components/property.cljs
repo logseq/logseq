@@ -44,6 +44,10 @@
   (let [type (or (:logseq.property/type property) property-type :default)
         ident (:db/ident property)
         icon (cond
+               (= ident :logseq.property.class/extends)
+               "child-node"
+               (= ident :logseq.property.class/properties)
+               "page-property"
                (= ident :block/tags)
                "hash"
                (string/starts-with? (str ident) ":plugin.")
@@ -55,12 +59,15 @@
                  :datetime "calendar"
                  :checkbox "checkbox"
                  :url "link"
-                 :property "letter-p"
+                 :property "property"
                  :page "page"
-                 :node "letter-n"
+                 :node "node"
                  :default nil
-                 nil))]
-    (when icon (ui/icon icon {:class "opacity-50" :size 16}))))
+                 nil))
+        extension? (#{"child-node" "page-property" "node" "property"} icon)]
+    (when icon (ui/icon icon (cond-> {:class "opacity-50" :size 16}
+                               extension? (assoc :extension? true
+                                                 :class "text-gray-10"))))))
 
 (defn property-key-bullet
   "Renders the property key bullet: filled square if no icon, otherwise property icon/emoji/image, all wrapped in bullet-link-wrap."
@@ -222,15 +229,19 @@
                         (let [convert? (:convert-page-to-property? x)]
                           {:label (if convert?
                                     (util/format "Convert \"%s\" to property" (:block/title x))
-                                    (let [ident (:db/ident x)
-                                          ns' (some-> ident (namespace))
-                                          plugin? (some-> ident (api-block/plugin-property-key?))
-                                          _plugin-name (and plugin? (second (re-find #"^plugin\.property\.([^.]+)" ns')))]
+                                    (let [custom-icon (:logseq.property/icon x)
+                                          type-icon (property-type-icon x nil)
+                                          icon-content (cond
+                                                         (and (map? custom-icon) (not= :none (:type custom-icon)))
+                                                         (icon-component/icon custom-icon {:size 16 :color? true})
+                                                         type-icon type-icon
+                                                         :else [:span.property-bullet.property-bullet-filled-square])
+                                          inline-icon [:span.flex.items-center.justify-center.shrink-0
+                                                       {:style {:width 16 :height 16}}
+                                                       icon-content]]
                                       [:span.flex.gap-1.items-center
-                                       {:title (str ident)}
-                                       (if plugin?
-                                         [:span.pt-1 (shui/tabler-icon "puzzle" {:size 15 :class "opacity-40"})]
-                                         [:span.pt-1 (shui/tabler-icon "letter-t" {:size 15 :class "opacity-40"})])
+                                       {:title (str (:db/ident x))}
+                                       inline-icon
                                        [:strong.font-normal (:block/title x)]]))
                            :value (:block/uuid x)
                            :block/title (:block/title x)
@@ -268,12 +279,15 @@
                  :datetime "calendar"
                  :checkbox "checkbox"
                  :url "link"
-                 :property "letter-p"
+                 :property "property"
                  :page "page"
                  :node "point-filled"
                  "letter-t"))]
-    (ui/icon icon {:class "opacity-50"
-                   :size 15})))
+    (ui/icon icon (cond-> {:class "opacity-50"
+                           :size 15}
+                    (#{"child-node" "page-property" "node" "property"} icon)
+                    (assoc :extension? true
+                           :class "text-gray-10")))))
 
 (defn- property-input-on-chosen
   [block *property *property-key *show-new-property-config? {:keys [class-schema? remove-property?]}]
@@ -1047,12 +1061,21 @@
                   (let [tag-props (->> (:logseq.property.class/properties block)
                                        (map (fn [e] [(:db/ident e)])))
                         opts' (assoc opts-with-resize :class-schema? true)
-                        tag-name (:block/title block)]
+                        tag-name (:block/title block)
+                        total-inherited (reduce (fn [n {:keys [properties]}] (+ n (count properties)))
+                                                0 inherited-properties-by-class)
+                        total-tag-props (+ (count tag-props) total-inherited)]
                     [:div.flex.flex-col.gap-1.mt-2
                      [:div {:style {:font-size 15}}
-                      [:div.property-pair
-                       [:div.property-key.text-sm
-                        (property-key-cp block (db/entity :logseq.property.class/properties) {})]]
+                      [:div.flex.items-center.gap-1 {:style {:margin-left 2}}
+                       [:div.flex.items-center.justify-center.shrink-0
+                        {:style {:width 16 :height 16}}
+                        (ui/icon "page-property" {:extension? true :size 16 :class "text-gray-10"})]
+                       [:span.font-medium "Tag Properties"]
+                       (when (pos? total-tag-props)
+                         [:<>
+                          [:span.text-muted-foreground " · "]
+                          [:span.text-muted-foreground {:style {:font-size "0.7rem"}} total-tag-props]])]
                       [:div.text-muted-foreground {:style {:margin-left 22}}
                        "These properties will show up on all nodes tagged with "
                        [:span.text-gray-11
@@ -1082,7 +1105,11 @@
                                [:a.cursor-pointer
                                 {:on-click (fn [] (route-handler/redirect-to-page! class-uuid))
                                  :style {:color "var(--lx-accent-11, var(--ls-link-text-color))"}}
-                                (str "#" class-title)]]]
+                                (str "#" class-title)]
+                               (when (pos? (count properties))
+                                 [:<>
+                                  [:span " · "]
+                                  [:span {:style {:font-size "0.7rem"}} (count properties)]])]]
                              [:div.ls-foldable-content
                               {:class (when collapsed? "is-collapsed")}
                               [:div.ls-foldable-content-inner
@@ -1092,7 +1119,10 @@
                                                      (mapv (fn [p] [p (get block p)]) properties)
                                                      (assoc opts-with-resize :inherited? true))]]]]])))
                       ;; Own tag properties
-                      (properties-section block tag-props opts')
+                      (when (seq tag-props)
+                        [:div {:class (when (and has-meaningful-extends? (seq inherited-properties-by-class))
+                                        "mt-3")}
+                         (properties-section block tag-props opts')])
                       (bidirectional-properties-section bidirectional-properties resize-handle)
                       (hidden-properties-cp block hidden-properties
                                             (assoc opts :root-block? root-block?))

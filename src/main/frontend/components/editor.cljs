@@ -293,7 +293,7 @@
                          (cond
                            (:nlp-date? block') "calendar"
                            (ldb/class? block') "hash"
-                           (ldb/property? block') "letter-p"
+                           (ldb/property? block') "property"
                            (or (ldb/page? block') (:page? block)) "file"
                            (or (string/starts-with? (str (:block/title block')) new-tag-pattern)
                                (string/starts-with? (str (:block/title block')) new-page-pattern)) "plus"

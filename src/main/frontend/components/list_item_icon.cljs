@@ -3,6 +3,10 @@
    [logseq.shui.ui :as shui]
    [rum.core :as rum]))
 
+(def ^:private extension-icons
+  "Icon names that use the tabler extension webfont (tie-*) instead of standard tabler SVGs."
+  #{"property" "child-node" "page-property" "node"})
+
 (rum/defc root
   "List item icon component with 4 variants:
    - :default - Dark gray background for regular search results
@@ -20,8 +24,9 @@
    - class - optional additional classes"
   [{:keys [variant icon extension? checked? on-checked-change size class]
     :or {variant :default}}]
-  (let [icon-opts (cond-> {:size (or size "14") :class ""}
-                    extension? (assoc :extension? true))]
+  (let [ext? (or extension? (contains? extension-icons icon))
+        icon-opts (cond-> {:size (or size "14") :class ""}
+                    ext? (assoc :extension? true))]
     (case variant
       :default
       [:div.list-item-icon.list-item-icon--default

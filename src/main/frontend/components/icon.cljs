@@ -466,7 +466,9 @@
                                   opts)]]
 
                (and (map? icon') (= :tabler-icon (:type icon')) (:id icon'))
-               (ui/icon (:id icon') opts)
+               (ui/icon (:id icon') (cond-> opts
+                                      (#{"property" "child-node" "page-property" "node"} (:id icon'))
+                                      (assoc :extension? true)))
 
                :else nil)]
     (when item
@@ -491,11 +493,11 @@
                            sorted-tags)]
     (cond
       ;; 0. Explicit "no icon" override — user deleted, suppress inheritance
-      ;; Skip to type-based defaults (file/hash/letter-p) instead of nil
+      ;; Skip to type-based defaults (file/hash/property) instead of nil
       (= :none (:type block-icon))
       (cond
         (ldb/class? node-entity) "hash"
-        (ldb/property? node-entity) "letter-p"
+        (ldb/property? node-entity) "property"
         (ldb/page? node-entity) "file"
         :else nil)
 
@@ -545,7 +547,7 @@
           (ldb/class? node-entity)
           "hash"
           (ldb/property? node-entity)
-          "letter-p"
+          "property"
           (ldb/page? node-entity)
           "file"
           (= asset-type "pdf")
@@ -2876,14 +2878,14 @@
         *el (rum/use-ref nil)
         content-fn (fn []
                      ;; Use Radix color variables for consistency with design system
-                     (let [colors [(colors/variable :gray :09)
-                                   (colors/variable :indigo :09)
-                                   (colors/variable :cyan :09)
-                                   (colors/variable :green :09)
-                                   (colors/variable :orange :09)
-                                   (colors/variable :tomato :09)
-                                   (colors/variable :pink :09)
-                                   (colors/variable :red :09)
+                     (let [colors [(colors/variable :gray :10)
+                                   (colors/variable :indigo :10)
+                                   (colors/variable :cyan :10)
+                                   (colors/variable :green :10)
+                                   (colors/variable :orange :10)
+                                   (colors/variable :tomato :10)
+                                   (colors/variable :pink :10)
+                                   (colors/variable :red :10)
                                    nil]]
                        [:div.color-picker-presets
                         (for [c colors]
