@@ -1707,7 +1707,7 @@
 
 (rum/defcs ^:large-vars/cleanup-todo block-control < rum/reactive
   (rum/local false ::dragging?)
-  [state config block {:keys [uuid block-id collapsed? *control-show? edit? selected? top? bottom?]}]
+  [state config block {:keys [uuid block-id collapsed? *control-show? edit? selected? captured? top? bottom?]}]
   (let [*bullet-dragging? (::dragging? state)
         doc-mode? (state/sub :document/mode?)
         control-show? (util/react *control-show?)
@@ -1775,8 +1775,9 @@
                       ;; Always show bullet (icon moved to inline before title)
                       [:span.bullet (cond->
                                      {:blockid (str uuid)}
-                                      selected?
-                                      (assoc :class "selected"))
+                                      (or selected? captured?)
+                                      (assoc :class (str (when selected? "selected")
+                                                         (when captured? " captured-bullet"))))
                        (when order-list?
                          [:label (str order-list-idx ".")])]]]
              bullet' (cond
@@ -2992,7 +2993,7 @@
                                                                       ;; React doesn't let us directly control passive via onTouchMove
                                                                       ;; So here we listen `touchmove` on the block node
        (mixins/listen state @*ref "touchmove" block-handler/on-touch-move))))
-  [state container-state repo config* block {:keys [navigating-block navigated? editing? selected?] :as opts}]
+  [state container-state repo config* block {:keys [navigating-block navigated? editing? selected? captured?] :as opts}]
   (let [*ref (::ref state)
         *hide-block-refs? (get state ::hide-block-refs?)
         *show-query? (get state ::show-query?)
@@ -3160,6 +3161,7 @@
        :ref #(when (nil? @*ref) (reset! *ref %))
        :data-collapsed (and collapsed? has-child?)
        :class (str (when selected? "selected")
+                   (when captured? " recently-captured")
                    (when order-list? " is-order-list")
                    (when (string/blank? title) " is-blank")
                    (when original-block " embed-block"))
@@ -3338,10 +3340,12 @@
         v1 (state/sub-editing? [container-id block-id])
         v2 (state/sub-editing? [:unknown-container block-id])
         selected? (state/sub-block-selected? block-id)
+        captured? (state/sub-block-captured? block-id)
         editing? (or v1 v2)]
     (block-container-inner-aux container-state repo config* block (assoc opts
                                                                          :editing? editing?
-                                                                         :selected? selected?))))
+                                                                         :selected? selected?
+                                                                         :captured? captured?))))
 
 (defn- block-changed?
   [old-block new-block]

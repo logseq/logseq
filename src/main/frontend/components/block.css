@@ -1219,6 +1219,35 @@ html.is-mac {
   background-color: var(--ls-secondary-background-color, var(--rx-gray-03));
 }
 
+/* Flash animation for recently captured blocks */
+@keyframes capture-flash {
+  /* Phase 1: Attention grab (0-200ms) */
+  0%   { background-color: var(--lx-accent-04-alpha, rgba(59, 130, 246, 0.18)); }
+  5%   { background-color: var(--lx-accent-03-alpha, rgba(59, 130, 246, 0.10)); }
+  /* Phase 2: Linger (200ms-3s) — subtle tint holds for scanning */
+  10%  { background-color: var(--lx-accent-02-alpha, rgba(59, 130, 246, 0.06)); }
+  75%  { background-color: var(--lx-accent-02-alpha, rgba(59, 130, 246, 0.05)); }
+  /* Phase 3: Gentle fade out (3s-4s) */
+  100% { background-color: transparent; }
+}
+
+.ls-block.recently-captured {
+  animation: capture-flash 4s ease-out forwards;
+  border-radius: 4px;
+}
+
+/* Prevent background stacking on nested captured blocks — only outermost gets flash */
+.ls-block.recently-captured .ls-block.recently-captured {
+  animation: none;
+  background-color: transparent;
+}
+
+/* Persistent blue bullet for captured blocks */
+.ls-block.recently-captured .bullet-container:not(.typed-list) .bullet.captured-bullet {
+  background-color: var(--lx-accent-08, var(--rx-blue-08));
+  transition: background-color 0.3s ease;
+}
+
 .aspect-video {
   aspect-ratio: 16 / 9;
   height: auto;

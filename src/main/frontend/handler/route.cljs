@@ -180,6 +180,12 @@
 (defn set-route-match!
   [route]
   (swap! state/state assoc :route-match route)
+  ;; Only clear captured highlights when navigating AWAY from the target page
+  (let [captured-page (state/get-captured-page-uuid)
+        dest-page (get-in route [:path-params :name])]
+    (when-not (and captured-page dest-page
+                   (= (str captured-page) dest-page))
+      (state/clear-captured-uuids!)))
   (update-page-title! route)
   (update-page-label! route)
   (when-let [anchor (get-in route [:query-params :anchor])]
