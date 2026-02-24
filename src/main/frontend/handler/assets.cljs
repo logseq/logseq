@@ -155,7 +155,9 @@
 
          :else
          (p/let [binary (fs/read-file-raw repo-dir path {})
-                 blob (js/Blob. (array binary) (clj->js {:type "image"}))]
+                 svg? (string/ends-with? path ".svg")
+                 type (if svg? "image/svg+xml" "image")
+                 blob (js/Blob. (array binary) (clj->js {:type type}))]
            (when blob (js/URL.createObjectURL blob))))))))
 
 (defn get-file-checksum
