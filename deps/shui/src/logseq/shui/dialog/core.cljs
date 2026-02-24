@@ -129,9 +129,10 @@
    Optionally merges new-opts into the modal config (e.g. :close-btn?, :content-props)."
   [id new-content & [new-opts]]
   (when-let [[index config] (get-modal id)]
-    (let [new-config (merge config
+    (let [content (if (fn? new-content) (new-content config) new-content)
+          new-config (merge config
                             (dissoc new-opts :id)
-                            {:content new-content
+                            {:content content
                              :prev-content (:content config)
                              :transitioning? true})]
       (swap! *modals assoc index new-config))))
