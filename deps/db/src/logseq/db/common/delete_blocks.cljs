@@ -63,9 +63,13 @@
             retract-reactions-tx (map (fn [reaction] [:db/retractEntity (:db/id reaction)])
                                       reaction-entities)
             retracted-tx (build-retracted-tx retracted-blocks)
-            retract-history-tx (mapcat (fn [e]
-                                         (map (fn [history] [:db/retractEntity (:db/id history)])
-                                              (:logseq.property.history/_block e))) retracted-blocks)
+            history-entities (->> retracted-blocks
+                                  (mapcat (fn [e]
+                                            (concat (:logseq.property.history/_block e)
+                                                    (:logseq.property.history/_ref-value e))))
+                                  (common-util/distinct-by :db/id))
+            retract-history-tx (map (fn [history] [:db/retractEntity (:db/id history)])
+                                    history-entities)
             delete-views (->>
                           (mapcat
                            (fn [item]
