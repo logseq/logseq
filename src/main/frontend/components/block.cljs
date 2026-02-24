@@ -2622,12 +2622,7 @@
         (task-agent-session-cp block)
         (task-spent-time-cp block)]]
 
-      (block-content-inner config block ast-body plugin-slotted? collapsed? block-ref-with-title?)
-
-      (case (:block/warning block)
-        :multiple-blocks
-        [:p.warning.text-sm "Full content is not displayed, Logseq doesn't support multiple unordered lists or headings in a block."]
-        nil)]]))
+      (block-content-inner config block ast-body plugin-slotted? collapsed? block-ref-with-title?)]]))
 
 (rum/defc block-refs-count < rum/static
   [block block-refs-count' *hide-block-refs?]
@@ -3742,7 +3737,10 @@
       ["Horizontal_Rule"]
       [:hr]
       ["Heading" h]
-      (block-container config h)
+      (let [{:keys [title]} h]
+        (->elem :div
+                (cons [:span "- "]
+                      (map-inline config title))))
       ["List" l]
       (let [lists (divide-lists l)]
         (if (= 1 (count lists))

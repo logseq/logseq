@@ -1311,7 +1311,8 @@
                   :type "pdf"
                   ;; avoid using the real checksum since it could be the same with in-graph asset
                   :checksum "0000000000000000000000000000000000000000000000000000000000000000"
-                  :size (.-size stat)
+                  ;; gracefully create stat-less assets so that references to them are still valid
+                  :size (if stat (.-size stat) 0)
                   :external-url (or asset-link-or-name path)
                   :external-file-name asset-path}))
         (p/catch (fn [error]

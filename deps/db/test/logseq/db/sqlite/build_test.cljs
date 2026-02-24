@@ -6,6 +6,7 @@
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.build :as sqlite-build]
+            [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]))
 
 (deftest build-tags
@@ -274,3 +275,30 @@
     (is (entity-util/property? (d/entity @conn :other.property/p1)))
     (is (entity-util/class? (d/entity @conn :user.class/C1)))
     (is (entity-util/class? (d/entity @conn :other.class/C1)))))
+
+(deftest build-preserves-class-property-ordering-for-export
+  (let [class-properties-c1 [:user.property/p2 :user.property/p1 :user.property/p3]
+        class-properties-c2 [:user.property/p4 :user.property/p2 :user.property/p3]
+        another-class-properties-c1 [:user.property/p5]
+        another-class-properties-c2 [:user.property/p6]
+        another-class-properties-c3 [:user.property/p6 :user.property/p5]
+        conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/p1 {:logseq.property/type :default}
+                            :user.property/p2 {:logseq.property/type :default}
+                            :user.property/p3 {:logseq.property/type :default}
+                            :user.property/p4 {:logseq.property/type :default}
+                            :user.property/p5 {:logseq.property/type :default}
+                            :user.property/p6 {:logseq.property/type :default}}
+               :classes {:user.class/C1 {:build/class-properties class-properties-c1}
+                         :user.class/C2 {:build/class-properties class-properties-c2}
+                         :user.class/AnotherC1 {:build/class-properties another-class-properties-c1}
+                         :user.class/AnotherC2 {:build/class-properties another-class-properties-c2}
+                         :user.class/AnotherC3 {:build/class-properties another-class-properties-c3}}})
+        export-map (sqlite-export/build-export @conn {:export-type :graph-ontology})]
+    (is (= class-properties-c1
+           (get-in export-map [:classes :user.class/C1 :build/class-properties])))
+    (is (= class-properties-c2
+           (get-in export-map [:classes :user.class/C2 :build/class-properties])))
+    (is (= another-class-properties-c3
+           (get-in export-map [:classes :user.class/AnotherC3 :build/class-properties]))
+        "Later class-level ordering constraint :p6 before :p5 is preserved")))

@@ -237,7 +237,7 @@
                   #_(map #(select-keys % [:block/title :block/tags]))
                   count))
           "Correct number of pages with block content")
-      (is (= 15 (->> @conn
+      (is (= 16 (->> @conn
                      (d/q '[:find [?ident ...]
                             :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                      count))
@@ -880,7 +880,8 @@
 
 (deftest-async export-files-with-remove-inline-tags
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_07.md"])
+          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_07.md"
+                                                          "journals/2026_01_27.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:remove-inline-tags? false :convert-all-tags? true})]
 
@@ -888,7 +889,10 @@
         "Created graph has no validation errors")
     (is (string/starts-with? (:block/title (db-test/find-block-by-content @conn #"Inception"))
                              "Inception #Movie")
-        "block with tag preserves inline tag")))
+        "block with tag preserves inline tag")
+    (is (string/includes? (:block/title (db-test/find-block-by-content @conn #"block with multi word tag"))
+                          "#[[another test]]")
+        "block with multi word tag preserves inline tag")))
 
 (deftest-async export-files-with-ignored-properties
   (p/let [file-graph-dir "test/resources/exporter-test-graph"

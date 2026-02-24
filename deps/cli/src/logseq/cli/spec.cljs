@@ -20,6 +20,8 @@
    :exclude-namespaces {:alias :e
                         :coerce #{}
                         :desc "Namespaces to exclude from properties and classes"}
+   :roundtrip {:alias :r
+               :desc "(Dev) Validate export is idempotent by importing into a temp graph and diffing its export"}
    :exclude-built-in-pages? {:alias :b
                              :desc "Exclude built-in pages"}
    :exclude-files? {:alias :F

@@ -114,8 +114,10 @@
                                          ;; Reasonable default for properties like logseq.property/default-value
                                          {:entity :number})
                                      built-in-type)]
-        {:db/ident k
-         :logseq.property/type built-in-type'}))
+        ;; Don't build property value entity if values are :block/uuid refs
+        (when (if (set? v) (not (vector? (first v))) (not (vector? v)))
+          {:db/ident k
+           :logseq.property/type built-in-type'})))
     (when (and (db-property-type/value-ref-property-types (get-in properties-config [k :logseq.property/type]))
                ;; Don't build property value entity if values are :block/uuid refs
                (if (set? v) (not (vector? (first v))) (not (vector? v))))
@@ -123,6 +125,45 @@
         {:db/ident (get-ident all-idents k)
          :original-property-id k
          :logseq.property/type prop-type}))))
+
+(declare ->property-value-tx-m)
+
+(defn- build-pvalue [properties-config all-idents closed-value-id v]
+  (let [pvalue-uuid (or (:block/uuid v) (random-uuid))
+        nested-pvalue-tx-m
+        (when (seq (:build/properties v))
+          (some-> (->property-value-tx-m {:block/uuid pvalue-uuid}
+                                         (:build/properties v)
+                                         properties-config
+                                         all-idents)
+                  ;; add :db/id to ensure datascript consistently creates this new tx
+                  (update-vals (fn [prop-val]
+                                 (cond
+                                   (map? prop-val)
+                                   (assoc prop-val :db/id (new-db-id))
+                                   (set? prop-val)
+                                   (set (map #(if (map? %)
+                                                (assoc % :db/id (new-db-id))
+                                                %)
+                                             prop-val))
+                                   :else
+                                   prop-val)))))]
+    {:attributes
+     (when (:build/property-value v)
+       (merge (:build/properties v)
+              nested-pvalue-tx-m
+              {:block/tags (mapv #(hash-map :db/ident (get-ident all-idents %))
+                                 (:build/tags v))}
+              (select-keys v [:block/created-at :block/updated-at])
+              {:block/uuid pvalue-uuid}))
+     :value
+     (cond
+       closed-value-id
+       closed-value-id
+       (:build/property-value v)
+       (or (:logseq.property/value v) (:block/title v))
+       :else
+       v)}))
 
 (defn- ->property-value-tx-m
   "Given a new block and its properties, creates a map of properties which have values of property value tx.
@@ -138,25 +179,8 @@
                                                                (when (= (:value item) v)
                                                                  (:uuid item)))
                                                              (get property :build/closed-values)))
-                        build-pvalue
-                        (fn build-pvalue [v]
-                          {:attributes
-                           (when (:build/property-value v)
-                             (merge (:build/properties v)
-                                    {:block/tags (mapv #(hash-map :db/ident (get-ident all-idents %))
-                                                       (:build/tags v))}
-                                    (select-keys v [:block/created-at :block/updated-at :block/uuid])))
-                           :value
-                           (cond
-                             closed-value-id
-                             closed-value-id
-
-                             (:build/property-value v)
-                             (or (:logseq.property/value v) (:block/title v))
-
-                             :else
-                             v)})]
-                    (if (set? v) (set (map build-pvalue v)) (build-pvalue v)))])))
+                        build-pvalue' #(build-pvalue properties-config all-idents closed-value-id %)]
+                    (if (set? v) (set (map build-pvalue' v)) (build-pvalue' v)))])))
        ((fn [x]
           (db-property-build/build-property-values-tx-m new-block x {:pvalue-map? true})))))
 
@@ -209,9 +233,10 @@
                         :block/refs block-refs})))))))
 
 (defn- build-property-tx
-  [properties page-uuids all-idents property-db-ids options
+  [properties page-uuids all-idents property-db-ids class-property-orders options
    [prop-name {:build/keys [property-classes] :as prop-m}]]
-  (let [[new-block & additional-tx]
+  (let [class-property-order (get class-property-orders prop-name)
+        [new-block & additional-tx]
         (if-let [closed-values (seq (map #(merge {:uuid (random-uuid)} %) (:build/closed-values prop-m)))]
           (let [db-ident (get-ident all-idents prop-name)]
             (db-property-build/build-closed-values
@@ -221,14 +246,18 @@
              {:property-attributes
               (merge {:db/id (or (property-db-ids prop-name)
                                  (throw (ex-info "No :db/id for property" {:property prop-name})))}
+                     (when class-property-order
+                       {:block/order class-property-order})
                      (select-keys prop-m [:build/properties-ref-types :block/created-at :block/updated-at :block/collapsed?]))}))
-          [(merge (sqlite-util/build-new-property (get-ident all-idents prop-name)
-                                                  (db-property/get-property-schema prop-m)
-                                                  {:block-uuid (:block/uuid prop-m)
-                                                   :title (:block/title prop-m)})
-                  {:db/id (or (property-db-ids prop-name)
-                              (throw (ex-info "No :db/id for property" {:property prop-name})))}
-                  (select-keys prop-m [:build/properties-ref-types :block/created-at :block/updated-at :block/collapsed?]))])
+          [(cond-> (merge (sqlite-util/build-new-property (get-ident all-idents prop-name)
+                                                          (db-property/get-property-schema prop-m)
+                                                          {:block-uuid (:block/uuid prop-m)
+                                                           :title (:block/title prop-m)})
+                          {:db/id (or (property-db-ids prop-name)
+                                      (throw (ex-info "No :db/id for property" {:property prop-name})))}
+                          (select-keys prop-m [:build/properties-ref-types :block/created-at :block/updated-at :block/collapsed?]))
+             class-property-order
+             (assoc :block/order class-property-order))])
         pvalue-tx-m
         (->property-value-tx-m new-block (:build/properties prop-m) properties all-idents)]
     (cond-> []
@@ -248,17 +277,70 @@
       true
       (into additional-tx))))
 
-(defn- build-properties-tx [properties page-uuids all-idents {:keys [build-existing-tx?] :as options}]
+(defn- class-properties->ordered-properties
+  "Returns a deterministic property order inferred from :build/class-properties, using topological sorting"
+  [classes]
+  (let [class-properties (->> (vals classes)
+                              (map :build/class-properties)
+                              (filter seq))
+        ;; Create first-seen unique property ids for use as a stable tie-break order
+        all-properties (vec (distinct (mapcat identity class-properties)))
+        property-index (zipmap all-properties (range))
+        sort-by-input-order #(sort-by property-index %)
+        ;; Adjacent pairs encode ordering e.g. [:p2 :p1 :p3]: #{[:p2 :p1] [:p1 :p3]}
+        edges (->> class-properties
+                   (mapcat #(partition 2 1 %))
+                   (remove (fn [[left right]] (= left right)))
+                   set)
+        ;; Adjacency list by source node
+        ;; Example: #{[:p2 :p1] [:p2 :p3] [:p1 :p3]} -> {:p2 [[:p2 :p1] [:p2 :p3]], :p1 [[:p1 :p3]]}
+        outgoing (group-by first edges)
+        ;; Count inbound edges for each property e.g. {:p2 0, :p1 1, :p3 2}
+        incoming-counts (reduce (fn [m [_left right]]
+                                  (update m right inc))
+                                (zipmap all-properties (repeat 0))
+                                edges)]
+    (loop [ordered-properties []
+           ;; Kahn queue: nodes with zero incoming edges, stably sorted
+           queue (->> all-properties
+                      (filter #(zero? (incoming-counts %)))
+                      sort-by-input-order
+                      vec)
+           remaining-incoming incoming-counts]
+      (if-let [property (first queue)]
+        ;; Consume one zero-incoming node, then decrement incoming counts for its neighbors
+        (let [[next-incoming unlocked]
+              (reduce (fn [[incoming unlocked*] [_left next-property]]
+                        (let [next-count (dec (incoming next-property))]
+                          [(assoc incoming next-property next-count)
+                           (if (zero? next-count) (conj unlocked* next-property) unlocked*)]))
+                      [remaining-incoming []]
+                      (get outgoing property))
+              ;; Merge newly unlocked nodes into queue with deterministic ordering
+              next-queue (->> (concat (rest queue) unlocked)
+                              sort-by-input-order
+                              vec)]
+          (recur (conj ordered-properties property) next-queue next-incoming))
+        (do
+          (assert (= (count ordered-properties) (count all-properties))
+                  (str "Cycle detected in :build/class-properties constraints. Ordered "
+                       (count ordered-properties) " of " (count all-properties) " properties."))
+          ordered-properties)))))
+
+(defn- build-properties-tx [properties classes page-uuids all-idents {:keys [build-existing-tx?] :as options}]
   (let [properties' (if build-existing-tx?
                       (->> properties
                            (remove (fn [[_ v]] (and (:block/uuid v) (not (:build/keep-uuid? v)))))
                            (into {}))
                       properties)
+        class-property-orders (->> classes
+                                   class-properties->ordered-properties
+                                   (#(zipmap % (db-order/gen-n-keys (count %) nil nil))))
         property-db-ids (->> (keys properties')
                              (map #(vector % (new-db-id)))
                              (into {}))
         new-properties-tx (vec
-                           (mapcat (partial build-property-tx properties' page-uuids all-idents property-db-ids options)
+                           (mapcat (partial build-property-tx properties' page-uuids all-idents property-db-ids class-property-orders options)
                                    properties'))]
     new-properties-tx))
 
@@ -392,15 +474,21 @@
                                    (map #(-> (:blocks %) vec (conj (:page %))))
                                    (mapcat (fn build-node-props-vec [nodes]
                                              (mapcat (fn [m]
-                                                       (if-let [pvalue-pages
-                                                                (->> (vals (:build/properties m))
-                                                                     (mapcat #(if (set? %) % [%]))
-                                                                     (filter page-prop-value?)
-                                                                     (map second)
-                                                                     seq)]
-                                                         (into (vec (:build/properties m))
-                                                               (build-node-props-vec pvalue-pages))
-                                                         (:build/properties m)))
+                                                       (let [nested-pvalue-pages
+                                                             (->> (vals (:build/properties m))
+                                                                  (mapcat #(if (set? %) % [%]))
+                                                                  (keep #(cond
+                                                                           (page-prop-value? %)
+                                                                           (second %)
+                                                                           (and (map? %) (:build/property-value %))
+                                                                           %
+                                                                           :else
+                                                                           nil))
+                                                                  seq)]
+                                                         (if nested-pvalue-pages
+                                                           (into (vec (:build/properties m))
+                                                                 (build-node-props-vec nested-pvalue-pages))
+                                                           (:build/properties m))))
                                                      nodes)))
                                    set)
         property-properties (->> (vals properties)
@@ -695,7 +783,7 @@
         page-uuids (create-page-uuids pages-and-blocks')
         {:keys [classes properties]} (if auto-create-ontology? (auto-create-ontology options) options)
         all-idents (create-all-idents properties classes options)
-        properties-tx (build-properties-tx properties page-uuids all-idents options)
+        properties-tx (build-properties-tx properties classes page-uuids all-idents options)
         classes-tx (build-classes-tx classes properties page-uuids all-idents options)
         class-ident->id (->> classes-tx (map (juxt :db/ident :db/id)) (into {}))
         ;; Replace idents with db-ids to avoid any upsert issues
