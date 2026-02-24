@@ -1,6 +1,6 @@
 (ns frontend.worker.platform.node
   "Node.js platform adapter for db-worker."
-  (:require ["better-sqlite3" :as sqlite3]
+  (:require ["node:sqlite" :as node-sqlite]
             ["fs/promises" :as fs]
             ["os" :as os]
             ["path" :as node-path]
@@ -11,8 +11,19 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
 
-(def ^:private sqlite
-  (or (aget sqlite3 "default") sqlite3))
+(defn- resolve-database-sync-ctor
+  []
+  (or (gobj/get node-sqlite "DatabaseSync")
+      (some-> (gobj/get node-sqlite "default")
+              (gobj/get "DatabaseSync"))
+      (let [default-export (gobj/get node-sqlite "default")]
+        (when (fn? default-export)
+          default-export))
+      (throw (ex-info "node:sqlite DatabaseSync constructor missing"
+                      {:module-keys (js->clj (js/Object.keys node-sqlite))}))))
+
+(def ^:private DatabaseSync
+  (resolve-database-sync-ctor))
 
 (defn- expand-home
   [path]
@@ -70,6 +81,36 @@
         (p/then (fn [_] true))
         (p/catch (fn [_] false)))))
 
+(defn- normalize-bind
+  [bind]
+  (cond
+    (array? bind) bind
+    (and bind (object? bind))
+    (let [out (js-obj)]
+      (doseq [key (js/Object.keys bind)]
+        (let [value (gobj/get bind key)
+              normalized (cond
+                           (string/starts-with? key "$") (subs key 1)
+                           (string/starts-with? key ":") (subs key 1)
+                           :else key)]
+          (gobj/set out normalized value)))
+      out)
+    :else bind))
+
+(defn- stmt-all
+  [^js stmt bind]
+  (cond
+    (array? bind) (.apply (.-all stmt) stmt bind)
+    (some? bind) (.all stmt bind)
+    :else (.all stmt)))
+
+(defn- stmt-run
+  [^js stmt bind]
+  (cond
+    (array? bind) (.apply (.-run stmt) stmt bind)
+    (some? bind) (.run stmt bind)
+    :else (.run stmt)))
+
 (defn- exec-sql
   [^js db opts-or-sql]
   (if (string? opts-or-sql)
@@ -77,47 +118,75 @@
     (let [sql (gobj/get opts-or-sql "sql")
           bind (gobj/get opts-or-sql "bind")
           row-mode (gobj/get opts-or-sql "rowMode")
-          bind' (cond
-                  (array? bind) bind
-                  (and bind (object? bind))
-                  (let [out (js-obj)]
-                    (doseq [key (js/Object.keys bind)]
-                      (let [value (gobj/get bind key)
-                            normalized (cond
-                                         (string/starts-with? key "$") (subs key 1)
-                                         (string/starts-with? key ":") (subs key 1)
-                                         :else key)]
-                        (gobj/set out normalized value)))
-                    out)
-                  :else bind)
+          bind' (normalize-bind bind)
           ^js stmt (.prepare db sql)]
       (if (= row-mode "array")
         (do
-          (.raw stmt)
-          (if (some? bind')
-            (.all stmt bind')
-            (.all stmt)))
+          (.setReturnArrays stmt true)
+          (stmt-all stmt bind'))
         (do
-          (if (some? bind')
-            (.run stmt bind')
-            (.run stmt))
+          (stmt-run stmt bind')
           nil)))))
 
-(defn- wrap-better-db
+(defn- with-transaction
+  [^js db tx-depth savepoint-seq tx-body]
+  (let [outermost? (zero? @tx-depth)
+        savepoint (when-not outermost?
+                    (str "__logseq_tx_" (swap! savepoint-seq inc)))]
+    (if outermost?
+      (.exec db "BEGIN")
+      (.exec db (str "SAVEPOINT " savepoint)))
+    (swap! tx-depth inc)
+    (try
+      (let [result (tx-body)]
+        (if outermost?
+          (.exec db "COMMIT")
+          (.exec db (str "RELEASE SAVEPOINT " savepoint)))
+        result)
+      (catch :default e
+        (if outermost?
+          (try
+            (.exec db "ROLLBACK")
+            (catch :default _))
+          (do
+            (try
+              (.exec db (str "ROLLBACK TO SAVEPOINT " savepoint))
+              (catch :default _))
+            (try
+              (.exec db (str "RELEASE SAVEPOINT " savepoint))
+              (catch :default _))))
+        (throw e))
+      (finally
+        (swap! tx-depth dec)))))
+
+(defn- wrap-node-sqlite-db
   [db]
-  (let [wrapper (js-obj)]
+  (let [wrapper (js-obj)
+        closed? (atom false)
+        tx-depth (atom 0)
+        savepoint-seq (atom 0)]
     (set! (.-exec wrapper) (fn [opts-or-sql] (exec-sql db opts-or-sql)))
     (set! (.-transaction wrapper)
           (fn [f]
-            (let [run-tx (.transaction db (fn [] (f wrapper)))]
-              (run-tx))))
-    (set! (.-close wrapper) (fn [] (.close db)))
+            (with-transaction db tx-depth savepoint-seq
+              (fn []
+                (f wrapper)))))
+    (set! (.-close wrapper)
+          (fn []
+            (when-not @closed?
+              (reset! closed? true)
+              (try
+                (.close db)
+                (catch :default e
+                  (when-not (string/includes? (str e) "database is not open")
+                    (throw e)))))
+            nil))
     wrapper))
 
 (defn- open-sqlite-db
   [{:keys [path]}]
   (p/let [_ (ensure-dir! (node-path/dirname path))]
-    (wrap-better-db (new sqlite path))))
+    (wrap-node-sqlite-db (new DatabaseSync path))))
 
 (defn- install-opfs-pool
   [data-dir _sqlite pool-name]
