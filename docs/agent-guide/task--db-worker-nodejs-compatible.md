@@ -18,7 +18,7 @@ Make `frontend.worker.db-worker` and its dependencies run in both browser and No
    - Implement `frontend.worker.platform.node` using `fs/promises`, `path`, `crypto`, and `ws`.
 3. Abstract sqlite storage and VFS specifics.
    - Browser: keep OPFS SAH pool implementation.
-   - Node: use file-backed sqlite storage via `better-sqlite3` (no OPFS, no sqlite-wasm).
+   - Node: use file-backed sqlite storage via Node built-in `node:sqlite` (no OPFS, no sqlite-wasm).
    - Route db path resolution through the platform adapter (data dir, per-repo paths).
 4. Replace `importScripts` bootstrap with an explicit init entrypoint.
    - Browser build still uses `:web-worker`, but entrypoint should call `init!` with a browser platform adapter.
@@ -41,13 +41,13 @@ Make `frontend.worker.db-worker` and its dependencies run in both browser and No
 10. Build config changes.
     - Add a Node build target in `shadow-cljs.edn` for db-worker (e.g. `:db-worker-node`).
     - Ensure shared code compiles for `:node-script` or `:node-library` with the correct externs.
-    - Add `better-sqlite3` dependency and ensure Node target treats it as a native external.
+    - Use Node built-in `node:sqlite` and keep Node runtime on `>=22.20.0`.
 11. Tests and fixtures.
     - Add unit tests for platform adapters and storage abstraction.
     - Add a minimal integration test that starts the Node daemon and exercises a small RPC call.
 
-## Node.js sqlite Implementation (better-sqlite3)
-Node runtime must not use OPFS or sqlite-wasm. Instead, use `better-sqlite3` as the direct file-backed sqlite engine.
+## Node.js sqlite Implementation (node:sqlite)
+Node runtime must not use OPFS or sqlite-wasm. Instead, use Node built-in `node:sqlite` as the direct file-backed sqlite engine.
 
 ### Concrete Refactor Items (File + Function + Summary)
 - `src/main/frontend/worker/db_core.cljs` (`init-sqlite-module!`, `<get-opfs-pool`, `get-dbs`, `<export-db-file`, `<import-db`, `close-db-aux!`, `:thread-api/init`)
@@ -58,22 +58,22 @@ Node runtime must not use OPFS or sqlite-wasm. Instead, use `better-sqlite3` as 
   - Extend platform contract to include a `:sqlite` section (or expand `:storage`) defining: `open-db`, `close-db`, `exec`, `transaction`, `export-db`, `import-db`.
 - `src/main/frontend/worker/platform/node.cljs` (`node-platform`, `install-opfs-pool`, `export-file`, `import-db`, `remove-vfs!`)
   - Remove OPFS pool and sqlite-wasm Node VFS behavior.
-  - Implement `better-sqlite3` adapter: open db files, exec, transactions, close.
+  - Implement `node:sqlite` adapter: open db files, exec, transactions, close.
   - Resolve db paths under data-dir and ensure directories exist.
 - `src/main/frontend/worker/platform/browser.cljs` (`browser-platform`, `install-opfs-pool`)
   - Keep sqlite-wasm + OPFS behavior but conform to the same `:sqlite` interface used by db-core.
 - `src/main/frontend/worker/state.cljs` (`*opfs-pools`, `get-opfs-pool`)
   - Ensure Node path does not write/read OPFS pools; keep OPFS state browser-only.
 - `src/main/frontend/worker/db_worker_node.cljs` (`main`, `<init-worker!`)
-  - Initialize platform adapter before core init; mark readiness after `better-sqlite3` ready.
+  - Initialize platform adapter before core init; mark readiness after sqlite adapter init.
 - `src/main/frontend/persist_db/node.cljs` (`start!`, `<invoke`)
   - Keep API compatibility; update if any thread-api names or args change due to sqlite refactor.
 - `shadow-cljs.edn` (`:db-worker-node`)
-  - Ensure `better-sqlite3` stays external; no bundling of sqlite-wasm artifacts for Node target.
+  - Ensure `node:sqlite` path remains standalone for Node target; no sqlite-wasm artifacts in Node path.
 - `package.json`
-  - Add `better-sqlite3` dependency; keep sqlite-wasm for browser path only.
+  - Keep sqlite-wasm browser-only; Node path uses built-in `node:sqlite`.
 - Tests
-  - Add Node integration smoke test with `better-sqlite3` backing: `list-db`, `create-or-open-db`, `q`, `transact`.
+  - Add Node integration smoke test with `node:sqlite` backing: `list-db`, `create-or-open-db`, `q`, `transact`.
 
 ## Refactor Steps (Milestones + Status)
 
@@ -104,10 +104,10 @@ Node runtime must not use OPFS or sqlite-wasm. Instead, use `better-sqlite3` as 
 - DONE 10. Add Node build target in `shadow-cljs.edn` for db-worker.
 - DONE 11. Implement Node daemon entrypoint and HTTP server.
 - LATER 12. Add a Node client in frontend to call the daemon (HTTP + SSE events).
-- DONE 12a. Switch Node sqlite implementation to `better-sqlite3` (no OPFS, no sqlite-wasm).
+- DONE 12a. Switch Node sqlite implementation to built-in `node:sqlite` (no OPFS, no sqlite-wasm).
 #### Acceptance Criteria
 - Node platform adapter provides storage/kv/broadcast/websocket/crypto/timers and validates via `frontend.worker.platform`.
-- Node sqlite adapter uses `better-sqlite3` and opens file-backed dbs in data-dir.
+- Node sqlite adapter uses built-in `node:sqlite` and opens file-backed dbs in data-dir.
 - Node build target compiles db-worker core without browser-only APIs.
 - Node daemon starts via CLI and reports readiness; `GET /healthz` and `GET /readyz` return `200 OK`.
 - `POST /v1/invoke` handles `list-db`, `create-or-open-db`, `q`, `transact` in a smoke test:
@@ -171,7 +171,7 @@ Event delivery options:
 - OPFS and IndexedDB do not exist in Node; file-backed storage and a Node KV store are required.
 - `BroadcastChannel` and `navigator.locks` are browser-only; Node should use a simpler single-client mode.
 - `Comlink` is browser-optimized; the Node daemon should use HTTP, not Comlink.
-- sqlite-wasm must remain browser-only; Node uses `better-sqlite3` directly.
+- sqlite-wasm must remain browser-only; Node uses built-in `node:sqlite` directly.
 - only db-graph supported in Node db-worker 
 
 ## Success Criteria

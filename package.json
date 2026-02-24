@@ -164,7 +164,6 @@
         "@tabler/icons-react": "^2.47.0",
         "@tabler/icons-webfont": "^2.47.0",
         "@tippyjs/react": "4.2.5",
-        "better-sqlite3": "12.6.0",
         "bignumber.js": "^9.0.2",
         "chokidar": "3.5.1",
         "chrono-node": "2.2.4",
