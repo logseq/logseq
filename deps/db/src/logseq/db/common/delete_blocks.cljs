@@ -46,24 +46,23 @@
      refs)))
 
 (defn update-refs-history
-  "When a block is deleted, a block's refs are updated and related property history, views and reactions
+  "When an entity is deleted, related property history, views and reactions
    are deleted"
   [db txs _opts]
-  (let [retracted-block-ids (->> (keep (fn [tx]
-                                         (when (and (vector? tx)
-                                                    (contains? #{:db.fn/retractEntity :db/retractEntity} (first tx)))
-                                           (second tx))) txs)
-                                 (filter (fn [id]
-                                           (not (entity-util/page? (d/entity db id))))))]
-    (when (seq retracted-block-ids)
-      (let [retracted-blocks (map #(d/entity db %) retracted-block-ids)
-            reaction-entities (->> retracted-blocks
+  (let [retracted-ids (keep (fn [tx]
+                              (when (and (vector? tx)
+                                         (contains? #{:db.fn/retractEntity :db/retractEntity} (first tx)))
+                                (second tx))) txs)
+        retracted-entities (map #(d/entity db %) retracted-ids)]
+    (when (seq retracted-ids)
+      (let [retracted-blocks (remove entity-util/page? retracted-entities)
+            reaction-entities (->> retracted-entities
                                    (mapcat :logseq.property.reaction/_target)
                                    (common-util/distinct-by :db/id))
             retract-reactions-tx (map (fn [reaction] [:db/retractEntity (:db/id reaction)])
                                       reaction-entities)
             retracted-tx (build-retracted-tx retracted-blocks)
-            history-entities (->> retracted-blocks
+            history-entities (->> retracted-entities
                                   (mapcat (fn [e]
                                             (concat (:logseq.property.history/_block e)
                                                     (:logseq.property.history/_ref-value e))))
@@ -75,6 +74,6 @@
                            (fn [item]
                              (let [block (d/entity db (:db/id item))]
                                (:logseq.property/_view-for block)))
-                           retracted-blocks)
+                           retracted-entities)
                           (map (fn [b] [:db/retractEntity (:db/id b)])))]
         (concat retracted-tx delete-views retract-history-tx retract-reactions-tx)))))
