@@ -39,8 +39,14 @@
                                  :click #(. web-contents showDefinitionForSelection)})))
             (when has-text?
               (. menu append
-                 (MenuItem. #js {:label "Search with Google"
-                                 :click #(let [url (js/URL. "https://www.google.com/search")]
+                 (MenuItem. #js {:label "Search with Kagi"
+                                 :click #(let [url (js/URL. "https://www.kagi.com/search")]
+                                           (.. url -searchParams (set "q" selection-text))
+                                           (.. shell (openExternal (.toString url))))}))
+                          (when has-text?
+              (. menu append
+                 (MenuItem. #js {:label "Search with DuckDuckGo"
+                                 :click #(let [url (js/URL. "https://www.duckduckgo.com/search")]
                                            (.. url -searchParams (set "q" selection-text))
                                            (.. shell (openExternal (.toString url))))}))
               (. menu append (MenuItem. #js {:type "separator"})))
