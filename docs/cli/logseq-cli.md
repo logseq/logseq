@@ -9,7 +9,7 @@ clojure -M:cljs compile logseq-cli db-worker-node
 yarn db-worker-node:release:bundle
 ```
 
-`yarn db-worker-node:release:bundle` compiles and bundles `db-worker-node` with `@vercel/ncc`, and writes a standalone runtime to `dist/db-worker-node.js` plus adjacent runtime assets (for example `dist/build/Release/better_sqlite3.node`).
+`yarn db-worker-node:release:bundle` compiles and bundles `db-worker-node` with `@vercel/ncc`, and writes a standalone runtime to `dist/db-worker-node.js` plus an asset manifest at `dist/db-worker-node-assets.json` (which may contain an empty `assets` array when no extra files are required).
 
 ## db-worker-node lifecycle
 
@@ -144,7 +144,7 @@ Output formats:
   - `doctor-script-unreadable`: script path exists but is not a readable file.
   - `data-dir-permission`: configured data dir is not readable or writable.
   - `doctor-server-not-ready`: one or more lock-discovered servers are still in `:starting` state (warning).
-  - If bundled runtime startup fails with native module load errors, rebuild with `yarn db-worker-node:release:bundle` and confirm `dist/db-worker-node-assets.json` and listed assets are present next to `dist/db-worker-node.js`.
+  - If bundled runtime startup fails with missing-module or missing-file errors, rebuild with `yarn db-worker-node:release:bundle` and confirm `dist/db-worker-node.js` exists and every path listed in `dist/db-worker-node-assets.json` is present next to it.
 - `query` human output returns a plain string (the query result rendered via `pr-str`), which is convenient for pipelines like `logseq query ... | xargs logseq show --id`.
 - Built-in named queries currently include `block-search`, `task-search`, `recent-updated`, `list-status`, and `list-priority`. Use `query list` to see the full set for your config.
 - Show and search outputs resolve block reference UUIDs inside text, replacing `[[<uuid>]]` with the referenced block content. Nested references are resolved recursively up to 10 levels to avoid excessive expansion. For example: `[[<uuid1>]]` → `[[some text [[<uuid2>]]]]` and then `<uuid2>` is also replaced.

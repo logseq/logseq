@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [frontend.test.node-helper :as node-helper]
             [frontend.worker.db-worker-node-lock :as db-lock]
+            [logseq.db :as ldb]
             [logseq.db-worker.daemon :as daemon]
             [promesa.core :as p]
             ["child_process" :as child-process]
@@ -42,6 +43,12 @@
   (let [manifest-path (dist-path "db-worker-node-assets.json")]
     (js->clj (js/JSON.parse (.toString (fs/readFileSync manifest-path) "utf8"))
              :keywordize-keys true)))
+
+(defn- write-asset-manifest!
+  [manifest]
+  (let [manifest-path (dist-path "db-worker-node-assets.json")
+        payload (str (js/JSON.stringify (clj->js manifest) nil 2) "\n")]
+    (fs/writeFileSync manifest-path payload "utf8")))
 
 (defn- copy-file!
   [source destination]
@@ -89,6 +96,20 @@
      :stdout stdout
      :stderr stderr}))
 
+(defn- invoke
+  [host port method args]
+  (let [payload (js/JSON.stringify
+                 (clj->js {:method method
+                           :directPass false
+                           :argsTransit (ldb/write-transit-str args)}))]
+    (daemon/http-request {:method "POST"
+                          :host host
+                          :port port
+                          :path "/v1/invoke"
+                          :headers {"Content-Type" "application/json"}
+                          :timeout-ms 5000
+                          :body payload})))
+
 (deftest bundle-only-daemon-startup-smoke-test
   (async done
          (let [child* (atom nil)]
@@ -135,29 +156,99 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest bundle-missing-native-asset-has-actionable-error
+(deftest bundle-daemon-starts-with-empty-asset-manifest
+  (async done
+         (let [child* (atom nil)
+               original-manifest* (atom nil)]
+           (-> (p/let [_ (ensure-bundle-built!)
+                       original-manifest (read-asset-manifest)
+                       _ (reset! original-manifest* original-manifest)
+                       _ (write-asset-manifest! (assoc original-manifest :assets []))
+                       {:keys [runtime-dir]} (copy-bundle-to-temp!)
+                       data-dir (absolute-path (node-helper/create-tmp-dir "db-worker-node-bundle-empty-assets"))
+                       repo (str "logseq_db_ncc_empty_assets_" (subs (str (random-uuid)) 0 8))
+                       lock-file (lock-path data-dir repo)
+                       {:keys [child]} (spawn-daemon! runtime-dir repo data-dir)
+                       _ (reset! child* child)
+                       _ (daemon/wait-for-lock lock-file)
+                       lock (daemon/read-lock lock-file)
+                       _ (is (some? lock))
+                       health (daemon/http-request {:method "GET"
+                                                    :host (:host lock)
+                                                    :port (:port lock)
+                                                    :path "/healthz"
+                                                    :timeout-ms 1000})
+                       ready (daemon/http-request {:method "GET"
+                                                   :host (:host lock)
+                                                   :port (:port lock)
+                                                   :path "/readyz"
+                                                   :timeout-ms 1000})
+                       create-db (invoke (:host lock)
+                                         (:port lock)
+                                         "thread-api/create-or-open-db"
+                                         [repo {}])
+                       create-db-body (js->clj (js/JSON.parse (:body create-db))
+                                               :keywordize-keys true)
+                       shutdown (daemon/http-request {:method "POST"
+                                                      :host (:host lock)
+                                                      :port (:port lock)
+                                                      :path "/v1/shutdown"
+                                                      :headers {"Content-Type" "application/json"}
+                                                      :timeout-ms 2000})
+                       _ (is (= 200 (:status health)))
+                       _ (is (= 200 (:status ready)))
+                       _ (is (= 200 (:status create-db)))
+                       _ (is (:ok create-db-body))
+                       _ (is (= 200 (:status shutdown)))
+                       _ (daemon/wait-for (fn []
+                                           (p/resolved (not (fs/existsSync lock-file))))
+                                          {:timeout-ms 10000
+                                           :interval-ms 200})]
+                 (is (not (fs/existsSync lock-file))))
+               (p/catch (fn [e]
+                          (when-let [^js child @child*]
+                            (try
+                              (.kill child "SIGTERM")
+                              (catch :default _)))
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (when-let [manifest @original-manifest*]
+                              (write-asset-manifest! manifest))
+                            (done)))))))
+
+(deftest bundle-errors-are-actionable-when-manifest-or-entry-is-missing
   (let [_ (ensure-bundle-built!)
-        {:keys [runtime-dir assets]} (copy-bundle-to-temp!)
-        native-asset (first (filter #(string/ends-with? % ".node") assets))]
-    (is (some? native-asset))
-    (when native-asset
-      (let [missing-path (node-path/join runtime-dir native-asset)
-            _ (fs/unlinkSync missing-path)
-            data-dir (absolute-path (node-helper/create-tmp-dir "db-worker-node-bundle-missing-asset"))
-            repo (str "logseq_db_ncc_missing_" (subs (str (random-uuid)) 0 8))
-            result (.spawnSync child-process
-                               "node"
-                               #js ["./db-worker-node.js"
-                                    "--repo" repo
-                                    "--data-dir" data-dir
-                                    "--owner-source" "cli"]
-                               #js {:cwd runtime-dir
-                                    :encoding "utf8"})
-            status (.-status result)
-            output (str (or (.-stderr result) "")
-                        (or (.-stdout result) ""))
-            missing-file (node-path/basename missing-path)]
-        (is (not= 0 status))
-        (is (or (string/includes? output missing-file)
-                (string/includes? output "Cannot find module")
-                (string/includes? output "could not locate the bindings file")))))))
+        manifest-path (dist-path "db-worker-node-assets.json")
+        manifest-backup-path (dist-path "db-worker-node-assets.json.bak")
+        _ (when (fs/existsSync manifest-backup-path)
+            (fs/unlinkSync manifest-backup-path))
+        _ (fs/renameSync manifest-path manifest-backup-path)
+        missing-manifest-error (try
+                                 (read-asset-manifest)
+                                 nil
+                                 (catch :default e
+                                   e))
+        _ (fs/renameSync manifest-backup-path manifest-path)
+        {:keys [runtime-dir]} (copy-bundle-to-temp!)
+        missing-entry-path (node-path/join runtime-dir "db-worker-node.js")
+        _ (fs/unlinkSync missing-entry-path)
+        data-dir (absolute-path (node-helper/create-tmp-dir "db-worker-node-bundle-missing-entry"))
+        repo (str "logseq_db_ncc_missing_entry_" (subs (str (random-uuid)) 0 8))
+        result (.spawnSync child-process
+                           "node"
+                           #js ["./db-worker-node.js"
+                                "--repo" repo
+                                "--data-dir" data-dir
+                                "--owner-source" "cli"]
+                           #js {:cwd runtime-dir
+                                :encoding "utf8"})
+        status (.-status result)
+        output (str (or (.-stderr result) "")
+                    (or (.-stdout result) ""))]
+    (is (some? missing-manifest-error))
+    (is (string/includes? (str missing-manifest-error) "db-worker-node-assets.json"))
+    (is (string/includes? (str missing-manifest-error) "ENOENT"))
+    (is (not= 0 status))
+    (is (string/includes? output "db-worker-node.js"))
+    (is (or (string/includes? output "Cannot find module")
+            (string/includes? output "MODULE_NOT_FOUND")))))
