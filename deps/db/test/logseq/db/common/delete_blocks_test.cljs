@@ -24,3 +24,26 @@
           extra (delete-blocks/update-refs-history @conn retracts {})]
       (d/transact! conn (concat retracts extra))
       (is (nil? (d/entity @conn (:db/id reaction-entity)))))))
+
+(deftest delete-blocks-removes-history-with-ref-value
+  (testing "property history entries referencing a deleted block are retracted"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Page"}
+                   :blocks [{:block/title "Target block"}
+                            {:block/title "Choice value"}]}]})
+          target-block (db-test/find-block-by-content @conn "Target block")
+          choice-value-block (db-test/find-block-by-content @conn "Choice value")
+          history-uuid (random-uuid)
+          now (common-util/time-ms)
+          _ (d/transact! conn [{:block/uuid history-uuid
+                                :block/created-at now
+                                :block/updated-at now
+                                :logseq.property.history/block (:db/id target-block)
+                                :logseq.property.history/property (:db/id (d/entity @conn :logseq.property/status))
+                                :logseq.property.history/ref-value (:db/id choice-value-block)}])
+          history-entity (d/entity @conn [:block/uuid history-uuid])
+          retracts [[:db/retractEntity (:db/id choice-value-block)]]
+          extra (delete-blocks/update-refs-history @conn retracts {})]
+      (d/transact! conn (concat retracts extra))
+      (is (nil? (d/entity @conn (:db/id history-entity)))))))
