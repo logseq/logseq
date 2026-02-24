@@ -455,11 +455,13 @@
 
                        (or (string/includes? message ".node")
                            (string/includes? message "Cannot find module")
+                           (string/includes? message "MODULE_NOT_FOUND")
                            (string/includes? message "bindings file"))
                        (.error js/console
-                               (str "db-worker-node failed to start: missing native bundle asset. "
+                               (str "db-worker-node failed to start: bundled runtime files are missing or incomplete. "
                                     "Rebuild with `yarn db-worker-node:release:bundle` and ensure "
-                                    "`dist/db-worker-node-assets.json` assets are next to `db-worker-node.js`. "
+                                    "`dist/db-worker-node.js` exists and assets listed in "
+                                    "`dist/db-worker-node-assets.json` are next to it. "
                                     "Root error: "
                                     message))
 
