@@ -2212,7 +2212,7 @@
       (shui/button {:variant :ghost :size :sm :class "target-pill"
                     :on-click (fn [e]
                                 (shui/popup-show!
-                                 (.-target e)
+                                 (.-currentTarget e)
                                  (fn [{:keys [id]}]
                                    (target-page-picker-content set-target-page! id))
                                  {:id :target-page-picker
