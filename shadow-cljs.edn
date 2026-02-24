@@ -192,7 +192,8 @@
                                 :externs ["datascript/externs.js"
                                           "externs.js"]
                                 :warnings {:fn-deprecated false
-                                           :redef false}}}
+                                           :redef false}}
+             :closure-defines {goog.debug.LOGGING_ENABLED true}}
 
   :test {:target :node-test
          :output-to "static/tests.js"
