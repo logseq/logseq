@@ -501,23 +501,27 @@ html.is-mobile {
   display: inline-block;
 }
 
-.ui__icon svg {
+.ui__icon svg,
+.ui__icon.tie {
   filter: brightness(1);
   transition: filter .15s;
   will-change: filter;
 }
 
-.ui__icon:hover svg {
+.ui__icon:hover svg,
+.ui__icon.tie:hover {
   filter: brightness(.8);
   transition-duration: .15s;
 }
 
 .dark-theme {
-    .ui__icon svg {
+    .ui__icon svg,
+    .ui__icon.tie {
         filter: brightness(.8);
     }
 
-    .ui__icon:hover svg {
+    .ui__icon:hover svg,
+    .ui__icon.tie:hover {
         filter: brightness(1);
     }
 }
