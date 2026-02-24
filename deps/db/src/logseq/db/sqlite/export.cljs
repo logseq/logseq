@@ -27,7 +27,7 @@
        ;; These classes are redundant as :build/journal is enough for Journal and Page
        ;; is implied by being in :pages-and-blocks
        (remove #{:logseq.class/Page :logseq.class/Journal})
-       vec))
+       set))
 
 (defn- block-title
   "Get an entity's original title"
@@ -147,7 +147,7 @@
                          (and (not shallow-copy?) include-alias? (:block/alias property))
                          (assoc :block/alias (set (map #(vector :block/uuid (:block/uuid %)) (:block/alias property))))
                          (and (not shallow-copy?) (:logseq.property/classes property))
-                         (assoc :build/property-classes (mapv :db/ident (:logseq.property/classes property)))
+                         (assoc :build/property-classes (set (map :db/ident (:logseq.property/classes property))))
                          (seq closed-values)
                          (assoc :build/closed-values
                                 (mapv #(cond-> {:value (db-property/property-value-content %)
@@ -194,7 +194,7 @@
          (:logseq.property.class/extends class-ent)
          (not= [:logseq.class/Root] (mapv :db/ident (:logseq.property.class/extends class-ent))))
     (assoc :build/class-extends
-           (mapv :db/ident (:logseq.property.class/extends class-ent)))))
+           (set (map :db/ident (:logseq.property.class/extends class-ent))))))
 
 (defn block-property-value? [%]
   (and (map? %) (:build/property-value %)))
@@ -1133,22 +1133,13 @@
       {:error (str "The exported EDN is unexpectedly invalid: " (pr-str (ex-message e)))})))
 
 (defn- prepare-export-to-diff
-  "This prepares a graph's exported edn to be diffed with another"
+  "Prepare a graph's exported edn to be diffed with another"
   [m]
   (-> m
-      ;; TODO: Fix order of these :build/* keys
-      (update :classes update-vals (fn [m]
-                                     (cond-> m
-                                       (:build/class-extends m)
-                                       (update :build/class-extends sort))))
-      (update :properties update-vals (fn [m]
-                                        (cond-> m
-                                          (:build/property-classes m)
-                                          (update :build/property-classes sort))))
       (update ::kv-values
               (fn [kvs]
                 (->> kvs
-                     ;; Ignore extra metadata that a copied graph can add
+                     ;; This varies per copied graph so ignore it
                      (remove #(#{:logseq.kv/import-type :logseq.kv/imported-at :logseq.kv/local-graph-uuid}
                                (:db/ident %)))
                      (sort-by :db/ident)
