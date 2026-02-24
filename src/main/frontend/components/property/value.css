@@ -13,6 +13,13 @@
 }
 
 .ls-property-dialog {
+  .ls-property-add.property-key {
+    width: auto;
+    max-width: none;
+    min-width: auto;
+    padding: 0;
+  }
+
   .ls-property-key {
     @apply overflow-y-hidden max-h-[286px];
 

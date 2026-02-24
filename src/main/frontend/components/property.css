@@ -343,6 +343,12 @@ a.control-link {
   max-width: none;
 }
 
+/* Widen the "Add property" combobox inside tag properties — 14rem default is too narrow */
+.tag-properties-content .ls-property-add .cp__select-main {
+  min-width: 20rem;
+  width: 20rem;
+}
+
 .ls-card-item {
     .property-key, .property-value-container {
         min-width: initial;
