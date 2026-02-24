@@ -10,7 +10,6 @@
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]
-            [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
             [medley.core :as medley]))
