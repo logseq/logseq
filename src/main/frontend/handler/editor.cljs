@@ -105,8 +105,8 @@
 (defn toggle-blocks-as-own-order-list!
   [blocks]
   (when (seq blocks)
-    (let [has-ordered?    (some own-order-number-list? blocks)
-          blocks-uuids    (some->> blocks (map :block/uuid) (remove nil?))
+    (let [has-ordered? (some own-order-number-list? blocks)
+          blocks-uuids (some->> blocks (map :block/uuid) (remove nil?))
           order-list-prop :logseq.property/order-list-type]
       (if has-ordered?
         (property-handler/batch-remove-block-property! blocks-uuids order-list-prop)
@@ -1415,8 +1415,8 @@
    ""
    format
    {:last-pattern (if drop-or-paste? "" commands/command-trigger)
-    :restore?     true
-    :command      :insert-asset})
+    :restore? true
+    :command :insert-asset})
   (-> (db-based-save-assets! repo (js->clj files))
       (p/catch (fn [e]
                  (js/console.error e)))
@@ -1764,11 +1764,11 @@
   (contains? #{" " "\t"} (get (.-value input) (- pos 2))))
 
 (defn handle-last-input []
-  (let [input           (state/get-input)
-        input-id        (state/get-edit-input-id)
-        edit-block      (state/get-edit-block)
-        pos             (cursor/pos input)
-        content         (.-value input)
+  (let [input (state/get-input)
+        input-id (state/get-edit-input-id)
+        edit-block (state/get-edit-block)
+        pos (cursor/pos input)
+        content (.-value input)
         last-input-char (util/nth-safe content (dec pos))
         last-prev-input-char (util/nth-safe content (dec (dec pos)))]
 
@@ -1824,7 +1824,7 @@
                        format
                        {:last-pattern (str block-ref/left-parens (if selected-text "" q))
                         :end-pattern block-ref/right-parens
-                        :postfix-fn   (fn [s] (util/replace-first block-ref/right-parens s ""))
+                        :postfix-fn (fn [s] (util/replace-first block-ref/right-parens s ""))
                         :forward-pos 3
                         :command :block-ref})
 
@@ -1970,10 +1970,10 @@
    A block element: {:content :properties :children [block-1, block-2, ...]}"
   [target-block-id sibling? tree-vec format keep-uuid?]
   (insert-block-tree tree-vec format
-                     {:target-block       (db/entity target-block-id)
-                      :keep-uuid?         keep-uuid?
+                     {:target-block (db/entity target-block-id)
+                      :keep-uuid? keep-uuid?
                       :skip-empty-target? true
-                      :sibling?           sibling?}))
+                      :sibling? sibling?}))
 
 (defn insert-template!
   ([element-id db-id]
@@ -2655,7 +2655,7 @@
   (let [last-key-code (state/get-last-key-code)
         blank-selected? (string/blank? (util/get-selected-text))
         non-enter-processed? (and is-processed? ;; #3251
-                                  (not= code keycode/enter-code))  ;; #3459
+                                  (not= code keycode/enter-code)) ;; #3459
         editor-action (state/get-editor-action)]
     (if (and (= editor-action :page-search-hashtag)
              (input-page-ref? k current-pos blank-selected? last-key-code))
@@ -2859,7 +2859,7 @@
           (copy-current-block-ref "ref")))
 
       (and (state/get-current-pdf)
-           (.closest (.. js/window getSelection -baseNode -parentElement)  ".pdfViewer"))
+           (.closest (.. js/window getSelection -baseNode -parentElement) ".pdfViewer"))
       (util/copy-to-clipboard!
        (pdf-utils/fix-selection-text-breakline (.. js/window getSelection toString))
        nil))))
@@ -3532,6 +3532,11 @@
            (save-block-inner! query-block current-query {}))))))))
 
 (defn quick-add-ensure-new-block-exists!
+  "Ensure the staging page has exactly one empty block ready for editing.
+   Cleans up leftover empty childless blocks (e.g. trailing empties from a
+   previous commit) while keeping one so the modal always opens with a clean
+   slate and a focusable block — avoids the async delete-all/create cycle
+   that can race with autofocus."
   []
   (let [graph (state/get-current-repo)]
     (p/do!
@@ -3544,11 +3549,28 @@
                          (filter (fn [block]
                                    (let [create-by-id (:db/id (:logseq.property/created-by-ref block))]
                                      (= user-db-id create-by-id))) children)
-                         children)]
-       (when (empty? children')
-         (api-insert-new-block! "" {:page (:block/uuid add-page)
-                                    :container-id :unknown-container
-                                    :replace-empty-target? false}))))))
+                         children)
+             stale-empties (vec (ldb/sort-by-order
+                                 (filter (fn [block]
+                                           (and (string/blank? (:block/title block))
+                                                (empty? (:block/_parent block))))
+                                         children')))
+             has-content? (some (fn [block]
+                                  (or (not (string/blank? (:block/title block)))
+                                      (seq (:block/_parent block))))
+                                children')]
+       (let [to-delete (if has-content?
+                         ;; Content exists: delete all empties (content blocks remain)
+                         stale-empties
+                         ;; No content: keep first empty, delete the rest
+                         (rest stale-empties))]
+         (doseq [block to-delete]
+           (delete-block-aux! block))
+         ;; Only create a new block when no empties existed and no content
+         (when (and (not has-content?) (empty? stale-empties))
+           (api-insert-new-block! "" {:page (:block/uuid add-page)
+                                      :container-id :unknown-container
+                                      :replace-empty-target? false})))))))
 
 (defn quick-add-blocks!
   []
@@ -3596,7 +3618,9 @@
 
 (defn capture-commit-blocks!
   "Move blocks from the staging page to a target page.
-   `target-page` can be a db entity or a string (page will be created)."
+   `target-page` can be a db entity or a string (page will be created).
+   Preserves intentional empty blocks between content, but strips trailing
+   empty blocks (cursor placeholders) from the end."
   [target-page]
   (p/do!
    (save-current-block!)
@@ -3606,15 +3630,39 @@
      (when target
        (let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)
              children (:block/_parent (db/entity (:db/id add-page)))
-             non-empty (seq (remove #(string/blank? (:block/title %)) children))]
+             ;; Sort by visual order and trim trailing empty blocks (cursor placeholders),
+             ;; but keep sandwiched empty blocks (intentional spacers)
+             sorted (vec (ldb/sort-by-order children))
+             to-move (seq (loop [blocks sorted]
+                            (if (and (seq blocks)
+                                     (let [last-block (peek blocks)]
+                                       (and (string/blank? (:block/title last-block))
+                                            (empty? (:block/_parent last-block)))))
+                              (recur (pop blocks))
+                              blocks)))]
          (p/do!
-          (when non-empty
-            (if-let [last-child (last (ldb/sort-by-order (:block/_parent target)))]
-              (move-blocks! non-empty last-child {:sibling? true})
-              (move-blocks! non-empty target {:sibling? false})))
+          (when to-move
+            (let [captured-uuids (letfn [(walk [b]
+                                           (cons (:block/uuid b)
+                                                 (mapcat walk (:block/_parent b))))]
+                                   (vec (mapcat walk to-move)))
+                  ;; Detect sole placeholder block BEFORE moving
+                  target-children (:block/_parent target)
+                  placeholder-block (when (= 1 (count target-children))
+                                      (let [only-child (first target-children)]
+                                        (when (and (string/blank? (:block/title only-child))
+                                                   (empty? (:block/_parent only-child)))
+                                          only-child)))]
+              (if-let [last-child (last (ldb/sort-by-order (:block/_parent target)))]
+                (move-blocks! to-move last-child {:sibling? true})
+                (move-blocks! to-move target {:sibling? false}))
+              ;; Remove the placeholder only if the page had exactly one empty block
+              (when placeholder-block
+                (delete-block-aux! placeholder-block))
+              (state/set-captured-uuids! captured-uuids (:block/uuid target))))
           (shui/dialog-close! :ls-dialog-cmdk)
           (shui/popup-hide!)
-          (when non-empty
+          (when to-move
             (let [page-title (:block/title target)]
               (notification/show!
                [:span "Blocks added to "
