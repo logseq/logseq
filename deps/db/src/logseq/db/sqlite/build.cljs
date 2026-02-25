@@ -26,6 +26,9 @@
             [malli.core :as m]
             [malli.error :as me]))
 
+(defn block-property-value? [%]
+  (and (map? %) (:build/property-value %)))
+
 ;; should match definition in translate-property-value
 (defn page-prop-value?
   [prop-value]
@@ -487,7 +490,7 @@
                                                                   (keep #(cond
                                                                            (page-prop-value? %)
                                                                            (second %)
-                                                                           (and (map? %) (:build/property-value %))
+                                                                           (block-property-value? %)
                                                                            %
                                                                            :else
                                                                            nil))
