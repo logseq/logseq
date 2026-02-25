@@ -4,6 +4,7 @@
             [frontend.db :as db]
             [frontend.db.conn :as conn]
             [frontend.db.model :as model]
+            [frontend.db.utils]
             [frontend.test.helper :as test-helper :refer [load-test-files]]))
 
 (use-fixtures :each {:before test-helper/start-test-db!

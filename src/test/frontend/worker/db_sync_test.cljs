@@ -10,6 +10,7 @@
             [frontend.worker.sync.crypt :as sync-crypt]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
+            [logseq.db.frontend.validate :as db-validate]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
@@ -422,6 +423,100 @@
              [[:db/add (:db/id block) :block/updated-at 1710000000000]])
             (let [block' (d/entity @conn (:db/id block))]
               (is (= "test" (:block/title block'))))))))))
+
+(deftest ^:long rebase-does-not-leave-anonymous-created-by-entities-test
+  (testing "rebase should not leave entities with timestamps/created-by but without identity attrs"
+    (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
+          child-id (:db/id child1)
+          page-id (:db/id (:block/page parent))]
+      (with-redefs [db-sync/enqueue-local-tx!
+                    (let [orig db-sync/enqueue-local-tx!]
+                      (fn [repo tx-report]
+                        (when-not (:rtc-tx? (:tx-meta tx-report))
+                          (orig repo tx-report))))]
+        (with-datascript-conns conn client-ops-conn
+          (fn []
+            ;; Ensure the deleted block has the same created-by shape from production repros.
+            (d/transact! conn [[:db/add child-id :logseq.property/created-by-ref page-id]])
+            (outliner-core/delete-blocks! conn [(d/entity @conn child-id)] {})
+            (is (seq (#'db-sync/pending-txs test-repo)))
+            (#'db-sync/apply-remote-tx!
+             test-repo
+             nil
+             [[:db/add (:db/id parent) :block/title "parent remote"]])
+            (let [anonymous-ents (->> (d/datoms @conn :avet :logseq.property/created-by-ref)
+                                      (keep (fn [datom]
+                                              (let [ent (d/entity @conn (:e datom))]
+                                                (when (and (nil? (:block/uuid ent))
+                                                           (nil? (:db/ident ent))
+                                                           (some? (:block/created-at ent))
+                                                           (some? (:block/updated-at ent)))
+                                                  (select-keys ent [:db/id :block/created-at :block/updated-at :logseq.property/created-by-ref]))))))
+                  validation (db-validate/validate-local-db! @conn)]
+              (is (empty? anonymous-ents) (str anonymous-ents))
+              (is (empty? (map :entity (:errors validation)))
+                  (str (:errors validation))))))))))
+
+(deftest ^:long rebase-create-then-delete-does-not-leave-anonymous-entities-test
+  (testing "create+delete before sync should not leave anonymous entities after rebase"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          page-id (:db/id (:block/page parent))]
+      (with-redefs [db-sync/enqueue-local-tx!
+                    (let [orig db-sync/enqueue-local-tx!]
+                      (fn [repo tx-report]
+                        (when-not (:rtc-tx? (:tx-meta tx-report))
+                          (orig repo tx-report))))]
+        (with-datascript-conns conn client-ops-conn
+          (fn []
+            (outliner-core/insert-blocks! conn [{:block/title "temp-rebase-case"}] parent {:sibling? false})
+            (let [temp-block (db-test/find-block-by-content @conn "temp-rebase-case")
+                  temp-id (:db/id temp-block)]
+              (d/transact! conn [[:db/add temp-id :logseq.property/created-by-ref page-id]])
+              (outliner-core/delete-blocks! conn [temp-block] {})
+              (is (>= (count (#'db-sync/pending-txs test-repo)) 2))
+              (#'db-sync/apply-remote-tx!
+               test-repo
+               nil
+               [[:db/add (:db/id parent) :block/title "parent remote 2"]])
+              (let [anonymous-ents (->> (d/datoms @conn :avet :block/created-at)
+                                        (keep (fn [datom]
+                                                (let [ent (d/entity @conn (:e datom))]
+                                                  (when (and (nil? (:block/uuid ent))
+                                                             (nil? (:db/ident ent))
+                                                             (some? (:block/updated-at ent)))
+                                                    (select-keys ent [:db/id :block/created-at :block/updated-at :logseq.property/created-by-ref]))))))
+                    validation (db-validate/validate-local-db! @conn)]
+                (is (empty? anonymous-ents) (str anonymous-ents))
+                (is (empty? (map :entity (:errors validation)))
+                    (str (:errors validation)))))))))))
+
+(deftest ^:long malformed-remote-anonymous-entity-tx-is-ignored-test
+  (testing "remote tx creating anonymous entities should be ignored instead of invalidating db"
+    (let [{:keys [conn parent]} (setup-parent-child)
+          created-by-id (:db/id (:block/page parent))
+          ts 1771435997392
+          malformed-tx [[:db/add "missing-uuid-entity" :block/created-at ts]
+                        [:db/add "missing-uuid-entity" :block/updated-at ts]
+                        [:db/add "missing-uuid-entity" :logseq.property/created-by-ref created-by-id]]]
+      (with-datascript-conns conn nil
+        (fn []
+          (is (nil? (try
+                      (#'db-sync/apply-remote-tx! test-repo nil malformed-tx)
+                      nil
+                      (catch :default e
+                        e))))
+          (let [anonymous-ents (->> (d/datoms @conn :avet :logseq.property/created-by-ref)
+                                    (keep (fn [datom]
+                                            (let [ent (d/entity @conn (:e datom))]
+                                              (when (and (nil? (:block/uuid ent))
+                                                         (nil? (:db/ident ent))
+                                                         (= ts (:block/created-at ent))
+                                                         (= ts (:block/updated-at ent)))
+                                                (select-keys ent [:db/id :block/created-at :block/updated-at :logseq.property/created-by-ref]))))))
+                validation (db-validate/validate-local-db! @conn)]
+            (is (empty? anonymous-ents) (str anonymous-ents))
+            (is (empty? (map :entity (:errors validation)))
+                (str (:errors validation)))))))))
 
 (deftest ^:long offload-large-title-test
   (testing "large titles are offloaded to object storage with placeholder"
