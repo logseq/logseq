@@ -27,6 +27,7 @@
             [electron.state :as state]
             [electron.utils :as utils]
             [electron.window :as win]
+            [electron.graph-switch-flow :as graph-switch-flow]
             [logseq.cli.common.graph :as cli-common-graph]
             [logseq.common.graph :as common-graph]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -326,8 +327,11 @@
 
 (defmethod handle :setCurrentGraph [^js window [_ graph-name]]
   (let [next-graph-path (when graph-name (utils/get-graph-dir graph-name))
-        current-graph-path (state/get-window-graph-path window)]
-    (p/let [_ (when (not= current-graph-path next-graph-path)
+        current-graph-path (state/get-window-graph-path window)
+        release-runtime? (graph-switch-flow/release-runtime-on-set-current-graph?
+                          {:previous-graph-path current-graph-path
+                           :next-graph-path next-graph-path})]
+    (p/let [_ (when release-runtime?
                 (db-worker/release-window! (.-id window)))]
       (if next-graph-path
         (set-current-graph! window next-graph-path)

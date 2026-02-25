@@ -5,6 +5,7 @@
             [frontend.persist-db :as persist-db]
             [frontend.persist-db.protocol :as protocol]
             [frontend.persist-db.remote :as remote]
+            [frontend.storage :as storage]
             [frontend.state :as state]
             [frontend.util :as util]
             [promesa.core :as p]))
@@ -110,6 +111,52 @@
                        (set! ipc/ipc original-ipc)
                        (set! remote/start! original-start!)
                        (set! remote/stop! original-stop!)
+                       (done)))))))
+
+(deftest electron-fetch-init-data-then-set-current-repo-does-not-rebind-runtime
+  (async done
+    (let [ipc-calls (atom [])
+          start-calls (atom [])
+          stop-calls (atom [])
+          wrapped-worker (fn [& _] nil)
+          original-state @state/state
+          original-electron? util/electron?
+          original-ipc ipc/ipc
+          original-start! remote/start!
+          original-stop! remote/stop!
+          original-storage-set storage/set
+          original-storage-remove storage/remove]
+      (reset-runtime-state!)
+      (set! util/electron? (constantly true))
+      (set! ipc/ipc (fn [channel repo]
+                      (swap! ipc-calls conj [channel repo])
+                      (p/resolved nil)))
+      (set! remote/start! (fn [{:keys [repo]}]
+                            (swap! start-calls conj repo)
+                            (->FakeRemote repo wrapped-worker)))
+      (set! remote/stop! (fn [client]
+                           (swap! stop-calls conj (:repo client))
+                           (p/resolved true)))
+      (set! storage/set (fn [& _] nil))
+      (set! storage/remove (fn [& _] nil))
+      (-> (p/let [repo "logseq_db_graph_a"
+                  _ (persist-db/<fetch-init-data repo {})
+                  _ (state/set-current-repo! repo)]
+            (is (= [["db-worker-runtime" "logseq_db_graph_a"]
+                    ["setCurrentGraph" "logseq_db_graph_a"]]
+                   @ipc-calls))
+            (is (= ["logseq_db_graph_a"] @start-calls))
+            (is (empty? @stop-calls)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (reset! state/state original-state)
+                       (set! util/electron? original-electron?)
+                       (set! ipc/ipc original-ipc)
+                       (set! remote/start! original-start!)
+                       (set! remote/stop! original-stop!)
+                       (set! storage/set original-storage-set)
+                       (set! storage/remove original-storage-remove)
                        (done)))))))
 
 (deftest electron-list-db-without-current-repo-does-not-bootstrap-runtime
