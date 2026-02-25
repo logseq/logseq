@@ -499,6 +499,49 @@
              (= :block/uuid (first x)))
     (second x)))
 
+(defn- drop-anonymous-temp-entity-datoms
+  "Drop malformed temp entities from remote txs.
+   A temp entity must declare one identity attr (:block/uuid or :db/ident)
+   in its :db/add datoms; otherwise it can create anonymous entities that fail validation."
+  [db tx-data]
+  (let [identity-attrs #{:block/uuid :db/ident}
+        temp-id? (fn [x]
+                   (or (string? x)
+                       (and (integer? x) (neg? x))))
+        add-attrs-by-entity
+        (reduce (fn [acc item]
+                  (if (and (vector? item)
+                           (= :db/add (first item))
+                           (>= (count item) 4))
+                    (update acc (second item) (fnil conj #{}) (nth item 2))
+                    acc))
+                {}
+                tx-data)
+        dropped-entities
+        (->> add-attrs-by-entity
+             (keep (fn [[entity attrs]]
+                     (when (and (temp-id? entity)
+                                (empty? (set/intersection identity-attrs attrs)))
+                       entity)))
+             set)]
+    (if (seq dropped-entities)
+      (let [tx-data' (->> tx-data
+                          (remove (fn [item]
+                                    (and (vector? item)
+                                         (>= (count item) 2)
+                                         (contains? dropped-entities (second item)))))
+                          (remove (fn [item]
+                                    (and (vector? item)
+                                         (>= (count item) 4)
+                                         (keyword? (nth item 2))
+                                         (= :db.type/ref (:db/valueType (d/entity db (nth item 2))))
+                                         (contains? dropped-entities (nth item 3))))))]
+        (log/warn :db-sync/drop-anonymous-temp-entities
+                  {:count (count dropped-entities)
+                   :entities dropped-entities})
+        tx-data')
+      tx-data)))
+
 (defn- sanitize-tx-data
   [db tx-data local-deleted-ids]
   (let [sanitized-tx-data (->> tx-data
@@ -1020,7 +1063,8 @@
   [repo client tx-data*]
   (if-let [conn (worker-state/get-datascript-conn repo)]
     (let [tx-data (->> tx-data*
-                       (db-normalize/remove-retract-entity-ref @conn))
+                       (db-normalize/remove-retract-entity-ref @conn)
+                       (#(drop-anonymous-temp-entity-datoms @conn %)))
           local-txs (pending-txs repo)
           reversed-tx-data (get-reverse-tx-data local-txs)
           has-local-changes? (seq reversed-tx-data)
