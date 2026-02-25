@@ -1,5 +1,6 @@
 (ns logseq.db-sync.worker.agent.runtime-provider
-  (:require [clojure.string :as string]
+  (:require ["@cloudflare/sandbox" :as cf-sandbox]
+            [clojure.string :as string]
             [lambdaisland.glogi :as log]
             [logseq.db-sync.worker.agent.sandbox :as sandbox]
             [logseq.db-sync.worker.agent.source-control :as source-control]
@@ -602,14 +603,12 @@
 
 (defn- cloudflare-sandbox [^js env sandbox-id]
   (let [^js sandbox-ns (cloudflare-sandbox-namespace env)
-        id-from-name (js-method sandbox-ns "idFromName")
-        get-sandbox (js-method sandbox-ns "get")]
-    (when-not (and id-from-name get-sandbox)
-      (throw (ex-info "invalid Sandbox binding: missing idFromName/get" {})))
-    (let [do-id (.idFromName sandbox-ns sandbox-id)
-          sandbox (.get sandbox-ns do-id)]
+        get-sandbox (js-method cf-sandbox "getSandbox")]
+    (when-not (fn? get-sandbox)
+      (throw (ex-info "cloudflare sandbox sdk missing getSandbox method" {})))
+    (let [sandbox (.call get-sandbox cf-sandbox sandbox-ns sandbox-id)]
       (when-not sandbox
-        (throw (ex-info "failed to get cloudflare sandbox stub"
+        (throw (ex-info "failed to get cloudflare sandbox"
                         {:sandbox-id sandbox-id})))
       sandbox)))
 
@@ -873,7 +872,7 @@
         (throw (ex-info "cloudflare sandbox missing getSession method"
                         {:reason :unsupported-terminal
                          :sandbox-id sandbox-id})))
-      (p/let [session (->promise (.getSession sandbox session-id))]
+      (p/let [session (->promise (.call get-session sandbox session-id))]
         (when-not session
           (throw (ex-info "cloudflare sandbox session not found"
                           {:sandbox-id sandbox-id

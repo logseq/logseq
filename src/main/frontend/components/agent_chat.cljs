@@ -1,7 +1,6 @@
 (ns frontend.components.agent-chat
   (:require ["@ai-sdk/react" :refer [useChat]]
             ["@xterm/addon-fit/lib/addon-fit.mjs" :refer [FitAddon]]
-            ["@xterm/xterm/css/xterm.css"]
             ["@xterm/xterm/lib/xterm.mjs" :refer [Terminal]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
@@ -417,18 +416,103 @@
     :idle "Idle"
     "Idle"))
 
-(defn- terminal-control-bytes
-  [payload]
-  (.encode (js/TextEncoder.)
-           (str "\u0000" (js/JSON.stringify (clj->js payload)))))
+(defn- terminal-status-dot-class
+  [status]
+  (case status
+    :connected "bg-emerald-500"
+    :connecting "bg-amber-500 animate-pulse"
+    :failed "bg-red-500"
+    :disconnected "bg-muted-foreground/50"
+    :idle "bg-muted-foreground/50"
+    "bg-muted-foreground/50"))
 
 (defn- send-terminal-resize!
   [^js socket ^js terminal]
   (when (and (websocket-open? socket) terminal)
     (.send socket
-           (terminal-control-bytes {:type "resize"
-                                    :cols (.-cols terminal)
-                                    :rows (.-rows terminal)}))))
+           (js/JSON.stringify
+            (clj->js {:type "resize"
+                      :cols (.-cols terminal)
+                      :rows (.-rows terminal)})))))
+
+(defn- install-terminal-query-suppressors!
+  "Suppress terminal auto-replies that can leak into shell input in websocket PTY mode."
+  [^js terminal]
+  (let [parser (.-parser terminal)
+        register-csi (when parser (aget parser "registerCsiHandler"))
+        register-dcs (when parser (aget parser "registerDcsHandler"))
+        register-osc (when parser (aget parser "registerOscHandler"))
+        csi-da (when (fn? register-csi)
+                 (.call register-csi parser #js {:final "c"}
+                        (fn [_params] true)))
+        csi-da-secondary (when (fn? register-csi)
+                           (.call register-csi parser #js {:prefix ">" :final "c"}
+                                  (fn [_params] true)))
+        csi-dsr (when (fn? register-csi)
+                  (.call register-csi parser #js {:final "n"}
+                         (fn [_params] true)))
+        csi-dsr-private (when (fn? register-csi)
+                          (.call register-csi parser #js {:prefix "?" :final "n"}
+                                 (fn [_params] true)))
+        csi-request-mode (when (fn? register-csi)
+                           (.call register-csi parser #js {:intermediates "$" :final "p"}
+                                  (fn [_params] true)))
+        csi-request-mode-private (when (fn? register-csi)
+                                   (.call register-csi parser #js {:prefix "?"
+                                                                   :intermediates "$"
+                                                                   :final "p"}
+                                          (fn [_params] true)))
+        csi-window-options (when (fn? register-csi)
+                             (.call register-csi parser #js {:final "t"}
+                                    (fn [_params] true)))
+        dcs-rqss (when (fn? register-dcs)
+                   (.call register-dcs parser #js {:intermediates "$" :final "q"}
+                          (fn [_data _params] true)))
+        osc10 (when (fn? register-osc)
+                (.call register-osc parser 10 (fn [_data] true)))
+        osc11 (when (fn? register-osc)
+                (.call register-osc parser 11 (fn [_data] true)))
+        osc12 (when (fn? register-osc)
+                (.call register-osc parser 12 (fn [_data] true)))]
+    (->> [csi-da
+          csi-da-secondary
+          csi-dsr
+          csi-dsr-private
+          csi-request-mode
+          csi-request-mode-private
+          csi-window-options
+          dcs-rqss
+          osc10
+          osc11
+          osc12]
+         (filter some?)
+         vec)))
+
+(defn- terminal-generated-reply?
+  "Detect xterm auto-generated terminal replies so they don't get sent as user stdin."
+  [payload]
+  (when (string? payload)
+    (let [esc (str (char 27))
+          csi-prefix (str esc "[")
+          dcs-prefix (str esc "P")
+          osc10-prefix (str esc "]10;")
+          osc11-prefix (str esc "]11;")
+          osc12-prefix (str esc "]12;")
+          last-char (when (pos? (count payload))
+                      (subs payload (dec (count payload))))]
+      (or
+       (and (string/starts-with? payload dcs-prefix)
+            (or (string/includes? payload "$r")
+                (string/includes? payload "$y")))
+       (and (string/starts-with? payload csi-prefix)
+            (or (= "c" last-char)
+                (= "n" last-char)
+                (= "R" last-char)
+                (= "t" last-char)
+                (string/ends-with? payload "$y")))
+       (string/starts-with? payload osc10-prefix)
+       (string/starts-with? payload osc11-prefix)
+       (string/starts-with? payload osc12-prefix)))))
 
 (rum/defc ^:large-vars/cleanup-todo agent-chat-dialog
   [block]
@@ -464,6 +548,7 @@
         chat-messages (->> ui-messages
                            (map message->chat-message)
                            (remove nil?))
+        [active-view set-active-view!] (rum/use-state "chat")
         [draft set-draft!] (rum/use-state "")
         [publish-mode set-publish-mode!] (rum/use-state nil)
         [terminal-visible? set-terminal-visible!] (rum/use-state false)
@@ -485,6 +570,7 @@
         can-send? (and (not input-disabled?)
                        (not (string/blank? trimmed-draft))
                        (not busy?))
+        terminal-tab-active? (= active-view "terminal")
         send-message! (fn []
                         (when (and can-send? base session-id)
                           (set-draft! "")
@@ -508,13 +594,21 @@
                            (set-terminal-error! nil)
                            (set-terminal-connection-key! (inc terminal-connection-key))))
         reconnect-terminal! (fn []
-                              (when terminal-enabled?
+                              (when (and terminal-enabled? (not terminal-open-disabled?))
                                 (set-terminal-status! :connecting)
                                 (set-terminal-error! nil)
                                 (set-terminal-connection-key! (inc terminal-connection-key))))
         close-terminal! (fn []
                           (set-terminal-visible! false)
-                          (set-terminal-status! :disconnected))]
+                          (set-terminal-status! :disconnected)
+                          (set-active-view! "chat"))
+        open-terminal-tab! (fn []
+                             (set-active-view! "terminal")
+                             (when (and terminal-enabled?
+                                        (not terminal-open-disabled?)
+                                        (or (not terminal-visible?)
+                                            (contains? #{:failed :disconnected} terminal-status)))
+                               (open-terminal!)))]
     (hooks/use-effect!
      (fn []
        (when (agent-handler/task-ready? block)
@@ -553,16 +647,12 @@
                                           (catch :default _ nil))
                                         (send-terminal-resize! socket terminal))
                  handle-open (fn []
-                               (set-terminal-status! :connected)
-                               (try
-                                 (.fit fit-addon)
-                                 (catch :default _ nil))
-                               (send-terminal-resize! socket terminal))
+                               nil)
                  handle-message (fn [event]
                                   (let [payload (.-data event)]
                                     (cond
                                       (string? payload)
-                                      (when-let [message (parse-json-safe payload)]
+                                      (if-let [message (parse-json-safe payload)]
                                         (case (:type message)
                                           "ready"
                                           (do
@@ -578,7 +668,8 @@
                                           "exit"
                                           (set-terminal-status! :disconnected)
 
-                                          nil))
+                                          nil)
+                                        (.write terminal payload))
 
                                       (instance? js/ArrayBuffer payload)
                                       (.write terminal (js/Uint8Array. payload))
@@ -597,63 +688,73 @@
                                 (set-terminal-status! :disconnected))]
              (set! (.-innerHTML container) "")
              (.loadAddon terminal fit-addon)
-             (.open terminal container)
-             (try
-               (.fit fit-addon)
-               (catch :default _ nil))
-             (.focus terminal)
-             (set! (.-binaryType socket) "arraybuffer")
-             (let [dispose-data (.onData terminal
-                                         (fn [payload]
-                                           (when (websocket-open? socket)
-                                             (.send socket (.encode encoder payload)))))]
-               (.addEventListener socket "open" handle-open)
-               (.addEventListener socket "message" handle-message)
-               (.addEventListener socket "error" handle-error)
-               (.addEventListener socket "close" handle-close)
-               (.addEventListener js/window "resize" handle-window-resize)
-               (js/setTimeout
-                (fn []
-                  (try
-                    (.fit fit-addon)
-                    (catch :default _ nil))
-                  (send-terminal-resize! socket terminal))
-                50)
-               (fn []
-                 (.removeEventListener socket "open" handle-open)
-                 (.removeEventListener socket "message" handle-message)
-                 (.removeEventListener socket "error" handle-error)
-                 (.removeEventListener socket "close" handle-close)
-                 (.removeEventListener js/window "resize" handle-window-resize)
-                 (when dispose-data
-                   (.dispose dispose-data))
-                 (when (or (= (.-readyState socket) js/WebSocket.CONNECTING)
-                           (websocket-open? socket))
-                   (.close socket 1000 "client-close"))
-                 (try
-                   (.dispose terminal)
-                   (catch :default _ nil)))))
+             (let [query-suppressors (install-terminal-query-suppressors! terminal)]
+               (.open terminal container)
+               (try
+                 (.fit fit-addon)
+                 (catch :default _ nil))
+               (.focus terminal)
+               (set! (.-binaryType socket) "arraybuffer")
+               (let [dispose-data (.onData terminal
+                                           (fn [payload]
+                                             (let [payload-str (if (string? payload)
+                                                                 payload
+                                                                 (str payload))]
+                                               (when (and (websocket-open? socket)
+                                                          (not (terminal-generated-reply? payload-str)))
+                                                 (.send socket (.encode encoder payload-str))))))]
+                 (.addEventListener socket "open" handle-open)
+                 (.addEventListener socket "message" handle-message)
+                 (.addEventListener socket "error" handle-error)
+                 (.addEventListener socket "close" handle-close)
+                 (.addEventListener js/window "resize" handle-window-resize)
+                 (fn []
+                   (.removeEventListener socket "open" handle-open)
+                   (.removeEventListener socket "message" handle-message)
+                   (.removeEventListener socket "error" handle-error)
+                   (.removeEventListener socket "close" handle-close)
+                   (.removeEventListener js/window "resize" handle-window-resize)
+                   (when dispose-data
+                     (.dispose dispose-data))
+                   (doseq [disposable query-suppressors]
+                     (when (fn? (aget disposable "dispose"))
+                       (.dispose disposable)))
+                   (when (or (= (.-readyState socket) js/WebSocket.CONNECTING)
+                             (websocket-open? socket))
+                     (.close socket 1000 "client-close"))
+                   (try
+                     (.dispose terminal)
+                     (catch :default _ nil))))))
            nil)
          nil))
      [terminal-visible?
       terminal-enabled?
       terminal-url
       terminal-connection-key])
-    [:div.max-w-full.flex.flex-col
-     {:style {:height "70vh" :overflow "hidden"}}
-     [:div.flex.items-start.justify-between.gap-3
-      [:div.flex.flex-col.gap-1
-       [:div.flex.items-center.gap-2.text-xs.opacity-75
-        (or agent-label "Agent")
-        (when busy?
-          [:div.inline-flex.items-center.gap-1
-           [:span.inline-block.h-1.5.w-1.5.animate-pulse.rounded-full.bg-emerald-500]
-           "Streaming"])]
-       (when (string? error)
-         [:div.text-xs.text-red-500 error])
-       (when (string? terminal-error)
-         [:div.text-xs.text-red-500 terminal-error])]
-      (when terminal-enabled?
+    [:div.max-w-full.flex.flex-col.gap-3
+     {:style {:height "72vh" :overflow "hidden"}}
+     [:div.flex.items-center.gap-3
+      [:div.min-w-0.flex.flex-col.gap-2
+       [:div {:class "inline-flex w-fit items-center gap-1 rounded-lg border border-border bg-muted/40 p-1"}
+        (shui/button
+         {:size :sm
+          :variant (if (= active-view "chat") :default :ghost)
+          :class "h-7 px-3 text-xs"
+          :on-click (fn [_] (set-active-view! "chat"))}
+         "Chat")
+        (when terminal-enabled?
+          (shui/button
+           {:size :sm
+            :variant (if terminal-tab-active? :default :ghost)
+            :class "h-7 px-3 text-xs"
+            :on-click (fn [_] (open-terminal-tab!))}
+           [:span.inline-flex.items-center.gap-1
+            [:span.inline-block.h-1.5.w-1.5.rounded-full
+             {:class (terminal-status-dot-class terminal-status)}]
+            "Terminal"]))]]
+
+      (cond
+        (and terminal-enabled? terminal-tab-active?)
         [:div.flex.items-center.gap-2
          (shui/button
           {:size :sm
@@ -664,69 +765,92 @@
                        (if terminal-visible?
                          (reconnect-terminal!)
                          (open-terminal!)))}
-          (if terminal-visible?
-            "Reconnect terminal"
-            "Open terminal"))
+          (if terminal-visible? "Reconnect" "Connect"))
          (when terminal-visible?
            (shui/button
             {:size :sm
              :variant :outline
              :class "h-7 px-2 text-xs"
              :on-click (fn [_] (close-terminal!))}
-            "Close"))])]
-     [:div.mt-4.relative.flex.flex-1.flex-col.overflow-hidden.rounded-xl.border.border-border.bg-gradient-to-b.from-background.to-muted
-      {:style {:minHeight 0}}
-      (shui/agent-chat-box
-       {:messages (bean/->js chat-messages)
-        :agent-label agent-label
-        :class "h-full"
-        :content-class-name "gap-3 px-2 py-2 sm:px-3"})]
-     (when terminal-visible?
-       [:div.mt-3.rounded-xl.border.border-border.overflow-hidden
-        [:div.flex.items-center.justify-between.px-3.py-2.bg-muted
-         [:div.text-xs.opacity-80
-          (str "Terminal · " (terminal-status-label terminal-status))]
-         (when terminal-open-disabled?
-           [:div.text-xs.opacity-60 "Start session to connect"])]
-        [:div
-         {:ref terminal-container-ref
-          :class "h-56 w-full bg-black"}]])
-     [:div.mt-3.flex.items-center.justify-between.gap-2
-      [:div.text-xs.opacity-60
-       (if publish-busy?
-         "Publishing changes..."
-         "Publish session changes")]
-      [:div.flex.items-center.gap-2
-       (shui/button
-        {:size :sm
-         :variant :outline
-         :class "h-7 px-2 text-xs"
-         :disabled publish-disabled?
-         :on-click (fn [_]
-                     (publish! false))}
-        (if (= publish-mode :push)
-          "Pushing..."
-          "Push"))
-       (shui/button
-        {:size :sm
-         :class "h-7 px-2 text-xs"
-         :disabled publish-disabled?
-         :on-click (fn [_]
-                     (publish! true))}
-        (if (= publish-mode :pr)
-          "Creating PR..."
-          "Push + PR"))]]
-     (shui/agent-chat-prompt-input
-      {:value draft
-       :on-value-change set-draft!
-       :on-send send-message!
-       :disabled input-disabled?
-       :busy busy?
-       :placeholder (if input-disabled?
-                      "Start the session to chat..."
-                      "Message the agent...")
-       :hint "Enter to send, Shift+Enter for newline"})]))
+            "Disconnect"))]
+        (not terminal-tab-active?)
+        [:div {:class "inline-flex items-center gap-2 rounded-full bg-muted/70 px-2.5 py-1 text-xs"}
+         [:span.font-medium (or agent-label "Agent")]
+         (when busy?
+           [:span.inline-flex.items-center.gap-1.text-emerald-600
+            [:span.inline-block.h-1.5.w-1.5.animate-pulse.rounded-full.bg-emerald-500]
+            "Streaming"])])]
+     (when (string? error)
+       [:div {:class "mt-0.5 rounded-lg border border-red-300/40 bg-red-500/5 px-3 py-1.5 text-xs text-red-500"}
+        error])
+     (when (and terminal-tab-active? (string? terminal-error))
+       [:div {:class "mt-0.5 rounded-lg border border-red-300/40 bg-red-500/5 px-3 py-1.5 text-xs text-red-500"}
+        terminal-error])
+     [:div {:class "relative flex flex-1 flex-col overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-b from-background via-background to-muted/40 shadow-sm"
+            :style {:minHeight 0}}
+      [:div.h-full.min-h-0
+       {:class (if terminal-tab-active? "hidden" "block")}
+       (shui/agent-chat-box
+        {:messages (bean/->js chat-messages)
+         :agent-label agent-label
+         :class "h-full"
+         :content-class-name "gap-3 px-2 py-3 sm:px-3"})]
+      (when terminal-enabled?
+        [:div.h-full.min-h-0.flex.flex-col
+         {:class (if terminal-tab-active? "flex" "hidden")}
+         [:div.flex-1.min-h-0.p-3
+          (if terminal-open-disabled?
+            [:div {:class "h-full rounded-xl border border-dashed border-border/80 bg-muted/20 px-4 py-3 text-xs opacity-70"}
+             "Terminal will connect after the session starts."]
+            [:div {:class "h-full overflow-hidden rounded-xl border border-border/80 bg-black"}
+             (if terminal-visible?
+               [:div
+                {:ref terminal-container-ref
+                 :class "h-full w-full"}]
+               [:div {:class "flex h-full items-center justify-center text-xs text-white/70"}
+                "Connect terminal to start interactive shell"])])]])]
+     (when-not terminal-tab-active?
+       [:div.flex.items-center.justify-between.gap-2
+        [:div.text-xs.opacity-60
+         (if publish-busy?
+           "Publishing changes..."
+           "Publish session changes")]
+        [:div.flex.items-center.gap-2
+         (shui/button
+          {:size :sm
+           :variant :outline
+           :class "h-7 px-2 text-xs"
+           :disabled publish-disabled?
+           :on-click (fn [_]
+                       (publish! false))}
+          (if (= publish-mode :push)
+            "Pushing..."
+            "Push"))
+         (shui/button
+          {:size :sm
+           :class "h-7 px-2 text-xs"
+           :disabled publish-disabled?
+           :on-click (fn [_]
+                       (publish! true))}
+          (if (= publish-mode :pr)
+            "Creating PR..."
+            "Push + PR"))]])
+     (when-not terminal-tab-active?
+       (shui/agent-chat-prompt-input
+        {:value draft
+         :on-value-change set-draft!
+         :on-send send-message!
+         :disabled input-disabled?
+         :busy busy?
+         :placeholder (if input-disabled?
+                        "Start the session to chat..."
+                        "Message the agent...")
+         :hint "Enter to send, Shift+Enter for newline"}))]))
 
 (defn open-agent-chat-dialog!
   [block]
-  (shui/dialog-open! (fn [] (agent-chat-dialog block)) {:id :agent-chat-dialog}))
+  (shui/dialog-open!
+   (fn [] (agent-chat-dialog block))
+   {:id :agent-chat-dialog
+    :content-props {:style {:width "min(96vw, 1100px)"
+                            :max-width "1100px"}}}))
