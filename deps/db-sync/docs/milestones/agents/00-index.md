@@ -18,3 +18,4 @@ Milestones are tracked as separate files in this folder:
 - `12-m12-attachments.md`
 - `13-m13-cloudflare-sandbox-runtime.md`
 - `14-m14-git-push-and-optional-pr.md`
+- `15-m15-thread-chat-browser-terminal.md`
