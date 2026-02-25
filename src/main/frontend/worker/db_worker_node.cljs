@@ -51,7 +51,6 @@
           "--data-dir" (recur remaining (assoc opts :data-dir value))
           "--repo" (recur remaining (assoc opts :repo value))
           "--owner-source" (recur remaining (assoc opts :owner-source value))
-          "--rtc-ws-url" (recur remaining (assoc opts :rtc-ws-url value))
           "--log-level" (recur remaining (assoc opts :log-level value))
           "--help" (recur remaining (assoc opts :help? true))
           (recur remaining opts))))))
@@ -122,13 +121,17 @@
                      (js/clearTimeout timeout-id))))))
 
 (defn- <init-worker!
-  [proxy rtc-ws-url]
+  [proxy]
   (let [method-kw :thread-api/init
         method-str (normalize-method-str method-kw)]
-    (<invoke! proxy method-str method-kw true #js [rtc-ws-url])))
+    (<invoke! proxy method-str method-kw true #js [])))
 
 (def ^:private non-repo-methods
   #{:thread-api/init
+    :thread-api/set-db-sync-config
+    :thread-api/db-sync-stop
+    :thread-api/db-sync-update-presence
+    :thread-api/db-sync-ensure-user-rsa-keys
     :thread-api/list-db
     :thread-api/get-version
     :thread-api/set-infer-worker-proxy
@@ -160,6 +163,7 @@
   #{:thread-api/transact
     :thread-api/import-db
     :thread-api/import-db-base64
+    :thread-api/db-sync-import-kvs-rows
     :thread-api/import-edn
     :thread-api/unsafe-unlink-db
     :thread-api/search-upsert-blocks
@@ -277,7 +281,6 @@
   (println (str (style/bold "db-worker-node") " " (style/bold "options") ":"))
   (println (str "  " (style/bold "--data-dir") " <path>    (default ~/logseq/graphs)"))
   (println (str "  " (style/bold "--repo") " <name>        (required)"))
-  (println (str "  " (style/bold "--rtc-ws-url") " <url>   (optional)"))
   (println (str "  " (style/bold "--log-level") " <level>  (default info)"))
   (println "  logs: <data-dir>/<graph-dir>/db-worker-node-YYYYMMDD.log (retains 7)"))
 
@@ -345,7 +348,7 @@
     file-path))
 
 (defn start-daemon!
-  [{:keys [data-dir repo rtc-ws-url log-level owner-source]}]
+  [{:keys [data-dir repo log-level owner-source]}]
   (let [host "127.0.0.1"
         port 0
         owner-source (normalize-owner-source owner-source)]
@@ -366,7 +369,7 @@
                                                              :event-fn handle-event!
                                                              :write-guard-fn write-guard-fn})
                       proxy (db-core/init-core! platform)
-                      _ (<init-worker! proxy (or rtc-ws-url ""))
+                      _ (<init-worker! proxy)
                       {:keys [path lock]} (db-lock/ensure-lock! {:data-dir data-dir
                                                                  :repo repo
                                                                  :host host
@@ -423,7 +426,7 @@
 
 (defn main
   []
-  (let [{:keys [data-dir repo rtc-ws-url help? owner-source] :as opts}
+  (let [{:keys [data-dir repo help? owner-source] :as opts}
         (parse-args (.-argv js/process))]
     (when help?
       (show-help!)
@@ -435,7 +438,6 @@
                 (start-daemon! {:data-dir data-dir
                                 :repo repo
                                 :owner-source owner-source
-                                :rtc-ws-url rtc-ws-url
                                 :log-level (:log-level opts)})]
           (log/info :db-worker-node-ready {:host (:host daemon) :port (:port daemon)})
           (let [shutdown (fn []

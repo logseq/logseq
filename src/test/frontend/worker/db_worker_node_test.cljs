@@ -211,6 +211,14 @@
     (is (nil? (:auth-token result)))
     (is (= "/tmp/db-worker" (:data-dir result)))))
 
+(deftest db-worker-node-parse-args-ignores-rtc-ws-url
+  (let [parse-args #'db-worker-node/parse-args
+        result (parse-args #js ["node" "dist/db-worker-node.js"
+                                "--rtc-ws-url" "ws://example.com"
+                                "--repo" "logseq_db_parse_args"])]
+    (is (nil? (:rtc-ws-url result)))
+    (is (= "logseq_db_parse_args" (:repo result)))))
+
 (deftest db-worker-node-owner-source-cli-is-written-into-lock
   (async done
          (let [daemon (atom nil)
@@ -279,12 +287,13 @@
                  (with-out-str (show-help!)))
         plain-output (style/strip-ansi output)]
     (is (not (string/includes? (style/strip-ansi output) "--auth-token")))
+    (is (not (string/includes? plain-output "--rtc-ws-url")))
     (is (string/includes? plain-output "(default ~/logseq/graphs)"))
     (is (re-find #"\u001b\[[0-9;]*moptions\u001b\[[0-9;]*m:" output))
     (is (contains-bold? output "db-worker-node"))
     (is (contains-bold? output "--data-dir"))
     (is (contains-bold? output "--repo"))
-    (is (contains-bold? output "--rtc-ws-url"))
+    (is (not (contains-bold? output "--rtc-ws-url")))
     (is (contains-bold? output "--log-level"))))
 
 (deftest db-worker-node-repo-error-handles-keyword-methods
