@@ -839,6 +839,69 @@
            (sqlite-export/diff-exports export-map export-map2))
         "No diff between original export and export after importing into a new graph")))
 
+(deftest ^:long import-graph-preserves-property-history
+  (let [now (common-util/time-ms)
+        original-data
+        {:properties {:user.property/num {:logseq.property/type :number}
+                      :user.property/node {:logseq.property/type :node
+                                           :db/cardinality :db.cardinality/many}}
+         :pages-and-blocks [{:page {:block/title "page1"}
+                             :blocks [{:block/title "num block"
+                                       :build/properties {:user.property/num 44}}
+                                      {:block/title "status block"
+                                       :build/properties {:logseq.property/status :logseq.property/status.doing}}
+                                      {:block/title "node block"}
+                                      {:block/title "object 1"}
+                                      {:block/title "object 2"}]}]}
+        conn (db-test/create-conn-with-import-map original-data)
+        num-block (db-test/find-block-by-content @conn "num block")
+        status-block (db-test/find-block-by-content @conn "status block")
+        node-block (db-test/find-block-by-content @conn "node block")
+        original-property-history
+        [{:block/uuid (random-uuid)
+          :block/created-at now
+          :logseq.property.history/block [:block/uuid (:block/uuid num-block)]
+          :logseq.property.history/property :user.property/num
+          :logseq.property.history/scalar-value 42}
+         {:block/uuid (random-uuid)
+          :block/created-at (+ now 1000)
+          :logseq.property.history/block [:block/uuid (:block/uuid num-block)]
+          :logseq.property.history/property :user.property/num
+          :logseq.property.history/scalar-value 44}
+         {:block/uuid (random-uuid)
+          :block/created-at now
+          :logseq.property.history/block [:block/uuid (:block/uuid node-block)]
+          :logseq.property.history/property :user.property/node
+          :logseq.property.history/ref-value [:block/uuid (:block/uuid (db-test/find-block-by-content @conn "object 1"))]}
+         {:block/uuid (random-uuid)
+          :block/created-at (+ now 1000)
+          :logseq.property.history/block [:block/uuid (:block/uuid node-block)]
+          :logseq.property.history/property :user.property/node
+          :logseq.property.history/ref-value [:block/uuid (:block/uuid (db-test/find-block-by-content @conn "object 2"))]}
+         {:block/uuid (random-uuid)
+          :block/created-at now
+          :logseq.property.history/block [:block/uuid (:block/uuid status-block)]
+          :logseq.property.history/property :logseq.property/status
+          :logseq.property.history/ref-value :logseq.property/status.todo}
+         {:block/uuid (random-uuid)
+          :block/created-at (+ now 1000)
+          :logseq.property.history/block [:block/uuid (:block/uuid status-block)]
+          :logseq.property.history/property :logseq.property/status
+          :logseq.property.history/ref-value :logseq.property/status.doing}]
+        _ (d/transact! conn original-property-history)
+        export-map (sqlite-export/build-export @conn {:export-type :graph})
+        valid-result (sqlite-export/validate-export export-map)
+        _ (assert (not (:error valid-result)) "No error when importing export-map into new graph")
+        _ (validate-db (:db valid-result))
+        export-map2 (sqlite-export/build-export (:db valid-result) {:export-type :graph})
+        property-history (::sqlite-export/property-history export-map2)]
+    (is (= nil
+           (sqlite-export/diff-exports export-map export-map2))
+        "No diff between original export and export after importing into a new graph")
+      ;; (cljs.pprint/pprint (clojure.data/diff original-property-history property-history))
+    (is (= (set original-property-history) property-history)
+        "Original property history equals exported property history")))
+
 (deftest import-graph-with-different-property-value-cases
   (let [pvalue-uuid1 (random-uuid)
         original-data

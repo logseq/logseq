@@ -766,6 +766,33 @@
        (remove #(= :logseq.kv/schema-version (:db/ident %)))
        vec))
 
+(defn- build-property-history
+  "Builds property history. Always include timestamps regardless of :include-timestamps? because
+   timestamps are a necessary part of history"
+  [db]
+  (->> (d/q '[:find [(pull ?b [:block/uuid
+                               :block/created-at
+                               {:logseq.property.history/block [:block/uuid]}
+                               {:logseq.property.history/property [:db/ident]}
+                               {:logseq.property.history/ref-value [:db/ident :block/uuid]}
+                               :logseq.property.history/scalar-value]) ...]
+              :where [?b :logseq.property.history/block]] db)
+       (map (fn [history]
+              (cond-> (-> history
+                          (update :logseq.property.history/block
+                                  (fn [m] [:block/uuid (:block/uuid m)]))
+                          (update :logseq.property.history/property :db/ident)
+                          (update :logseq.property.history/ref-value
+                                  (fn [m]
+                                    (if (:db/ident m)
+                                      (:db/ident m)
+                                      [:block/uuid (:block/uuid m)]))))
+                (nil? (:logseq.property.history/ref-value history))
+                (dissoc :logseq.property.history/ref-value)
+                (not (contains? history :logseq.property.history/scalar-value))
+                (dissoc :logseq.property.history/scalar-value))))
+       set))
+
 (defn remove-uuids-if-not-ref [export-map all-ref-uuids]
   (let [remove-uuid-if-not-ref (partial remove-uuid-if-not-ref-given-uuids all-ref-uuids)]
     (-> export-map
@@ -825,7 +852,16 @@
         graph-export (if (seq (:exclude-namespaces options))
                        (assoc graph-export* ::auto-include-namespaces (:exclude-namespaces options))
                        graph-export*)
-        all-ref-uuids (set/union content-ref-uuids ontology-pvalue-uuids (:pvalue-uuids pages-export))
+        property-history (build-property-history db)
+        property-history-ref-uuids
+        (->> property-history
+             (mapcat (fn [history]
+                       (keep #(when (vector? %) (second %))
+                             [(:logseq.property.history/block history)
+                              (:logseq.property.history/ref-value history)])))
+             set)
+        all-ref-uuids (set/union content-ref-uuids ontology-pvalue-uuids (:pvalue-uuids pages-export)
+                                 property-history-ref-uuids)
         files (when-not exclude-files? (build-graph-files db options))
         kv-values (build-kv-values db)
         ;; Remove all non-ref uuids after all nodes are built.
@@ -837,7 +873,9 @@
       (not exclude-files?)
       (assoc ::graph-files files)
       true
-      (assoc ::kv-values kv-values))))
+      (assoc ::kv-values kv-values)
+      true
+      (assoc ::property-history property-history))))
 
 (defn- find-undefined-classes-and-properties [{:keys [classes properties pages-and-blocks]}]
   (let [referenced-classes
@@ -1074,6 +1112,7 @@
    * ::block - Block map for a :block export
    * ::graph-files - Vec of files for a :graph export
    * ::kv-values - Vec of :kv/value maps for a :graph export
+   * ::property-history - Set of property history blocks for a :graph export
    * ::auto-include-namespaces - A set of parent namespaces to include from properties and classes
      for a :graph export. See :exclude-namespaces in build-graph-export for a similar option
    * ::import-options - A map of options that alters importing behavior. Has the following keys:
@@ -1101,7 +1140,8 @@
       (if (= :graph (::export-type export-map''))
         (-> (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map''))
             (assoc :misc-tx (vec (concat (::graph-files export-map'')
-                                         (::kv-values export-map'')))))
+                                         (::kv-values export-map'')
+                                         (::property-history export-map'')))))
         (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map''))))))
 
 (defn create-conn
