@@ -154,6 +154,8 @@
         "@tabler/icons-react": "^2.47.0",
         "@tabler/icons-webfont": "^2.47.0",
         "@tippyjs/react": "4.2.5",
+        "@xterm/addon-fit": "^0.11.0",
+        "@xterm/xterm": "^6.0.0",
         "aws-amplify": "^6.15.6",
         "bignumber.js": "^9.0.2",
         "chokidar": "3.5.1",
@@ -198,11 +200,11 @@
         "shepherd.js": "^9.1.0",
         "tailwind-capitalize-first-letter": "^1.0.4",
         "threads": "1.6.5",
+        "ui": "0.0.1",
         "url": "^0.11.0",
         "util": "^0.12.5",
         "yargs-parser": "20.2.4",
-        "zod": "^4.3.6",
-        "ui": "0.0.1"
+        "zod": "^4.3.6"
     },
     "resolutions": {
         "pixi-graph-fork/@pixi/app": "6.2.0",

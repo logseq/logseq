@@ -21,12 +21,13 @@
   resolved "https://registry.yarnpkg.com/@cloudflare/containers/-/containers-0.0.30.tgz#c825edd70712cfee6c578f2280e19991cbcfca94"
   integrity sha512-i148xBgmyn/pje82ZIyuTr/Ae0BT/YWwa1/GTJcw6DxEjUHAzZLaBCiX446U9OeuJ2rBh/L/9FIzxX5iYNt1AQ==
 
-"@cloudflare/sandbox@0.7.0":
-  version "0.7.0"
-  resolved "https://registry.yarnpkg.com/@cloudflare/sandbox/-/sandbox-0.7.0.tgz#6182e04487880cb603b4adfced93131f29adcdac"
-  integrity sha512-U9e/fqc2R/epygMRoRFZxjM6z8ZSyJqQSFFykWTLWl2j+c9+kK9reBjp1G/RcvTAGtv8pH3Dac21jmvh4ZbGXg==
+"@cloudflare/sandbox@0.7.6":
+  version "0.7.6"
+  resolved "https://registry.yarnpkg.com/@cloudflare/sandbox/-/sandbox-0.7.6.tgz#60ed65c773903b1f3ba431028d45e5c845564945"
+  integrity sha512-tBDM3AsKeMVxCUXtClTC4rRKHejx8J54Uj7ngyNb7q2tRc4KkaFDY9o70Jq6E3nbxRNwJZ9TxdxtnbQvOy1F6g==
   dependencies:
     "@cloudflare/containers" "^0.0.30"
+    aws4fetch "^1.0.20"
 
 "@fly/sprites@^0.0.1":
   version "0.0.1"
@@ -506,6 +507,11 @@ acorn@^8.15.0:
   version "8.15.0"
   resolved "https://registry.yarnpkg.com/acorn/-/acorn-8.15.0.tgz#a360898bc415edaac46c8241f6383975b930b816"
   integrity sha512-NZyJarBfL7nWwIq+FDL6Zp/yHEhePMNnnJ0y3qfieCrmNvYct8uvtiV41UvlSe6apAfk0fY1FbWx+NwfmpvtTg==
+
+aws4fetch@^1.0.20:
+  version "1.0.20"
+  resolved "https://registry.yarnpkg.com/aws4fetch/-/aws4fetch-1.0.20.tgz#090d6c65e32c6df645dd5e5acf04cc56da575cbe"
+  integrity sha512-/djoAN709iY65ETD6LKCtyyEI04XIBP5xVvfmNxsEP0uJB5tyaGBztSryRr4HqMStr9R06PisQE7m9zDTXKu6g==
 
 balanced-match@^1.0.0:
   version "1.0.2"

@@ -42,6 +42,22 @@
                (assoc :body body))]
     (.fetch stub (platform/request url (clj->js init)))))
 
+(defn- forward-websocket-request [^js stub request url claims]
+  (let [headers (js/Headers. (.-headers request))
+        user-id (aget claims "sub")
+        email (aget claims "email")
+        username (aget claims "username")]
+    (when (string? user-id)
+      (.set headers "x-user-id" user-id))
+    (when (string? email)
+      (.set headers "x-user-email" email))
+    (when (string? username)
+      (.set headers "x-user-username" username))
+    (let [forwarded-request (js/Request. url
+                                         #js {:method (.-method request)
+                                              :headers headers})]
+      (.fetch stub forwarded-request))))
+
 (defn- handle-create [{:keys [env request url claims]}]
   (.then (common/read-json request)
          (fn [result]
@@ -129,6 +145,15 @@
           (forward-request stub do-url "GET" headers nil))
         (http/error-response "server error" 500)))))
 
+(defn- handle-terminal [{:keys [env request url claims route]}]
+  (let [session-id (get-in route [:path-params :session-id])]
+    (if-not (string? session-id)
+      (http/bad-request "invalid session id")
+      (if-let [^js stub (session-stub env session-id)]
+        (let [do-url (str (.-origin url) "/__session__/terminal" (.-search url))]
+          (forward-websocket-request stub request do-url claims))
+        (http/error-response "server error" 500)))))
+
 (defn- handle-events [{:keys [env request url claims route]}]
   (let [session-id (get-in route [:path-params :session-id])]
     (if-not (string? session-id)
@@ -168,6 +193,7 @@
     :sessions/interrupt (handle-control ctx "/__session__/interrupt")
     :sessions/cancel (handle-cancel ctx)
     :sessions/pr (handle-pr ctx)
+    :sessions/terminal (handle-terminal ctx)
     :sessions/events (handle-events ctx)
     :sessions/stream (handle-stream ctx)
     (http/not-found)))

@@ -62,7 +62,10 @@
       (is (= "session-3" (get-in match [:path-params :session-id]))))
     (let [match (routes/match-route "GET" "/sessions/session-4/stream")]
       (is (= :sessions/stream (:handler match)))
-      (is (= "session-4" (get-in match [:path-params :session-id]))))))
+      (is (= "session-4" (get-in match [:path-params :session-id]))))
+    (let [match (routes/match-route "GET" "/sessions/session-5/terminal")]
+      (is (= :sessions/terminal (:handler match)))
+      (is (= "session-5" (get-in match [:path-params :session-id]))))))
 
 (deftest match-route-sessions-events-test
   (testing "sessions events routes"

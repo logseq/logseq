@@ -215,3 +215,29 @@
                           (reset! state/state prev-state)
                           (is false (str e))
                           (done)))))))
+
+(deftest terminal-websocket-url-test
+  (let [url (agent-handler/terminal-websocket-url
+             "https://db-sync.example.com"
+             "sess-1"
+             {:token "jwt-123"
+              :cols 120
+              :rows 40})
+        parsed (js/URL. url)]
+    (is (= "wss:" (.-protocol parsed)))
+    (is (= "/sessions/sess-1/terminal" (.-pathname parsed)))
+    (is (= "jwt-123" (.get (.-searchParams parsed) "token")))
+    (is (= "120" (.get (.-searchParams parsed) "cols")))
+    (is (= "40" (.get (.-searchParams parsed) "rows")))))
+
+(deftest session-terminal-enabled-test
+  (is (true? (agent-handler/session-terminal-enabled?
+              {:runtime-provider "cloudflare"})))
+  (is (false? (agent-handler/session-terminal-enabled?
+               {:runtime-provider "sprites"})))
+  (is (true? (agent-handler/session-terminal-enabled?
+              {:events [{:type "session.provisioned"
+                         :data {:provider "cloudflare"}}]})))
+  (is (false? (agent-handler/session-terminal-enabled?
+               {:events [{:type "session.provisioned"
+                          :data {:provider "local-dev"}}]}))))

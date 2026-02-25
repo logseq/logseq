@@ -127,6 +127,12 @@
 (defn- terminal-status? [status]
   (contains? #{"completed" "failed" "canceled"} status))
 
+(defn- session-runtime-provider [session]
+  (some-> (get-in session [:runtime :provider]) str string/lower-case))
+
+(defn- session-terminal-enabled? [session]
+  (runtime-provider/runtime-terminal-supported? (:runtime session)))
+
 (defn- session-capabilities
   [session]
   (merge {:push-enabled true
@@ -386,13 +392,15 @@
             runtime-id (get-in existing [:runtime :session-id])]
         (p/let [_ (when-not (string? runtime-id)
                     (<provision-runtime! self (:task existing) session-id))
-                session (<get-session self)]
-          (when (and (map? (:runtime session))
-                     (not (terminal-status? (:status session))))
-            (start-runtime-events-stream-background! self session-id (:runtime session)))
+                current-session (<get-session self)]
+          (when (and (map? (:runtime current-session))
+                     (not (terminal-status? (:status current-session))))
+            (start-runtime-events-stream-background! self session-id (:runtime current-session)))
           (http/json-response :sessions/create
                               {:session-id session-id
-                               :status (:status session)
+                               :status (:status current-session)
+                               :runtime-provider (session-runtime-provider current-session)
+                               :terminal-enabled (session-terminal-enabled? current-session)
                                :stream-url (stream-url request session-id)})))
       (.then (common/read-json request)
              (fn [result]
@@ -425,10 +433,14 @@
                                                                                      :ts now})]
                        (p/let [_ (<put-session! self session)
                                _ (<put-events! self events)
-                               _ (<provision-runtime! self task task-id)]
+                               _ (<provision-runtime! self task task-id)
+                               updated-session (<get-session self)]
                          (http/json-response :sessions/create
                                              {:session-id task-id
-                                              :status (:status session)
+                                              :status (or (:status updated-session)
+                                                          (:status session))
+                                              :runtime-provider (session-runtime-provider updated-session)
+                                              :terminal-enabled (session-terminal-enabled? updated-session)
                                               :stream-url (stream-url request task-id)})))))))))))
 
 (defn- handle-status [^js self _request]
@@ -438,6 +450,8 @@
       (http/json-response :sessions/get
                           {:session-id (:id session)
                            :status (:status session)
+                           :runtime-provider (session-runtime-provider session)
+                           :terminal-enabled (session-terminal-enabled? session)
                            :task (:task session)
                            :audit (:audit session)
                            :created-at (:created-at session)
@@ -834,6 +848,74 @@
     (let [parsed (js/parseInt value 10)]
       (when (js/Number.isFinite parsed) parsed))))
 
+(defn- <terminal-opened-response!
+  [^js self user-id cols rows response]
+  (p/let [_ (<append-event! self (cond-> {:type "session.terminal.opened"
+                                          :data {:by user-id}
+                                          :ts (common/now-ms)}
+                                   (number? cols) (assoc-in [:data :cols] cols)
+                                   (number? rows) (assoc-in [:data :rows] rows)))]
+    response))
+
+(defn- terminal-error-status
+  [error]
+  (let [reason (some-> error ex-data :reason)]
+    (if (= reason :unsupported-terminal)
+      409
+      500)))
+
+(defn- terminal-error-message
+  [error]
+  (let [reason (some-> error ex-data :reason)]
+    (if (= reason :unsupported-terminal)
+      "session runtime does not support browser terminal"
+      "failed to open terminal")))
+
+(defn- <terminal-failed-response!
+  [^js self user-id cols rows error]
+  (p/let [_ (<append-event! self (cond-> {:type "session.terminal.failed"
+                                          :data {:by user-id
+                                                 :error (str error)}
+                                          :ts (common/now-ms)}
+                                   (number? cols) (assoc-in [:data :cols] cols)
+                                   (number? rows) (assoc-in [:data :rows] rows)))]
+    (http/error-response (terminal-error-message error)
+                         (terminal-error-status error))))
+
+(defn- handle-terminal [^js self request]
+  (let [user-id (user-id-from-request request)
+        url (platform/request-url request)
+        cols (parse-int (.get (.-searchParams url) "cols"))
+        rows (parse-int (.get (.-searchParams url) "rows"))]
+    (if-not (string? user-id)
+      (http/unauthorized)
+      (p/let [current-session (<get-session self)]
+        (cond
+          (nil? current-session)
+          (http/not-found)
+
+          (terminal-status? (:status current-session))
+          (session-conflict "session is not writable")
+
+          (not (map? (:runtime current-session)))
+          (session-conflict "session runtime unavailable")
+
+          :else
+          (let [runtime (:runtime current-session)
+                provider (runtime-provider/resolve-provider (.-env self) runtime)
+                opts (cond-> {}
+                       (number? cols) (assoc :cols cols)
+                       (number? rows) (assoc :rows rows))]
+            (-> (runtime-provider/<open-terminal! provider runtime request opts)
+                (p/then (fn [response]
+                          (<terminal-opened-response! self user-id cols rows response)))
+                (p/catch (fn [error]
+                           (log/error :agent/session-terminal-open-failed
+                                      {:session-id (:id current-session)
+                                       :runtime-session-id (:session-id runtime)
+                                       :error error})
+                           (<terminal-failed-response! self user-id cols rows error))))))))))
+
 (defn- handle-events [^js self request]
   (let [url (platform/request-url request)
         since-ts (parse-int (.get (.-searchParams url) "since"))
@@ -883,6 +965,9 @@
 
           (= path "/__session__/pr")
           (handle-pr self request)
+
+          (= path "/__session__/terminal")
+          (handle-terminal self request)
 
           (= path "/__session__/stream")
           (handle-stream self request)

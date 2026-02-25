@@ -816,3 +816,111 @@
                  (.catch (fn [error]
                            (is false (str "unexpected error: " error))
                            (done))))))))
+
+(deftest terminal-endpoint-requires-authenticated-user-test
+  (testing "session terminal endpoint requires x-user-id header"
+    (async done
+           (let [self (make-self #js {})]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-term-auth"
+                                 :status "running"
+                                 :task {}
+                                 :runtime {:provider "cloudflare"
+                                           :sandbox-id "sbx-1"
+                                           :session-id "sess-term-auth"}
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (agent-do/handle-fetch self
+                                                 (json-request "http://db-sync.local/__session__/terminal"
+                                                               "GET"
+                                                               nil
+                                                               {}))))
+                 (.then (fn [resp]
+                          (is (= 401 (.-status resp)))
+                          (done)))
+                 (.catch (fn [error]
+                           (is false (str "unexpected error: " error))
+                           (done))))))))
+
+(deftest terminal-endpoint-runtime-unavailable-test
+  (testing "session terminal endpoint returns conflict when runtime is missing"
+    (async done
+           (let [self (make-self #js {})
+                 headers {"x-user-id" "user-1"}]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-term-missing-runtime"
+                                 :status "running"
+                                 :task {}
+                                 :runtime nil
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (agent-do/handle-fetch self
+                                                 (json-request "http://db-sync.local/__session__/terminal"
+                                                               "GET"
+                                                               nil
+                                                               headers))))
+                 (.then (fn [resp]
+                          (is (= 409 (.-status resp)))
+                          (done)))
+                 (.catch (fn [error]
+                           (is false (str "unexpected error: " error))
+                           (done))))))))
+
+(deftest terminal-endpoint-opens-runtime-terminal-test
+  (testing "session terminal endpoint opens runtime terminal and forwards size options"
+    (async done
+           (let [calls (atom {})
+                 session-stub
+                 #js {:terminal
+                      (fn [request opts]
+                        (swap! calls assoc
+                               :url (.-url request)
+                               :method (.-method request)
+                               :opts (js->clj opts :keywordize-keys true))
+                        (js/Promise.resolve
+                         (js/Response.
+                          "ok"
+                          #js {:status 200})))}
+                 sandbox-stub
+                 #js {:getSession
+                      (fn [session-id]
+                        (swap! calls assoc :runtime-session-id session-id)
+                        (js/Promise.resolve session-stub))}
+                 sandbox-ns
+                 #js {:idFromName (fn [_] "id-sbx")
+                      :get (fn [_] sandbox-stub)}
+                 self (make-self #js {"Sandbox" sandbox-ns})
+                 headers {"x-user-id" "user-1"}]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-term-open"
+                                 :status "running"
+                                 :task {}
+                                 :runtime {:provider "cloudflare"
+                                           :sandbox-id "sbx-1"
+                                           :session-id "sess-term-open"}
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (agent-do/handle-fetch self
+                                                 (json-request "http://db-sync.local/__session__/terminal?cols=120&rows=40"
+                                                               "GET"
+                                                               nil
+                                                               headers))))
+                 (.then (fn [resp]
+                          (is (= 200 (.-status resp)))
+                          (is (= "GET" (:method @calls)))
+                          (is (= "sess-term-open" (:runtime-session-id @calls)))
+                          (is (= 120 (get-in @calls [:opts :cols])))
+                          (is (= 40 (get-in @calls [:opts :rows])))
+                          (done)))
+                 (.catch (fn [error]
+                           (is false (str "unexpected error: " error))
+                           (done))))))))

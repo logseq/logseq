@@ -113,6 +113,32 @@
 (defn- session-stream-url [base session-id]
   (str base "/sessions/" session-id "/stream"))
 
+(defn- websocket-base-url [base]
+  (when (string? base)
+    (cond
+      (string/starts-with? base "https://")
+      (str "wss://" (subs base (count "https://")))
+
+      (string/starts-with? base "http://")
+      (str "ws://" (subs base (count "http://")))
+
+      :else
+      base)))
+
+(defn terminal-websocket-url
+  [base session-id {:keys [token cols rows]}]
+  (let [ws-base (websocket-base-url base)]
+    (when (and (string? ws-base) (string? session-id))
+      (let [url (js/URL. (str ws-base "/sessions/" session-id "/terminal"))
+            search-params (.-searchParams url)]
+        (when (string? token)
+          (.set search-params "token" token))
+        (when (number? cols)
+          (.set search-params "cols" (str cols)))
+        (when (number? rows)
+          (.set search-params "rows" (str rows)))
+        (.toString url)))))
+
 (def ^:private session-status->task-status
   {"created" :logseq.property/status.doing
    "running" :logseq.property/status.doing
@@ -123,6 +149,25 @@
 
 (defn- terminal-status? [status]
   (contains? #{"completed" "failed" "canceled"} status))
+
+(defn- normalize-runtime-provider [provider]
+  (some-> provider str string/trim string/lower-case not-empty))
+
+(defn- runtime-provider-terminal-enabled? [provider]
+  (= "cloudflare" (normalize-runtime-provider provider)))
+
+(defn- event-runtime-provider [event]
+  (when (= "session.provisioned" (:type event))
+    (some-> (get-in event [:data :provider]) normalize-runtime-provider)))
+
+(defn session-terminal-enabled?
+  [session]
+  (let [provider (or (normalize-runtime-provider (:runtime-provider session))
+                     (some->> (:events session)
+                              reverse
+                              (keep event-runtime-provider)
+                              first))]
+    (runtime-provider-terminal-enabled? provider)))
 
 (defn- status->label [status-ident]
   (some-> (db/entity status-ident) :block/title))
@@ -227,7 +272,13 @@
                               {:response-schema :sessions/events})
           (p/then (fn [resp]
                     (when (seq (:events resp))
-                      (append-events! block-uuid (:events resp)))))
+                      (append-events! block-uuid (:events resp))
+                      (when-let [provider (some->> (:events resp)
+                                                   reverse
+                                                   (keep event-runtime-provider)
+                                                   first)]
+                        (update-session-state! block-uuid {:runtime-provider provider
+                                                           :terminal-enabled (runtime-provider-terminal-enabled? provider)})))))
           (p/catch (fn [_] nil))))))
 
 (defn- session-terminal? [block-uuid]
@@ -248,6 +299,9 @@
 (defn- handle-stream-event!
   [block-uuid event]
   (append-events! block-uuid [event])
+  (when-let [provider (event-runtime-provider event)]
+    (update-session-state! block-uuid {:runtime-provider provider
+                                       :terminal-enabled (runtime-provider-terminal-enabled? provider)}))
   (when-let [status (event->status event)]
     (update-session-state! block-uuid {:status status})
     (maybe-update-task-status! block-uuid status)
@@ -345,6 +399,8 @@
                       stream-url (session-stream-url base session-id)]
                 (update-session-state! block-uuid {:session-id session-id
                                                    :status (:status resp)
+                                                   :runtime-provider (:runtime-provider resp)
+                                                   :terminal-enabled (true? (:terminal-enabled resp))
                                                    :stream-url stream-url
                                                    :loading? false})
                 (maybe-update-task-status! block-uuid (:status resp))
@@ -398,6 +454,8 @@
                                             {:response-schema :sessions/message})))]
             (update-session-state! block-uuid {:session-id session-id
                                                :status status
+                                               :runtime-provider (:runtime-provider resp)
+                                               :terminal-enabled (true? (:terminal-enabled resp))
                                                :stream-url stream-url
                                                :started-at (util/time-ms)})
             (<connect-session-stream! block-uuid stream-url)

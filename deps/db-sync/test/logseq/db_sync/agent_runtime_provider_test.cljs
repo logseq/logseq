@@ -611,3 +611,93 @@
                (.catch (fn [error]
                          (is false (str "unexpected error: " error))
                          (done)))))))
+
+(deftest local-dev-provider-open-terminal-unsupported-test
+  (async done
+         (let [env #js {"SANDBOX_AGENT_URL" "http://127.0.0.1:2468"}
+               provider (runtime-provider/create-provider env "local-dev")
+               runtime {:provider "local-dev"
+                        :base-url "http://127.0.0.1:2468"
+                        :session-id "sess-terminal-unsupported"}
+               request (js/Request. "http://db-sync.local/sessions/sess-terminal-unsupported/terminal"
+                                    #js {:method "GET"})]
+           (-> (runtime-provider/<open-terminal! provider runtime request {:cols 120 :rows 40})
+               (.then (fn [_]
+                        (is false "expected local-dev terminal to reject as unsupported")
+                        (done)))
+               (.catch (fn [error]
+                         (let [data (ex-data error)]
+                           (is (= :unsupported-terminal (:reason data)))
+                           (is (= "local-dev" (:provider data))))
+                         (done)))))))
+
+(deftest cloudflare-provider-open-terminal-test
+  (async done
+         (let [calls (atom {})
+               session-stub
+               #js {:terminal
+                    (fn [request opts]
+                      (swap! calls assoc
+                             :terminal-url (.-url request)
+                             :terminal-method (.-method request)
+                             :terminal-opts (js->clj opts :keywordize-keys true))
+                      (js/Promise.resolve
+                       (js/Response.
+                        "ok"
+                        #js {:status 200})))}
+               sandbox-stub
+               #js {:getSession
+                    (fn [session-id]
+                      (swap! calls assoc :runtime-session-id session-id)
+                      (js/Promise.resolve session-stub))}
+               sandbox-ns
+               #js {:idFromName (fn [_] "id-sbx")
+                    :get (fn [_] sandbox-stub)}
+               env #js {"Sandbox" sandbox-ns}
+               provider (runtime-provider/create-provider env "cloudflare")
+               runtime {:provider "cloudflare"
+                        :sandbox-id "sbx-1"
+                        :sandbox-port 8000
+                        :session-id "sess-3"}
+               request (js/Request. "http://db-sync.local/sessions/sess-3/terminal"
+                                    #js {:method "GET"})]
+           (-> (runtime-provider/<open-terminal! provider runtime request {:cols 120 :rows 40})
+               (.then (fn [resp]
+                        (is (= 200 (.-status resp)))
+                        (is (= "sess-3" (:runtime-session-id @calls)))
+                        (is (= "GET" (:terminal-method @calls)))
+                        (is (= 120 (get-in @calls [:terminal-opts :cols])))
+                        (is (= 40 (get-in @calls [:terminal-opts :rows])))
+                        (done)))
+               (.catch (fn [error]
+                         (is false (str "unexpected error: " error))
+                         (done)))))))
+
+(deftest cloudflare-provider-open-terminal-missing-method-test
+  (async done
+         (let [session-stub #js {}
+               sandbox-stub
+               #js {:getSession
+                    (fn [_session-id]
+                      (js/Promise.resolve session-stub))}
+               sandbox-ns
+               #js {:idFromName (fn [_] "id-sbx")
+                    :get (fn [_] sandbox-stub)}
+               env #js {"Sandbox" sandbox-ns}
+               provider (runtime-provider/create-provider env "cloudflare")
+               runtime {:provider "cloudflare"
+                        :sandbox-id "sbx-1"
+                        :sandbox-port 8000
+                        :session-id "sess-3"}
+               request (js/Request. "http://db-sync.local/sessions/sess-3/terminal"
+                                    #js {:method "GET"})]
+           (-> (runtime-provider/<open-terminal! provider runtime request {:cols 120 :rows 40})
+               (.then (fn [_]
+                        (is false "expected cloudflare terminal to reject when session.terminal is missing")
+                        (done)))
+               (.catch (fn [error]
+                         (let [data (ex-data error)]
+                           (is (= :unsupported-terminal (:reason data)))
+                           (is (= "sbx-1" (:sandbox-id data)))
+                           (is (= "sess-3" (:session-id data))))
+                         (done)))))))

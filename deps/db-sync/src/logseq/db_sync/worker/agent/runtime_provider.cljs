@@ -859,10 +859,41 @@
     :else
     (p/resolved nil)))
 
+(defn- <cloudflare-open-terminal!
+  [^js env runtime request {:keys [cols rows]}]
+  (let [sandbox-id (:sandbox-id runtime)
+        session-id (:session-id runtime)]
+    (when-not (string? sandbox-id)
+      (throw (ex-info "missing sandbox-id on runtime" {:runtime runtime})))
+    (when-not (string? session-id)
+      (throw (ex-info "missing runtime session-id on runtime" {:runtime runtime})))
+    (let [sandbox (cloudflare-sandbox env sandbox-id)
+          get-session (js-method sandbox "getSession")]
+      (when-not (fn? get-session)
+        (throw (ex-info "cloudflare sandbox missing getSession method"
+                        {:reason :unsupported-terminal
+                         :sandbox-id sandbox-id})))
+      (p/let [session (->promise (.getSession sandbox session-id))]
+        (when-not session
+          (throw (ex-info "cloudflare sandbox session not found"
+                          {:sandbox-id sandbox-id
+                           :session-id session-id})))
+        (let [terminal (js-method session "terminal")
+              opts (cond-> {}
+                     (number? cols) (assoc :cols cols)
+                     (number? rows) (assoc :rows rows))]
+          (when-not (fn? terminal)
+            (throw (ex-info "cloudflare sandbox session missing terminal method"
+                            {:reason :unsupported-terminal
+                             :sandbox-id sandbox-id
+                             :session-id session-id})))
+          (->promise (.call terminal session request (clj->js opts))))))))
+
 (defprotocol RuntimeProvider
   (<provision-runtime! [this session-id task])
   (<open-events-stream! [this runtime])
   (<send-message! [this runtime message])
+  (<open-terminal! [this runtime request opts])
   (<push-branch! [this runtime opts])
   (<terminate-runtime! [this runtime]))
 
@@ -936,6 +967,12 @@
         (js/console.log "[agent:sprites-send-message]" script)
         (p/let [_ (sprites-exec-post! env name ["bash" "-lc" script])]
           true))))
+
+  (<open-terminal! [_ _runtime _request _opts]
+    (p/rejected
+     (ex-info "sprites runtime provider does not support browser terminal"
+              {:reason :unsupported-terminal
+               :provider "sprites"})))
 
   (<push-branch! [_ runtime opts]
     (let [name (:sprite-name runtime)
@@ -1018,6 +1055,12 @@
           agent-token (local-dev-token env runtime)]
       (sandbox/<send-message base-url agent-token (:session-id runtime) message)))
 
+  (<open-terminal! [_ _runtime _request _opts]
+    (p/rejected
+     (ex-info "local-dev runtime provider does not support browser terminal"
+              {:reason :unsupported-terminal
+               :provider "local-dev"})))
+
   (<push-branch! [_ _runtime _opts]
     (p/rejected
      (ex-info "local-dev runtime provider does not support managed git push"
@@ -1099,6 +1142,9 @@
       (let [sandbox (cloudflare-sandbox env sandbox-id)]
         (prn :debug :send-message message)
         (<cloudflare-send-message! sandbox port agent-token session-id message))))
+
+  (<open-terminal! [_ runtime request opts]
+    (<cloudflare-open-terminal! env runtime request opts))
 
   (<push-branch! [_ runtime opts]
     (let [sandbox-id (:sandbox-id runtime)
@@ -1197,3 +1243,8 @@
 (defn resolve-provider
   [^js env runtime]
   (create-provider env (runtime-provider-kind env runtime)))
+
+(defn runtime-terminal-supported?
+  [runtime]
+  (let [provider (known-provider-kind (:provider runtime))]
+    (= "cloudflare" provider)))

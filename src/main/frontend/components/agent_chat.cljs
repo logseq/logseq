@@ -1,5 +1,8 @@
 (ns frontend.components.agent-chat
   (:require ["@ai-sdk/react" :refer [useChat]]
+            ["@xterm/addon-fit/lib/addon-fit.mjs" :refer [FitAddon]]
+            ["@xterm/xterm/css/xterm.css"]
+            ["@xterm/xterm/lib/xterm.mjs" :refer [Terminal]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.handler.agent :as agent-handler]
@@ -393,6 +396,40 @@
                    true))
                session-messages)))))
 
+(defn- parse-json-safe
+  [value]
+  (when (string? value)
+    (try
+      (js->clj (js/JSON.parse value) :keywordize-keys true)
+      (catch :default _ nil))))
+
+(defn- websocket-open?
+  [^js socket]
+  (and socket (= (.-readyState socket) js/WebSocket.OPEN)))
+
+(defn- terminal-status-label
+  [status]
+  (case status
+    :connecting "Connecting"
+    :connected "Connected"
+    :disconnected "Disconnected"
+    :failed "Failed"
+    :idle "Idle"
+    "Idle"))
+
+(defn- terminal-control-bytes
+  [payload]
+  (.encode (js/TextEncoder.)
+           (str "\u0000" (js/JSON.stringify (clj->js payload)))))
+
+(defn- send-terminal-resize!
+  [^js socket ^js terminal]
+  (when (and (websocket-open? socket) terminal)
+    (.send socket
+           (terminal-control-bytes {:type "resize"
+                                    :cols (.-cols terminal)
+                                    :rows (.-rows terminal)}))))
+
 (rum/defc ^:large-vars/cleanup-todo agent-chat-dialog
   [block]
   (let [block-uuid (:block/uuid block)
@@ -420,6 +457,7 @@
                            (str e))))
         error (or chat-error (:stream-error session))
         session-started? (boolean (:session-id session))
+        terminal-enabled? (agent-handler/session-terminal-enabled? session)
         session-chat-messages (->> session-messages
                                    (map message->chat-message)
                                    (remove nil?))
@@ -428,6 +466,17 @@
                            (remove nil?))
         [draft set-draft!] (rum/use-state "")
         [publish-mode set-publish-mode!] (rum/use-state nil)
+        [terminal-visible? set-terminal-visible!] (rum/use-state false)
+        [terminal-status set-terminal-status!] (rum/use-state :idle)
+        [terminal-error set-terminal-error!] (rum/use-state nil)
+        [terminal-connection-key set-terminal-connection-key!] (rum/use-state 0)
+        terminal-container-ref (hooks/use-ref nil)
+        auth-token (state/get-auth-id-token)
+        terminal-url (agent-handler/terminal-websocket-url base
+                                                           session-id
+                                                           {:token auth-token})
+        terminal-open-disabled? (or (not session-started?)
+                                    (not (string? terminal-url)))
         trimmed-draft (string/trim (or draft ""))
         busy? (contains? #{"submitted" "streaming"} chat-status)
         input-disabled? (or (not session-started?) (not (agent-handler/task-ready? block)))
@@ -451,7 +500,21 @@
                                   (string? commit-message) (assoc :commit-message commit-message))]
                        (-> (agent-handler/<publish-session! block opts)
                            (p/catch (fn [_] nil))
-                           (p/finally (fn [] (set-publish-mode! nil)))))))]
+                           (p/finally (fn [] (set-publish-mode! nil)))))))
+        open-terminal! (fn []
+                         (when (and terminal-enabled? (not terminal-open-disabled?))
+                           (set-terminal-visible! true)
+                           (set-terminal-status! :connecting)
+                           (set-terminal-error! nil)
+                           (set-terminal-connection-key! (inc terminal-connection-key))))
+        reconnect-terminal! (fn []
+                              (when terminal-enabled?
+                                (set-terminal-status! :connecting)
+                                (set-terminal-error! nil)
+                                (set-terminal-connection-key! (inc terminal-connection-key))))
+        close-terminal! (fn []
+                          (set-terminal-visible! false)
+                          (set-terminal-status! :disconnected))]
     (hooks/use-effect!
      (fn []
        (when (agent-handler/task-ready? block)
@@ -471,6 +534,111 @@
          (agent-handler/<fetch-events! block))
        nil)
      [session-id session-started?])
+    (hooks/use-effect!
+     (fn []
+       (if (and terminal-visible?
+                terminal-enabled?
+                (string? terminal-url))
+         (if-let [container (hooks/deref terminal-container-ref)]
+           (let [terminal (Terminal. #js {:convertEol true
+                                          :cursorBlink true
+                                          :fontSize 12
+                                          :fontFamily "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"})
+                 fit-addon (FitAddon.)
+                 socket (js/WebSocket. terminal-url)
+                 encoder (js/TextEncoder.)
+                 handle-window-resize (fn []
+                                        (try
+                                          (.fit fit-addon)
+                                          (catch :default _ nil))
+                                        (send-terminal-resize! socket terminal))
+                 handle-open (fn []
+                               (set-terminal-status! :connected)
+                               (try
+                                 (.fit fit-addon)
+                                 (catch :default _ nil))
+                               (send-terminal-resize! socket terminal))
+                 handle-message (fn [event]
+                                  (let [payload (.-data event)]
+                                    (cond
+                                      (string? payload)
+                                      (when-let [message (parse-json-safe payload)]
+                                        (case (:type message)
+                                          "ready"
+                                          (do
+                                            (set-terminal-status! :connected)
+                                            (send-terminal-resize! socket terminal))
+
+                                          "error"
+                                          (do
+                                            (set-terminal-status! :failed)
+                                            (set-terminal-error! (or (:message message)
+                                                                     "terminal connection error")))
+
+                                          "exit"
+                                          (set-terminal-status! :disconnected)
+
+                                          nil))
+
+                                      (instance? js/ArrayBuffer payload)
+                                      (.write terminal (js/Uint8Array. payload))
+
+                                      (instance? js/Blob payload)
+                                      (-> (.arrayBuffer payload)
+                                          (.then (fn [buffer]
+                                                   (.write terminal (js/Uint8Array. buffer))))
+                                          (.catch (fn [_] nil)))
+
+                                      :else nil)))
+                 handle-error (fn []
+                                (set-terminal-status! :failed)
+                                (set-terminal-error! "terminal websocket error"))
+                 handle-close (fn []
+                                (set-terminal-status! :disconnected))]
+             (set! (.-innerHTML container) "")
+             (.loadAddon terminal fit-addon)
+             (.open terminal container)
+             (try
+               (.fit fit-addon)
+               (catch :default _ nil))
+             (.focus terminal)
+             (set! (.-binaryType socket) "arraybuffer")
+             (let [dispose-data (.onData terminal
+                                         (fn [payload]
+                                           (when (websocket-open? socket)
+                                             (.send socket (.encode encoder payload)))))]
+               (.addEventListener socket "open" handle-open)
+               (.addEventListener socket "message" handle-message)
+               (.addEventListener socket "error" handle-error)
+               (.addEventListener socket "close" handle-close)
+               (.addEventListener js/window "resize" handle-window-resize)
+               (js/setTimeout
+                (fn []
+                  (try
+                    (.fit fit-addon)
+                    (catch :default _ nil))
+                  (send-terminal-resize! socket terminal))
+                50)
+               (fn []
+                 (.removeEventListener socket "open" handle-open)
+                 (.removeEventListener socket "message" handle-message)
+                 (.removeEventListener socket "error" handle-error)
+                 (.removeEventListener socket "close" handle-close)
+                 (.removeEventListener js/window "resize" handle-window-resize)
+                 (when dispose-data
+                   (.dispose dispose-data))
+                 (when (or (= (.-readyState socket) js/WebSocket.CONNECTING)
+                           (websocket-open? socket))
+                   (.close socket 1000 "client-close"))
+                 (try
+                   (.dispose terminal)
+                   (catch :default _ nil)))))
+           nil)
+         nil))
+     [terminal-visible?
+      terminal-enabled?
+      terminal-url
+      terminal-connection-key])
     [:div.max-w-full.flex.flex-col
      {:style {:height "70vh" :overflow "hidden"}}
      [:div.flex.items-start.justify-between.gap-3
@@ -482,7 +650,30 @@
            [:span.inline-block.h-1.5.w-1.5.animate-pulse.rounded-full.bg-emerald-500]
            "Streaming"])]
        (when (string? error)
-         [:div.text-xs.text-red-500 error])]]
+         [:div.text-xs.text-red-500 error])
+       (when (string? terminal-error)
+         [:div.text-xs.text-red-500 terminal-error])]
+      (when terminal-enabled?
+        [:div.flex.items-center.gap-2
+         (shui/button
+          {:size :sm
+           :variant :outline
+           :class "h-7 px-2 text-xs"
+           :disabled terminal-open-disabled?
+           :on-click (fn [_]
+                       (if terminal-visible?
+                         (reconnect-terminal!)
+                         (open-terminal!)))}
+          (if terminal-visible?
+            "Reconnect terminal"
+            "Open terminal"))
+         (when terminal-visible?
+           (shui/button
+            {:size :sm
+             :variant :outline
+             :class "h-7 px-2 text-xs"
+             :on-click (fn [_] (close-terminal!))}
+            "Close"))])]
      [:div.mt-4.relative.flex.flex-1.flex-col.overflow-hidden.rounded-xl.border.border-border.bg-gradient-to-b.from-background.to-muted
       {:style {:minHeight 0}}
       (shui/agent-chat-box
@@ -490,6 +681,16 @@
         :agent-label agent-label
         :class "h-full"
         :content-class-name "gap-3 px-2 py-2 sm:px-3"})]
+     (when terminal-visible?
+       [:div.mt-3.rounded-xl.border.border-border.overflow-hidden
+        [:div.flex.items-center.justify-between.px-3.py-2.bg-muted
+         [:div.text-xs.opacity-80
+          (str "Terminal · " (terminal-status-label terminal-status))]
+         (when terminal-open-disabled?
+           [:div.text-xs.opacity-60 "Start session to connect"])]
+        [:div
+         {:ref terminal-container-ref
+          :class "h-56 w-full bg-black"}]])
      [:div.mt-3.flex.items-center.justify-between.gap-2
       [:div.text-xs.opacity-60
        (if publish-busy?

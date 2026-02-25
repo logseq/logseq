@@ -33,6 +33,7 @@
      ["/cancel" {:methods {"POST" :sessions/cancel}}]
      ["/pr" {:methods {"POST" :sessions/pr}}]
      ["/events" {:methods {"GET" :sessions/events}}]
+     ["/terminal" {:methods {"GET" :sessions/terminal}}]
      ["/stream" {:methods {"GET" :sessions/stream}}]]]])
 
 (def ^:private router

@@ -262,12 +262,16 @@
   [:map
    [:session-id :string]
    [:status :string]
+   [:runtime-provider {:optional true} [:maybe :string]]
+   [:terminal-enabled {:optional true} :boolean]
    [:stream-url :string]])
 
 (def sessions-get-response-schema
   [:map
    [:session-id :string]
    [:status :string]
+   [:runtime-provider {:optional true} [:maybe :string]]
+   [:terminal-enabled {:optional true} :boolean]
    [:task :map]
    [:audit :map]
    [:created-at :int]

@@ -20,7 +20,7 @@
     "deploy-staging": "export SENTRY_RELEASE=$(git rev-parse HEAD) && yarn clean && yarn release && yarn sentry:sourcemaps && cd ./worker && wrangler deploy --env staging"
   },
   "dependencies": {
-    "@cloudflare/sandbox": "0.7.5",
+    "@cloudflare/sandbox": "0.7.6",
     "@fly/sprites": "^0.0.1",
     "@sentry/cloudflare": "^10.38.0",
     "@sentry/node": "^10.38.0",
