@@ -10,7 +10,7 @@ instance_type = "lite"
 max_instances = 1
 
 [containers.settings]
-idle_timeout = "10m"
+idle_timeout = "1h"
 
 [version_metadata]
 binding = "CF_VERSION_METADATA"
