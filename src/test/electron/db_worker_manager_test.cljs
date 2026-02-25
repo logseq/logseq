@@ -77,6 +77,50 @@
                      (is false (str "unexpected error: " e))))
           (p/finally (fn [] (done)))))))
 
+(deftest ensure-stopped-stale-repo-does-not-clear-new-window-mapping
+  (async done
+    (let [stop-calls (atom [])
+          manager (db-worker/create-manager
+                   {:start-daemon! (fn [repo] (p/resolved (runtime repo)))
+                    :stop-daemon! (fn [rt]
+                                    (swap! stop-calls conj (:repo rt))
+                                    (p/resolved true))})]
+      (-> (p/let [_ (db-worker/ensure-started! manager "graph-a" :window-1)
+                  _ (db-worker/ensure-started! manager "graph-a" :window-2)
+                  _ (db-worker/ensure-started! manager "graph-b" :window-1)
+                  ;; simulate late/stale release for previous repo after window-1 already moved to graph-b
+                  _ (db-worker/ensure-stopped! manager "graph-a" :window-1)
+                  manager-state @(:state manager)]
+            (is (= "graph-b" (get-in manager-state [:window->repo :window-1])))
+            (is (= #{:window-2} (get-in manager-state [:repos "graph-a" :windows])))
+            (is (= #{:window-1} (get-in manager-state [:repos "graph-b" :windows])))
+            (is (empty? @stop-calls)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
+(deftest ensure-stopped-stale-intermediate-repo-after-switch-back-keeps-current-repo
+  (async done
+    (let [stop-calls (atom [])
+          manager (db-worker/create-manager
+                   {:start-daemon! (fn [repo] (p/resolved (runtime repo)))
+                    :stop-daemon! (fn [rt]
+                                    (swap! stop-calls conj (:repo rt))
+                                    (p/resolved true))})]
+      (-> (p/let [_ (db-worker/ensure-started! manager "graph-a" :window-1)
+                  _ (db-worker/ensure-started! manager "graph-b" :window-1)
+                  _ (db-worker/ensure-started! manager "graph-a" :window-1)
+                  ;; stale cleanup for graph-b arrives after the window is already back on graph-a
+                  _ (db-worker/ensure-stopped! manager "graph-b" :window-1)
+                  manager-state @(:state manager)]
+            (is (= "graph-a" (get-in manager-state [:window->repo :window-1])))
+            (is (= #{:window-1} (get-in manager-state [:repos "graph-a" :windows])))
+            (is (nil? (get-in manager-state [:repos "graph-b"])))
+            (is (= ["graph-a" "graph-b"] @stop-calls)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn [] (done)))))))
+
 (deftest ensure-window-stopped-releases-active-runtime-by-window
   (async done
     (let [stop-calls (atom [])

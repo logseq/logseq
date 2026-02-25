@@ -42,7 +42,7 @@
       [state nil]
       (let [remaining (disj (:windows entry) window-id)
             state' (cond-> state
-                     true
+                     (= repo (get-in state [:window->repo window-id]))
                      (update :window->repo dissoc window-id)
 
                      (seq remaining)
