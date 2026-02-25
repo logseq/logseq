@@ -47,6 +47,51 @@
         value))
     value))
 
+(defn status-part-label
+  [part]
+  (some-> (or (:label part)
+              (:status-label part)
+              (:status_label part))
+          str
+          non-empty-str
+          string/lower-case))
+
+(defn status-part-detail
+  [part]
+  (let [detail (:detail part)]
+    (cond
+      (map? detail) detail
+      (string? detail) (let [parsed (parse-json-safe detail)]
+                         (when (map? parsed) parsed))
+      :else nil)))
+
+(defn status-error-message
+  [part]
+  (let [label (status-part-label part)
+        detail (status-part-detail part)
+        error-value (:error detail)
+        error-message (cond
+                        (map? error-value)
+                        (or (non-empty-str (:message error-value))
+                            (non-empty-str (:error error-value))
+                            (non-empty-str (:codexErrorInfo error-value)))
+                        (string? error-value) (non-empty-str error-value)
+                        :else nil)
+        detail-message (or error-message
+                           (non-empty-str (:message detail))
+                           (non-empty-str (:error_message detail))
+                           (non-empty-str (:error-message detail)))
+        failed-status? (= "failed" (normalize-kind (:status detail)))
+        failed-turn-label? (contains? #{"turn.completed" "turn.failed" "turn.error"} label)]
+    (cond
+      (string? detail-message)
+      detail-message
+
+      (and failed-status? failed-turn-label?)
+      "Agent turn failed."
+
+      :else nil)))
+
 (defn unwrap-event-payload
   [event]
   (loop [payload (let [data (:data event)]

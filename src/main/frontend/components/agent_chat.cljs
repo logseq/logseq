@@ -244,6 +244,10 @@
                              (= "tool-result" part-kind)
                              (set-tool-output! item-id role part)
 
+                             (= "status" part-kind)
+                             (when-let [error-message (chat-event/status-error-message part)]
+                               (set-text-part! item-id "assistant" error-message))
+
                              :else nil)))
                        (process-event! [event]
                          (let [event-type (:type event)
@@ -285,6 +289,10 @@
 
                                    (= "tool-result" item-kind)
                                    (set-tool-output! item-id role merged)
+
+                                   (= "status" item-kind)
+                                   (when-let [error-message (chat-event/status-error-message merged)]
+                                     (set-text-part! item-id "assistant" error-message))
 
                                    :else
                                    (set-text-part! item-id role (or (chat-event/payload-text item)

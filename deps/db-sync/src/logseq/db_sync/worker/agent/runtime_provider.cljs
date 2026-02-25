@@ -717,6 +717,7 @@
 
 (defn- <cloudflare-start-server! [^js env ^js sandbox task port agent-token]
   (let [command (cloudflare-server-command env task port agent-token)]
+    (prn :debug :command command)
     (if (js-method sandbox "startProcess")
       (->promise (.startProcess sandbox command))
       (->promise (<cloudflare-exec! sandbox (str "nohup " command " >/tmp/sandbox-agent.log 2>&1 &"))))))
@@ -793,6 +794,8 @@
                                   :headers headers})]
     (p/let [resp (<cloudflare-container-fetch! sandbox request port)
             status (.-status resp)]
+      (prn :debug :status status
+           :cloudflare-local-host cloudflare-local-host)
       (if (<= 200 status 299)
         resp
         (throw (ex-info "cloudflare sandbox open-events-stream failed"
@@ -1094,6 +1097,7 @@
       (when-not (string? session-id)
         (throw (ex-info "missing runtime session-id on runtime" {:runtime runtime})))
       (let [sandbox (cloudflare-sandbox env sandbox-id)]
+        (prn :debug :send-message message)
         (<cloudflare-send-message! sandbox port agent-token session-id message))))
 
   (<push-branch! [_ runtime opts]

@@ -434,6 +434,109 @@
                            (is false (str "unexpected error: " error))
                            (done))))))))
 
+(deftest messages-wait-for-events-stream-before-runtime-send-test
+  (testing "session runtime send waits until events stream is established"
+    (async done
+           (let [calls (atom {:create 0
+                              :events-sse 0
+                              :messages 0
+                              :messages-before-stream? false})
+                 events-stream-open? (atom false)
+                 open-events-stream! (atom nil)
+                 original-fetch js/fetch
+                 env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"
+                          "SANDBOX_AGENT_URL" "http://sandbox.local"}
+                 self (make-self env)
+                 headers {"content-type" "application/json"
+                          "x-user-id" "user-1"}
+                 init-body {:id "sess-stream-ready"
+                            :project {:id "project-1"}
+                            :agent "codex"}]
+             (set! js/fetch
+                   (fn [request]
+                     (let [url (.-url request)
+                           method (.-method request)]
+                       (cond
+                         (and (= "POST" method)
+                              (string/includes? url "/v1/sessions/sess-stream-ready")
+                              (not (string/includes? url "/messages")))
+                         (do
+                           (swap! calls update :create inc)
+                           (js/Promise.resolve
+                            (js/Response.
+                             (js/JSON.stringify #js {:ok true})
+                             #js {:status 200
+                                  :headers #js {"content-type" "application/json"}})))
+
+                         (and (= "GET" method)
+                              (string/includes? url "/v1/sessions/sess-stream-ready/events/sse"))
+                         (do
+                           (swap! calls update :events-sse inc)
+                           (js/Promise.
+                            (fn [resolve _reject]
+                              (reset! open-events-stream!
+                                      (fn []
+                                        (reset! events-stream-open? true)
+                                        (resolve
+                                         (js/Response.
+                                          (.-readable (js/TransformStream.))
+                                          #js {:status 200
+                                               :headers #js {"content-type" "text/event-stream"}})))))))
+
+                         (and (= "POST" method)
+                              (string/includes? url "/v1/sessions/sess-stream-ready/messages")
+                              (not (string/includes? url "/messages/stream")))
+                         (do
+                           (swap! calls update :messages inc)
+                           (when-not @events-stream-open?
+                             (swap! calls assoc :messages-before-stream? true))
+                           (js/Promise.resolve
+                            (js/Response.
+                             (js/JSON.stringify #js {:ok true})
+                             #js {:status 200
+                                  :headers #js {"content-type" "application/json"}})))
+
+                         :else
+                         (js/Promise.resolve
+                          (js/Response.
+                           (js/JSON.stringify #js {:error "unhandled request"})
+                           #js {:status 500
+                                :headers #js {"content-type" "application/json"}}))))))
+
+             (let [promise (-> (agent-do/handle-fetch self
+                                                      (json-request "http://db-sync.local/__session__/init"
+                                                                    "POST"
+                                                                    init-body
+                                                                    headers))
+                               (.then (fn [_]
+                                        (agent-do/handle-fetch self
+                                                               (json-request "http://db-sync.local/__session__/messages"
+                                                                             "POST"
+                                                                             {:message "quick question"}
+                                                                             headers))))
+                               (.then (fn [resp]
+                                        (is (= 200 (.-status resp)))
+                                        (is (= 0 (:messages @calls)))
+                                        (if-let [open! @open-events-stream!]
+                                          (open!)
+                                          (is false "events stream opener missing"))
+                                        (js/Promise.resolve nil)))
+                               (.then (fn [_]
+                                        (js/Promise. (fn [resolve _reject]
+                                                       (js/setTimeout resolve 0)))))
+                               (.then (fn [_]
+                                        (set! js/fetch original-fetch)
+                                        (is (= 1 (:create @calls)))
+                                        (is (= 1 (:events-sse @calls)))
+                                        (is (= 1 (:messages @calls)))
+                                        (is (false? (:messages-before-stream? @calls)))
+                                        (done))))]
+               (.catch promise
+                       (fn [error]
+                         (set! js/fetch original-fetch)
+                         (is false (str "unexpected error: " error))
+                         (done))))))))
+
 (deftest messages-persists-when-existing-events-near-storage-limit-test
   (testing "message append should retain existing events even with low configured max bytes"
     (async done

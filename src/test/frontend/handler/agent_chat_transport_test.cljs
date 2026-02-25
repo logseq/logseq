@@ -155,6 +155,70 @@
                          (is false (str "unexpected error: " error))
                          (done)))))))
 
+(deftest send-messages-emits-text-delta-for-turn-completed-status-error-test
+  (async done
+         (let [fetch-fn (fn [url init]
+                          (let [method (or (aget init "method") "GET")]
+                            (cond
+                              (and (= "POST" method)
+                                   (= "http://db-sync.local/sessions/sess-1/messages" url))
+                              (js/Promise.resolve
+                               (js/Response.
+                                (js/JSON.stringify #js {:ok true})
+                                #js {:status 200
+                                     :headers #js {"content-type" "application/json"}}))
+
+                              (and (= "GET" method)
+                                   (= "http://db-sync.local/sessions/sess-1/stream" url))
+                              (js/Promise.resolve
+                               (sse-response
+                                [{:type "item.completed"
+                                  :ts 1100
+                                  :data {:item_id "itm-9"
+                                         :item {:item_id "itm-9"
+                                                :kind "status"
+                                                :role "system"
+                                                :content [{:type "status"
+                                                           :label "turn.completed"
+                                                           :detail "{\"error\":{\"codexErrorInfo\":\"unauthorized\",\"message\":\"Your access token could not be refreshed because your refresh token was already used. Please log out and sign in again.\"},\"status\":\"failed\"}"}]}}}
+                                 {:type "response.completed"
+                                  :ts 1200
+                                  :data {:item_id "itm-9"}}]))
+
+                              :else
+                              (js/Promise.resolve
+                               (js/Response.
+                                (js/JSON.stringify #js {:error "unexpected request"})
+                                #js {:status 500
+                                     :headers #js {"content-type" "application/json"}})))))
+               transport (agent-chat-transport/make-transport
+                          {:base "http://db-sync.local"
+                           :session-id "sess-1"
+                           :fetch-fn fetch-fn
+                           :now-fn (fn [] 1000)
+                           :idle-timeout-ms 100})]
+           (-> (.sendMessages transport
+                              #js {:chatId "sess-1"
+                                   :trigger "submit-message"
+                                   :messageId nil
+                                   :messages #js [#js {:id "user-1"
+                                                       :role "user"
+                                                       :parts #js [#js {:type "text"
+                                                                        :text "hello"}]}]})
+               (.then <read-all-chunks)
+               (.then (fn [chunks]
+                        (let [delta (some #(when (= "text-delta" (:type %)) %) chunks)
+                              types (mapv :type chunks)]
+                          (is (some #{"start"} types))
+                          (is (some #{"text-start"} types))
+                          (is (= "Your access token could not be refreshed because your refresh token was already used. Please log out and sign in again."
+                                 (:delta delta)))
+                          (is (= "finish" (:type (last chunks))))
+                          (done))))
+               (.catch (fn [error]
+                         (is false (str "unexpected error: " error))
+                         (done)))))))
+
 (deftest send-messages-rejects-empty-user-message-test
   (async done
          (let [call-count (atom 0)

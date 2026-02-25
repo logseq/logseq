@@ -181,6 +181,7 @@
 
 (defn- <terminate-runtime! [^js self runtime]
   (set! (.-runtime-events-stream self) nil)
+  (set! (.-runtime-events-stream-ready self) nil)
   (if-not (map? runtime)
     (p/resolved nil)
     (let [provider (runtime-provider/resolve-provider (.-env self) runtime)]
@@ -210,10 +211,12 @@
           (when (terminal-status? (:status current-session))
             (<terminate-runtime! self (:runtime current-session))))))))
 
-(defn- <consume-events-stream! [^js self session-id runtime]
+(defn- <consume-events-stream! [^js self session-id runtime on-ready]
   (let [provider (runtime-provider/resolve-provider (.-env self) runtime)]
     (p/let [resp (runtime-provider/<open-events-stream! provider runtime)
             reader (.getReader (.-body resp))]
+      (when (fn? on-ready)
+        (on-ready))
       (let [decoder (js/TextDecoder.)
             buffer (atom "")]
         (letfn [(emit-frame! [frame]
@@ -242,8 +245,22 @@
   (when (and (map? runtime)
              (string? (:session-id runtime))
              (nil? (.-runtime-events-stream self)))
-    (let [stream-task (-> (<consume-events-stream! self session-id runtime)
+    (let [ready-state (atom {:resolve nil
+                             :resolved? false})
+          ready-promise (js/Promise.
+                         (fn [resolve _reject]
+                           (swap! ready-state assoc :resolve resolve)))
+          resolve-ready! (fn [value]
+                           (let [{:keys [resolve resolved?]} @ready-state]
+                             (when (and (fn? resolve) (not resolved?))
+                               (swap! ready-state assoc :resolved? true)
+                               (resolve value))))
+          stream-task (-> (<consume-events-stream! self
+                                                   session-id
+                                                   runtime
+                                                   #(resolve-ready! :ready))
                           (.catch (fn [error]
+                                    (resolve-ready! :error)
                                     (log/error :agent/runtime-events-stream-error
                                                {:session-id session-id
                                                 :runtime-session-id (:session-id runtime)
@@ -252,28 +269,53 @@
                                                           :data {:session-id session-id
                                                                  :message (str error)}
                                                           :ts (common/now-ms)}))))]
+      (set! (.-runtime-events-stream-ready self) ready-promise)
       (set! (.-runtime-events-stream self)
             (.finally stream-task
                       (fn []
-                        (set! (.-runtime-events-stream self) nil)))))))
+                        (resolve-ready! :closed)
+                        (set! (.-runtime-events-stream self) nil)
+                        (set! (.-runtime-events-stream-ready self) nil))))
+      ready-promise)))
+
+(defn- <await-events-stream-ready
+  [ready-promise timeout-ms]
+  (if-not ready-promise
+    (p/resolved :no-stream)
+    (js/Promise.race
+     #js [(js/Promise.resolve ready-promise)
+          (js/Promise.
+           (fn [resolve _reject]
+             (js/setTimeout
+              (fn [] (resolve :timeout))
+              timeout-ms)))])))
+
+(defn- ensure-runtime-events-stream-ready!
+  [^js self session-id runtime]
+  (when (and (map? runtime)
+             (string? (:session-id runtime)))
+    (when (nil? (.-runtime-events-stream self))
+      (start-runtime-events-stream! self session-id runtime))
+    (.-runtime-events-stream-ready self)))
+
+(def ^:private events-stream-ready-timeout-ms 1000)
 
 (defn- start-runtime-events-stream-background! [^js self session-id runtime]
   ;; Fire-and-forget start. Returning nil avoids p/let awaiting the stream task.
   (when (and (map? runtime)
              (string? (:session-id runtime)))
-    (start-runtime-events-stream! self session-id runtime)
+    (ensure-runtime-events-stream-ready! self session-id runtime)
     nil))
 
-(defn- send-runtime-message-background!
+(defn- send-runtime-message!
   [^js self current-session runtime provider message kind]
-  (when (and runtime
-             provider
-             (string? (:session-id runtime)))
-    (start-runtime-events-stream-background! self (:id current-session) runtime)
-    (-> (runtime-provider/<send-message! provider
-                                         runtime
-                                         {:message message
-                                          :kind kind})
+  (let [ready-promise (ensure-runtime-events-stream-ready! self (:id current-session) runtime)]
+    (-> (<await-events-stream-ready ready-promise events-stream-ready-timeout-ms)
+        (.then (fn [_]
+                 (runtime-provider/<send-message! provider
+                                                  runtime
+                                                  {:message message
+                                                   :kind kind})))
         (.catch (fn [error]
                   (log/error :agent/runtime-message-error
                              {:session-id (:id current-session)
@@ -283,7 +325,14 @@
                                         :data {:session-id (:id current-session)
                                                :message (str error)}
                                         :ts (common/now-ms)})))
-        (.catch (fn [_] nil)))
+        (.catch (fn [_] nil)))))
+
+(defn- send-runtime-message-background!
+  [^js self current-session runtime provider message kind]
+  (when (and runtime
+             provider
+             (string? (:session-id runtime)))
+    (send-runtime-message! self current-session runtime provider message kind)
     nil))
 
 (defn- <transition! [^js self to-status event-type data]

@@ -344,6 +344,11 @@
                   (= "tool-result" part-kind)
                   (tool-output-chunks! item-id part)
 
+                  (= "status" part-kind)
+                  (if-let [error-message (chat-event/status-error-message part)]
+                    (text-delta-chunks! error-message)
+                    [])
+
                   :else
                   [])))
             (item-completed-chunks! [payload item item-id]
@@ -374,6 +379,11 @@
 
                       (= "tool-result" item-kind)
                       (tool-output-chunks! item-id merged)
+
+                      (= "status" item-kind)
+                      (if-let [error-message (chat-event/status-error-message merged)]
+                        (text-delta-chunks! error-message)
+                        [])
 
                       emitted-text-delta?
                       []

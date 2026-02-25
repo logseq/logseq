@@ -27,6 +27,7 @@
   (testing "normalizes known sandbox-agent aliases"
     (is (= "claude" (sandbox/normalize-agent-id "claude-code")))
     (is (= "claude" (sandbox/normalize-agent-id "CLAUDE_CODE")))
+    (is (= "codex" (sandbox/normalize-agent-id "chatgpt")))
     (is (= "opencode" (sandbox/normalize-agent-id "open-code")))
     (is (= "codex" (sandbox/normalize-agent-id "codex")))
     (is (nil? (sandbox/normalize-agent-id "   ")))))

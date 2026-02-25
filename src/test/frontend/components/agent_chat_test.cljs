@@ -134,6 +134,24 @@
                         :text "**Inspecting repo structure**"}]}]
              messages)))))
 
+(deftest session->messages-includes-turn-completed-status-errors-test
+  (testing "extracts status detail error message from turn.completed events"
+    (let [session {:events [{:type "item.completed"
+                             :ts 1100
+                             :data {:item_id "itm-9"
+                                    :item {:item_id "itm-9"
+                                           :kind "status"
+                                           :role "system"
+                                           :content [{:type "status"
+                                                      :label "turn.completed"
+                                                      :detail "{\"error\":{\"codexErrorInfo\":\"unauthorized\",\"message\":\"Your access token could not be refreshed because your refresh token was already used. Please log out and sign in again.\"},\"status\":\"failed\"}"}]}}}]}
+          messages (#'agent-chat/session->messages session {:block/uuid "b4"})]
+      (is (= [{:id "itm-9"
+               :role "assistant"
+               :parts [{:type "text"
+                        :text "Your access token could not be refreshed because your refresh token was already used. Please log out and sign in again."}]}]
+             messages)))))
+
 (deftest session-messages-need-sync-detects-content-growth-without-clobbering-optimistic-ui-test
   (testing "session updates with richer content should sync even when count is unchanged"
     (let [f (some-> (resolve 'frontend.components.agent-chat/session-messages-need-sync?)

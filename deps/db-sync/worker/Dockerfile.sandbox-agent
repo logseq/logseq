@@ -1,10 +1,9 @@
 FROM docker.io/cloudflare/sandbox:0.7.0
 
 WORKDIR /workspace
-RUN curl -fsSL https://releases.rivet.dev/sandbox-agent/latest/install.sh | sh
+# RUN curl -fsSL https://releases.rivet.dev/sandbox-agent/latest/install.sh | sh
 # Pre-install agents
-RUN sandbox-agent install-agent claude && \
-    sandbox-agent install-agent codex
+# RUN sandbox-agent install-agent codex
 
 # Expose port for local dev (wrangler dev requires EXPOSE directives)
 EXPOSE 2468
