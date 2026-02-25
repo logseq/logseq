@@ -196,9 +196,6 @@
     (assoc :build/class-extends
            (set (map :db/ident (:logseq.property.class/extends class-ent))))))
 
-(defn block-property-value? [%]
-  (and (map? %) (:build/property-value %)))
-
 (defn- build-node-classes
   [db build-block block-tags properties]
   (let [pvalue-classes (->> (:build/properties build-block)
@@ -206,7 +203,7 @@
                             (mapcat (fn [val-or-vals]
                                       (mapcat #(cond (sqlite-build/page-prop-value? %)
                                                      (:build/tags (second %))
-                                                     (block-property-value? %)
+                                                     (sqlite-build/block-property-value? %)
                                                      (:build/tags %))
                                               (if (set? val-or-vals) val-or-vals [val-or-vals]))))
                             (remove db-class/logseq-class?))
@@ -509,7 +506,7 @@
             (fn [props]
               (let [shrink-property-value
                     (fn shrink-property-value [v]
-                      (if (block-property-value? v)
+                      (if (sqlite-build/block-property-value? v)
                         ;; Keep property value as map if uuid is referenced or it has unique attributes
                         (if (or (contains? ref-uuids (:block/uuid v))
                                ;; Keep this in sync with build-pvalue-entity-default
@@ -806,7 +803,7 @@
                                 ;; TODO: Walk data structure via :build/properties instead of slower walk
                                 page-map'
                                 (walk/postwalk (fn [f]
-                                                 (if (block-property-value? f)
+                                                 (if (sqlite-build/block-property-value? f)
                                                    (remove-uuid-if-not-ref f)
                                                    f))
                                                page-map)]
@@ -903,7 +900,7 @@
 (defn- find-undefined-uuids [db {:keys [classes properties pages-and-blocks]}]
   (let [pvalue-known-uuids (atom #{})
         _ (walk/postwalk (fn [f]
-                           (if (and (block-property-value? f) (:block/uuid f))
+                           (if (and (sqlite-build/block-property-value? f) (:block/uuid f))
                              (swap! pvalue-known-uuids conj (:block/uuid f))
                              f))
                          pages-and-blocks)
