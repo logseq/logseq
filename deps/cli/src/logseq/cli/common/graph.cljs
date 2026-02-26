@@ -27,5 +27,7 @@
          (remove (fn [s] (= s common-config/unlinked-graphs-dir)))
          (map graph-name->path)
          (keep (fn [s]
-                 (when-not (string/starts-with? s common-config/file-version-prefix)
-                   (str common-config/db-version-prefix s)))))))
+                 (when (and (string? s)
+                            (not (string/starts-with? s common-config/file-version-prefix)))
+                   (common-config/canonicalize-db-version-repo s))))
+         distinct)))

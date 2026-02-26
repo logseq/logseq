@@ -1,7 +1,6 @@
 (ns frontend.db.conn
   "Contains db connections."
-  (:require [clojure.string :as string]
-            [datascript.core :as d]
+  (:require [datascript.core :as d]
             [frontend.config :as config]
             [frontend.db.conn-state :as db-conn-state]
             [frontend.mobile.util :as mobile-util]
@@ -52,7 +51,7 @@
                      :else
                      repo-name)]
     (if (config/db-based-graph? repo-name')
-      (string/replace-first repo-name' config/db-version-prefix "")
+      (config/db-graph-name repo-name')
       repo-name')))
 
 (defn remove-conn!
