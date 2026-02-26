@@ -122,3 +122,52 @@ yarn release-electron
 ```
 
 The final released binaries or installers will be at `static/out/`.
+
+## DB sync
+
+DB sync can be run locally in one of two ways as described in the following
+sections. To use a local sync approach, the app must be built with
+`$ENABLE_DB_SYNC_LOCAL` e.g. `ENABLE_DB_SYNC_LOCAL=true yarn watch`. For more
+about db sync, see [its readme](/deps/db-sync/README.md).
+
+### DB sync Cloudflare Worker adapter
+
+Build and run a Cloudlare worker locally
+
+```bash
+cd deps/db-sync
+yarn install
+yarn release
+# This migration is a one time setup
+cd worker && wrangler d1 migrations apply DB --local && cd -
+yarn dev
+```
+
+When testing
+
+### DB sync Node adapter (self-hosted)
+
+Build and run the Node.js adapter for self-hosted DB sync.
+
+```bash
+cd deps/db-sync
+yarn install
+DB_SYNC_PORT=8787 \
+COGNITO_ISSUER=https://cognito-idp.us-east-2.amazonaws.com/us-east-2_kAqZcxIeM \
+COGNITO_CLIENT_ID=1qi1uijg8b6ra70nejvbptis0q \
+COGNITO_JWKS_URL=https://cognito-idp.us-east-2.amazonaws.com/us-east-2_kAqZcxIeM/.well-known/jwks.json \
+yarn build:node-adapter
+
+DB_SYNC_PORT=8787 \
+COGNITO_ISSUER=https://cognito-idp.us-east-2.amazonaws.com/us-east-2_kAqZcxIeM \
+COGNITO_CLIENT_ID=1qi1uijg8b6ra70nejvbptis0q \
+COGNITO_JWKS_URL=https://cognito-idp.us-east-2.amazonaws.com/us-east-2_kAqZcxIeM/.well-known/jwks.json \
+yarn start:node-adapter
+```
+
+Optional environment variables:
+- DB_SYNC_DATA_DIR (defaults to data/db-sync)
+
+Notes:
+- The Cognito values above match `ENABLE_DB_SYNC_LOCAL=true yarn watch` default auth config.
+- For production builds, use the production Cognito pool values from `src/main/frontend/config.cljs`.

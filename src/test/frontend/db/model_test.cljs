@@ -4,6 +4,7 @@
             [frontend.db :as db]
             [frontend.db.conn :as conn]
             [frontend.db.model :as model]
+            [frontend.db.utils]
             [frontend.test.helper :as test-helper :refer [load-test-files]]))
 
 (use-fixtures :each {:before test-helper/start-test-db!
@@ -117,3 +118,13 @@
     (is (= ["child 1" "child 2" "child 3"]
            (map :block/title
                 (model/get-block-immediate-children test-db (:block/uuid parent)))))))
+
+(deftest with-pages-preserves-page-ref-when-ui-db-is-partial
+  (let [page-ref {:db/id 1}
+        block {:db/id 2
+               :block/uuid (random-uuid)
+               :block/page page-ref}]
+    (with-redefs [frontend.db.utils/pull-many (fn [& _] nil)]
+      (is (= page-ref
+             (:block/page (first (model/with-pages [block]))))
+          "When page entity details are unavailable locally, keep the original page ref instead of replacing it with nil"))))

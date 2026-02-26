@@ -8,14 +8,16 @@
 #?(:cljs
    (defn make-export-zip
      "Makes a zipfile for an exported version of graph. Removes files with blank content"
-     [zip-filename file-name-content]
+     [zip-filename file-name-content & {:as file-opts}]
      (let [zip (JSZip.)
-           folder (.folder zip zip-filename)]
+           folder (.folder zip zip-filename)
+           file-opts (when (some? file-opts) (clj->js file-opts))]
        (doseq [[file-name content] file-name-content]
          (when-not (string/blank? content)
            (.file folder (-> file-name
                              (string/replace #"^/+" ""))
-                  content)))
+                  content
+                  file-opts)))
        zip)))
 
 ;; Macros are defined at top-level for frontend and nbb

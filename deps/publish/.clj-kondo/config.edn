@@ -12,7 +12,7 @@
              datascript.transit dt
              logseq.publish.common publish-common
              logseq.publish.model publish-model}}}
- :lint-as {logseq.publish.async/js-await clojure.core/let
+ :lint-as {promesa.core/let clojure.core/let
            shadow.cljs.modern/defclass clj-kondo.lint-as/def-catch-all}
  :skip-comments true
  :output {:progress true}}

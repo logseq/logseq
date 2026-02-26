@@ -1,8 +1,8 @@
 (ns logseq.common.util.page-ref
   "Core vars and util fns for page-ref. Currently this only handles a logseq
   page-ref e.g. [[page name]]"
-  (:require [clojure.string :as string]
-            ["path" :as node-path]))
+  (:require ["path" :as node-path]
+            [clojure.string :as string]))
 
 (def left-brackets "Opening characters for page-ref" "[[")
 (def right-brackets "Closing characters for page-ref" "]]")

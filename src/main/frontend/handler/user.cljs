@@ -16,6 +16,7 @@
             [goog.crypt :as crypt]
             [goog.crypt.Hmac]
             [goog.crypt.Sha256]
+            [goog.crypt.base64 :as base64]
             [missionary.core :as m]))
 
 ;;; userinfo, token, login/logout, ...
@@ -31,10 +32,17 @@
   (some-> jwt
           (string/split ".")
           second
-          (#(.decodeString ^js crypt/base64 % true))
+          (#(base64/decodeString % true))
           js/JSON.parse
           (js->clj :keywordize-keys true)
           (update :cognito:username decode-username)))
+
+(defn- parse-jwt-safe
+  [jwt]
+  (try
+    (parse-jwt jwt)
+    (catch :default _
+      nil)))
 
 (defn- expired? [parsed-jwt]
   (some->
@@ -190,12 +198,34 @@
   "Refresh id-token&access-token, pull latest repos, returns nil when tokens are not available."
   []
   (println "restore-tokens-from-localstorage")
-  (let [refresh-token (js/localStorage.getItem "refresh-token")]
-    (when refresh-token
+  (let [refresh-token (js/localStorage.getItem "refresh-token")
+        id-token (js/localStorage.getItem "id-token")
+        access-token (js/localStorage.getItem "access-token")
+        restored-from-cache?
+        (boolean
+         (when (and (string? refresh-token) (not (string/blank? refresh-token))
+                    (string? id-token) (not (string/blank? id-token))
+                    (string? access-token) (not (string/blank? access-token)))
+           (when-let [parsed (parse-jwt-safe id-token)]
+             (when-not (expired? parsed)
+               (set-tokens! id-token access-token refresh-token)
+               true))))
+        should-refresh?
+        (and (string? refresh-token)
+             (not (string/blank? refresh-token))
+             (or (not restored-from-cache?)
+                 (some-> (state/get-auth-id-token)
+                         parse-jwt-safe
+                         almost-expired?)))]
+    (when restored-from-cache?
+      ;; Publish login event immediately so sync can start without waiting token refresh request.
+      (state/pub-event! [:user/fetch-info-and-graphs]))
+    (when should-refresh?
       (go
         (<! (<refresh-id-token&access-token))
-        ;; refresh remote graph list by pub login event
-        (when (user-uuid) (state/pub-event! [:user/fetch-info-and-graphs]))))))
+        ;; If tokens were not restored from cache, this is the first chance to continue login flow.
+        (when (and (not restored-from-cache?) (user-uuid))
+          (state/pub-event! [:user/fetch-info-and-graphs]))))))
 
 (defn login-callback
   [session]
@@ -212,7 +242,7 @@
         key          (.encode text-encoder client-secret)
         hasher       (new crypt/Sha256)
         hmacer       (new crypt/Hmac hasher key)
-        secret-hash  (.encodeByteArray ^js crypt/base64 (.getHmac hmacer (str username' client-id)))
+        secret-hash  (base64/encodeByteArray (.getHmac hmacer (str username' client-id)))
         payload      {"AuthParameters" {"USERNAME"    username',
                                         "PASSWORD"    password,
                                         "SECRET_HASH" secret-hash}
