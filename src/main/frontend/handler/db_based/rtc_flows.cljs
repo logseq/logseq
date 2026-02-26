@@ -153,4 +153,4 @@ conditions:
    (apply c.m/mix)
    (m/latest vector flows/current-login-user-flow)
    (m/eduction (keep (fn [[current-user trigger-event]] (when current-user trigger-event))))
-   (c.m/debounce 200)))
+   (c.m/debounce 50)))
