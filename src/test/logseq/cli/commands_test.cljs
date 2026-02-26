@@ -1080,7 +1080,14 @@
                                        "--input" "import.zip"
                                        "--repo" "demo"])]
       (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code]))))))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "server status accepts prefix-like repo option values"
+    (let [result (commands/parse-args ["server" "status"
+                                       "--repo" "logseq_db_logseq_db_demo"])]
+      (is (true? (:ok? result)))
+      (is (= :server-status (:command result)))
+      (is (= "logseq_db_logseq_db_demo" (get-in result [:options :repo]))))))
 
 (deftest test-verb-subcommand-parse-flags
   (testing "verb subcommands reject unknown flags"
@@ -1156,7 +1163,14 @@
     (let [parsed {:ok? true :command :server-stop :options {:repo "demo"}}
           result (commands/build-action parsed {})]
       (is (true? (:ok? result)))
-      (is (= :server-stop (get-in result [:action :type]))))))
+      (is (= :server-stop (get-in result [:action :type])))))
+
+  (testing "server status canonicalizes multi-prefixed repo option"
+    (let [parsed {:ok? true :command :server-status :options {:repo "logseq_db_logseq_db_demo"}}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :server-status (get-in result [:action :type])))
+      (is (= "logseq_db_demo" (get-in result [:action :repo]))))))
 
 (deftest test-build-action-doctor
   (testing "doctor builds action"
@@ -1565,10 +1579,13 @@
 (deftest test-execute-graph-list-strips-db-prefix
   (async done
          (let [orig-list-graphs cli-server/list-graphs]
-           (set! cli-server/list-graphs (fn [_] ["logseq_db_demo" "logseq_db_other"]))
+           (set! cli-server/list-graphs (fn [_] ["logseq_db_demo"
+                                                 "logseq_db_logseq_db_other"
+                                                 "my_logseq_db_notes"]))
            (-> (p/let [result (commands/execute {:type :graph-list} {})]
                  (is (= :ok (:status result)))
-                 (is (= ["demo" "other"] (get-in result [:data :graphs]))))
+                 (is (= ["demo" "logseq_db_other" "my_logseq_db_notes"]
+                        (get-in result [:data :graphs]))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally (fn []

@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is async]]
             [clojure.string :as string]
             [frontend.db :as db]
+            [frontend.handler.repo :as repo-handler]
             [frontend.handler.db-based.sync :as db-sync]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
@@ -152,6 +153,37 @@
                           (is false (str e))
                           (done)))))))
 
+(deftest get-remote-graphs-canonicalizes-prefixed-graph-names
+  (async done
+    (let [set-state-calls (atom [])]
+      (-> (p/with-redefs [db-sync/http-base (constantly "http://base")
+                          user-handler/task--ensure-id&access-token (fn [resolve _reject]
+                                                                      (resolve true))
+                          db-sync/fetch-json (fn [url _opts _schema]
+                                               (if (string/ends-with? url "/graphs")
+                                                 (p/resolved {:graphs [{:graph-name "logseq_db_demo"
+                                                                        :graph-id "graph-1"
+                                                                        :schema-version 1}
+                                                                       {:graph-name "logseq_db_logseq_db_legacy"
+                                                                        :graph-id "graph-2"
+                                                                        :schema-version 1}]})
+                                                 (p/rejected (ex-info "unexpected fetch-json URL"
+                                                                      {:url url}))))
+                          state/set-state! (fn [k v]
+                                             (swap! set-state-calls conj [k v]))
+                          repo-handler/refresh-repos! (fn [] nil)]
+            (p/let [result (db-sync/<get-remote-graphs)
+                    urls (mapv :url result)]
+              (is (= ["logseq_db_demo" "logseq_db_legacy"] urls))
+              (is (not-any? #(re-find #"^logseq_db_logseq_db_" %) urls))
+              (is (some (fn [[k v]]
+                          (and (= :rtc/graphs k)
+                               (= urls (mapv :url v))))
+                        @set-state-calls))))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally done)))))
+
 (deftest rtc-download-graph-emits-feedback-before-snapshot-fetch-test
   (let [trace (atom [])
         log-events (atom [])]
@@ -242,3 +274,56 @@
                           (set! js/fetch original-fetch)
                           (is false (str error))
                           (done)))))))
+
+(deftest rtc-download-graph-canonicalizes-prefixed-graph-name-before-import-test
+  (async done
+    (let [import-calls (atom [])
+          rows [[1 "content-1" "addresses-1"]]
+          framed-bytes (encode-framed-rows rows)
+          original-fetch js/fetch
+          stream-url "http://base/sync/graph-2/snapshot/stream"]
+      (-> (p/let [gzip-bytes (<gzip-bytes framed-bytes)]
+            (set! js/fetch
+                  (fn [url opts]
+                    (let [method (or (aget opts "method") "GET")]
+                      (cond
+                        (and (= url stream-url) (= method "GET"))
+                        (js/Promise.resolve
+                         #js {:ok true
+                              :status 200
+                              :headers #js {:get (fn [header]
+                                                   (when (= header "content-length")
+                                                     (str (.-byteLength gzip-bytes))))}
+                              :arrayBuffer (fn [] (js/Promise.resolve (.-buffer gzip-bytes)))})
+
+                        :else
+                        (js/Promise.resolve #js {:ok true :status 200})))))
+            (-> (p/with-redefs [db-sync/http-base (constantly "http://base")
+                                db-sync/fetch-json (fn [url _opts _schema]
+                                                     (cond
+                                                       (string/ends-with? url "/pull")
+                                                       (p/resolved {:t 8})
+
+                                                       :else
+                                                       (p/rejected (ex-info "unexpected fetch-json URL"
+                                                                            {:url url}))))
+                                user-handler/task--ensure-id&access-token (fn [resolve _reject]
+                                                                            (resolve true))
+                                state/<invoke-db-worker (fn [& args]
+                                                          (swap! import-calls conj args)
+                                                          (p/resolved :ok))
+                                state/set-state! (fn [& _] nil)
+                                state/pub-event! (fn [& _] nil)]
+                  (db-sync/<rtc-download-graph! "logseq_db_demo" "graph-2" true))
+                (p/finally (fn [] (set! js/fetch original-fetch)))))
+          (p/then (fn [_]
+                    (is (= 1 (count @import-calls)))
+                    (let [[op graph] (first @import-calls)]
+                      (is (= :thread-api/db-sync-import-kvs-rows op))
+                      (is (= "logseq_db_demo" graph))
+                      (is (not (string/starts-with? graph "logseq_db_logseq_db_"))))
+                    (done)))
+          (p/catch (fn [error]
+                     (set! js/fetch original-fetch)
+                     (is false (str error))
+                     (done)))))))

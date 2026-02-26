@@ -238,7 +238,7 @@
 
 (defn db-graph-name
   [repo-with-prefix]
-  (string/replace-first repo-with-prefix db-version-prefix ""))
+  (common-config/strip-leading-db-version-prefix repo-with-prefix))
 
 (defn db-based-graph?
   ([]
@@ -257,7 +257,7 @@
   (path/path-join (get-in @state/state [:system/info :home-dir])
                   "logseq"
                   "graphs"
-                  (string/replace repo db-version-prefix "")))
+                  (db-graph-name repo)))
 
 (defn get-electron-backup-dir
   [repo]
@@ -269,7 +269,7 @@
     (if (util/electron?)
       (get-local-dir repo-url)
       (str "memory:///"
-           (string/replace-first repo-url db-version-prefix "")))))
+           (db-graph-name repo-url)))))
 
 (defn get-repo-config-path
   []
