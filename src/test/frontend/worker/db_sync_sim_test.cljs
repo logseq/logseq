@@ -1,7 +1,6 @@
 (ns frontend.worker.db-sync-sim-test
   (:require [cljs.test :refer [deftest is testing]]
             [clojure.data :as data]
-            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.state :as worker-state]
@@ -371,9 +370,8 @@
       (let [parent-uuid (:block/uuid parent)
             parent (d/entity db [:block/uuid parent-uuid])]
         (when parent
-          (let [uuid ((or gen-uuid random-uuid))
-                title (str "Block-" (rand-int! rng 1000000))]
-            (create-block! conn parent title uuid)
+          (let [uuid ((or gen-uuid random-uuid))]
+            (create-block! conn parent "" uuid)
             (swap! state update :blocks conj uuid)
             {:op :create-block :uuid uuid :parent parent-uuid}))))))
 
@@ -384,7 +382,7 @@
         block (d/entity db [:block/uuid (:block/uuid ent)])]
     (when (and block (not (ldb/page? block)))
       (let [uuid (:block/uuid block)
-            new-title (string/replace (:block/title (d/entity @conn [:block/uuid uuid])) "block" "title")]
+            new-title (str "title-" (:db/id block))]
         (update-title! conn uuid new-title)
         {:op :update-title :uuid uuid :title new-title}))))
 
