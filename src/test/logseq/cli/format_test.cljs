@@ -91,14 +91,23 @@
              result)))))
 
 (deftest test-human-output-add-remove
-  (testing "add block renders a succinct success line"
+  (testing "add block renders ids in two lines"
     (let [result (format/format-result {:status :ok
                                         :command :add-block
                                         :context {:repo "demo-repo"
                                                   :blocks ["a" "b"]}
-                                        :data {:result {:ok true}}}
+                                        :data {:result [201 202]}}
                                        {:output-format nil})]
-      (is (= "Added blocks: 2 (repo: demo-repo)" result))))
+      (is (= "Added blocks:\n[201 202]" result))))
+
+  (testing "add page renders ids in two lines"
+    (let [result (format/format-result {:status :ok
+                                        :command :add-page
+                                        :context {:repo "demo-repo"
+                                                  :page "Home"}
+                                        :data {:result [123]}}
+                                       {:output-format nil})]
+      (is (= "Added page:\n[123]" result))))
 
   (testing "remove page renders a succinct success line"
     (let [result (format/format-result {:status :ok

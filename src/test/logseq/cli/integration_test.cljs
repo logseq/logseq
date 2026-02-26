@@ -184,6 +184,10 @@
                (when (= title (item-title item)) item)))
        item-id))
 
+(defn- first-result-id
+  [payload]
+  (first (get-in payload [:data :result])))
+
 (deftest ^:long test-cli-graph-list
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker")]
@@ -296,6 +300,162 @@
                                 (get-in show-payload [:data :root :id]))))
                  (is (not (contains? (get-in show-payload [:data :root]) :block/uuid)))
                  (is (= "ok" (:status remove-page-payload)))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest ^:long test-cli-add-page-json-output-returns-id
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-add-page-json-id")
+               repo "add-page-json-id-graph"]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
+                       add-page-result (run-cli ["--repo" repo "add" "page" "--page" "Home"] data-dir cfg-path)
+                       add-page-payload (parse-json-output add-page-result)
+                       page-ids (get-in add-page-payload [:data :result])
+                       page-id (first page-ids)
+                       query-payload (run-query data-dir cfg-path repo
+                                                "[:find ?id . :in $ ?page-name :where [?id :block/name ?page-name]]"
+                                                (pr-str [(common-util/page-name-sanity-lc "Home")]))
+                       queried-page-id (get-in query-payload [:data :result])
+                       stop-result (run-cli ["server" "stop" "--repo" repo] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= 0 (:exit-code add-page-result)))
+                 (is (= "ok" (:status add-page-payload)))
+                 (is (vector? page-ids))
+                 (is (= 1 (count page-ids)))
+                 (is (number? page-id))
+                 (is (= page-id queried-page-id))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest ^:long test-cli-add-block-json-output-returns-ids
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-add-block-json-ids")
+               repo "add-block-json-ids-graph"]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       blocks-edn (pr-str [{:block/title "Parent"
+                                            :block/children [{:block/title "Child"}]}
+                                           {:block/title "Sibling"}])
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
+                       _ (run-cli ["--repo" repo "add" "page" "--page" "Home"] data-dir cfg-path)
+                       add-block-result (run-cli ["--repo" repo
+                                                  "add" "block"
+                                                  "--target-page-name" "Home"
+                                                  "--blocks" blocks-edn]
+                                                 data-dir cfg-path)
+                       add-block-payload (parse-json-output add-block-result)
+                       block-ids (get-in add-block-payload [:data :result])
+                       title-query-payload (run-query data-dir cfg-path repo
+                                                      "[:find ?title :in $ [?id ...] :where [?id :block/title ?title]]"
+                                                      (pr-str [block-ids]))
+                       block-titles (->> (get-in title-query-payload [:data :result])
+                                         (map first)
+                                         set)
+                       stop-result (run-cli ["server" "stop" "--repo" repo] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= 0 (:exit-code add-block-result)))
+                 (is (= "ok" (:status add-block-payload)))
+                 (is (vector? block-ids))
+                 (is (= 3 (count block-ids)))
+                 (is (= 3 (count (distinct block-ids))))
+                 (is (every? number? block-ids))
+                 (is (= #{"Parent" "Child" "Sibling"} block-titles))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest ^:long test-cli-add-page-block-edn-output-returns-id
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-add-edn-id")
+               repo "add-edn-id-graph"]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
+                       add-page-result (run-cli ["--repo" repo
+                                                 "--output" "edn"
+                                                 "add" "page"
+                                                 "--page" "Home"]
+                                                data-dir cfg-path)
+                       add-page-payload (parse-edn-output add-page-result)
+                       page-ids (get-in add-page-payload [:data :result])
+                       add-block-result (run-cli ["--repo" repo
+                                                  "--output" "edn"
+                                                  "add" "block"
+                                                  "--target-page-name" "Home"
+                                                  "--content" "EDN block"]
+                                                 data-dir cfg-path)
+                       add-block-payload (parse-edn-output add-block-result)
+                       block-ids (get-in add-block-payload [:data :result])
+                       stop-result (run-cli ["server" "stop" "--repo" repo] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= 0 (:exit-code add-page-result)))
+                 (is (= :ok (:status add-page-payload)))
+                 (is (vector? page-ids))
+                 (is (= 1 (count page-ids)))
+                 (is (number? (first page-ids)))
+                 (is (= 0 (:exit-code add-block-result)))
+                 (is (= :ok (:status add-block-payload)))
+                 (is (vector? block-ids))
+                 (is (= 1 (count block-ids)))
+                 (is (number? (first block-ids)))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest ^:long test-cli-add-identifiers-chain-update-remove
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-add-id-chain")
+               repo "add-id-chain-graph"]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
+                       add-page-result (run-cli ["--repo" repo "add" "page" "--page" "ChainPage"] data-dir cfg-path)
+                       add-page-payload (parse-json-output add-page-result)
+                       page-id (first-result-id add-page-payload)
+                       add-block-result (run-cli ["--repo" repo
+                                                  "add" "block"
+                                                  "--target-id" (str page-id)
+                                                  "--content" "Chain block"]
+                                                 data-dir cfg-path)
+                       add-block-payload (parse-json-output add-block-result)
+                       block-id (first-result-id add-block-payload)
+                       update-result (run-cli ["--repo" repo
+                                               "update"
+                                               "--id" (str block-id)
+                                               "--update-properties" "{:logseq.property/publishing-public? true}"]
+                                              data-dir cfg-path)
+                       update-payload (parse-json-output update-result)
+                       remove-result (run-cli ["--repo" repo "remove" "--id" (str block-id)] data-dir cfg-path)
+                       remove-payload (parse-json-output remove-result)
+                       query-after-remove (run-query data-dir cfg-path repo
+                                                     "[:find ?e . :in $ ?title :where [?e :block/title ?title]]"
+                                                     (pr-str ["Chain block"]))
+                       removed-id (get-in query-after-remove [:data :result])
+                       stop-result (run-cli ["server" "stop" "--repo" repo] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= 0 (:exit-code add-page-result)))
+                 (is (= "ok" (:status add-page-payload)))
+                 (is (number? page-id))
+                 (is (= 0 (:exit-code add-block-result)))
+                 (is (= "ok" (:status add-block-payload)))
+                 (is (number? block-id))
+                 (is (= 0 (:exit-code update-result)))
+                 (is (= "ok" (:status update-payload)))
+                 (is (= 0 (:exit-code remove-result)))
+                 (is (= "ok" (:status remove-payload)))
+                 (is (nil? removed-id))
                  (is (= "ok" (:status stop-payload)))
                  (done))
                (p/catch (fn [e]
