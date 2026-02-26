@@ -99,18 +99,118 @@
 
 (defn- ensure-block-uuids
   [blocks]
-  (mapv (fn [block]
-          (let [current (:block/uuid block)]
-            (cond
-              (some? current)
-              (update block :block/uuid (fn [value]
-                                          (if (and (string? value) (common-util/uuid-string? value))
-                                            (uuid value)
-                                            value)))
+  (mapv (fn ensure-block-uuid [block]
+          (let [current (:block/uuid block)
+                block (cond
+                        (some? current)
+                        (update block :block/uuid (fn [value]
+                                                    (if (and (string? value) (common-util/uuid-string? value))
+                                                      (uuid value)
+                                                      value)))
 
-              :else
-              (assoc block :block/uuid (common-uuid/gen-uuid)))))
+                        :else
+                        (assoc block :block/uuid (common-uuid/gen-uuid)))]
+            (if (seq (:block/children block))
+              (update block :block/children ensure-block-uuids)
+              block)))
         blocks))
+
+(defn- normalize-created-ids
+  [ids]
+  (->> ids
+       (remove nil?)
+       distinct
+       vec))
+
+(defn- normalized-uuid
+  [value]
+  (cond
+    (uuid? value) value
+    (and (string? value) (common-util/uuid-string? (string/trim value)))
+    (uuid (string/trim value))
+    :else nil))
+
+(defn- collect-created-block-uuids
+  [blocks]
+  (letfn [(walk [acc block]
+            (let [block-uuid (normalized-uuid (:block/uuid block))
+                  acc (if block-uuid
+                        (conj acc block-uuid)
+                        acc)
+                  children (:block/children block)]
+              (if (seq children)
+                (reduce walk acc children)
+                acc)))]
+    (->> (reduce walk [] blocks)
+         distinct
+         vec)))
+
+(defn- flatten-block-tree
+  [blocks]
+  (letfn [(walk [parent-uuid block]
+            (let [children (:block/children block)
+                  block (cond-> (dissoc block :block/children)
+                          parent-uuid
+                          (assoc :block/parent [:block/uuid parent-uuid]))
+                  block-uuid (normalized-uuid (:block/uuid block))]
+              (into [block]
+                    (mapcat #(walk block-uuid %) children))))]
+    (vec (mapcat #(walk nil %) blocks))))
+
+(defn- created-ids-in-order
+  [ordered-uuids entities entity-kind]
+  (let [id-by-uuid (reduce (fn [acc {:keys [db/id block/uuid]}]
+                             (if-let [entity-uuid (normalized-uuid uuid)]
+                               (if (some? id)
+                                 (assoc acc entity-uuid id)
+                                 acc)
+                               acc))
+                           {}
+                           entities)
+        missing-uuids (->> ordered-uuids
+                           (remove #(contains? id-by-uuid %))
+                           vec)]
+    (when (seq missing-uuids)
+      (throw (ex-info "unable to resolve created ids"
+                      {:code :add-id-resolution-failed
+                       :entity-kind entity-kind
+                       :missing-uuids missing-uuids})))
+    (normalize-created-ids (map #(get id-by-uuid %) ordered-uuids))))
+
+(defn- resolve-created-block-ids
+  [config repo blocks insert-result]
+  (let [ordered-uuids (or (seq (collect-created-block-uuids (:tx-data insert-result)))
+                          (seq (collect-created-block-uuids blocks))
+                          (seq (collect-created-block-uuids (:blocks insert-result))))]
+    (if-not (seq ordered-uuids)
+      (p/rejected (ex-info "unable to resolve created block ids"
+                           {:code :add-id-resolution-failed
+                            :entity-kind :block
+                            :reason :missing-created-uuids}))
+      (p/let [entities (p/all
+                        (map (fn [block-uuid]
+                               (transport/invoke config :thread-api/pull false
+                                                 [repo [:db/id :block/uuid] [:block/uuid block-uuid]]))
+                             ordered-uuids))]
+        (created-ids-in-order ordered-uuids entities :block)))))
+
+(defn- resolve-created-page-ids
+  [config repo page create-result]
+  (let [page-uuid (some-> create-result second normalized-uuid)]
+    (if page-uuid
+      (p/let [page-entity (transport/invoke config :thread-api/pull false
+                                            [repo [:db/id :block/uuid] [:block/uuid page-uuid]])]
+        (created-ids-in-order [page-uuid] [page-entity] :page))
+      (p/let [page-entity (transport/invoke config :thread-api/pull false
+                                            [repo [:db/id :block/uuid]
+                                             [:block/name (common-util/page-name-sanity-lc page)]])
+              page-id (:db/id page-entity)]
+        (if (some? page-id)
+          [page-id]
+          (throw (ex-info "unable to resolve created page id"
+                          {:code :add-id-resolution-failed
+                           :entity-kind :page
+                           :page page})))))))
 
 (defn- extract-page-refs
   [title]
@@ -845,8 +945,7 @@
           tags-result (parse-tags-option (:tags options))
           properties-result (parse-properties-option (:properties options))
           tags (:value tags-result)
-          properties (:value properties-result)
-          ensure-uuids? (or status (seq tags) (seq properties))]
+          properties (:value properties-result)]
       (cond
         (and (seq status-text) (nil? status))
         {:ok? false
@@ -865,9 +964,7 @@
           (let [vector-result (ensure-blocks (:value blocks-result))]
             (if-not (:ok? vector-result)
               vector-result
-              (let [blocks (cond-> (:value vector-result)
-                             ensure-uuids?
-                             ensure-block-uuids)]
+              (let [blocks (ensure-block-uuids (:value vector-result))]
                 {:ok? true
                  :action {:type :add-block
                           :repo repo
@@ -921,11 +1018,12 @@
               blocks (if (seq refs)
                        (normalize-block-title-refs (:blocks action) refs)
                        (:blocks action))
+              blocks-for-insert (flatten-block-tree blocks)
               status (:status action)
               tags (resolve-tags cfg (:repo action) (:tags action))
               properties (resolve-properties cfg (:repo action) (:properties action))
               pos (:pos action)
-              keep-uuid? (or status (seq tags) (seq properties))
+              keep-uuid? true
               opts (case pos
                      "last-child" {:sibling? false :bottom? true}
                      "sibling" {:sibling? true}
@@ -933,11 +1031,11 @@
               opts (cond-> opts
                      keep-uuid?
                      (assoc :keep-uuid? true))
-              ops [[:insert-blocks [blocks
+              ops [[:insert-blocks [blocks-for-insert
                                     target-id
                                     (assoc opts :outliner-op :insert-blocks)]]]
-              _ (transport/invoke cfg :thread-api/apply-outliner-ops false [(:repo action) ops {}])
-              block-ids (->> blocks
+              insert-result (transport/invoke cfg :thread-api/apply-outliner-ops false [(:repo action) ops {}])
+              block-ids (->> blocks-for-insert
                              (map :block/uuid)
                              (remove nil?)
                              vec)
@@ -963,9 +1061,10 @@
                                             [(:repo action)
                                              [[:batch-set-property [block-ids k v {}]]]
                                              {}]))
-                        properties)))]
+                        properties)))
+              created-ids (resolve-created-block-ids cfg (:repo action) blocks-for-insert insert-result)]
         {:status :ok
-         :data {:result nil}})))
+         :data {:result created-ids}})))
 
 (defn execute-add-page
   [action config]
@@ -977,7 +1076,7 @@
               options (cond-> {}
                         (seq properties) (assoc :properties properties))
               ops [[:create-page [(:page action) options]]]
-              result (transport/invoke cfg :thread-api/apply-outliner-ops false [(:repo action) ops {}])
+              create-result (transport/invoke cfg :thread-api/apply-outliner-ops false [(:repo action) ops {}])
               _ (when (seq tag-ids)
                   (p/let [page-name (common-util/page-name-sanity-lc (:page action))
                           page (pull-entity cfg (:repo action) [:db/id :block/uuid] [:block/name page-name])
@@ -990,6 +1089,7 @@
                                               [(:repo action)
                                                [[:batch-set-property [[page-uuid] :block/tags tag-id {}]]]
                                                {}]))
-                          tag-ids))))]
+                          tag-ids))))
+              created-ids (resolve-created-page-ids cfg (:repo action) (:page action) create-result)]
         {:status :ok
-         :data {:result result}})))
+         :data {:result created-ids}})))
