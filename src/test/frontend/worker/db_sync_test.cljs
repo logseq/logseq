@@ -11,6 +11,7 @@
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]
+            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
@@ -114,6 +115,66 @@
               {:user/uuid "u2" :user/name "Bob" :user/editing-block-uuid "block-2"}]
              @(:online-users client)))
       (is (= 1 (count @broadcasts))))))
+
+(deftest pull-ok-with-older-remote-tx-is-ignored-test
+  (testing "pull/ok with remote tx behind local tx does not apply stale tx data"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          parent-id (:db/id parent)
+          stale-tx (sqlite-util/write-transit-str [[:db/add parent-id :block/title "stale-title"]])
+          raw-message (js/JSON.stringify
+                       (clj->js {:type "pull/ok"
+                                 :t 4
+                                 :txs [{:t 4 :tx stale-tx}]}))
+          latest-prev @db-sync/*repo->latest-remote-tx
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (reset! db-sync/*repo->latest-remote-tx {})
+          (try
+            (client-op/update-local-tx test-repo 5)
+            (#'db-sync/handle-message! test-repo client raw-message)
+            (let [parent' (d/entity @conn parent-id)]
+              (is (= "parent" (:block/title parent')))
+              (is (= 5 (client-op/get-local-tx test-repo))))
+            (finally
+              (reset! db-sync/*repo->latest-remote-tx latest-prev))))))))
+
+(deftest pull-ok-out-of-order-stale-response-is-ignored-test
+  (testing "late stale pull/ok should not overwrite a newer already-applied tx"
+    (async done
+           (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+                 parent-id (:db/id parent)
+                 new-tx (sqlite-util/write-transit-str [[:db/add parent-id :block/title "remote-new-title"]])
+                 stale-tx (sqlite-util/write-transit-str [[:db/add parent-id :block/title "stale-title"]])
+                 raw-new (js/JSON.stringify
+                          (clj->js {:type "pull/ok"
+                                    :t 2
+                                    :txs [{:t 2 :tx new-tx}]}))
+                 raw-stale (js/JSON.stringify
+                            (clj->js {:type "pull/ok"
+                                      :t 1
+                                      :txs [{:t 1 :tx stale-tx}]}))
+                 latest-prev @db-sync/*repo->latest-remote-tx
+                 client {:repo test-repo
+                         :graph-id "graph-1"
+                         :inflight (atom [])
+                         :online-users (atom [])
+                         :ws-state (atom :open)}]
+             (reset! db-sync/*repo->latest-remote-tx {})
+             (with-datascript-conns conn client-ops-conn
+               (fn []
+                 (-> (p/let [_ (#'db-sync/handle-message! test-repo client raw-new)
+                             _ (#'db-sync/handle-message! test-repo client raw-stale)
+                             parent' (d/entity @conn parent-id)]
+                       (is (= "remote-new-title" (:block/title parent')))
+                       (is (= 2 (client-op/get-local-tx test-repo))))
+                     (p/finally (fn []
+                                  (reset! db-sync/*repo->latest-remote-tx latest-prev)
+                                  (done))))))))))
 
 (deftest reaction-add-enqueues-pending-sync-tx-test
   (testing "adding a reaction should enqueue tx for db-sync"

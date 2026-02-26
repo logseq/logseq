@@ -1170,7 +1170,7 @@
                         (flush-pending! repo client))
         ;; Download response
         ;; Merge batch txs to one tx, does it really work? We'll see
-        "pull/ok" (when-not (= local-tx remote-tx)
+        "pull/ok" (when (> remote-tx local-tx)
                     (let [txs (:txs message)
                           _ (require-non-negative remote-tx {:repo repo :type "pull/ok"})
                           _ (require-seq txs {:repo repo :type "pull/ok" :field :txs})
