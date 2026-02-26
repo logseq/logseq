@@ -34,9 +34,13 @@
    :tags {:desc "EDN vector of tags. Identifiers can be id, :db/ident, or :block/title."}
    :properties {:desc "EDN map of built-in properties. Identifiers can be id, :db/ident, or :block/title."}})
 
+(def ^:private add-tag-spec
+  {:name {:desc "Tag name"}})
+
 (def entries
   [(core/command-entry ["add" "block"] :add-block "Add blocks" content-add-spec)
-   (core/command-entry ["add" "page"] :add-page "Create page" add-page-spec)])
+   (core/command-entry ["add" "page"] :add-page "Create page" add-page-spec)
+   (core/command-entry ["add" "tag"] :add-tag "Create tag" add-tag-spec)])
 
 (defn- today-page-title
   [config repo]
@@ -1007,6 +1011,43 @@
          :error {:code :missing-page-name
                  :message "page name is required"}}))))
 
+(defn- normalize-tag-name-option
+  [value]
+  (let [normalized (normalize-tag-value value)]
+    (when (string? normalized)
+      (let [name (string/trim normalized)]
+        (when (seq name)
+          name)))))
+
+(defn build-add-tag-action
+  [options repo]
+  (if-not (seq repo)
+    {:ok? false
+     :error {:code :missing-repo
+             :message "repo is required for add"}}
+    (let [name (normalize-tag-name-option (:name options))]
+      (if (seq name)
+        {:ok? true
+         :action {:type :add-tag
+                  :repo repo
+                  :graph (core/repo->graph repo)
+                  :name name}}
+        {:ok? false
+         :error {:code :missing-tag-name
+                 :message "tag name is required"}}))))
+
+(defn- pull-page-by-name
+  [config repo page-name]
+  (pull-entity config repo
+               [:db/id :block/name :block/title :block/uuid
+                {:block/tags [:db/id :db/ident :block/name :block/title]}]
+               [:block/name (common-util/page-name-sanity-lc page-name)]))
+
+(defn- tag-entity?
+  [entity]
+  (some #(= :logseq.class/Tag (:db/ident %))
+        (:block/tags entity)))
+
 (defn execute-add-block
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
@@ -1091,5 +1132,35 @@
                                                {}]))
                           tag-ids))))
               created-ids (resolve-created-page-ids cfg (:repo action) (:page action) create-result)]
+        {:status :ok
+         :data {:result created-ids}})))
+
+(defn execute-add-tag
+  [action config]
+  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+              existing (pull-page-by-name cfg (:repo action) (:name action))
+              existing-id (:db/id existing)
+              _ (when (and existing-id (not (tag-entity? existing)))
+                  (throw (ex-info "tag already exists as a page and is not a tag"
+                                  {:code :tag-name-conflict
+                                   :name (:name action)})))
+              _ (when-not existing-id
+                  (transport/invoke cfg :thread-api/apply-outliner-ops false
+                                    [(:repo action)
+                                     [[:create-page [(:name action) {:class? true}]]]
+                                     {}]))
+              page (or (when existing-id existing)
+                       (pull-page-by-name cfg (:repo action) (:name action)))
+              page-id (:db/id page)
+              _ (when-not page-id
+                  (throw (ex-info "tag not found after create"
+                                  {:code :tag-not-found
+                                   :name (:name action)})))
+              _ (when-not (tag-entity? page)
+                  (throw (ex-info "created entity is not tagged as :logseq.class/Tag"
+                                  {:code :tag-create-not-tag
+                                   :name (:name action)
+                                   :id page-id})))
+              created-ids (normalize-created-ids [page-id])]
         {:status :ok
          :data {:result created-ids}})))
