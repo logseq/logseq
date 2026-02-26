@@ -101,4 +101,4 @@
    On iOS, repo-url might be nil"
   [repo-url]
   (when (not-empty repo-url)
-    (string/replace-first repo-url config/db-version-prefix "")))
+    (config/db-graph-name repo-url)))
