@@ -691,8 +691,8 @@
             (p/recur (rest remaining) (conj acc item))))))))
 
 (defn- rehydrate-large-titles!
-  [repo {:keys [graph-id download-fn aes-key tx-data]}]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
+  [repo {:keys [graph-id download-fn aes-key tx-data conn]}]
+  (when-let [conn (or conn (worker-state/get-datascript-conn repo))]
     (let [download-fn (or download-fn download-large-title!)
           graph-id (or graph-id (get-graph-id repo))
           items (if (seq tx-data)
