@@ -360,40 +360,47 @@ DROP TRIGGER IF EXISTS blocks_au;
       :else
       match-input)))
 
+(defn- build-search-bind
+  [q input page limit use-namespace-last-part?]
+  (let [namespace? (and use-namespace-last-part?
+                        (ns-util/namespace-page? q))
+        last-part (when namespace?
+                    (some-> (text/get-namespace-last-part q)
+                            get-match-input))]
+    (cond
+      (and namespace? page)
+      [page input last-part limit]
+      page
+      [page input limit]
+      namespace?
+      [input last-part limit]
+      :else
+      [input limit])))
+
 (defn- search-blocks-aux
-  [db sql q input page limit enable-snippet?]
-  (try
-    (let [namespace? (ns-util/namespace-page? q)
-          last-part (when namespace?
-                      (some-> (text/get-namespace-last-part q)
-                              get-match-input))
-          bind (cond
-                 (and namespace? page)
-                 [page input last-part limit]
-                 page
-                 [page input limit]
-                 namespace?
-                 [input last-part limit]
-                 :else
-                 [input limit])
-          result (.exec db (bean/->js
-                            {:sql sql
-                             :bind bind
-                             :rowMode "array"}))
-          blocks (bean/->clj result)]
-      (keep (fn [block]
-              (let [[id page title _rank snippet] (if enable-snippet?
-                                                    (update block 4 get-snippet-result)
-                                                    block)]
-                (when title
-                  {:id id
-                   :keyword-score (fuzzy/score q title)
-                   :page page
-                   :title title
-                   :snippet snippet}))) blocks))
-    (catch :default e
-      (prn :debug "Search blocks failed: ")
-      (js/console.error e))))
+  ([db sql q input page limit enable-snippet?]
+   (search-blocks-aux db sql q input page limit enable-snippet? false))
+  ([db sql q input page limit enable-snippet? use-namespace-last-part?]
+   (try
+     (let [bind (build-search-bind q input page limit use-namespace-last-part?)
+           result (.exec db (bean/->js
+                             {:sql sql
+                              :bind bind
+                              :rowMode "array"}))
+           blocks (bean/->clj result)]
+       (keep (fn [block]
+               (let [[id page title _rank snippet] (if enable-snippet?
+                                                     (update block 4 get-snippet-result)
+                                                     block)]
+                 (when title
+                   {:id id
+                    :keyword-score (fuzzy/score q title)
+                    :page page
+                    :title title
+                    :snippet snippet}))) blocks))
+     (catch :default e
+       (prn :debug "Search blocks failed: ")
+       (js/console.error e)))))
 
 (defn exact-matched?
   "Check if two strings points toward same search result"
@@ -624,7 +631,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                        (str select pg-sql " title match ? order by rank limit ?"))
            non-match-sql (str select pg-sql " title like ? limit ?")
            matched-result (when-not page-only?
-                            (search-blocks-aux search-db match-sql q match-input page limit-p enable-snippet?))
+                            (search-blocks-aux search-db match-sql q match-input page limit-p enable-snippet? (ns-util/namespace-page? q)))
            non-match-result (when (and (not page-only?) non-match-input)
                               (->> (search-blocks-aux search-db non-match-sql q non-match-input page limit-p enable-snippet?)
                                    (map (fn [result]
