@@ -670,9 +670,11 @@
   (d/q '[:find ?e ?a
          :in $ ?v
          :where
-         [?e ?a ?v]
+         [?c :logseq.property.class/enable-bidirectional? ?c-enable?]
+         [(true? ?c-enable?)]
+         [?ea :logseq.property/classes ?c]
          [?ea :db/ident ?a]
-         [?ea :logseq.property/classes]]
+         [?e ?a ?v]]
        db
        v))
 
@@ -687,10 +689,19 @@
           (fn [acc class-id entity]
             (if class-id
               (update acc class-id (fnil conj #{}) entity)
-              acc))]
+              acc))
+          *attr->bidirectional? (volatile! {})
+          bidirectional-property-attr-cached?
+          (fn [attr]
+            (let [cache @*attr->bidirectional?]
+              (if (contains? cache attr)
+                (get cache attr)
+                (let [result (bidirectional-property-attr? db attr)]
+                  (vswap! *attr->bidirectional? assoc attr result)
+                  result))))]
       (->> (get-ea-by-v db target-id)
            (keep (fn [[e a]]
-                   (when (bidirectional-property-attr? db a)
+                   (when (bidirectional-property-attr-cached? a)
                      (when-let [entity (d/entity db e)]
                        (when (and (not= (:db/id entity) target-id)
                                   (not (entity-util/class? entity))

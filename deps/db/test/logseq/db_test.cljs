@@ -148,3 +148,58 @@
       (is (= "People" (:title (first results))))
       (is (= ["Alice"]
              (map :block/title (:entities (first results))))))))
+
+(defn- bidirectional-perf-conn
+  [n property-titles]
+  (let [target-page {:page {:block/title "Target"}}
+        properties (into {}
+                         (map (fn [property-title]
+                                [property-title {:logseq.property/type :node
+                                                 :build/property-classes [:Person]}]))
+                         property-titles)
+        person-properties (into {}
+                                (map (fn [property-title]
+                                       [property-title [:build/page {:block/title "Target"}]]))
+                                property-titles)
+        pages (vec (concat [target-page]
+                           (map (fn [i]
+                                  {:page {:block/title (str "Person " i)
+                                          :build/tags [:Person]
+                                          :build/properties person-properties}})
+                                (range n))))]
+    (db-test/create-conn-with-blocks
+     {:properties properties
+      :classes {:Person {:build/properties {:logseq.property.class/enable-bidirectional? true}}}
+      :pages-and-blocks pages})))
+
+(deftest ^:long get-bidirectional-properties-performance-single-property
+  (testing "attribute lookups scale with unique properties, not entities"
+    (let [conn (bidirectional-perf-conn 400 [:friend])
+          target-id (:db/id (db-test/find-page-by-title @conn "Target"))
+          original-entity d/entity
+          attr-lookups (atom 0)
+          results (with-redefs [d/entity (fn [db eid]
+                                           (when (keyword? eid)
+                                             (swap! attr-lookups inc))
+                                           (original-entity db eid))]
+                    (ldb/get-bidirectional-properties @conn target-id))]
+      (is (= 1 (count results)))
+      (is (= 400 (count (:entities (first results)))))
+      (is (<= @attr-lookups 8)
+          (str "expected bounded attr lookups, got " @attr-lookups)))))
+
+(deftest ^:long get-bidirectional-properties-performance-multi-property
+  (testing "attribute lookups stay bounded with multiple matching properties"
+    (let [conn (bidirectional-perf-conn 300 [:friend :colleague])
+          target-id (:db/id (db-test/find-page-by-title @conn "Target"))
+          original-entity d/entity
+          attr-lookups (atom 0)
+          results (with-redefs [d/entity (fn [db eid]
+                                           (when (keyword? eid)
+                                             (swap! attr-lookups inc))
+                                           (original-entity db eid))]
+                    (ldb/get-bidirectional-properties @conn target-id))]
+      (is (= 1 (count results)))
+      (is (= 300 (count (:entities (first results)))))
+      (is (<= @attr-lookups 12)
+          (str "expected bounded attr lookups, got " @attr-lookups)))))

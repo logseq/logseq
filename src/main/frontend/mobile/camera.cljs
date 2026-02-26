@@ -28,7 +28,7 @@
              (string/includes? message "not authorized")
              (string/includes? message "permission")))))
 
-(defn- take-or-choose-photo []
+(defn take-or-choose-photo []
   (-> (*camera-get-photo*
        (clj->js
         {:allowEditing (get-in

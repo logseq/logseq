@@ -185,26 +185,64 @@
   [repo]
   (some #(= repo (:url %)) (state/get-rtc-graphs)))
 
+(defn- graph-has-local-rtc-id?
+  [repo]
+  (boolean (some-> (db/get-db repo)
+                   ldb/get-graph-rtc-uuid)))
+
+(defn- remote-graphs-unknown?
+  []
+  (not= false (:rtc/loading-graphs? @state/state)))
+
+(defn- should-start-rtc?
+  [repo]
+  (or (graph-in-remote-list? repo)
+      ;; During startup, remote graph list might not be fetched yet.
+      ;; If local DB already has graph UUID, start optimistically to reduce cold-start latency.
+      (and (remote-graphs-unknown?)
+           (graph-has-local-rtc-id? repo))))
+
 (defn- normalize-graph-e2ee?
   [graph-e2ee?]
   (if (nil? graph-e2ee?)
     true
     (true? graph-e2ee?)))
 
-(defn <rtc-start!
-  [repo & {:keys [_stop-before-start?] :as _opts}]
-  (if (graph-in-remote-list? repo)
-    (do
-      (log/info :db-sync/start {:repo repo})
-      (state/<invoke-db-worker :thread-api/db-sync-start repo))
-    (do
-      (log/info :db-sync/skip-start {:repo repo :reason :graph-not-in-remote-list})
-      (p/resolved nil))))
+(defn- <wait-for-db-worker-ready!
+  []
+  (if @state/*db-worker
+    (p/resolved true)
+    (let [ready (p/deferred)
+          watch-key (keyword "frontend.handler.db-based.sync"
+                             (str "wait-db-worker-ready-" (random-uuid)))]
+      (add-watch state/*db-worker watch-key
+                 (fn [_ _ _ worker]
+                   (when worker
+                     (remove-watch state/*db-worker watch-key)
+                     (p/resolve! ready true))))
+      ;; If worker becomes ready between the initial check and add-watch.
+      (when @state/*db-worker
+        (remove-watch state/*db-worker watch-key)
+        (p/resolve! ready true))
+      ready)))
 
 (defn <rtc-stop!
   []
   (log/info :db-sync/stop true)
   (state/<invoke-db-worker :thread-api/db-sync-stop))
+
+(defn <rtc-start!
+  [repo & {:keys [_stop-before-start?] :as _opts}]
+  (p/let [_ (<wait-for-db-worker-ready!)]
+    (if (should-start-rtc? repo)
+      (do
+        (log/info :db-sync/start {:repo repo})
+        (state/<invoke-db-worker :thread-api/db-sync-start repo))
+      (do
+        (log/info :db-sync/skip-start {:repo repo :reason :graph-not-in-remote-list
+                                       :remote-graphs-loading? (:rtc/loading-graphs? @state/state)
+                                       :has-local-rtc-id? (graph-has-local-rtc-id? repo)})
+        (<rtc-stop!)))))
 
 (defonce ^:private debounced-update-presence
   (util/debounce

@@ -56,3 +56,21 @@
                (p/catch (fn [error]
                           (is (= "jwks" (ex-message error)))
                           (done)))))))
+
+(deftest auth-claims-expired-jwt-short-circuits-verification-test
+  (async done
+         (let [expired-token "eyJhbGciOiJSUzI1NiJ9.eyJleHAiOjEsInN1YiI6InUxIn0.signature"
+               request (js/Request. "http://localhost/graphs"
+                                    #js {:headers #js {"authorization" (str "Bearer " expired-token)}})
+               verify-called? (atom false)]
+           (-> (p/with-redefs [authorization/verify-jwt
+                               (fn [_token _env]
+                                 (reset! verify-called? true)
+                                 (p/rejected (ex-info "should-not-be-called" {})))]
+                 (p/let [claims (auth/auth-claims request #js {})]
+                   (is (nil? claims))
+                   (is (false? @verify-called?))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))

@@ -411,7 +411,7 @@
                         [:block/title :string]
                         [:build/children {:optional true} [:vector [:ref ::block]]]
                         [:build/properties {:optional true} User-properties]
-                        [:build/tags {:optional true} [:vector Class]]
+                        [:build/tags {:optional true} [:or [:set Class] [:vector Class]]]
                         [:build/keep-uuid? {:optional true} :boolean]]}}
    [:page [:and
            [:map
@@ -419,7 +419,7 @@
             [:block/title {:optional true} :string]
             [:build/journal {:optional true} :int]
             [:build/properties {:optional true} User-properties]
-            [:build/tags {:optional true} [:vector Class]]
+            [:build/tags {:optional true} [:or [:set Class] [:vector Class]]]
             [:build/keep-uuid? {:optional true} :boolean]]
            [:fn {:error/message ":block/title, :block/uuid or :build/journal required"
                  :error/path [:block/title]}
@@ -434,13 +434,14 @@
     [:build/properties {:optional true} User-properties]
     [:build/properties-ref-types {:optional true}
      [:map-of :keyword :keyword]]
+    ;; TODO: Make this respect :block/order or allow :set
     [:build/closed-values
      {:optional true}
      [:vector [:map
                [:value [:or :string :double]]
                [:uuid {:optional true} :uuid]
                [:icon {:optional true} :map]]]]
-    [:build/property-classes {:optional true} [:vector Class]]
+    [:build/property-classes {:optional true} [:or [:set Class] [:vector Class]]]
     [:build/keep-uuid? {:optional true} :boolean]]])
 
 (def Classes
@@ -448,13 +449,19 @@
    Class
    [:map
     [:build/properties {:optional true} User-properties]
-    [:build/class-extends {:optional true} [:vector Class]]
+    [:build/class-extends {:optional true} [:or [:set Class] [:vector Class]]]
     [:build/class-properties {:optional true} [:vector Property]]
     [:build/keep-uuid? {:optional true} :boolean]]])
 
 (def Options
+  "Main malli schema that validates a sqlite.build EDN map. If an inner schema
+  uses :vector e.g. :blocks, it's to preserve :block/order-ing for that node's
+  attribute. If an inner schema uses :vector or :set e.g. :build/class-extends,
+  it's to indicate it is order-less and also allow users to write the more
+  familiar vector syntax"
   [:map
    {:closed true}
+   ;; TODO: Make this respect :block/order or allow :set
    [:pages-and-blocks {:optional true} [:vector Page-blocks]]
    [:properties {:optional true} Properties]
    [:classes {:optional true} Classes]

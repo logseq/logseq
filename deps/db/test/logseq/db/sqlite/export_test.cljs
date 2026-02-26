@@ -61,7 +61,8 @@
         imported-page (export-page-and-import-to-another-graph conn conn2 page-title)
         updated-page (db-test/find-page-by-title @conn2 page-title)
         expected-page-and-blocks
-        (update-in (:pages-and-blocks original-data) [0 :blocks] transform-expected-blocks)
+        (-> (:pages-and-blocks original-data)
+            (update-in [0 :blocks] transform-expected-blocks))
         filter-imported-page (if build-journal
                                #(= build-journal (get-in % [:page :build/journal]))
                                #(= (get-in % [:page :block/title]) page-title))]
@@ -91,8 +92,7 @@
     imported-graph))
 
 (defn- expand-properties
-  "Add default values to properties of an input export map to test against a
-  db-based export map"
+  "Modify given properties so that they match properties exported from the imported graph"
   [properties]
   (->> properties
        (map (fn [[k m]]
@@ -100,20 +100,23 @@
                (cond->
                 (merge {:db/cardinality :db.cardinality/one}
                        m)
+                 (:build/property-classes m)
+                 (update :build/property-classes set)
                  (not (:block/title m))
                  (assoc :block/title (name k)))]))
        (into {})))
 
 (defn- expand-classes
-  "Add default values to classes of an input export map to test against a
-  db-based export map"
+  "Modify given classes so that they match classes exported from the imported graph"
   [classes]
   (->> classes
        (map (fn [[k m]]
               [k
                (cond-> m
                  (not (:block/title m))
-                 (assoc :block/title (name k)))]))
+                 (assoc :block/title (name k))
+                 (:build/class-extends m)
+                 (update :build/class-extends set))]))
        (into {})))
 
 (def sort-pages-and-blocks sqlite-export/sort-pages-and-blocks)
@@ -159,7 +162,7 @@
          [{:page {:block/title "page1"}
            :blocks [{:block/title "export"
                      :build/properties {:user.property/default-many #{"foo" "bar" "baz"}}
-                     :build/tags [:user.class/MyClass]}
+                     :build/tags #{:user.class/MyClass}}
                     {:block/title "import"}]}]}
         conn (db-test/create-conn-with-blocks original-data)
         imported-block (export-block-and-import-to-another-block conn conn "export" "import")]
@@ -184,7 +187,7 @@
          [{:page {:block/title "page1"}
            :blocks [{:block/title "export"
                      :build/properties {:user.property/num-many #{3 6 9}}
-                     :build/tags [:user.class/MyClass]}]}]}
+                     :build/tags #{:user.class/MyClass}}]}]}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn-with-blocks
                {:pages-and-blocks [{:page {:block/title "page2"}
@@ -249,10 +252,10 @@
                                         {:block/title "b1ab"}]}
                                       {:block/title "b1b"}]}
                     {:block/title "b2"
-                     :build/tags [:user.class/MyClass]}
+                     :build/tags #{:user.class/MyClass}}
                     {:block/title "some task"
                      :build/properties {:logseq.property/status :logseq.property/status.doing}
-                     :build/tags [:logseq.class/Task]}]}]}
+                     :build/tags #{:logseq.class/Task}}]}]}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
         imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
@@ -388,9 +391,9 @@
          :pages-and-blocks
          [{:page {:block/title "page1"
                   :build/properties {:user.property/p1 "woot"}
-                  :build/tags [:user.class/ChildClass]}
+                  :build/tags #{:user.class/ChildClass}}
            :blocks [{:block/title "child object"
-                     :build/tags [:user.class/ChildClass2]}]}]}
+                     :build/tags #{:user.class/ChildClass2}}]}]}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
         imported-page (export-page-and-import-to-another-graph conn conn2 "page1")]
@@ -471,14 +474,14 @@
                      :build/properties {:user.property/date [:build/page {:build/journal 20250203}]}}
                     {:block/title "node block"
                      :build/properties {:user.property/node #{[:build/page {:block/title "page object"
-                                                                            :build/tags [:user.class/MyClass]}]
+                                                                            :build/tags #{:user.class/MyClass}}]
                                                               [:block/uuid block-object-uuid]
                                                               :logseq.class/Task}}}
                     {:block/title "map block"
                      :build/properties {:user.property/map {:foo :bar :num 2}}}]}
           {:page {:block/title "Blocks"}
            :blocks [{:block/title "myclass object"
-                     :build/tags [:user.class/MyClass]
+                     :build/tags #{:user.class/MyClass}
                      :block/uuid block-object-uuid
                      :build/keep-uuid? true}]}]}
         conn (db-test/create-conn-with-blocks original-data)
@@ -570,7 +573,7 @@
                                        :build/properties {:user.property/p1 "ok"}
                                        :build/children [{:block/title "b2"}]}
                                       {:block/title "b3"
-                                       :build/tags [:user.class/class1]
+                                       :build/tags #{:user.class/class1}
                                        :build/children [{:block/title "b4"}]}]}
                             {:page {:block/title "page2"}
                              :blocks [{:block/title "dont export"}]}]}
@@ -655,7 +658,7 @@
                     {:block/title "b2" :build/properties {:user.property/node #{[:block/uuid page-object-uuid]}}}
                     {:block/title "b3" :build/properties {:user.property/node #{[:block/uuid page-object-uuid]}}}
                     {:block/title "Example advanced query",
-                     :build/tags [:logseq.class/Query],
+                     :build/tags #{:logseq.class/Query},
                      :build/properties
                      {:logseq.property/query
                       {:build/property-value :block
@@ -668,24 +671,24 @@
                      {:user.property/url
                       {:build/property-value :block
                        :block/title "https://example.com"
-                       :build/tags [:user.class/MyClass]}}}]}
+                       :build/tags #{:user.class/MyClass}}}}]}
           {:page {:block/title "page object"
                   :block/uuid page-object-uuid
                   :build/keep-uuid? true}
            :blocks []}
-          {:page {:block/title "page2" :build/tags [:user.class/MyClass2]}
+          {:page {:block/title "page2" :build/tags #{:user.class/MyClass2}}
            :blocks [{:block/title "hola" :block/uuid internal-block-uuid :build/keep-uuid? true}
                     {:block/title "myclass object 1"
-                     :build/tags [:user.class/MyClass]
+                     :build/tags #{:user.class/MyClass}
                      :block/uuid block-pvalue-uuid
                      :build/keep-uuid? true}
                     (cond-> {:block/title "myclass object 2"
-                             :build/tags [:user.class/MyClass]}
+                             :build/tags #{:user.class/MyClass}}
                       (not exclude-namespaces?)
                       (merge {:block/uuid property-pvalue-uuid
                               :build/keep-uuid? true}))
                     {:block/title "myclass object 3"
-                     :build/tags [:user.class/MyClass]
+                     :build/tags #{:user.class/MyClass}
                      :block/uuid page-pvalue-uuid
                      :build/keep-uuid? true}
                     {:block/title "ref blocks"
@@ -836,6 +839,69 @@
            (sqlite-export/diff-exports export-map export-map2))
         "No diff between original export and export after importing into a new graph")))
 
+(deftest ^:long import-graph-preserves-property-history
+  (let [now (common-util/time-ms)
+        original-data
+        {:properties {:user.property/num {:logseq.property/type :number}
+                      :user.property/node {:logseq.property/type :node
+                                           :db/cardinality :db.cardinality/many}}
+         :pages-and-blocks [{:page {:block/title "page1"}
+                             :blocks [{:block/title "num block"
+                                       :build/properties {:user.property/num 44}}
+                                      {:block/title "status block"
+                                       :build/properties {:logseq.property/status :logseq.property/status.doing}}
+                                      {:block/title "node block"}
+                                      {:block/title "object 1"}
+                                      {:block/title "object 2"}]}]}
+        conn (db-test/create-conn-with-import-map original-data)
+        num-block (db-test/find-block-by-content @conn "num block")
+        status-block (db-test/find-block-by-content @conn "status block")
+        node-block (db-test/find-block-by-content @conn "node block")
+        original-property-history
+        [{:block/uuid (random-uuid)
+          :block/created-at now
+          :logseq.property.history/block [:block/uuid (:block/uuid num-block)]
+          :logseq.property.history/property :user.property/num
+          :logseq.property.history/scalar-value 42}
+         {:block/uuid (random-uuid)
+          :block/created-at (+ now 1000)
+          :logseq.property.history/block [:block/uuid (:block/uuid num-block)]
+          :logseq.property.history/property :user.property/num
+          :logseq.property.history/scalar-value 44}
+         {:block/uuid (random-uuid)
+          :block/created-at now
+          :logseq.property.history/block [:block/uuid (:block/uuid node-block)]
+          :logseq.property.history/property :user.property/node
+          :logseq.property.history/ref-value [:block/uuid (:block/uuid (db-test/find-block-by-content @conn "object 1"))]}
+         {:block/uuid (random-uuid)
+          :block/created-at (+ now 1000)
+          :logseq.property.history/block [:block/uuid (:block/uuid node-block)]
+          :logseq.property.history/property :user.property/node
+          :logseq.property.history/ref-value [:block/uuid (:block/uuid (db-test/find-block-by-content @conn "object 2"))]}
+         {:block/uuid (random-uuid)
+          :block/created-at now
+          :logseq.property.history/block [:block/uuid (:block/uuid status-block)]
+          :logseq.property.history/property :logseq.property/status
+          :logseq.property.history/ref-value :logseq.property/status.todo}
+         {:block/uuid (random-uuid)
+          :block/created-at (+ now 1000)
+          :logseq.property.history/block [:block/uuid (:block/uuid status-block)]
+          :logseq.property.history/property :logseq.property/status
+          :logseq.property.history/ref-value :logseq.property/status.doing}]
+        _ (d/transact! conn original-property-history)
+        export-map (sqlite-export/build-export @conn {:export-type :graph})
+        valid-result (sqlite-export/validate-export export-map)
+        _ (assert (not (:error valid-result)) "No error when importing export-map into new graph")
+        _ (validate-db (:db valid-result))
+        export-map2 (sqlite-export/build-export (:db valid-result) {:export-type :graph})
+        property-history (::sqlite-export/property-history export-map2)]
+    (is (= nil
+           (sqlite-export/diff-exports export-map export-map2))
+        "No diff between original export and export after importing into a new graph")
+      ;; (cljs.pprint/pprint (clojure.data/diff original-property-history property-history))
+    (is (= (set original-property-history) property-history)
+        "Original property history equals exported property history")))
+
 (deftest import-graph-with-different-property-value-cases
   (let [pvalue-uuid1 (random-uuid)
         original-data
@@ -849,7 +915,7 @@
            :blocks [{:block/title "block with pvalue that has :build/tags"
                      :build/properties {:user.property/default {:build/property-value :block
                                                                 :block/title "tags pvalue"
-                                                                :build/tags [:user.class/C1]}}}
+                                                                :build/tags #{:user.class/C1}}}}
                     {:block/title "block with pvalue that has a view"
                      :build/properties {:user.property/default {:build/property-value :block
                                                                 :block/title "view pvalue"
@@ -861,7 +927,7 @@
                       #{"yep"
                         {:build/property-value :block
                          :block/title ":many pvalue"
-                         :build/tags [:user.class/C1]}}}}]}
+                         :build/tags #{:user.class/C1}}}}}]}
           {:page {:block/title "$$$views2"}
            :blocks [{:block/title "Unlinked references",
                      :build/properties
@@ -967,25 +1033,25 @@
            :blocks [{:block/title "asset block"
                      :block/uuid asset-uuid
                      :build/keep-uuid? true
-                     :build/tags [:logseq.class/Asset]
+                     :build/tags #{:logseq.class/Asset}
                      :build/properties {:logseq.property.asset/type "pdf"
                                         :logseq.property.asset/checksum "abc"
                                         :logseq.property.asset/size 42}}
                     {:block/title "annotation block"
-                     :build/tags [:logseq.class/Pdf-annotation]
+                     :build/tags #{:logseq.class/Pdf-annotation}
                      :build/properties {:logseq.property/asset [:block/uuid asset-uuid]}}]}
           {:page {:block/title "page2"}
            :blocks [{:block/title "asset image block"
                      :block/uuid asset2-uuid
                      :build/keep-uuid? true
-                     :build/tags [:logseq.class/Asset]
+                     :build/tags #{:logseq.class/Asset}
                      :build/properties {:logseq.property.asset/type "png"
                                         :logseq.property.asset/checksum "img-checksum"
                                         :logseq.property.asset/width 100
                                         :logseq.property.asset/height 200
                                         :logseq.property.asset/size 300}}
                     {:block/title "annotation with image"
-                     :build/tags [:logseq.class/Pdf-annotation]
+                     :build/tags #{:logseq.class/Pdf-annotation}
                      :build/properties {:logseq.property.pdf/hl-image [:block/uuid asset2-uuid]}}]}]}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)

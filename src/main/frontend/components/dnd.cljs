@@ -51,12 +51,12 @@
         sensors (useSensors (useSensor MouseSensor (bean/->js {:activationConstraint {:distance 8}})))
         dnd-opts {:sensors sensors
                   :collisionDetection closestCenter
-                  :onDragStart (fn [event]
+                  :onDragStart (fn [^js event]
                                  (when-not (state/editing?)
-                                   (set-active-id (.-id (.-active event)))))
-                  :onDragEnd (fn [event]
-                               (let [active-id (.-id (.-active event))
-                                     over-id (.-id (.-over event))]
+                                   (set-active-id (.-id ^js (.-active event)))))
+                  :onDragEnd (fn [^js event]
+                               (let [active-id (.-id ^js (.-active event))
+                                     over-id (.-id ^js (.-over event))]
                                  (when active-id
                                    (when-not (= active-id over-id)
                                      (let [old-index (.indexOf ids active-id)

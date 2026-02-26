@@ -40,12 +40,22 @@
     (let [message (or (ex-message error) (some-> error .-message))]
       (contains? recoverable-auth-errors message))))
 
+(defn- expired-token?
+  [token]
+  (when-let [claims (unsafe-jwt-claims token)]
+    (let [exp (aget claims "exp")
+          now-s (js/Math.floor (/ (.now js/Date) 1000))]
+      (and (number? exp)
+           (<= exp now-s)))))
+
 (defn auth-claims [request env]
   (let [token (token-from-request request)]
     (if (string? token)
-      (-> (authorization/verify-jwt token env)
-          (p/catch (fn [error]
-                     (if (recoverable-auth-error? error)
-                       nil
-                       (p/rejected error)))))
+      (if (expired-token? token)
+        (p/resolved nil)
+        (-> (authorization/verify-jwt token env)
+            (p/catch (fn [error]
+                       (if (recoverable-auth-error? error)
+                         nil
+                         (p/rejected error))))))
       (p/resolved nil))))

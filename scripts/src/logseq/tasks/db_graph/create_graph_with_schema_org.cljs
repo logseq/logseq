@@ -334,23 +334,7 @@
              :desc "Verbose mode"}})
 
 (defn- write-export-file [db]
-  (let [export-map* (sqlite-export/build-export db {:export-type :graph-ontology})
-        ;; Modify export to provide stable diff like prepare-export-to-diff
-        ;; TODO: Remove this when prepare-export-to-diff TODO is done i.e.
-        ;; when export has stable sort order for these keys
-        export-map (-> export-map*
-                       (update :classes update-vals
-                               (fn [m]
-                                 (cond-> m
-                                   (:build/class-extends m)
-                                   (update :build/class-extends (comp vec sort))
-                                   (:build/class-properties m)
-                                   (update :build/class-properties (comp vec sort)))))
-                       (update :properties update-vals
-                               (fn [m]
-                                 (cond-> m
-                                   (:build/property-classes m)
-                                   (update :build/property-classes (comp vec sort))))))]
+  (let [export-map (sqlite-export/build-export db {:export-type :graph-ontology})]
     (fs/writeFileSync "schema.edn"
                       (with-out-str (pprint/pprint export-map)))))
 

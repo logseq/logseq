@@ -98,11 +98,18 @@ independent of format as format specific heading characters are stripped"
                        (remove nil?))
         pages (when (seq pages-ids)
                 (db-utils/pull-many '[:db/id :block/name :block/title :block/journal-day] pages-ids))
-        pages-map (reduce (fn [acc p] (assoc acc (:db/id p) p)) {} pages)
+        pages-map (reduce (fn [acc p]
+                            (if (map? p)
+                              (assoc acc (:db/id p) p)
+                              acc))
+                          {}
+                          pages)
         blocks (map
                 (fn [block]
-                  (assoc block :block/page
-                         (get pages-map (:db/id (:block/page block)))))
+                  (assoc block
+                         :block/page
+                         (or (get pages-map (:db/id (:block/page block)))
+                             (:block/page block))))
                 blocks)]
     blocks))
 

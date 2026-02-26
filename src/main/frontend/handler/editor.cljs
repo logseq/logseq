@@ -1398,7 +1398,10 @@
                                                    :bottom? true
                                                    :sibling? (= edit-block target)
                                                    :replace-empty-target? true}))
-       (map (fn [b] (db/entity [:block/uuid (:block/uuid b)])) blocks)))))
+       (p/let [blocks (map (fn [b] (db/entity [:block/uuid (:block/uuid b)])) blocks)]
+         (when-let [block (some (fn [block] (when (= (:block/uuid block) (:block/uuid edit-block)) block)) blocks)]
+           (edit-block! block :max))
+         blocks)))))
 
 (def insert-command! editor-common-handler/insert-command!)
 

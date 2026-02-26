@@ -10,6 +10,8 @@
             [frontend.worker.sync.crypt :as sync-crypt]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
+            [logseq.db.frontend.validate :as db-validate]
+            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
@@ -113,6 +115,112 @@
               {:user/uuid "u2" :user/name "Bob" :user/editing-block-uuid "block-2"}]
              @(:online-users client)))
       (is (= 1 (count @broadcasts))))))
+
+(deftest pull-ok-with-older-remote-tx-is-ignored-test
+  (testing "pull/ok with remote tx behind local tx does not apply stale tx data"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          parent-id (:db/id parent)
+          stale-tx (sqlite-util/write-transit-str [[:db/add parent-id :block/title "stale-title"]])
+          raw-message (js/JSON.stringify
+                       (clj->js {:type "pull/ok"
+                                 :t 4
+                                 :txs [{:t 4 :tx stale-tx}]}))
+          latest-prev @db-sync/*repo->latest-remote-tx
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (reset! db-sync/*repo->latest-remote-tx {})
+          (try
+            (client-op/update-local-tx test-repo 5)
+            (#'db-sync/handle-message! test-repo client raw-message)
+            (let [parent' (d/entity @conn parent-id)]
+              (is (= "parent" (:block/title parent')))
+              (is (= 5 (client-op/get-local-tx test-repo))))
+            (finally
+              (reset! db-sync/*repo->latest-remote-tx latest-prev))))))))
+
+(deftest pull-ok-out-of-order-stale-response-is-ignored-test
+  (testing "late stale pull/ok should not overwrite a newer already-applied tx"
+    (async done
+           (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+                 parent-id (:db/id parent)
+                 new-tx (sqlite-util/write-transit-str [[:db/add parent-id :block/title "remote-new-title"]])
+                 stale-tx (sqlite-util/write-transit-str [[:db/add parent-id :block/title "stale-title"]])
+                 raw-new (js/JSON.stringify
+                          (clj->js {:type "pull/ok"
+                                    :t 2
+                                    :txs [{:t 2 :tx new-tx}]}))
+                 raw-stale (js/JSON.stringify
+                            (clj->js {:type "pull/ok"
+                                      :t 1
+                                      :txs [{:t 1 :tx stale-tx}]}))
+                 latest-prev @db-sync/*repo->latest-remote-tx
+                 client {:repo test-repo
+                         :graph-id "graph-1"
+                         :inflight (atom [])
+                         :online-users (atom [])
+                         :ws-state (atom :open)}]
+             (reset! db-sync/*repo->latest-remote-tx {})
+             (with-datascript-conns conn client-ops-conn
+               (fn []
+                 (-> (p/let [_ (#'db-sync/handle-message! test-repo client raw-new)
+                             _ (#'db-sync/handle-message! test-repo client raw-stale)
+                             parent' (d/entity @conn parent-id)]
+                       (is (= "remote-new-title" (:block/title parent')))
+                       (is (= 2 (client-op/get-local-tx test-repo))))
+                     (p/finally (fn []
+                                  (reset! db-sync/*repo->latest-remote-tx latest-prev)
+                                  (done))))))))))
+
+(deftest pull-ok-batched-txs-preserve-tempid-boundaries-test
+  (testing "pull/ok applies tx batches without cross-tx tempid collisions"
+    (async done
+           (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+                 page-uuid (:block/uuid (:block/page parent))
+                 block-uuid-a (random-uuid)
+                 block-uuid-b (random-uuid)
+                 now 1760000000000
+                 tx-a (sqlite-util/write-transit-str
+                       [[:db/add -1 :block/uuid block-uuid-a]
+                        [:db/add -1 :block/title "remote-a"]
+                        [:db/add -1 :block/parent [:block/uuid page-uuid]]
+                        [:db/add -1 :block/page [:block/uuid page-uuid]]
+                        [:db/add -1 :block/order 1]
+                        [:db/add -1 :block/updated-at now]
+                        [:db/add -1 :block/created-at now]])
+                 tx-b (sqlite-util/write-transit-str
+                       [[:db/add -1 :block/uuid block-uuid-b]
+                        [:db/add -1 :block/title "remote-b"]
+                        [:db/add -1 :block/parent [:block/uuid page-uuid]]
+                        [:db/add -1 :block/page [:block/uuid page-uuid]]
+                        [:db/add -1 :block/order 2]
+                        [:db/add -1 :block/updated-at now]
+                        [:db/add -1 :block/created-at now]])
+                 raw-message (js/JSON.stringify
+                              (clj->js {:type "pull/ok"
+                                        :t 2
+                                        :txs [{:t 1 :tx tx-a}
+                                              {:t 2 :tx tx-b}]}))
+                 latest-prev @db-sync/*repo->latest-remote-tx
+                 client {:repo test-repo
+                         :graph-id "graph-1"
+                         :inflight (atom [])
+                         :online-users (atom [])
+                         :ws-state (atom :open)}]
+             (with-datascript-conns conn client-ops-conn
+               (fn []
+                 (reset! db-sync/*repo->latest-remote-tx {})
+                 (-> (p/let [_ (client-op/update-local-tx test-repo 0)
+                             _ (#'db-sync/handle-message! test-repo client raw-message)]
+                       (is (= "remote-a" (:block/title (d/entity @conn [:block/uuid block-uuid-a]))))
+                       (is (= "remote-b" (:block/title (d/entity @conn [:block/uuid block-uuid-b])))))
+                     (p/finally (fn []
+                                  (reset! db-sync/*repo->latest-remote-tx latest-prev)
+                                  (done))))))))))
 
 (deftest reaction-add-enqueues-pending-sync-tx-test
   (testing "adding a reaction should enqueue tx for db-sync"
@@ -423,6 +531,100 @@
             (let [block' (d/entity @conn (:db/id block))]
               (is (= "test" (:block/title block'))))))))))
 
+(deftest ^:long rebase-does-not-leave-anonymous-created-by-entities-test
+  (testing "rebase should not leave entities with timestamps/created-by but without identity attrs"
+    (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
+          child-id (:db/id child1)
+          page-id (:db/id (:block/page parent))]
+      (with-redefs [db-sync/enqueue-local-tx!
+                    (let [orig db-sync/enqueue-local-tx!]
+                      (fn [repo tx-report]
+                        (when-not (:rtc-tx? (:tx-meta tx-report))
+                          (orig repo tx-report))))]
+        (with-datascript-conns conn client-ops-conn
+          (fn []
+            ;; Ensure the deleted block has the same created-by shape from production repros.
+            (d/transact! conn [[:db/add child-id :logseq.property/created-by-ref page-id]])
+            (outliner-core/delete-blocks! conn [(d/entity @conn child-id)] {})
+            (is (seq (#'db-sync/pending-txs test-repo)))
+            (#'db-sync/apply-remote-tx!
+             test-repo
+             nil
+             [[:db/add (:db/id parent) :block/title "parent remote"]])
+            (let [anonymous-ents (->> (d/datoms @conn :avet :logseq.property/created-by-ref)
+                                      (keep (fn [datom]
+                                              (let [ent (d/entity @conn (:e datom))]
+                                                (when (and (nil? (:block/uuid ent))
+                                                           (nil? (:db/ident ent))
+                                                           (some? (:block/created-at ent))
+                                                           (some? (:block/updated-at ent)))
+                                                  (select-keys ent [:db/id :block/created-at :block/updated-at :logseq.property/created-by-ref]))))))
+                  validation (db-validate/validate-local-db! @conn)]
+              (is (empty? anonymous-ents) (str anonymous-ents))
+              (is (empty? (map :entity (:errors validation)))
+                  (str (:errors validation))))))))))
+
+(deftest ^:long rebase-create-then-delete-does-not-leave-anonymous-entities-test
+  (testing "create+delete before sync should not leave anonymous entities after rebase"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          page-id (:db/id (:block/page parent))]
+      (with-redefs [db-sync/enqueue-local-tx!
+                    (let [orig db-sync/enqueue-local-tx!]
+                      (fn [repo tx-report]
+                        (when-not (:rtc-tx? (:tx-meta tx-report))
+                          (orig repo tx-report))))]
+        (with-datascript-conns conn client-ops-conn
+          (fn []
+            (outliner-core/insert-blocks! conn [{:block/title "temp-rebase-case"}] parent {:sibling? false})
+            (let [temp-block (db-test/find-block-by-content @conn "temp-rebase-case")
+                  temp-id (:db/id temp-block)]
+              (d/transact! conn [[:db/add temp-id :logseq.property/created-by-ref page-id]])
+              (outliner-core/delete-blocks! conn [temp-block] {})
+              (is (>= (count (#'db-sync/pending-txs test-repo)) 2))
+              (#'db-sync/apply-remote-tx!
+               test-repo
+               nil
+               [[:db/add (:db/id parent) :block/title "parent remote 2"]])
+              (let [anonymous-ents (->> (d/datoms @conn :avet :block/created-at)
+                                        (keep (fn [datom]
+                                                (let [ent (d/entity @conn (:e datom))]
+                                                  (when (and (nil? (:block/uuid ent))
+                                                             (nil? (:db/ident ent))
+                                                             (some? (:block/updated-at ent)))
+                                                    (select-keys ent [:db/id :block/created-at :block/updated-at :logseq.property/created-by-ref]))))))
+                    validation (db-validate/validate-local-db! @conn)]
+                (is (empty? anonymous-ents) (str anonymous-ents))
+                (is (empty? (map :entity (:errors validation)))
+                    (str (:errors validation)))))))))))
+
+(deftest ^:long malformed-remote-anonymous-entity-tx-is-ignored-test
+  (testing "remote tx creating anonymous entities should be ignored instead of invalidating db"
+    (let [{:keys [conn parent]} (setup-parent-child)
+          created-by-id (:db/id (:block/page parent))
+          ts 1771435997392
+          malformed-tx [[:db/add "missing-uuid-entity" :block/created-at ts]
+                        [:db/add "missing-uuid-entity" :block/updated-at ts]
+                        [:db/add "missing-uuid-entity" :logseq.property/created-by-ref created-by-id]]]
+      (with-datascript-conns conn nil
+        (fn []
+          (is (nil? (try
+                      (#'db-sync/apply-remote-tx! test-repo nil malformed-tx)
+                      nil
+                      (catch :default e
+                        e))))
+          (let [anonymous-ents (->> (d/datoms @conn :avet :logseq.property/created-by-ref)
+                                    (keep (fn [datom]
+                                            (let [ent (d/entity @conn (:e datom))]
+                                              (when (and (nil? (:block/uuid ent))
+                                                         (nil? (:db/ident ent))
+                                                         (= ts (:block/created-at ent))
+                                                         (= ts (:block/updated-at ent)))
+                                                (select-keys ent [:db/id :block/created-at :block/updated-at :logseq.property/created-by-ref]))))))
+                validation (db-validate/validate-local-db! @conn)]
+            (is (empty? anonymous-ents) (str anonymous-ents))
+            (is (empty? (map :entity (:errors validation)))
+                (str (:errors validation)))))))))
+
 (deftest ^:long offload-large-title-test
   (testing "large titles are offloaded to object storage with placeholder"
     (async done
@@ -554,6 +756,7 @@
                  (-> (p/let [result (#'db-sync/rehydrate-large-titles!
                                      test-repo
                                      {:tx-data tx-data
+                                      :conn conn
                                       :graph-id "graph-1"
                                       :download-fn download-fn
                                       :aes-key nil})
