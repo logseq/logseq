@@ -138,6 +138,19 @@ Output formats:
 - Global `--output <human|json|edn>` applies to all commands
 - For `graph export`, `--output` refers to the destination file path. Output formatting is controlled via `:output-format` in config or `LOGSEQ_CLI_OUTPUT`.
 - Human output is plain text. List/search commands render tables with a final `Count: N` line. For list and search subcommands, the ID column uses `:db/id` (not UUID). If `:db/ident` exists, an `IDENT` column is included. Search table columns are `ID` and `TITLE`. Block titles can include multiple lines; multi-line rows align additional lines under the `TITLE` column. Times such as list `UPDATED-AT`/`CREATED-AT` and `graph info` `Created at` are shown in human-friendly relative form. Errors include error codes and may include a `Hint:` line. Use `--output json|edn` for structured output.
+- `add page` and `add block` return created entity ids in `data.result` for JSON/EDN output, and include ids in human output.
+  - Human example:
+    ```text
+    Added page:
+    [123]
+    ```
+  - Human example:
+    ```text
+    Added blocks:
+    [201 202]
+    ```
+  - JSON example: `{"status":"ok","data":{"result":[123]}}`
+  - EDN example: `{:status :ok, :data {:result [123]}}`
 - `doctor` output includes overall status (`ok`, `warning`, `error`) and per-check rows for `db-worker-script`, `data-dir`, and `running-servers`. For scripting, `--output json|edn` keeps the structured check payload.
 - Common doctor failures:
   - `doctor-script-missing`: `db-worker-node.js` runtime target is missing (default target: `dist/db-worker-node.js`; use `doctor --dev-script` to check `static/db-worker-node.js`).
