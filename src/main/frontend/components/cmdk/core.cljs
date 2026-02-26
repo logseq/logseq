@@ -135,8 +135,7 @@
                                  (and
                                   (:page? block)
                                   (= (util/page-name-sanity-lc input) (util/page-name-sanity-lc (:block.temp/original-title block))))) blocks-result)))
-        include-slash? (or (string/includes? input "/")
-                           (string/starts-with? input "/"))
+        include-slash? (string/includes? input "/")
         start-with-slash? (string/starts-with? input "/")
         order* (cond
                  (= search-mode :graph)
@@ -445,6 +444,7 @@
 
 ;; The default load-results function triggers all the other load-results function
 (defmethod load-results :default [_ state]
+  (reset! (::disable-lazy? state) false)
   (let [filter-group (:group @(::filter state))]
     (if (and (not (some-> state ::input deref seq))
              (not filter-group))
@@ -644,39 +644,82 @@
   (when-let [action (state->action state)]
     (handle-action action state event)))
 
-(defn- ensure-focus-visible!
-  [state target]
-  (let [container @(::scroll-container-ref state)
-        rect (scroll/focus-row-visible-rect container target)]
-    (when rect
-      (let [next-scroll-top (scroll/ensure-focus-visible-scroll-top rect)]
-        (when (not= next-scroll-top (.-scrollTop container))
-          (set! (.-scrollTop container) next-scroll-top))))))
+(def ^:private scroll-lerp-base-factor
+  "Minimum lerp factor used near target (smooth settle). Range 0..1."
+  0.3)
 
-(defn- apply-anchored-wheel-scroll!
-  [state e]
-  (when (and @(::wheel-focus-anchor? state)
-             (= :keyboard @(::focus-source state)))
-    (let [container @(::scroll-container-ref state)
-          target @(::highlighted-row-el state)
-          rect (scroll/focus-row-visible-rect container target)
-          delta-y (some-> e .-deltaY)]
-      (when (and rect (number? delta-y) (not (zero? delta-y)))
-        (let [next-scroll-top (scroll/anchored-scroll-top (assoc rect :delta-y delta-y))]
-          (.preventDefault e)
-          (when (not= next-scroll-top (.-scrollTop container))
-            (set! (.-scrollTop container) next-scroll-top)))))))
+(def ^:private scroll-lerp-max-factor
+  "Maximum lerp factor used far from target (fast tracking). Range 0..1."
+  0.8)
 
-(defn- handle-results-wheel!
-  [state e]
-  ;; Wheel input means user wants free scrolling, so exit keyboard-anchored mode first.
-  (when (= :keyboard @(::focus-source state))
-    (apply-anchored-wheel-scroll! state e)
-    (reset! (::focus-source state) :mouse)
-    (reset! (::highlighted-row-el state) nil)))
+(def ^:private scroll-lerp-ramp-px
+  "Pixel distance at which max-factor is fully reached.
+   During rapid keypresses the gap is typically 40-120px;
+   this value should be tuned so most of that range maps
+   to the upper half of the factor curve."
+  120)
+
+;; --- Keyboard acceleration ---
+;; When holding ArrowDown/Up, step starts at 1 and ramps up
+;; so the highlight moves through items progressively faster.
+
+(def ^:private accel-delay-ms
+  "Milliseconds to hold before acceleration kicks in."
+  200)
+
+(def ^:private accel-step-interval-ms
+  "Milliseconds between each step increase after delay."
+  150)
+
+(def ^:private accel-max-step
+  "Maximum items to move per keypress during acceleration."
+  5)
+
+(defn- start-scroll-animation!
+  "Starts (or continues) a requestAnimationFrame loop that lerps scrollTop
+   towards `::scroll-target`. Stops when target is reached or cleared."
+  [state]
+  (when-not @(::scroll-raf state)
+    (let [animate (fn animate []
+                    (if-let [container @(::scroll-container-ref state)]
+                      (let [target @(::scroll-target state)
+                            current (.-scrollTop container)]
+                        (if (or (nil? target) (= (js/Math.round current) target))
+                          (reset! (::scroll-raf state) nil)
+                          (let [distance (js/Math.abs (- target current))
+                                factor (scroll/adaptive-lerp-factor
+                                        scroll-lerp-base-factor
+                                        scroll-lerp-max-factor
+                                        distance
+                                        scroll-lerp-ramp-px)
+                                next-top (scroll/lerp-scroll-top current target factor)]
+                            (set! (.-scrollTop container) next-top)
+                            (reset! (::scroll-raf state) (js/requestAnimationFrame animate)))))
+                      (reset! (::scroll-raf state) nil)))]
+      (reset! (::scroll-raf state) (js/requestAnimationFrame animate)))))
+
+(defn- scroll-to-highlight!
+  "Updates the scroll target to bring the highlighted row into view,
+   then starts the rAF animation loop (if not already running).
+   For large jumps (e.g. wrap-around) scrolls instantly."
+  [state row-el]
+  (when-let [container @(::scroll-container-ref state)]
+    (when row-el
+      (let [rect (scroll/focus-row-visible-rect container row-el)]
+        (when rect
+          (let [target-top (scroll/ensure-focus-visible-scroll-top rect)
+                current-top (.-scrollTop container)]
+            (when (not= target-top (js/Math.round current-top))
+              (if (= :instant (scroll/scroll-behavior current-top target-top (.-clientHeight container)))
+                (do
+                  (set! (.-scrollTop container) target-top)
+                  (reset! (::scroll-target state) nil))
+                (do
+                  (reset! (::scroll-target state) target-top)
+                  (start-scroll-animation! state))))))))))
 
 (defn- render-result-list-item
-  [state group highlighted-item highlighted? *mouse-active? disable-lazy? item hls-page? text]
+  [state group highlighted-item highlighted? mouse-mode? disable-lazy? item hls-page? text]
   (let [item (list-item/root
               (assoc item
                      :group group
@@ -685,45 +728,38 @@
                      :hls-page? hls-page?
                      :compact true
                      :rounded true
-                     :hoverable @*mouse-active?
+                     :hoverable mouse-mode?
                      :highlighted highlighted?
                      ;; for some reason, the highlight effect does not always trigger on a
                      ;; boolean value change so manually pass in the dep
                      :on-highlight-dep highlighted-item
-                     :on-click
-                     (fn [e]
-                       (util/stop-propagation e)
-                       (reset! (::highlighted-item state) item)
-                       (handle-action :default state item)
-                       (when-let [on-click (:on-click item)]
-                         (on-click e)))
-                     :on-mouse-enter
-                     (fn [_e]
-                       (when (and @*mouse-active?
-                                  (= :mouse @(::focus-source state)))
-                         (when (not= item @(::highlighted-item state))
-                           (reset! (::highlighted-item state) item))))
-                     :component-opts
-                     {:on-mouse-move
-                      (fn [e]
-                        (let [dx (or (.-movementX e) 0)
-                              dy (or (.-movementY e) 0)
-                              real-pointer-move? (or (not (zero? dx))
-                                                     (not (zero? dy)))]
-                          (when real-pointer-move?
-                            (when-not @*mouse-active?
-                              (reset! *mouse-active? true))
-                            (when-not (= :mouse @(::focus-source state))
-                              (reset! (::focus-source state) :mouse))
-                            (when (not= item @(::highlighted-item state))
-                              (reset! (::highlighted-item state) item)))))}
+                     :on-click (fn [e]
+                                 (util/stop-propagation e)
+                                 (reset! (::highlighted-item state) item)
+                                 (handle-action :default state item)
+                                 (when-let [on-click (:on-click item)]
+                                   (on-click e)))
+                     :on-mouse-enter (fn [_e]
+                                       (when (= :mouse @(::focus-source state))
+                                         (when (not= item @(::highlighted-item state))
+                                           (reset! (::highlighted-item state) item))))
+                     :on-mouse-move (fn [e]
+                                      (let [dx (or (.-movementX e) 0)
+                                            dy (or (.-movementY e) 0)
+                                            real-pointer-move? (or (not (zero? dx))
+                                                                   (not (zero? dy)))]
+                                        (when real-pointer-move?
+                                          (when-not (= :mouse @(::focus-source state))
+                                            (reset! (::focus-source state) :mouse))
+                                          (when (not= item @(::highlighted-item state))
+                                            (reset! (::highlighted-item state) item)))))
                      :on-highlight (fn [ref]
                                      (reset! (::highlighted-group state) group)
                                      (when (and ref (.-current ref))
                                        (let [row-el (.-current ref)]
                                          (reset! (::highlighted-row-el state) row-el)
                                          (when (= :keyboard @(::focus-source state))
-                                           (ensure-focus-visible! state row-el))))))
+                                           (scroll-to-highlight! state row-el))))))
               nil)]
     (if (and (= group :nodes) (not disable-lazy?))
       (ui/lazy-visible (fn [] item) {:trigger-once? true})
@@ -737,7 +773,7 @@
         highlighted-item (or @(::highlighted-item state)
                              (when (= :keyboard focus-source) first-item))
         disable-lazy? @(::disable-lazy? state)
-        *mouse-active? (::mouse-active? state)
+        mouse-mode? (= :mouse focus-source)
         filter' @(::filter state)
         can-show-less? (< (get-group-limit group) (count visible-items))
         can-show-more? (< (count visible-items) (count items))
@@ -745,15 +781,7 @@
         show-more #(swap! (::results state) assoc-in [group :show] :more)]
     [:div {:class         (if (= title "Create")
                             "border-b border-gray-06 last:border-b-0"
-                            "border-b border-gray-06 pb-1 last:border-b-0")
-           :on-mouse-move (fn [e]
-                            (let [dx (or (.-movementX e) 0)
-                                  dy (or (.-movementY e) 0)
-                                  real-pointer-move? (or (not (zero? dx))
-                                                         (not (zero? dy)))]
-                               (when real-pointer-move?
-                                 (when-not @*mouse-active?
-                                  (reset! *mouse-active? true)))))}
+                            "border-b border-gray-06 pb-1 last:border-b-0")}
      (when-not (= title "Create")
        [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02 h-8"}
         [:div {:class "font-bold text-gray-11 pl-0.5 cursor-pointer select-none"
@@ -778,6 +806,11 @@
            {:on-click (fn [e]
                         (util/stop e)
                         (reset! (::focus-source state) :mouse)
+                        ;; Disable lazy rendering when showing more :nodes items
+                        ;; so all DOM is ready before keyboard navigation.
+                        ;; The brief render cost is acceptable during a user click.
+                        (when (= group :nodes)
+                          (reset! (::disable-lazy? state) (not= show :more)))
                         (when-let [input-el @(::input-ref state)]
                           (.focus input-el))
                         ((if (= show :more) show-less show-more)))}
@@ -796,17 +829,21 @@
                   text (some-> item :text)
                   source-block (some-> item :source-block)
                   hls-page? (and page? (pdf-utils/hls-file? (:block/title source-block)))]]
-        (render-result-list-item state group highlighted-item highlighted? *mouse-active? disable-lazy? item hls-page? text))]]))
+        (render-result-list-item state group highlighted-item highlighted? mouse-mode? disable-lazy? item hls-page? text))]]))
 
 (defn move-highlight [state n]
-  (let [items (mapcat last (state->results-ordered state (:search/mode @state/state)))
+  (let [items @(::all-items-cache state)
         focus-source @(::focus-source state)
-        highlighted-item (some-> state ::highlighted-item deref (dissoc :mouse-enter-triggered-highlight))
+        highlighted-item (some-> state ::highlighted-item deref)
         fallback-highlighted? (and (nil? highlighted-item)
                                    (= :keyboard focus-source)
                                    (seq items))
         current-item-index (cond
-                             highlighted-item (.indexOf items highlighted-item)
+                             highlighted-item
+                             (let [idx (:item-index highlighted-item)]
+                               (if (and (some? idx) (= highlighted-item (nth items idx nil)))
+                                 idx
+                                 (.indexOf items highlighted-item)))
                              fallback-highlighted? 0
                              :else nil)
         items-count (count items)]
@@ -814,7 +851,8 @@
       (let [base-index (if (some? current-item-index)
                          current-item-index
                          (if (pos? n) -1 0))
-            next-item-index (mod (+ base-index n) items-count)
+            raw-index (+ base-index n)
+            next-item-index (mod raw-index items-count)
             next-highlighted-item (nth items next-item-index nil)]
         (if next-highlighted-item
           (reset! (::highlighted-item state) next-highlighted-item)
@@ -904,22 +942,26 @@
                     (do
                       (reset! (::disable-lazy? state) true)
                       (show-more))
-                    (do
-                      (reset! (::disable-lazy? state) true)
-                      (reset! (::mouse-active? state) false)
+                    (let [repeat? (.-repeat e)
+                          now (js/Date.now)
+                          _ (when-not repeat?
+                              (reset! (::accel-start-ts state) now))
+                          held-ms (- now (or @(::accel-start-ts state) now))
+                          step (scroll/accel-step held-ms accel-delay-ms accel-step-interval-ms accel-max-step)]
                       (reset! (::focus-source state) :keyboard)
-                      (reset! (::highlighted-row-el state) nil)
-                      (move-highlight state 1)))
+                      (move-highlight state step)))
       as-keyup? (if meta?
                   (do
                     (reset! (::disable-lazy? state) true)
                     (show-less))
-                  (do
-                    (reset! (::disable-lazy? state) true)
-                    (reset! (::mouse-active? state) false)
+                  (let [repeat? (.-repeat e)
+                        now (js/Date.now)
+                        _ (when-not repeat?
+                            (reset! (::accel-start-ts state) now))
+                        held-ms (- now (or @(::accel-start-ts state) now))
+                        step (scroll/accel-step held-ms accel-delay-ms accel-step-interval-ms accel-max-step)]
                     (reset! (::focus-source state) :keyboard)
-                    (reset! (::highlighted-row-el state) nil)
-                    (move-highlight state -1)))
+                    (move-highlight state (- step))))
       (and enter? (not composing?)) (do
                                       (handle-action :default state e)
                                       (util/stop-propagation e))
@@ -949,9 +991,13 @@
 (defn- keyup-handler
   [state e]
   (let [shift? (.-shiftKey e)
-        meta? (util/meta-key? e)]
+        meta? (util/meta-key? e)
+        keyname (.-key e)]
     (reset! (::shift? state) shift?)
-    (reset! (::meta? state) meta?)))
+    (reset! (::meta? state) meta?)
+    ;; Reset acceleration when arrow key is released
+    (when (or (= keyname "ArrowDown") (= keyname "ArrowUp"))
+      (reset! (::accel-start-ts state) nil))))
 
 (defn- input-placeholder
   [sidebar?]
@@ -988,9 +1034,14 @@
     ;; if not then clear that puppy out!
     ;; This was moved to a functional component
     (hooks/use-effect! (fn []
-                         (when (and highlighted-item (= -1 (.indexOf all-items (dissoc highlighted-item :mouse-enter-triggered-highlight))))
-                           (reset! (::highlighted-item state) nil)
-                           (reset! (::highlighted-row-el state) nil)))
+                         (when highlighted-item
+                           (let [idx (:item-index highlighted-item)
+                                 ;; Fast path via cached :item-index; fall back to .indexOf if stale.
+                                 item-present? (or (and (some? idx) (= highlighted-item (nth all-items idx nil)))
+                                                   (not= -1 (.indexOf all-items highlighted-item)))]
+                             (when-not item-present?
+                               (reset! (::highlighted-item state) nil)
+                               (reset! (::highlighted-row-el state) nil)))))
                        [all-items])
     (hooks/use-effect!
      (fn []
@@ -1127,6 +1178,46 @@
                  (clear-filter-and-refresh! state))}
     (shui/tabler-icon "x"))])
 
+(defn- cmdk-init-state
+  "Initialize cmdk component state atoms."
+  [state]
+  (let [raw-search-mode (:search/mode @state/state)
+        search-mode (or raw-search-mode :global)
+        search-args (:search/args @state/state)
+        opts (last (:rum/args state))
+        {input :input filter-group :filter} (cmdk-state/build-initial-cmdk-search
+                                             opts
+                                             search-mode
+                                             search-args
+                                             (state/get-current-repo))]
+    (when (nil? raw-search-mode)
+      (state/set-state! :search/mode :global))
+    (assoc state
+           ::shift? (atom false)
+           ::meta? (atom false)
+           ::ref (atom nil)
+           ::filter (atom filter-group)
+           ::input (atom input)
+           ::input-ref (atom nil)
+           ::input-changed? (atom false)
+           ::highlighted-group (atom nil)
+           ::highlighted-row-el (atom nil)
+           ::all-items-cache (atom [])
+           ::scroll-raf (atom nil)
+           ::scroll-target (atom nil)
+           ::scroll-container-ref (atom nil)
+           ::accel-start-ts (atom nil))))
+
+(defn- cmdk-will-unmount
+  "Clean up cmdk component: cancel pending rAF, persist state, clear search mode."
+  [state]
+  (when-let [raf @(::scroll-raf state)]
+    (js/cancelAnimationFrame raf))
+  (persist-cmdk-query-state! state)
+  (state/set-state! :search/mode nil)
+  (state/set-state! :search/args nil)
+  state)
+
 (rum/defcs cmdk
   < rum/static
   rum/reactive
@@ -1141,27 +1232,8 @@
      (when-not (:sidebar? (last (:rum/args state)))
        (shortcut/listen-all!))
      state)}
-  {:init (fn [state]
-           (let [raw-search-mode (:search/mode @state/state)
-                 search-mode (or raw-search-mode :global)
-                 search-args (:search/args @state/state)
-                 opts (last (:rum/args state))
-                 {input :input filter-group :filter} (cmdk-state/build-initial-cmdk-search
-                                                      opts
-                                                      search-mode
-                                                      search-args
-                                                      (state/get-current-repo))]
-             (when (nil? raw-search-mode)
-               (state/set-state! :search/mode :global))
-             (assoc state
-                    ::ref (atom nil)
-                    ::filter (atom filter-group)
-                    ::input (atom input))))
-   :will-unmount (fn [state]
-                   (persist-cmdk-query-state! state)
-                   (state/set-state! :search/mode nil)
-                   (state/set-state! :search/args nil)
-                   state)}
+  {:init cmdk-init-state
+   :will-unmount cmdk-will-unmount}
   (mixins/event-mixin
    (fn [state]
      (let [ref @(::ref state)]
@@ -1170,19 +1242,10 @@
                             :all-handler (fn [e _key] (keydown-handler state e))})
        (mixins/on-key-up state {} (fn [e _key]
                                     (keyup-handler state e))))))
-  (rum/local false ::shift?)
-  (rum/local false ::meta?)
-  (rum/local nil ::highlighted-group)
   (rum/local nil ::highlighted-item)
-  (rum/local nil ::highlighted-row-el)
   (rum/local false ::disable-lazy?)
   (rum/local :keyboard ::focus-source)
-  (rum/local false ::mouse-active?)
-  (rum/local true ::wheel-focus-anchor?)
   (rum/local default-results ::results)
-  (rum/local nil ::scroll-container-ref)
-  (rum/local nil ::input-ref)
-  (rum/local false ::input-changed?)
   [state {:keys [sidebar?] :as opts}]
   (let [*input (::input state)
         search-mode (state/sub :search/mode)
@@ -1191,7 +1254,8 @@
                          (:group (rum/react (::filter state))))
         results-ordered (state->results-ordered state search-mode)
         all-items (mapcat last results-ordered)
-        first-item (first all-items)]
+        first-item (first all-items)
+        _ (reset! (::all-items-cache state) (vec all-items))]
     [:div.cp__cmdk {:ref #(when-not @(::ref state) (reset! (::ref state) %))
                     :class (cond-> "w-full h-full relative flex flex-col justify-start"
                              (not sidebar?) (str " rounded-lg"))}
@@ -1200,8 +1264,6 @@
                       (not sidebar?) (str " pb-14"))
              :ref #(let [*ref (::scroll-container-ref state)]
                      (when-not @*ref (reset! *ref %)))
-             :on-mouse-leave #(reset! (::mouse-active? state) false)
-             :on-wheel #(handle-results-wheel! state %)
              :style {:background "var(--lx-gray-02)"
                      :scroll-padding-block 32}}
 

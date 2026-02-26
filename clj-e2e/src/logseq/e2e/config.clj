@@ -6,7 +6,6 @@
   []
   (let [port (some-> (System/getProperty "port")
                      parse-long)]
-    (prn :resolved-port port)
     (if (pos-int? port) port default-port)))
 
 (defonce *port (atom (resolve-port)))
