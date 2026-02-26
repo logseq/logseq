@@ -85,14 +85,14 @@
 
 (deftest rtc-start-skips-when-graph-missing-from-remote-list-test
   (async done
-         (let [called (atom nil)]
+         (let [called (atom [])]
            (-> (p/with-redefs [state/get-rtc-graphs (fn [] [{:url "repo-other"}])
                                state/<invoke-db-worker (fn [& args]
-                                                         (reset! called args)
+                                                         (swap! called conj args)
                                                          (p/resolved :ok))]
                  (db-sync/<rtc-start! "repo-current"))
                (p/then (fn [_]
-                         (is (nil? @called))
+                         (is (= [[:thread-api/db-sync-stop]] @called))
                          (done)))
                (p/catch (fn [e]
                           (is false (str e))
