@@ -404,31 +404,67 @@
 
 (def Class :keyword)
 (def Property :keyword)
-(def User-properties [:map-of Property :any])
+(def Page
+  [:and
+   [:map
+    [:block/uuid {:optional true} :uuid]
+    [:block/title {:optional true} :string]
+    [:build/journal {:optional true} :int]
+    [:build/properties {:optional true} [:ref ::user-properties]]
+    [:build/tags {:optional true} [:or [:set Class] [:vector Class]]]
+    [:build/keep-uuid? {:optional true} :boolean]]
+   [:fn {:error/message ":block/title, :block/uuid or :build/journal required"
+         :error/path [:block/title]}
+    (fn [m]
+      (or (:block/title m) (:block/uuid m) (:build/journal m)))]])
+
+(def Build-schema-registry
+  "This registry contains block and properties related definitions which reference each other"
+  {::block
+   [:map
+    [:block/title :string]
+    [:build/children {:optional true} [:vector [:ref ::block]]]
+    [:build/properties {:optional true} [:ref ::user-properties]]
+    [:build/tags {:optional true} [:or [:set Class] [:vector Class]]]
+    [:build/keep-uuid? {:optional true} :boolean]]
+   ;; Used primarily by text-ref property values like :default
+   ::block-property-value
+   [:and
+    [:ref ::block]
+    [:map
+     [:build/property-value [:= :block]]]]
+   ;; Used for any other ref property value
+   ::block-uuid-property-value
+   [:tuple [:= :block/uuid] :uuid]
+   ;; Used as a convenient way to embed pages in non :graph type exports
+   ::build-page-property-value
+   [:tuple [:= :build/page] Page]
+   ::property-value
+   [:or
+    ;; All ref property values
+    [:ref ::build-page-property-value]
+    [:ref ::block-uuid-property-value]
+    [:ref ::block-property-value]
+    ;; All scalar property values as enumerated in logseq.db.frontend.property.type
+    :any]
+   ::property-values
+   [:or [:ref ::property-value] [:set [:ref ::property-value]]]
+   ::user-properties
+   [:map-of Property [:ref ::property-values]]})
+
+;; Having the schema here instead of Options allows the schemas below to be public facing
+(def User-properties
+  [:schema
+   {:registry Build-schema-registry}
+   [:ref ::user-properties]])
 
 (def Page-blocks
-  [:map
-   {:closed true
-    ;; Define recursive :block schema
-    :registry {::block [:map
-                        [:block/title :string]
-                        [:build/children {:optional true} [:vector [:ref ::block]]]
-                        [:build/properties {:optional true} User-properties]
-                        [:build/tags {:optional true} [:or [:set Class] [:vector Class]]]
-                        [:build/keep-uuid? {:optional true} :boolean]]}}
-   [:page [:and
-           [:map
-            [:block/uuid {:optional true} :uuid]
-            [:block/title {:optional true} :string]
-            [:build/journal {:optional true} :int]
-            [:build/properties {:optional true} User-properties]
-            [:build/tags {:optional true} [:or [:set Class] [:vector Class]]]
-            [:build/keep-uuid? {:optional true} :boolean]]
-           [:fn {:error/message ":block/title, :block/uuid or :build/journal required"
-                 :error/path [:block/title]}
-            (fn [m]
-              (or (:block/title m) (:block/uuid m) (:build/journal m)))]]]
-   [:blocks {:optional true} [:vector ::block]]])
+  [:schema
+   {:registry Build-schema-registry}
+   [:map
+    {:closed true}
+    [:page Page]
+    [:blocks {:optional true} [:vector [:ref ::block]]]]])
 
 (def Properties
   [:map-of
@@ -437,7 +473,6 @@
     [:build/properties {:optional true} User-properties]
     [:build/properties-ref-types {:optional true}
      [:map-of :keyword :keyword]]
-    ;; TODO: Make this respect :block/order or allow :set
     [:build/closed-values
      {:optional true}
      [:vector [:map
