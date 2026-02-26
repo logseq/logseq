@@ -977,10 +977,13 @@
                  (util/stop e)
                  (clear-filter-and-refresh! state))
 
-               :else
-               (when-not (string/blank? input)
+               (not (string/blank? input))
+               (do
                  (util/stop e)
-                 (handle-input-change state nil ""))))
+                 (handle-input-change state nil ""))
+
+               :else
+               (shui/dialog-close! :ls-dialog-cmdk)))
       (and meta? (= keyname "c")) (do
                                     (copy-block-ref state)
                                     (util/stop-propagation e))
@@ -1070,12 +1073,6 @@
                   (when-let [on-blur (:on-input-blur opts)]
                     (on-blur input)))
        :on-composition-end (gfun/debounce (fn [e] (handle-input-change state e)) 100)
-       :on-key-down (fn [e]
-                      (case (util/ekey e)
-                        "Esc"
-                        (when-not @(::filter state)
-                          (shui/dialog-close!))
-                        nil))
        :default-value input}]]))
 
 (defn rand-tip
