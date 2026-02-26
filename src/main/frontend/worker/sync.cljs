@@ -1311,22 +1311,40 @@
     (reset! worker-state/*db-sync-client nil))
   (p/resolved nil))
 
+(defn- active-client-for?
+  [client repo graph-id]
+  (when (and client (= repo (:repo client)) (= graph-id (:graph-id client)))
+    (let [ws (:ws client)
+          ws-state (some-> (:ws-state client) deref)
+          ws-ready-state (when ws (ready-state ws))]
+      (or (= :open ws-state)
+          (contains? #{0 1} ws-ready-state)))))
+
 (defn start!
   [repo]
-  (p/do!
-   (stop!)
-   (let [base (ws-base-url)
-         graph-id (get-graph-id repo)]
-     (if (and (string? base) (seq base) (seq graph-id))
+  (let [base (ws-base-url)
+        graph-id (get-graph-id repo)
+        current @worker-state/*db-sync-client]
+    (cond
+      (not (and (string? base) (seq base) (seq graph-id)))
+      (do
+        (log/info :db-sync/start-skipped {:repo repo :graph-id graph-id :base base})
+        (p/resolved nil))
+
+      (active-client-for? current repo graph-id)
+      (do
+        (broadcast-rtc-state! current)
+        (p/resolved nil))
+
+      :else
+      (p/do!
+       (stop!)
        (let [client (ensure-client-state! repo)
              url (format-ws-url base graph-id)
              _ (ensure-client-graph-uuid! repo graph-id)
              connected (assoc client :graph-id graph-id)
              connected (connect! repo connected url)]
          (reset! worker-state/*db-sync-client connected)
-         (p/resolved nil))
-       (do
-         (log/info :db-sync/start-skipped {:repo repo :graph-id graph-id :base base})
          (p/resolved nil))))))
 
 (defn enqueue-local-tx!

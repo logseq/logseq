@@ -152,7 +152,7 @@
     (reset! native-top-bar-listener? true)))
 
 (defn- configure-native-top-bar!
-  [repo {:keys [tab title route-name route-view sync-color favorited? show-sync?]}]
+  [{:keys [tab title route-name route-view sync-color favorited? show-sync?]}]
   (when (and (mobile-util/native-platform?)
              mobile-util/native-top-bar)
     (let [hidden? (and (mobile-util/native-ios?) (= tab "search"))
@@ -247,7 +247,6 @@
                title (or (:block/title block) fallback-title)
                f (fn [favorited?]
                    (configure-native-top-bar!
-                    current-repo
                     {:tab tab
                      :title title
                      :route-name route-name
@@ -277,7 +276,6 @@
                           title (:block/title block)
                           f (fn [favorited?]
                               (configure-native-top-bar!
-                               current-repo
                                {:tab tab
                                 :title title
                                 :route-name route-name
