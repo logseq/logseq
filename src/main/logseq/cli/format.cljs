@@ -90,6 +90,7 @@
     :missing-graph "Use --repo <name>"
     :missing-repo "Use --repo <name>"
     :missing-content "Use --content or pass content as args"
+    :missing-tag-name "Use --name <tag-name>"
     :missing-query "Use --query <edn>"
     :unknown-query "Use `logseq query list` to see available queries"
     :data-dir-permission "Check filesystem permissions or set LOGSEQ_CLI_DATA_DIR"
@@ -243,6 +244,10 @@
   [_context ids]
   (str "Added page:\n" (pr-str (vec (or ids [])))))
 
+(defn- format-add-tag
+  [_context ids]
+  (str "Added tag:\n" (pr-str (vec (or ids [])))))
+
 (defn- format-remove
   [{:keys [repo page uuid id ids]}]
   (cond
@@ -313,6 +318,7 @@
         (:list-tag :list-property) (format-list-tag-or-property (:items data) now-ms)
         :add-block (format-add-block context (:result data))
         :add-page (format-add-page context (:result data))
+        :add-tag (format-add-tag context (:result data))
         :remove (format-remove context)
         :update-block (format-update-block context)
         :graph-export (format-graph-export context)
