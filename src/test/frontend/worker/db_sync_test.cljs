@@ -710,6 +710,7 @@
                  (-> (p/let [result (#'db-sync/rehydrate-large-titles!
                                      test-repo
                                      {:tx-data tx-data
+                                      :conn conn
                                       :graph-id "graph-1"
                                       :download-fn download-fn
                                       :aes-key nil})
