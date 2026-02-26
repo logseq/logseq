@@ -857,6 +857,111 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
+(deftest ^:long test-cli-add-tag-create-and-use
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-add-tag-create")]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       repo "add-tag-create-graph"
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
+                       _ (run-cli ["--repo" repo "add" "page" "--page" "Home"] data-dir cfg-path)
+                       add-tag-result (run-cli ["--repo" repo
+                                                "add" "tag"
+                                                "--name" "CliQuote"]
+                                               data-dir cfg-path)
+                       add-tag-payload (parse-json-output add-tag-result)
+                       list-tag-result (run-cli ["--repo" repo "list" "tag"] data-dir cfg-path)
+                       list-tag-payload (parse-json-output list-tag-result)
+                       tag-names (->> (get-in list-tag-payload [:data :items])
+                                      (map #(or (:block/title %) (:title %) (:name %)))
+                                      set)
+                       add-block-result (run-cli ["--repo" repo
+                                                  "add" "block"
+                                                  "--target-page-name" "Home"
+                                                  "--content" "Tagged by add tag"
+                                                  "--tags" "[\"CliQuote\"]"]
+                                                 data-dir cfg-path)
+                       add-block-payload (parse-json-output add-block-result)
+                       _ (p/delay 100)
+                       block-tag-names (query-tags data-dir cfg-path repo "Tagged by add tag")
+                       stop-result (run-cli ["server" "stop" "--repo" repo] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= 0 (:exit-code add-tag-result))
+                     (pr-str (:error add-tag-payload)))
+                 (is (= "ok" (:status add-tag-payload)))
+                 (is (= "ok" (:status list-tag-payload)))
+                 (is (contains? tag-names "CliQuote"))
+                 (is (= 0 (:exit-code add-block-result))
+                     (pr-str (:error add-block-payload)))
+                 (is (= "ok" (:status add-block-payload)))
+                 (is (contains? block-tag-names "CliQuote"))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest ^:long test-cli-add-tag-rejects-existing-non-tag-page
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-add-tag-conflict")]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       repo "add-tag-conflict-graph"
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
+                       _ (run-cli ["--repo" repo "add" "page" "--page" "ConflictPage"] data-dir cfg-path)
+                       add-tag-result (run-cli ["--repo" repo
+                                                "add" "tag"
+                                                "--name" "ConflictPage"]
+                                               data-dir cfg-path)
+                       add-tag-payload (parse-json-output add-tag-result)
+                       list-tag-result (run-cli ["--repo" repo "list" "tag"] data-dir cfg-path)
+                       list-tag-payload (parse-json-output list-tag-result)
+                       tag-names (->> (get-in list-tag-payload [:data :items])
+                                      (map #(or (:block/title %) (:title %) (:name %)))
+                                      set)
+                       stop-result (run-cli ["server" "stop" "--repo" repo] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= 1 (:exit-code add-tag-result)))
+                 (is (= "error" (:status add-tag-payload)))
+                 (is (string/includes? (get-in add-tag-payload [:error :message])
+                                       "already exists as a page and is not a tag"))
+                 (is (not (contains? tag-names "ConflictPage")))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest ^:long test-cli-add-tag-idempotent-existing-tag
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-add-tag-idempotent")]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       repo "add-tag-idempotent-graph"
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
+                       first-add-result (run-cli ["--repo" repo "add" "tag" "--name" "StableTag"]
+                                                 data-dir cfg-path)
+                       first-add-payload (parse-json-output first-add-result)
+                       second-add-result (run-cli ["--repo" repo "add" "tag" "--name" "StableTag"]
+                                                  data-dir cfg-path)
+                       second-add-payload (parse-json-output second-add-result)
+                       list-tag-result (run-cli ["--repo" repo "list" "tag"] data-dir cfg-path)
+                       list-tag-payload (parse-json-output list-tag-result)
+                       stable-tags (->> (get-in list-tag-payload [:data :items])
+                                        (filter #(= "StableTag" (or (:block/title %) (:title %) (:name %)))))
+                       stop-result (run-cli ["server" "stop" "--repo" repo] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= 0 (:exit-code first-add-result)))
+                 (is (= "ok" (:status first-add-payload)))
+                 (is (= 0 (:exit-code second-add-result)))
+                 (is (= "ok" (:status second-add-payload)))
+                 (is (= 1 (count stable-tags)))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
 (deftest ^:long test-cli-query
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-query")

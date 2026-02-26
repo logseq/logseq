@@ -109,6 +109,15 @@
                                        {:output-format nil})]
       (is (= "Added page:\n[123]" result))))
 
+  (testing "add tag renders ids in two lines"
+    (let [result (format/format-result {:status :ok
+                                        :command :add-tag
+                                        :context {:repo "demo-repo"
+                                                  :name "Quote"}
+                                        :data {:result [321]}}
+                                       {:output-format nil})]
+      (is (= "Added tag:\n[321]" result))))
+
   (testing "remove page renders a succinct success line"
     (let [result (format/format-result {:status :ok
                                         :command :remove
