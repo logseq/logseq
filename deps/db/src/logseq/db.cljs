@@ -678,6 +678,12 @@
        db
        v))
 
+(defn- add-entity
+  [acc class-id entity]
+  (if class-id
+    (update acc class-id (fnil conj #{}) entity)
+    acc))
+
 (defn get-bidirectional-properties
   "Given a target entity id, returns a seq of maps with:
    * :class - class entity
@@ -685,12 +691,7 @@
    * :entities - node entities that reference the target via ref properties"
   [db target-id]
   (when (and db target-id (d/entity db target-id))
-    (let [add-entity
-          (fn [acc class-id entity]
-            (if class-id
-              (update acc class-id (fnil conj #{}) entity)
-              acc))
-          *attr->bidirectional? (volatile! {})
+    (let [*attr->bidirectional? (volatile! {})
           bidirectional-property-attr-cached?
           (fn [attr]
             (let [cache @*attr->bidirectional?]
