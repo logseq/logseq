@@ -1010,7 +1010,6 @@
   [{:keys [conn local-txs reversed-tx-data safe-remote-tx-data remote-deleted-blocks
            temp-tx-meta *remote-tx-report *reversed-tx-report *remote-deleted-ids *rebase-tx-data]}]
   (let [batch-tx-meta {:rtc-tx? true}]
-    (prn :debug :local-txs local-txs)
     (ldb/transact-with-temp-conn!
      conn
      batch-tx-meta
@@ -1043,7 +1042,6 @@
          (fix-tx! temp-conn remote-tx-report rebase-tx-report (assoc tx-meta :op :fix))
          (delete-nodes! temp-conn deleted-nodes (assoc tx-meta :op :delete-blocks))))
      {:listen-db (fn [{:keys [tx-meta tx-data]}]
-                   (prn :debug :tx-meta tx-meta :tx-data tx-data)
                    (when-not (contains? #{:reverse :transact-remote-tx-data} (:op tx-meta))
                      (swap! *rebase-tx-data into tx-data)))})))
 
@@ -1181,7 +1179,6 @@
                                            (parse-transit (:tx data) {:repo repo :type "pull/ok"}))
                                          txs)
                           tx (distinct (mapcat identity txs-data))]
-                      (prn :debug :remote-tx tx)
                       (when (seq tx)
                         (p/let [aes-key (sync-crypt/<ensure-graph-aes-key repo (:graph-id client))
                                 _ (when (and (sync-crypt/graph-e2ee? repo) (nil? aes-key))
