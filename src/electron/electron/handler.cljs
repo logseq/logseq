@@ -29,6 +29,7 @@
             [electron.window :as win]
             [electron.graph-switch-flow :as graph-switch-flow]
             [logseq.cli.common.graph :as cli-common-graph]
+            [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
@@ -200,24 +201,30 @@
   []
   (distinct (cli-common-graph/get-db-based-graphs)))
 
+(defn- canonical-repo
+  [graph]
+  (common-config/canonicalize-db-version-repo graph))
+
 ;; TODO support alias mechanism
 (defn get-graph-name
   "Given a graph's name of string, returns the graph's fullname. For example, given
   `cat`, returns `logseq_db_cat`.  Returns `nil` if no such graph exists."
   [graph-identifier]
-  (->> (get-graphs)
-       (some #(when (or
-                     (= (utils/normalize-lc %) (utils/normalize-lc (str sqlite-util/db-version-prefix graph-identifier)))
-                     (string/ends-with? (utils/normalize-lc %)
-                                        (str "/" (utils/normalize-lc graph-identifier))))
-                %))))
+  (when-let [repo (canonical-repo graph-identifier)]
+    (let [graph-name (common-config/strip-leading-db-version-prefix repo)]
+      (->> (get-graphs)
+           (some #(when (or
+                         (= (utils/normalize-lc %) (utils/normalize-lc repo))
+                         (string/ends-with? (utils/normalize-lc %)
+                                            (str "/" (utils/normalize-lc graph-name))))
+                    %))))))
 
 (defmethod handle :getGraphs [_window [_]]
   (get-graphs))
 
 (defmethod handle :deleteGraph [_window [_ graph]]
-  (when graph
-    (db/unlink-graph! graph)))
+  (when-let [repo (canonical-repo graph)]
+    (db/unlink-graph! repo)))
 
 ;; DB related IPCs start
 
@@ -228,20 +235,22 @@
 (defmethod handle :db-worker-runtime [^js window [_ repo]]
   (if (string/blank? repo)
     (p/rejected (ex-info "repo is required" {:code :missing-repo}))
-    (db-worker/ensure-runtime! repo (.-id window))))
+    (db-worker/ensure-runtime! (canonical-repo repo) (.-id window))))
 
 (defmethod handle :db-export [_window [_ repo data]]
-  (logger/warn ::db-export-compat
-               {:repo repo
-                :message "legacy db-export IPC path invoked; desktop should use db-worker runtime"})
-  (db/ensure-graph-dir! repo)
-  (db/save-db! repo data))
+  (when-let [repo (canonical-repo repo)]
+    (logger/warn ::db-export-compat
+                 {:repo repo
+                  :message "legacy db-export IPC path invoked; desktop should use db-worker runtime"})
+    (db/ensure-graph-dir! repo)
+    (db/save-db! repo data)))
 
 (defmethod handle :db-get [_window [_ repo]]
-  (logger/warn ::db-get-compat
-               {:repo repo
-                :message "legacy db-get IPC path invoked; desktop should use db-worker runtime"})
-  (db/get-db repo))
+  (when-let [repo (canonical-repo repo)]
+    (logger/warn ::db-get-compat
+                 {:repo repo
+                  :message "legacy db-get IPC path invoked; desktop should use db-worker runtime"})
+    (db/get-db repo)))
 
 ;; DB related IPCs End
 

@@ -3,7 +3,6 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.ipc :as ipc]
-            [frontend.config :as config]
             [frontend.persist-db :as persist-db]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
@@ -23,12 +22,13 @@
                       (map
                        (fn [{:keys [name] :as repo}]
                          (assoc repo :name
-                                (str config/db-version-prefix name)))))
+                                (common-config/canonicalize-db-version-repo name)))))
           electron-disk-graphs (when (util/electron?) (ipc/ipc "getGraphs"))]
     (distinct
      (concat
       repos'
-      (map (fn [repo-name] {:name repo-name})
+      (map (fn [repo-name]
+             {:name (common-config/canonicalize-db-version-repo repo-name)})
            (some-> electron-disk-graphs bean/->clj))))))
 
 (defn delete-graph!

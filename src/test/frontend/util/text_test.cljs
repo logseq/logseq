@@ -35,3 +35,9 @@
 
     '(false false false false false false true true true true true true)
     (map #(text-util/wrapped-by? "prop::value" % "::" "") (take 12 (range)))))
+
+(deftest get-graph-name-from-path-strips-only-one-leading-db-prefix
+  (are [input expected] (= expected (text-util/get-graph-name-from-path input))
+    "logseq_db_demo" "demo"
+    "logseq_db_logseq_db_demo" "logseq_db_demo"
+    "my_logseq_db_notes" "my_logseq_db_notes"))
