@@ -210,15 +210,14 @@
 
 (defn graph->repo
   [graph]
-  (when (seq graph)
-    (if (string/starts-with? graph common-config/db-version-prefix)
-      graph
-      (str common-config/db-version-prefix graph))))
+  (some-> graph
+          string/trim
+          common-config/canonicalize-db-version-repo))
 
 (defn repo->graph
   [repo]
   (when (seq repo)
-    (string/replace-first repo common-config/db-version-prefix "")))
+    (common-config/strip-leading-db-version-prefix repo)))
 
 (defn resolve-repo
   [graph]

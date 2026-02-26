@@ -9,6 +9,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db-sync.malli-schema :as db-sync-schema]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -286,7 +287,7 @@
      (if base
        (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
                body (coerce-http-request :graphs/create
-                                         {:graph-name (string/replace repo config/db-version-prefix "")
+                                         {:graph-name (common-config/strip-leading-db-version-prefix repo)
                                           :schema-version schema-version
                                           :graph-e2ee? graph-e2ee?})
                result (if (nil? body)
@@ -334,15 +335,15 @@
   ([graph-name graph-uuid graph-e2ee?]
    (state/set-state! :rtc/downloading-graph-uuid graph-uuid)
    (state/pub-event!
-    [:rtc/log {:type :rtc.log/download
+   [:rtc/log {:type :rtc.log/download
                :sub-type :download-progress
                :graph-uuid graph-uuid
                :message "Preparing graph snapshot download"}])
    (let [graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
+         graph (common-config/canonicalize-db-version-repo graph-name)
          base (http-base)]
      (-> (if (and graph-uuid base)
            (-> (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
-                       graph (str config/db-version-prefix graph-name)
                        pull-resp (fetch-json (str base "/sync/" graph-uuid "/pull")
                                              {:method "GET"}
                                              {:response-schema :sync/pull})
@@ -398,12 +399,14 @@
                                    {:response-schema :graphs/list})
                   graphs (:graphs resp)
                   result (mapv (fn [graph]
-                                 (let [graph-e2ee? (if (contains? graph :graph-e2ee?)
+                                 (let [repo (common-config/canonicalize-db-version-repo (:graph-name graph))
+                                       graph-name (common-config/strip-leading-db-version-prefix repo)
+                                       graph-e2ee? (if (contains? graph :graph-e2ee?)
                                                      (normalize-graph-e2ee? (:graph-e2ee? graph))
                                                      true)]
                                    (merge
-                                    {:url (str config/db-version-prefix (:graph-name graph))
-                                     :GraphName (:graph-name graph)
+                                    {:url repo
+                                     :GraphName graph-name
                                      :GraphSchemaVersion (:schema-version graph)
                                      :GraphUUID (:graph-id graph)
                                      :rtc-graph? true

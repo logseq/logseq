@@ -175,7 +175,34 @@
                                        {:output-format nil})]
       (is (= (str "Server ready: demo-repo\n"
                   "Host: 127.0.0.1  Port: 1234")
-             result)))))
+             result))))
+
+  (testing "server status strips only one leading db prefix and keeps middle substrings"
+    (let [double-prefixed (format/format-result {:status :ok
+                                                 :command :server-status
+                                                 :data {:repo "logseq_db_logseq_db_demo"
+                                                        :status :ready}}
+                                                {:output-format nil})
+          middle-substring (format/format-result {:status :ok
+                                                  :command :server-status
+                                                 :data {:repo "my_logseq_db_notes"
+                                                         :status :ready}}
+                                                 {:output-format nil})]
+      (is (= "Server ready: logseq_db_demo" double-prefixed))
+      (is (= "Server ready: my_logseq_db_notes" middle-substring)))))
+
+(deftest test-json-output-normalizes-graph-fields-with-single-leading-strip-only
+  (let [result (format/format-result {:status :ok
+                                      :data {:repo "logseq_db_logseq_db_demo"
+                                             :graph "my_logseq_db_notes"
+                                             :graphs ["logseq_db_logseq_db_demo"
+                                                      "my_logseq_db_notes"]}}
+                                     {:output-format :edn})
+        parsed (reader/read-string result)]
+    (is (= "logseq_db_demo" (get-in parsed [:data :repo])))
+    (is (= "my_logseq_db_notes" (get-in parsed [:data :graph])))
+    (is (= ["logseq_db_demo" "my_logseq_db_notes"]
+           (get-in parsed [:data :graphs])))))
 
 (deftest test-human-output-server-list-includes-owner
   (testing "server list shows owner column and value"
