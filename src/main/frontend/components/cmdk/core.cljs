@@ -620,10 +620,7 @@
   [state]
   (let [filter-group (:group @(::filter state))]
     (reset! (::filter state) nil)
-    (let [search-mode (:search/mode @state/state)]
-      (when (and search-mode
-                 (not (contains? #{:global :graph} search-mode)))
-        (state/set-state! :search/mode :global)))
+    (state/set-state! :search/mode :global)
     (swap! (::results state) assoc-in [filter-group :items] nil)
     (persist-cmdk-query-state! state)
     (load-results :default state)))

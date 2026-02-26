@@ -4,6 +4,21 @@
             [frontend.worker.search :as search]
             [logseq.db :as ldb]))
 
+(defn- sql-placeholder-count
+  [sql]
+  (count (re-seq #"\?" sql)))
+
+(defn- checking-db
+  []
+  #js {:exec (fn [opts]
+               (let [sql (aget opts "sql")
+                     bind (aget opts "bind")
+                     expected (sql-placeholder-count sql)
+                     actual (count bind)]
+                 (when-not (= expected actual)
+                   (throw (js/Error. (str "Bind index " (inc expected) " is out of range."))))
+                 #js []))})
+
 (deftest ensure-highlighted-snippet-adds-marker
   (testing "adds highlight markers for first matching term"
     (is (= "今天学习$pfts_2lqh>$中文$<pfts_2lqh$"
@@ -166,3 +181,22 @@
     (with-redefs [ldb/page? (constantly true)
                   ldb/class-instance? (fn [_ _] true)]
       (is (false? (#'search/code-block? :code-class {:logseq.property.node/display-type :code}))))))
+
+(deftest search-blocks-aux-bind-count
+  (testing "namespace match SQL keeps bind count aligned"
+    (let [sql "select id, page, title, rank from blocks_fts where title match ? or title match ? order by rank limit ?"
+          result (#'search/search-blocks-aux (checking-db) sql "a/b" "a/b" nil 10 false true)]
+      (is (some? result))
+      (is (empty? result))))
+
+  (testing "namespace non-match SQL without page keeps bind count aligned"
+    (let [sql "select id, page, title, rank from blocks_fts where title like ? limit ?"
+          result (#'search/search-blocks-aux (checking-db) sql "a/" "%a/%" nil 10 false)]
+      (is (some? result))
+      (is (empty? result))))
+
+  (testing "namespace non-match SQL with page keeps bind count aligned"
+    (let [sql "select id, page, title, rank from blocks_fts where page = ? and title like ? limit ?"
+          result (#'search/search-blocks-aux (checking-db) sql "a/" "%a/%" "page-1" 10 false)]
+      (is (some? result))
+      (is (empty? result)))))
