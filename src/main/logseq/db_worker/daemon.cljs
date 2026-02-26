@@ -263,7 +263,9 @@
         (log/warn :db-worker-daemon/missing-script {:repo repo :data-dir data-dir})
         nil)
       (let [child (.spawn child-process (.-execPath js/process) args #js {:detached true
-                                                                          :stdio "inherit"
+                                                                          :stdio (if (= owner-source :cli)
+                                                                                   "ignore"
+                                                                                   "inherit")
                                                                           :env env})]
         (.unref child)
         child))))
