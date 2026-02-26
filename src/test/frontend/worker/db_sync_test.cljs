@@ -176,6 +176,52 @@
                                   (reset! db-sync/*repo->latest-remote-tx latest-prev)
                                   (done))))))))))
 
+(deftest pull-ok-batched-txs-preserve-tempid-boundaries-test
+  (testing "pull/ok applies tx batches without cross-tx tempid collisions"
+    (async done
+           (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+                 page-uuid (:block/uuid (:block/page parent))
+                 block-uuid-a (random-uuid)
+                 block-uuid-b (random-uuid)
+                 now 1760000000000
+                 tx-a (sqlite-util/write-transit-str
+                       [[:db/add -1 :block/uuid block-uuid-a]
+                        [:db/add -1 :block/title "remote-a"]
+                        [:db/add -1 :block/parent [:block/uuid page-uuid]]
+                        [:db/add -1 :block/page [:block/uuid page-uuid]]
+                        [:db/add -1 :block/order 1]
+                        [:db/add -1 :block/updated-at now]
+                        [:db/add -1 :block/created-at now]])
+                 tx-b (sqlite-util/write-transit-str
+                       [[:db/add -1 :block/uuid block-uuid-b]
+                        [:db/add -1 :block/title "remote-b"]
+                        [:db/add -1 :block/parent [:block/uuid page-uuid]]
+                        [:db/add -1 :block/page [:block/uuid page-uuid]]
+                        [:db/add -1 :block/order 2]
+                        [:db/add -1 :block/updated-at now]
+                        [:db/add -1 :block/created-at now]])
+                 raw-message (js/JSON.stringify
+                              (clj->js {:type "pull/ok"
+                                        :t 2
+                                        :txs [{:t 1 :tx tx-a}
+                                              {:t 2 :tx tx-b}]}))
+                 latest-prev @db-sync/*repo->latest-remote-tx
+                 client {:repo test-repo
+                         :graph-id "graph-1"
+                         :inflight (atom [])
+                         :online-users (atom [])
+                         :ws-state (atom :open)}]
+             (with-datascript-conns conn client-ops-conn
+               (fn []
+                 (reset! db-sync/*repo->latest-remote-tx {})
+                 (-> (p/let [_ (client-op/update-local-tx test-repo 0)
+                             _ (#'db-sync/handle-message! test-repo client raw-message)]
+                       (is (= "remote-a" (:block/title (d/entity @conn [:block/uuid block-uuid-a]))))
+                       (is (= "remote-b" (:block/title (d/entity @conn [:block/uuid block-uuid-b])))))
+                     (p/finally (fn []
+                                  (reset! db-sync/*repo->latest-remote-tx latest-prev)
+                                  (done))))))))))
+
 (deftest reaction-add-enqueues-pending-sync-tx-test
   (testing "adding a reaction should enqueue tx for db-sync"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
