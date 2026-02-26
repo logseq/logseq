@@ -11,11 +11,11 @@
   [hiccup]
   (walk/postwalk (fn [f]
                    (if (map? f)
-                      (apply dissoc f (conj (filter (fn [key]
-                                                      (string/starts-with? (str key) ":data-"))
-                                                    (keys f))
-                                            :style
-                                            :class))
+                     (apply dissoc f (conj (filter (fn [key]
+                                                     (string/starts-with? (str key) ":data-"))
+                                                   (keys f))
+                                           :style
+                                           :class))
                      f)) hiccup))
 
 (defn- export-hiccup

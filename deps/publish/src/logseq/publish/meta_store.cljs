@@ -1,8 +1,8 @@
 (ns logseq.publish.meta-store
   "Handles storing Durable Object in SQLite"
   (:require [clojure.string :as string]
-            [logseq.publish.common :as publish-common])
-  (:require-macros [logseq.publish.async :refer [js-await]]))
+            [logseq.publish.common :as publish-common]
+            [promesa.core :as p]))
 
 (defn init-schema! [sql]
   (let [cols (publish-common/get-sql-rows (publish-common/sql-exec sql "PRAGMA table_info(pages);"))
@@ -110,121 +110,121 @@
     (init-schema! sql)
     (cond
       (= "POST" (.-method request))
-      (js-await [body (.json request)]
-                (let [page-uuid (aget body "page_uuid")
-                      graph-uuid (aget body "graph")]
-                  (if (and (string? page-uuid) (string? graph-uuid))
-                    (publish-common/sql-exec sql
-                                             (str "INSERT INTO pages ("
-                                                  "page_uuid,"
-                                                  "page_title,"
-                                                  "page_tags,"
-                                                  "graph_uuid,"
-                                                  "schema_version,"
-                                                  "block_count,"
-                                                  "content_hash,"
-                                                  "content_length,"
-                                                  "r2_key,"
-                                                  "owner_sub,"
-                                                  "owner_username,"
-                                                  "created_at,"
-                                                  "updated_at,"
-                                                  "short_id,"
-                                                  "password_hash"
-                                                  ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-                                                  " ON CONFLICT(graph_uuid, page_uuid) DO UPDATE SET"
-                                                  " page_uuid=excluded.page_uuid,"
-                                                  " page_title=excluded.page_title,"
-                                                  " page_tags=excluded.page_tags,"
-                                                  " schema_version=excluded.schema_version,"
-                                                  " block_count=excluded.block_count,"
-                                                  " content_hash=excluded.content_hash,"
-                                                  " content_length=excluded.content_length,"
-                                                  " r2_key=excluded.r2_key,"
-                                                  " owner_sub=excluded.owner_sub,"
-                                                  " owner_username=excluded.owner_username,"
-                                                  " updated_at=excluded.updated_at,"
-                                                  " short_id=excluded.short_id,"
-                                                  " password_hash=excluded.password_hash;")
-                                             page-uuid
-                                             (aget body "page_title")
-                                             (aget body "page_tags")
-                                             graph-uuid
-                                             (aget body "schema_version")
-                                             (aget body "block_count")
-                                             (aget body "content_hash")
-                                             (aget body "content_length")
-                                             (aget body "r2_key")
-                                             (aget body "owner_sub")
-                                             (aget body "owner_username")
-                                             (aget body "created_at")
-                                             (aget body "updated_at")
-                                             (aget body "short_id")
-                                             (aget body "password_hash"))
-                    (throw (js/Error. "publish: missing page_uuid or graph")))
-                  (let [refs (aget body "refs")
-                        tagged-nodes (aget body "tagged_nodes")
-                        blocks (aget body "blocks")
-                        graph-uuid (aget body "graph")
-                        page-uuid (aget body "page_uuid")]
-                    (when (and graph-uuid page-uuid)
-                      (publish-common/sql-exec sql
-                                               "DELETE FROM page_refs WHERE graph_uuid = ? AND source_page_uuid = ?;"
-                                               graph-uuid
-                                               page-uuid)
-                      (publish-common/sql-exec sql
-                                               "DELETE FROM page_tags WHERE graph_uuid = ? AND source_page_uuid = ?;"
-                                               graph-uuid
-                                               page-uuid)
-                      (doseq [ref refs]
-                        (publish-common/sql-exec sql
-                                                 (str "INSERT OR REPLACE INTO page_refs ("
-                                                      "graph_uuid, target_page_uuid, target_page_title, target_page_name, source_page_uuid, "
-                                                      "source_page_title, source_block_uuid, source_block_content, "
-                                                      "source_block_format, updated_at"
-                                                      ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);")
-                                                 (aget ref "graph_uuid")
-                                                 (aget ref "target_page_uuid")
-                                                 (aget ref "target_page_title")
-                                                 (aget ref "target_page_name")
-                                                 (aget ref "source_page_uuid")
-                                                 (aget ref "source_page_title")
-                                                 (aget ref "source_block_uuid")
-                                                 (aget ref "source_block_content")
-                                                 (aget ref "source_block_format")
-                                                 (aget ref "updated_at")))
+      (p/let [body (.json request)]
+        (let [page-uuid (aget body "page_uuid")
+              graph-uuid (aget body "graph")]
+          (if (and (string? page-uuid) (string? graph-uuid))
+            (publish-common/sql-exec sql
+                                     (str "INSERT INTO pages ("
+                                          "page_uuid,"
+                                          "page_title,"
+                                          "page_tags,"
+                                          "graph_uuid,"
+                                          "schema_version,"
+                                          "block_count,"
+                                          "content_hash,"
+                                          "content_length,"
+                                          "r2_key,"
+                                          "owner_sub,"
+                                          "owner_username,"
+                                          "created_at,"
+                                          "updated_at,"
+                                          "short_id,"
+                                          "password_hash"
+                                          ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                                          " ON CONFLICT(graph_uuid, page_uuid) DO UPDATE SET"
+                                          " page_uuid=excluded.page_uuid,"
+                                          " page_title=excluded.page_title,"
+                                          " page_tags=excluded.page_tags,"
+                                          " schema_version=excluded.schema_version,"
+                                          " block_count=excluded.block_count,"
+                                          " content_hash=excluded.content_hash,"
+                                          " content_length=excluded.content_length,"
+                                          " r2_key=excluded.r2_key,"
+                                          " owner_sub=excluded.owner_sub,"
+                                          " owner_username=excluded.owner_username,"
+                                          " updated_at=excluded.updated_at,"
+                                          " short_id=excluded.short_id,"
+                                          " password_hash=excluded.password_hash;")
+                                     page-uuid
+                                     (aget body "page_title")
+                                     (aget body "page_tags")
+                                     graph-uuid
+                                     (aget body "schema_version")
+                                     (aget body "block_count")
+                                     (aget body "content_hash")
+                                     (aget body "content_length")
+                                     (aget body "r2_key")
+                                     (aget body "owner_sub")
+                                     (aget body "owner_username")
+                                     (aget body "created_at")
+                                     (aget body "updated_at")
+                                     (aget body "short_id")
+                                     (aget body "password_hash"))
+            (throw (js/Error. "publish: missing page_uuid or graph")))
+          (let [refs (aget body "refs")
+                tagged-nodes (aget body "tagged_nodes")
+                blocks (aget body "blocks")
+                graph-uuid (aget body "graph")
+                page-uuid (aget body "page_uuid")]
+            (when (and graph-uuid page-uuid)
+              (publish-common/sql-exec sql
+                                       "DELETE FROM page_refs WHERE graph_uuid = ? AND source_page_uuid = ?;"
+                                       graph-uuid
+                                       page-uuid)
+              (publish-common/sql-exec sql
+                                       "DELETE FROM page_tags WHERE graph_uuid = ? AND source_page_uuid = ?;"
+                                       graph-uuid
+                                       page-uuid)
+              (doseq [ref refs]
+                (publish-common/sql-exec sql
+                                         (str "INSERT OR REPLACE INTO page_refs ("
+                                              "graph_uuid, target_page_uuid, target_page_title, target_page_name, source_page_uuid, "
+                                              "source_page_title, source_block_uuid, source_block_content, "
+                                              "source_block_format, updated_at"
+                                              ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);")
+                                         (aget ref "graph_uuid")
+                                         (aget ref "target_page_uuid")
+                                         (aget ref "target_page_title")
+                                         (aget ref "target_page_name")
+                                         (aget ref "source_page_uuid")
+                                         (aget ref "source_page_title")
+                                         (aget ref "source_block_uuid")
+                                         (aget ref "source_block_content")
+                                         (aget ref "source_block_format")
+                                         (aget ref "updated_at")))
 
-                      (doseq [tag tagged-nodes]
-                        (publish-common/sql-exec sql
-                                                 (str "INSERT OR REPLACE INTO page_tags ("
-                                                      "graph_uuid, tag_page_uuid, tag_title, source_page_uuid, "
-                                                      "source_page_title, source_block_uuid, source_block_content, "
-                                                      "source_block_format, updated_at"
-                                                      ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);")
-                                                 (aget tag "graph_uuid")
-                                                 (aget tag "tag_page_uuid")
-                                                 (aget tag "tag_title")
-                                                 (aget tag "source_page_uuid")
-                                                 (aget tag "source_page_title")
-                                                 (aget tag "source_block_uuid")
-                                                 (aget tag "source_block_content")
-                                                 (aget tag "source_block_format")
-                                                 (aget tag "updated_at"))))
-                    (publish-common/sql-exec sql
-                                             "DELETE FROM page_blocks WHERE graph_uuid = ? AND page_uuid = ?;"
-                                             graph-uuid
-                                             page-uuid)
-                    (doseq [block blocks]
-                      (publish-common/sql-exec sql
-                                               (str "INSERT OR REPLACE INTO page_blocks ("
-                                                    "graph_uuid, page_uuid, block_uuid, block_content, updated_at"
-                                                    ") VALUES (?, ?, ?, ?, ?);")
-                                               (aget body "graph")
-                                               (aget block "page_uuid")
-                                               (aget block "block_uuid")
-                                               (aget block "block_content")
-                                               (aget block "updated_at"))))
-                  (publish-common/json-response {:ok true})))
+              (doseq [tag tagged-nodes]
+                (publish-common/sql-exec sql
+                                         (str "INSERT OR REPLACE INTO page_tags ("
+                                              "graph_uuid, tag_page_uuid, tag_title, source_page_uuid, "
+                                              "source_page_title, source_block_uuid, source_block_content, "
+                                              "source_block_format, updated_at"
+                                              ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);")
+                                         (aget tag "graph_uuid")
+                                         (aget tag "tag_page_uuid")
+                                         (aget tag "tag_title")
+                                         (aget tag "source_page_uuid")
+                                         (aget tag "source_page_title")
+                                         (aget tag "source_block_uuid")
+                                         (aget tag "source_block_content")
+                                         (aget tag "source_block_format")
+                                         (aget tag "updated_at"))))
+            (publish-common/sql-exec sql
+                                     "DELETE FROM page_blocks WHERE graph_uuid = ? AND page_uuid = ?;"
+                                     graph-uuid
+                                     page-uuid)
+            (doseq [block blocks]
+              (publish-common/sql-exec sql
+                                       (str "INSERT OR REPLACE INTO page_blocks ("
+                                            "graph_uuid, page_uuid, block_uuid, block_content, updated_at"
+                                            ") VALUES (?, ?, ?, ?, ?);")
+                                       (aget body "graph")
+                                       (aget block "page_uuid")
+                                       (aget block "block_uuid")
+                                       (aget block "block_content")
+                                       (aget block "updated_at"))))
+          (publish-common/json-response {:ok true})))
 
       (= "GET" (.-method request))
       (let [url (js/URL. (.-url request))

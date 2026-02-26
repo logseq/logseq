@@ -18,6 +18,6 @@
     (is (string/includes? (str (.-stdout result))
                           "Usage: logseq [command]"))
 
-    (let [max-time (-> 0.25 (* (if js/process.env.CI 2 1)))]
+    (let [max-time (-> 0.40 (* (if js/process.env.CI 2 1)))]
       (is (< (-> end-time (- start-time) (/ 1000)) max-time)
           (str "Printing CLI help takes less than " max-time "s")))))

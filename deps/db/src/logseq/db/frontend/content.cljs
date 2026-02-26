@@ -94,7 +94,10 @@
 (defn- replace-page-ref
   [content page-name id]
   (let [[page wrapped-id] (map page-ref/->page-ref [page-name id])]
-    (common-util/replace-ignore-case content page wrapped-id)))
+    (string/replace content
+                    ;; Don't replace #[[]] as that is a tag and is handled separately in replace-tag-ref
+                    (re-pattern (str "(?i)" "(^|[^#])"
+                                     (common-util/escape-regex-chars page))) (str "$1" wrapped-id))))
 
 (defn- replace-page-ref-with-id
   [content page-name id replace-tag?]

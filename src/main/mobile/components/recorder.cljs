@@ -8,6 +8,7 @@
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.handler.editor :as editor-handler]
+            [frontend.mobile.audio-recorder :as audio-recorder]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -144,7 +145,7 @@
                                   (.notify beats value')))))
 
          ;; auto start
-         (.startRecording r)
+         (audio-recorder/start-recording! r)
          #(stop)))
      [])
 

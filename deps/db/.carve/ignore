@@ -27,6 +27,8 @@ logseq.db.sqlite.export/validate-export
 ;; API
 logseq.db.sqlite.export/build-import
 ;; API
+logseq.db.sqlite.export/diff-exports
+;; API
 logseq.db.common.view/get-property-values
 ;; API
 logseq.db.common.view/get-view-data
@@ -50,3 +52,6 @@ logseq.db.sqlite.gc/ensure-no-garbage
 logseq.db.frontend.entity-util/entity->map
 ;; documenting keywords
 logseq.db.frontend.kv-entity/kv-entities
+;; API
+logseq.db.common.normalize/replace-attr-retract-with-retract-entity-v2
+logseq.db.common.normalize/normalize-tx-data
