@@ -1,7 +1,7 @@
 (ns frontend.components.query.result-test
   (:require [clojure.test :refer [deftest are testing is]]
-            [frontend.db.model :as model]
-            [frontend.components.query.result :as query-result]))
+            [frontend.components.query.result :as query-result]
+            [frontend.db.model :as model]))
 
 (defn- transform-query-result
   [config query-m result]

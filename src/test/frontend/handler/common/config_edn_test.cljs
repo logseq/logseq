@@ -1,10 +1,10 @@
 (ns frontend.handler.common.config-edn-test
-  (:require [clojure.test :refer [is testing deftest]]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
+            [clojure.test :refer [is testing deftest]]
             [frontend.handler.common.config-edn :as config-edn-common-handler]
+            [frontend.handler.notification :as notification]
             [frontend.schema.handler.global-config :as global-config-schema]
             [frontend.schema.handler.repo-config :as repo-config-schema]
-            [frontend.handler.notification :as notification]
             [reitit.frontend.easy :as rfe]))
 
 (defn- validation-config-error-for

@@ -2,11 +2,9 @@
   "Main ns for providing test fns for DB graphs"
   (:require [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
+            [logseq.db.sqlite.export :as sqlite-export]))
 
 (defn find-block-by-content
   "Find first block by exact block string or by fuzzier regex"
@@ -73,17 +71,24 @@
                   v)]))
        (into {})))
 
-(defn create-conn
-  "Create a conn for a DB graph seeded with initial data"
-  []
-  (let [conn (d/create-conn db-schema/schema)
-        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))]
-    (entity-plus/reset-immutable-entities-cache!)
-    conn))
+(def create-conn sqlite-export/create-conn)
 
 (defn create-conn-with-blocks
-  "Create a conn with create-db-conn and then create blocks using sqlite-build"
+  "Create a conn with create-conn and then create blocks using sqlite-build"
   [opts]
   (let [conn (create-conn)
         _ (sqlite-build/create-blocks conn opts)]
+    conn))
+
+(defn create-conn-with-import-map
+  "Create a conn with create-conn and then create/upsert entities using sqlite-export/build-import.
+   Unlike create-conn-with-blocks, this fn can upsert existing entities"
+  [export-map]
+  (let [conn (create-conn)
+        {:keys [init-tx block-props-tx misc-tx]}
+        (sqlite-export/build-import (dissoc export-map ::sqlite-export/graph-files) @conn {})
+        _ (d/transact! conn (concat init-tx block-props-tx misc-tx))
+        ;; Handle graph-files separately b/c build-import can't upsert them
+        _ (when (::sqlite-export/graph-files export-map)
+            (d/transact! conn (::sqlite-export/graph-files export-map)))]
     conn))

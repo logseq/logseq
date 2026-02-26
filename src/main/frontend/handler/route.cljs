@@ -14,12 +14,12 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.graph-parser.text :as text]
             [logseq.shui.ui :as shui]
-            [reitit.frontend.easy :as rfe]
-            [logseq.common.config :as common-config]))
+            [reitit.frontend.easy :as rfe]))
 
 (defn redirect!
   "If `push` is truthy, previous page will be left in history."

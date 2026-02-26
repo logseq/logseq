@@ -1,34 +1,40 @@
-## Repository Layout
-- `src/`: Core source code
-  - `src/main/`: The core logic of the application
-    - `src/main/mobile/`: Mobile app code
-    - `src/main/frontend/inference_worker/`: Code running in a webworker for text-embedding and vector-search
-    - `src/main/frontend/worker/`: Code running in an another webworker
-        - `src/main/frontend/worker/rtc/`: RTC(Real Time Collaboration) related code
-    - `src/main/frontend/components/`: UI components
-  - `src/electron/`: Code specifically for the Electron desktop application.
-  - `src/test/`: unit-tests
-- `deps/`: Internal dependencies/modules
-- `clj-e2e/`: End to end test code
+# Repository Guidelines
 
-## Common used cljs keywords
-- All commonly used ClojureScript keywords are defined using `logseq.common.defkeywords/defkeyword`.
-- Search for `defkeywords` to find all the definitions.
+## Project Structure & Module Organization
+- `src/` is the main codebase.
+  - `src/main/` contains core application logic.
+  - `src/main/mobile/` is the mobile app code.
+  - `src/main/frontend/components/` houses UI components.
+  - `src/main/frontend/inference_worker/` and `src/main/frontend/worker/` hold webworker code, including RTC in `src/main/frontend/worker/rtc/`.
+- `src/electron/` is Electron-specific code.
+- `src/test/` contains unit tests.
+- `deps/` contains internal dependencies/modules.
+- `clj-e2e/` contains end-to-end tests.
 
-## Testing Commands
-- Run linters and unit-tests: `bb dev:lint-and-test`
-- Run a single unit-test:
-  - `bb dev:test -v <namespace/testcase-name>`
-- E2E tests files are located in `/clj-e2e`
+## Build, Test, and Development Commands
+- `bb dev:lint-and-test` runs linters and unit tests.
+- `bb dev:test -v <namespace/testcase-name>` runs a single unit test (example: `bb dev:test -v logseq.some-test/foo`).
+- E2E tests live in `clj-e2e/`; run them from that directory if needed.
 
-## Common used cljs keywords
-- All commonly used ClojureScript keywords are defined using `logseq.common.defkeywords/defkeyword`.
-- Search for `defkeywords` to find all the definitions.
+## Coding Style & Naming Conventions
+- ClojureScript keywords are defined via `logseq.common.defkeywords/defkeyword`; use existing keywords and add new ones in the shared definitions.
+- Follow existing namespace and file layout; keep related workers and RTC code in their dedicated directories.
+- Prefer concise, imperative commit subjects aligned with existing history (examples: `fix: download`, `enhance(rtc): ...`).
+- Clojure map keyword name should prefer `-` instead of `_`, e.g. `:user-id` instead of `:user_id`.
 
-## Code Guidance
-- Keep in mind: @prompts/review.md
+## Testing Guidelines
+- Unit tests live in `src/test/` and should be runnable via `bb dev:lint-and-test`.
+- Name tests after their namespaces; use `-v` to target a specific test case.
+- Run lint/tests before submitting PRs; keep changes green.
 
-## Review Checklist
-- Linters and unit-tests must pass
-- Check the review notes listed in @prompts/review.md
+## Commit & Pull Request Guidelines
+- Commit subjects are short and imperative; optional scope prefixes appear (e.g., `fix:` or `enhance(rtc):`).
+- PRs should describe the behavior change, link relevant issues, and note any test coverage added or skipped.
 
+## Agent-Specific Notes
+- Review notes live in `prompts/review.md`; check them when preparing changes.
+- DB-sync feature guide for AI agents: `docs/agent-guide/db-sync/db-sync-guide.md`.
+- DB-sync protocol reference: `docs/agent-guide/db-sync/protocol.md`.
+- New properties should be added to `logseq.db.frontend.property/built-in-properties`.
+- Avoid creating new class or property unless you have to.
+- Avoid shadow var, e.g. `bytes` should be named as `payload`.

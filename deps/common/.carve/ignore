@@ -2,6 +2,8 @@
 logseq.common.graph/get-files
 ;; API fn
 logseq.common.graph/read-directories
+;; API fn
+logseq.common.authorization/verify-jwt
 
 ;; Profile utils
 logseq.common.profile/profile-fn!
