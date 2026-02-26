@@ -236,12 +236,12 @@
                    (and host port) (conj (str "Host: " host "  Port: " port))))))
 
 (defn- format-add-block
-  [{:keys [repo blocks]}]
-  (str "Added blocks: " (count blocks) " (repo: " repo ")"))
+  [_context ids]
+  (str "Added blocks:\n" (pr-str (vec (or ids [])))))
 
 (defn- format-add-page
-  [{:keys [repo page]}]
-  (str "Added page: " page " (repo: " repo ")"))
+  [_context ids]
+  (str "Added page:\n" (pr-str (vec (or ids [])))))
 
 (defn- format-remove
   [{:keys [repo page uuid id ids]}]
@@ -311,8 +311,8 @@
         (format-server-action command data)
         :list-page (format-list-page (:items data) now-ms)
         (:list-tag :list-property) (format-list-tag-or-property (:items data) now-ms)
-        :add-block (format-add-block context)
-        :add-page (format-add-page context)
+        :add-block (format-add-block context (:result data))
+        :add-page (format-add-page context (:result data))
         :remove (format-remove context)
         :update-block (format-update-block context)
         :graph-export (format-graph-export context)
