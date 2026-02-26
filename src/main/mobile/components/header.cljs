@@ -152,13 +152,10 @@
     (reset! native-top-bar-listener? true)))
 
 (defn- configure-native-top-bar!
-  [repo {:keys [tab title route-name route-view sync-color favorited?]}]
+  [repo {:keys [tab title route-name route-view sync-color favorited? show-sync?]}]
   (when (and (mobile-util/native-platform?)
              mobile-util/native-top-bar)
     (let [hidden? (and (mobile-util/native-ios?) (= tab "search"))
-          rtc-indicator? (and repo
-                              (ldb/get-graph-rtc-uuid (db/get-db))
-                              (user-handler/logged-in?))
           base (cond->
                 {:hidden hidden?}
                  (not (mobile-util/native-ipad?))
@@ -179,7 +176,7 @@
                           (cond-> []
                             (nil? route-view)
                             (conj {:id "home-setting" :systemIcon "ellipsis"})
-                            (and rtc-indicator? (not page?))
+                            (and show-sync? (not page?))
                             (conj {:id "sync" :systemIcon "circle.fill" :color sync-color
                                    :size "small"}))
 
@@ -208,13 +205,27 @@
                           "Select a Graph")
         route-name (get-in route-match [:data :name])
         route-view (get-in route-match [:data :view])
+        route-id (get-in route-match [:parameters :path :name])
+        page-route? (= route-name :page)
         [*configure-top-bar-f _] (hooks/use-state (atom nil))
         detail-info (hooks/use-flow-state (m/watch rtc-indicator/*detail-info))
         _ (hooks/use-flow-state flows/current-login-user-flow)
         online? (hooks/use-flow-state flows/network-online-event-flow)
         rtc-state (:rtc-state detail-info)
+        graph-uuid (or (:graph-uuid detail-info)
+                       (ldb/get-graph-rtc-uuid (db/get-db)))
+        show-sync? (and current-repo graph-uuid (user-handler/logged-in?))
         unpushed-block-update-count (:pending-local-ops detail-info)
         pending-asset-ops           (:pending-asset-ops detail-info)
+        fallback-title (cond
+                         (= tab "home")
+                         short-repo-name
+
+                         (= tab "search")
+                         "Search"
+
+                         :else
+                         (string/capitalize tab))
         sync-color (if (and online?
                             (= :open rtc-state)
                             (zero? unpushed-block-update-count)
@@ -228,33 +239,58 @@
        (when (and (mobile-util/native-platform?)
                   mobile-util/native-top-bar)
          (register-native-top-bar-events! *configure-top-bar-f)
-         (p/let [block (when (= route-name :page)
-                         (let [id (get-in route-match [:parameters :path :name])]
-                           (when (common-util/uuid-string? id)
-                             (db-async/<get-block current-repo (uuid id) {:children? false}))))
-                 favorited? (when block
-                              (page-handler/favorited? (str (:block/uuid block))))
-                 title (cond block
-                             (:block/title block)
-                             (= tab "home")
-                             short-repo-name
-                             (= tab "search")
-                             "Search"
-                             :else
-                             (string/capitalize tab))
-                 f (fn [favorited?]
-                     (configure-native-top-bar!
-                      current-repo
-                      {:tab tab
-                       :title title
-                       :route-name route-name
-                       :route-view route-view
-                       :sync-color sync-color
-                       :favorited? favorited?}))]
+         (let [block (when (and page-route?
+                                (common-util/uuid-string? route-id))
+                       (db/entity [:block/uuid (uuid route-id)]))
+               favorited? (when block
+                            (page-handler/favorited? (str (:block/uuid block))))
+               title (or (:block/title block) fallback-title)
+               f (fn [favorited?]
+                   (configure-native-top-bar!
+                    current-repo
+                    {:tab tab
+                     :title title
+                     :route-name route-name
+                     :route-view route-view
+                     :sync-color sync-color
+                     :show-sync? show-sync?
+                     :favorited? favorited?}))]
            (reset! *configure-top-bar-f f)
            (f favorited?)))
        nil)
-     [tab short-repo-name route-match sync-color])
+     [current-repo tab route-name route-view route-id fallback-title sync-color show-sync? page-route?])
+
+    (hooks/use-effect!
+     (fn []
+       (if (and (mobile-util/native-platform?)
+                mobile-util/native-top-bar
+                current-repo
+                page-route?
+                (common-util/uuid-string? route-id))
+         (let [cancelled? (atom false)
+               page-id (uuid route-id)]
+           (-> (db-async/<get-block current-repo page-id {:children? false})
+               (p/then
+                (fn [block]
+                  (when (and block (not @cancelled?))
+                    (let [favorited? (page-handler/favorited? (str (:block/uuid block)))
+                          title (:block/title block)
+                          f (fn [favorited?]
+                              (configure-native-top-bar!
+                               current-repo
+                               {:tab tab
+                                :title title
+                                :route-name route-name
+                                :route-view route-view
+                                :sync-color sync-color
+                                :show-sync? show-sync?
+                                :favorited? favorited?}))]
+                      (reset! *configure-top-bar-f f)
+                      (f favorited?)))))
+               (p/catch (fn [_] nil)))
+           #(reset! cancelled? true))
+         nil))
+     [current-repo tab route-name route-view route-id sync-color show-sync? page-route?])
 
     [:<>]))
 
