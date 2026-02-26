@@ -67,7 +67,7 @@
 
 (rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value
                         title highlighted on-highlight on-highlight-dep header on-click
-                        hoverable compact rounded on-mouse-enter component-opts source-block] :as props
+                        hoverable compact rounded on-mouse-enter on-mouse-move source-block] :as props
                  :or {hoverable true rounded true}}
                 {:keys [app-config]}]
   (let [ref (hooks/create-ref)
@@ -77,7 +77,7 @@
         header-badge (current-page-badge-node (:header-badge badge-placement))
         [hover? set-hover?] (rum/use-state false)
         mouse-highlighted? (and highlighted hoverable hover?)
-        keyboard-highlighted? (and highlighted (not mouse-highlighted?))
+        keyboard-highlighted? (and highlighted (not hoverable))
         interaction-bg "var(--lx-gray-03, var(--ls-a-chosen-bg, var(--ls-tertiary-background-color, rgba(0,0,0,0.10))))"
         interaction-border "var(--ls-border-color, var(--lx-gray-08, rgba(0,0,0,0.24)))"
         mouse-selected-border "var(--ls-border-color, var(--lx-gray-09, rgba(0,0,0,0.32)))"
@@ -102,6 +102,7 @@
                      (assoc :background-color interaction-bg
                             :box-shadow (str "inset 0 0 0 9999px " keyboard-overlay
                                              ", inset 0 0 0 2px " keyboard-ring)))
+            :data-keyboard-highlight (when keyboard-highlighted? true)
             :class (cond-> "flex flex-col transition-colors duration-75 ease-in"
                      hoverable (str " cursor-pointer")
                      rounded (str " rounded-lg")
@@ -113,8 +114,8 @@
                               (set-hover? true)
                               (when on-mouse-enter
                                 (on-mouse-enter e)))
-            :on-mouse-leave #(set-hover? false)}
-           component-opts)
+            :on-mouse-move (when on-mouse-move on-mouse-move)
+            :on-mouse-leave #(set-hover? false)})
      ;; header
      (when header
        [:div.text-xs.pl-8.font-light.flex.items-center.gap-2.flex-wrap {:class "-mt-1"

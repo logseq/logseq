@@ -3,7 +3,7 @@
  :tasks
  {:requires ([babashka.cli :as cli])
   :init (do
-          (def cli-opts (cli/parse-opts *command-line-args* {:alias {:p :port}
+          (def cli-opts (cli/parse-opts *command-line-args* {:alias {:p :port :n :namespace :i :include :v :var}
                                                              :coerce {:port :int :headers :edn}}))
           (defn clojure-with-port
             [cmd]
@@ -19,8 +19,17 @@
 
   prn {:task (clojure "-X clojure.core/prn" cli-opts)}
 
-  test {:doc "run tests (ns'es ending in '-basic-test')"
-        :task (do (clojure (clojure-with-port "-M:test -r \".*\\-basic\\-test$\" -e fix-me"))
+  test {:doc "run tests (ns'es ending in '-basic-test'); use -n <ns> to run a single namespace, -v <ns/fn> to run a single test fn, -i <tag> to filter by metadata"
+        :task (do (let [ns      (:namespace cli-opts)
+                        include (:include cli-opts)
+                        var     (:var cli-opts)
+                        ns-arg  (when ns (str " -n " ns))
+                        inc-arg (when include (str " -i " include))
+                        var-arg (when var (str " -v " var))
+                        base    (if ns
+                                  (str "-M:test" ns-arg " -e fix-me")
+                                  "-M:test -r \".*\\-basic\\-test$\" -e fix-me")]
+                    (clojure (clojure-with-port (str base inc-arg var-arg))))
                   (System/exit 0))}
 
   rtc-extra-test {:doc "run rtc-extra-test"
