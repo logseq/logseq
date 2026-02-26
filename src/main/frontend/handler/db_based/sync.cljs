@@ -208,6 +208,11 @@
     true
     (true? graph-e2ee?)))
 
+(defn <rtc-stop!
+  []
+  (log/info :db-sync/stop true)
+  (state/<invoke-db-worker :thread-api/db-sync-stop))
+
 (defn <rtc-start!
   [repo & {:keys [_stop-before-start?] :as _opts}]
   (if (should-start-rtc? repo)
@@ -218,12 +223,7 @@
       (log/info :db-sync/skip-start {:repo repo :reason :graph-not-in-remote-list
                                      :remote-graphs-loading? (:rtc/loading-graphs? @state/state)
                                      :has-local-rtc-id? (graph-has-local-rtc-id? repo)})
-      (p/resolved nil))))
-
-(defn <rtc-stop!
-  []
-  (log/info :db-sync/stop true)
-  (state/<invoke-db-worker :thread-api/db-sync-stop))
+      (<rtc-stop!))))
 
 (defonce ^:private debounced-update-presence
   (util/debounce

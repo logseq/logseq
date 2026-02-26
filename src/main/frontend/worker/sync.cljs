@@ -27,6 +27,7 @@
             [promesa.core :as p]))
 
 (defonce *repo->latest-remote-tx (atom {}))
+(defonce *start-inflight-target (atom nil))
 
 (defn- current-client
   [repo]
@@ -1324,6 +1325,8 @@
   [repo]
   (let [base (ws-base-url)
         graph-id (get-graph-id repo)
+        start-target [repo graph-id]
+        inflight-target @*start-inflight-target
         current @worker-state/*db-sync-client]
     (cond
       (not (and (string? base) (seq base) (seq graph-id)))
@@ -1331,21 +1334,31 @@
         (log/info :db-sync/start-skipped {:repo repo :graph-id graph-id :base base})
         (p/resolved nil))
 
+      (= start-target inflight-target)
+      (p/resolved nil)
+
       (active-client-for? current repo graph-id)
       (do
         (broadcast-rtc-state! current)
         (p/resolved nil))
 
       :else
-      (p/do!
-       (stop!)
-       (let [client (ensure-client-state! repo)
-             url (format-ws-url base graph-id)
-             _ (ensure-client-graph-uuid! repo graph-id)
-             connected (assoc client :graph-id graph-id)
-             connected (connect! repo connected url)]
-         (reset! worker-state/*db-sync-client connected)
-         (p/resolved nil))))))
+      (do
+        (reset! *start-inflight-target start-target)
+        (->
+         (p/do!
+          (stop!)
+          (let [client (ensure-client-state! repo)
+                url (format-ws-url base graph-id)
+                _ (ensure-client-graph-uuid! repo graph-id)
+                connected (assoc client :graph-id graph-id)
+                connected (connect! repo connected url)]
+            (reset! worker-state/*db-sync-client connected)
+            nil))
+         (p/finally
+           (fn []
+             (when (= start-target @*start-inflight-target)
+               (reset! *start-inflight-target nil)))))))))
 
 (defn enqueue-local-tx!
   [repo {:keys [tx-meta tx-data db-after db-before]}]
