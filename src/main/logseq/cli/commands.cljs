@@ -62,6 +62,13 @@
            :message "page name is required"}
    :summary summary})
 
+(defn- missing-tag-name-result
+  [summary]
+  {:ok? false
+   :error {:code :missing-tag-name
+           :message "tag name is required"}
+   :summary summary})
+
 (defn- missing-type-result
   [summary]
   {:ok? false
@@ -166,6 +173,9 @@
 
       (and (= command :add-page) (not (seq (:page opts))))
       (missing-page-name-result summary)
+
+      (and (= command :add-tag) (not (seq (some-> (:name opts) string/trim))))
+      (missing-tag-name-result summary)
 
       (and (= command :remove) (seq args))
       (command-core/invalid-options-result summary "remove does not accept subcommands")
@@ -362,6 +372,9 @@
         :add-page
         (add-command/build-add-page-action options repo)
 
+        :add-tag
+        (add-command/build-add-tag-action options repo)
+
         :update-block
         (update-command/build-action options repo)
 
@@ -410,6 +423,7 @@
                          :list-property (list-command/execute-list-property action config)
                          :add-block (add-command/execute-add-block action config)
                          :add-page (add-command/execute-add-page action config)
+                         :add-tag (add-command/execute-add-tag action config)
                          :update-block (update-command/execute-update action config)
                          :remove (remove-command/execute-remove action config)
                          :query (query-command/execute-query action config)
@@ -427,6 +441,7 @@
         (assoc result
                :command (or (:command action) (:type action))
                :context (select-keys action [:repo :graph :page :id :ids :uuid :block :blocks
+                                             :name
                                              :source :target :update-tags :update-properties
                                              :remove-tags :remove-properties
                                              :export-type :output :import-type :input])))))

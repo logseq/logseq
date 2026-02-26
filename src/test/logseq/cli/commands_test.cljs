@@ -73,6 +73,7 @@
       (is (contains-bold? summary "list property"))
       (is (contains-bold? summary "add block"))
       (is (contains-bold? summary "add page"))
+      (is (contains-bold? summary "add tag"))
       (is (contains-bold? summary "remove"))
       (is (contains-bold? summary "update"))
       (is (contains-bold? summary "query"))
@@ -133,17 +134,6 @@
       (is (string/includes? plain-summary "Global options:"))
       (is (string/includes? plain-summary "Command options:"))))
 
-  (testing "add group shows subcommands"
-    (let [result (binding [style/*color-enabled?* true]
-                   (commands/parse-args ["add"]))
-          summary (:summary result)
-          plain-summary (strip-ansi summary)]
-      (is (true? (:help? result)))
-      (is (string/includes? plain-summary "add block"))
-      (is (string/includes? plain-summary "add page"))
-      (is (contains-bold? summary "add block"))
-      (is (contains-bold? summary "add page"))))
-
   (testing "remove command shows help"
     (let [result (binding [style/*color-enabled?* true]
                    (commands/parse-args ["remove" "--help"]))
@@ -201,6 +191,20 @@
           lines (command-lines summary)]
       (is (seq lines))
       (is (every? #(not (string/includes? % "[options]")) lines)))))
+
+(deftest test-parse-args-help-add-group
+  (testing "add group shows subcommands"
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["add"]))
+          summary (:summary result)
+          plain-summary (strip-ansi summary)]
+      (is (true? (:help? result)))
+      (is (string/includes? plain-summary "add block"))
+      (is (string/includes? plain-summary "add page"))
+      (is (string/includes? plain-summary "add tag"))
+      (is (contains-bold? summary "add block"))
+      (is (contains-bold? summary "add page"))
+      (is (contains-bold? summary "add tag")))))
 
 (deftest test-parse-args-help-alignment
   (testing "graph group aligns subcommand columns"
@@ -967,7 +971,23 @@
       (is (true? (:ok? result)))
       (is (= :add-page (:command result)))
       (is (= "[\"TagA\"]" (get-in result [:options :tags])))
-      (is (= "{:logseq.property/publishing-public? true}" (get-in result [:options :properties]))))))
+      (is (= "{:logseq.property/publishing-public? true}" (get-in result [:options :properties])))))
+
+  (testing "add tag requires name"
+    (let [result (commands/parse-args ["add" "tag"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-tag-name (get-in result [:error :code])))))
+
+  (testing "add tag parses with name"
+    (let [result (commands/parse-args ["add" "tag" "--name" "Quote"])]
+      (is (true? (:ok? result)))
+      (is (= :add-tag (:command result)))
+      (is (= "Quote" (get-in result [:options :name])))))
+
+  (testing "add tag rejects blank name"
+    (let [result (commands/parse-args ["add" "tag" "--name" "   "])]
+      (is (false? (:ok? result)))
+      (is (= :missing-tag-name (get-in result [:error :code]))))))
 
 (deftest test-verb-subcommand-parse-update-target-page
   (testing "update parses with target page"
@@ -1212,6 +1232,22 @@
       (is (false? (:ok? result)))
       (is (= :missing-page-name (get-in result [:error :code])))))
 
+  (testing "add tag requires name"
+    (let [parsed {:ok? true :command :add-tag :options {}}
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (false? (:ok? result)))
+      (is (= :missing-tag-name (get-in result [:error :code])))))
+
+  (testing "add tag builds normalized action"
+    (let [parsed {:ok? true :command :add-tag :options {:name "  #Quote  "}}
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (true? (:ok? result)))
+      (is (= {:type :add-tag
+              :repo "logseq_db_demo"
+              :graph "demo"
+              :name "Quote"}
+             (:action result)))))
+
   (testing "remove requires target"
     (let [parsed {:ok? true :command :remove :options {}}
           result (commands/build-action parsed {:repo "demo"})]
@@ -1349,6 +1385,107 @@
     (let [result (commands/parse-args ["update" "--id" "1" "--pos" "last-child" "--update-tags" "[\"TagA\"]"])]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code]))))))
+
+(deftest test-execute-add-tag-builds-create-page-op
+  (async done
+         (let [ops* (atom nil)
+               created?* (atom false)
+               orig-ensure-server! cli-server/ensure-server!
+               orig-invoke transport/invoke
+               action {:type :add-tag
+                       :repo "demo"
+                       :name "Quote"}]
+           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
+           (set! transport/invoke (fn [_ method _ args]
+                                    (case method
+                                      :thread-api/pull (let [[_ _ lookup] args]
+                                                         (if (= lookup [:block/name "quote"])
+                                                           (if @created?*
+                                                             {:db/id 4242
+                                                              :block/name "quote"
+                                                              :block/title "Quote"
+                                                              :block/tags [{:db/ident :logseq.class/Tag}]}
+                                                             {})
+                                                           {}))
+                                      :thread-api/apply-outliner-ops (let [[_ ops _] args]
+                                                                       (reset! created?* true)
+                                                                       (reset! ops* ops)
+                                                                       {:result :ok})
+                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
+           (-> (p/let [result (add-command/execute-add-tag action {})]
+                 (is (= :ok (:status result)))
+                 (is (= [4242] (get-in result [:data :result])))
+                 (is (= [[:create-page ["Quote" {:class? true}]]]
+                        @ops*)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! cli-server/ensure-server! orig-ensure-server!)
+                            (set! transport/invoke orig-invoke)
+                            (done)))))))
+
+(deftest test-execute-add-tag-rejects-existing-non-tag-page
+  (async done
+         (let [action {:type :add-tag
+                       :repo "demo"
+                       :name "Home"}
+               orig-ensure-server! cli-server/ensure-server!
+               orig-invoke transport/invoke]
+           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
+           (set! transport/invoke (fn [_ method _ args]
+                                    (case method
+                                      :thread-api/pull (let [[_ _ lookup] args]
+                                                         (if (= lookup [:block/name "home"])
+                                                           {:db/id 99
+                                                            :block/name "home"
+                                                            :block/title "Home"
+                                                            :block/tags [{:db/ident :logseq.class/Page}]}
+                                                           {}))
+                                      :thread-api/apply-outliner-ops
+                                      (throw (ex-info "should not create tag" {:args args}))
+                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
+           (-> (add-command/execute-add-tag action {})
+               (p/then (fn [_]
+                         (is false "expected add tag conflict error")))
+               (p/catch (fn [e]
+                          (is (= :tag-name-conflict (:code (ex-data e))))))
+               (p/finally (fn []
+                            (set! cli-server/ensure-server! orig-ensure-server!)
+                            (set! transport/invoke orig-invoke)
+                            (done)))))))
+
+(deftest test-execute-add-tag-idempotent-when-tag-exists
+  (async done
+         (let [apply-calls* (atom 0)
+               orig-ensure-server! cli-server/ensure-server!
+               orig-invoke transport/invoke
+               action {:type :add-tag
+                       :repo "demo"
+                       :name "Quote"}]
+           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
+           (set! transport/invoke (fn [_ method _ args]
+                                    (case method
+                                      :thread-api/pull (let [[_ _ lookup] args]
+                                                         (if (= lookup [:block/name "quote"])
+                                                           {:db/id 4242
+                                                            :block/name "quote"
+                                                            :block/title "Quote"
+                                                            :block/tags [{:db/ident :logseq.class/Tag}]}
+                                                           {}))
+                                      :thread-api/apply-outliner-ops (do
+                                                                       (swap! apply-calls* inc)
+                                                                       {:result :ok})
+                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
+           (-> (p/let [result (add-command/execute-add-tag action {})]
+                 (is (= :ok (:status result)))
+                 (is (= [4242] (get-in result [:data :result])))
+                 (is (= 0 @apply-calls*)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! cli-server/ensure-server! orig-ensure-server!)
+                            (set! transport/invoke orig-invoke)
+                            (done)))))))
 
 (deftest test-execute-update-builds-batch-ops
   (async done
