@@ -206,7 +206,7 @@
 (defn- server-pull [server since]
   (let [{:keys [txs]} @server]
     (->> (filter (fn [{:keys [t]}] (> t since)) txs)
-         (mapcat :tx))))
+         (mapv :tx))))
 
 (defn- server-upload! [server t-before tx-data]
   (swap! server
@@ -233,10 +233,10 @@
           server-t (:t @server)]
       ;; (prn :debug :repo repo :local-tx local-tx :server-t server-t)
       (when (< local-tx server-t)
-        (let [tx (server-pull server local-tx)]
+        (let [txs (server-pull server local-tx)]
           ;; (prn :debug :apply-remote-tx :repo repo
           ;;      :tx tx)
-          (#'db-sync/apply-remote-tx! repo client tx)
+          (#'db-sync/apply-remote-tx! repo client txs)
           (client-op/update-local-tx repo server-t)
           (reset! progress? true)))
       (let [pending (#'db-sync/pending-txs repo)
