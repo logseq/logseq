@@ -1,12 +1,14 @@
 (ns frontend.handler.events.rtc
   "RTC events"
   (:require [frontend.common.crypt :as crypt]
+            [frontend.common.missionary :as c.m]
             [frontend.components.e2ee :as e2ee]
             [frontend.handler.events :as events]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [lambdaisland.glogi :as log]
             [logseq.shui.ui :as shui]
+            [missionary.core :as m]
             [promesa.core :as p]))
 
 (defn rtc-collaborators-dialog?
@@ -52,3 +54,26 @@
 
 (defmethod events/handle :rtc/graph-count-exceed-limit [[_]]
   (notification/show! "Sync graph count exceed limit" :warning false))
+
+(defn- sync-app-state!
+  []
+  (let [state-flow
+        (->> (m/watch state/state)
+             (m/eduction
+              (map #(select-keys % [:git/current-repo :config
+                                    :auth/id-token :auth/access-token :auth/refresh-token
+                                    :user/info]))
+              (dedupe)))
+        <init-sync-done? (p/deferred)
+        task (m/reduce
+              (constantly nil)
+              (m/ap
+                (let [m (m/?> (m/relieve state-flow))]
+                  (when (:git/current-repo m)
+                    (c.m/<? (state/<invoke-db-worker :thread-api/sync-app-state m)))
+                  (p/resolve! <init-sync-done?))))]
+    (c.m/run-task* task)
+    <init-sync-done?))
+
+(defmethod events/handle :rtc/sync-app-state [[_]]
+  (sync-app-state!))

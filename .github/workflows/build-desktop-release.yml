@@ -99,7 +99,7 @@ jobs:
           key: ${{ runner.os }}-clojure-lib-${{ hashFiles('**/deps.edn') }}
 
       - name: Setup clojure
-        uses: DeLaGuardo/setup-clojure@10.1
+        uses: DeLaGuardo/setup-clojure@13.5
         with:
           cli: ${{ env.CLOJURE_VERSION }}
 

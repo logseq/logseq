@@ -11,9 +11,9 @@
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
             [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.property :as gp-property]
-            [logseq.common.config :as common-config]))
+            [logseq.graph-parser.property :as gp-property]))
 
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
@@ -57,8 +57,6 @@ and handles unexpected failure."
                      (extract-blocks ast title format {})))
           new-block (first blocks)
           block (cond-> (merge block new-block)
-                  (> (count blocks) 1)
-                  (assoc :block/warning :multiple-blocks)
                   true
                   (dissoc :block/format))
           block (dissoc block :block.temp/ast-body :block/level)]

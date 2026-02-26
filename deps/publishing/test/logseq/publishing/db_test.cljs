@@ -3,8 +3,8 @@
             [clojure.set :as set]
             [datascript.core :as d]
             [logseq.db :as ldb]
-            [logseq.publishing.db :as publish-db]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.db.test.helper :as db-test]
+            [logseq.publishing.db :as publish-db]))
 
 (deftest clean-export!
   (let [conn (db-test/create-conn-with-blocks
@@ -82,4 +82,4 @@
         "Only exports blocks from public pages")
     ;; TODO: Create assets to test this
     #_(is (= ["thumb-on-fire_1648822523866_0.PNG"] assets)
-        "Only exports assets from public pages")))
+          "Only exports assets from public pages")))

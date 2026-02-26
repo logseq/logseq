@@ -6,7 +6,7 @@ on:
       branch:
         description: "Git branch to build & deploy"
         required: true
-        default: "feat/worker-sync"
+        default: "master"
 
 env:
   CLOJURE_VERSION: "1.11.1.1413"
@@ -36,7 +36,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Setup Clojure
-        uses: DeLaGuardo/setup-clojure@11.0
+        uses: DeLaGuardo/setup-clojure@13.5
         with:
           cli: ${{ env.CLOJURE_VERSION }}
 

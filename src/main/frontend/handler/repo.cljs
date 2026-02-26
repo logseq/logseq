@@ -89,7 +89,9 @@
   (when-let [repos' (seq (concat (map (fn [{:keys [sync-meta metadata] :as repo}]
                                         (let [graph-id (some-> (or (:kv/value metadata)
                                                                    (second sync-meta)) str)]
-                                          (if graph-id (assoc repo :GraphUUID graph-id) repo)))
+                                          (if (and graph-id (nil? (:GraphUUID repo)))
+                                            (assoc repo :GraphUUID graph-id)
+                                            repo)))
                                       local-repos)
                                  (some->> remote-repos
                                           (map #(assoc % :remote? true)))))]
@@ -132,12 +134,13 @@
   (let [full-graph-name (string/lower-case (str config/db-version-prefix graph-name))]
     (some #(= (some-> (:url %) string/lower-case) full-graph-name) (state/get-repos))))
 
-(defn- create-db [full-graph-name {:keys [file-graph-import?]}]
+(defn- create-db [full-graph-name {:keys [file-graph-import? remote-graph?]}]
   (->
    (p/let [config config/config-default-content
            _ (persist-db/<new full-graph-name
                               (cond-> {:config config
-                                       :graph-git-sha config/revision}
+                                       :graph-git-sha config/revision
+                                       :remote-graph? remote-graph?}
                                 file-graph-import? (assoc :import-type :file-graph)))
            _ (start-repo-db-if-not-exists! full-graph-name)
            _ (state/add-repo! {:url full-graph-name :root (config/get-local-dir full-graph-name)})

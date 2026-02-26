@@ -4,6 +4,7 @@
             [clojure.core.async.interop :refer [p->c]]
             [frontend.components.assets :as assets]
             [frontend.components.cmdk.core :as cmdk]
+            [frontend.components.icon :as icon-component]
             [frontend.components.page :as component-page]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugin]
@@ -18,12 +19,14 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
-            [frontend.handler.db-based.rtc :as rtc-handler]
+            [frontend.handler.db-based.rtc-flows :as rtc-flows]
+            [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.events :as events]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.reaction :as reaction-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
@@ -32,6 +35,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]
+            [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
@@ -227,6 +231,41 @@
      (editor-handler/save-current-block!)
      (editor-new-property block target opts))))
 
+(defn- editor-new-reaction [target]
+  (let [editing-block (state/get-edit-block)
+        target-block-id (or (:block/uuid editing-block)
+                            (first (state/get-selection-block-ids)))
+        target' (or target
+                    (some-> (state/get-edit-input-id)
+                            (gdom/getElement))
+                    (first (state/get-selection-blocks)))
+        on-pick (fn [popup-id icon]
+                  (let [emoji-id (:id icon)
+                        emoji? (= :emoji (:type icon))]
+                    (if emoji?
+                      (do
+                        (reaction-handler/toggle-reaction! target-block-id emoji-id)
+                        (shui/popup-hide! popup-id))
+                      (notification/show! "Please pick an emoji reaction." :warning))))]
+    (when (and target-block-id target')
+      (shui/popup-show!
+       target'
+       (fn [{:keys [id]}]
+         (icon-component/icon-search
+          {:on-chosen (fn [_e icon _keep-popup?] (on-pick id icon))
+           :tabs [[:emoji "Emojis"]]
+           :default-tab :emoji
+           :show-used? true
+           :icon-value nil}))
+       {:align :start
+        :content-props {:class "ls-icon-picker"}}))))
+
+(defmethod events/handle :editor/new-reaction [[_ {:keys [target]}]]
+  (when-not config/publishing?
+    (p/do!
+     (editor-handler/save-current-block!)
+     (editor-new-reaction target))))
+
 (defmethod events/handle :graph/new-db-graph [[_ _opts]]
   (shui/dialog-open!
    repo/new-db-graph
@@ -287,6 +326,21 @@
     :title (str (if asset-block "Edit" "Create") " asset")
     :center? true}))
 
+(defn ensure-user-rsa-keys-if-possible!
+  []
+  (if @state/*db-worker
+    (-> (p/do!
+         (state/pub-event! [:rtc/sync-app-state])
+         (state/<invoke-db-worker :thread-api/set-db-sync-config
+                                  {:enabled? true
+                                   :ws-url config/db-sync-ws-url
+                                   :http-base config/db-sync-http-base})
+         (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys))
+        (p/catch (fn [error]
+                   (log/error :db-sync/ensure-user-rsa-keys-failed error)
+                   nil)))
+    (p/resolved nil)))
+
 (defmethod events/handle :user/fetch-info-and-graphs [[_]]
   (state/set-state! [:ui/loading? :login] false)
   (async/go
@@ -298,11 +352,18 @@
         (do
           (state/set-user-info! result)
           (when-let [uid (user-handler/user-uuid)]
-            (sentry-event/set-user! uid))
-          (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
-            (when (and (= status :welcome) (user-handler/logged-in?))
+            (sentry-event/set-user! uid)
+            (ensure-user-rsa-keys-if-possible!))
+          (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)
+                fetch-graphs? (and (user-handler/logged-in?)
+                                   (or (= status :welcome)
+                                       (user-handler/rtc-group?)))]
+            (when fetch-graphs?
               (async/<! (p->c (rtc-handler/<get-remote-graphs)))
-              (repo-handler/refresh-repos!))))))))
+              (repo-handler/refresh-repos!)
+              (when-let [current-repo (state/get-current-repo)]
+                (when (some #(= current-repo (:url %)) (state/get-rtc-graphs))
+                  (rtc-flows/trigger-rtc-start current-repo))))))))))
 
 (defmethod events/handle :dialog/show-block [[_ block option]]
   (shui/dialog-open!

@@ -17,6 +17,35 @@
   fixtures/new-logseq-page
   fixtures/validate-graph)
 
+(defn- drag-and-drop-file!
+  [file-name file-type]
+  (w/eval-js
+   (format "(() => {
+      const container = document.querySelector('#main-content-container');
+      if (!container) {
+        throw new Error('main-content-container not found');
+      }
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(new File(['logseq-e2e-drag-drop'], %s, { type: %s }));
+      container.dispatchEvent(new DragEvent('dragover', { dataTransfer, bubbles: true, cancelable: true }));
+      container.dispatchEvent(new DragEvent('drop', { dataTransfer, bubbles: true, cancelable: true }));
+    })();"
+           (pr-str file-name)
+           (pr-str file-type))))
+
+(deftest drag-and-drop-asset-does-not-create-blank-asset
+  (testing "dragging and dropping a file should keep non-empty asset title"
+    (let [asset-title "drag-drop-regression"
+          file-name (str asset-title ".png")]
+      (b/new-block "")
+      (drag-and-drop-file! file-name "image/png")
+      (w/wait-for ".ls-page-blocks .ls-block .asset-container img")
+      ;; Exit edit mode to trigger a save; this used to overwrite the new asset with blank content.
+      (util/exit-edit)
+      (assert/assert-have-count ".ls-page-blocks .ls-block .asset-container img" 1)
+      (assert/assert-is-visible
+       (format ".ls-page-blocks .ls-block .block-title-wrap:text('%s')" asset-title)))))
+
 (deftest toggle-between-page-and-block
   (testing "Convert block to page and back"
     (b/new-block "b1")

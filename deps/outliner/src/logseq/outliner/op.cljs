@@ -1,6 +1,7 @@
 (ns logseq.outliner.op
   "Transact outliner ops"
   (:require [datascript.core :as d]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.outliner.core :as outliner-core]
@@ -119,7 +120,12 @@
    [:delete-page
     [:catn
      [:op :keyword]
-     [:args [:tuple ::uuid]]]]])
+     [:args [:tuple ::uuid]]]]
+
+   [:toggle-reaction
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::uuid ::emoji-id ::maybe-uuid]]]]])
 
 (def ^:private ops-schema
   [:schema {:registry {::id int?
@@ -129,7 +135,9 @@
                        ::block-id :any
                        ::block-ids [:sequential ::block-id]
                        ::class-id int?
+                       ::emoji-id string?
                        ::property-id [:or int? keyword? nil?]
+                       ::maybe-uuid [:maybe :uuid]
                        ::value :any
                        ::values [:sequential ::value]
                        ::option [:maybe map?]
@@ -145,6 +153,38 @@
 (def ^:private ops-validator (m/validator ops-schema))
 
 (defonce ^:private *op-handlers (atom {}))
+
+(defn- reaction-user-id
+  [reaction]
+  (:db/id (:logseq.property/created-by-ref reaction)))
+
+(defn- toggle-reaction!
+  [conn target-uuid emoji-id user-uuid]
+  (when-let [target (d/entity @conn [:block/uuid target-uuid])]
+    (let [user-id (when user-uuid
+                    (:db/id (d/entity @conn [:block/uuid user-uuid])))
+          reactions (:logseq.property.reaction/_target target)
+          match? (fn [reaction]
+                   (and (= emoji-id (:logseq.property.reaction/emoji-id reaction))
+                        (if user-id
+                          (= user-id (reaction-user-id reaction))
+                          (nil? (reaction-user-id reaction)))))
+          existing (some (fn [reaction] (when (match? reaction) reaction)) reactions)]
+      (if existing
+        (do
+          (ldb/transact! conn [[:db/retractEntity (:db/id existing)]]
+                         {:outliner-op :toggle-reaction})
+          true)
+        (let [now (common-util/time-ms)
+              reaction-tx (cond-> {:block/uuid (d/squuid)
+                                   :block/created-at now
+                                   :logseq.property.reaction/emoji-id emoji-id
+                                   :logseq.property.reaction/target (:db/id target)}
+                            user-id
+                            (assoc :logseq.property/created-by-ref user-id))]
+          (ldb/transact! conn [reaction-tx]
+                         {:outliner-op :toggle-reaction})
+          true)))))
 
 (defn register-op-handlers!
   [handlers]
@@ -257,6 +297,9 @@
 
          :transact
          (apply ldb/transact! conn args)
+
+         :toggle-reaction
+         (reset! *result (apply toggle-reaction! conn args))
 
          (when-let [handler (get @*op-handlers op)]
            (reset! *result (handler conn args))))))

@@ -69,9 +69,14 @@ deps/shui/.clj-kondo
 deps/publish/worker/.wrangler
 deps/publish/worker/dist
 deps/publish/worker/.env*
+deps/db-sync/worker/.wrangler
+deps/db-sync/worker/dist
+deps/db-sync/worker/.env*
+
 
 tx-log*
 clj-e2e/.wally
 clj-e2e/e2e-dump
 .dir-locals.el
 .projectile
+deps/db-sync/data

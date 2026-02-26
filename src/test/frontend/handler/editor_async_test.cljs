@@ -1,12 +1,12 @@
 (ns frontend.handler.editor-async-test
-  (:require [frontend.handler.editor :as editor]
-            [frontend.db :as db]
-            [clojure.test :refer [is testing async use-fixtures]]
+  (:require [clojure.test :refer [is testing async use-fixtures]]
             [datascript.core :as d]
-            [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async load-test-files]]
+            [frontend.db :as db]
+            [frontend.handler.editor :as editor]
             [frontend.state :as state]
-            [goog.dom :as gdom]
+            [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async load-test-files]]
             [frontend.util :as util]
+            [goog.dom :as gdom]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -23,27 +23,27 @@
         first-block (ldb/get-left-sibling sibling-block)
         block-dom-id "ls-block-block-to-delete"]
     (p/with-redefs
-      [editor/get-state (constantly {:block-id (:block/uuid block)
-                                     :block-parent-id block-dom-id
-                                     :config {:embed? embed?}})
+     [editor/get-state (constantly {:block-id (:block/uuid block)
+                                    :block-parent-id block-dom-id
+                                    :config {:embed? embed?}})
                   ;; stub for delete-block
-       gdom/getElement (constantly #js {:id block-dom-id})
+      gdom/getElement (constantly #js {:id block-dom-id})
                   ;; stub since not testing moving
-       editor/edit-block! (constantly nil)
+      editor/edit-block! (constantly nil)
                   ;; stub b/c of js/document
-       state/get-selection-blocks (constantly [])
-       util/get-blocks-noncollapse (constantly (mapv
-                                                (fn [m]
-                                                  #js {:id (:id m)
+      state/get-selection-blocks (constantly [])
+      util/get-blocks-noncollapse (constantly (mapv
+                                               (fn [m]
+                                                 #js {:id (:id m)
                                                                   ;; for dom/attr
-                                                       :getAttribute #({"blockid" (str (:block-uuid m))
-                                                                        "data-embed" (if embed? "true" "false")} %)})
-                                                [{:id "ls-block-first-block"
-                                                  :block-uuid (:block/uuid first-block)}
-                                                 {:id "ls-block-sibling-block"
-                                                  :block-uuid (:block/uuid sibling-block)}
-                                                 {:id block-dom-id
-                                                  :block-uuid (:block/uuid block)}]))]
+                                                      :getAttribute #({"blockid" (str (:block-uuid m))
+                                                                       "data-embed" (if embed? "true" "false")} %)})
+                                               [{:id "ls-block-first-block"
+                                                 :block-uuid (:block/uuid first-block)}
+                                                {:id "ls-block-sibling-block"
+                                                 :block-uuid (:block/uuid sibling-block)}
+                                                {:id block-dom-id
+                                                 :block-uuid (:block/uuid block)}]))]
       (p/do!
        (editor/delete-block! test-helper/test-db)
        (when (fn? on-delete)
