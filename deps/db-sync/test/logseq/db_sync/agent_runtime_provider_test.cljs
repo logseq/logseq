@@ -701,3 +701,168 @@
                            (is (= "sbx-1" (:sandbox-id data)))
                            (is (= "sess-3" (:session-id data))))
                          (done)))))))
+
+(deftest cloudflare-provider-backup-restore-test
+  (async done
+         (runtime-provider/clear-cloudflare-backup-cache!)
+         (let [calls (atom {:clone 0
+                            :restore []
+                            :backups []})
+               backup-counter (atom 0)
+               sandboxes (atom {})
+               make-sandbox
+               (fn [sandbox-id]
+                 #js {:exec
+                      (fn [cmd]
+                        (cond
+                          (string/includes? cmd "/v1/health")
+                          (js/Promise.resolve #js {:success true})
+
+                          (string/includes? cmd "git clone --depth 1 --single-branch --no-tags")
+                          (do
+                            (swap! calls update :clone inc)
+                            (js/Promise.resolve #js {:success true}))
+
+                          :else
+                          (js/Promise.resolve #js {:success true :stdout "" :stderr ""})))
+                      :setEnvVars (fn [_] (js/Promise.resolve nil))
+                      :startProcess (fn [_] (js/Promise.resolve nil))
+                      :containerFetch
+                      (fn [_req _port]
+                        (js/Promise.resolve
+                         (js/Response.
+                          (js/JSON.stringify #js {:ok true})
+                          #js {:status 200 :headers #js {"content-type" "application/json"}})))
+                      :createBackup
+                      (fn [opts]
+                        (let [backup-id (str "backup-" (swap! backup-counter inc))]
+                          (swap! calls update :backups conj {:sandbox-id sandbox-id
+                                                             :opts (js->clj opts :keywordize-keys true)
+                                                             :id backup-id})
+                          (js/Promise.resolve #js {:id backup-id :dir (aget opts "dir")})))
+                      :restoreBackup
+                      (fn [backup]
+                        (swap! calls update :restore conj {:sandbox-id sandbox-id
+                                                           :backup (js->clj backup :keywordize-keys true)})
+                        (js/Promise.resolve #js {:success true}))
+                      :delete (fn [] (js/Promise.resolve nil))})
+               sandbox-ns
+               #js {:idFromName (fn [name] name)
+                    :get (fn [id]
+                           (or (get @sandboxes id)
+                               (let [sandbox (make-sandbox id)]
+                                 (swap! sandboxes assoc id sandbox)
+                                 sandbox)))}
+               env #js {"Sandbox" sandbox-ns
+                        "CLOUDFLARE_SANDBOX_AGENT_PORT" "8000"
+                        "GITHUB_DEFAULT_BASE_BRANCH" "main"}
+               provider (runtime-provider/create-provider env "cloudflare")
+               task {:agent {:provider "codex"}
+                     :project {:repo-url "https://github.com/example/repo"
+                               :base-branch "main"}}]
+           (-> (runtime-provider/<provision-runtime! provider "sess-bk-1" task)
+               (.then (fn [runtime-1]
+                        (is (= 1 (:clone @calls)))
+                        (-> (runtime-provider/<terminate-runtime! provider runtime-1)
+                            (.then (fn [_]
+                                     (is (= 1 (count (:backups @calls))))
+                                     (is (= 604800 (get-in @calls [:backups 0 :opts :ttl])))
+                                     (-> (runtime-provider/<provision-runtime! provider "sess-bk-2" task)
+                                         (.then (fn [_runtime-2]
+                                                  (is (= 1 (:clone @calls)))
+                                                  (is (= 1 (count (:restore @calls))))
+                                                  (is (= "backup-1"
+                                                         (get-in @calls [:restore 0 :backup :id])))
+                                                  (is (= "/workspace/sess-bk-2"
+                                                         (get-in @calls [:restore 0 :backup :dir])))
+                                                  (done)))
+                                         (.catch (fn [error]
+                                                   (is false (str "unexpected reprovision error: " error))
+                                                   (done))))))
+                            (.catch (fn [error]
+                                      (is false (str "unexpected terminate error: " error))
+                                      (done))))))
+               (.catch (fn [error]
+                         (is false (str "unexpected provision error: " error))
+                         (done)))))))
+
+(deftest cloudflare-provider-backup-single-pointer-per-repo-branch-test
+  (async done
+         (runtime-provider/clear-cloudflare-backup-cache!)
+         (let [calls (atom {:restore-ids []
+                            :backup-ids []})
+               backup-counter (atom 0)
+               sandboxes (atom {})
+               make-sandbox
+               (fn [_sandbox-id]
+                 #js {:exec
+                      (fn [cmd]
+                        (cond
+                          (string/includes? cmd "/v1/health")
+                          (js/Promise.resolve #js {:success true})
+                          (string/includes? cmd "git clone --depth 1 --single-branch --no-tags")
+                          (js/Promise.resolve #js {:success true})
+                          :else
+                          (js/Promise.resolve #js {:success true :stdout "" :stderr ""})))
+                      :setEnvVars (fn [_] (js/Promise.resolve nil))
+                      :startProcess (fn [_] (js/Promise.resolve nil))
+                      :containerFetch
+                      (fn [_req _port]
+                        (js/Promise.resolve
+                         (js/Response.
+                          (js/JSON.stringify #js {:ok true})
+                          #js {:status 200 :headers #js {"content-type" "application/json"}})))
+                      :createBackup
+                      (fn [_opts]
+                        (let [backup-id (str "backup-" (swap! backup-counter inc))]
+                          (swap! calls update :backup-ids conj backup-id)
+                          (js/Promise.resolve #js {:id backup-id :dir "/workspace"})))
+                      :restoreBackup
+                      (fn [backup]
+                        (swap! calls update :restore-ids conj (aget backup "id"))
+                        (js/Promise.resolve #js {:success true}))
+                      :delete (fn [] (js/Promise.resolve nil))})
+               sandbox-ns
+               #js {:idFromName (fn [name] name)
+                    :get (fn [id]
+                           (or (get @sandboxes id)
+                               (let [sandbox (make-sandbox id)]
+                                 (swap! sandboxes assoc id sandbox)
+                                 sandbox)))}
+               env #js {"Sandbox" sandbox-ns
+                        "CLOUDFLARE_SANDBOX_AGENT_PORT" "8000"
+                        "GITHUB_DEFAULT_BASE_BRANCH" "main"}
+               provider (runtime-provider/create-provider env "cloudflare")
+               task {:agent {:provider "codex"}
+                     :project {:repo-url "https://github.com/example/repo"
+                               :base-branch "main"}}]
+           (-> (runtime-provider/<provision-runtime! provider "sess-bk-a" task)
+               (.then (fn [runtime-a]
+                        (-> (runtime-provider/<terminate-runtime! provider runtime-a)
+                            (.then (fn [_]
+                                     (-> (runtime-provider/<provision-runtime! provider "sess-bk-b" task)
+                                         (.then (fn [runtime-b]
+                                                  (-> (runtime-provider/<terminate-runtime! provider runtime-b)
+                                                      (.then (fn [_]
+                                                               (-> (runtime-provider/<provision-runtime! provider "sess-bk-c" task)
+                                                                   (.then (fn [_runtime-c]
+                                                                            (is (= ["backup-1" "backup-2"]
+                                                                                   (:restore-ids @calls)))
+                                                                            (is (= ["backup-1" "backup-2"]
+                                                                                   (:backup-ids @calls)))
+                                                                            (done)))
+                                                                   (.catch (fn [error]
+                                                                             (is false (str "unexpected third provision error: " error))
+                                                                             (done))))))
+                                                      (.catch (fn [error]
+                                                                (is false (str "unexpected second terminate error: " error))
+                                                                (done))))))
+                                         (.catch (fn [error]
+                                                   (is false (str "unexpected second provision error: " error))
+                                                   (done))))))
+                            (.catch (fn [error]
+                                      (is false (str "unexpected first terminate error: " error))
+                                      (done))))))
+               (.catch (fn [error]
+                         (is false (str "unexpected first provision error: " error))
+                         (done)))))))

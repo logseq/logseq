@@ -121,6 +121,12 @@
 
 (def ^:private default-repo-base-dir "/workspace")
 (def ^:private cloudflare-local-host "http://localhost")
+(def ^:private cloudflare-backup-ttl-seconds (* 7 24 60 60))
+(defonce ^:private cloudflare-backup-cache (atom {}))
+
+(defn clear-cloudflare-backup-cache!
+  []
+  (reset! cloudflare-backup-cache {}))
 
 (defn- cloudflare-agent-port [^js env]
   (parse-int (env-str env "CLOUDFLARE_SANDBOX_AGENT_PORT") 2468))
@@ -369,6 +375,68 @@
 
 (defn- task-repo-url [task]
   (some-> (get-in task [:project :repo-url]) str string/trim not-empty))
+
+(defn- task-repo-branch
+  [^js env task]
+  (or (some-> (get-in task [:project :base-branch]) source-control/sanitize-branch-name)
+      (some-> (get-in task [:project :branch]) source-control/sanitize-branch-name)
+      (some-> (env-str env "GITHUB_DEFAULT_BASE_BRANCH") source-control/sanitize-branch-name)
+      "main"))
+
+(defn- repo-backup-key
+  [^js env task]
+  (let [repo-url (task-repo-url task)
+        branch (task-repo-branch env task)]
+    (when (and (string? repo-url) (string? branch))
+      (let [{:keys [provider owner name]} (source-control/repo-ref repo-url)
+            repo-key (if (and (string? provider)
+                              (string? owner)
+                              (string? name))
+                       (str provider
+                            "/"
+                            (string/lower-case owner)
+                            "/"
+                            (string/lower-case name))
+                       (string/lower-case repo-url))]
+        (str repo-key "#" (string/lower-case branch))))))
+
+(defn- prune-cloudflare-backup-cache!
+  []
+  (let [now (js/Date.now)]
+    (swap! cloudflare-backup-cache
+           (fn [entries]
+             (reduce-kv (fn [acc k v]
+                          (let [expires-at-ms (:expires-at-ms v)
+                                backup-id (:id v)]
+                            (if (and (string? k)
+                                     (string? backup-id)
+                                     (number? expires-at-ms)
+                                     (> expires-at-ms now))
+                              (assoc acc k v)
+                              acc)))
+                        {}
+                        entries)))))
+
+(defn- cloudflare-backup-entry
+  [backup-key]
+  (prune-cloudflare-backup-cache!)
+  (when (string? backup-key)
+    (get @cloudflare-backup-cache backup-key)))
+
+(defn- remember-cloudflare-backup!
+  [backup-key backup-id]
+  (when (and (string? backup-key) (string? backup-id))
+    (let [now (js/Date.now)
+          ttl-ms (* cloudflare-backup-ttl-seconds 1000)]
+      (swap! cloudflare-backup-cache assoc backup-key {:id backup-id
+                                                       :ttl-seconds cloudflare-backup-ttl-seconds
+                                                       :expires-at-ms (+ now ttl-ms)
+                                                       :updated-at-ms now}))))
+
+(defn- forget-cloudflare-backup!
+  [backup-key]
+  (when (string? backup-key)
+    (swap! cloudflare-backup-cache dissoc backup-key)))
 
 (defn- fill-repo-template
   [template {:keys [repo-url session-id repo-dir]}]
@@ -809,6 +877,72 @@
                              {:token token
                               :json-body (message-payload message)}))
 
+(defn- <cloudflare-restore-backup!
+  [^js sandbox backup-key target-dir]
+  (let [entry (cloudflare-backup-entry backup-key)
+        restore-backup (js-method sandbox "restoreBackup")]
+    (cond
+      (or (not (string? backup-key))
+          (not (string? target-dir))
+          (nil? entry))
+      (p/resolved false)
+
+      (not (fn? restore-backup))
+      (p/resolved false)
+
+      :else
+      (let [backup-id (:id entry)
+            backup #js {:id backup-id
+                        :dir target-dir}]
+        (-> (->promise (.call restore-backup sandbox backup))
+            (p/then (fn [_]
+                      (log/debug :agent/cloudflare-backup-restored
+                                 {:backup-key backup-key
+                                  :backup-id backup-id
+                                  :dir target-dir})
+                      true))
+            (p/catch (fn [error]
+                       (forget-cloudflare-backup! backup-key)
+                       (log/error :agent/cloudflare-backup-restore-failed
+                                  {:backup-key backup-key
+                                   :backup-id backup-id
+                                   :dir target-dir
+                                   :error (str error)})
+                       false)))))))
+
+(defn- <cloudflare-create-backup!
+  [^js sandbox backup-key source-dir]
+  (let [create-backup (js-method sandbox "createBackup")]
+    (cond
+      (or (not (string? backup-key))
+          (not (string? source-dir)))
+      (p/resolved nil)
+
+      (not (fn? create-backup))
+      (p/resolved nil)
+
+      :else
+      (-> (->promise (.call create-backup sandbox (clj->js {:dir source-dir
+                                                            :name backup-key
+                                                            :ttl cloudflare-backup-ttl-seconds})))
+          (p/then (fn [backup]
+                    (let [backup-id (aget backup "id")]
+                      (when (string? backup-id)
+                        (remember-cloudflare-backup! backup-key backup-id)
+                        (log/debug :agent/cloudflare-backup-created
+                                   {:backup-key backup-key
+                                    :backup-id backup-id
+                                    :dir source-dir
+                                    :ttl-seconds cloudflare-backup-ttl-seconds})
+                        {:id backup-id
+                         :dir source-dir}))))
+          (p/catch (fn [error]
+                     (log/error :agent/cloudflare-backup-create-failed
+                                {:backup-key backup-key
+                                 :dir source-dir
+                                 :error (str error)})
+                     nil))))))
+
 (defn- <cloudflare-clone-repo! [^js env sandbox session-id task]
   (when-let [cmd (repo-clone-command env session-id task "cloudflare")]
     (<cloudflare-exec! sandbox cmd)))
@@ -1084,25 +1218,34 @@
           sandbox (cloudflare-sandbox env sandbox-id)
           port (cloudflare-agent-port env)
           agent-token (env-str env "SANDBOX_AGENT_TOKEN")
-          payload (session-payload task)]
+          payload (session-payload task)
+          repo-dir (get-repo-dir session-id)
+          backup-key (repo-backup-key env task)]
       (log/debug :agent/cloudflare-provision-start
                  {:session-id session-id
                   :sandbox-id sandbox-id
                   :port port
-                  :token? (boolean (string? agent-token))})
+                  :token? (boolean (string? agent-token))
+                  :backup-key backup-key
+                  :repo-dir repo-dir})
       (p/let [_ (<cloudflare-ensure-running! env sandbox task port agent-token)
-              _ (<cloudflare-clone-repo! env sandbox session-id task)
+              restored? (<cloudflare-restore-backup! sandbox backup-key repo-dir)
+              _ (when-not restored?
+                  (<cloudflare-clone-repo! env sandbox session-id task))
               response (<cloudflare-create-session! sandbox port agent-token session-id payload)]
         (log/debug :agent/cloudflare-provisioned
                    {:session-id session-id
                     :sandbox-id sandbox-id
-                    :runtime-session-id (:session-id response)})
+                    :runtime-session-id (:session-id response)
+                    :backup-restored? restored?})
         {:provider "cloudflare"
          :sandbox-id sandbox-id
          :sandbox-name sandbox-id
          :sandbox-port port
          :agent-token agent-token
-         :session-id (:session-id response)})))
+         :session-id (:session-id response)
+         :backup-key backup-key
+         :backup-dir repo-dir})))
 
   (<open-events-stream! [_ runtime]
     (let [sandbox-id (:sandbox-id runtime)
@@ -1203,10 +1346,15 @@
 
   (<terminate-runtime! [_ runtime]
     (let [sandbox-id (:sandbox-id runtime)
-          session-id (:session-id runtime)]
+          session-id (:session-id runtime)
+          backup-key (:backup-key runtime)
+          backup-dir (or (:backup-dir runtime)
+                         (get-repo-dir session-id))]
       (log/debug :agent/cloudflare-terminate
                  {:session-id session-id
-                  :sandbox-id sandbox-id})
+                  :sandbox-id sandbox-id
+                  :backup-key backup-key
+                  :backup-dir backup-dir})
       (if-not (string? sandbox-id)
         (p/resolved nil)
         (let [sandbox (cloudflare-sandbox env sandbox-id)
@@ -1214,7 +1362,10 @@
               agent-token (or (:agent-token runtime)
                               (env-str env "SANDBOX_AGENT_TOKEN"))]
           (p/catch
-           (p/let [_ (when (string? session-id)
+           (p/let [_ (p/catch
+                      (<cloudflare-create-backup! sandbox backup-key backup-dir)
+                      (fn [_] nil))
+                   _ (when (string? session-id)
                        (p/catch
                         (<cloudflare-terminate-session! sandbox port agent-token session-id)
                         (fn [_] nil)))
