@@ -185,6 +185,23 @@
   [repo]
   (some #(= repo (:url %)) (state/get-rtc-graphs)))
 
+(defn- graph-has-local-rtc-id?
+  [repo]
+  (boolean (some-> (db/get-db repo)
+                   ldb/get-graph-rtc-uuid)))
+
+(defn- remote-graphs-unknown?
+  []
+  (not= false (:rtc/loading-graphs? @state/state)))
+
+(defn- should-start-rtc?
+  [repo]
+  (or (graph-in-remote-list? repo)
+      ;; During startup, remote graph list might not be fetched yet.
+      ;; If local DB already has graph UUID, start optimistically to reduce cold-start latency.
+      (and (remote-graphs-unknown?)
+           (graph-has-local-rtc-id? repo))))
+
 (defn- normalize-graph-e2ee?
   [graph-e2ee?]
   (if (nil? graph-e2ee?)
@@ -193,12 +210,14 @@
 
 (defn <rtc-start!
   [repo & {:keys [_stop-before-start?] :as _opts}]
-  (if (graph-in-remote-list? repo)
+  (if (should-start-rtc? repo)
     (do
       (log/info :db-sync/start {:repo repo})
       (state/<invoke-db-worker :thread-api/db-sync-start repo))
     (do
-      (log/info :db-sync/skip-start {:repo repo :reason :graph-not-in-remote-list})
+      (log/info :db-sync/skip-start {:repo repo :reason :graph-not-in-remote-list
+                                     :remote-graphs-loading? (:rtc/loading-graphs? @state/state)
+                                     :has-local-rtc-id? (graph-has-local-rtc-id? repo)})
       (p/resolved nil))))
 
 (defn <rtc-stop!
