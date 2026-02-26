@@ -20,3 +20,4 @@ Milestones are tracked as separate files in this folder:
 - `14-m14-git-push-and-optional-pr.md`
 - `15-m15-thread-chat-browser-terminal.md`
 - `16-m16-cloudflare-sandbox-backup-restore.md`
+- `17-m17-separate-agents-worker-from-db-sync.md`
