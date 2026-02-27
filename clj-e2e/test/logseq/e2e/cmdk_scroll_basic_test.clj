@@ -191,3 +191,84 @@
                   return er.top >= cr.top - 5 && er.bottom <= cr.bottom + 5;
                 })()")))
         "after settle, highlight is in viewport")))
+
+;; ---------------------------------------------------------------------------
+;; Lazy-visible keyboard scroll verification
+;;
+;; Goal:
+;;   Verify that keyboard navigation scrolls correctly through :nodes items
+;;   that are wrapped in lazy-visible (disable-lazy? = false, show = :more).
+;;   This exercises the data-item-index wrapper-div DOM query path in
+;;   move-highlight, which finds the wrapper even when the inner list-item
+;;   has not been mounted by IntersectionObserver.
+;;
+;; How to reach the lazy + expanded state:
+;;   In :less mode (default), :nodes shows at most 10 items.
+;;   10 items × 32 px = 320 px — fits in the 468 px viewport.
+;;   All items are in-view so IntersectionObserver renders them immediately;
+;;   lazy-visible is irrelevant.  We need :more mode (all items rendered)
+;;   with lazy still enabled.
+;;
+;;   1. Ctrl+ArrowDown — expands :nodes (show = :more, disable-lazy? = true).
+;;   2. Backspace — deletes the last input character.  This triggers
+;;      load-results :default which resets disable-lazy? = false.
+;;      The :show :more state for :nodes is preserved because
+;;      load-results :nodes uses `merge` (does not touch :show).
+;;   Result: :nodes is expanded (all 30 items) BUT lazy-visible is active.
+;;
+;; Why this is the real-world bug path:
+;;   Users often expand results, tweak the query, then keep navigating.
+;;   The input change resets disable-lazy? while leaving :more intact,
+;;   creating the exact condition where lazy items exist below the viewport.
+;;
+;; Layout:
+;;   viewport_height = 65dvh × 720 px (Playwright default) = 468 px
+;;   item_height ≈ 32 px,  group_header = 32 px
+;;   Create (32) + nodes header (32) + 30 nodes items (30 × 32 = 960)
+;;     = 1024 px total — significantly exceeds viewport
+;;   Navigating 20 items → top ≈ 32 + 32 + 20×32 = 704 px
+;;     → far below viewport bottom (468 px), deep into lazy territory
+;; ---------------------------------------------------------------------------
+
+(deftest cmdk-lazy-visible-keyboard-scroll
+  (testing "keyboard navigation scrolls through lazy-visible :nodes items after input change"
+    (setup-search "cmdklazy" 30)
+
+    ;; 1. Expand :nodes group — sets :show :more AND disable-lazy? = true.
+    (k/arrow-down)
+    (util/wait-timeout 100)
+    (k/press "ControlOrMeta+ArrowDown")
+    (util/wait-timeout 300)
+
+    ;; 2. Delete last input char ("cmdklazy" → "cmdklaz").
+    ;; Same pages match, but load-results :default fires, which:
+    ;;   • resets disable-lazy? = false  (lazy-visible re-enabled)
+    ;;   • calls load-results :nodes with merge (preserves :show :more)
+    ;; After this, :nodes shows all 30 items wrapped in lazy-visible.
+    (k/press "Backspace")
+    (util/wait-timeout 800)  ;; 200 ms debounce + async search + render
+
+    ;; 3. Navigate down 20 steps — well past the viewport into lazy items.
+    (k/press (vec (repeat 20 "ArrowDown")) {:delay 30})
+    (util/wait-timeout 300)
+
+    ;; 4. Verify keyboard highlight exists.
+    (is (= 1 (util/count-elements kbd-highlight))
+        "keyboard highlight present after navigating through lazy items")
+
+    ;; 5. Verify the highlighted element is within the visible scroll area.
+    ;; Without the data-item-index fix, move-highlight's querySelector
+    ;; would fail on lazy items whose list-item was not yet mounted,
+    ;; and scroll-to-highlight! would never be called — leaving the
+    ;; highlight invisible below the viewport.
+    (is (true?
+         (w/eval-js
+          (str "(() => {
+                  const el = document.querySelector('" kbd-highlight "');
+                  if (!el) return false;
+                  const c  = document.querySelector('" scroll-container "');
+                  const cr = c.getBoundingClientRect();
+                  const er = el.getBoundingClientRect();
+                  return er.top >= cr.top - 5 && er.bottom <= cr.bottom + 5;
+                })()")))
+        "highlight is in viewport after navigating through lazy-visible items")))
