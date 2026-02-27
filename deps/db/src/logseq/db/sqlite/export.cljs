@@ -58,14 +58,20 @@
         (entity-util/journal? pvalue)
         [:build/page {:build/journal (:block/journal-day pvalue)}]))
 
-(defn- build-pvalue-entity-default [ent-properties pvalue
+(defn- build-pvalue-entity-default [ent-properties build-children pvalue
                                     {:keys [include-pvalue-uuid-fn]
                                      :or {include-pvalue-uuid-fn (constantly false)}
                                      :as options}]
   (let [property-value-content' (property-value-content pvalue)]
-    (if (or (seq ent-properties) (seq (:block/tags pvalue)) (include-pvalue-uuid-fn (:block/uuid pvalue)))
+    (if (or (seq ent-properties)
+            (seq build-children)
+            (seq (:block/tags pvalue))
+            (include-pvalue-uuid-fn (:block/uuid pvalue)))
       (cond-> {:build/property-value :block
                :block/title property-value-content'}
+        (seq build-children)
+        (assoc :build/children build-children)
+
         (seq (:block/tags pvalue))
         (assoc :build/tags (->build-tags (:block/tags pvalue)))
 
@@ -80,6 +86,8 @@
       property-value-content')))
 
 (defonce ignored-properties [:logseq.property/created-by-ref :logseq.property.embedding/hnsw-label-updated-at])
+;; buildable-properties and build-blocks-export depend on each other
+(declare build-blocks-export)
 
 (defn- buildable-properties
   "Originally copied from db-test/readable-properties. Modified so that property values are
@@ -97,12 +105,16 @@
                   ;; Use metadata to distinguish from block references that don't exist like closed values
                   ^::existing-property-value? [:block/uuid (:block/uuid pvalue)])
                 (or (:db/ident pvalue)
-                    (let [ent-properties* (apply dissoc (db-property/properties pvalue)
-                                                 :logseq.property/value :logseq.property/created-from-property
+                    (let [ent-properties* (apply dissoc (db-property/properties pvalue) :logseq.property/value :logseq.property/created-from-property
                                                  db-property/public-db-attribute-properties)
+                          child-blocks (rest (ldb/get-block-and-children db' (:block/uuid pvalue)))
+                          build-children (when (seq child-blocks)
+                                           ;; TODO: Handle new properties and classes for non :graph exports
+                                           (:blocks (build-blocks-export db' child-blocks
+                                                                         (dissoc options' :include-uuid-fn :include-pvalue-uuid-fn))))
                           ent-properties (when (and (not (:block/closed-value-property pvalue)) (seq ent-properties*))
                                            (buildable-properties db' ent-properties* properties-config' options'))]
-                      (build-pvalue-entity-default ent-properties pvalue options'))))))]
+                      (build-pvalue-entity-default ent-properties build-children pvalue options'))))))]
     (->> (apply dissoc ent-properties ignored-properties)
          (map (fn [[k v]]
                 [k
@@ -510,7 +522,7 @@
                         ;; Keep property value as map if uuid is referenced or it has unique attributes
                         (if (or (contains? ref-uuids (:block/uuid v))
                                ;; Keep this in sync with build-pvalue-entity-default
-                                ((some-fn :build/tags :build/properties) v))
+                                ((some-fn :build/tags :build/properties :build/children) v))
                           v
                           (:block/title v))
                         v))]
@@ -520,6 +532,14 @@
                                  (set (map shrink-property-value v))
                                  (shrink-property-value v)))))))))
 
+(defn- pvalue-descendant? [block]
+  (loop [parent (:block/parent block)]
+    (if-not parent
+      false
+      (if (:logseq.property/created-from-property parent)
+        true
+        (recur (:block/parent parent))))))
+
 (defn- build-page-export*
   "When given the :handle-block-uuids option, handle uuid references between
   blocks including property value blocks"
@@ -527,8 +547,9 @@
   (let [page-entity (d/entity db eid)
         page-blocks (->> page-blocks*
                          (sort-by :block/order)
-                         ;; Remove property value blocks as they are exported in a block's :build/properties
-                         (remove :logseq.property/created-from-property))
+                         ;; Remove property value blocks and their children as they are exported in :build/properties
+                         (remove #(or (:logseq.property/created-from-property %)
+                                      (pvalue-descendant? %))))
         {:keys [pvalue-uuids] :as blocks-export*}
         (build-blocks-export db page-blocks (cond-> options
                                               handle-block-uuids?
