@@ -529,11 +529,18 @@
     (or (boolean (:source-block item))
         (and block-uuid (:block/name (db/entity [:block/uuid block-uuid]))))))
 
+(defn- event-shift?
+  [event]
+  (boolean
+   (cond
+     (map? event) (:shift? event)
+     :else (gobj/getValueByKeys event "shiftKey"))))
+
 (defmethod handle-action :open [_ state event]
   (when-let [item (some-> state state->highlighted-item)]
     (let [page? (page-item? item)
           block? (boolean (:source-block item))
-          shift?  @(::shift? state)
+          shift?  (event-shift? event)
           shift-or-sidebar? (or shift? (boolean (:open-sidebar? (:opts state))))
           search-mode (:search/mode @state/state)
           graph-view? (= search-mode :graph)]
@@ -738,7 +745,7 @@
                      :on-click (fn [e]
                                  (util/stop-propagation e)
                                  (reset! (::highlighted-item state) item)
-                                 (handle-action :default state item)
+                                 (handle-action :default state e)
                                  (when-let [on-click (:on-click item)]
                                    (on-click e)))
                      :on-mouse-enter (fn [_e]
@@ -923,8 +930,7 @@
 
 (defn- keydown-handler
   [state e]
-  (let [shift? (.-shiftKey e)
-        meta? (util/meta-key? e)
+  (let [meta? (util/meta-key? e)
         ctrl? (.-ctrlKey e)
         keyname (.-key e)
         enter? (= keyname "Enter")
@@ -936,7 +942,6 @@
         input @(::input state)
         as-keydown? (or (= keyname "ArrowDown") (and ctrl? (= keyname "n")))
         as-keyup? (or (= keyname "ArrowUp") (and ctrl? (= keyname "p")))]
-    (reset! (::shift? state) shift?)
     (when (or as-keydown? as-keyup?)
       (util/stop e))
 
@@ -986,9 +991,7 @@
 
 (defn- keyup-handler
   [state e]
-  (let [shift? (.-shiftKey e)
-        keyname (.-key e)]
-    (reset! (::shift? state) shift?)
+  (let [keyname (.-key e)]
     ;; Reset acceleration when arrow key is released
     (when (or (= keyname "ArrowDown") (= keyname "ArrowUp"))
       (reset! (::accel-start-ts state) nil))))
@@ -1180,7 +1183,6 @@
     (when (nil? raw-search-mode)
       (state/set-state! :search/mode :global))
     (assoc state
-           ::shift? (atom false)
            ::ref (atom nil)
            ::filter (atom filter-group)
            ::input (atom input)
