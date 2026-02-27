@@ -2520,8 +2520,10 @@
           ready? (agent-handler/task-ready? block)
           running? (contains? #{"running" "paused"} status)
           session-started? (boolean (:session-id session))
+          session-created? (or session-started?
+                               (true? (pu/get-block-property-value block :logseq.property/agent-session-created?)))
           btn-title (if ready?
-                      (if session-started? "Open chat" "Run agent")
+                      (if session-created? "Open chat" "Run agent")
                       "Set Project + Agent + Git Repo")]
       [:div.flex.flex-row.items-center.gap-1
        (shui/button
@@ -2535,7 +2537,7 @@
                      (agent-chat/open-agent-chat-dialog! block))}
         (cond
           running? "Running"
-          session-started? "Thread"
+          session-created? "Thread"
           :else "Run"))])))
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive

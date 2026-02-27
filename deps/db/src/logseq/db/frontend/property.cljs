@@ -425,6 +425,12 @@
             [[:logseq.property/agent.codex "Codex"]
              [:logseq.property/agent.claude-code "Claude Code"]])
       :queryable? true}
+     :logseq.property/agent-session-created?
+     {:title "Agent session created?"
+      :schema {:type :checkbox
+               :public? false
+               :hide? true}
+      :queryable? false}
      :logseq.property/git-repo
      {:title "Git Repo"
       :schema {:type :url

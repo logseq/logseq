@@ -211,6 +211,7 @@
    "completed" :logseq.property/status.done
    "failed" :logseq.property/status.canceled
    "canceled" :logseq.property/status.canceled})
+(def ^:private task-session-created-property :logseq.property/agent-session-created?)
 
 (defn- terminal-status? [status]
   (contains? #{"completed" "failed" "canceled"} status))
@@ -245,6 +246,12 @@
             desired (status->label status-ident)]
         (when (and desired (not= current desired))
           (property-handler/set-block-property! block-uuid :logseq.property/status status-ident))))))
+
+(defn- mark-task-session-created!
+  [block-uuid]
+  (when-let [block (db/entity [:block/uuid block-uuid])]
+    (when-not (true? (pu/get-block-property-value block task-session-created-property))
+      (property-handler/set-block-property! block-uuid task-session-created-property true))))
 
 (defn- update-session!
   [block-uuid f]
@@ -475,6 +482,7 @@
 
         (:session-id session)
         (do
+          (mark-task-session-created! block-uuid)
           (when-not (:streaming? session)
             (<connect-session-stream! block-uuid (or (:stream-url session)
                                                      (session-stream-url base session-id))))
@@ -493,6 +501,7 @@
                                                    :terminal-enabled (true? (:terminal-enabled resp))
                                                    :stream-url stream-url
                                                    :loading? false})
+                (mark-task-session-created! block-uuid)
                 (maybe-update-task-status! block-uuid (:status resp))
                 (<connect-session-stream! block-uuid stream-url)
                 resp)
@@ -550,6 +559,7 @@
                                                 :terminal-enabled (true? (:terminal-enabled resp))
                                                 :stream-url stream-url
                                                 :started-at (util/time-ms)})
+             (mark-task-session-created! block-uuid)
              (<connect-session-stream! block-uuid stream-url)
              resp)))))))
 
