@@ -100,8 +100,10 @@
     (let [conn (db-test/create-conn)]
       (testing "#Task shouldn't be converted to property"
         (is (thrown? js/Error
-                     (with-out-str (ldb/transact! conn [{:db/ident :logseq.class/Task
-                                                         :block/tags :logseq.class/Property}])))))
+                     (with-out-str
+                       (db-test/silence-stderr
+                        (ldb/transact! conn [{:db/ident :logseq.class/Task
+                                              :block/tags :logseq.class/Property}]))))))
       (ldb/transact-with-temp-conn!
        conn
        {}
