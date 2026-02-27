@@ -46,10 +46,10 @@
   [s]
   (when (seq s)
     (let [s (str s)
-          stripped (loop [name s]
-                     (if (string/starts-with? name db-version-prefix)
-                       (recur (subs name (count db-version-prefix)))
-                       name))]
+          stripped (loop [name' s]
+                     (if (string/starts-with? name' db-version-prefix)
+                       (recur (subs name' (count db-version-prefix)))
+                       name'))]
       (str db-version-prefix stripped))))
 
 (defonce local-assets-dir "assets")
