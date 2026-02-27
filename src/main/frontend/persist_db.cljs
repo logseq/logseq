@@ -55,7 +55,9 @@
   [& {:keys [succ-notification? force-save?]}]
   (when (util/electron?)
     (when-let [repo (state/get-current-repo)]
-      (when (or (graph-has-changed? repo) force-save?)
+      (when (or force-save? 
+                (and (graph-has-changed? repo)
+                     (state/input-idle? repo :diff 5000)))
         (println :debug :save-db-to-disk repo)
         (->
          (p/do!

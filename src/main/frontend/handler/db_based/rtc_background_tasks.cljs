@@ -32,14 +32,14 @@
         (c.m/<? (rtc-handler/<rtc-start! (state/get-current-repo) :stop-before-start? false)))))))
 
 (run-background-task-when-not-publishing
- ;; stop rtc when [graph-switch user-logout]
+ ;; stop rtc when [user-logout]
  ::stop-rtc-if-needed
  (m/reduce
   (constantly nil)
   (m/ap
-    (let [logout-or-graph-switch (m/?> rtc-flows/logout-or-graph-switch-flow)]
-      (log/info :try-to-stop-rtc-if-needed logout-or-graph-switch)
-      (c.m/<? (rtc-handler/<rtc-stop!))))))
+    (m/?> rtc-flows/logout-flow)
+    (log/info :try-to-stop-rtc-if-needed :logout)
+    (c.m/<? (rtc-handler/<rtc-stop!)))))
 
 (run-background-task-when-not-publishing
  ;; auto-start rtc when [user-login graph-switch]

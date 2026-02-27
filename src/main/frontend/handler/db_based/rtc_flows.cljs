@@ -71,14 +71,10 @@ conditions:
                     {:graph-uuid graph-uuid :t (common-util/time-ms)})))))
        (c.m/throttle 5000)))
 
-(def logout-or-graph-switch-flow
-  (c.m/mix
-   (m/eduction
-    (filter #(= :logout %))
-    flows/current-login-user-flow)
-   (m/eduction
-    (keep (fn [repo] (when repo :graph-switch)))
-    flows/current-repo-flow)))
+(def logout-flow
+  (m/eduction
+   (filter #(= :logout %))
+   flows/current-login-user-flow))
 
 (def ^:private *rtc-start-trigger (atom nil))
 (defn trigger-rtc-start
@@ -153,4 +149,4 @@ conditions:
    (apply c.m/mix)
    (m/latest vector flows/current-login-user-flow)
    (m/eduction (keep (fn [[current-user trigger-event]] (when current-user trigger-event))))
-   (c.m/debounce 200)))
+   (c.m/debounce 50)))

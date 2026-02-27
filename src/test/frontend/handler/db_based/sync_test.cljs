@@ -85,14 +85,14 @@
 
 (deftest rtc-start-skips-when-graph-missing-from-remote-list-test
   (async done
-         (let [called (atom nil)]
+         (let [called (atom [])]
            (-> (p/with-redefs [state/get-rtc-graphs (fn [] [{:url "repo-other"}])
                                state/<invoke-db-worker (fn [& args]
-                                                         (reset! called args)
+                                                         (swap! called conj args)
                                                          (p/resolved :ok))]
                  (db-sync/<rtc-start! "repo-current"))
                (p/then (fn [_]
-                         (is (nil? @called))
+                         (is (= [[:thread-api/db-sync-stop]] @called))
                          (done)))
                (p/catch (fn [e]
                           (is false (str e))
@@ -109,6 +109,48 @@
                (p/then (fn [_]
                          (is (= [:thread-api/db-sync-start "repo-current"] @called))
                          (done)))
+               (p/catch (fn [e]
+                          (is false (str e))
+                          (done)))))))
+
+(deftest rtc-start-waits-for-db-worker-before-start-test
+  (async done
+         (let [worker (atom nil)
+               called (atom [])]
+           (-> (p/with-redefs [state/get-rtc-graphs (fn [] [{:url "repo-current"}])
+                               state/*db-worker worker]
+                 (p/let [start-p (db-sync/<rtc-start! "repo-current")
+                         _ (p/delay 30)
+                         _ (is (empty? @called))
+                         _ (reset! worker
+                                   (fn [qkw direct-pass? & args]
+                                     (swap! called conj [qkw direct-pass? args])
+                                     (p/resolved :ok)))
+                         _ start-p]
+                   (is (= [[:thread-api/db-sync-start false ["repo-current"]]]
+                          @called))
+                   (done)))
+               (p/catch (fn [e]
+                          (is false (str e))
+                          (done)))))))
+
+(deftest rtc-start-waits-for-db-worker-before-stop-test
+  (async done
+         (let [worker (atom nil)
+               called (atom [])]
+           (-> (p/with-redefs [state/get-rtc-graphs (fn [] [{:url "repo-other"}])
+                               state/*db-worker worker]
+                 (p/let [start-p (db-sync/<rtc-start! "repo-current")
+                         _ (p/delay 30)
+                         _ (is (empty? @called))
+                         _ (reset! worker
+                                   (fn [qkw direct-pass? & args]
+                                     (swap! called conj [qkw direct-pass? args])
+                                     (p/resolved :ok)))
+                         _ start-p]
+                   (is (= [[:thread-api/db-sync-stop false []]]
+                          @called))
+                   (done)))
                (p/catch (fn [e]
                           (is false (str e))
                           (done)))))))

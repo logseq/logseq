@@ -9,6 +9,9 @@ binding = "CF_VERSION_METADATA"
 [observability]
 enabled = true
 
+[observability.logs]
+invocation_logs = false
+
 [[durable_objects.bindings]]
 name = "LOGSEQ_SYNC_DO"
 class_name = "SyncDO"
