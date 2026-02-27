@@ -139,7 +139,7 @@
   (testing "lerp animation smoothly scrolls highlight into view (faster than native smooth)"
     (setup-search "cmdklerp" 20)
 
-    ;; Set highlighted-group, then expand (show all items, disable lazy).
+    ;; Set highlighted-group, then expand (show all items).
     (k/arrow-down)
     (util/wait-timeout 100)
     (k/press "ControlOrMeta+ArrowDown")
@@ -197,29 +197,10 @@
 ;;
 ;; Goal:
 ;;   Verify that keyboard navigation scrolls correctly through :nodes items
-;;   that are wrapped in lazy-visible (disable-lazy? = false, show = :more).
+;;   that are wrapped in lazy-visible (always active for :nodes group).
 ;;   This exercises the data-item-index wrapper-div DOM query path in
 ;;   move-highlight, which finds the wrapper even when the inner list-item
-;;   has not been mounted by IntersectionObserver.
-;;
-;; How to reach the lazy + expanded state:
-;;   In :less mode (default), :nodes shows at most 10 items.
-;;   10 items × 32 px = 320 px — fits in the 468 px viewport.
-;;   All items are in-view so IntersectionObserver renders them immediately;
-;;   lazy-visible is irrelevant.  We need :more mode (all items rendered)
-;;   with lazy still enabled.
-;;
-;;   1. Ctrl+ArrowDown — expands :nodes (show = :more, disable-lazy? = true).
-;;   2. Backspace — deletes the last input character.  This triggers
-;;      load-results :default which resets disable-lazy? = false.
-;;      The :show :more state for :nodes is preserved because
-;;      load-results :nodes uses `merge` (does not touch :show).
-;;   Result: :nodes is expanded (all 30 items) BUT lazy-visible is active.
-;;
-;; Why this is the real-world bug path:
-;;   Users often expand results, tweak the query, then keep navigating.
-;;   The input change resets disable-lazy? while leaving :more intact,
-;;   creating the exact condition where lazy items exist below the viewport.
+;;   has not yet been mounted by IntersectionObserver.
 ;;
 ;; Layout:
 ;;   viewport_height = 65dvh × 720 px (Playwright default) = 468 px
@@ -231,36 +212,24 @@
 ;; ---------------------------------------------------------------------------
 
 (deftest cmdk-lazy-visible-keyboard-scroll
-  (testing "keyboard navigation scrolls through lazy-visible :nodes items after input change"
+  (testing "keyboard navigation scrolls through lazy-visible :nodes items"
     (setup-search "cmdklazy" 30)
 
-    ;; 1. Expand :nodes group — sets :show :more AND disable-lazy? = true.
+    ;; Expand :nodes group — sets :show :more.
     (k/arrow-down)
     (util/wait-timeout 100)
     (k/press "ControlOrMeta+ArrowDown")
     (util/wait-timeout 300)
 
-    ;; 2. Delete last input char ("cmdklazy" → "cmdklaz").
-    ;; Same pages match, but load-results :default fires, which:
-    ;;   • resets disable-lazy? = false  (lazy-visible re-enabled)
-    ;;   • calls load-results :nodes with merge (preserves :show :more)
-    ;; After this, :nodes shows all 30 items wrapped in lazy-visible.
-    (k/press "Backspace")
-    (util/wait-timeout 800)  ;; 200 ms debounce + async search + render
-
-    ;; 3. Navigate down 20 steps — well past the viewport into lazy items.
+    ;; Navigate down 20 steps — well past the viewport into lazy items.
     (k/press (vec (repeat 20 "ArrowDown")) {:delay 30})
     (util/wait-timeout 300)
 
-    ;; 4. Verify keyboard highlight exists.
+    ;; Verify keyboard highlight exists.
     (is (= 1 (util/count-elements kbd-highlight))
         "keyboard highlight present after navigating through lazy items")
 
-    ;; 5. Verify the highlighted element is within the visible scroll area.
-    ;; Without the data-item-index fix, move-highlight's querySelector
-    ;; would fail on lazy items whose list-item was not yet mounted,
-    ;; and scroll-to-highlight! would never be called — leaving the
-    ;; highlight invisible below the viewport.
+    ;; Verify the highlighted element is within the visible scroll area.
     (is (true?
          (w/eval-js
           (str "(() => {
