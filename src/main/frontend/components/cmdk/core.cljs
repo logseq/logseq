@@ -111,7 +111,8 @@
            (remove nil?)))))
 
 ;; Take the results, decide how many items to show, and order the results appropriately
-(defn state->results-ordered [state search-mode]
+(defn state->results-ordered
+  [state search-mode]
   (let [sidebar? (:sidebar? (last (:rum/args state)))
         results @(::results state)
         input @(::input state)
@@ -189,9 +190,7 @@
 
 (defn state->highlighted-item [state]
   (or (some-> state ::highlighted-item deref)
-      (some->> (state->results-ordered state (:search/mode @state/state))
-               (mapcat last)
-               (first))))
+      (first @(::all-items-cache state))))
 
 (defn state->action [state]
   (let [highlighted-item (state->highlighted-item state)
