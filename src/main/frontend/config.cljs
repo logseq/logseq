@@ -28,6 +28,7 @@
 (if ENABLE-FILE-SYNC-PRODUCTION
   (do (def LOGIN-URL
         "https://logseq-prod.auth.us-east-1.amazoncognito.com/login?client_id=3c7np6bjtb4r1k1bi9i049ops5&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
+      ;; TODO: move user_info api to cloudflare workers
       (def API-DOMAIN "api.logseq.com")
       (def COGNITO-IDP "https://cognito-idp.us-east-1.amazonaws.com/")
       (def COGNITO-CLIENT-ID "69cs1lgme7p8kbgld8n5kseii6")
@@ -57,12 +58,12 @@
 (defonce db-sync-ws-url
   (if db-sync-local?
     "ws://127.0.0.1:8787/sync/%s"
-    "wss://logseq-sync-prod.logseq.workers.dev/sync/%s"))
+    "wss://api.logseq.io/sync/%s"))
 
 (defonce db-sync-http-base
   (if db-sync-local?
     "http://127.0.0.1:8787"
-    "https://logseq-sync-prod.logseq.workers.dev"))
+    "https://api.logseq.io"))
 
 ;; Feature flags
 ;; =============
