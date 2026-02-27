@@ -61,18 +61,36 @@
                 :repo-url repo-url}
          (string? base-branch) (assoc :base-branch base-branch))))))
 
+(defn- block-line-content
+  [block]
+  (blank->nil (:block/title block)))
+
+(defn- block-tree->lines
+  ([block]
+   (block-tree->lines block 0))
+  ([block depth]
+   (let [indent (apply str (repeat (max 0 depth) "  "))
+         content (block-line-content block)
+         children (:block/_parent block)
+         own-line (when (string? content)
+                    [(str indent "- " content)])
+         child-lines (mapcat #(block-tree->lines % (inc depth)) children)]
+     (into (or own-line [])
+           child-lines))))
+
+(defn- task-content
+  [block]
+  (let [lines (block-tree->lines block)]
+    (some->> lines seq (string/join "\n"))))
+
 (defn- task-context
   ([block]
    (task-context block nil))
   ([block opts]
    (let [block-uuid (:block/uuid block)
          node-id (some-> block-uuid str)
-         node-title (or (blank->nil (:block/raw-title block))
-                        (blank->nil (:block/title block))
-                        "")
-         content (or (blank->nil (:block/raw-title block))
-                     (blank->nil (:block/title block))
-                     "")
+         node-title (blank->nil (:block/title block))
+         content (task-content block)
          project-page (:logseq.property/project block)
          agent-page (:logseq.property/agent block)
          project (when project-page (project-config project-page opts))
