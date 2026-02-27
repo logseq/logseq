@@ -267,20 +267,16 @@
   []
   "main")
 
-(defn- github-default-branch-token
-  [^js env]
-  (or (source-control/push-token env)
-      (source-control/pr-token env)))
-
-(defn- github-branches-token
-  [^js env]
-  (or (source-control/push-token env)
-      (source-control/pr-token env)))
-
 (defn- task-requested-base-branch
   [task]
   (or (some-> (get-in task [:project :base-branch]) source-control/sanitize-branch-name)
       (some-> (get-in task [:project :branch]) source-control/sanitize-branch-name)))
+
+(defn- github-install-required-message
+  [install-url]
+  (if (string? install-url)
+    (str "GitHub App is not installed for this repository. Install it and retry: " install-url)
+    "GitHub App is not installed for this repository. Install it and retry."))
 
 (defn- <ensure-task-base-branch!
   [^js env task]
@@ -301,7 +297,7 @@
 
       :else
       (p/let [detected-base (source-control/<default-branch! env
-                                                             (github-default-branch-token env)
+                                                             nil
                                                              repo-url)
               detected-base (source-control/sanitize-branch-name detected-base)
               fallback-base (source-control/sanitize-branch-name (default-base-branch))
@@ -567,24 +563,36 @@
                      (http/forbidden)
 
                      :else
-                     (p/let [task (<ensure-task-base-branch! (.-env self) task)]
-                       (let [session (session/initial-session task audit now)
-                             [session events _event] (session/append-event session [] {:type "session.created"
-                                                                                       :data {:requested-by user-id
-                                                                                              :project (:project task)
-                                                                                              :agent (:agent task)}
-                                                                                       :ts now})]
-                         (p/let [_ (<put-session! self session)
-                                 _ (<put-events! self events)
-                                 _ (<provision-runtime! self task task-id)
-                                 updated-session (<get-session self)]
-                           (http/json-response :sessions/create
-                                               {:session-id task-id
-                                                :status (or (:status updated-session)
-                                                            (:status session))
-                                                :runtime-provider (session-runtime-provider updated-session)
-                                                :terminal-enabled (session-terminal-enabled? updated-session)
-                                                :stream-url (stream-url request task-id)}))))))))))))
+                     (p/let [repo-url (some-> (get-in task [:project :repo-url]) str string/trim not-empty)
+                             install-status (-> (if (string? repo-url)
+                                                  (source-control/<repo-installation-status! (.-env self) repo-url)
+                                                  (p/resolved {:installed? true}))
+                                                (p/catch (fn [error]
+                                                           {:error error})))]
+                       (if (:error install-status)
+                         (http/error-response "failed to verify GitHub App installation" 500)
+                         (if (and (map? install-status)
+                                  (false? (:installed? install-status)))
+                           (http/error-response (github-install-required-message (:install-url install-status)) 412)
+                           (p/let [task (<ensure-task-base-branch! (.-env self) task)]
+                             (let [session (session/initial-session task audit now)
+                                   [session events _event]
+                                   (session/append-event session [] {:type "session.created"
+                                                                     :data {:requested-by user-id
+                                                                            :project (:project task)
+                                                                            :agent (:agent task)}
+                                                                     :ts now})]
+                               (p/let [_ (<put-session! self session)
+                                       _ (<put-events! self events)
+                                       _ (<provision-runtime! self task task-id)
+                                       updated-session (<get-session self)]
+                                 (http/json-response :sessions/create
+                                                     {:session-id task-id
+                                                      :status (or (:status updated-session)
+                                                                  (:status session))
+                                                      :runtime-provider (session-runtime-provider updated-session)
+                                                      :terminal-enabled (session-terminal-enabled? updated-session)
+                                                      :stream-url (stream-url request task-id)})))))))))))))))
 
 (defn- handle-status [^js self _request]
   (p/let [session (<get-session self)]
@@ -741,12 +749,11 @@
 
 (defn- <handle-pr-after-push!
   [^js self current-session body user-id repo-url head-branch force? create-pr?]
-  (p/let [pr-token (source-control/pr-token (.-env self))
-          requested-base-branch (source-control/sanitize-branch-name (:base-branch body))
+  (p/let [requested-base-branch (source-control/sanitize-branch-name (:base-branch body))
           default-base (source-control/sanitize-branch-name (default-base-branch))
           detected-base-branch (when (nil? requested-base-branch)
                                  (source-control/<default-branch! (.-env self)
-                                                                  pr-token
+                                                                  nil
                                                                   repo-url))
           detected-base-branch (source-control/sanitize-branch-name detected-base-branch)
           base-branch (or requested-base-branch
@@ -774,21 +781,13 @@
       (http/forbidden)
 
       :else
-      (let [description (or (some-> (:body body) str string/trim not-empty)
-                            "Automated changes from agent session.")
-            title (or (some-> (:title body) str string/trim not-empty)
-                      (description->pr-title description)
-                      (str "Agent updates for session " (:id current-session)))
-            manual-url (source-control/manual-pr-url repo-url head-branch base-branch)]
-        (if-not (string? pr-token)
-          (<manual-pr-required-response! self
-                                         {:user-id user-id
-                                          :head-branch head-branch
-                                          :base-branch base-branch
-                                          :manual-url manual-url
-                                          :reason "missing-token"
-                                          :force? force?
-                                          :message "branch pushed; create pull request manually"})
+      (p/let [pr-token (source-control/<pr-token! (.-env self) repo-url)]
+        (let [description (or (some-> (:body body) str string/trim not-empty)
+                              "Automated changes from agent session.")
+              title (or (some-> (:title body) str string/trim not-empty)
+                        (description->pr-title description)
+                        (str "Agent updates for session " (:id current-session)))
+              manual-url (source-control/manual-pr-url repo-url head-branch base-branch)]
           (<create-pr-response! self
                                 {:user-id user-id
                                  :repo-url repo-url
@@ -803,13 +802,14 @@
 (defn- <perform-pr-push!
   [^js self current-session body user-id repo-url runtime force? create-pr? push-branch-fn]
   (let [provider (runtime-provider/resolve-provider (.-env self) runtime)
-        push-token (source-control/push-token (.-env self))
+        env (.-env self)
         commit-message (some-> (:commit-message body) str string/trim not-empty)
         head-branch (source-control/resolve-head-branch (:head-branch body)
                                                         (generated-head-branch current-session body))]
     (if-not (string? head-branch)
       (http/bad-request "invalid head branch")
-      (-> (p/let [_ (<append-publish-event! self "git.push.started"
+      (-> (p/let [push-token (source-control/<push-token! env repo-url)
+                  _ (<append-publish-event! self "git.push.started"
                                             {:by user-id
                                              :head-branch head-branch
                                              :force force?})
@@ -1084,8 +1084,9 @@
                              (repo-url-from-session session))]
           (if-not (string? repo-url)
             (http/bad-request "missing repo url")
-            (p/let [branches (source-control/<list-branches! env
-                                                             (github-branches-token env)
+            (p/let [token (source-control/<push-token! env repo-url)
+                    branches (source-control/<list-branches! env
+                                                             token
                                                              repo-url)]
               (http/json-response :sessions/branches
                                   {:branches (->> branches

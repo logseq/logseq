@@ -44,7 +44,10 @@
      :cloudflare-repo-clone-command (env-value env "CLOUDFLARE_REPO_CLONE_COMMAND")
      :cloudflare-health-retries (env-value env "CLOUDFLARE_HEALTH_RETRIES")
      :cloudflare-health-interval-ms (env-value env "CLOUDFLARE_HEALTH_INTERVAL_MS")
-     :github-token (env-value env "GITHUB_TOKEN")
+     :github-app-id (env-value env "GITHUB_APP_ID")
+     :github-app-installation-id (env-value env "GITHUB_APP_INSTALLATION_ID")
+     :github-app-private-key (env-value env "GITHUB_APP_PRIVATE_KEY")
+     :github-app-slug (env-value env "GITHUB_APP_SLUG")
      :github-api-base (env-value env "GITHUB_API_BASE")
      :openai-api-key (env-value env "OPENAI_API_KEY")
      :anthropic-api-key (env-value env "ANTHROPIC_API_KEY")
@@ -66,7 +69,7 @@
    :cloudflare-sandbox-name-prefix :cloudflare-sandbox-agent-port
    :cloudflare-bootstrap-command :cloudflare-repo-clone-command
    :cloudflare-health-retries :cloudflare-health-interval-ms
-   :github-token :github-api-base
+   :github-app-id :github-app-installation-id :github-app-private-key :github-app-slug :github-api-base
    :openai-api-key :anthropic-api-key :openai-base-url :anthropic-base-url
    :log-level :cognito-issuer :cognito-client-id :cognito-jwks-url])
 

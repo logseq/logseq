@@ -844,8 +844,6 @@
                                             :repo-url (:repo-url opts)
                                             :force (:force opts)
                                             :remote "origin"}))
-                                        source-control/pr-token
-                                        (fn [_env] "token-1")
                                         source-control/<default-branch!
                                         (fn [_env _token _repo-url]
                                           (js/Promise.resolve same-branch))]

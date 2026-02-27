@@ -11,6 +11,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
+            [logseq.shui.ui :as shui]
             [logseq.sync.malli-schema :as db-sync-schema]
             [promesa.core :as p]))
 
@@ -113,6 +114,55 @@
                    (some->> repo-url
                             (re-matches #"^ssh://git@github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$"))]
           {:owner owner :name repo}))))
+
+(def ^:private github-install-required-notification-uid :agent/github-install-required)
+
+(defn- first-url-in-text
+  [text]
+  (some-> (when (string? text)
+            (re-find #"https?://[^\s)\]}]+" text))
+          (string/replace #"[,.;:!?]+$" "")))
+
+(defn- start-session-error-message
+  [error]
+  (or (some-> (ex-data error) :body :error)
+      (some-> error ex-message)
+      "Failed to start agent session."))
+
+(defn- start-session-install-url
+  [error]
+  (first-url-in-text (some-> (ex-data error) :body :error)))
+
+(defn- open-external-url!
+  [url]
+  (when (string? url)
+    (if (util/electron?)
+      (js/window.apis.openExternal url)
+      (js/window.open url "_blank" "noopener,noreferrer"))))
+
+(defn- show-github-install-required-notification!
+  [error retry-fn]
+  (let [message (start-session-error-message error)
+        install-url (start-session-install-url error)
+        can-retry? (fn? retry-fn)]
+    (notification/show!
+     [:div.space-y-2
+      [:div.whitespace-pre-line message]
+      [:div.flex.flex-wrap.gap-2
+       (when (string? install-url)
+         (shui/button
+          {:size :sm
+           :on-click (fn []
+                       (open-external-url! install-url))}
+          "Install GitHub App"))
+       (when can-retry?
+         (shui/button
+          {:variant :outline
+           :size :sm
+           :on-click (fn []
+                       (retry-fn))}
+          "retry"))]]
+     :warning false github-install-required-notification-uid)))
 
 (defn- normalize-branches
   [branches]
@@ -536,32 +586,42 @@
            (do
              (notification/show! "Invalid agent session payload." :error false)
              nil)
-           (p/let [resp (db-sync/fetch-json (str base "/sessions")
-                                            {:method "POST"
-                                             :headers {"content-type" "application/json"}
-                                             :body (js/JSON.stringify (clj->js body))}
-                                            {:response-schema :sessions/create})
-                   session-id (:session-id resp)
-                   status (:status resp)
-                   stream-url (:stream-url resp)
-                   block-uuid (:block/uuid block)
-                   _ (when-let [raw-message (message-body (:content raw-body))]
-                       (let [coerced (coerce-http-request :sessions/message raw-message)
-                             msg-body (if (map? coerced) coerced raw-message)]
-                         (db-sync/fetch-json (str base "/sessions/" session-id "/messages")
-                                             {:method "POST"
-                                              :headers {"content-type" "application/json"}
-                                              :body (js/JSON.stringify (clj->js msg-body))}
-                                             {:response-schema :sessions/message})))]
-             (update-session-state! block-uuid {:session-id session-id
-                                                :status status
-                                                :runtime-provider (:runtime-provider resp)
-                                                :terminal-enabled (true? (:terminal-enabled resp))
-                                                :stream-url stream-url
-                                                :started-at (util/time-ms)})
-             (mark-task-session-created! block-uuid)
-             (<connect-session-stream! block-uuid stream-url)
-             resp)))))))
+           (-> (p/let [resp (db-sync/fetch-json (str base "/sessions")
+                                                {:method "POST"
+                                                 :headers {"content-type" "application/json"}
+                                                 :body (js/JSON.stringify (clj->js body))}
+                                                {:response-schema :sessions/create})
+                       session-id (:session-id resp)
+                       status (:status resp)
+                       stream-url (:stream-url resp)
+                       block-uuid (:block/uuid block)
+                       _ (when-let [raw-message (message-body (:content raw-body))]
+                           (let [coerced (coerce-http-request :sessions/message raw-message)
+                                 msg-body (if (map? coerced) coerced raw-message)]
+                             (db-sync/fetch-json (str base "/sessions/" session-id "/messages")
+                                                 {:method "POST"
+                                                  :headers {"content-type" "application/json"}
+                                                  :body (js/JSON.stringify (clj->js msg-body))}
+                                                 {:response-schema :sessions/message})))]
+                 (notification/clear! github-install-required-notification-uid)
+                 (update-session-state! block-uuid {:session-id session-id
+                                                    :status status
+                                                    :runtime-provider (:runtime-provider resp)
+                                                    :terminal-enabled (true? (:terminal-enabled resp))
+                                                    :stream-url stream-url
+                                                    :started-at (util/time-ms)})
+                 (mark-task-session-created! block-uuid)
+                 (<connect-session-stream! block-uuid stream-url)
+                 resp)
+               (p/catch (fn [error]
+                          (if (= 412 (:status (ex-data error)))
+                            (show-github-install-required-notification!
+                             error
+                             (fn []
+                               (-> (<start-session! block opts)
+                                   (p/catch (fn [_] nil)))))
+                            (notification/show! (start-session-error-message error) :error false))
+                          nil)))))))))
 
 (defn- publish-request-body
   [{:keys [title body commit-message head-branch base-branch create-pr? force?]}]

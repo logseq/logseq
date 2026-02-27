@@ -180,7 +180,10 @@ Cloudflare runtime flow:
 | CLOUDFLARE_REPO_CLONE_COMMAND | Optional repo clone command template for Cloudflare sandbox |
 | CLOUDFLARE_HEALTH_RETRIES | Cloudflare sandbox health check retry count |
 | CLOUDFLARE_HEALTH_INTERVAL_MS | Cloudflare sandbox health check retry interval (ms) |
-| GITHUB_TOKEN | Fallback token used for both git push and PR API calls |
+| GITHUB_APP_ID | GitHub App ID used to mint installation tokens |
+| GITHUB_APP_INSTALLATION_ID | Optional fixed installation ID (if omitted, resolved from repo) |
+| GITHUB_APP_PRIVATE_KEY | GitHub App private key PEM used for JWT signing |
+| GITHUB_APP_SLUG | Optional app slug used to build install URL in setup prompts |
 | GITHUB_API_BASE | Optional GitHub API base URL override (default `https://api.github.com`) |
 | OPENAI_API_KEY | Passed into Cloudflare sandbox runtime env (if set) |
 | ANTHROPIC_API_KEY | Passed into Cloudflare sandbox runtime env (if set) |
@@ -197,15 +200,24 @@ This endpoint is available to any authenticated collaborator and supports:
 - push only (`{"create-pr": false}`)
 - push + PR (`{"create-pr": true}` or omitted)
 
+When creating a session, the worker verifies the GitHub App is installed on the target repo.
+If not installed, `POST /sessions` returns `412` with an install prompt message.
+
+Agent chat messages can also trigger the same publish flow:
+- `push`
+- `submit PR`
+- natural language requests like `please push this branch` or `can you submit a pull request?`
+
 Response `status` values:
 - `pushed`
 - `pr-created`
 - `manual-pr-required`
 
-If PR credentials are missing or PR API creation fails after a successful push, response includes `manual-pr-url`.
+If PR API creation fails after a successful push, response includes `manual-pr-url`.
 
 For Cloudflare deploys, store tokens as agents worker secrets:
-- `wrangler secret put GITHUB_TOKEN -c worker/wrangler.agents.toml --env <staging|prod>`
+- `wrangler secret put GITHUB_APP_PRIVATE_KEY -c worker/wrangler.agents.toml --env <staging|prod>`
+- set `GITHUB_APP_ID` and optional `GITHUB_APP_INSTALLATION_ID` in worker vars
 
 ## Notes
 - Protocol definitions live in `docs/agent-guide/db-sync/protocol.md`.
