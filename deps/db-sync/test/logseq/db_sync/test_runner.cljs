@@ -11,6 +11,7 @@
             [logseq.db-sync.node-server-test]
             [logseq.db-sync.normalize-test]
             [logseq.db-sync.platform-test]
+            [logseq.db-sync.worker-agents-dispatch-test]
             [logseq.db-sync.worker-auth-test]
             [logseq.db-sync.worker-handler-assets-test]
             [logseq.db-sync.worker-handler-index-test]

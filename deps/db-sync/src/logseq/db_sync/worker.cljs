@@ -1,13 +1,11 @@
 (ns logseq.db-sync.worker
   ;; Turn off false defclass errors
   {:clj-kondo/config {:linters {:unresolved-symbol {:level :off}}}}
-  (:require ["@cloudflare/sandbox" :as cf-sandbox]
-            ["cloudflare:workers" :refer [DurableObject]]
+  (:require ["cloudflare:workers" :refer [DurableObject]]
             [lambdaisland.glogi :as log]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.logging :as logging]
             [logseq.db-sync.sentry.worker :as sentry]
-            [logseq.db-sync.worker.agent.do :as agent-do]
             [logseq.db-sync.worker.dispatch :as dispatch]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
             [logseq.db-sync.worker.handler.ws :as ws-handler]
@@ -17,8 +15,6 @@
             [shadow.cljs.modern :refer (defclass)]))
 
 (logging/install!)
-
-(def Sandbox (.-Sandbox cf-sandbox))
 
 (def worker
   (sentry/wrap-handler
@@ -78,17 +74,3 @@
                   (presence/broadcast-online-users! this)
                   (sentry/capture-exception! error)
                   (log/error :db-sync/ws-error error)))
-
-(defclass AgentSessionDO
-  (extends DurableObject)
-
-  (constructor [this ^js state env]
-               (super state env)
-               (set! (.-state this) state)
-               (set! (.-env this) env)
-               (set! (.-storage this) (.-storage state))
-               (set! (.-streams this) (js/Map.)))
-
-  Object
-  (fetch [this request]
-         (agent-do/handle-fetch this request)))

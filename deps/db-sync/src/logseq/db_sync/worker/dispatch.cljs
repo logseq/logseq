@@ -2,11 +2,36 @@
   (:require [clojure.string :as string]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.platform.core :as platform]
-            [logseq.db-sync.worker.handler.agent :as agent-handler]
             [logseq.db-sync.worker.handler.assets :as assets-handler]
             [logseq.db-sync.worker.handler.index :as index-handler]
             [logseq.db-sync.worker.http :as http]
             [promesa.core :as p]))
+
+(def ^:private agents-local-forward-max-retries 300)
+(def ^:private agents-local-forward-retry-delay-ms 100)
+
+(defn- local-dev-host? [request]
+  (let [host (.-hostname (platform/request-url request))]
+    (or (= host "127.0.0.1")
+        (= host "localhost"))))
+
+(defn- <forward-sessions-local! [^js agents-service request]
+  (letfn [(attempt [retry-count]
+            (-> (.fetch agents-service (.clone request))
+                (p/then
+                 (fn [response]
+                   (if (and (= 503 (.-status response))
+                            (< retry-count agents-local-forward-max-retries))
+                     (p/let [_ (p/delay agents-local-forward-retry-delay-ms)]
+                       (attempt (inc retry-count)))
+                     response)))
+                (p/catch
+                 (fn [error]
+                   (if (< retry-count agents-local-forward-max-retries)
+                     (p/let [_ (p/delay agents-local-forward-retry-delay-ms)]
+                       (attempt (inc retry-count)))
+                     (p/rejected error))))))]
+    (attempt 0)))
 
 (defn handle-worker-fetch [request ^js env]
   (->
@@ -26,7 +51,11 @@
          (index-handler/handle-fetch #js {:env env :d1 (aget env "DB")} request)
 
          (string/starts-with? path "/sessions")
-         (agent-handler/handle-fetch #js {:env env} request)
+         (if-let [^js agents-service (aget env "AGENTS_SERVICE")]
+           (if (local-dev-host? request)
+             (<forward-sessions-local! agents-service request)
+             (.fetch agents-service request))
+           (http/error-response "agents service unavailable" 503))
 
          (string/starts-with? path "/assets/")
          (if (= method "OPTIONS")

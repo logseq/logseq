@@ -43,3 +43,59 @@
                (.catch (fn [error]
                          (is false (str "unexpected error: " error))
                          (done)))))))
+
+(deftest dispatch-worker-fetch-sessions-service-unavailable-test
+  (async done
+         (let [request (platform/request "http://example.com/sessions/session-1" #js {:method "GET"})
+               resp (dispatch/handle-worker-fetch request #js {})]
+           (-> (.then resp (fn [resolved]
+                             (is (= 503 (.-status resolved)))
+                             (done)))
+               (.catch (fn [error]
+                         (is false (str "unexpected error: " error))
+                         (done)))))))
+
+(deftest dispatch-worker-fetch-sessions-forward-to-agents-service-test
+  (async done
+         (let [request (platform/request "http://example.com/sessions/session-2/events?since=1" #js {:method "GET"})
+               captured-url (atom nil)
+               env #js {:AGENTS_SERVICE #js {:fetch (fn [forwarded]
+                                                      (reset! captured-url (.-url forwarded))
+                                                      (js/Promise.resolve
+                                                       (js/Response. (js/JSON.stringify #js {:ok true})
+                                                                     #js {:status 202
+                                                                          :headers #js {"content-type" "application/json"}})))}}]
+           (-> (dispatch/handle-worker-fetch request env)
+               (.then (fn [resolved]
+                        (is (= 202 (.-status resolved)))
+                        (is (= "http://example.com/sessions/session-2/events?since=1" @captured-url))
+                        (done)))
+               (.catch (fn [error]
+                         (is false (str "unexpected error: " error))
+                         (done)))))))
+
+(deftest dispatch-worker-fetch-sessions-local-retry-test
+  (async done
+         (let [request (platform/request "http://127.0.0.1:8787/sessions/session-3"
+                                         #js {:method "POST"
+                                              :headers #js {"content-type" "application/json"}
+                                              :body (js/JSON.stringify #js {:id "session-3"})})
+               call-count (atom 0)
+               env #js {:AGENTS_SERVICE #js {:fetch (fn [_forwarded]
+                                                      (let [count (swap! call-count inc)]
+                                                        (if (< count 3)
+                                                          (js/Promise.resolve
+                                                           (js/Response. "agents starting"
+                                                                         #js {:status 503}))
+                                                          (js/Promise.resolve
+                                                           (js/Response. (js/JSON.stringify #js {:ok true})
+                                                                         #js {:status 201
+                                                                              :headers #js {"content-type" "application/json"}})))))}}]
+           (-> (dispatch/handle-worker-fetch request env)
+               (.then (fn [resolved]
+                        (is (= 201 (.-status resolved)))
+                        (is (= 3 @call-count))
+                        (done)))
+               (.catch (fn [error]
+                         (is false (str "unexpected error: " error))
+                         (done)))))))

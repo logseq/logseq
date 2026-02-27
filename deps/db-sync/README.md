@@ -1,7 +1,7 @@
 # Logseq DB Sync (deps/db-sync)
 
-This package contains the DB sync server code and tests used by Logseq.
-It includes the Cloudflare Worker implementation and a Node.js adapter for self-hosting.
+This package contains db-sync and agents worker code plus tests used by Logseq.
+It includes separate Cloudflare worker entrypoints and a Node.js adapter for self-hosting.
 
 ## Requirements
 - Node.js (see repo root for required version)
@@ -9,7 +9,9 @@ It includes the Cloudflare Worker implementation and a Node.js adapter for self-
 
 ## Build and Test
 
-### Cloudflare Worker
+### Cloudflare Workers
+
+DB sync worker (`/sync/*`, `/graphs*`, `/e2ee*`, `/assets/*`):
 
 ```bash
 cd deps/db-sync
@@ -20,7 +22,31 @@ cd deps/db-sync/worker
 wrangler dev
 ```
 
-### D1 Schema (Worker)
+Agents worker (`/sessions*`):
+
+```bash
+cd deps/db-sync
+yarn watch:agents
+
+# open another terminal
+cd deps/db-sync/worker
+wrangler dev -c wrangler.agents.toml
+```
+
+Local split note:
+- `db-sync` and `agents` are separate workers after M17.
+- For a unified local API on one port, run:
+  `wrangler dev -c wrangler.toml -c wrangler.agents.toml --port 8787`
+  and `/sessions*` will be forwarded via `AGENTS_SERVICE`.
+- If you run workers separately, call sessions on the agents port.
+- `worker/wrangler.agents.toml` sets `AGENT_RUNTIME_PROVIDER=cloudflare` by default.
+- On localhost, `/sessions*` forwarding retries during agents startup (up to ~30s) to avoid transient `503`.
+
+Production routing note:
+- If `api.logseq.com` is currently routed via AWS Route53/API Gateway, keep hostname routing in API Gateway.
+- Forward only `/sessions*` from API Gateway to the deployed agents worker URL (`*.workers.dev` or another worker-facing domain).
+
+### D1 Schema (db-sync Worker)
 
 The worker no longer initializes schema at request time. Apply the D1 schema
 via migrations during deployment/CI.
@@ -70,7 +96,7 @@ cd deps/db-sync
 ./scripts/start-local-sandbox-agent.sh
 ```
 
-Then run db-sync worker with:
+Then run agents worker with:
 
 ```bash
 SANDBOX_AGENT_URL=http://127.0.0.1:2468
@@ -96,12 +122,13 @@ The control plane forwards each task message through sandbox-agent
 ### Runtime Provider
 
 Agent runtime is selected by `AGENT_RUNTIME_PROVIDER`:
-- `sprites` (default): provisions a Sprite and runs `sandbox-agent` inside it.
+- `sprites`: provisions a Sprite and runs `sandbox-agent` inside it.
 - `local-dev`: uses `SANDBOX_AGENT_URL` directly.
 - `cloudflare`: provisions a sandbox first, then connects to the sandbox-hosted `sandbox-agent`.
+- Agents worker default is `cloudflare` (set in `worker/wrangler.agents.toml`).
 
-For `cloudflare`, bind and export `Sandbox` in the Worker and configure the container image in
-`worker/wrangler.toml` (`[[containers]] class_name = "Sandbox"`).
+For `cloudflare`, bind and export `Sandbox` in the agents worker and configure the container image in
+`worker/wrangler.agents.toml` (`[[containers]] class_name = "Sandbox"`).
 
 Cloudflare runtime flow:
 - resolve sandbox by deterministic name (session id + prefix)
@@ -165,7 +192,7 @@ Cloudflare runtime flow:
 
 ## M14 Publish Endpoint
 
-Agent sessions now expose:
+Agent sessions now expose (from the agents worker):
 
 `POST /sessions/:session-id/pr`
 
@@ -180,9 +207,9 @@ Response `status` values:
 
 If PR credentials are missing or PR API creation fails after a successful push, response includes `manual-pr-url`.
 
-For Cloudflare deploys, store tokens as Worker secrets:
-- `wrangler secret put GITHUB_PUSH_TOKEN --env <staging|prod>`
-- `wrangler secret put GITHUB_PR_TOKEN --env <staging|prod>`
+For Cloudflare deploys, store tokens as agents worker secrets:
+- `wrangler secret put GITHUB_PUSH_TOKEN -c worker/wrangler.agents.toml --env <staging|prod>`
+- `wrangler secret put GITHUB_PR_TOKEN -c worker/wrangler.agents.toml --env <staging|prod>`
 
 ## Notes
 - Protocol definitions live in `docs/agent-guide/db-sync/protocol.md`.

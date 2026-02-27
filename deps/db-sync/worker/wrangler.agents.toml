@@ -1,7 +1,13 @@
-name = "logseq-sync"
-main = "dist/worker/main.js"
+name = "logseq-agents"
+main = "dist/agents/main.js"
 compatibility_date = "2025-12-10"
 compatibility_flags = [ "nodejs_compat" ]
+
+[[containers]]
+class_name = "Sandbox"
+image = "./Dockerfile.sandbox-agent"
+instance_type = "lite"
+max_instances = 1
 
 [version_metadata]
 binding = "CF_VERSION_METADATA"
@@ -13,104 +19,88 @@ enabled = true
 invocation_logs = false
 
 [[durable_objects.bindings]]
-name = "LOGSEQ_SYNC_DO"
-class_name = "SyncDO"
+name = "LOGSEQ_AGENT_SESSION_DO"
+class_name = "AgentSessionDO"
 
-[[services]]
-binding = "AGENTS_SERVICE"
-service = "logseq-agents"
-
-[[r2_buckets]]
-binding = "LOGSEQ_SYNC_ASSETS"
-bucket_name = "logseq-sync-assets-prod"
-
-[[d1_databases]]
-binding = "DB"
-database_name = "logseq-sync-graph-meta-prod"
-database_id = "00325aa2-c805-4693-b599-900a25dcde42"
+[[durable_objects.bindings]]
+name = "Sandbox"
+class_name = "Sandbox"
 
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = [ "SyncDO" ]
+new_sqlite_classes = [ "AgentSessionDO" ]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = [ "Sandbox" ]
 
 [vars]
 COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
 COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
 COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
 GITHUB_DEFAULT_BASE_BRANCH = "master"
+AGENT_RUNTIME_PROVIDER = "cloudflare"
 
 [env.staging]
-name = "logseq-sync-staging"
+name = "logseq-agents-staging"
 
 [env.staging.vars]
 COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
 COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
 COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
 GITHUB_DEFAULT_BASE_BRANCH = "master"
+AGENT_RUNTIME_PROVIDER = "cloudflare"
 SENTRY_DSN = "https://dc09d27243b9492bbe15e0dd279ad7de@o416451.ingest.us.sentry.io/5311485"
 SENTRY_ENVIRONMENT = "staging"
 SENTRY_TRACES_SAMPLE_RATE = "0.1"
 
 [[env.staging.durable_objects.bindings]]
-name = "LOGSEQ_SYNC_DO"
-class_name = "SyncDO"
+name = "LOGSEQ_AGENT_SESSION_DO"
+class_name = "AgentSessionDO"
 
-[[env.staging.services]]
-binding = "AGENTS_SERVICE"
-service = "logseq-agents-staging"
+[[env.staging.durable_objects.bindings]]
+name = "Sandbox"
+class_name = "Sandbox"
 
 [[env.staging.migrations]]
 tag = "v1"
-new_sqlite_classes = [ "SyncDO" ]
+new_sqlite_classes = [ "AgentSessionDO" ]
 
 [[env.staging.migrations]]
 tag = "v2"
-deleted_classes = [ "SyncIndexDO" ]
-
-[[env.staging.r2_buckets]]
-binding = "LOGSEQ_SYNC_ASSETS"
-bucket_name = "logseq-sync-assets-dev"
-
-[[env.staging.d1_databases]]
-binding = "DB"
-database_name = "logseq-sync-graph-meta-staging"
-database_id = "00325aa2-c805-4693-b599-900a25dcde42"
+new_sqlite_classes = [ "Sandbox" ]
 
 [env.staging.version_metadata]
 binding = "CF_VERSION_METADATA"
 
 [env.prod]
-name = "logseq-sync-prod"
+name = "logseq-agents-prod"
 
 [env.prod.vars]
 COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
 COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
 COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
 GITHUB_DEFAULT_BASE_BRANCH = "master"
+AGENT_RUNTIME_PROVIDER = "cloudflare"
 SENTRY_DSN = "https://dc09d27243b9492bbe15e0dd279ad7de@o416451.ingest.us.sentry.io/5311485"
 SENTRY_ENVIRONMENT = "prod"
 SENTRY_TRACES_SAMPLE_RATE = "0.1"
 
 [[env.prod.durable_objects.bindings]]
-name = "LOGSEQ_SYNC_DO"
-class_name = "SyncDO"
+name = "LOGSEQ_AGENT_SESSION_DO"
+class_name = "AgentSessionDO"
 
-[[env.prod.services]]
-binding = "AGENTS_SERVICE"
-service = "logseq-agents-prod"
+[[env.prod.durable_objects.bindings]]
+name = "Sandbox"
+class_name = "Sandbox"
 
 [[env.prod.migrations]]
 tag = "v1"
-new_sqlite_classes = [ "SyncDO" ]
+new_sqlite_classes = [ "AgentSessionDO" ]
 
-[[env.prod.r2_buckets]]
-binding = "LOGSEQ_SYNC_ASSETS"
-bucket_name = "logseq-sync-assets-prod"
-
-[[env.prod.d1_databases]]
-binding = "DB"
-database_name = "logseq-sync-graphs-prod"
-database_id = "4c80e058-69b5-4985-88d1-f53711d817ba"
+[[env.prod.migrations]]
+tag = "v2"
+new_sqlite_classes = [ "Sandbox" ]
 
 [env.prod.version_metadata]
 binding = "CF_VERSION_METADATA"
