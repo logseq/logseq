@@ -768,6 +768,56 @@
                            (is false (str "unexpected error: " error))
                            (done))))))))
 
+(deftest pr-endpoint-generates-friendly-unique-head-branch-test
+  (testing "session publish endpoint derives head branch from task and summary when omitted"
+    (async done
+           (let [push-calls (atom [])
+                 env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"}
+                 self (make-self env)
+                 headers {"content-type" "application/json"
+                          "x-user-id" "user-1"}
+                 session-id "69a1251a-82ea-4608-a243-fba45c928b9a"]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id session-id
+                                 :status "running"
+                                 :task {:node-title "Improve sync performance"
+                                        :project {:repo-url "https://github.com/example/repo"}}
+                                 :runtime {:provider "local-dev"
+                                           :session-id session-id}
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (with-redefs [runtime-provider/<push-branch!
+                                        (fn [_provider _runtime opts]
+                                          (swap! push-calls conj opts)
+                                          (js/Promise.resolve
+                                           {:head-branch (:head-branch opts)
+                                            :repo-url (:repo-url opts)
+                                            :force (:force opts)
+                                            :remote "origin"}))]
+                            (agent-do/handle-fetch self
+                                                   (json-request "http://db-sync.local/__session__/pr"
+                                                                 "POST"
+                                                                 {:create-pr false
+                                                                  :body "Optimize batch write latency in sync pipeline"}
+                                                                 headers)))))
+                 (.then (fn [resp]
+                          (is (= 200 (.-status resp)))
+                          (.then (<json resp)
+                                 (fn [body]
+                                   (let [generated-branch (:head-branch body)]
+                                     (is (string/starts-with? generated-branch "perf/"))
+                                     (is (string/includes? generated-branch "improve-sync-performance"))
+                                     (is (re-find #"-69a1251a$" generated-branch))
+                                     (is (= generated-branch
+                                            (:head-branch (first @push-calls)))))
+                                   (done)))))
+                 (.catch (fn [error]
+                           (is false (str "unexpected error: " error))
+                           (done))))))))
+
 (deftest pr-endpoint-fallbacks-base-branch-when-equal-to-head-test
   (testing "session publish endpoint avoids head==base branch when resolving base branch"
     (async done

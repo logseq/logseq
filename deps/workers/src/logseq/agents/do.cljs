@@ -1,11 +1,11 @@
 (ns logseq.agents.do
   (:require [clojure.string :as string]
             [lambdaisland.glogi :as log]
-            [logseq.sync.common :as common]
-            [logseq.sync.platform.core :as platform]
             [logseq.agents.runtime-provider :as runtime-provider]
             [logseq.agents.session :as session]
             [logseq.agents.source-control :as source-control]
+            [logseq.sync.common :as common]
+            [logseq.sync.platform.core :as platform]
             [logseq.sync.worker.http :as http]
             [promesa.core :as p]))
 
@@ -152,16 +152,107 @@
   [session]
   (some-> (get-in session [:task :project :repo-url]) str string/trim not-empty))
 
-(defn- generated-head-branch
+(def ^:private default-pr-title-max-len 72)
+(def ^:private default-head-branch-slug-max-len 54)
+
+(defn- clean-summary-line
+  [line]
+  (-> (or line "")
+      string/trim
+      (string/replace #"^#{1,6}\s+" "")
+      (string/replace #"^[-*+]\s+" "")
+      (string/replace #"^\d+\.\s+" "")
+      string/trim))
+
+(defn- first-summary-line
+  [text]
+  (some->> (some-> text
+                   str
+                   (string/replace #"\r\n?" "\n")
+                   (string/split #"\n"))
+           (map clean-summary-line)
+           (remove string/blank?)
+           first))
+
+(defn- truncate-pr-title
+  [title]
+  (let [trimmed (some-> title string/trim not-empty)]
+    (cond
+      (not (string? trimmed)) nil
+      (<= (count trimmed) default-pr-title-max-len) trimmed
+      :else (str (subs trimmed 0 (- default-pr-title-max-len 3)) "..."))))
+
+(defn- description->pr-title
+  [description]
+  (some-> (first-summary-line description)
+          truncate-pr-title))
+
+(defn- branch-slugify
+  [text]
+  (some-> text
+          str
+          string/lower-case
+          (string/replace #"['`\"]+" "")
+          (string/replace #"[^a-z0-9]+" "-")
+          (string/replace #"-+" "-")
+          (string/replace #"^-+" "")
+          (string/replace #"-+$" "")
+          not-empty))
+
+(defn- truncate-branch-slug
+  [slug max-len]
+  (let [slug (some-> slug str string/trim not-empty)
+        max-len (max 1 (or max-len 1))]
+    (when slug
+      (if (<= (count slug) max-len)
+        slug
+        (some-> (subs slug 0 max-len)
+                (string/replace #"-+$" "")
+                not-empty)))))
+
+(defn- infer-branch-prefix
+  [texts]
+  (let [haystack (->> texts
+                      (remove nil?)
+                      (map str)
+                      (string/join " ")
+                      string/lower-case)]
+    (cond
+      (re-find #"\b(fix|bug|issue|error|hotfix|regression|broken|crash)\b" haystack) "fix"
+      (re-find #"\b(perf|performance|optimi[sz]e|latency|faster|speed|throughput)\b" haystack) "perf"
+      :else "feat")))
+
+(defn- session-branch-suffix
   [session-id]
-  (let [suffix (some-> session-id
-                       str
-                       string/lower-case
-                       (string/replace #"[^a-z0-9-]+" "-")
-                       (string/replace #"-+" "-")
-                       (string/replace #"^-+" "")
-                       (string/replace #"-+$" ""))]
-    (str "logseq-agent/" (if (string/blank? suffix) "session" suffix))))
+  (let [normalized (some-> session-id
+                           str
+                           string/lower-case
+                           (string/replace #"[^a-z0-9]+" ""))]
+    (if (string/blank? normalized)
+      "session"
+      (subs normalized 0 (min 8 (count normalized))))))
+
+(defn- generated-head-branch
+  [session body]
+  (let [session-id (:id session)
+        task-title (or (some-> (get-in session [:task :node-title]) str string/trim not-empty)
+                       (some-> (get-in session [:task :project :title]) str string/trim not-empty))
+        pr-title (some-> (:title body) str string/trim not-empty)
+        pr-summary (or (description->pr-title (:body body))
+                       (first-summary-line (:body body)))
+        prefix (infer-branch-prefix [task-title pr-title pr-summary])
+        slug-parts (->> [task-title pr-title pr-summary]
+                        (map branch-slugify)
+                        (remove string/blank?)
+                        distinct)
+        suffix (session-branch-suffix session-id)
+        raw-slug (if (seq slug-parts)
+                   (string/join "-" slug-parts)
+                   "update")
+        reserved (- default-head-branch-slug-max-len (inc (count suffix)))
+        slug (or (truncate-branch-slug raw-slug reserved)
+                 "update")]
+    (str prefix "/" slug "-" suffix)))
 
 (defn- default-base-branch
   [^js env]
@@ -632,10 +723,11 @@
       (http/forbidden)
 
       :else
-      (let [title (or (some-> (:title body) str string/trim not-empty)
-                      (str "Agent updates for session " (:id current-session)))
-            description (or (some-> (:body body) str string/trim not-empty)
+      (let [description (or (some-> (:body body) str string/trim not-empty)
                             "Automated changes from agent session.")
+            title (or (some-> (:title body) str string/trim not-empty)
+                      (description->pr-title description)
+                      (str "Agent updates for session " (:id current-session)))
             manual-url (source-control/manual-pr-url repo-url head-branch base-branch)]
         (if-not (string? pr-token)
           (<manual-pr-required-response! self
@@ -663,7 +755,7 @@
         push-token (source-control/push-token (.-env self))
         commit-message (some-> (:commit-message body) str string/trim not-empty)
         head-branch (source-control/resolve-head-branch (:head-branch body)
-                                                        (generated-head-branch (:id current-session)))]
+                                                        (generated-head-branch current-session body))]
     (if-not (string? head-branch)
       (http/bad-request "invalid head branch")
       (-> (p/let [_ (<append-publish-event! self "git.push.started"
