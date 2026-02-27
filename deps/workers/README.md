@@ -190,6 +190,11 @@ Cloudflare runtime flow:
 | OPENAI_BASE_URL | Passed into Cloudflare sandbox runtime env (if set) |
 | ANTHROPIC_BASE_URL | Passed into Cloudflare sandbox runtime env (if set) |
 
+For agent tasks with a GitHub repo configured, the worker also injects a short-lived GitHub App
+installation token into sandbox runtime env as `GITHUB_TOKEN`, `GH_TOKEN`, and
+`GITHUB_APP_INSTALLATION_TOKEN`.
+It also configures git credentials inside sandbox runtimes so plain `git push` can authenticate.
+
 ## M14 Publish Endpoint
 
 Agent sessions now expose (from the agents worker):

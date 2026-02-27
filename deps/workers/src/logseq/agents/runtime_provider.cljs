@@ -314,6 +314,37 @@
     (str "mkdir -p ~/.codex; "
          "printf \"%s\" \"" encoded "\" | base64 -d > ~/.codex/auth.json; ")))
 
+(def ^:private github-installation-token-env-keys
+  ["GITHUB_TOKEN"
+   "GH_TOKEN"
+   "GITHUB_APP_INSTALLATION_TOKEN"])
+
+(defn- assoc-github-installation-token
+  [env-vars token]
+  (if-not (string? token)
+    env-vars
+    (reduce (fn [acc k] (assoc acc k token))
+            env-vars
+            github-installation-token-env-keys)))
+
+(defn- shell-export-command
+  [env-vars]
+  (->> env-vars
+       (sort-by key)
+       (keep (fn [[k v]]
+               (when (and (string? k) (string? v))
+                 (str "export " k "='" (escape-shell-single v) "'; "))))
+       (apply str)))
+
+(defn- github-auth-setup-command
+  [token]
+  (if-not (string? token)
+    ""
+    (let [credentials-url (str "https://x-access-token:" token "@github.com")]
+      (str "git config --global credential.helper store; "
+           "printf '%s\\n' '" (escape-shell-single credentials-url) "' > ~/.git-credentials; "
+           "chmod 600 ~/.git-credentials; "))))
+
 (defn- get-repo-dir [session-id]
   (let [session-id (some-> session-id str)]
     (when (string? session-id)
@@ -336,17 +367,26 @@
         install-script (str "https://releases.rivet.dev/sandbox-agent/" version "/install.sh")]
     (str "(curl -fsSL " install-script " | sh);")))
 
+(declare <github-installation-token-for-task!)
+
 (defn- <sprite-bootstrap! [^js env sprite-name port task session-id]
-  (let [auth-json (get-in task [:agent :auth-json])
-        write-auth (or (auth-json-write-command auth-json) "")
-        repo-cd (or (repo-cd-command session-id) "")
-        bootstrap (or (env-str env "SPRITES_BOOTSTRAP_COMMAND")
-                      (str (sandbox-agent-install-command env)
-                           write-auth
-                           (when (string? repo-cd) (str repo-cd "; "))
-                           "nohup sandbox-agent server --no-token --host 0.0.0.0 --port " port
-                           " --no-telemetry >/tmp/sandbox-agent.log 2>&1 &"))]
-    (sprites-exec-post! env sprite-name ["bash" "-lc" bootstrap])))
+  (p/let [github-token (<github-installation-token-for-task! env task)]
+    (let [auth-json (get-in task [:agent :auth-json])
+          write-auth (or (auth-json-write-command auth-json) "")
+          repo-cd (or (repo-cd-command session-id) "")
+          token-exports (if (string? github-token)
+                          (shell-export-command (assoc-github-installation-token {} github-token))
+                          "")
+          github-auth-setup (github-auth-setup-command github-token)
+          bootstrap (or (env-str env "SPRITES_BOOTSTRAP_COMMAND")
+                        (str (sandbox-agent-install-command env)
+                             token-exports
+                             github-auth-setup
+                             write-auth
+                             (when (string? repo-cd) (str repo-cd "; "))
+                             "nohup sandbox-agent server --no-token --host 0.0.0.0 --port " port
+                             " --no-telemetry >/tmp/sandbox-agent.log 2>&1 &"))]
+      (sprites-exec-post! env sprite-name ["bash" "-lc" bootstrap]))))
 
 (declare sprites-exec-output)
 (defn- <sprite-health! [^js env sprite-name port agent-token retries interval-ms]
@@ -375,6 +415,18 @@
 
 (defn- task-repo-url [task]
   (some-> (get-in task [:project :repo-url]) str string/trim not-empty))
+
+(defn- <github-installation-token-for-task!
+  [^js env task]
+  (let [repo-url (task-repo-url task)]
+    (if (string? repo-url)
+      (-> (source-control/<installation-token! env repo-url)
+          (p/catch (fn [error]
+                     (log/error :agent/github-installation-token-mint-failed
+                                {:repo-url repo-url
+                                 :error (str error)})
+                     nil)))
+      (p/resolved nil))))
 
 (defn- task-repo-branch
   [task]
@@ -742,7 +794,7 @@
    "OPENAI_BASE_URL"
    "ANTHROPIC_BASE_URL"])
 
-(defn- cloudflare-agent-env-vars [^js env task]
+(defn- <cloudflare-agent-env-vars! [^js env task]
   (let [base (reduce (fn [acc k]
                        (if-let [v (env-str env k)]
                          (assoc acc k v)
@@ -752,9 +804,11 @@
         task-env (normalize-agent-env-map (get-in task [:agent :env]))
         agent-id (:agent (session-payload task))
         api-token (some-> (get-in task [:agent :api-token]) str string/trim not-empty)]
-    (cond-> (merge base task-env)
-      (and (string? api-token) (= "codex" agent-id)) (assoc "OPENAI_API_KEY" api-token)
-      (and (string? api-token) (= "claude" agent-id)) (assoc "ANTHROPIC_API_KEY" api-token))))
+    (p/let [github-token (<github-installation-token-for-task! env task)]
+      (cond-> (merge base task-env)
+        (and (string? api-token) (= "codex" agent-id)) (assoc "OPENAI_API_KEY" api-token)
+        (and (string? api-token) (= "claude" agent-id)) (assoc "ANTHROPIC_API_KEY" api-token)
+        (string? github-token) (assoc-github-installation-token github-token)))))
 
 (defn- cloudflare-server-command [^js env task port agent-token]
   (let [auth-json (get-in task [:agent :auth-json])
@@ -946,13 +1000,19 @@
   (when-let [cmd (repo-clone-command env session-id task "cloudflare")]
     (<cloudflare-exec! sandbox cmd)))
 
+(defn- <cloudflare-setup-github-auth! [sandbox github-token]
+  (if-not (string? github-token)
+    (p/resolved nil)
+    (<cloudflare-exec! sandbox (github-auth-setup-command github-token))))
+
 (defn- <cloudflare-ensure-running! [^js env sandbox task port agent-token]
-  (p/let [healthy? (->promise (<cloudflare-health-once! sandbox port agent-token))]
+  (p/let [env-vars (<cloudflare-agent-env-vars! env task)
+          _ (<cloudflare-set-env-vars! sandbox env-vars)
+          _ (<cloudflare-setup-github-auth! sandbox (get env-vars "GITHUB_TOKEN"))
+          healthy? (->promise (<cloudflare-health-once! sandbox port agent-token))]
     (if healthy?
       true
-      (p/let [env-vars (cloudflare-agent-env-vars env task)
-              _ (<cloudflare-set-env-vars! sandbox env-vars)
-              _ (<cloudflare-start-server! env sandbox task port agent-token)
+      (p/let [_ (<cloudflare-start-server! env sandbox task port agent-token)
               _ (<cloudflare-health! sandbox
                                      port
                                      agent-token
@@ -1281,7 +1341,6 @@
       (when-not (string? session-id)
         (throw (ex-info "missing runtime session-id on runtime" {:runtime runtime})))
       (let [sandbox (cloudflare-sandbox env sandbox-id)]
-        (prn :debug :send-message message)
         (<cloudflare-send-message! sandbox port agent-token session-id message))))
 
   (<open-terminal! [_ runtime request opts]
