@@ -444,7 +444,6 @@
 
 ;; The default load-results function triggers all the other load-results function
 (defmethod load-results :default [_ state]
-  (reset! (::disable-lazy? state) false)
   (let [filter-group (:group @(::filter state))]
     (if (and (not (some-> state ::input deref seq))
              (not filter-group))
@@ -722,7 +721,7 @@
                   (start-scroll-animation! state))))))))))
 
 (defn- render-result-list-item
-  [state group highlighted-item highlighted? mouse-mode? disable-lazy? item hls-page? text]
+  [state group highlighted-item highlighted? mouse-mode? item hls-page? text]
   (let [item-idx (:item-index item)
         item (list-item/root
               (assoc item
@@ -766,7 +765,7 @@
                                            (scroll-to-highlight! state row-el))))))
               nil)]
     [:div {:key item-idx :data-item-index item-idx}
-     (if (and (= group :nodes) (not disable-lazy?))
+     (if (= group :nodes)
        (ui/lazy-visible (fn [] item) {:trigger-once? true})
        item)]))
 
@@ -777,7 +776,6 @@
         focus-source @(::focus-source state)
         highlighted-item (or @(::highlighted-item state)
                              (when (= :keyboard focus-source) first-item))
-        disable-lazy? @(::disable-lazy? state)
         mouse-mode? (= :mouse focus-source)
         filter' @(::filter state)
         can-show-less? (< (get-group-limit group) (count visible-items))
@@ -811,11 +809,6 @@
            {:on-click (fn [e]
                         (util/stop e)
                         (reset! (::focus-source state) :mouse)
-                        ;; Disable lazy rendering when showing more :nodes items
-                        ;; so all DOM is ready before keyboard navigation.
-                        ;; The brief render cost is acceptable during a user click.
-                        (when (= group :nodes)
-                          (reset! (::disable-lazy? state) (not= show :more)))
                         (when-let [input-el @(::input-ref state)]
                           (.focus input-el))
                         ((if (= show :more) show-less show-more)))}
@@ -834,7 +827,7 @@
                   text (some-> item :text)
                   source-block (some-> item :source-block)
                   hls-page? (and page? (pdf-utils/hls-file? (:block/title source-block)))]]
-        (render-result-list-item state group highlighted-item highlighted? mouse-mode? disable-lazy? item hls-page? text))]]))
+        (render-result-list-item state group highlighted-item highlighted? mouse-mode? item hls-page? text))]]))
 
 (defn move-highlight [state n]
   (let [items @(::all-items-cache state)
@@ -954,16 +947,12 @@
         (shui/dialog-close! :ls-dialog-cmdk)
         (state/sidebar-add-block! repo input :search))
       as-keydown? (if meta?
-                    (do
-                      (reset! (::disable-lazy? state) true)
-                      (show-more))
+                    (show-more)
                     (let [step (keydown-accel-step state e)]
                       (reset! (::focus-source state) :keyboard)
                       (move-highlight state step)))
       as-keyup? (if meta?
-                  (do
-                    (reset! (::disable-lazy? state) true)
-                    (show-less))
+                  (show-less)
                   (let [step (keydown-accel-step state e)]
                     (reset! (::focus-source state) :keyboard)
                     (move-highlight state (- step))))
@@ -1243,7 +1232,6 @@
        (mixins/on-key-up state {} (fn [e _key]
                                     (keyup-handler state e))))))
   (rum/local nil ::highlighted-item)
-  (rum/local false ::disable-lazy?)
   (rum/local :keyboard ::focus-source)
   (rum/local default-results ::results)
   [state {:keys [sidebar?] :as opts}]
