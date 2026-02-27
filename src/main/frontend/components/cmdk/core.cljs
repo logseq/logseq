@@ -875,8 +875,6 @@
      (reset! !input input)
      (set! (.-value input-ref) input)
 
-     (reset! (::input-changed? state) true)
-
      ;; retrieve the load-results function and update all the results
      (when (or (not composing?) composing-end?)
        (persist-cmdk-query-state! state)
@@ -937,7 +935,6 @@
         as-keydown? (or (= keyname "ArrowDown") (and ctrl? (= keyname "n")))
         as-keyup? (or (= keyname "ArrowUp") (and ctrl? (= keyname "p")))]
     (reset! (::shift? state) shift?)
-    (reset! (::meta? state) meta?)
     (when (or as-keydown? as-keyup?)
       (util/stop e))
 
@@ -988,10 +985,8 @@
 (defn- keyup-handler
   [state e]
   (let [shift? (.-shiftKey e)
-        meta? (util/meta-key? e)
         keyname (.-key e)]
     (reset! (::shift? state) shift?)
-    (reset! (::meta? state) meta?)
     ;; Reset acceleration when arrow key is released
     (when (or (= keyname "ArrowDown") (= keyname "ArrowUp"))
       (reset! (::accel-start-ts state) nil))))
@@ -1184,12 +1179,10 @@
       (state/set-state! :search/mode :global))
     (assoc state
            ::shift? (atom false)
-           ::meta? (atom false)
            ::ref (atom nil)
            ::filter (atom filter-group)
            ::input (atom input)
            ::input-ref (atom nil)
-           ::input-changed? (atom false)
            ::highlighted-group (atom nil)
            ::all-items-cache (atom [])
            ::scroll-raf (atom nil)
