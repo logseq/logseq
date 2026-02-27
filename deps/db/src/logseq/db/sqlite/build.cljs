@@ -129,6 +129,7 @@
          :original-property-id k
          :logseq.property/type prop-type}))))
 
+;; build-pvalue and ->property-value-tx-m depend on each other
 (declare ->property-value-tx-m)
 
 (defn- build-pvalue [properties-config all-idents closed-value-id v]
@@ -157,7 +158,7 @@
               nested-pvalue-tx-m
               {:block/tags (mapv #(hash-map :db/ident (get-ident all-idents %))
                                  (:build/tags v))}
-              (select-keys v [:block/created-at :block/updated-at])
+              (select-keys v [:block/created-at :block/updated-at :build/children])
               {:block/uuid pvalue-uuid}))
      :value
      (cond
@@ -198,6 +199,45 @@
     []
     (map second (re-seq page-ref/page-ref-re s))))
 
+(defn- expand-build-children
+  "Expands any blocks with :build/children to return a flattened vec with
+  children having correct :block/parent. Also ensures all blocks have a :block/uuid"
+  ([data] (expand-build-children data nil))
+  ([data parent-id]
+   (vec
+    (mapcat
+     (fn [block]
+       (let [block' (if (:block/uuid block)
+                      (with-meta block {::existing-block? true})
+                      (assoc block :block/uuid (random-uuid)))
+             block'' (cond-> block'
+                       true
+                       (dissoc :build/children)
+                       parent-id
+                       (assoc :block/parent {:db/id [:block/uuid parent-id]}))
+             children (:build/children block)
+             child-maps (when children (expand-build-children children (:block/uuid block'')))]
+         (cons block'' child-maps)))
+     data))))
+
+;; pvalue-tx->txs and ->block-tx depend on each other
+(declare ->block-tx)
+
+(defn- pvalue-tx->txs
+  "Builds tx maps from property value tx maps and handles nested property value children."
+  [pvalue-tx-m page-uuids all-idents options]
+  (mapcat (fn [pvalue]
+            (if (map? pvalue)
+              (let [children-tx
+                    (when-let [children (seq (:build/children pvalue))]
+                      (let [children' (expand-build-children children (:block/uuid pvalue))]
+                        (mapcat #(->block-tx % page-uuids all-idents (:block/page pvalue) options)
+                                children')))]
+                (cond-> [(dissoc pvalue :build/children)]
+                  (seq children-tx) (into children-tx)))
+              [pvalue]))
+          (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m))))
+
 (defn- ->block-tx [{:keys [build/properties] :as m} page-uuids all-idents page-id
                    {properties-config :properties :keys [build-existing-tx? extract-content-refs?] :as options}]
   (let [build-existing-tx?' (and build-existing-tx? (::existing-block? (meta m)) (not (:build/keep-uuid? m)))
@@ -212,7 +252,7 @@
     (cond-> []
       ;; Place property values first since they are referenced by block
       (seq pvalue-tx-m)
-      (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
+      (into (pvalue-tx->txs pvalue-tx-m page-uuids all-idents options))
       true
       (conj (merge (if build-existing-tx?' {:block/updated-at (common-util/time-ms)} (block-with-timestamps block))
                    (dissoc m :build/properties :build/tags :build/keep-uuid?)
@@ -265,7 +305,7 @@
         (->property-value-tx-m new-block (:build/properties prop-m) properties all-idents)]
     (cond-> []
       (seq pvalue-tx-m)
-      (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
+      (into (pvalue-tx->txs pvalue-tx-m page-uuids all-idents options))
       true
       (conj
        (merge
@@ -384,7 +424,7 @@
                              pvalue-tx-m (->property-value-tx-m new-block (:build/properties class-m) properties-config all-idents)]
                          (cond-> []
                            (seq pvalue-tx-m)
-                           (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
+                           (into (pvalue-tx->txs pvalue-tx-m uuid-maps all-idents options))
                            true
                            (conj
                             (merge
@@ -592,7 +632,7 @@
         pvalue-tx-m (->property-value-tx-m page' (:build/properties page) properties all-idents)]
     (cond-> []
       (seq pvalue-tx-m)
-      (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
+      (into (pvalue-tx->txs pvalue-tx-m page-uuids all-idents options))
       true
       (conj
        (merge
@@ -703,27 +743,6 @@
     ;;            (pr-str (mapv #(or (get-in % [:page :block/title]) (get-in % [:page :build/journal])) new-pages))))
     ;; new-pages must come first because they are referenced by pages-and-blocks
     (concat new-pages pages-and-blocks)))
-
-(defn- expand-build-children
-  "Expands any blocks with :build/children to return a flattened vec with
-  children having correct :block/parent. Also ensures all blocks have a :block/uuid"
-  ([data] (expand-build-children data nil))
-  ([data parent-id]
-   (vec
-    (mapcat
-     (fn [block]
-       (let [block' (if (:block/uuid block)
-                      (with-meta block {::existing-block? true})
-                      (assoc block :block/uuid (random-uuid)))
-             block'' (cond-> block'
-                       true
-                       (dissoc :build/children)
-                       parent-id
-                       (assoc :block/parent {:db/id [:block/uuid parent-id]}))
-             children (:build/children block)
-             child-maps (when children (expand-build-children children (:block/uuid block'')))]
-         (cons block'' child-maps)))
-     data))))
 
 (defn- pre-build-pages-and-blocks
   "Pre builds :pages-and-blocks before any indexes like page-uuids are made"
