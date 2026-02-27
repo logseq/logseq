@@ -2532,10 +2532,7 @@
          :disabled (not ready?)
          :on-click (fn [e]
                      (util/stop e)
-                     (agent-chat/open-agent-chat-dialog! block)
-                     (when-not session-started?
-                       (-> (agent-handler/<start-session! block)
-                           (p/catch (fn [_] nil)))))}
+                     (agent-chat/open-agent-chat-dialog! block))}
         (cond
           running? "Running"
           session-started? "Thread"

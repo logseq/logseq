@@ -550,6 +550,8 @@
                            (remove nil?))
         [active-view set-active-view!] (rum/use-state "chat")
         [draft set-draft!] (rum/use-state "")
+        [start-branch set-start-branch!] (rum/use-state "")
+        [starting-session? set-starting-session?!] (rum/use-state false)
         [publish-mode set-publish-mode!] (rum/use-state nil)
         [terminal-visible? set-terminal-visible!] (rum/use-state false)
         [terminal-status set-terminal-status!] (rum/use-state :idle)
@@ -563,9 +565,13 @@
         terminal-open-disabled? (or (not session-started?)
                                     (not (string? terminal-url)))
         trimmed-draft (string/trim (or draft ""))
+        selected-start-branch (normalized-text start-branch)
         busy? (contains? #{"submitted" "streaming"} chat-status)
         input-disabled? (or (not session-started?) (not (agent-handler/task-ready? block)))
         publish-busy? (some? publish-mode)
+        start-session-disabled? (or starting-session?
+                                    session-started?
+                                    (not (agent-handler/task-ready? block)))
         publish-disabled? (or input-disabled? busy? publish-busy?)
         can-send? (and (not input-disabled?)
                        (not (string/blank? trimmed-draft))
@@ -576,6 +582,15 @@
                           (set-draft! "")
                           (-> (.sendMessage chat #js {:text trimmed-draft})
                               (.catch (fn [_] nil)))))
+        start-session! (fn []
+                         (when (and base session-id (not start-session-disabled?))
+                           (set-starting-session?! true)
+                           (let [opts (cond-> {}
+                                        (string? selected-start-branch)
+                                        (assoc :base-branch selected-start-branch))]
+                             (-> (agent-handler/<start-session! block opts)
+                                 (p/catch (fn [_] nil))
+                                 (p/finally (fn [] (set-starting-session?! false)))))))
         publish! (fn [create-pr?]
                    (when (and base session-id (not publish-disabled?))
                      (set-publish-mode! (if create-pr? :pr :push))
@@ -786,6 +801,27 @@
      (when (and terminal-tab-active? (string? terminal-error))
        [:div {:class "mt-0.5 rounded-lg border border-red-300/40 bg-red-500/5 px-3 py-1.5 text-xs text-red-500"}
         terminal-error])
+     (when-not session-started?
+       [:div {:class "flex items-end gap-2 rounded-xl border border-border/70 bg-muted/30 p-2"}
+        [:div.flex-1
+         [:div.mb-1.text-xs.opacity-70 "Base branch (optional)"]
+         (shui/input
+          {:placeholder "Leave empty to auto-detect from GitHub"
+           :value start-branch
+           :disabled starting-session?
+           :on-change #(set-start-branch! (or (.. % -target -value) ""))
+           :on-key-down (fn [^js e]
+                          (when (= "Enter" (.-key e))
+                            (.preventDefault e)
+                            (start-session!)))})]
+        (shui/button
+         {:size :sm
+          :class "h-9 px-3 text-xs"
+          :disabled start-session-disabled?
+          :on-click (fn [_] (start-session!))}
+         (if starting-session?
+           "Starting..."
+           "Start session"))])
      [:div {:class "relative flex flex-1 flex-col overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-b from-background via-background to-muted/40 shadow-sm"
             :style {:minHeight 0}}
       [:div.h-full.min-h-0

@@ -259,6 +259,44 @@
   (or (some-> (aget env "GITHUB_DEFAULT_BASE_BRANCH") str string/trim not-empty)
       "main"))
 
+(defn- github-default-branch-token
+  [^js env]
+  (or (source-control/push-token env)
+      (source-control/pr-token env)))
+
+(defn- task-requested-base-branch
+  [task]
+  (or (some-> (get-in task [:project :base-branch]) source-control/sanitize-branch-name)
+      (some-> (get-in task [:project :branch]) source-control/sanitize-branch-name)))
+
+(defn- <ensure-task-base-branch!
+  [^js env task]
+  (let [repo-url (some-> (get-in task [:project :repo-url]) str string/trim not-empty)
+        requested-base (task-requested-base-branch task)]
+    (cond
+      (not (map? task))
+      (p/resolved task)
+
+      (not (map? (:project task)))
+      (p/resolved task)
+
+      (string? requested-base)
+      (p/resolved (assoc-in task [:project :base-branch] requested-base))
+
+      (not (string? repo-url))
+      (p/resolved task)
+
+      :else
+      (p/let [detected-base (source-control/<default-branch! env
+                                                             (github-default-branch-token env)
+                                                             repo-url)
+              detected-base (source-control/sanitize-branch-name detected-base)
+              fallback-base (source-control/sanitize-branch-name (default-base-branch env))
+              resolved-base (or detected-base fallback-base)]
+        (if (string? resolved-base)
+          (assoc-in task [:project :base-branch] resolved-base)
+          task)))))
+
 (defn- error-reason
   [error]
   (let [reason (some-> error ex-data :reason)]
@@ -516,23 +554,24 @@
                      (http/forbidden)
 
                      :else
-                     (let [session (session/initial-session task audit now)
-                           [session events _event] (session/append-event session [] {:type "session.created"
-                                                                                     :data {:requested-by user-id
-                                                                                            :project (:project task)
-                                                                                            :agent (:agent task)}
-                                                                                     :ts now})]
-                       (p/let [_ (<put-session! self session)
-                               _ (<put-events! self events)
-                               _ (<provision-runtime! self task task-id)
-                               updated-session (<get-session self)]
-                         (http/json-response :sessions/create
-                                             {:session-id task-id
-                                              :status (or (:status updated-session)
-                                                          (:status session))
-                                              :runtime-provider (session-runtime-provider updated-session)
-                                              :terminal-enabled (session-terminal-enabled? updated-session)
-                                              :stream-url (stream-url request task-id)})))))))))))
+                     (p/let [task (<ensure-task-base-branch! (.-env self) task)]
+                       (let [session (session/initial-session task audit now)
+                             [session events _event] (session/append-event session [] {:type "session.created"
+                                                                                       :data {:requested-by user-id
+                                                                                              :project (:project task)
+                                                                                              :agent (:agent task)}
+                                                                                       :ts now})]
+                         (p/let [_ (<put-session! self session)
+                                 _ (<put-events! self events)
+                                 _ (<provision-runtime! self task task-id)
+                                 updated-session (<get-session self)]
+                           (http/json-response :sessions/create
+                                               {:session-id task-id
+                                                :status (or (:status updated-session)
+                                                            (:status session))
+                                                :runtime-provider (session-runtime-provider updated-session)
+                                                :terminal-enabled (session-terminal-enabled? updated-session)
+                                                :stream-url (stream-url request task-id)}))))))))))))
 
 (defn- handle-status [^js self _request]
   (p/let [session (<get-session self)]
@@ -692,8 +731,7 @@
   (p/let [pr-token (source-control/pr-token (.-env self))
           requested-base-branch (source-control/sanitize-branch-name (:base-branch body))
           default-base (source-control/sanitize-branch-name (default-base-branch (.-env self)))
-          detected-base-branch (when (and (nil? requested-base-branch)
-                                          (string? pr-token))
+          detected-base-branch (when (nil? requested-base-branch)
                                  (source-control/<default-branch! (.-env self)
                                                                   pr-token
                                                                   repo-url))
