@@ -186,7 +186,7 @@
        (if (= group-key :create)
          (count group-items)
          (count (get-in results [group-key :items])))
-       (mapv #(assoc % :item-index (vswap! index inc)) group-items)])))
+       (mapv #(assoc % :group group-key :item-index (vswap! index inc)) group-items)])))
 
 (defn state->highlighted-item [state]
   (or (some-> state ::highlighted-item deref)
@@ -763,7 +763,6 @@
                                           (when (not= item @(::highlighted-item state))
                                             (reset! (::highlighted-item state) item)))))
                      :on-highlight (fn [ref]
-                                     (reset! (::highlighted-group state) group)
                                      (when (and ref (.-current ref))
                                        (let [row-el (.-current ref)]
                                          (when (and (= :keyboard @(::focus-source state))
@@ -936,9 +935,13 @@
         enter? (= keyname "Enter")
         esc? (= keyname "Escape")
         composing? (util/goog-event-is-composing? e)
-        highlighted-group @(::highlighted-group state)
-        show-less (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :less))
-        show-more (fn [] (swap! (::results state) assoc-in [highlighted-group :show] :more))
+        highlighted-group (some-> (state->highlighted-item state) :group)
+        show-less (fn []
+                    (when highlighted-group
+                      (swap! (::results state) assoc-in [highlighted-group :show] :less)))
+        show-more (fn []
+                    (when highlighted-group
+                      (swap! (::results state) assoc-in [highlighted-group :show] :more)))
         input @(::input state)
         as-keydown? (or (= keyname "ArrowDown") (and ctrl? (= keyname "n")))
         as-keyup? (or (= keyname "ArrowUp") (and ctrl? (= keyname "p")))]
@@ -1187,7 +1190,6 @@
            ::filter (atom filter-group)
            ::input (atom input)
            ::input-ref (atom nil)
-           ::highlighted-group (atom nil)
            ::all-items-cache (atom [])
            ::scroll-raf (atom nil)
            ::scroll-target (atom nil)
