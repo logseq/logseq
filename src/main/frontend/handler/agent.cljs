@@ -92,6 +92,63 @@
          agent
          (> (count (:block/title block)) 4))))
 
+(defn project-repo-url
+  [block]
+  (some-> (:logseq.property/project block)
+          (pu/get-block-property-value :logseq.property/git-repo)
+          blank->nil))
+
+(defn- github-repo-ref
+  [repo-url]
+  (let [repo-url (blank->nil repo-url)]
+    (or (when-let [[_ owner repo]
+                   (some->> repo-url
+                            (re-matches #"^https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$"))]
+          {:owner owner :name repo})
+        (when-let [[_ owner repo]
+                   (some->> repo-url
+                            (re-matches #"^git@github\.com:([^/]+)/([^/]+?)(?:\.git)?$"))]
+          {:owner owner :name repo})
+        (when-let [[_ owner repo]
+                   (some->> repo-url
+                            (re-matches #"^ssh://git@github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$"))]
+          {:owner owner :name repo}))))
+
+(defn- normalize-branches
+  [branches]
+  (->> branches
+       (keep (fn [branch]
+               (when (string? branch)
+                 (let [branch (string/trim branch)]
+                   (when-not (string/blank? branch)
+                     branch)))))
+       distinct
+       vec))
+
+(defn- <fetch-project-branches-from-github!
+  [repo-url]
+  (if-let [{:keys [owner name]} (github-repo-ref repo-url)]
+    (-> (js/fetch (str "https://api.github.com/repos/"
+                       owner
+                       "/"
+                       name
+                       "/branches?per_page=100")
+                  #js {:method "GET"
+                       :headers #js {"accept" "application/vnd.github+json"
+                                     "x-github-api-version" "2022-11-28"}})
+        (p/then (fn [resp]
+                  (if-not (.-ok resp)
+                    []
+                    (-> (.json resp)
+                        (p/then (fn [data]
+                                  (->> (js->clj data :keywordize-keys true)
+                                       (keep (fn [item]
+                                               (when (map? item)
+                                                 (:name item))))
+                                       normalize-branches)))))))
+        (p/catch (fn [_] [])))
+    (p/resolved [])))
+
 (defn build-session-body
   ([block]
    (build-session-body block nil))
@@ -288,6 +345,31 @@
                         (update-session-state! block-uuid {:runtime-provider provider
                                                            :terminal-enabled (runtime-provider-terminal-enabled? provider)})))))
           (p/catch (fn [_] nil))))))
+
+(defn <fetch-project-branches!
+  [block]
+  (let [base (db-sync/http-base)
+        block-uuid (:block/uuid block)
+        session-id (some-> block-uuid str)
+        repo-url (project-repo-url block)]
+    (if-not (and (string? base) (string? session-id) (string? repo-url))
+      (p/resolved [])
+      (let [url (str base
+                     "/sessions/"
+                     session-id
+                     "/branches?repo-url="
+                     (js/encodeURIComponent repo-url))]
+        (-> (db-sync/fetch-json url
+                                {:method "GET"}
+                                {:response-schema :sessions/branches})
+            (p/then (fn [resp]
+                      (->> (:branches resp)
+                           (filter string?)
+                           normalize-branches)))
+            (p/catch (fn [error]
+                       (if (= 404 (:status (ex-data error)))
+                         (<fetch-project-branches-from-github! repo-url)
+                         []))))))))
 
 (defn- session-terminal? [block-uuid]
   (terminal-status? (:status (session-state block-uuid))))

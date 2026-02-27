@@ -282,6 +282,10 @@
   [:map
    [:events [:sequential :map]]])
 
+(def sessions-branches-response-schema
+  [:map
+   [:branches [:sequential :string]]])
+
 (def sessions-resume-response-schema
   [:map
    [:ok :boolean]
@@ -345,6 +349,7 @@
    :sessions/cancel http-ok-response-schema
    :sessions/pr sessions-pr-response-schema
    :sessions/events sessions-events-response-schema
+   :sessions/branches sessions-branches-response-schema
    :error http-error-response-schema})
 
 (def ^:private json-transformer

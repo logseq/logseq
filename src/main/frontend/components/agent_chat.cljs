@@ -4,6 +4,7 @@
             ["@xterm/xterm/lib/xterm.mjs" :refer [Terminal]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [frontend.components.select :as select]
             [frontend.handler.agent :as agent-handler]
             [frontend.handler.agent-chat-transport :as chat-transport]
             [frontend.handler.db-based.sync :as db-sync]
@@ -395,6 +396,99 @@
                    true))
                session-messages)))))
 
+(def ^:private branch-cache-storage-key "logseq.agent.repo-branches.v1")
+(def ^:private branch-selection-storage-key "logseq.agent.repo-last-branch.v1")
+
+(defn- repo-storage-key
+  [repo-url]
+  (when-let [repo-url (normalized-text repo-url)]
+    (or (when-let [[_ owner repo]
+                   (re-matches #"^https?://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$" repo-url)]
+          (str "github.com/" (string/lower-case owner) "/" (string/lower-case repo)))
+        (when-let [[_ owner repo]
+                   (re-matches #"^git@github\.com:([^/]+)/([^/]+?)(?:\.git)?$" repo-url)]
+          (str "github.com/" (string/lower-case owner) "/" (string/lower-case repo)))
+        (when-let [[_ owner repo]
+                   (re-matches #"^ssh://git@github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$" repo-url)]
+          (str "github.com/" (string/lower-case owner) "/" (string/lower-case repo)))
+        (-> repo-url
+            (string/lower-case)
+            (string/replace #"/+$" "")
+            (string/replace #"\.git$" "")))))
+
+(defn- read-local-map
+  [storage-key]
+  (try
+    (let [raw (.getItem js/localStorage storage-key)]
+      (if (string? raw)
+        (let [parsed (js->clj (js/JSON.parse raw))]
+          (if (map? parsed) parsed {}))
+        {}))
+    (catch :default _ {})))
+
+(defn- write-local-map!
+  [storage-key value]
+  (try
+    (.setItem js/localStorage storage-key (js/JSON.stringify (clj->js value)))
+    (catch :default e
+      (js/console.error e))))
+
+(defn- normalize-branch-options
+  [branches]
+  (->> branches
+       (keep normalized-text)
+       distinct
+       sort
+       vec))
+
+(defn- last-selected-branch
+  [repo-url]
+  (when-let [repo-key (repo-storage-key repo-url)]
+    (let [selection-map (read-local-map branch-selection-storage-key)]
+      (some-> (or (get selection-map repo-key)
+                  (when (string? repo-url)
+                    (get selection-map repo-url)))
+              normalized-text))))
+
+(defn- remember-last-selected-branch!
+  [repo-url branch]
+  (when-let [repo-key (repo-storage-key repo-url)]
+    (let [value (normalized-text branch)
+          current (read-local-map branch-selection-storage-key)]
+      (write-local-map! branch-selection-storage-key
+                        (if (string? value)
+                          (assoc current repo-key value)
+                          (-> current
+                              (dissoc repo-key)
+                              (dissoc repo-url)))))))
+
+(defn- cached-branches
+  [repo-url]
+  (if-not (string? repo-url)
+    []
+    (let [repo-key (repo-storage-key repo-url)
+          cache-map (read-local-map branch-cache-storage-key)
+          entry (or (get cache-map repo-key)
+                    (get cache-map repo-url))
+          branches (normalize-branch-options (get entry "branches"))]
+      branches)))
+
+(defn- remember-cached-branches!
+  [repo-url branches]
+  (when-let [repo-key (repo-storage-key repo-url)]
+    (let [branches (normalize-branch-options branches)
+          cache (read-local-map branch-cache-storage-key)]
+      (write-local-map! branch-cache-storage-key
+                        (assoc cache repo-key {"branches" branches
+                                               "fetched-at-ms" (.now js/Date)})))))
+
+(defn- with-last-branch
+  [repo-url branches]
+  (let [last-branch (last-selected-branch repo-url)]
+    (normalize-branch-options
+     (cond-> (vec branches)
+       (string? last-branch) (conj last-branch)))))
+
 (defn- parse-json-safe
   [value]
   (when (string? value)
@@ -521,6 +615,7 @@
         session (get sessions (str block-uuid))
         session-id (or (:session-id session) (some-> block-uuid str))
         base (db-sync/http-base)
+        repo-url (agent-handler/project-repo-url block)
         agent-value (:logseq.property/agent block)
         agent-label (agent-title agent-value)
         session-messages (session->messages session block)
@@ -551,6 +646,9 @@
         [active-view set-active-view!] (rum/use-state "chat")
         [draft set-draft!] (rum/use-state "")
         [start-branch set-start-branch!] (rum/use-state "")
+        [branch-options set-branch-options!] (rum/use-state [])
+        [branch-select-open? set-branch-select-open?!] (rum/use-state false)
+        [loading-branches? set-loading-branches?!] (rum/use-state false)
         [starting-session? set-starting-session?!] (rum/use-state false)
         [publish-mode set-publish-mode!] (rum/use-state nil)
         [terminal-visible? set-terminal-visible!] (rum/use-state false)
@@ -566,11 +664,16 @@
                                     (not (string? terminal-url)))
         trimmed-draft (string/trim (or draft ""))
         selected-start-branch (normalized-text start-branch)
+        branch-select-items (vec (map (fn [branch]
+                                        {:value branch
+                                         :label branch})
+                                      branch-options))
         busy? (contains? #{"submitted" "streaming"} chat-status)
         input-disabled? (or (not session-started?) (not (agent-handler/task-ready? block)))
         publish-busy? (some? publish-mode)
         start-session-disabled? (or starting-session?
                                     session-started?
+                                    (not (string? selected-start-branch))
                                     (not (agent-handler/task-ready? block)))
         publish-disabled? (or input-disabled? busy? publish-busy?)
         can-send? (and (not input-disabled?)
@@ -585,12 +688,31 @@
         start-session! (fn []
                          (when (and base session-id (not start-session-disabled?))
                            (set-starting-session?! true)
-                           (let [opts (cond-> {}
-                                        (string? selected-start-branch)
-                                        (assoc :base-branch selected-start-branch))]
+                           (let [opts {:base-branch selected-start-branch}]
                              (-> (agent-handler/<start-session! block opts)
+                                 (p/then (fn [resp]
+                                           (when (and (map? resp)
+                                                      (string? selected-start-branch)
+                                                      (string? repo-url))
+                                             (remember-last-selected-branch! repo-url selected-start-branch))
+                                           resp))
                                  (p/catch (fn [_] nil))
                                  (p/finally (fn [] (set-starting-session?! false)))))))
+        refresh-branches! (fn []
+                            (when (and (not session-started?) (string? repo-url))
+                              (set-loading-branches?! true)
+                              (-> (agent-handler/<fetch-project-branches! block)
+                                  (p/then (fn [fetched-branches]
+                                            (let [fetched-branches (normalize-branch-options fetched-branches)
+                                                  options (with-last-branch repo-url fetched-branches)]
+                                              (remember-cached-branches! repo-url fetched-branches)
+                                              (set-branch-options! options)
+                                              (when-not (and (string? selected-start-branch)
+                                                             (some #(= % selected-start-branch) options))
+                                                (set-start-branch! (or (last-selected-branch repo-url) ""))))))
+                                  (p/catch (fn [_] nil))
+                                  (p/finally (fn []
+                                               (set-loading-branches?! false))))))
         publish! (fn [create-pr?]
                    (when (and base session-id (not publish-disabled?))
                      (set-publish-mode! (if create-pr? :pr :push))
@@ -630,6 +752,41 @@
          (agent-handler/<ensure-session! block))
        nil)
      [block-uuid (:logseq.property/project block) (:logseq.property/agent block)])
+    (hooks/use-effect!
+     (fn []
+       (let [alive? (atom true)
+             remembered-branch (last-selected-branch repo-url)
+             apply-branches! (fn [branches]
+                               (when @alive?
+                                 (let [options (with-last-branch repo-url branches)]
+                                   (set-branch-options! options)
+                                   (if (and (string? selected-start-branch)
+                                            (some #(= % selected-start-branch) options))
+                                     (set-start-branch! selected-start-branch)
+                                     (set-start-branch! (or remembered-branch ""))))))]
+         (if (or session-started? (not (string? repo-url)))
+           (do
+             (set-loading-branches?! false)
+             (set-branch-options! [])
+             (set-branch-select-open?! false)
+             (set-start-branch! ""))
+           (let [branches (cached-branches repo-url)]
+             (apply-branches! branches)
+             (if (seq branches)
+               (set-loading-branches?! false)
+               (do
+                 (set-loading-branches?! true)
+                 (-> (agent-handler/<fetch-project-branches! block)
+                     (p/then (fn [fetched-branches]
+                               (let [fetched-branches (normalize-branch-options fetched-branches)]
+                                 (remember-cached-branches! repo-url fetched-branches)
+                                 (apply-branches! fetched-branches))))
+                     (p/catch (fn [_] nil))
+                     (p/finally (fn []
+                                  (when @alive?
+                                    (set-loading-branches?! false)))))))))
+         (fn [] (reset! alive? false))))
+     [block-uuid repo-url session-started?])
     (hooks/use-effect!
      (fn []
        (when (and (fn? set-messages!)
@@ -747,141 +904,175 @@
       terminal-url
       terminal-connection-key])
     [:div.max-w-full.flex.flex-col.gap-3
-     {:style {:height "72vh" :overflow "hidden"}}
-     [:div.flex.items-center.gap-3
-      [:div.min-w-0.flex.flex-col.gap-2
-       [:div {:class "inline-flex w-fit items-center gap-1 rounded-lg border border-border bg-muted/40 p-1"}
-        (shui/button
-         {:size :sm
-          :variant (if (= active-view "chat") :default :ghost)
-          :class "h-7 px-3 text-xs"
-          :on-click (fn [_] (set-active-view! "chat"))}
-         "Chat")
-        (when terminal-enabled?
-          (shui/button
-           {:size :sm
-            :variant (if terminal-tab-active? :default :ghost)
-            :class "h-7 px-3 text-xs"
-            :on-click (fn [_] (open-terminal-tab!))}
-           [:span.inline-flex.items-center.gap-1
-            [:span.inline-block.h-1.5.w-1.5.rounded-full
-             {:class (terminal-status-dot-class terminal-status)}]
-            "Terminal"]))]]
-
-      (cond
-        (and terminal-enabled? terminal-tab-active?)
-        [:div.flex.items-center.gap-2
+     {:style (when session-started?
+               {:height "72vh" :overflow "hidden"})}
+     (if-not session-started?
+       [:div {:class "rounded-xl border border-border/70 bg-muted/30 p-3"}
+        [:div.flex.items-end.gap-2
+         [:div.flex-1
+          [:div.mb-1.text-xs.opacity-70 "Base branch"]
+          (if branch-select-open?
+            [:div
+             {:key (str "branch-fuzzy-select-" (or repo-url "") "-" (or start-branch ""))}
+             (select/select
+              {:items branch-select-items
+               :dropdown? false
+               :close-modal? false
+               :extract-fn :label
+               :extract-chosen-fn :value
+               :show-new-when-not-exact-match? false
+               :input-default-placeholder (if loading-branches?
+                                            "Loading branches..."
+                                            "Search branches")
+               :input-opts {:class "!p-1.5 text-xs h-9 rounded"
+                            :disabled (or starting-session? loading-branches?)}
+               :host-opts {:style {:max-height "80%"}}
+               :on-chosen (fn [value _ _ _]
+                            (let [chosen-branch (or value "")]
+                              (set-start-branch! chosen-branch)
+                              (remember-last-selected-branch! repo-url chosen-branch))
+                            (set-branch-select-open?! false))})]
+            (shui/button
+             {:size :sm
+              :variant :outline
+              :class "h-9 w-full justify-between px-3 text-xs font-normal"
+              :disabled (or starting-session? loading-branches?)
+              :on-click (fn [_] (set-branch-select-open?! true))}
+             (or selected-start-branch
+                 (if loading-branches?
+                   "Loading branches..."
+                   "Select a base branch"))))]
          (shui/button
           {:size :sm
            :variant :outline
-           :class "h-7 px-2 text-xs"
-           :disabled terminal-open-disabled?
-           :on-click (fn [_]
-                       (if terminal-visible?
-                         (reconnect-terminal!)
-                         (open-terminal!)))}
-          (if terminal-visible? "Reconnect" "Connect"))
-         (when terminal-visible?
+           :class "h-9 px-3 text-xs"
+           :disabled (or starting-session? loading-branches? (not (string? repo-url)))
+           :on-click (fn [_] (refresh-branches!))}
+          (if loading-branches?
+            "Refreshing..."
+            "Refresh"))
+         (shui/button
+          {:size :sm
+           :class "h-9 px-3 text-xs"
+           :disabled start-session-disabled?
+           :on-click (fn [_] (start-session!))}
+          (if starting-session?
+            "Starting..."
+            "Start session"))]]
+       [:<>
+        [:div.flex.items-center.gap-3
+         [:div.min-w-0.flex.flex-col.gap-2
+          [:div {:class "inline-flex w-fit items-center gap-1 rounded-lg border border-border bg-muted/40 p-1"}
            (shui/button
             {:size :sm
-             :variant :outline
-             :class "h-7 px-2 text-xs"
-             :on-click (fn [_] (close-terminal!))}
-            "Disconnect"))]
-        (not terminal-tab-active?)
-        [:div {:class "inline-flex items-center gap-2 rounded-full bg-muted/70 px-2.5 py-1 text-xs"}
-         [:span.font-medium (or agent-label "Agent")]
-         (when busy?
-           [:span.inline-flex.items-center.gap-1.text-emerald-600
-            [:span.inline-block.h-1.5.w-1.5.animate-pulse.rounded-full.bg-emerald-500]
-            "Streaming"])])]
-     (when (string? error)
-       [:div {:class "mt-0.5 rounded-lg border border-red-300/40 bg-red-500/5 px-3 py-1.5 text-xs text-red-500"}
-        error])
-     (when (and terminal-tab-active? (string? terminal-error))
-       [:div {:class "mt-0.5 rounded-lg border border-red-300/40 bg-red-500/5 px-3 py-1.5 text-xs text-red-500"}
-        terminal-error])
-     (when-not session-started?
-       [:div {:class "flex items-end gap-2 rounded-xl border border-border/70 bg-muted/30 p-2"}
-        [:div.flex-1
-         [:div.mb-1.text-xs.opacity-70 "Base branch (optional)"]
-         (shui/input
-          {:placeholder "Leave empty to auto-detect from GitHub"
-           :value start-branch
-           :disabled starting-session?
-           :on-change #(set-start-branch! (or (.. % -target -value) ""))
-           :on-key-down (fn [^js e]
-                          (when (= "Enter" (.-key e))
-                            (.preventDefault e)
-                            (start-session!)))})]
-        (shui/button
-         {:size :sm
-          :class "h-9 px-3 text-xs"
-          :disabled start-session-disabled?
-          :on-click (fn [_] (start-session!))}
-         (if starting-session?
-           "Starting..."
-           "Start session"))])
-     [:div {:class "relative flex flex-1 flex-col overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-b from-background via-background to-muted/40 shadow-sm"
-            :style {:minHeight 0}}
-      [:div.h-full.min-h-0
-       {:class (if terminal-tab-active? "hidden" "block")}
-       (shui/agent-chat-box
-        {:messages (bean/->js chat-messages)
-         :agent-label agent-label
-         :class "h-full"
-         :content-class-name "gap-3 px-2 py-3 sm:px-3"})]
-      (when terminal-enabled?
-        [:div.h-full.min-h-0.flex.flex-col
-         {:class (if terminal-tab-active? "flex" "hidden")}
-         [:div.flex-1.min-h-0.p-3
-          (if terminal-open-disabled?
-            [:div {:class "h-full rounded-xl border border-dashed border-border/80 bg-muted/20 px-4 py-3 text-xs opacity-70"}
-             "Terminal will connect after the session starts."]
-            [:div {:class "h-full overflow-hidden rounded-xl border border-border/80 bg-black"}
-             (if terminal-visible?
-               [:div
-                {:ref terminal-container-ref
-                 :class "h-full w-full"}]
-               [:div {:class "flex h-full items-center justify-center text-xs text-white/70"}
-                "Connect terminal to start interactive shell"])])]])]
-     (when-not terminal-tab-active?
-       [:div.flex.items-center.justify-between.gap-2
-        [:div.text-xs.opacity-60
-         (if publish-busy?
-           "Publishing changes..."
-           "Publish session changes")]
-        [:div.flex.items-center.gap-2
-         (shui/button
-          {:size :sm
-           :variant :outline
-           :class "h-7 px-2 text-xs"
-           :disabled publish-disabled?
-           :on-click (fn [_]
-                       (publish! false))}
-          (if (= publish-mode :push)
-            "Pushing..."
-            "Push"))
-         (shui/button
-          {:size :sm
-           :class "h-7 px-2 text-xs"
-           :disabled publish-disabled?
-           :on-click (fn [_]
-                       (publish! true))}
-          (if (= publish-mode :pr)
-            "Creating PR..."
-            "Push + PR"))]])
-     (when-not terminal-tab-active?
-       (shui/agent-chat-prompt-input
-        {:value draft
-         :on-value-change set-draft!
-         :on-send send-message!
-         :disabled input-disabled?
-         :busy busy?
-         :placeholder (if input-disabled?
-                        "Start the session to chat..."
-                        "Message the agent...")
-         :hint "Enter to send, Shift+Enter for newline"}))]))
+             :variant (if (= active-view "chat") :default :ghost)
+             :class "h-7 px-3 text-xs"
+             :on-click (fn [_] (set-active-view! "chat"))}
+            "Chat")
+           (when terminal-enabled?
+             (shui/button
+              {:size :sm
+               :variant (if terminal-tab-active? :default :ghost)
+               :class "h-7 px-3 text-xs"
+               :on-click (fn [_] (open-terminal-tab!))}
+              [:span.inline-flex.items-center.gap-1
+               [:span.inline-block.h-1.5.w-1.5.rounded-full
+                {:class (terminal-status-dot-class terminal-status)}]
+               "Terminal"]))]]
+
+         (cond
+           (and terminal-enabled? terminal-tab-active?)
+           [:div.flex.items-center.gap-2
+            (shui/button
+             {:size :sm
+              :variant :outline
+              :class "h-7 px-2 text-xs"
+              :disabled terminal-open-disabled?
+              :on-click (fn [_]
+                          (if terminal-visible?
+                            (reconnect-terminal!)
+                            (open-terminal!)))}
+             (if terminal-visible? "Reconnect" "Connect"))
+            (when terminal-visible?
+              (shui/button
+               {:size :sm
+                :variant :outline
+                :class "h-7 px-2 text-xs"
+                :on-click (fn [_] (close-terminal!))}
+               "Disconnect"))]
+           (not terminal-tab-active?)
+           [:div {:class "inline-flex items-center gap-2 rounded-full bg-muted/70 px-2.5 py-1 text-xs"}
+            [:span.font-medium (or agent-label "Agent")]
+            (when busy?
+              [:span.inline-flex.items-center.gap-1.text-emerald-600
+               [:span.inline-block.h-1.5.w-1.5.animate-pulse.rounded-full.bg-emerald-500]
+               "Streaming"])])]
+        (when (string? error)
+          [:div {:class "mt-0.5 rounded-lg border border-red-300/40 bg-red-500/5 px-3 py-1.5 text-xs text-red-500"}
+           error])
+        (when (and terminal-tab-active? (string? terminal-error))
+          [:div {:class "mt-0.5 rounded-lg border border-red-300/40 bg-red-500/5 px-3 py-1.5 text-xs text-red-500"}
+           terminal-error])
+        [:div {:class "relative flex flex-1 flex-col overflow-hidden rounded-2xl border border-border/80 bg-gradient-to-b from-background via-background to-muted/40 shadow-sm"
+               :style {:minHeight 0}}
+         [:div.h-full.min-h-0
+          {:class (if terminal-tab-active? "hidden" "block")}
+          (shui/agent-chat-box
+           {:messages (bean/->js chat-messages)
+            :agent-label agent-label
+            :class "h-full"
+            :content-class-name "gap-3 px-2 py-3 sm:px-3"})]
+         (when terminal-enabled?
+           [:div.h-full.min-h-0.flex.flex-col
+            {:class (if terminal-tab-active? "flex" "hidden")}
+            [:div.flex-1.min-h-0.p-3
+             (if terminal-open-disabled?
+               [:div {:class "h-full rounded-xl border border-dashed border-border/80 bg-muted/20 px-4 py-3 text-xs opacity-70"}
+                "Terminal will connect after the session starts."]
+               [:div {:class "h-full overflow-hidden rounded-xl border border-border/80 bg-black"}
+                (if terminal-visible?
+                  [:div
+                   {:ref terminal-container-ref
+                    :class "h-full w-full"}]
+                  [:div {:class "flex h-full items-center justify-center text-xs text-white/70"}
+                   "Connect terminal to start interactive shell"])])]])]
+        (when-not terminal-tab-active?
+          [:div.flex.items-center.justify-between.gap-2
+           [:div.text-xs.opacity-60
+            (if publish-busy?
+              "Publishing changes..."
+              "Publish session changes")]
+           [:div.flex.items-center.gap-2
+            (shui/button
+             {:size :sm
+              :variant :outline
+              :class "h-7 px-2 text-xs"
+              :disabled publish-disabled?
+              :on-click (fn [_]
+                          (publish! false))}
+             (if (= publish-mode :push)
+               "Pushing..."
+               "Push"))
+            (shui/button
+             {:size :sm
+              :class "h-7 px-2 text-xs"
+              :disabled publish-disabled?
+              :on-click (fn [_]
+                          (publish! true))}
+             (if (= publish-mode :pr)
+               "Creating PR..."
+               "Push + PR"))]])
+        (when-not terminal-tab-active?
+          (shui/agent-chat-prompt-input
+           {:value draft
+            :on-value-change set-draft!
+            :on-send send-message!
+            :disabled input-disabled?
+            :busy busy?
+            :placeholder (if input-disabled?
+                           "Start the session to chat..."
+                           "Message the agent...")
+            :hint "Enter to send, Shift+Enter for newline"}))])]))
 
 (defn open-agent-chat-dialog!
   [block]

@@ -165,6 +165,32 @@
             nil))))
     (p/resolved nil)))
 
+(defn <list-branches!
+  [^js env token repo-url]
+  (if-let [{:keys [provider owner name]} (repo-ref repo-url)]
+    (if-not (= "github" provider)
+      (p/resolved [])
+      (let [url (str (api-base-url env) "/repos/" owner "/" name "/branches?per_page=100")
+            headers (doto (js/Headers.)
+                      (.set "accept" "application/vnd.github+json")
+                      (.set "user-agent" (user-agent env))
+                      (.set "x-github-api-version" "2022-11-28"))
+            _ (when (string? token)
+                (.set headers "authorization" (str "Bearer " token)))]
+        (p/let [resp (js/fetch url #js {:method "GET" :headers headers})
+                status (.-status resp)
+                text (.text resp)
+                payload (parse-json-safe text)]
+          (if (<= 200 status 299)
+            (->> (if (sequential? payload) payload [])
+                 (keep (fn [item]
+                         (when (map? item)
+                           (some-> (:name item) sanitize-branch-name))))
+                 distinct
+                 vec)
+            []))))
+    (p/resolved [])))
+
 (defn <create-pull-request!
   [^js env token repo-url {:keys [title body head-branch base-branch draft]}]
   (cond

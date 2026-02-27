@@ -26,6 +26,9 @@
   (testing "sessions events routes"
     (let [match (routes/match-route "GET" "/sessions/session-9/events")]
       (is (= :sessions/events (:handler match)))
+      (is (= "session-9" (get-in match [:path-params :session-id]))))
+    (let [match (routes/match-route "GET" "/sessions/session-9/branches")]
+      (is (= :sessions/branches (:handler match)))
       (is (= "session-9" (get-in match [:path-params :session-id]))))))
 
 (deftest match-route-sessions-control-test

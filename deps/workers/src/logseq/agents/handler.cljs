@@ -1,9 +1,9 @@
 (ns logseq.agents.handler
   (:require [lambdaisland.glogi :as log]
-            [logseq.sync.common :as common]
-            [logseq.sync.platform.core :as platform]
             [logseq.agents.request :as agent-request]
             [logseq.agents.routes :as routes]
+            [logseq.sync.common :as common]
+            [logseq.sync.platform.core :as platform]
             [logseq.sync.worker.auth :as auth]
             [logseq.sync.worker.http :as http]
             [promesa.core :as p]))
@@ -164,6 +164,16 @@
           (forward-request stub do-url "GET" headers nil))
         (http/error-response "server error" 500)))))
 
+(defn- handle-branches [{:keys [env request url claims route]}]
+  (let [session-id (get-in route [:path-params :session-id])]
+    (if-not (string? session-id)
+      (http/bad-request "invalid session id")
+      (if-let [^js stub (session-stub env session-id)]
+        (let [headers (base-headers request claims)
+              do-url (str (.-origin url) "/__session__/branches" (.-search url))]
+          (forward-request stub do-url "GET" headers nil))
+        (http/error-response "server error" 500)))))
+
 (defn- handle-pr [{:keys [env request url claims route]}]
   (let [session-id (get-in route [:path-params :session-id])]
     (if-not (string? session-id)
@@ -195,6 +205,7 @@
     :sessions/pr (handle-pr ctx)
     :sessions/terminal (handle-terminal ctx)
     :sessions/events (handle-events ctx)
+    :sessions/branches (handle-branches ctx)
     :sessions/stream (handle-stream ctx)
     (http/not-found)))
 

@@ -13,6 +13,7 @@
      ["/cancel" {:methods {"POST" :sessions/cancel}}]
      ["/pr" {:methods {"POST" :sessions/pr}}]
      ["/events" {:methods {"GET" :sessions/events}}]
+     ["/branches" {:methods {"GET" :sessions/branches}}]
      ["/terminal" {:methods {"GET" :sessions/terminal}}]
      ["/stream" {:methods {"GET" :sessions/stream}}]]]])
 

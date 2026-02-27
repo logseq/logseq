@@ -152,6 +152,15 @@
   [session]
   (some-> (get-in session [:task :project :repo-url]) str string/trim not-empty))
 
+(defn- repo-url-from-request
+  [request]
+  (some-> (platform/request-url request)
+          .-searchParams
+          (.get "repo-url")
+          str
+          string/trim
+          not-empty))
+
 (def ^:private default-pr-title-max-len 72)
 (def ^:private default-head-branch-slug-max-len 54)
 
@@ -259,6 +268,11 @@
   "main")
 
 (defn- github-default-branch-token
+  [^js env]
+  (or (source-control/push-token env)
+      (source-control/pr-token env)))
+
+(defn- github-branches-token
   [^js env]
   (or (source-control/push-token env)
       (source-control/pr-token env)))
@@ -1060,6 +1074,24 @@
                 filtered (session/filter-events events {:since-ts since-ts :limit limit})]
           (http/json-response :sessions/events {:events filtered}))))))
 
+(defn- handle-branches [^js self request]
+  (let [user-id (user-id-from-request request)]
+    (if-not (string? user-id)
+      (http/unauthorized)
+      (let [env (.-env self)]
+        (p/let [session (<get-session self)
+                repo-url (or (repo-url-from-request request)
+                             (repo-url-from-session session))]
+          (if-not (string? repo-url)
+            (http/bad-request "missing repo url")
+            (p/let [branches (source-control/<list-branches! env
+                                                             (github-branches-token env)
+                                                             repo-url)]
+              (http/json-response :sessions/branches
+                                  {:branches (->> branches
+                                                  (filter string?)
+                                                  vec)}))))))))
+
 (defn handle-fetch [^js self request]
   (let [url (platform/request-url request)
         path (.-pathname url)
@@ -1103,6 +1135,9 @@
 
           (= path "/__session__/events")
           (handle-events self request)
+
+          (= path "/__session__/branches")
+          (handle-branches self request)
 
           :else
           (http/not-found))
