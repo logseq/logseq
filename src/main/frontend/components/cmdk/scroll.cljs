@@ -1,5 +1,5 @@
 (ns frontend.components.cmdk.scroll
-  "Scroll geometry helpers for Cmd+K focus visibility and wheel anchoring.")
+  "Scroll geometry helpers for Cmd+K focus visibility.")
 
 (defn focus-row-visible-rect
   "Builds normalized focus geometry from `container` and `target` DOM elements.
