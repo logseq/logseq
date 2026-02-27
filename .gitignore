@@ -69,9 +69,9 @@ deps/shui/.clj-kondo
 deps/publish/worker/.wrangler
 deps/publish/worker/dist
 deps/publish/worker/.env*
-deps/db-sync/worker/.wrangler
-deps/db-sync/worker/dist
-deps/db-sync/worker/.env*
+deps/workers/worker/.wrangler
+deps/workers/worker/dist
+deps/workers/worker/.env*
 
 
 tx-log*
@@ -79,5 +79,5 @@ clj-e2e/.wally
 clj-e2e/e2e-dump
 .dir-locals.el
 .projectile
-deps/db-sync/data
+deps/workers/data
 /packages/ui/@/lib/streamdown-bundle.js

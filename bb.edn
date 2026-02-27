@@ -172,12 +172,12 @@
 
   dev:db-sync-test
   {:doc "Run db-sync server unit tests"
-   :task (do (shell {:dir "deps/db-sync"} "clojure -M:cljs compile db-sync-test")
-             (shell {:dir "deps/db-sync"} "node worker/dist/worker-test.js"))}
+   :task (do (shell {:dir "deps/workers"} "clojure -M:cljs compile db-sync-test")
+             (shell {:dir "deps/workers"} "node worker/dist/worker-test.js"))}
 
   dev:db-sync-start
   {:doc "Start db-sync local server + client watch processes in foreground"
-   :task logseq.tasks.dev.db-sync/start}
+   :task logseq.tasks.dev.sync/start}
 
   dev:gen-malli-kondo-config
   logseq.tasks.dev/gen-malli-kondo-config

@@ -6,25 +6,25 @@ on:
   push:
     branches: [master]
     paths:
-      - 'deps/db-sync/**'
+      - 'deps/workers/**'
       - '.github/workflows/deps-db-sync.yml'
-      - '!deps/db-sync/**.md'
+      - '!deps/workers/**.md'
       # Deps that logseq/db-sync depends on should trigger this workflow
       - 'deps/db/**'
       - 'deps/common/**'
   pull_request:
     branches: [master]
     paths:
-      - 'deps/db-sync/**'
+      - 'deps/workers/**'
       - '.github/workflows/deps-db-sync.yml'
-      - '!deps/db-sync/**.md'
+      - '!deps/workers/**.md'
       # Deps that logseq/db-sync depends on should trigger this workflow
       - 'deps/db/**'
       - 'deps/common/**'
 
 defaults:
   run:
-    working-directory: deps/db-sync
+    working-directory: deps/workers
 
 env:
   CLOJURE_VERSION: '1.11.1.1413'
@@ -46,7 +46,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'yarn'
-          cache-dependency-path: deps/db-sync/yarn.lock
+          cache-dependency-path: deps/workers/yarn.lock
 
       - name: Set up Java
         uses: actions/setup-java@v4

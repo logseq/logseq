@@ -1,0 +1,18 @@
+(ns logseq.sync.node.entry
+  (:require [logseq.sync.node.config :as config]
+            [logseq.sync.node.server :as server]
+            [logseq.sync.sentry.node :as sentry]
+            [promesa.core :as p]))
+
+(defonce ^:private *server (atom nil))
+
+(defn main [& _args]
+  (sentry/init!)
+  (let [cfg (config/normalize-config {})]
+    (js/console.log "Starting Logseq sync...")
+    (-> (server/start! cfg)
+        (p/then (fn [result]
+                  (reset! *server result)
+                  (js/console.log (str "Logseq sync listening on port " (:port result)))))
+        (p/catch (fn [error]
+                   (js/console.error "Logseq sync failed to start" error))))))

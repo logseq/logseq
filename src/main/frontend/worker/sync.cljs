@@ -16,14 +16,14 @@
             [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db-sync.cycle :as sync-cycle]
-            [logseq.db-sync.malli-schema :as db-sync-schema]
-            [logseq.db-sync.order :as sync-order]
             [logseq.db.common.normalize :as db-normalize]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]
+            [logseq.sync.cycle :as sync-cycle]
+            [logseq.sync.malli-schema :as db-sync-schema]
+            [logseq.sync.order :as sync-order]
             [promesa.core :as p]))
 
 (defonce *repo->latest-remote-tx (atom {}))

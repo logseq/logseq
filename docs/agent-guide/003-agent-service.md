@@ -176,7 +176,7 @@ Errors and idempotency:
   },
   "execution": {
     "repo": "logseq/web",
-    "workdir": "deps/db-sync",
+    "workdir": "deps/workers",
     "env": {
       "LOGSEQ_GRAPH": "main"
     },

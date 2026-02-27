@@ -8,7 +8,7 @@ This guide helps AI agents implement and review db-sync features consistently ac
 - Client runtime: `src/main/frontend/worker/db_sync.cljs`
 - Worker thread API: `src/main/frontend/worker/db_worker.cljs`
 - Handler entry points: `src/main/frontend/handler/db_based/db_sync.cljs`
-- Server worker code: `deps/db-sync/src/logseq/db_sync/`
+- Server worker code: `deps/workers/src/logseq/sync/`
 
 ## Implementation Workflow
 1) **Define behavior**: state the new capability, expected inputs/outputs, and compatibility requirements.
@@ -47,8 +47,8 @@ This guide helps AI agents implement and review db-sync features consistently ac
 ## Testing & Verification
 - Local dev(client+server): `bb dev:db-sync-start` runs the db-sync watcher, `wrangler dev`, and `yarn watch` with `ENABLE_DB_SYNC_LOCAL=true`
 - DB-sync server side unit-tests: `bb dev:db-sync-test`
-- Node adapter tests: `cd deps/db-sync && npm run test:node-adapter`
-- Node adapter build/run: `cd deps/db-sync && npm run build:node-adapter && npm run start:node-adapter`
+- Node adapter tests: `cd deps/workers && npm run test:node-adapter`
+- Node adapter build/run: `cd deps/workers && npm run build:node-adapter && npm run start:node-adapter`
 
 ## Review Checklist
 - Protocol versioning and error handling are consistent across client/server.
