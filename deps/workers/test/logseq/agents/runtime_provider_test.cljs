@@ -754,8 +754,7 @@
                                  (swap! sandboxes assoc id sandbox)
                                  sandbox)))}
                env #js {"Sandbox" sandbox-ns
-                        "CLOUDFLARE_SANDBOX_AGENT_PORT" "8000"
-                        "GITHUB_DEFAULT_BASE_BRANCH" "main"}
+                        "CLOUDFLARE_SANDBOX_AGENT_PORT" "8000"}
                provider (runtime-provider/create-provider env "cloudflare")
                task {:agent {:provider "codex"}
                      :project {:repo-url "https://github.com/example/repo"
@@ -830,8 +829,7 @@
                                  (swap! sandboxes assoc id sandbox)
                                  sandbox)))}
                env #js {"Sandbox" sandbox-ns
-                        "CLOUDFLARE_SANDBOX_AGENT_PORT" "8000"
-                        "GITHUB_DEFAULT_BASE_BRANCH" "main"}
+                        "CLOUDFLARE_SANDBOX_AGENT_PORT" "8000"}
                provider (runtime-provider/create-provider env "cloudflare")
                task {:agent {:provider "codex"}
                      :project {:repo-url "https://github.com/example/repo"

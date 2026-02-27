@@ -182,7 +182,6 @@ Cloudflare runtime flow:
 | CLOUDFLARE_HEALTH_INTERVAL_MS | Cloudflare sandbox health check retry interval (ms) |
 | GITHUB_TOKEN | Fallback token used for both git push and PR API calls |
 | GITHUB_API_BASE | Optional GitHub API base URL override (default `https://api.github.com`) |
-| GITHUB_DEFAULT_BASE_BRANCH | Default PR base branch fallback (default `main`) |
 | OPENAI_API_KEY | Passed into Cloudflare sandbox runtime env (if set) |
 | ANTHROPIC_API_KEY | Passed into Cloudflare sandbox runtime env (if set) |
 | OPENAI_BASE_URL | Passed into Cloudflare sandbox runtime env (if set) |

@@ -255,9 +255,8 @@
     (str prefix "/" slug "-" suffix)))
 
 (defn- default-base-branch
-  [^js env]
-  (or (some-> (aget env "GITHUB_DEFAULT_BASE_BRANCH") str string/trim not-empty)
-      "main"))
+  []
+  "main")
 
 (defn- github-default-branch-token
   [^js env]
@@ -291,7 +290,7 @@
                                                              (github-default-branch-token env)
                                                              repo-url)
               detected-base (source-control/sanitize-branch-name detected-base)
-              fallback-base (source-control/sanitize-branch-name (default-base-branch env))
+              fallback-base (source-control/sanitize-branch-name (default-base-branch))
               resolved-base (or detected-base fallback-base)]
         (if (string? resolved-base)
           (assoc-in task [:project :base-branch] resolved-base)
@@ -730,7 +729,7 @@
   [^js self current-session body user-id repo-url head-branch force? create-pr?]
   (p/let [pr-token (source-control/pr-token (.-env self))
           requested-base-branch (source-control/sanitize-branch-name (:base-branch body))
-          default-base (source-control/sanitize-branch-name (default-base-branch (.-env self)))
+          default-base (source-control/sanitize-branch-name (default-base-branch))
           detected-base-branch (when (nil? requested-base-branch)
                                  (source-control/<default-branch! (.-env self)
                                                                   pr-token

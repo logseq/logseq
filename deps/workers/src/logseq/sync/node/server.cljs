@@ -55,7 +55,6 @@
               (aset "CLOUDFLARE_HEALTH_INTERVAL_MS" (:cloudflare-health-interval-ms cfg))
               (aset "GITHUB_TOKEN" (:github-token cfg))
               (aset "GITHUB_API_BASE" (:github-api-base cfg))
-              (aset "GITHUB_DEFAULT_BASE_BRANCH" (:github-default-base-branch cfg))
               (aset "OPENAI_API_KEY" (:openai-api-key cfg))
               (aset "ANTHROPIC_API_KEY" (:anthropic-api-key cfg))
               (aset "OPENAI_BASE_URL" (:openai-base-url cfg))

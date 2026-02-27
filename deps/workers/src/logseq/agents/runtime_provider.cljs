@@ -377,16 +377,15 @@
   (some-> (get-in task [:project :repo-url]) str string/trim not-empty))
 
 (defn- task-repo-branch
-  [^js env task]
+  [task]
   (or (some-> (get-in task [:project :base-branch]) source-control/sanitize-branch-name)
       (some-> (get-in task [:project :branch]) source-control/sanitize-branch-name)
-      (some-> (env-str env "GITHUB_DEFAULT_BASE_BRANCH") source-control/sanitize-branch-name)
       "main"))
 
 (defn- repo-backup-key
-  [^js env task]
+  [task]
   (let [repo-url (task-repo-url task)
-        branch (task-repo-branch env task)]
+        branch (task-repo-branch task)]
     (when (and (string? repo-url) (string? branch))
       (let [{:keys [provider owner name]} (source-control/repo-ref repo-url)
             repo-key (if (and (string? provider)
@@ -1220,7 +1219,7 @@
           agent-token (env-str env "SANDBOX_AGENT_TOKEN")
           payload (session-payload task)
           repo-dir (get-repo-dir session-id)
-          backup-key (repo-backup-key env task)]
+          backup-key (repo-backup-key task)]
       (log/debug :agent/cloudflare-provision-start
                  {:session-id session-id
                   :sandbox-id sandbox-id
