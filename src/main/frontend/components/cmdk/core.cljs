@@ -719,22 +719,22 @@
                   (reset! (::scroll-target state) target-top)
                   (start-scroll-animation! state))))))))))
 
-(defn- render-result-list-item
-  [state group highlighted-item highlighted? mouse-mode? item hls-page? text]
+(rum/defc render-result-list-item < rum/static
+  [state group highlighted? mouse-mode? item hls-page? text input]
   (let [item-idx (:item-index item)
         item (list-item/root
               (assoc item
                      :group group
-                     :query (when-not (= group :create) @(::input state))
+                     :query (when-not (= group :create) input)
                      :text (if hls-page? (pdf-utils/fix-local-asset-pagename text) text)
                      :hls-page? hls-page?
                      :compact true
                      :rounded true
                      :hoverable mouse-mode?
                      :highlighted highlighted?
-                     ;; for some reason, the highlight effect does not always trigger on a
-                     ;; boolean value change so manually pass in the dep
-                     :on-highlight-dep highlighted-item
+                     ;; Pass the item itself when highlighted so the effect re-fires
+                     ;; if the list reloads while this item stays highlighted.
+                     :on-highlight-dep (when highlighted? item)
                      :on-click (fn [e]
                                  (util/stop-propagation e)
                                  (reset! (::highlighted-item state) item)
@@ -763,7 +763,7 @@
                                                     (= item @(::highlighted-item state)))
                                            (scroll-to-highlight! state row-el))))))
               nil)]
-    [:div {:key item-idx :data-item-index item-idx}
+    [:div {:data-item-index item-idx}
      (if (= group :nodes)
        (ui/lazy-visible (fn [] item) {:trigger-once? true})
        item)]))
@@ -776,6 +776,7 @@
         highlighted-item (or @(::highlighted-item state)
                              (when (= :keyboard focus-source) first-item))
         mouse-mode? (= :mouse focus-source)
+        input @(::input state)
         filter' @(::filter state)
         can-show-less? (< (get-group-limit group) (count visible-items))
         can-show-more? (< (count visible-items) (count items))
@@ -826,7 +827,9 @@
                   text (some-> item :text)
                   source-block (some-> item :source-block)
                   hls-page? (and page? (pdf-utils/hls-file? (:block/title source-block)))]]
-        (render-result-list-item state group highlighted-item highlighted? mouse-mode? item hls-page? text))]]))
+        (rum/with-key
+          (render-result-list-item state group highlighted? mouse-mode? item hls-page? text input)
+          (:item-index item)))]]))
 
 (defn move-highlight [state n]
   (let [items @(::all-items-cache state)
