@@ -45,8 +45,6 @@
      :cloudflare-health-retries (env-value env "CLOUDFLARE_HEALTH_RETRIES")
      :cloudflare-health-interval-ms (env-value env "CLOUDFLARE_HEALTH_INTERVAL_MS")
      :github-token (env-value env "GITHUB_TOKEN")
-     :github-push-token (env-value env "GITHUB_PUSH_TOKEN")
-     :github-pr-token (env-value env "GITHUB_PR_TOKEN")
      :github-api-base (env-value env "GITHUB_API_BASE")
      :github-default-base-branch (env-value env "GITHUB_DEFAULT_BASE_BRANCH")
      :openai-api-key (env-value env "OPENAI_API_KEY")
@@ -69,7 +67,7 @@
    :cloudflare-sandbox-name-prefix :cloudflare-sandbox-agent-port
    :cloudflare-bootstrap-command :cloudflare-repo-clone-command
    :cloudflare-health-retries :cloudflare-health-interval-ms
-   :github-token :github-push-token :github-pr-token :github-api-base
+   :github-token :github-api-base
    :github-default-base-branch
    :openai-api-key :anthropic-api-key :openai-base-url :anthropic-base-url
    :log-level :cognito-issuer :cognito-client-id :cognito-jwks-url])

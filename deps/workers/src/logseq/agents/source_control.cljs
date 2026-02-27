@@ -100,13 +100,11 @@
 
 (defn pr-token
   [^js env]
-  (or (some-> (aget env "GITHUB_PR_TOKEN") non-empty-str)
-      (some-> (aget env "GITHUB_TOKEN") non-empty-str)))
+  (some-> (aget env "GITHUB_TOKEN") non-empty-str))
 
 (defn push-token
   [^js env]
-  (or (some-> (aget env "GITHUB_PUSH_TOKEN") non-empty-str)
-      (some-> (aget env "GITHUB_TOKEN") non-empty-str)))
+  (some-> (aget env "GITHUB_TOKEN") non-empty-str))
 
 (defn push-remote-url
   [repo-url token]
