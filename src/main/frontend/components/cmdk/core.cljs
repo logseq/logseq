@@ -713,18 +713,31 @@
   [state row-el]
   (when-let [container @(::scroll-container-ref state)]
     (when row-el
-      (let [rect (scroll/focus-row-visible-rect container row-el)]
-        (when rect
-          (let [target-top (scroll/ensure-focus-visible-scroll-top rect)
-                current-top (.-scrollTop container)]
-            (when (not= target-top (js/Math.round current-top))
-              (if (= :instant (scroll/scroll-behavior current-top target-top (.-clientHeight container)))
-                (do
-                  (set! (.-scrollTop container) target-top)
-                  (reset! (::scroll-target state) nil))
-                (do
-                  (reset! (::scroll-target state) target-top)
-                  (start-scroll-animation! state))))))))))
+      (let [highlighted-item-index (some-> state state->highlighted-item :item-index)
+            row-item-index (some-> (.closest row-el "[data-item-index]")
+                                   (.getAttribute "data-item-index"))
+            stale-row? (and (some? highlighted-item-index)
+                            (some? row-item-index)
+                            (not= (str highlighted-item-index) row-item-index))]
+        ;; Async highlight callback can lag behind keyboard navigation.
+        ;; Drop stale row updates before any rect/math/animation work.
+        (when-not stale-row?
+          (let [rect (scroll/focus-row-visible-rect container row-el)]
+            (when rect
+              (let [target-top (scroll/ensure-focus-visible-scroll-top rect)
+                    current-top (.-scrollTop container)]
+                (when (not= target-top (js/Math.round current-top))
+                  (if (= :instant (scroll/scroll-behavior current-top target-top (.-clientHeight container)))
+                    (do
+                      (set! (.-scrollTop container) target-top)
+                      (reset! (::scroll-target state) nil))
+                    (let [pending-target @(::scroll-target state)
+                          scrolling? (some? @(::scroll-raf state))]
+                      ;; Sync path may run before row mount and async path may fire after mount.
+                      ;; Skip duplicate scheduling only when already animating to the same target.
+                      (when-not (and scrolling? (= pending-target target-top))
+                        (reset! (::scroll-target state) target-top)
+                        (start-scroll-animation! state)))))))))))))
 
 (rum/defc render-result-list-item < rum/static
   [state group highlighted? mouse-mode? item hls-page? text input]
