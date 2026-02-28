@@ -1032,6 +1032,20 @@
   (when-let [cmd (project-init-setup-command session-id task)]
     (<cloudflare-exec! sandbox cmd)))
 
+(defn- start-cloudflare-project-init-setup-background!
+  [sandbox session-id task sandbox-id]
+  (js/setTimeout
+   (fn []
+     (when-let [setup-promise (<cloudflare-run-project-init-setup! sandbox session-id task)]
+       (-> setup-promise
+           (p/catch (fn [error]
+                      (log/error :agent/cloudflare-project-init-setup-failed
+                                 {:session-id session-id
+                                  :sandbox-id sandbox-id
+                                  :error (str error)}))))))
+   0)
+  nil)
+
 (defn- <cloudflare-setup-github-auth! [sandbox github-token]
   (if-not (string? github-token)
     (p/resolved nil)
@@ -1325,12 +1339,7 @@
               _ (when-not restored?
                   (<cloudflare-clone-repo! env sandbox session-id task))
               response (<cloudflare-create-session! sandbox port agent-token session-id payload)]
-        (-> (<cloudflare-run-project-init-setup! sandbox session-id task)
-            (p/catch (fn [error]
-                       (log/error :agent/cloudflare-project-init-setup-failed
-                                  {:session-id session-id
-                                   :sandbox-id sandbox-id
-                                   :error (str error)}))))
+        (start-cloudflare-project-init-setup-background! sandbox session-id task sandbox-id)
         (log/debug :agent/cloudflare-provisioned
                    {:session-id session-id
                     :sandbox-id sandbox-id
