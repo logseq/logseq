@@ -61,10 +61,6 @@ service = "logseq-agents-staging"
 tag = "v1"
 new_sqlite_classes = [ "SyncDO" ]
 
-[[env.staging.migrations]]
-tag = "v2"
-deleted_classes = [ "SyncIndexDO" ]
-
 [[env.staging.r2_buckets]]
 binding = "LOGSEQ_SYNC_ASSETS"
 bucket_name = "logseq-sync-assets-dev"

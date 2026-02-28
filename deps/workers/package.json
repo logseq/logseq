@@ -21,8 +21,8 @@
     "sentry:sourcemaps:agents": "sentry-cli sourcemaps upload --release $SENTRY_RELEASE --rewrite --strip-prefix worker/dist/agents --url-prefix \"~/\" worker/dist/agents",
     "deploy-sync-prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && yarn clean && yarn release && yarn sentry:sourcemaps && cd ./worker && wrangler deploy --env prod",
     "deploy-sync-staging": "export SENTRY_RELEASE=$(git rev-parse HEAD) && yarn clean && yarn release && yarn sentry:sourcemaps && cd ./worker && wrangler deploy --env staging",
-    "deploy-agents-prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && yarn clean && yarn release:agents && yarn sentry:sourcemaps:agents && cd ./worker && wrangler deploy -c wrangler.agents.toml --env prod",
-    "deploy-agents-staging": "export SENTRY_RELEASE=$(git rev-parse HEAD) && yarn clean && yarn release:agents && yarn sentry:sourcemaps:agents && cd ./worker && wrangler deploy -c wrangler.agents.toml --env staging"
+    "deploy-agents-prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && yarn clean && clojure -M:cljs release agents-worker && yarn sentry:sourcemaps:agents && cd ./worker && wrangler deploy -c wrangler.agents.toml --env prod",
+    "deploy-agents-staging": "export SENTRY_RELEASE=$(git rev-parse HEAD) && yarn clean && clojure -M:cljs release agents-worker && yarn sentry:sourcemaps:agents && cd ./worker && wrangler deploy -c wrangler.agents.toml --env staging"
   },
   "dependencies": {
     "@cloudflare/sandbox": "0.7.6",
