@@ -723,6 +723,7 @@
   (testing "session publish endpoint supports push-only flow"
     (async done
            (let [push-calls (atom [])
+                 terminate-calls (atom [])
                  env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"}
                  self (make-self env)
                  headers {"content-type" "application/json"
@@ -745,7 +746,11 @@
                                            {:head-branch (:head-branch opts)
                                             :repo-url (:repo-url opts)
                                             :force (:force opts)
-                                            :remote "origin"}))]
+                                            :remote "origin"}))
+                                        agent-do/<terminate-runtime!
+                                        (fn [_self runtime]
+                                          (swap! terminate-calls conj runtime)
+                                          (js/Promise.resolve nil))]
                             (agent-do/handle-fetch self
                                                    (json-request "http://db-sync.local/__session__/pr"
                                                                  "POST"
@@ -763,6 +768,7 @@
                                    (is (= true (:force body)))
                                    (is (= "feat: summarize PR changes"
                                           (:commit-message (first @push-calls))))
+                                   (is (empty? @terminate-calls))
                                    (done)))))
                  (.catch (fn [error]
                            (is false (str "unexpected error: " error))
@@ -861,6 +867,67 @@
                                    (is (= same-branch (:head-branch body)))
                                    (is (= "main" (:base-branch body)))
                                    (done)))))
+                 (.catch (fn [error]
+                           (is false (str "unexpected error: " error))
+                           (done))))))))
+
+(deftest pr-endpoint-pr-created-terminates-runtime-test
+  (testing "session publish endpoint terminates runtime and clears sandbox runtime when PR is created"
+    (async done
+           (let [terminate-calls (atom [])
+                 env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"}
+                 self (make-self env)
+                 headers {"content-type" "application/json"
+                          "x-user-id" "user-1"}]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-pr-created"
+                                 :status "running"
+                                 :task {:project {:repo-url "https://github.com/example/repo"}}
+                                 :runtime {:provider "cloudflare"
+                                           :sandbox-id "sbx-pr-created"
+                                           :session-id "sess-pr-created"}
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (with-redefs [runtime-provider/<push-branch!
+                                        (fn [_provider _runtime opts]
+                                          (js/Promise.resolve
+                                           {:head-branch (:head-branch opts)
+                                            :repo-url (:repo-url opts)
+                                            :force (:force opts)
+                                            :remote "origin"}))
+                                        source-control/<pr-token!
+                                        (fn [_env _repo-url]
+                                          (js/Promise.resolve "pr-token"))
+                                        source-control/<create-pull-request!
+                                        (fn [_env _token _repo-url _opts]
+                                          (js/Promise.resolve {:url "https://github.com/example/repo/pull/88"
+                                                               :id 88}))
+                                        agent-do/<terminate-runtime!
+                                        (fn [_self runtime]
+                                          (swap! terminate-calls conj runtime)
+                                          (js/Promise.resolve nil))]
+                            (agent-do/handle-fetch self
+                                                   (json-request "http://db-sync.local/__session__/pr"
+                                                                 "POST"
+                                                                 {:create-pr true
+                                                                  :head-branch "m14/pr-created"
+                                                                  :base-branch "main"}
+                                                                 headers)))))
+                 (.then (fn [resp]
+                          (is (= 200 (.-status resp)))
+                          (.then (<json resp)
+                                 (fn [body]
+                                   (is (= "pr-created" (:status body)))
+                                   (is (= "https://github.com/example/repo/pull/88" (:pr-url body)))
+                                   (.then (.get (.-storage self) "session")
+                                          (fn [session]
+                                            (let [session (js->clj session :keywordize-keys true)]
+                                              (is (= 1 (count @terminate-calls)))
+                                              (is (nil? (:runtime session)))
+                                              (done))))))))
                  (.catch (fn [error]
                            (is false (str "unexpected error: " error))
                            (done))))))))

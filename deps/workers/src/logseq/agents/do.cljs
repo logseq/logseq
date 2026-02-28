@@ -331,6 +331,28 @@
     (let [provider (runtime-provider/resolve-provider (.-env self) runtime)]
       (runtime-provider/<terminate-runtime! provider runtime))))
 
+(defn- <cleanup-runtime-after-pr-ready! [^js self]
+  (p/let [current-session (<get-session self)]
+    (if-not (map? current-session)
+      nil
+      (let [runtime (:runtime current-session)]
+        (if-not (map? runtime)
+          nil
+          (p/let [terminated? (-> (<terminate-runtime! self runtime)
+                                  (p/then (fn [_] true))
+                                  (p/catch (fn [error]
+                                             (log/error :agent/pr-runtime-terminate-failed
+                                                        {:session-id (:id current-session)
+                                                         :runtime-session-id (:session-id runtime)
+                                                         :sandbox-id (:sandbox-id runtime)
+                                                         :error error})
+                                             false)))
+                  latest-session (<get-session self)]
+            (when (and terminated?
+                       (map? latest-session)
+                       (map? (:runtime latest-session)))
+              (<save-session! self (assoc latest-session :runtime nil)))))))))
+
 (defn- parse-sse-data [frame]
   (let [lines (string/split frame #"\n")
         data-lines (keep (fn [line]
@@ -694,7 +716,8 @@
                                          :head-branch head-branch
                                          :base-branch base-branch
                                          :pr-url (:url pr-result)
-                                         :pr-id (:id pr-result)})]
+                                         :pr-id (:id pr-result)})
+              _ (<cleanup-runtime-after-pr-ready! self)]
         (http/json-response :sessions/pr
                             (cond-> {:status "pr-created"
                                      :head-branch head-branch
@@ -718,7 +741,8 @@
                                                           :base-branch (or (:base-branch existing-pr) base-branch)
                                                           :pr-url (:url existing-pr)
                                                           :pr-id (:id existing-pr)
-                                                          :existing true})]
+                                                          :existing true})
+                               _ (<cleanup-runtime-after-pr-ready! self)]
                          (http/json-response :sessions/pr
                                              (cond-> {:status "pr-created"
                                                       :head-branch head-branch
