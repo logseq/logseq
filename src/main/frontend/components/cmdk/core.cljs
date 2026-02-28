@@ -571,9 +571,8 @@
                      #(trigger highlighted-item)))
         input-ref @(::input-ref state)]
     (when action
-      (when input-ref
-        (set! (.-value input-ref) "")
-        (.focus input-ref))
+      (set! (.-value input-ref) "")
+      (.focus input-ref)
       (action)
       (when-not (contains? dont-close-commands (:id command))
         (shui/dialog-close! :ls-dialog-cmdk)))))
@@ -625,10 +624,12 @@
   [state]
   (let [filter-group (:group @(::filter state))]
     (reset! (::filter state) nil)
+    (reset! (::focus-source state) :keyboard)
     (state/set-state! :search/mode :global)
     (swap! (::results state) assoc-in [filter-group :items] nil)
     (persist-cmdk-query-state! state)
-    (load-results :default state)))
+    (load-results :default state)
+    (.focus @(::input-ref state))))
 
 (defmethod handle-action :filter [_ state _event]
   (let [item (some-> state state->highlighted-item)
@@ -640,8 +641,10 @@
     (let [!filter (::filter state)
           group (get-in item [:filter :group])]
       (swap! !filter assoc :group group)
+      (reset! (::focus-source state) :keyboard)
       (persist-cmdk-query-state! state)
-      (load-results group state))))
+      (load-results group state)
+      (.focus input-ref))))
 
 (defmethod handle-action :theme [_ state]
   (when-let [item (some-> state state->highlighted-item)]
@@ -849,8 +852,7 @@
            {:on-click (fn [e]
                         (util/stop e)
                         (reset! (::focus-source state) :mouse)
-                        (when-let [input-el @(::input-ref state)]
-                          (.focus input-el))
+                        (.focus @(::input-ref state))
                         ((if (= show :more) show-less show-more)))}
            (if (= show :more)
              [:div.flex.flex-row.gap-1.items-center
