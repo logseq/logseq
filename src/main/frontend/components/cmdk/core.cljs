@@ -1057,10 +1057,8 @@
                                     (on-change new-value))))
                               200)
                              [])]
-    ;; use-effect [results-ordered input] to check whether the highlighted item is still in the results,
-    ;; if not then clear that puppy out!
-    ;; This was moved to a functional component
     (hooks/use-effect! (fn []
+                         (reset! (::all-items-cache state) (vec all-items))
                          (when highlighted-item
                            (let [idx (:item-index highlighted-item)
                                  ;; Fast path via cached :item-index; fall back to .indexOf if stale.
@@ -1078,11 +1076,11 @@
                                (.focus el)
                                (.select el)))
                            0))]
+         (load-results :default state)
          (fn []
            (when timeout-id
              (js/clearTimeout timeout-id)))))
      [])
-    (hooks/use-effect! (fn [] (load-results :default state)) [])
     ;; fired when highlighted item changes (normal keyboard navigation)
     (hooks/use-effect!
      (fn []
@@ -1278,8 +1276,7 @@
                          (:group (rum/react (::filter state))))
         results-ordered (state->results-ordered state search-mode)
         all-items (mapcat last results-ordered)
-        first-item (first all-items)
-        _ (reset! (::all-items-cache state) (vec all-items))]
+        first-item (first all-items)]
     [:div.cp__cmdk {:ref #(when-not @(::ref state) (reset! (::ref state) %))
                     :class (cond-> "w-full h-full relative flex flex-col justify-start"
                              (not sidebar?) (str " rounded-lg"))}
