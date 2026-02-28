@@ -103,19 +103,25 @@
       :project project
       :agent agent})))
 
+(defn task-runnable?
+  [block]
+  (and (:logseq.property/project block)
+       (:logseq.property/agent block)))
+
 (defn task-ready?
   [block]
-  (let [{:keys [project agent node-id]} (task-context block)]
+  (let [{:keys [project agent node-id node-title content]} (task-context block)]
     (and (string? node-id)
+         (string? node-title)
+         (string? content)
          project
-         agent
-         (> (count (:block/title block)) 4))))
+         agent)))
 
 (defn project-repo-url
   [block]
-  (some-> (:logseq.property/project block)
-          (pu/get-block-property-value :logseq.property/git-repo)
-          blank->nil))
+  (some-> block
+          :logseq.property/project
+          (pu/get-block-property-value :logseq.property/git-repo)))
 
 (defn- github-repo-ref
   [repo-url]

@@ -2517,24 +2517,28 @@
     (let [sessions (state/sub :agent/sessions)
           session (get sessions (str (:block/uuid block)))
           status (:status session)
-          ready? (agent-handler/task-ready? block)
+          runnable? (agent-handler/task-runnable? block)
           running? (contains? #{"running" "paused"} status)
           session-started? (boolean (:session-id session))
           session-created? (or session-started?
                                (true? (pu/get-block-property-value block :logseq.property/agent-session-created?)))
-          btn-title (if ready?
+          btn-title (if runnable?
                       (if session-created? "Open chat" "Run agent")
-                      "Set Project + Agent + Git Repo")]
+                      "Set Project + Agent")]
       [:div.flex.flex-row.items-center.gap-1
        (shui/button
         {:variant :ghost
          :size :sm
          :class "text-xs h-6 !px-2"
          :title btn-title
-         :disabled (not ready?)
+         :disabled (not runnable?)
          :on-click (fn [e]
                      (util/stop e)
-                     (agent-chat/open-agent-chat-dialog! block))}
+                     (p/do!
+                      ;; Ensure project is loaded
+                      (db-async/<get-block (state/get-current-repo) (:db/id (:logseq.property/project block)))
+                      (let [block' (db/entity (:db/id block))]
+                        (agent-chat/open-agent-chat-dialog! block'))))}
         (cond
           running? "Running"
           session-created? "Thread"
