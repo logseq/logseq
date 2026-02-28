@@ -755,7 +755,8 @@
         get-sandbox (js-method cf-sandbox "getSandbox")]
     (when-not (fn? get-sandbox)
       (throw (ex-info "cloudflare sandbox sdk missing getSandbox method" {})))
-    (let [sandbox (.call get-sandbox cf-sandbox sandbox-ns sandbox-id)]
+    (let [sandbox (.call get-sandbox cf-sandbox sandbox-ns sandbox-id
+                         #js {:sleepAfter "10m"})]
       (when-not sandbox
         (throw (ex-info "failed to get cloudflare sandbox"
                         {:sandbox-id sandbox-id})))
@@ -867,7 +868,6 @@
 
 (defn- <cloudflare-start-server! [^js env ^js sandbox task port agent-token]
   (let [command (cloudflare-server-command env task port agent-token)]
-    (prn :debug :command command)
     (if (js-method sandbox "startProcess")
       (->promise (.startProcess sandbox command))
       (->promise (<cloudflare-exec! sandbox (str "nohup " command " >/tmp/sandbox-agent.log 2>&1 &"))))))
@@ -944,8 +944,6 @@
                                   :headers headers})]
     (p/let [resp (<cloudflare-container-fetch! sandbox request port)
             status (.-status resp)]
-      (prn :debug :status status
-           :cloudflare-local-host cloudflare-local-host)
       (if (<= 200 status 299)
         resp
         (throw (ex-info "cloudflare sandbox open-events-stream failed"
@@ -1326,13 +1324,17 @@
               restored? (<cloudflare-restore-backup! sandbox backup-key repo-dir)
               _ (when-not restored?
                   (<cloudflare-clone-repo! env sandbox session-id task))
-              _ (<cloudflare-run-project-init-setup! sandbox session-id task)
               response (<cloudflare-create-session! sandbox port agent-token session-id payload)]
+        (-> (<cloudflare-run-project-init-setup! sandbox session-id task)
+            (p/catch (fn [error]
+                       (log/error :agent/cloudflare-project-init-setup-failed
+                                  {:session-id session-id
+                                   :sandbox-id sandbox-id
+                                   :error (str error)}))))
         (log/debug :agent/cloudflare-provisioned
                    {:session-id session-id
                     :sandbox-id sandbox-id
-                    :runtime-session-id (:session-id response)
-                    :backup-restored? restored?})
+                    :runtime-session-id (:session-id response)})
         {:provider "cloudflare"
          :sandbox-id sandbox-id
          :sandbox-name sandbox-id
