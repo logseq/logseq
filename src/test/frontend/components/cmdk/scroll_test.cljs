@@ -46,6 +46,24 @@
            :focus-top 350.2
            :focus-height 20.9})))))
 
+(deftest ensure-focus-visible-scroll-top-tracks-layout-shift
+  (testing "recomputes a larger scroll top when lazy placeholders expand during animation"
+    (let [placeholder-scroll-top (scroll/ensure-focus-visible-scroll-top
+                                  {:scroll-top 100
+                                   :viewport-height 200
+                                   :scroll-height 2400
+                                   :focus-top 560
+                                   :focus-height 24})
+          mounted-scroll-top (scroll/ensure-focus-visible-scroll-top
+                              {:scroll-top placeholder-scroll-top
+                               :viewport-height 200
+                               :scroll-height 2400
+                               :focus-top 620
+                               :focus-height 32})]
+      (is (= 384 placeholder-scroll-top))
+      (is (= 452 mounted-scroll-top))
+      (is (> mounted-scroll-top placeholder-scroll-top)))))
+
 (deftest scroll-behavior-strategy
   (testing "small distance uses smooth scrolling"
     (is (= :smooth
