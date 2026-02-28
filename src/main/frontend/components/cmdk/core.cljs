@@ -782,10 +782,10 @@
                                  (handle-action :default state e)
                                  (when-let [on-click (:on-click item)]
                                    (on-click e)))
-                     :on-mouse-enter (fn [_e]
-                                       (when (= :mouse @(::focus-source state))
-                                         (when (not= item @(::highlighted-item state))
-                                           (reset! (::highlighted-item state) item))))
+                     ;; :on-mouse-enter (fn [_e]
+                     ;;                   (when (= :mouse @(::focus-source state))
+                     ;;                     (when (not= item @(::highlighted-item state))
+                     ;;                       (reset! (::highlighted-item state) item))))
                      :on-mouse-move (fn [e]
                                       (let [dx (or (.-movementX e) 0)
                                             dy (or (.-movementY e) 0)
