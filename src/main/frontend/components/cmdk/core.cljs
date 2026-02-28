@@ -683,6 +683,24 @@
   "Maximum items to move per keypress during acceleration."
   5)
 
+(defn- highlighted-row-wrapper-el
+  "Returns the current highlighted row wrapper (`[data-item-index]`) in container."
+  [state container]
+  (when-let [item-index (some-> state state->highlighted-item :item-index)]
+    (.querySelector container (str "[data-item-index='" item-index "']"))))
+
+(defn- current-highlight-target-top
+  "Recomputes scroll target from latest highlighted-row geometry.
+
+  This keeps target tracking accurate while lazy placeholders are replaced by
+  real rows (which can change cumulative list height during animation)."
+  [state container fallback-target]
+  (if-let [row-el (highlighted-row-wrapper-el state container)]
+    (if-let [rect (scroll/focus-row-visible-rect container row-el)]
+      (scroll/ensure-focus-visible-scroll-top rect)
+      fallback-target)
+    fallback-target))
+
 (defn- start-scroll-animation!
   "Starts (or continues) a requestAnimationFrame loop that lerps scrollTop
    towards `::scroll-target`. Stops when target is reached or cleared."
@@ -690,8 +708,11 @@
   (when-not @(::scroll-raf state)
     (let [animate (fn animate []
                     (if-let [container @(::scroll-container-ref state)]
-                      (let [target @(::scroll-target state)
+                      (let [pending-target @(::scroll-target state)
+                            target (current-highlight-target-top state container pending-target)
                             current (.-scrollTop container)]
+                        (when (not= target pending-target)
+                          (reset! (::scroll-target state) target))
                         (if (or (nil? target) (= (js/Math.round current) target))
                           (reset! (::scroll-raf state) nil)
                           (let [distance (js/Math.abs (- target current))
