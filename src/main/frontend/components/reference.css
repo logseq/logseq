@@ -27,5 +27,5 @@
 }
 
 .custom-query-page-result {
-  @apply p-4 my-1 rounded bg-gray-03;
+  @apply py-4 pr-4 pl-1 my-1 rounded bg-gray-03;
 }
