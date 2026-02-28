@@ -776,9 +776,6 @@
                      :rounded true
                      :hoverable mouse-mode?
                      :highlighted highlighted?
-                     ;; Pass the item itself when highlighted so the effect re-fires
-                     ;; if the list reloads while this item stays highlighted.
-                     :on-highlight-dep (when highlighted? item)
                      :on-click (fn [e]
                                  (util/stop-propagation e)
                                  (reset! (::highlighted-item state) item)
@@ -798,13 +795,7 @@
                                           (when-not (= :mouse @(::focus-source state))
                                             (reset! (::focus-source state) :mouse))
                                           (when (not= item @(::highlighted-item state))
-                                            (reset! (::highlighted-item state) item)))))
-                     :on-highlight (fn [ref]
-                                     (when (and ref (.-current ref))
-                                       (let [row-el (.-current ref)]
-                                         (when (and (= :keyboard @(::focus-source state))
-                                                    (= item @(::highlighted-item state)))
-                                           (scroll-to-highlight! state row-el))))))
+                                            (reset! (::highlighted-item state) item))))))
               nil)]
     [:div {:data-item-index item-idx}
      (if (= group :nodes)
@@ -1092,6 +1083,16 @@
              (js/clearTimeout timeout-id)))))
      [])
     (hooks/use-effect! (fn [] (load-results :default state)) [])
+    ;; fired when highlighted item changes (normal keyboard navigation)
+    (hooks/use-effect!
+     (fn []
+       (when (and highlighted-item (= :keyboard @(::focus-source state)))
+         (when-let [container @(::scroll-container-ref state)]
+           (when-let [idx (:item-index highlighted-item)]
+             (when-let [el (.querySelector container (str "[data-item-index='" idx "']"))]
+               (scroll-to-highlight! state el)))))
+       nil)
+     [highlighted-item])
     [:div {:class "bg-gray-02 border-b border-1 border-gray-07"}
      [:input.cp__cmdk-search-input
       {:class "text-xl bg-transparent border-none w-full outline-none px-3 py-3"
