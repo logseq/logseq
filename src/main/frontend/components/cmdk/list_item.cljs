@@ -65,13 +65,11 @@
   (when-not (string/blank? label)
     [:span.cp__cmdk-current-page-badge label]))
 
-(rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value
-                        title highlighted on-highlight on-highlight-dep header on-click
-                        hoverable compact rounded on-mouse-enter on-mouse-move source-block] :as props
+(rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted
+                        header on-click hoverable compact rounded on-mouse-enter on-mouse-move source-block] :as props
                  :or {hoverable true rounded true}}
                 {:keys [app-config]}]
-  (let [ref (hooks/create-ref)
-        highlight-query (partial highlight-query* app-config query)
+  (let [highlight-query (partial highlight-query* app-config query)
         badge-placement (current-page-badge-placement props)
         text-badge (current-page-badge-node (:text-badge badge-placement))
         header-badge (current-page-badge-node (:header-badge badge-placement))
@@ -83,11 +81,6 @@
         mouse-selected-border "var(--ls-border-color, var(--lx-gray-09, rgba(0,0,0,0.32)))"
         keyboard-ring "var(--lx-accent-09, #3b82f6)"
         keyboard-overlay "rgba(0,0,0,0.07)"]
-    (hooks/use-effect!
-     (fn []
-       (when (and highlighted on-highlight)
-         (on-highlight ref)))
-     [highlighted on-highlight-dep])
     [:div (merge
            {:style (cond-> {:opacity 1
                             :background-color "transparent"
@@ -108,7 +101,6 @@
                      rounded (str " rounded-lg")
                      (not compact) (str " py-4 px-6 gap-1")
                      compact (str " py-1.5 px-3 gap-0.5"))
-            :ref ref
             :on-click (when on-click on-click)
             :on-mouse-enter (fn [e]
                               (set-hover? true)
@@ -119,7 +111,7 @@
      ;; header
      (when header
        [:div.text-xs.pl-8.font-light.flex.items-center.gap-2.flex-wrap {:class "-mt-1"
-                                      :style {:color "var(--lx-gray-11)"}}
+                                                                        :style {:color "var(--lx-gray-11)"}}
         (highlight-query header)
         header-badge])
      ;; main row
