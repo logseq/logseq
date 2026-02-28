@@ -41,3 +41,16 @@
            (:kv/value (d/entity @conn :logseq.kv/schema-version))))
     (doseq [ident remove-idents]
       (is (some? (d/entity @conn ident))))))
+
+(deftest migrate-adds-pr-property-builtin
+  (let [conn (db-test/create-conn)
+        property-ident :logseq.property/pr
+        _ (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                              :kv/value {:major 65 :minor 24}}])
+        existing-eid (d/entid @conn property-ident)
+        _ (when existing-eid
+            (d/transact! conn [[:db/retractEntity existing-eid]]))
+        _ (db-migrate/migrate conn :target-version "65.25")]
+    (is (= {:major 65 :minor 25}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (is (some? (d/entity @conn property-ident)))))

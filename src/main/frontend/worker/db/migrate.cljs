@@ -83,7 +83,8 @@
                           :logseq.property/git-repo
                           :logseq.property/agent-api-token
                           :logseq.property/agent-auth-json]}]
-   ["65.24" {:properties [:logseq.property/agent-session-created?]}]])
+   ["65.24" {:properties [:logseq.property/agent-session-created?]}]
+   ["65.25" {:properties [:logseq.property/pr]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

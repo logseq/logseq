@@ -277,9 +277,11 @@
    "running" :logseq.property/status.doing
    "paused" :logseq.property/status.todo
    "completed" :logseq.property/status.done
+   "pr-created" :logseq.property/status.done
    "failed" :logseq.property/status.canceled
    "canceled" :logseq.property/status.canceled})
 (def ^:private task-session-created-property :logseq.property/agent-session-created?)
+(def ^:private task-pr-property :logseq.property/pr)
 
 (defn- terminal-status? [status]
   (contains? #{"completed" "failed" "canceled"} status))
@@ -314,6 +316,14 @@
             desired (status->label status-ident)]
         (when (and desired (not= current desired))
           (property-handler/set-block-property! block-uuid :logseq.property/status status-ident))))))
+
+(defn- maybe-update-task-pr-url!
+  [block-uuid pr-url]
+  (when-let [pr-url (blank->nil pr-url)]
+    (when-let [block (db/entity [:block/uuid block-uuid])]
+      (let [current (blank->nil (pu/get-block-property-value block task-pr-property))]
+        (when (not= current pr-url)
+          (property-handler/set-block-property! block-uuid task-pr-property pr-url))))))
 
 (defn- mark-task-session-created!
   [block-uuid]
@@ -653,16 +663,10 @@
 
 (defn- maybe-insert-pr-sibling-blocks!
   [block-uuid resp summary]
-  (when-let [url (or (blank->nil (:pr-url resp))
-                     (blank->nil (:manual-pr-url resp)))]
-    (p/let [block (editor-handler/api-insert-new-block! (str "PR URL: " url)
-                                                        {:block-uuid block-uuid
-                                                         :sibling? false})]
-
-      (when-let [summary (blank->nil summary)]
-        (editor-handler/api-insert-new-block! (str "PR Summary: " summary)
-                                              {:block-uuid (:block/uuid block)
-                                               :sibling? true})))))
+  (when-let [summary (blank->nil summary)]
+    (editor-handler/api-insert-new-block! (str "PR Summary: " summary)
+                                          {:block-uuid block-uuid
+                                           :sibling? true})))
 
 (defn- publish-status-message
   [resp]
@@ -717,8 +721,12 @@
                                    :body (js/JSON.stringify (clj->js body))}
                                   {:response-schema :sessions/pr})
               (p/then (fn [resp]
-                        (update-session-state! block-uuid {:last-publish resp
-                                                           :last-publish-at (util/time-ms)})
+                        (let [status (:status resp)]
+                          (update-session-state! block-uuid {:last-publish resp
+                                                             :last-publish-at (util/time-ms)})
+                          (when (= "pr-created" status)
+                            (maybe-update-task-pr-url! block-uuid (:pr-url resp)))
+                          (maybe-update-task-status! block-uuid status))
                         (maybe-insert-pr-sibling-blocks! block-uuid resp (:body raw-body))
                         (notification/show! (publish-status-message resp)
                                             (if (= "manual-pr-required" (:status resp))

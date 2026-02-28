@@ -1,10 +1,13 @@
 (ns frontend.handler.agent-test
   (:require [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
+            [frontend.db :as db]
             [frontend.handler.agent :as agent-handler]
             [frontend.handler.db-based.sync :as db-sync]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.property :as property-handler]
+            [frontend.handler.property.util :as pu]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
             [promesa.core :as p]))
@@ -90,10 +93,11 @@
                           (is false (str e))
                           (done)))))))
 
-(deftest publish-session-pr-created-inserts-url-and-summary-sibling-blocks-test
+(deftest publish-session-pr-created-inserts-summary-sibling-block-test
   (async done
          (let [insert-calls (atom [])
                fetch-calls (atom [])
+               property-calls (atom [])
                block {:block/uuid #uuid "cccccccc-cccc-cccc-cccc-cccccccccccc"}
                prev-state @state/state]
            (swap! state/state assoc :agent/sessions {(str (:block/uuid block)) {:session-id "sess-pr-1"}})
@@ -108,6 +112,21 @@
                                                                            (resolve true))
                                agent-handler/task-ready? (fn [_] true)
                                notification/show! (fn [& _] nil)
+                               db/entity (fn [lookup]
+                                           (cond
+                                             (= lookup [:block/uuid (:block/uuid block)])
+                                             {:block/uuid (:block/uuid block)}
+
+                                             (= lookup :logseq.property/status.done)
+                                             {:block/title "Done"}
+
+                                             :else nil))
+                               pu/get-block-property-value (fn [block k]
+                                                             (get block k))
+                               property-handler/set-block-property! (fn [block-id k v]
+                                                                      (swap! property-calls conj {:block-id block-id
+                                                                                                  :key k
+                                                                                                  :value v}))
                                editor-handler/api-insert-new-block! (fn [content opts]
                                                                       (swap! insert-calls conj {:content content :opts opts}))]
                  (p/let [_ (agent-handler/<publish-session! block {:create-pr? true
@@ -115,11 +134,12 @@
                          [first-call] @fetch-calls
                          _ (reset! state/state prev-state)]
                    (is (= "http://base/sessions/sess-pr-1/pr" (:url first-call)))
-                   (is (= 2 (count @insert-calls)))
-                   (is (= "PR URL: https://github.com/example/repo/pull/123"
-                          (:content (first @insert-calls))))
+                   (is (= #{[:logseq.property/pr "https://github.com/example/repo/pull/123"]
+                            [:logseq.property/status :logseq.property/status.done]}
+                          (set (map (juxt :key :value) @property-calls))))
+                   (is (= 1 (count @insert-calls)))
                    (is (= "PR Summary: Agent summary for PR"
-                          (:content (second @insert-calls))))
+                          (:content (first @insert-calls))))
                    (is (every? #(= true (get-in % [:opts :sibling?])) @insert-calls))
                    (is (every? #(= (:block/uuid block) (get-in % [:opts :block-uuid])) @insert-calls))
                    (done)))
@@ -128,7 +148,7 @@
                           (is false (str e))
                           (done)))))))
 
-(deftest publish-session-manual-pr-inserts-manual-url-and-summary-sibling-blocks-test
+(deftest publish-session-manual-pr-inserts-summary-sibling-block-test
   (async done
          (let [insert-calls (atom [])
                block {:block/uuid #uuid "dddddddd-dddd-dddd-dddd-dddddddddddd"}
@@ -149,11 +169,9 @@
                  (p/let [_ (agent-handler/<publish-session! block {:create-pr? true
                                                                    :body "Agent summary for manual PR"})
                          _ (reset! state/state prev-state)]
-                   (is (= 2 (count @insert-calls)))
-                   (is (= "PR URL: https://github.com/example/repo/compare/a...b"
-                          (:content (first @insert-calls))))
+                   (is (= 1 (count @insert-calls)))
                    (is (= "PR Summary: Agent summary for manual PR"
-                          (:content (second @insert-calls))))
+                          (:content (first @insert-calls))))
                    (done)))
                (p/catch (fn [e]
                           (reset! state/state prev-state)

@@ -437,6 +437,11 @@
                :public? true
                :view-context :page}
       :queryable? true}
+     :logseq.property/pr
+     {:title "PR"
+      :schema {:type :url
+               :public? true}
+      :queryable? true}
      :logseq.property/agent-api-token
      {:title "API Token"
       :schema {:type :string
