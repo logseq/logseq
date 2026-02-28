@@ -127,6 +127,9 @@
 (defn- terminal-status? [status]
   (contains? #{"completed" "failed" "canceled"} status))
 
+(defn- runtime-auto-terminate-status? [status]
+  (contains? #{"failed" "canceled"} status))
+
 (defn- session-runtime-provider [session]
   (some-> (get-in session [:runtime :provider]) str string/lower-case))
 
@@ -374,7 +377,7 @@
                                         :data payload
                                         :ts (common/now-ms)})
                 current-session (<get-session self)]
-          (when (terminal-status? (:status current-session))
+          (when (runtime-auto-terminate-status? (:status current-session))
             (<terminate-runtime! self (:runtime current-session))))))))
 
 (defn- <consume-events-stream! [^js self session-id runtime on-ready]
