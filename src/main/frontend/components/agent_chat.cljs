@@ -8,6 +8,7 @@
             [frontend.handler.agent :as agent-handler]
             [frontend.handler.agent-chat-transport :as chat-transport]
             [frontend.handler.db-based.sync :as db-sync]
+            [frontend.handler.property.util :as pu]
             [frontend.modules.agent-chat.event :as chat-event]
             [frontend.state :as state]
             [logseq.shui.hooks :as hooks]
@@ -636,6 +637,8 @@
                            (str e))))
         error (or chat-error (:stream-error session))
         session-started? (boolean (:session-id session))
+        session-created? (or session-started?
+                             (true? (pu/get-block-property-value block :logseq.property/agent-session-created?)))
         terminal-enabled? (agent-handler/session-terminal-enabled? session)
         session-chat-messages (->> session-messages
                                    (map message->chat-message)
@@ -748,10 +751,11 @@
                                (open-terminal!)))]
     (hooks/use-effect!
      (fn []
-       (when (agent-handler/task-ready? block)
+       (when (and (agent-handler/task-ready? block)
+                  session-created?)
          (agent-handler/<ensure-session! block))
        nil)
-     [block-uuid (:logseq.property/project block) (:logseq.property/agent block)])
+     [block-uuid (:logseq.property/project block) (:logseq.property/agent block) session-created?])
     (hooks/use-effect!
      (fn []
        (let [alive? (atom true)
