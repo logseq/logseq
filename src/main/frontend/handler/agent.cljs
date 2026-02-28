@@ -52,6 +52,7 @@
    (project-config project-page nil))
   ([project-page {:keys [base-branch]}]
    (let [repo-url (blank->nil (pu/get-block-property-value project-page :logseq.property/git-repo))
+         sandbox-init-setup (blank->nil (pu/get-block-property-value project-page :logseq.property/project-sandbox-init-setup))
          project-id (some-> (:block/uuid project-page) str)
          title (blank->nil (:block/title project-page))
          base-branch (blank->nil base-branch)]
@@ -59,7 +60,8 @@
        (cond-> {:id project-id
                 :title title
                 :repo-url repo-url}
-         (string? base-branch) (assoc :base-branch base-branch))))))
+         (string? base-branch) (assoc :base-branch base-branch)
+         (string? sandbox-init-setup) (assoc :sandbox-init-setup sandbox-init-setup))))))
 
 (defn- block-line-content
   [block]

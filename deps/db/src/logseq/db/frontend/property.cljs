@@ -437,6 +437,12 @@
                :public? true
                :view-context :page}
       :queryable? true}
+     :logseq.property/project-sandbox-init-setup
+     {:title "Project sandbox init setup"
+      :schema {:type :default
+               :public? true
+               :view-context :page}
+      :properties {:logseq.property/description "Runs after sandbox startup is ready. Store setup commands in a code block, e.g. `yarn install`."}}
      :logseq.property/pr
      {:title "PR"
       :schema {:type :url

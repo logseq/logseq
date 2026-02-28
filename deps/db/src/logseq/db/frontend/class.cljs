@@ -44,7 +44,8 @@
 
      :logseq.class/Project
      {:title "Project"
-      :schema {:properties [:logseq.property/git-repo]
+      :schema {:properties [:logseq.property/git-repo
+                            :logseq.property/project-sandbox-init-setup]
                :required-properties [:logseq.property/git-repo]}}
 
      :logseq.class/Agent

@@ -12,6 +12,24 @@
             [frontend.state :as state]
             [promesa.core :as p]))
 
+(deftest build-session-body-includes-project-sandbox-init-setup-test
+  (let [project-page {:block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                      :block/title "Project"}
+        block {:block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+               :block/title "Task"
+               :logseq.property/project project-page
+               :logseq.property/agent {:block/title "Codex"}}]
+    (p/with-redefs [pu/get-block-property-value (fn [entity k]
+                                                  (if (= entity project-page)
+                                                    (case k
+                                                      :logseq.property/git-repo "https://github.com/example/repo"
+                                                      :logseq.property/project-sandbox-init-setup "yarn install"
+                                                      nil)
+                                                    (get entity k)))]
+      (is (= "yarn install"
+             (get-in (agent-handler/build-session-body block)
+                     [:project :sandbox-init-setup]))))))
+
 (deftest start-session-sends-initial-message-test
   (async done
          (let [calls (atom [])

@@ -416,6 +416,24 @@
 (defn- task-repo-url [task]
   (some-> (get-in task [:project :repo-url]) str string/trim not-empty))
 
+(defn- unwrap-code-block
+  [text]
+  (when (string? text)
+    (or (some->> text
+                 (re-matches #"(?s)^```[^\n]*\n(.*)\n```$")
+                 second
+                 string/trim
+                 not-empty)
+        text)))
+
+(defn- task-project-init-setup
+  [task]
+  (some-> (get-in task [:project :sandbox-init-setup])
+          str
+          unwrap-code-block
+          string/trim
+          not-empty))
+
 (defn- <github-installation-token-for-task!
   [^js env task]
   (let [repo-url (task-repo-url task)]
@@ -517,6 +535,14 @@
               " && git clone --depth 1 --single-branch --no-tags '"
               (escape-shell-single repo-url) "' '" (escape-shell-single repo-dir) "'"
               " && chmod -R u+rw '" (escape-shell-single repo-dir) "'"))))))
+
+(defn- project-init-setup-command
+  [session-id task]
+  (let [setup-script (task-project-init-setup task)
+        session-id (some-> session-id str)
+        repo-dir (get-repo-dir session-id)]
+    (when (and (string? setup-script) (string? repo-dir))
+      (str "set -e; cd '" (escape-shell-single repo-dir) "'; " setup-script))))
 
 (defn- classify-push-error
   [error]
@@ -699,6 +725,10 @@
 
 (defn- <sprite-clone-repo! [^js env sprite-name session-id task]
   (when-let [cmd (repo-clone-command env session-id task)]
+    (sprites-exec-post! env sprite-name ["bash" "-lc" cmd])))
+
+(defn- <sprite-run-project-init-setup! [^js env sprite-name session-id task]
+  (when-let [cmd (project-init-setup-command session-id task)]
     (sprites-exec-post! env sprite-name ["bash" "-lc" cmd])))
 
 ;; ============================================================
@@ -1000,6 +1030,10 @@
   (when-let [cmd (repo-clone-command env session-id task "cloudflare")]
     (<cloudflare-exec! sandbox cmd)))
 
+(defn- <cloudflare-run-project-init-setup! [sandbox session-id task]
+  (when-let [cmd (project-init-setup-command session-id task)]
+    (<cloudflare-exec! sandbox cmd)))
+
 (defn- <cloudflare-setup-github-auth! [sandbox github-token]
   (if-not (string? github-token)
     (p/resolved nil)
@@ -1104,6 +1138,7 @@
               _ (<sprite-clone-repo! env name session-id task)
               _ (<sprite-bootstrap! env name port task session-id)
               _ (<sprite-health! env name port agent-token health-retries health-interval-ms)
+              _ (<sprite-run-project-init-setup! env name session-id task)
               payload (session-payload task)
               response (<sprite-create-session-with-retry! env
                                                            name
@@ -1291,6 +1326,7 @@
               restored? (<cloudflare-restore-backup! sandbox backup-key repo-dir)
               _ (when-not restored?
                   (<cloudflare-clone-repo! env sandbox session-id task))
+              _ (<cloudflare-run-project-init-setup! sandbox session-id task)
               response (<cloudflare-create-session! sandbox port agent-token session-id payload)]
         (log/debug :agent/cloudflare-provisioned
                    {:session-id session-id

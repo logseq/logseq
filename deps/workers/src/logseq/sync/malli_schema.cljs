@@ -231,7 +231,8 @@
               [:id :string]
               [:title :string]
               [:repo-url :string]
-              [:base-branch {:optional true} :string]]]
+              [:base-branch {:optional true} :string]
+              [:sandbox-init-setup {:optional true} :string]]]
    [:agent [:or :string
             [:map
              [:provider {:optional true} :string]

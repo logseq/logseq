@@ -502,6 +502,89 @@
                          (is (= 400 (:status (ex-data error))))
                          (done)))))))
 
+(deftest sprites-provider-provision-runs-project-init-setup-after-sandbox-ready-test
+  (async done
+         (let [scripts (atom [])
+               env #js {"SPRITE_TOKEN" "sprite-token"}
+               provider (runtime-provider/create-provider env "sprites")
+               task {:agent {:provider "codex"}
+                     :project {:repo-url "https://github.com/example/repo"
+                               :sandbox-init-setup "yarn install"}}
+               original-fetch js/fetch
+               find-index (fn [pred coll]
+                            (first
+                             (keep-indexed (fn [idx item]
+                                             (when (pred item) idx))
+                                           coll)))]
+           (set! js/fetch
+                 (fn [request init]
+                   (let [url (fetch-url request)
+                         method (fetch-method request init)]
+                     (cond
+                       (and (= "POST" method)
+                            (string/includes? url "/v1/sprites")
+                            (not (string/includes? url "/exec")))
+                       (js/Promise.resolve
+                        (js/Response.
+                         (js/JSON.stringify #js {:name "logseq-task-sess-init-sp"})
+                         #js {:status 200 :headers #js {"content-type" "application/json"}}))
+
+                       (and (= "POST" method)
+                            (string/includes? url "/v1/sprites/logseq-task-sess-init-sp/exec"))
+                       (let [parsed (js/URL. url)
+                             cmds (vec (.getAll (.-searchParams parsed) "cmd"))
+                             script (nth cmds 2 nil)
+                             create-session? (and (string? script)
+                                                  (string/includes? script "/v1/sessions/sess-init-sp"))
+                             health? (and (string? script)
+                                          (string/includes? script "/v1/health"))]
+                         (when (string? script)
+                           (swap! scripts conj script))
+                         (js/Promise.resolve
+                          (js/Response.
+                           (js/JSON.stringify
+                            (clj->js (cond
+                                       create-session?
+                                       {:result {:stdout "{\"ok\":true}\n__HTTP_STATUS__:200"
+                                                 :stderr ""}}
+
+                                       health?
+                                       {:result {:stdout "__HEALTH_OK__"
+                                                 :stderr ""}}
+
+                                       :else
+                                       {:result {:stdout ""
+                                                 :stderr ""}})))
+                           #js {:status 200 :headers #js {"content-type" "application/json"}})))
+
+                       :else
+                       (js/Promise.resolve
+                        (js/Response.
+                         (js/JSON.stringify #js {:error "unexpected request"})
+                         #js {:status 500 :headers #js {"content-type" "application/json"}}))))))
+           (-> (runtime-provider/<provision-runtime! provider "sess-init-sp" task)
+               (.then (fn [runtime]
+                        (set! js/fetch original-fetch)
+                        (let [all-scripts @scripts
+                              clone-idx (find-index #(string/includes? % "git clone --depth 1 --single-branch --no-tags")
+                                                    all-scripts)
+                              health-idx (find-index #(string/includes? % "/v1/health")
+                                                     all-scripts)
+                              setup-idx (find-index #(string/includes? % "yarn install")
+                                                    all-scripts)]
+                          (is (= "sprites" (:provider runtime)))
+                          (is (number? clone-idx))
+                          (is (number? health-idx))
+                          (is (number? setup-idx))
+                          (is (< clone-idx setup-idx))
+                          (is (< health-idx setup-idx))
+                          (is (string/includes? (nth all-scripts setup-idx) "cd '/workspace/sess-init-sp'")))
+                        (done)))
+               (.catch (fn [error]
+                         (set! js/fetch original-fetch)
+                         (is false (str "unexpected error: " error))
+                         (done)))))))
+
 (deftest cloudflare-provider-provision-test
   (async done
          (let [calls (atom {:health 0})
@@ -548,6 +631,63 @@
                         (is (string/includes? (:create-url @calls) "/v1/sessions/sess-1"))
                         (is (= "sk-openai" (get (:env @calls) "OPENAI_API_KEY")))
                         (is (string/includes? (:start @calls) "sandbox-agent server"))
+                        (done)))
+               (.catch (fn [error]
+                         (is false (str "unexpected error: " error))
+                         (done)))))))
+
+(deftest cloudflare-provider-provision-runs-project-init-setup-after-sandbox-ready-test
+  (async done
+         (let [calls (atom {:exec []})
+               find-index (fn [pred coll]
+                            (first
+                             (keep-indexed (fn [idx item]
+                                             (when (pred item) idx))
+                                           coll)))
+               sandbox-stub
+               #js {:exec
+                    (fn [cmd]
+                      (swap! calls update :exec conj cmd)
+                      (if (string/includes? cmd "/v1/health")
+                        (js/Promise.resolve #js {:success true})
+                        (js/Promise.resolve #js {:success true :stdout "" :stderr ""})))
+                    :setEnvVars
+                    (fn [_]
+                      (js/Promise.resolve nil))
+                    :startProcess
+                    (fn [_]
+                      (js/Promise.resolve nil))
+                    :containerFetch
+                    (fn [_req _port]
+                      (js/Promise.resolve
+                       (js/Response.
+                        (js/JSON.stringify #js {:ok true})
+                        #js {:status 200 :headers #js {"content-type" "application/json"}})))}
+               sandbox-ns
+               #js {:idFromName (fn [name] name)
+                    :get (fn [_id] sandbox-stub)}
+               env #js {"Sandbox" sandbox-ns
+                        "CLOUDFLARE_SANDBOX_AGENT_PORT" "8000"}
+               provider (runtime-provider/create-provider env "cloudflare")
+               task {:agent {:provider "codex"}
+                     :project {:repo-url "https://github.com/example/repo"
+                               :sandbox-init-setup "yarn install"}}]
+           (-> (runtime-provider/<provision-runtime! provider "sess-init-cf" task)
+               (.then (fn [runtime]
+                        (let [exec-cmds (:exec @calls)
+                              clone-idx (find-index #(string/includes? % "git clone --depth 1 --single-branch --no-tags")
+                                                    exec-cmds)
+                              health-idx (find-index #(string/includes? % "/v1/health")
+                                                     exec-cmds)
+                              setup-idx (find-index #(string/includes? % "yarn install")
+                                                    exec-cmds)]
+                          (is (= "cloudflare" (:provider runtime)))
+                          (is (number? clone-idx))
+                          (is (number? health-idx))
+                          (is (number? setup-idx))
+                          (is (< clone-idx setup-idx))
+                          (is (< health-idx setup-idx))
+                          (is (string/includes? (nth exec-cmds setup-idx) "cd '/workspace/sess-init-cf'")))
                         (done)))
                (.catch (fn [error]
                          (is false (str "unexpected error: " error))
