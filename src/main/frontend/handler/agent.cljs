@@ -670,11 +670,11 @@
     (string? (blank->nil base-branch)) (assoc :base-branch (blank->nil base-branch))))
 
 (defn- maybe-insert-pr-sibling-blocks!
-  [block-uuid resp summary]
+  [block-uuid summary]
   (when-let [summary (blank->nil summary)]
     (editor-handler/api-insert-new-block! (str "PR Summary: " summary)
                                           {:block-uuid block-uuid
-                                           :sibling? true})))
+                                           :sibling? false})))
 
 (defn- publish-status-message
   [resp]
@@ -735,7 +735,7 @@
                           (when (= "pr-created" status)
                             (maybe-update-task-pr-url! block-uuid (:pr-url resp)))
                           (maybe-update-task-status! block-uuid status))
-                        (maybe-insert-pr-sibling-blocks! block-uuid resp (:body raw-body))
+                        (maybe-insert-pr-sibling-blocks! block-uuid (:body raw-body))
                         (notification/show! (publish-status-message resp)
                                             (if (= "manual-pr-required" (:status resp))
                                               :warning

@@ -776,39 +776,52 @@
 
 (defn- <handle-pr-after-push!
   [^js self current-session body user-id repo-url head-branch force? create-pr?]
-  (p/let [requested-base-branch (source-control/sanitize-branch-name (:base-branch body))
-          default-base (source-control/sanitize-branch-name (default-base-branch))
-          detected-base-branch (when (nil? requested-base-branch)
-                                 (source-control/<default-branch! (.-env self)
-                                                                  nil
-                                                                  repo-url))
-          detected-base-branch (source-control/sanitize-branch-name detected-base-branch)
-          base-branch (or requested-base-branch
-                          detected-base-branch
-                          default-base)
-          base-branch (if (= base-branch head-branch)
-                        (or (some (fn [candidate]
-                                    (let [candidate (source-control/sanitize-branch-name candidate)]
-                                      (when (and (string? candidate)
-                                                 (not= candidate head-branch))
-                                        candidate)))
-                                  [default-base "main" "master"])
-                            base-branch)
-                        base-branch)]
+  (let [requested-base-branch (source-control/sanitize-branch-name (:base-branch body))
+        task-base-branch (some-> (get-in current-session [:task :project :base-branch])
+                                 source-control/sanitize-branch-name)
+        default-base (source-control/sanitize-branch-name (default-base-branch))
+        choose-base-branch (fn [candidates]
+                             (let [valid-candidates (->> candidates
+                                                         (map source-control/sanitize-branch-name)
+                                                         (remove nil?)
+                                                         vec)
+                                   non-head-candidate (some (fn [candidate]
+                                                              (when (not= candidate head-branch)
+                                                                candidate))
+                                                            valid-candidates)
+                                   fallback-non-head (some (fn [candidate]
+                                                             (let [candidate (source-control/sanitize-branch-name candidate)]
+                                                               (when (and (string? candidate)
+                                                                          (not= candidate head-branch))
+                                                                 candidate)))
+                                                           ["main" "master"])]
+                               (or non-head-candidate
+                                   fallback-non-head
+                                   (first valid-candidates))))]
     (cond
       (false? create-pr?)
-      (http/json-response :sessions/pr
-                          (cond-> {:status "pushed"
-                                   :head-branch head-branch
-                                   :message "branch pushed"}
-                            (string? base-branch) (assoc :base-branch base-branch)
-                            (some? force?) (assoc :force force?)))
+      (let [base-branch (choose-base-branch [requested-base-branch
+                                             task-base-branch
+                                             default-base])]
+        (http/json-response :sessions/pr
+                            (cond-> {:status "pushed"
+                                     :head-branch head-branch
+                                     :message "branch pushed"}
+                              (string? base-branch) (assoc :base-branch base-branch)
+                              (some? force?) (assoc :force force?))))
 
       (not (pr-enabled? current-session))
       (http/forbidden)
 
       :else
-      (p/let [pr-token (source-control/<pr-token! (.-env self) repo-url)]
+      (p/let [pr-token (source-control/<pr-token! (.-env self) repo-url)
+              detected-base-branch (source-control/<default-branch! (.-env self)
+                                                                    pr-token
+                                                                    repo-url)
+              base-branch (choose-base-branch [detected-base-branch
+                                               requested-base-branch
+                                               task-base-branch
+                                               default-base])]
         (let [description (or (some-> (:body body) str string/trim not-empty)
                               "Automated changes from agent session.")
               title (or (some-> (:title body) str string/trim not-empty)

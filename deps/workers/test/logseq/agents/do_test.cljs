@@ -871,6 +871,68 @@
                            (is false (str "unexpected error: " error))
                            (done))))))))
 
+(deftest pr-endpoint-prefers-detected-default-base-branch-for-pr-create-test
+  (testing "session publish endpoint uses detected default branch when creating PR"
+    (async done
+           (let [create-pr-calls (atom [])
+                 env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"}
+                 self (make-self env)
+                 headers {"content-type" "application/json"
+                          "x-user-id" "user-1"}]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-pr-default-base"
+                                 :status "running"
+                                 :task {:project {:repo-url "https://github.com/example/repo"
+                                                  :base-branch "main"}}
+                                 :runtime {:provider "local-dev"
+                                           :session-id "sess-pr-default-base"}
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (with-redefs [runtime-provider/<push-branch!
+                                        (fn [_provider _runtime opts]
+                                          (js/Promise.resolve
+                                           {:head-branch (:head-branch opts)
+                                            :repo-url (:repo-url opts)
+                                            :force (:force opts)
+                                            :remote "origin"}))
+                                        source-control/<pr-token!
+                                        (fn [_env _repo-url]
+                                          (js/Promise.resolve "pr-token"))
+                                        source-control/<default-branch!
+                                        (fn [_env _token _repo-url]
+                                          (js/Promise.resolve "develop"))
+                                        source-control/<create-pull-request!
+                                        (fn [_env _token _repo-url opts]
+                                          (swap! create-pr-calls conj opts)
+                                          (js/Promise.resolve {:url "https://github.com/example/repo/pull/99"
+                                                               :id 99
+                                                               :base-branch (:base-branch opts)}))
+                                        agent-do/<terminate-runtime!
+                                        (fn [_self _runtime]
+                                          (js/Promise.resolve nil))]
+                            (agent-do/handle-fetch self
+                                                   (json-request "http://db-sync.local/__session__/pr"
+                                                                 "POST"
+                                                                 {:create-pr true
+                                                                  :head-branch "feature/improve-base-detection"
+                                                                  :base-branch "main"}
+                                                                 headers)))))
+                 (.then (fn [resp]
+                          (is (= 200 (.-status resp)))
+                          (.then (<json resp)
+                                 (fn [body]
+                                   (is (= "pr-created" (:status body)))
+                                   (is (= "develop" (:base-branch body)))
+                                   (is (= 1 (count @create-pr-calls)))
+                                   (is (= "develop" (:base-branch (first @create-pr-calls))))
+                                   (done)))))
+                 (.catch (fn [error]
+                           (is false (str "unexpected error: " error))
+                           (done))))))))
+
 (deftest pr-endpoint-pr-created-terminates-runtime-test
   (testing "session publish endpoint terminates runtime and clears sandbox runtime when PR is created"
     (async done
@@ -901,6 +963,9 @@
                                         source-control/<pr-token!
                                         (fn [_env _repo-url]
                                           (js/Promise.resolve "pr-token"))
+                                        source-control/<default-branch!
+                                        (fn [_env _token _repo-url]
+                                          (js/Promise.resolve "main"))
                                         source-control/<create-pull-request!
                                         (fn [_env _token _repo-url _opts]
                                           (js/Promise.resolve {:url "https://github.com/example/repo/pull/88"
