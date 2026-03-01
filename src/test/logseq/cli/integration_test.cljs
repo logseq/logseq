@@ -282,7 +282,7 @@
                        _ (p/delay 100)
                        show-result (run-cli ["--repo" "content-graph" "show" "--page" "TestPage"] data-dir cfg-path)
                        show-payload (parse-json-output show-result)
-                       remove-page-result (run-cli ["--repo" "content-graph" "remove" "--page" "TestPage"] data-dir cfg-path)
+                       remove-page-result (run-cli ["--repo" "content-graph" "remove" "page" "--name" "TestPage"] data-dir cfg-path)
                        remove-page-payload (parse-json-output remove-page-result)
                        stop-result (run-cli ["server" "stop" "--repo" "content-graph"] data-dir cfg-path)
                        stop-payload (parse-json-output stop-result)]
@@ -437,7 +437,7 @@
                                                "--update-properties" "{:logseq.property/publishing-public? true}"]
                                               data-dir cfg-path)
                        update-payload (parse-json-output update-result)
-                       remove-result (run-cli ["--repo" repo "remove" "--id" (str block-id)] data-dir cfg-path)
+                       remove-result (run-cli ["--repo" repo "remove" "block" "--id" (str block-id)] data-dir cfg-path)
                        remove-payload (parse-json-output remove-result)
                        query-after-remove (run-query data-dir cfg-path repo
                                                      "[:find ?e . :in $ ?title :where [?e :block/title ?title]]"
@@ -857,19 +857,19 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest ^:long test-cli-add-tag-create-and-use
+(deftest ^:long test-cli-upsert-tag-create-and-use
   (async done
-         (let [data-dir (node-helper/create-tmp-dir "db-worker-add-tag-create")]
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-upsert-tag-create")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
-                       repo "add-tag-create-graph"
+                       repo "upsert-tag-create-graph"
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
                        _ (run-cli ["--repo" repo "add" "page" "--page" "Home"] data-dir cfg-path)
-                       add-tag-result (run-cli ["--repo" repo
-                                                "add" "tag"
-                                                "--name" "CliQuote"]
-                                               data-dir cfg-path)
-                       add-tag-payload (parse-json-output add-tag-result)
+                       upsert-tag-result (run-cli ["--repo" repo
+                                                   "upsert" "tag"
+                                                   "--name" "CliQuote"]
+                                                  data-dir cfg-path)
+                       upsert-tag-payload (parse-json-output upsert-tag-result)
                        list-tag-result (run-cli ["--repo" repo "list" "tag"] data-dir cfg-path)
                        list-tag-payload (parse-json-output list-tag-result)
                        tag-names (->> (get-in list-tag-payload [:data :items])
@@ -878,17 +878,17 @@
                        add-block-result (run-cli ["--repo" repo
                                                   "add" "block"
                                                   "--target-page-name" "Home"
-                                                  "--content" "Tagged by add tag"
+                                                  "--content" "Tagged by upsert tag"
                                                   "--tags" "[\"CliQuote\"]"]
                                                  data-dir cfg-path)
                        add-block-payload (parse-json-output add-block-result)
                        _ (p/delay 100)
-                       block-tag-names (query-tags data-dir cfg-path repo "Tagged by add tag")
+                       block-tag-names (query-tags data-dir cfg-path repo "Tagged by upsert tag")
                        stop-result (run-cli ["server" "stop" "--repo" repo] data-dir cfg-path)
                        stop-payload (parse-json-output stop-result)]
-                 (is (= 0 (:exit-code add-tag-result))
-                     (pr-str (:error add-tag-payload)))
-                 (is (= "ok" (:status add-tag-payload)))
+                 (is (= 0 (:exit-code upsert-tag-result))
+                     (pr-str (:error upsert-tag-payload)))
+                 (is (= "ok" (:status upsert-tag-payload)))
                  (is (= "ok" (:status list-tag-payload)))
                  (is (contains? tag-names "CliQuote"))
                  (is (= 0 (:exit-code add-block-result))
@@ -901,19 +901,19 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest ^:long test-cli-add-tag-rejects-existing-non-tag-page
+(deftest ^:long test-cli-upsert-tag-rejects-existing-non-tag-page
   (async done
-         (let [data-dir (node-helper/create-tmp-dir "db-worker-add-tag-conflict")]
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-upsert-tag-conflict")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
-                       repo "add-tag-conflict-graph"
+                       repo "upsert-tag-conflict-graph"
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
                        _ (run-cli ["--repo" repo "add" "page" "--page" "ConflictPage"] data-dir cfg-path)
-                       add-tag-result (run-cli ["--repo" repo
-                                                "add" "tag"
-                                                "--name" "ConflictPage"]
-                                               data-dir cfg-path)
-                       add-tag-payload (parse-json-output add-tag-result)
+                       upsert-tag-result (run-cli ["--repo" repo
+                                                   "upsert" "tag"
+                                                   "--name" "ConflictPage"]
+                                                  data-dir cfg-path)
+                       upsert-tag-payload (parse-json-output upsert-tag-result)
                        list-tag-result (run-cli ["--repo" repo "list" "tag"] data-dir cfg-path)
                        list-tag-payload (parse-json-output list-tag-result)
                        tag-names (->> (get-in list-tag-payload [:data :items])
@@ -921,9 +921,9 @@
                                       set)
                        stop-result (run-cli ["server" "stop" "--repo" repo] data-dir cfg-path)
                        stop-payload (parse-json-output stop-result)]
-                 (is (= 1 (:exit-code add-tag-result)))
-                 (is (= "error" (:status add-tag-payload)))
-                 (is (string/includes? (get-in add-tag-payload [:error :message])
+                 (is (= 0 (:exit-code upsert-tag-result)))
+                 (is (= "error" (:status upsert-tag-payload)))
+                 (is (string/includes? (get-in upsert-tag-payload [:error :message])
                                        "already exists as a page and is not a tag"))
                  (is (not (contains? tag-names "ConflictPage")))
                  (is (= "ok" (:status stop-payload)))
@@ -932,30 +932,97 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest ^:long test-cli-add-tag-idempotent-existing-tag
+(deftest ^:long test-cli-upsert-tag-idempotent-existing-tag
   (async done
-         (let [data-dir (node-helper/create-tmp-dir "db-worker-add-tag-idempotent")]
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-upsert-tag-idempotent")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
-                       repo "add-tag-idempotent-graph"
+                       repo "upsert-tag-idempotent-graph"
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
-                       first-add-result (run-cli ["--repo" repo "add" "tag" "--name" "StableTag"]
-                                                 data-dir cfg-path)
-                       first-add-payload (parse-json-output first-add-result)
-                       second-add-result (run-cli ["--repo" repo "add" "tag" "--name" "StableTag"]
-                                                  data-dir cfg-path)
-                       second-add-payload (parse-json-output second-add-result)
+                       first-upsert-result (run-cli ["--repo" repo "upsert" "tag" "--name" "StableTag"]
+                                                    data-dir cfg-path)
+                       first-upsert-payload (parse-json-output first-upsert-result)
+                       second-upsert-result (run-cli ["--repo" repo "upsert" "tag" "--name" "StableTag"]
+                                                     data-dir cfg-path)
+                       second-upsert-payload (parse-json-output second-upsert-result)
                        list-tag-result (run-cli ["--repo" repo "list" "tag"] data-dir cfg-path)
                        list-tag-payload (parse-json-output list-tag-result)
                        stable-tags (->> (get-in list-tag-payload [:data :items])
                                         (filter #(= "StableTag" (or (:block/title %) (:title %) (:name %)))))
                        stop-result (run-cli ["server" "stop" "--repo" repo] data-dir cfg-path)
                        stop-payload (parse-json-output stop-result)]
-                 (is (= 0 (:exit-code first-add-result)))
-                 (is (= "ok" (:status first-add-payload)))
-                 (is (= 0 (:exit-code second-add-result)))
-                 (is (= "ok" (:status second-add-payload)))
+                 (is (= 0 (:exit-code first-upsert-result)))
+                 (is (= "ok" (:status first-upsert-payload)))
+                 (is (= 0 (:exit-code second-upsert-result)))
+                 (is (= "ok" (:status second-upsert-payload)))
                  (is (= 1 (count stable-tags)))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest ^:long test-cli-upsert-and-remove-tag-property
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-upsert-remove-tag-property")]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       repo "upsert-remove-tag-property-graph"
+                       tag-name "CliQuoteTagX"
+                       property-name "CliOwnerPropX"
+                       property-name-lc (common-util/page-name-sanity-lc property-name)
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
+                       upsert-tag-result (run-cli ["--repo" repo "upsert" "tag" "--name" tag-name] data-dir cfg-path)
+                       upsert-tag-payload (parse-json-output upsert-tag-result)
+                       upsert-property-result (run-cli ["--repo" repo
+                                                        "upsert" "property"
+                                                        "--name" property-name
+                                                        "--type" "node"
+                                                        "--cardinality" "many"]
+                                                       data-dir cfg-path)
+                       upsert-property-payload (parse-json-output upsert-property-result)
+                       update-property-result (run-cli ["--repo" repo
+                                                        "upsert" "property"
+                                                        "--name" property-name
+                                                        "--type" "node"
+                                                        "--cardinality" "one"]
+                                                       data-dir cfg-path)
+                       update-property-payload (parse-json-output update-property-result)
+                       property-schema-before-remove (run-query data-dir cfg-path repo
+                                                                "[:find ?type ?cardinality :in $ ?name :where [?p :block/name ?name] [?p :logseq.property/type ?type] [?p :db/cardinality ?cardinality]]"
+                                                                (pr-str [property-name-lc]))
+                       remove-tag-result (run-cli ["--repo" repo "remove" "tag" "--name" tag-name] data-dir cfg-path)
+                       remove-tag-payload (parse-json-output remove-tag-result)
+                       remove-property-result (run-cli ["--repo" repo "remove" "property" "--name" property-name] data-dir cfg-path)
+                       remove-property-payload (parse-json-output remove-property-result)
+                       list-tag-result (run-cli ["--repo" repo "list" "tag"] data-dir cfg-path)
+                       list-tag-payload (parse-json-output list-tag-result)
+                       list-property-result (run-cli ["--repo" repo "list" "property"] data-dir cfg-path)
+                       list-property-payload (parse-json-output list-property-result)
+                       tag-names (->> (get-in list-tag-payload [:data :items])
+                                      (map #(or (:block/title %) (:title %) (:name %)))
+                                      set)
+                       property-names (->> (get-in list-property-payload [:data :items])
+                                           (map #(or (:block/title %) (:title %) (:name %)))
+                                           set)
+                       stop-result (run-cli ["server" "stop" "--repo" repo] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= 0 (:exit-code upsert-tag-result)))
+                 (is (= "ok" (:status upsert-tag-payload)))
+                 (is (= 0 (:exit-code upsert-property-result)))
+                 (is (= "ok" (:status upsert-property-payload)))
+                 (is (= 0 (:exit-code update-property-result)))
+                 (is (= "ok" (:status update-property-payload)))
+                 (is (= [["node" "one"]]
+                        (get-in property-schema-before-remove [:data :result])))
+                 (is (= 0 (:exit-code remove-tag-result)))
+                 (is (= "ok" (:status remove-tag-payload))
+                     (pr-str remove-tag-payload))
+                 (is (= 0 (:exit-code remove-property-result)))
+                 (is (= "ok" (:status remove-property-payload))
+                     (pr-str remove-property-payload))
+                 (is (not (contains? tag-names tag-name)))
+                 (is (not (contains? property-names property-name)))
                  (is (= "ok" (:status stop-payload)))
                  (done))
                (p/catch (fn [e]
