@@ -11,6 +11,7 @@
             [logseq.cli.command.remove :as remove-command]
             [logseq.cli.command.server :as server-command]
             [logseq.cli.command.show :as show-command]
+            [logseq.cli.command.upsert :as upsert-command]
             [logseq.cli.command.update :as update-command]
             [logseq.cli.server :as cli-server]
             [promesa.core :as p]))
@@ -69,6 +70,13 @@
            :message "tag name is required"}
    :summary summary})
 
+(defn- missing-property-name-result
+  [summary]
+  {:ok? false
+   :error {:code :missing-property-name
+           :message "property name is required"}
+   :summary summary})
+
 (defn- missing-type-result
   [summary]
   {:ok? false
@@ -106,6 +114,7 @@
                server-command/entries
                list-command/entries
                add-command/entries
+               upsert-command/entries
                remove-command/entries
                update-command/entries
                query-command/entries
@@ -153,9 +162,6 @@
                          (seq (:blocks-file opts))
                          has-args?)
         show-targets (filter some? [(:id opts) (:uuid opts) (:page opts)])
-        remove-targets (filter some? [(:id opts)
-                                      (some-> (:uuid opts) string/trim)
-                                      (some-> (:page opts) string/trim)])
         update-sources (filter some? [(:id opts) (some-> (:uuid opts) string/trim)])]
     (cond
       (:help opts)
@@ -174,17 +180,24 @@
       (and (= command :add-page) (not (seq (:page opts))))
       (missing-page-name-result summary)
 
-      (and (= command :add-tag) (not (seq (some-> (:name opts) string/trim))))
+      (and (= command :upsert-tag) (not (seq (some-> (:name opts) string/trim))))
       (missing-tag-name-result summary)
 
-      (and (= command :remove) (seq args))
-      (command-core/invalid-options-result summary "remove does not accept subcommands")
+      (and (= command :upsert-property) (not (seq (some-> (:name opts) string/trim))))
+      (missing-property-name-result summary)
 
-      (and (= command :remove) (empty? remove-targets))
+      (and (= command :upsert-property) (upsert-command/invalid-options? command opts))
+      (command-core/invalid-options-result summary (upsert-command/invalid-options? command opts))
+
+      (and (= command :remove-block) (empty? (filter some? [(:id opts) (some-> (:uuid opts) string/trim)])))
       (missing-target-result summary)
 
-      (and (= command :remove) (> (count remove-targets) 1))
-      (command-core/invalid-options-result summary "only one of --id, --uuid, or --page is allowed")
+      (and (= command :remove-page) (not (seq (some-> (:name opts) string/trim))))
+      (missing-page-name-result summary)
+
+      (and (#{:remove-tag :remove-property} command)
+           (empty? (filter some? [(:id opts) (some-> (:name opts) string/trim)])))
+      (missing-target-result summary)
 
       (and (= command :update-block) (update-command/invalid-options? opts))
       (command-core/invalid-options-result summary (update-command/invalid-options? opts))
@@ -207,8 +220,9 @@
            (list-command/invalid-options? command opts))
       (command-core/invalid-options-result summary (list-command/invalid-options? command opts))
 
-      (and (= command :remove) (remove-command/invalid-options? opts))
-      (command-core/invalid-options-result summary (remove-command/invalid-options? opts))
+      (and (#{:remove-block :remove-page :remove-tag :remove-property} command)
+           (remove-command/invalid-options? command opts))
+      (command-core/invalid-options-result summary (remove-command/invalid-options? command opts))
 
       (and (= command :show) (show-command/invalid-options? opts))
       (command-core/invalid-options-result summary (show-command/invalid-options? opts))
@@ -268,7 +282,7 @@
                  :message "missing command"}
          :summary summary})
 
-      (and (= 1 (count args)) (#{"graph" "server" "list" "add" "query"} (first args)))
+      (and (= 1 (count args)) (#{"graph" "server" "list" "add" "upsert" "remove" "query"} (first args)))
       (command-core/help-result (command-core/group-summary (first args) table))
 
       :else
@@ -372,14 +386,17 @@
         :add-page
         (add-command/build-add-page-action options repo)
 
-        :add-tag
-        (add-command/build-add-tag-action options repo)
+        :upsert-tag
+        (upsert-command/build-tag-action options repo)
+
+        :upsert-property
+        (upsert-command/build-property-action options repo)
 
         :update-block
         (update-command/build-action options repo)
 
-        :remove
-        (remove-command/build-action options repo)
+        (:remove-block :remove-page :remove-tag :remove-property)
+        (remove-command/build-action command options repo)
 
         :query
         (query-command/build-action options repo config)
@@ -423,9 +440,13 @@
                          :list-property (list-command/execute-list-property action config)
                          :add-block (add-command/execute-add-block action config)
                          :add-page (add-command/execute-add-page action config)
-                         :add-tag (add-command/execute-add-tag action config)
+                         :upsert-tag (upsert-command/execute-upsert-tag action config)
+                         :upsert-property (upsert-command/execute-upsert-property action config)
                          :update-block (update-command/execute-update action config)
-                         :remove (remove-command/execute-remove action config)
+                         :remove-block (remove-command/execute-remove-block action config)
+                         :remove-page (remove-command/execute-remove-page action config)
+                         :remove-tag (remove-command/execute-remove-tag action config)
+                         :remove-property (remove-command/execute-remove-property action config)
                          :query (query-command/execute-query action config)
                          :query-list (query-command/execute-query-list action config)
                          :show (show-command/execute-show action config)
@@ -440,8 +461,8 @@
                                   :message "unknown action"}}))]
         (assoc result
                :command (or (:command action) (:type action))
-               :context (select-keys action [:repo :graph :page :id :ids :uuid :block :blocks
-                                             :name
+               :context (select-keys action [:repo :graph :page :name :id :ids :uuid :block :blocks
+                                             :schema
                                              :source :target :update-tags :update-properties
                                              :remove-tags :remove-properties
                                              :export-type :output :import-type :input])))))
