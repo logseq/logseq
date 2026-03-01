@@ -93,17 +93,30 @@
     :missing-tag-name "Use --name <tag-name>"
     :missing-query "Use --query <edn>"
     :unknown-query "Use `logseq query list` to see available queries"
+    :ambiguous-tag-name "Retry with --id <tag-id>"
+    :ambiguous-property-name "Retry with --id <property-id>"
     :data-dir-permission "Check filesystem permissions or set LOGSEQ_CLI_DATA_DIR"
     :server-owned-by-other "Retry from the process owner that started the server"
     :server-start-timeout-orphan "Check and stop lingering db-worker-node processes, then retry"
     nil))
 
+(defn- format-candidates
+  [candidates]
+  (when (seq candidates)
+    (str "\nCandidates:\n"
+         (string/join "\n"
+                      (map (fn [{:keys [id name]}]
+                             (str "  " id "  " (or name "-")))
+                           candidates)))))
+
 (defn- format-error
   [error]
-  (let [{:keys [code message]} error
+  (let [{:keys [code message candidates]} error
         hint (error-hint error)
-        message* (style/bold-keywords message ["option" "command" "argument"])]
+        message* (style/bold-keywords message ["option" "command" "argument"])
+        candidates* (format-candidates candidates)]
     (cond-> (str "Error (" (name (or code :error)) "): " message*)
+      candidates* (str candidates*)
       hint (str "\nHint: " hint))))
 
 (defn- maybe-ident-header
@@ -248,14 +261,37 @@
   [_context ids]
   (str "Added tag:\n" (pr-str (vec (or ids [])))))
 
-(defn- format-remove
-  [{:keys [repo page uuid id ids]}]
+(defn- format-upsert-tag
+  [_context ids]
+  (str "Upserted tag:\n" (pr-str (vec (or ids [])))))
+
+(defn- format-upsert-property
+  [_context ids]
+  (str "Upserted property:\n" (pr-str (vec (or ids [])))))
+
+(defn- format-remove-block
+  [{:keys [repo uuid id ids]}]
   (cond
-    (seq page) (str "Removed page: " page " (repo: " repo ")")
     (seq uuid) (str "Removed block: " uuid " (repo: " repo ")")
     (seq ids) (str "Removed blocks: " (count ids) " (repo: " repo ")")
     (some? id) (str "Removed block: " id " (repo: " repo ")")
-    :else (str "Removed item (repo: " repo ")")))
+    :else (str "Removed block (repo: " repo ")")))
+
+(defn- format-remove-page
+  [{:keys [repo name]}]
+  (str "Removed page: " name " (repo: " repo ")"))
+
+(defn- format-remove-tag
+  [{:keys [repo name id]}]
+  (if (seq name)
+    (str "Removed tag: " name " (repo: " repo ")")
+    (str "Removed tag: " id " (repo: " repo ")")))
+
+(defn- format-remove-property
+  [{:keys [repo name id]}]
+  (if (seq name)
+    (str "Removed property: " name " (repo: " repo ")")
+    (str "Removed property: " id " (repo: " repo ")")))
 
 (defn- format-update-block
   [{:keys [repo source target update-tags update-properties remove-tags remove-properties]}]
@@ -319,7 +355,12 @@
         :add-block (format-add-block context (:result data))
         :add-page (format-add-page context (:result data))
         :add-tag (format-add-tag context (:result data))
-        :remove (format-remove context)
+        :upsert-tag (format-upsert-tag context (:result data))
+        :upsert-property (format-upsert-property context (:result data))
+        :remove-block (format-remove-block context)
+        :remove-page (format-remove-page context)
+        :remove-tag (format-remove-tag context)
+        :remove-property (format-remove-property context)
         :update-block (format-update-block context)
         :graph-export (format-graph-export context)
         :graph-import (format-graph-import context)
