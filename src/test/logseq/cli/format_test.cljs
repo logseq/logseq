@@ -90,7 +90,7 @@
                   "Count: 1")
              result)))))
 
-(deftest test-human-output-add-remove
+(deftest test-human-output-add-upsert-remove
   (testing "add block renders ids in two lines"
     (let [result (format/format-result {:status :ok
                                         :command :add-block
@@ -109,23 +109,59 @@
                                        {:output-format nil})]
       (is (= "Added page:\n[123]" result))))
 
-  (testing "add tag renders ids in two lines"
+  (testing "upsert tag renders ids in two lines"
     (let [result (format/format-result {:status :ok
-                                        :command :add-tag
+                                        :command :upsert-tag
                                         :context {:repo "demo-repo"
                                                   :name "Quote"}
                                         :data {:result [321]}}
                                        {:output-format nil})]
-      (is (= "Added tag:\n[321]" result))))
+      (is (= "Upserted tag:\n[321]" result))))
+
+  (testing "upsert property renders ids in two lines"
+    (let [result (format/format-result {:status :ok
+                                        :command :upsert-property
+                                        :context {:repo "demo-repo"
+                                                  :name "owner"}
+                                        :data {:result [654]}}
+                                       {:output-format nil})]
+      (is (= "Upserted property:\n[654]" result))))
 
   (testing "remove page renders a succinct success line"
     (let [result (format/format-result {:status :ok
-                                        :command :remove
+                                        :command :remove-page
                                         :context {:repo "demo-repo"
-                                                  :page "Home"}
+                                                  :name "Home"}
                                         :data {:result {:ok true}}}
                                        {:output-format nil})]
       (is (= "Removed page: Home (repo: demo-repo)" result))))
+
+  (testing "remove block with id list renders block count"
+    (let [result (format/format-result {:status :ok
+                                        :command :remove-block
+                                        :context {:repo "demo-repo"
+                                                  :ids [1 2 3]}
+                                        :data {:result {:ok true}}}
+                                       {:output-format nil})]
+      (is (= "Removed blocks: 3 (repo: demo-repo)" result))))
+
+  (testing "remove tag renders a succinct success line"
+    (let [result (format/format-result {:status :ok
+                                        :command :remove-tag
+                                        :context {:repo "demo-repo"
+                                                  :name "Quote"}
+                                        :data {:result {:ok true}}}
+                                       {:output-format nil})]
+      (is (= "Removed tag: Quote (repo: demo-repo)" result))))
+
+  (testing "remove property renders a succinct success line"
+    (let [result (format/format-result {:status :ok
+                                        :command :remove-property
+                                        :context {:repo "demo-repo"
+                                                  :name "owner"}
+                                        :data {:result {:ok true}}}
+                                       {:output-format nil})]
+      (is (= "Removed property: owner (repo: demo-repo)" result))))
 
   (testing "update block renders a succinct success line"
     (let [result (format/format-result {:status :ok
@@ -430,7 +466,22 @@
                                        {:output-format nil})]
       (is (= (str "Error (server-start-timeout-orphan): db-worker-node failed to create lock\n"
                   "Hint: Check and stop lingering db-worker-node processes, then retry")
-             result)))))
+             result))))
+
+  (testing "remove tag ambiguity includes candidate list"
+    (let [result (format/format-result {:status :error
+                                        :command :remove-tag
+                                        :error {:code :ambiguous-tag-name
+                                                :message "multiple tags match name: Quote"
+                                                :candidates [{:id 1 :name "Quote"}
+                                                             {:id 2 :name "QUOTE"}]}}
+                                       {:output-format nil})]
+      (is (string/includes? result "Error (ambiguous-tag-name):"))
+      (is (string/includes? result "multiple tags match name: Quote"))
+      (is (string/includes? result "1"))
+      (is (string/includes? result "2"))
+      (is (string/includes? result "Quote"))
+      (is (string/includes? result "QUOTE")))))
 
 (deftest test-human-output-doctor
   (testing "doctor renders concise check summary"
