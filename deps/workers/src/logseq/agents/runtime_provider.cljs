@@ -1083,19 +1083,8 @@
                              (str "/v1/sessions/" session-id "/terminate")
                              {:token agent-token}))
 
-(defn- <cloudflare-delete-sandbox! [^js sandbox]
-  (cond
-    (js-method sandbox "delete")
-    (->promise (.delete sandbox))
-
-    (js-method sandbox "remove")
-    (->promise (.remove sandbox))
-
-    (js-method sandbox "destroy")
-    (->promise (.destroy sandbox))
-
-    :else
-    (p/resolved nil)))
+(defn- <cloudflare-destroy-sandbox! [^js sandbox]
+  (->promise (.destroy sandbox)))
 
 (defn- <cloudflare-open-terminal!
   [^js env runtime request {:keys [cols rows]}]
@@ -1474,8 +1463,8 @@
                        (p/catch
                         (<cloudflare-terminate-session! sandbox port agent-token session-id)
                         (fn [_] nil)))
-                   _ (p/catch (<cloudflare-delete-sandbox! sandbox)
-                              (fn [_] nil))]
+                   result (<cloudflare-destroy-sandbox! sandbox)]
+             (log/info ::destroy-sandbox-result result)
              nil)
            (fn [_] nil)))))))
 

@@ -373,12 +373,9 @@
   (p/let [current-session (<get-session self)]
     (when (= session-id (:id current-session))
       (let [event-type (or (:type payload) "agent.runtime")]
-        (p/let [_ (<append-event! self {:type event-type
-                                        :data payload
-                                        :ts (common/now-ms)})
-                current-session (<get-session self)]
-          (when (runtime-auto-terminate-status? (:status current-session))
-            (<terminate-runtime! self (:runtime current-session))))))))
+        (<append-event! self {:type event-type
+                              :data payload
+                              :ts (common/now-ms)})))))
 
 (defn- <consume-events-stream! [^js self session-id runtime on-ready]
   (let [provider (runtime-provider/resolve-provider (.-env self) runtime)]
