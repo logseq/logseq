@@ -113,9 +113,12 @@
                             '[:find (pull ?e [*])
                               :in $ ?ref-id
                               :where [?e :logseq.property/asset ?ref-id]]
-                            ref-id)]
-    (let [highlights (some->> data (flatten) (map #(:logseq.property.pdf/hl-value %)) (vec))]
-      {:highlights highlights})))
+                            ref-id)
+          block-entity (db/entity ref-id)]
+    (let [highlights (some->> data (flatten) (map #(:logseq.property.pdf/hl-value %)) (vec))
+          extra {:page (:logseq.property.asset/last-visit-page block-entity)}]
+      {:highlights highlights
+       :extra (when (some #(not (nil? (% extra))) [:page]) extra)})))
 
 (defn area-highlight?
   [hl]
