@@ -60,6 +60,7 @@
       (is (string/includes? plain-summary "Graph Management"))
       (is (string/includes? plain-summary "list"))
       (is (string/includes? plain-summary "add"))
+      (is (string/includes? plain-summary "upsert"))
       (is (string/includes? plain-summary "remove"))
       (is (string/includes? plain-summary "update"))
       (is (string/includes? plain-summary "query"))
@@ -73,8 +74,12 @@
       (is (contains-bold? summary "list property"))
       (is (contains-bold? summary "add block"))
       (is (contains-bold? summary "add page"))
-      (is (contains-bold? summary "add tag"))
-      (is (contains-bold? summary "remove"))
+      (is (contains-bold? summary "upsert tag"))
+      (is (contains-bold? summary "upsert property"))
+      (is (contains-bold? summary "remove block"))
+      (is (contains-bold? summary "remove page"))
+      (is (contains-bold? summary "remove tag"))
+      (is (contains-bold? summary "remove property"))
       (is (contains-bold? summary "update"))
       (is (contains-bold? summary "query"))
       (is (contains-bold? summary "query list"))
@@ -134,17 +139,27 @@
       (is (string/includes? plain-summary "Global options:"))
       (is (string/includes? plain-summary "Command options:"))))
 
-  (testing "remove command shows help"
+  (testing "upsert group shows subcommands"
     (let [result (binding [style/*color-enabled?* true]
-                   (commands/parse-args ["remove" "--help"]))
+                   (commands/parse-args ["upsert"]))
           summary (:summary result)
           plain-summary (strip-ansi summary)]
       (is (true? (:help? result)))
-      (is (string/includes? plain-summary "Usage: logseq remove"))
+      (is (string/includes? plain-summary "upsert tag"))
+      (is (string/includes? plain-summary "upsert property"))
+      (is (contains-bold? summary "upsert tag"))
+      (is (contains-bold? summary "upsert property"))))
+
+  (testing "remove block command shows help"
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["remove" "block" "--help"]))
+          summary (:summary result)
+          plain-summary (strip-ansi summary)]
+      (is (true? (:help? result)))
+      (is (string/includes? plain-summary "Usage: logseq remove block"))
       (is (string/includes? plain-summary "Command options:"))
       (is (contains-bold? summary "--id"))
-      (is (contains-bold? summary "--uuid"))
-      (is (contains-bold? summary "--page"))))
+      (is (contains-bold? summary "--uuid"))))
 
   (testing "update command shows help"
     (let [result (binding [style/*color-enabled?* true]
@@ -192,7 +207,7 @@
       (is (seq lines))
       (is (every? #(not (string/includes? % "[options]")) lines)))))
 
-(deftest test-parse-args-help-add-group
+(deftest test-parse-args-help-add-upsert-group
   (testing "add group shows subcommands"
     (let [result (binding [style/*color-enabled?* true]
                    (commands/parse-args ["add"]))
@@ -201,10 +216,19 @@
       (is (true? (:help? result)))
       (is (string/includes? plain-summary "add block"))
       (is (string/includes? plain-summary "add page"))
-      (is (string/includes? plain-summary "add tag"))
       (is (contains-bold? summary "add block"))
-      (is (contains-bold? summary "add page"))
-      (is (contains-bold? summary "add tag")))))
+      (is (contains-bold? summary "add page"))))
+
+  (testing "upsert group shows subcommands"
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["upsert"]))
+          summary (:summary result)
+          plain-summary (strip-ansi summary)]
+      (is (true? (:help? result)))
+      (is (string/includes? plain-summary "upsert tag"))
+      (is (string/includes? plain-summary "upsert property"))
+      (is (contains-bold? summary "upsert tag"))
+      (is (contains-bold? summary "upsert property")))))
 
 (deftest test-parse-args-help-alignment
   (testing "graph group aligns subcommand columns"
@@ -268,13 +292,26 @@
       (is (false? (:ok? result)))
       (is (= :unknown-command (get-in result [:error :code]))))))
 
-(deftest test-parse-args-rejects-legacy-remove-subcommands
-  (testing "rejects legacy remove subcommands"
-    (doseq [args [["remove" "block"]
-                  ["remove" "page"]]]
-      (let [result (commands/parse-args args)]
-        (is (false? (:ok? result)))
-        (is (= :invalid-options (get-in result [:error :code])))))))
+(deftest test-parse-args-remove-help-and-rejects-add-tag
+  (testing "bare remove shows remove subcommand help"
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["remove"]))
+          summary (:summary result)
+          plain-summary (strip-ansi summary)]
+      (is (true? (:help? result)))
+      (is (string/includes? plain-summary "remove block"))
+      (is (string/includes? plain-summary "remove page"))
+      (is (string/includes? plain-summary "remove tag"))
+      (is (string/includes? plain-summary "remove property"))
+      (is (contains-bold? summary "remove block"))
+      (is (contains-bold? summary "remove page"))
+      (is (contains-bold? summary "remove tag"))
+      (is (contains-bold? summary "remove property"))))
+
+  (testing "rejects removed add tag command"
+    (let [result (commands/parse-args ["add" "tag" "--name" "Quote"])]
+      (is (false? (:ok? result)))
+      (is (= :unknown-command (get-in result [:error :code]))))))
 
 (deftest test-parse-args-rejects-graph-option
   (testing "rejects legacy --graph option"
@@ -826,42 +863,69 @@
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code]))))))
 
-(deftest test-verb-subcommand-parse-add-remove
-  (testing "remove requires target"
-    (let [result (commands/parse-args ["remove"])]
-      (is (false? (:ok? result)))
-      (is (= :missing-target (get-in result [:error :code])))))
-
-  (testing "remove parses with id"
-    (let [result (commands/parse-args ["remove" "--id" "10"])]
+(deftest test-verb-subcommand-parse-upsert-remove
+  (testing "remove block parses with id"
+    (let [result (commands/parse-args ["remove" "block" "--id" "10"])]
       (is (true? (:ok? result)))
-      (is (= :remove (:command result)))
+      (is (= :remove-block (:command result)))
       (is (= 10 (get-in result [:options :id])))))
 
-  (testing "remove parses with uuid"
-    (let [result (commands/parse-args ["remove" "--uuid" "abc"])]
+  (testing "remove page parses with name"
+    (let [result (commands/parse-args ["remove" "page" "--name" "Home"])]
       (is (true? (:ok? result)))
-      (is (= :remove (:command result)))
-      (is (= "abc" (get-in result [:options :uuid])))))
+      (is (= :remove-page (:command result)))
+      (is (= "Home" (get-in result [:options :name])))))
 
-  (testing "remove parses with page"
-    (let [result (commands/parse-args ["remove" "--page" "Home"])]
+  (testing "remove tag parses with name"
+    (let [result (commands/parse-args ["remove" "tag" "--name" "Quote"])]
       (is (true? (:ok? result)))
-      (is (= :remove (:command result)))
-      (is (= "Home" (get-in result [:options :page])))))
+      (is (= :remove-tag (:command result)))
+      (is (= "Quote" (get-in result [:options :name])))))
 
-  (testing "remove rejects multiple selectors"
-    (let [result (commands/parse-args ["remove" "--id" "1" "--page" "Home"])]
+  (testing "remove property parses with id"
+    (let [result (commands/parse-args ["remove" "property" "--id" "123"])]
+      (is (true? (:ok? result)))
+      (is (= :remove-property (:command result)))
+      (is (= 123 (get-in result [:options :id])))))
+
+  (testing "remove block rejects empty id vector"
+    (let [result (commands/parse-args ["remove" "block" "--id" "[]"])]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
 
-  (testing "remove rejects empty id vector"
-    (let [result (commands/parse-args ["remove" "--id" "[]"])]
+  (testing "remove block rejects invalid id vector"
+    (let [result (commands/parse-args ["remove" "block" "--id" "[1 \"no\"]"])]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
 
-  (testing "remove rejects invalid id vector"
-    (let [result (commands/parse-args ["remove" "--id" "[1 \"no\"]"])]
+  (testing "upsert tag parses with name"
+    (let [result (commands/parse-args ["upsert" "tag" "--name" "Quote"])]
+      (is (true? (:ok? result)))
+      (is (= :upsert-tag (:command result)))
+      (is (= "Quote" (get-in result [:options :name])))))
+
+  (testing "upsert property parses with type and cardinality"
+    (let [result (commands/parse-args ["upsert" "property"
+                                       "--name" "owner"
+                                       "--type" "node"
+                                       "--cardinality" "many"])]
+      (is (true? (:ok? result)))
+      (is (= :upsert-property (:command result)))
+      (is (= "owner" (get-in result [:options :name])))
+      (is (= "node" (get-in result [:options :type])))
+      (is (= "many" (get-in result [:options :cardinality])))))
+
+  (testing "upsert property rejects invalid type"
+    (let [result (commands/parse-args ["upsert" "property"
+                                       "--name" "owner"
+                                       "--type" "wat"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "upsert property rejects invalid cardinality"
+    (let [result (commands/parse-args ["upsert" "property"
+                                       "--name" "owner"
+                                       "--cardinality" "triple"])]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
 
@@ -973,21 +1037,10 @@
       (is (= "[\"TagA\"]" (get-in result [:options :tags])))
       (is (= "{:logseq.property/publishing-public? true}" (get-in result [:options :properties])))))
 
-  (testing "add tag requires name"
-    (let [result (commands/parse-args ["add" "tag"])]
-      (is (false? (:ok? result)))
-      (is (= :missing-tag-name (get-in result [:error :code])))))
-
-  (testing "add tag parses with name"
+  (testing "add tag is no longer supported"
     (let [result (commands/parse-args ["add" "tag" "--name" "Quote"])]
-      (is (true? (:ok? result)))
-      (is (= :add-tag (:command result)))
-      (is (= "Quote" (get-in result [:options :name])))))
-
-  (testing "add tag rejects blank name"
-    (let [result (commands/parse-args ["add" "tag" "--name" "   "])]
       (is (false? (:ok? result)))
-      (is (= :missing-tag-name (get-in result [:error :code]))))))
+      (is (= :unknown-command (get-in result [:error :code]))))))
 
 (deftest test-verb-subcommand-parse-update-target-page
   (testing "update parses with target page"
@@ -1113,7 +1166,8 @@
   (testing "verb subcommands reject unknown flags"
     (doseq [args [["list" "page" "--wat"]
                   ["add" "block" "--wat"]
-                  ["remove" "--wat"]
+                  ["remove" "block" "--wat"]
+                  ["upsert" "tag" "--wat"]
                   ["update" "--wat"]
                   ["show" "--wat"]]]
       (let [result (commands/parse-args args)]
@@ -1207,7 +1261,7 @@
       (is (= (cli-server/db-worker-dev-script-path)
              (get-in result [:action :script-path]))))))
 
-(deftest test-build-action-inspect-edit
+(deftest test-build-action-inspect-edit-add-upsert
   (testing "list page requires repo"
     (let [parsed {:ok? true :command :list-page :options {}}
           result (commands/build-action parsed {})]
@@ -1232,34 +1286,78 @@
       (is (false? (:ok? result)))
       (is (= :missing-page-name (get-in result [:error :code])))))
 
-  (testing "add tag requires name"
-    (let [parsed {:ok? true :command :add-tag :options {}}
+  (testing "upsert tag requires name"
+    (let [parsed {:ok? true :command :upsert-tag :options {}}
           result (commands/build-action parsed {:repo "demo"})]
       (is (false? (:ok? result)))
       (is (= :missing-tag-name (get-in result [:error :code])))))
 
-  (testing "add tag builds normalized action"
-    (let [parsed {:ok? true :command :add-tag :options {:name "  #Quote  "}}
+  (testing "upsert tag builds normalized action"
+    (let [parsed {:ok? true :command :upsert-tag :options {:name "  #Quote  "}}
           result (commands/build-action parsed {:repo "demo"})]
       (is (true? (:ok? result)))
-      (is (= {:type :add-tag
+      (is (= {:type :upsert-tag
               :repo "logseq_db_demo"
               :graph "demo"
               :name "Quote"}
              (:action result)))))
 
-  (testing "remove requires target"
-    (let [parsed {:ok? true :command :remove :options {}}
+  (testing "upsert property coerces schema options"
+    (let [parsed {:ok? true
+                  :command :upsert-property
+                  :options {:name "owner"
+                            :type "node"
+                            :cardinality "many"
+                            :hide true
+                            :public false}}
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (true? (:ok? result)))
+      (is (= {:type :upsert-property
+              :repo "logseq_db_demo"
+              :graph "demo"
+              :name "owner"
+              :schema {:logseq.property/type :node
+                       :db/cardinality :db.cardinality/many
+                       :logseq.property/hide? true
+                       :logseq.property/public? false}}
+             (:action result)))))
+
+  )
+
+(deftest test-build-action-inspect-edit-remove-show
+
+  (testing "remove block requires target"
+    (let [parsed {:ok? true :command :remove-block :options {}}
           result (commands/build-action parsed {:repo "demo"})]
       (is (false? (:ok? result)))
       (is (= :missing-target (get-in result [:error :code])))))
 
-  (testing "remove normalizes id vector in build action"
-    (let [parsed {:ok? true :command :remove :options {:id "[1 2]"}}
+  (testing "remove block normalizes id vector in build action"
+    (let [parsed {:ok? true :command :remove-block :options {:id "[1 2]"}}
           result (commands/build-action parsed {:repo "demo"})]
       (is (true? (:ok? result)))
-      (is (= :remove (get-in result [:action :type])))
+      (is (= :remove-block (get-in result [:action :type])))
       (is (= [1 2] (get-in result [:action :ids])))))
+
+  (testing "remove page requires name"
+    (let [parsed {:ok? true :command :remove-page :options {}}
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (false? (:ok? result)))
+      (is (= :missing-page-name (get-in result [:error :code])))))
+
+  (testing "remove tag parses by id"
+    (let [parsed {:ok? true :command :remove-tag :options {:id 42}}
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :remove-tag (get-in result [:action :type])))
+      (is (= 42 (get-in result [:action :id])))))
+
+  (testing "remove property parses by name"
+    (let [parsed {:ok? true :command :remove-property :options {:name "owner"}}
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :remove-property (get-in result [:action :type])))
+      (is (= "owner" (get-in result [:action :name])))))
 
   (testing "show requires target"
     (let [parsed {:ok? true :command :show :options {}}
@@ -1386,15 +1484,17 @@
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code]))))))
 
-(deftest test-execute-add-tag-builds-create-page-op
+(deftest test-execute-upsert-tag-builds-create-page-op
   (async done
          (let [ops* (atom nil)
                created?* (atom false)
+               orig-list-graphs cli-server/list-graphs
                orig-ensure-server! cli-server/ensure-server!
                orig-invoke transport/invoke
-               action {:type :add-tag
+               action {:type :upsert-tag
                        :repo "demo"
                        :name "Quote"}]
+           (set! cli-server/list-graphs (fn [_] ["demo"]))
            (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
            (set! transport/invoke (fn [_ method _ args]
                                     (case method
@@ -1412,7 +1512,7 @@
                                                                        (reset! ops* ops)
                                                                        {:result :ok})
                                       (throw (ex-info "unexpected invoke" {:method method :args args})))))
-           (-> (p/let [result (add-command/execute-add-tag action {})]
+           (-> (p/let [result (commands/execute action {})]
                  (is (= :ok (:status result)))
                  (is (= [4242] (get-in result [:data :result])))
                  (is (= [[:create-page ["Quote" {:class? true}]]]
@@ -1420,17 +1520,20 @@
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally (fn []
+                            (set! cli-server/list-graphs orig-list-graphs)
                             (set! cli-server/ensure-server! orig-ensure-server!)
                             (set! transport/invoke orig-invoke)
                             (done)))))))
 
-(deftest test-execute-add-tag-rejects-existing-non-tag-page
+(deftest test-execute-upsert-tag-rejects-existing-non-tag-page
   (async done
-         (let [action {:type :add-tag
+         (let [action {:type :upsert-tag
                        :repo "demo"
                        :name "Home"}
+               orig-list-graphs cli-server/list-graphs
                orig-ensure-server! cli-server/ensure-server!
                orig-invoke transport/invoke]
+           (set! cli-server/list-graphs (fn [_] ["demo"]))
            (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
            (set! transport/invoke (fn [_ method _ args]
                                     (case method
@@ -1444,24 +1547,27 @@
                                       :thread-api/apply-outliner-ops
                                       (throw (ex-info "should not create tag" {:args args}))
                                       (throw (ex-info "unexpected invoke" {:method method :args args})))))
-           (-> (add-command/execute-add-tag action {})
-               (p/then (fn [_]
-                         (is false "expected add tag conflict error")))
+           (-> (p/let [result (commands/execute action {})]
+                 (is (= :error (:status result)))
+                 (is (= :tag-name-conflict (get-in result [:error :code]))))
                (p/catch (fn [e]
-                          (is (= :tag-name-conflict (:code (ex-data e))))))
+                          (is false (str "unexpected error: " e))))
                (p/finally (fn []
+                            (set! cli-server/list-graphs orig-list-graphs)
                             (set! cli-server/ensure-server! orig-ensure-server!)
                             (set! transport/invoke orig-invoke)
                             (done)))))))
 
-(deftest test-execute-add-tag-idempotent-when-tag-exists
+(deftest test-execute-upsert-tag-idempotent-when-tag-exists
   (async done
          (let [apply-calls* (atom 0)
+               orig-list-graphs cli-server/list-graphs
                orig-ensure-server! cli-server/ensure-server!
                orig-invoke transport/invoke
-               action {:type :add-tag
+               action {:type :upsert-tag
                        :repo "demo"
                        :name "Quote"}]
+           (set! cli-server/list-graphs (fn [_] ["demo"]))
            (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
            (set! transport/invoke (fn [_ method _ args]
                                     (case method
@@ -1476,13 +1582,159 @@
                                                                        (swap! apply-calls* inc)
                                                                        {:result :ok})
                                       (throw (ex-info "unexpected invoke" {:method method :args args})))))
-           (-> (p/let [result (add-command/execute-add-tag action {})]
+           (-> (p/let [result (commands/execute action {})]
                  (is (= :ok (:status result)))
                  (is (= [4242] (get-in result [:data :result])))
                  (is (= 0 @apply-calls*)))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally (fn []
+                            (set! cli-server/list-graphs orig-list-graphs)
+                            (set! cli-server/ensure-server! orig-ensure-server!)
+                            (set! transport/invoke orig-invoke)
+                            (done)))))))
+
+(deftest test-execute-upsert-property-emits-upsert-op
+  (async done
+         (let [ops* (atom nil)
+               created?* (atom false)
+               orig-list-graphs cli-server/list-graphs
+               orig-ensure-server! cli-server/ensure-server!
+               orig-invoke transport/invoke
+               action {:type :upsert-property
+                       :repo "demo"
+                       :name "owner"
+                       :schema {:logseq.property/type :node
+                                :db/cardinality :db.cardinality/many}}]
+           (set! cli-server/list-graphs (fn [_] ["demo"]))
+           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
+           (set! transport/invoke (fn [_ method _ args]
+                                    (case method
+                                      :thread-api/pull (if @created?*
+                                                         {:db/id 654
+                                                          :db/ident :user.property/owner
+                                                          :block/name "owner"
+                                                          :block/title "owner"
+                                                          :logseq.property/type :node}
+                                                         {})
+                                      :thread-api/apply-outliner-ops (let [[_ ops _] args]
+                                                                       (reset! created?* true)
+                                                                       (reset! ops* ops)
+                                                                       {:result :ok})
+                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
+           (-> (p/let [result (commands/execute action {})]
+                 (is (= :ok (:status result)))
+                 (is (= [[:upsert-property [nil
+                                            {:logseq.property/type :node
+                                             :db/cardinality :db.cardinality/many}
+                                            {:property-name "owner"}]]]
+                        @ops*)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! cli-server/list-graphs orig-list-graphs)
+                            (set! cli-server/ensure-server! orig-ensure-server!)
+                            (set! transport/invoke orig-invoke)
+                            (done)))))))
+
+(deftest test-execute-remove-tag-property
+  (async done
+         (let [ops* (atom [])
+               orig-list-graphs cli-server/list-graphs
+               orig-ensure-server! cli-server/ensure-server!
+               orig-invoke transport/invoke]
+           (set! cli-server/list-graphs (fn [_] ["demo"]))
+           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
+           (set! transport/invoke
+                 (fn [_ method _ args]
+                   (case method
+                     :thread-api/api-list-tags [{:db/id 1 :block/title "Quote"}]
+                     :thread-api/api-list-properties [{:db/id 2 :block/title "owner"}]
+                     :thread-api/pull (let [[_ selector lookup] args]
+                                        (cond
+                                          (= lookup 1)
+                                          {:db/id 1
+                                           :block/title "Quote"
+                                           :block/uuid (uuid "00000000-0000-0000-0000-000000000011")
+                                           :block/tags [{:db/ident :logseq.class/Tag}]
+                                           :logseq.property/public? true}
+
+                                          (= lookup 2)
+                                          {:db/id 2
+                                           :db/ident :user.property/owner
+                                           :block/title "owner"
+                                           :block/uuid (uuid "00000000-0000-0000-0000-000000000022")
+                                           :logseq.property/type :node
+                                           :logseq.property/public? true}
+
+                                          (= lookup [:block/name "quote"])
+                                          {:db/id 1
+                                           :block/title "Quote"
+                                           :block/uuid (uuid "00000000-0000-0000-0000-000000000011")
+                                           :block/tags [{:db/ident :logseq.class/Tag}]
+                                           :logseq.property/public? true}
+
+                                          (= lookup [:block/name "owner"])
+                                          {:db/id 2
+                                           :db/ident :user.property/owner
+                                           :block/title "owner"
+                                           :block/uuid (uuid "00000000-0000-0000-0000-000000000022")
+                                           :logseq.property/type :node
+                                           :logseq.property/public? true}
+
+                                          :else
+                                          (throw (ex-info "unexpected pull lookup"
+                                                          {:lookup lookup :selector selector}))))
+                     :thread-api/apply-outliner-ops (let [[_ ops _] args]
+                                                      (swap! ops* conj ops)
+                                                      {:result :ok})
+                     (throw (ex-info "unexpected invoke" {:method method :args args})))))
+           (-> (p/let [tag-result (commands/execute {:type :remove-tag
+                                                     :repo "demo"
+                                                     :name "Quote"}
+                                                    {})
+                       property-result (commands/execute {:type :remove-property
+                                                          :repo "demo"
+                                                          :id 2}
+                                                         {})]
+                 (is (= :ok (:status tag-result)))
+                 (is (= :ok (:status property-result)))
+                 (is (= [[:delete-page [(uuid "00000000-0000-0000-0000-000000000011")]]]
+                        (first @ops*)))
+                 (is (= [[:delete-page [(uuid "00000000-0000-0000-0000-000000000022")]]]
+                        (second @ops*))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! cli-server/list-graphs orig-list-graphs)
+                            (set! cli-server/ensure-server! orig-ensure-server!)
+                            (set! transport/invoke orig-invoke)
+                            (done)))))))
+
+(deftest test-execute-remove-tag-ambiguous-name
+  (async done
+         (let [orig-list-graphs cli-server/list-graphs
+               orig-ensure-server! cli-server/ensure-server!
+               orig-invoke transport/invoke]
+           (set! cli-server/list-graphs (fn [_] ["demo"]))
+           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
+           (set! transport/invoke
+                 (fn [_ method _ _]
+                   (case method
+                     :thread-api/api-list-tags [{:db/id 1 :block/title "Quote"}
+                                                {:db/id 2 :block/title "QUOTE"}]
+                     (throw (ex-info "unexpected invoke" {:method method})))))
+           (-> (p/let [result (commands/execute {:type :remove-tag
+                                                 :repo "demo"
+                                                 :name "Quote"}
+                                                {})]
+                 (is (= :error (:status result)))
+                 (is (= :ambiguous-tag-name (get-in result [:error :code])))
+                 (is (= 2 (count (get-in result [:error :candidates])))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! cli-server/list-graphs orig-list-graphs)
                             (set! cli-server/ensure-server! orig-ensure-server!)
                             (set! transport/invoke orig-invoke)
                             (done)))))))
