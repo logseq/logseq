@@ -95,6 +95,30 @@
   [text]
   (boolean (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text)))
 
+(defn- markdown-images?
+  [text]
+  (and (string? text)
+       (boolean (util/safe-re-find #"!\[[^\]]*\]\([^)]+\)" text))))
+
+(defn- choose-pasted-text
+  [text html]
+  (let [html-text (let [result (when-not (string/blank? html)
+                                 (try
+                                   (html-parser/convert html)
+                                   (catch :default e
+                                     (log/error :exception e)
+                                     nil)))]
+                    (if (string/blank? result) nil result))
+        parsed-text (or html-text
+                        (when (common-util/url? text)
+                          (wrap-macro-url text))
+                        text)]
+    ;; Keep markdown image links from clipboard text when html conversion loses them.
+    (if (and (markdown-images? text)
+             (not (markdown-images? parsed-text)))
+      text
+      parsed-text)))
+
 (defn- get-revert-cut-txs
   "Get reverted previous cut tx when paste"
   [blocks]
@@ -135,17 +159,7 @@
       :else
       ;; from external
       (let [format (or (db/get-page-format (state/get-current-page)) :markdown)
-            html-text (let [result (when-not (string/blank? html)
-                                     (try
-                                       (html-parser/convert html)
-                                       (catch :default e
-                                         (log/error :exception e)
-                                         nil)))]
-                        (if (string/blank? result) nil result))
-            text' (or html-text
-                      (when (common-util/url? text)
-                        (wrap-macro-url text))
-                      text)
+            text' (choose-pasted-text text html)
             blocks? (markdown-blocks? text')]
         (cond
           blocks?

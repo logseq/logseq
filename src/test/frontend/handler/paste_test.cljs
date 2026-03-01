@@ -49,6 +49,22 @@
      :selection-end 76
      :selection "https://logseq.com) is developed with [Clojure](https://clojure.org"} false))
 
+(deftest choose-pasted-text-prefers-clipboard-text-for-images
+  (let [clipboard "- text\n- ![asset](../assets/image.png)"
+        html "<ul><li>text</li><li><img src=\"../assets/image.png\"/></li></ul>"
+        converted-html "- text"]
+    (p/with-redefs [html-parser/convert (constantly converted-html)]
+      (is (= clipboard
+             (#'paste-handler/choose-pasted-text clipboard html))))))
+
+(deftest choose-pasted-text-keeps-converted-html-when-image-preserved
+  (let [clipboard "- text\n- ![asset](../assets/image.png)"
+        html "<ul><li>text</li><li><img src=\"../assets/image.png\"/></li></ul>"
+        converted-html "- text\n- ![asset](../assets/image.png)"]
+    (p/with-redefs [html-parser/convert (constantly converted-html)]
+      (is (= converted-html
+             (#'paste-handler/choose-pasted-text clipboard html))))))
+
 (deftest-async editor-on-paste-raw-with-link
   (testing "Raw paste for link should just paste link"
     (let [clipboard "https://www.youtube.com/watch?v=xu9p5ynlhZk"
