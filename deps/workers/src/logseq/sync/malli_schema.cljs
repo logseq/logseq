@@ -260,6 +260,9 @@
    [:create-pr {:optional true} :boolean]
    [:force {:optional true} :boolean]])
 
+(def sessions-snapshot-request-schema
+  [:map])
+
 (def sessions-create-response-schema
   [:map
    [:session-id :string]
@@ -306,6 +309,12 @@
    [:github-raw-body {:optional true} :string]
    [:github-response-headers {:optional true} :any]])
 
+(def sessions-snapshot-response-schema
+  [:map
+   [:status :string]
+   [:snapshot-id {:optional true} [:maybe :string]]
+   [:message {:optional true} [:maybe :string]]])
+
 (def http-request-schemas
   {:graphs/create graph-create-request-schema
    :graph-members/create graph-member-create-request-schema
@@ -316,7 +325,8 @@
    :e2ee/grant-access e2ee-grant-access-request-schema
    :sessions/create sessions-create-request-schema
    :sessions/message sessions-message-request-schema
-   :sessions/pr sessions-pr-request-schema})
+   :sessions/pr sessions-pr-request-schema
+   :sessions/snapshot sessions-snapshot-request-schema})
 
 (def http-response-schemas
   {:graphs/list graphs-list-response-schema
@@ -349,6 +359,7 @@
    :sessions/interrupt http-ok-response-schema
    :sessions/cancel http-ok-response-schema
    :sessions/pr sessions-pr-response-schema
+   :sessions/snapshot sessions-snapshot-response-schema
    :sessions/events sessions-events-response-schema
    :sessions/branches sessions-branches-response-schema
    :error http-error-response-schema})

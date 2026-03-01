@@ -193,6 +193,16 @@
                        (forward-request stub do-url "POST" headers body-json))
                      (http/error-response "server error" 500)))))))))
 
+(defn- handle-snapshot [{:keys [env request url claims route]}]
+  (let [session-id (get-in route [:path-params :session-id])]
+    (if-not (string? session-id)
+      (http/bad-request "invalid session id")
+      (if-let [^js stub (session-stub env session-id)]
+        (let [headers (base-headers request claims)
+              do-url (str (.-origin url) "/__session__/snapshot")]
+          (forward-request stub do-url "POST" headers nil))
+        (http/error-response "server error" 500)))))
+
 (defn handle [{:keys [route] :as ctx}]
   (case (:handler route)
     :sessions/create (handle-create ctx)
@@ -203,6 +213,7 @@
     :sessions/interrupt (handle-control ctx "/__session__/interrupt")
     :sessions/cancel (handle-cancel ctx)
     :sessions/pr (handle-pr ctx)
+    :sessions/snapshot (handle-snapshot ctx)
     :sessions/terminal (handle-terminal ctx)
     :sessions/events (handle-events ctx)
     :sessions/branches (handle-branches ctx)

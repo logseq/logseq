@@ -692,6 +692,18 @@
       (some-> error ex-message)
       "Publish failed."))
 
+(defn- snapshot-status-message
+  [resp]
+  (or (:message resp)
+      "Sandbox snapshot created."))
+
+(defn- snapshot-error-message
+  [error]
+  (or (some-> (ex-data error) :body :message)
+      (some-> (ex-data error) :body :error)
+      (some-> error ex-message)
+      "Snapshot failed."))
+
 (defn <publish-session!
   [block opts]
   (let [base (db-sync/http-base)
@@ -745,4 +757,49 @@
                         resp))
               (p/catch (fn [error]
                          (notification/show! (publish-error-message error) :error false)
+                         (p/rejected error)))))))))
+
+(defn <snapshot-session!
+  [block]
+  (let [base (db-sync/http-base)
+        block-uuid (:block/uuid block)
+        session (session-state block-uuid)
+        session-id (or (:session-id session)
+                       (some-> block-uuid str))]
+    (cond
+      (not base)
+      (do
+        (notification/show! "DB sync is not configured." :error false)
+        (p/resolved nil))
+
+      (not (task-ready? block))
+      (do
+        (notification/show! "Task needs Project (with Git Repo) and Agent." :warning)
+        (p/resolved nil))
+
+      (not (:session-id session))
+      (do
+        (notification/show! "Start the agent session before snapshotting." :warning)
+        (p/resolved nil))
+
+      :else
+      (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+              body (coerce-http-request :sessions/snapshot {})]
+        (if (nil? body)
+          (do
+            (notification/show! "Invalid snapshot payload." :error false)
+            nil)
+          (-> (db-sync/fetch-json (str base "/sessions/" session-id "/snapshot")
+                                  {:method "POST"
+                                   :headers {"content-type" "application/json"}
+                                   :body (js/JSON.stringify (clj->js body))}
+                                  {:response-schema :sessions/snapshot})
+              (p/then (fn [resp]
+                        (update-session-state! block-uuid {:last-snapshot resp
+                                                           :last-snapshot-at (util/time-ms)})
+                        (notification/show! (snapshot-status-message resp) :success false)
+                        (<fetch-events! block)
+                        resp))
+              (p/catch (fn [error]
+                         (notification/show! (snapshot-error-message error) :error false)
                          (p/rejected error)))))))))

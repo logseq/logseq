@@ -44,4 +44,7 @@
       (is (= "session-12" (get-in match [:path-params :session-id]))))
     (let [match (routes/match-route "POST" "/sessions/session-13/pr")]
       (is (= :sessions/pr (:handler match)))
-      (is (= "session-13" (get-in match [:path-params :session-id]))))))
+      (is (= "session-13" (get-in match [:path-params :session-id]))))
+    (let [match (routes/match-route "POST" "/sessions/session-14/snapshot")]
+      (is (= :sessions/snapshot (:handler match)))
+      (is (= "session-14" (get-in match [:path-params :session-id]))))))

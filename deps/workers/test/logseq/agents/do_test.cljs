@@ -719,6 +719,47 @@
                            (is false (str "unexpected error: " error))
                            (done))))))))
 
+(deftest snapshot-endpoint-creates-sandbox-snapshot-test
+  (testing "session snapshot endpoint creates a manual sandbox snapshot"
+    (async done
+           (let [snapshot-calls (atom [])
+                 env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"}
+                 self (make-self env)
+                 headers {"content-type" "application/json"
+                          "x-user-id" "user-1"}]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-snapshot"
+                                 :status "running"
+                                 :task {:project {:repo-url "https://github.com/example/repo"}}
+                                 :runtime {:provider "cloudflare"
+                                           :sandbox-id "sbx-snapshot"
+                                           :session-id "sess-snapshot"}
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (with-redefs [runtime-provider/<snapshot-runtime!
+                                        (fn [_provider runtime _opts]
+                                          (swap! snapshot-calls conj runtime)
+                                          (js/Promise.resolve {:snapshot-id "backup-1"}))]
+                            (agent-do/handle-fetch self
+                                                   (json-request "http://db-sync.local/__session__/snapshot"
+                                                                 "POST"
+                                                                 {}
+                                                                 headers)))))
+                 (.then (fn [resp]
+                          (is (= 200 (.-status resp)))
+                          (.then (<json resp)
+                                 (fn [body]
+                                   (is (= "snapshot-created" (:status body)))
+                                   (is (= "backup-1" (:snapshot-id body)))
+                                   (is (= 1 (count @snapshot-calls)))
+                                   (done)))))
+                 (.catch (fn [error]
+                           (is false (str "unexpected error: " error))
+                           (done))))))))
+
 (deftest pr-endpoint-push-only-success-test
   (testing "session publish endpoint supports push-only flow"
     (async done

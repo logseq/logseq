@@ -12,6 +12,7 @@
      ["/interrupt" {:methods {"POST" :sessions/interrupt}}]
      ["/cancel" {:methods {"POST" :sessions/cancel}}]
      ["/pr" {:methods {"POST" :sessions/pr}}]
+     ["/snapshot" {:methods {"POST" :sessions/snapshot}}]
      ["/events" {:methods {"GET" :sessions/events}}]
      ["/branches" {:methods {"GET" :sessions/branches}}]
      ["/terminal" {:methods {"GET" :sessions/terminal}}]

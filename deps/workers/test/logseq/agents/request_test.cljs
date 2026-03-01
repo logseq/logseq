@@ -67,3 +67,9 @@
     (is (nil? (http/coerce-http-request :sessions/pr {:force "no"})))
     (is (nil? (http/coerce-http-request :sessions/pr {:commit-message 100})))
     (is (nil? (http/coerce-http-request :sessions/pr {:head-branch 42})))))
+
+(deftest sessions-snapshot-coerce-test
+  (testing "accepts empty sessions/snapshot request payload"
+    (is (= {} (http/coerce-http-request :sessions/snapshot {}))))
+  (testing "rejects invalid sessions/snapshot payload"
+    (is (nil? (http/coerce-http-request :sessions/snapshot {:force true})))))

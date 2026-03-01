@@ -1043,8 +1043,10 @@
         (when-not terminal-tab-active?
           [:div.flex.items-center.justify-between.gap-2
            [:div.text-xs.opacity-60
-            (if publish-busy?
+            (cond
+              publish-busy?
               "Publishing changes..."
+              :else
               "Publish session changes")]
            [:div.flex.items-center.gap-2
             (shui/button

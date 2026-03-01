@@ -925,6 +925,53 @@
                                             create-pr?
                                             push-branch-fn)))))))))))
 
+(defn- handle-snapshot [^js self request]
+  (let [user-id (user-id-from-request request)]
+    (if-not (string? user-id)
+      (http/unauthorized)
+      (p/let [current-session (<get-session self)]
+        (cond
+          (nil? current-session)
+          (http/not-found)
+
+          (terminal-status? (:status current-session))
+          (session-conflict "session is not writable")
+
+          (not (map? (:runtime current-session)))
+          (session-conflict "session runtime unavailable")
+
+          :else
+          (let [runtime (:runtime current-session)
+                provider (runtime-provider/resolve-provider (.-env self) runtime)]
+            (-> (p/let [_ (<append-event! self {:type "sandbox.snapshot.started"
+                                                :data {:by user-id}
+                                                :ts (common/now-ms)})
+                        result (runtime-provider/<snapshot-runtime! provider
+                                                                    runtime
+                                                                    {:task (:task current-session)})
+                        snapshot-id (or (:snapshot-id result)
+                                        (:id result))
+                        _ (<append-event! self {:type "sandbox.snapshot.succeeded"
+                                                :data (cond-> {:by user-id}
+                                                        (string? snapshot-id) (assoc :snapshot-id snapshot-id))
+                                                :ts (common/now-ms)})]
+                  (http/json-response :sessions/snapshot
+                                      (cond-> {:status "snapshot-created"
+                                               :message "Sandbox snapshot created."}
+                                        (string? snapshot-id) (assoc :snapshot-id snapshot-id))))
+                (p/catch (fn [error]
+                           (let [reason (error-reason error)
+                                 unsupported? (= reason "unsupported-snapshot")]
+                             (p/let [_ (<append-event! self {:type "sandbox.snapshot.failed"
+                                                             :data {:by user-id
+                                                                    :reason reason
+                                                                    :error (str error)}
+                                                             :ts (common/now-ms)})]
+                               (if unsupported?
+                                 (session-conflict (or (some-> error ex-message str string/trim not-empty)
+                                                       "session runtime snapshot unavailable"))
+                                 (http/error-response (str error) 500)))))))))))))
+
 (defn- handle-cancel [^js self request]
   (let [user-id (user-id-from-request request)]
     (if-not (string? user-id)
@@ -1164,6 +1211,9 @@
 
           (= path "/__session__/pr")
           (handle-pr self request)
+
+          (= path "/__session__/snapshot")
+          (handle-snapshot self request)
 
           (= path "/__session__/terminal")
           (handle-terminal self request)

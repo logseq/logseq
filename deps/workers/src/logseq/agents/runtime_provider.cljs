@@ -121,7 +121,7 @@
 
 (def ^:private default-repo-base-dir "/workspace")
 (def ^:private cloudflare-local-host "http://localhost")
-(def ^:private cloudflare-backup-ttl-seconds (* 7 24 60 60))
+(def ^:private cloudflare-snapshot-ttl-seconds (* 7 24 60 60))
 (defonce ^:private cloudflare-backup-cache (atom {}))
 
 (defn clear-cloudflare-backup-cache!
@@ -496,9 +496,9 @@
   [backup-key backup-id]
   (when (and (string? backup-key) (string? backup-id))
     (let [now (js/Date.now)
-          ttl-ms (* cloudflare-backup-ttl-seconds 1000)]
+          ttl-ms (* cloudflare-snapshot-ttl-seconds 1000)]
       (swap! cloudflare-backup-cache assoc backup-key {:id backup-id
-                                                       :ttl-seconds cloudflare-backup-ttl-seconds
+                                                       :ttl-seconds cloudflare-snapshot-ttl-seconds
                                                        :expires-at-ms (+ now ttl-ms)
                                                        :updated-at-ms now}))))
 
@@ -506,6 +506,28 @@
   [backup-key]
   (when (string? backup-key)
     (swap! cloudflare-backup-cache dissoc backup-key)))
+
+(defn- sanitize-backup-name
+  [value]
+  (let [raw (or (some-> value str string/lower-case) "snapshot")
+        sanitized (-> raw
+                      ;; Keep snapshot names flat for provider compatibility.
+                      (string/replace #"[^a-z0-9._-]+" "-")
+                      (string/replace #"-+" "-")
+                      (string/replace #"^-+" "")
+                      (string/replace #"-+$" ""))]
+    (if (string/blank? sanitized)
+      "snapshot"
+      sanitized)))
+
+(defn- snapshot-backup-name
+  [runtime task]
+  (let [base (or (repo-backup-key task)
+                 (some-> (:session-id runtime) str not-empty)
+                 "snapshot")]
+    (str (sanitize-backup-name base)
+         "-"
+         (js/Date.now))))
 
 (defn- fill-repo-template
   [template {:keys [repo-url session-id repo-dir]}]
@@ -882,6 +904,43 @@
   (let [msg (when error (aget error "message"))]
     (if (string? msg) msg (str error))))
 
+(defn- cloudflare-backup-config-error?
+  [error]
+  (let [message (-> (str (or (ex-message error) "")
+                         "\n"
+                         (error-message error))
+                    string/lower-case)]
+    (or (string/includes? message "invalidbackupconfigerror")
+        (string/includes? message "backup not configured")
+        (string/includes? message "backup_bucket")
+        (string/includes? message "presigned url credentials")
+        (string/includes? message "missing env vars")
+        (string/includes? message "cf-r2-error header")
+        (string/includes? message "response.statuscode = 500"))))
+
+(defn- cloudflare-backup-config-message
+  [error]
+  (let [raw (or (some-> error ex-message str string/trim not-empty)
+                (some-> (error-message error) str string/trim not-empty)
+                (str error))
+        lower-raw (string/lower-case raw)
+        sanitized (-> raw
+                      (string/replace #"(?i)^error:\s*" "")
+                      (string/replace #"(?i)^invalidbackupconfigerror:\s*" "")
+                      string/trim)]
+    (cond
+      (or (string/includes? lower-raw "cf-r2-error header")
+          (string/includes? lower-raw "response.statuscode = 500"))
+      (str "snapshot upload succeeded but backup verification through BACKUP_BUCKET failed in local dev. "
+           "Ensure the R2 binding uses remote=true and run both workers with remote mode "
+           "(e.g. `wrangler dev --remote` for sync and agents).")
+
+      (string/blank? sanitized)
+      "snapshot backup is not configured. Configure BACKUP_BUCKET and backup credentials in wrangler.agents.toml."
+
+      :else
+      sanitized)))
+
 (defn- cloudflare-port-error?
   [error]
   (let [m (-> (error-message error) string/lower-case)]
@@ -975,7 +1034,7 @@
       (let [backup-id (:id entry)
             backup #js {:id backup-id
                         :dir target-dir}]
-        (-> (->promise (.call restore-backup sandbox backup))
+        (-> (->promise (.restoreBackup sandbox backup))
             (p/then (fn [_]
                       (log/debug :agent/cloudflare-backup-restored
                                  {:backup-key backup-key
@@ -992,37 +1051,52 @@
                        false)))))))
 
 (defn- <cloudflare-create-backup!
-  [^js sandbox backup-key source-dir]
+  [^js sandbox source-dir backup-name]
   (let [create-backup (js-method sandbox "createBackup")]
     (cond
-      (or (not (string? backup-key))
-          (not (string? source-dir)))
-      (p/resolved nil)
+      (not (string? source-dir))
+      (p/rejected (ex-info "invalid snapshot source dir"
+                           {:reason :invalid-snapshot-source-dir
+                            :source-dir source-dir}))
 
       (not (fn? create-backup))
-      (p/resolved nil)
+      (p/rejected (ex-info "cloudflare runtime does not support snapshots"
+                           {:reason :unsupported-snapshot
+                            :provider "cloudflare"}))
 
       :else
-      (-> (->promise (.call create-backup sandbox (clj->js {:dir source-dir
-                                                            :name backup-key
-                                                            :ttl cloudflare-backup-ttl-seconds})))
-          (p/then (fn [backup]
-                    (let [backup-id (aget backup "id")]
-                      (when (string? backup-id)
-                        (remember-cloudflare-backup! backup-key backup-id)
-                        (log/debug :agent/cloudflare-backup-created
-                                   {:backup-key backup-key
-                                    :backup-id backup-id
-                                    :dir source-dir
-                                    :ttl-seconds cloudflare-backup-ttl-seconds})
-                        {:id backup-id
-                         :dir source-dir}))))
-          (p/catch (fn [error]
-                     (log/error :agent/cloudflare-backup-create-failed
-                                {:backup-key backup-key
-                                 :dir source-dir
-                                 :error (str error)})
-                     nil))))))
+      (p/catch
+       ;; Use direct method invocation instead of Function#call to avoid
+       ;; serializing the sandbox proxy receiver across RPC boundaries.
+       (p/let [backup (->promise (.createBackup sandbox (clj->js {:dir source-dir
+                                                                  :name backup-name
+                                                                  :ttl cloudflare-snapshot-ttl-seconds})))
+               backup-id (aget backup "id")]
+         (if (string? backup-id)
+           (do
+             (log/debug :agent/cloudflare-snapshot-created
+                        {:snapshot-id backup-id
+                         :name backup-name
+                         :dir source-dir
+                         :ttl-seconds cloudflare-snapshot-ttl-seconds})
+             {:snapshot-id backup-id
+              :name backup-name
+              :dir source-dir})
+           (throw (ex-info "cloudflare snapshot create returned invalid id"
+                           {:reason :invalid-snapshot-id
+                            :backup backup}))))
+       (fn [error]
+         (log/error :agent/cloudflare-snapshot-create-failed
+                    {:name backup-name
+                     :dir source-dir
+                     :error (str error)})
+         (if (cloudflare-backup-config-error? error)
+           (p/rejected
+            (ex-info (cloudflare-backup-config-message error)
+                     {:reason :unsupported-snapshot
+                      :provider "cloudflare"
+                      :raw-error (str error)}))
+           (p/rejected error)))))))
 
 (defn- <cloudflare-clone-repo! [^js env sandbox session-id task]
   (when-let [cmd (repo-clone-command env session-id task "cloudflare")]
@@ -1121,6 +1195,7 @@
   (<open-events-stream! [this runtime])
   (<send-message! [this runtime message])
   (<open-terminal! [this runtime request opts])
+  (<snapshot-runtime! [this runtime opts])
   (<push-branch! [this runtime opts])
   (<terminate-runtime! [this runtime]))
 
@@ -1200,6 +1275,12 @@
     (p/rejected
      (ex-info "sprites runtime provider does not support browser terminal"
               {:reason :unsupported-terminal
+               :provider "sprites"})))
+
+  (<snapshot-runtime! [_ _runtime _opts]
+    (p/rejected
+     (ex-info "sprites runtime provider does not support snapshots"
+              {:reason :unsupported-snapshot
                :provider "sprites"})))
 
   (<push-branch! [_ runtime opts]
@@ -1287,6 +1368,12 @@
     (p/rejected
      (ex-info "local-dev runtime provider does not support browser terminal"
               {:reason :unsupported-terminal
+               :provider "local-dev"})))
+
+  (<snapshot-runtime! [_ _runtime _opts]
+    (p/rejected
+     (ex-info "local-dev runtime provider does not support snapshots"
+              {:reason :unsupported-snapshot
                :provider "local-dev"})))
 
   (<push-branch! [_ _runtime _opts]
@@ -1382,6 +1469,25 @@
   (<open-terminal! [_ runtime request opts]
     (<cloudflare-open-terminal! env runtime request opts))
 
+  (<snapshot-runtime! [_ runtime opts]
+    (let [sandbox-id (:sandbox-id runtime)
+          session-id (:session-id runtime)
+          backup-dir (or (:backup-dir runtime)
+                         (get-repo-dir session-id))
+          task (:task opts)
+          backup-key (repo-backup-key task)
+          backup-name (snapshot-backup-name runtime task)]
+      (when-not (string? sandbox-id)
+        (throw (ex-info "missing sandbox-id on runtime"
+                        {:reason :missing-sandbox-id
+                         :runtime runtime})))
+      (let [sandbox (cloudflare-sandbox env sandbox-id)]
+        (p/let [result (<cloudflare-create-backup! sandbox backup-dir backup-name)
+                snapshot-id (:snapshot-id result)]
+          (when (and (string? backup-key) (string? snapshot-id))
+            (remember-cloudflare-backup! backup-key snapshot-id))
+          result))))
+
   (<push-branch! [_ runtime opts]
     (let [sandbox-id (:sandbox-id runtime)
           session-id (:session-id opts)
@@ -1440,15 +1546,10 @@
 
   (<terminate-runtime! [_ runtime]
     (let [sandbox-id (:sandbox-id runtime)
-          session-id (:session-id runtime)
-          backup-key (:backup-key runtime)
-          backup-dir (or (:backup-dir runtime)
-                         (get-repo-dir session-id))]
+          session-id (:session-id runtime)]
       (log/debug :agent/cloudflare-terminate
                  {:session-id session-id
-                  :sandbox-id sandbox-id
-                  :backup-key backup-key
-                  :backup-dir backup-dir})
+                  :sandbox-id sandbox-id})
       (if-not (string? sandbox-id)
         (p/resolved nil)
         (let [sandbox (cloudflare-sandbox env sandbox-id)
@@ -1456,10 +1557,7 @@
               agent-token (or (:agent-token runtime)
                               (env-str env "SANDBOX_AGENT_TOKEN"))]
           (p/catch
-           (p/let [_ (p/catch
-                      (<cloudflare-create-backup! sandbox backup-key backup-dir)
-                      (fn [_] nil))
-                   _ (when (string? session-id)
+           (p/let [_ (when (string? session-id)
                        (p/catch
                         (<cloudflare-terminate-session! sandbox port agent-token session-id)
                         (fn [_] nil)))

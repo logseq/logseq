@@ -23,6 +23,8 @@ service = "logseq-agents"
 [[r2_buckets]]
 binding = "LOGSEQ_SYNC_ASSETS"
 bucket_name = "logseq-sync-assets-prod"
+preview_bucket_name = "logseq-sync-assets-prod"
+remote = true
 
 [[d1_databases]]
 binding = "DB"
@@ -64,6 +66,8 @@ new_sqlite_classes = [ "SyncDO" ]
 [[env.staging.r2_buckets]]
 binding = "LOGSEQ_SYNC_ASSETS"
 bucket_name = "logseq-sync-assets-dev"
+preview_bucket_name = "logseq-sync-assets-dev"
+remote = true
 
 [[env.staging.d1_databases]]
 binding = "DB"
@@ -99,6 +103,8 @@ new_sqlite_classes = [ "SyncDO" ]
 [[env.prod.r2_buckets]]
 binding = "LOGSEQ_SYNC_ASSETS"
 bucket_name = "logseq-sync-assets-prod"
+preview_bucket_name = "logseq-sync-assets-prod"
+remote = true
 
 [[env.prod.d1_databases]]
 binding = "DB"
