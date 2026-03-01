@@ -46,7 +46,7 @@ name = "logseq-agents-staging"
 [[env.staging.containers]]
 class_name = "Sandbox"
 image = "./Dockerfile.sandbox-agent"
-instance_type = "standard-1"
+instance_type = "standard-2"
 max_instances = 100
 
 [env.staging.vars]
@@ -92,7 +92,7 @@ SENTRY_TRACES_SAMPLE_RATE = "0.1"
 [[env.prod.containers]]
 class_name = "Sandbox"
 image = "./Dockerfile.sandbox-agent"
-instance_type = "standard-1"
+instance_type = "standard-2"
 max_instances = 100
 
 [[env.prod.durable_objects.bindings]]
