@@ -533,12 +533,123 @@
                        missing-property-payload (parse-json-output missing-property-result)
                        stop-result (run-cli ["server" "stop" "--repo" repo] data-dir cfg-path)
                        stop-payload (parse-json-output stop-result)]
-                 (is (= 1 (:exit-code missing-tag-result)))
                  (is (= "error" (:status missing-tag-payload)))
                  (is (= :tag-not-found (keyword (get-in missing-tag-payload [:error :code]))))
-                 (is (= 1 (:exit-code missing-property-result)))
                  (is (= "error" (:status missing-property-payload)))
                  (is (= :invalid-options (keyword (get-in missing-property-payload [:error :code]))))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest ^:long test-cli-upsert-id-mode-for-page-tag-property
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-upsert-id-mode")
+               repo "upsert-id-mode-graph"]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
+                       create-page-result (run-cli ["--repo" repo "upsert" "page" "--page" "Home"] data-dir cfg-path)
+                       create-page-payload (parse-json-output create-page-result)
+                       page-id (first-result-id create-page-payload)
+                       update-page-result (run-cli ["--repo" repo
+                                                    "upsert" "page"
+                                                    "--id" (str page-id)
+                                                    "--update-properties" "{:logseq.property/publishing-public? true}"]
+                                                   data-dir cfg-path)
+                       update-page-payload (parse-json-output update-page-result)
+                       page-value (query-property data-dir cfg-path repo "Home" ":logseq.property/publishing-public?")
+                       create-tag-result (run-cli ["--repo" repo "upsert" "tag" "--name" "StableTag"] data-dir cfg-path)
+                       create-tag-payload (parse-json-output create-tag-result)
+                       tag-id (first-result-id create-tag-payload)
+                       noop-tag-result (run-cli ["--repo" repo "upsert" "tag" "--id" (str tag-id)] data-dir cfg-path)
+                       noop-tag-payload (parse-json-output noop-tag-result)
+                       create-property-result (run-cli ["--repo" repo
+                                                        "upsert" "property"
+                                                        "--name" "OwnerProp"
+                                                        "--type" "default"]
+                                                       data-dir cfg-path)
+                       create-property-payload (parse-json-output create-property-result)
+                       property-id (first-result-id create-property-payload)
+                       property-name (common-util/page-name-sanity-lc "OwnerProp")
+                       update-property-result (run-cli ["--repo" repo
+                                                        "upsert" "property"
+                                                        "--id" (str property-id)
+                                                        "--type" "node"
+                                                        "--cardinality" "many"]
+                                                       data-dir cfg-path)
+                       update-property-payload (parse-json-output update-property-result)
+                       property-schema (run-query data-dir cfg-path repo
+                                                  "[:find ?type . :in $ ?name :where [?p :block/name ?name] [?p :logseq.property/type ?type]]"
+                                                  (pr-str [property-name]))
+                       stop-result (run-cli ["server" "stop" "--repo" repo] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= 0 (:exit-code create-page-result)))
+                 (is (= "ok" (:status create-page-payload)))
+                 (is (number? page-id))
+                 (is (= 0 (:exit-code update-page-result)))
+                 (is (= "ok" (:status update-page-payload)))
+                 (is (= page-id (first-result-id update-page-payload)))
+                 (is (true? page-value))
+                 (is (= 0 (:exit-code create-tag-result)))
+                 (is (= "ok" (:status create-tag-payload)))
+                 (is (number? tag-id))
+                 (is (= 0 (:exit-code noop-tag-result)))
+                 (is (= "ok" (:status noop-tag-payload)))
+                 (is (= tag-id (first-result-id noop-tag-payload)))
+                 (is (= 0 (:exit-code create-property-result)))
+                 (is (= "ok" (:status create-property-payload)))
+                 (is (number? property-id))
+                 (is (= 0 (:exit-code update-property-result)))
+                 (is (= "ok" (:status update-property-payload)))
+                 (is (= property-id (first-result-id update-property-payload)))
+                 (is (= "node" (get-in property-schema [:data :result])))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest ^:long test-cli-upsert-rejects-legacy-flags-and-selector-conflict
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-upsert-legacy-options")
+               repo "upsert-legacy-options-graph"]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
+                       create-page-result (run-cli ["--repo" repo "upsert" "page" "--page" "Home"] data-dir cfg-path)
+                       create-page-payload (parse-json-output create-page-result)
+                       page-id (first-result-id create-page-payload)
+                       legacy-block-result (run-cli ["--repo" repo
+                                                     "upsert" "block"
+                                                     "--target-page" "Home"
+                                                     "--content" "Legacy block"
+                                                     "--tags" "[\"Quote\"]"]
+                                                    data-dir cfg-path)
+                       legacy-page-result (run-cli ["--repo" repo
+                                                    "upsert" "page"
+                                                    "--page" "Home"
+                                                    "--properties" "{:logseq.property/publishing-public? true}"]
+                                                   data-dir cfg-path)
+                       conflict-result (run-cli ["--repo" repo
+                                                 "upsert" "page"
+                                                 "--id" (str page-id)
+                                                 "--page" "Home"]
+                                                data-dir cfg-path)
+                       stop-result (run-cli ["server" "stop" "--repo" repo] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= 0 (:exit-code create-page-result)))
+                 (is (= "ok" (:status create-page-payload)))
+                 (is (= 1 (:exit-code legacy-block-result)))
+                 (is (string/includes? (:output legacy-block-result) "invalid-options"))
+                 (is (string/includes? (:output legacy-block-result) "--update-tags"))
+                 (is (= 1 (:exit-code legacy-page-result)))
+                 (is (string/includes? (:output legacy-page-result) "invalid-options"))
+                 (is (string/includes? (:output legacy-page-result) "--update-properties"))
+                 (is (= 1 (:exit-code conflict-result)))
+                 (is (string/includes? (:output conflict-result) "invalid-options"))
+                 (is (string/includes? (:output conflict-result) "only one of --id or --page"))
                  (is (= "ok" (:status stop-payload)))
                  (done))
                (p/catch (fn [e]
@@ -673,23 +784,23 @@
                        add-page-result (run-cli ["--repo" "tags-graph"
                                                  "upsert" "page"
                                                  "--page" "TaggedPage"
-                                                 "--tags" "[\"Quote\"]"
-                                                 "--properties" "{:logseq.property/publishing-public? true}"]
+                                                 "--update-tags" "[\"Quote\"]"
+                                                 "--update-properties" "{:logseq.property/publishing-public? true}"]
                                                 data-dir cfg-path)
                        add-page-payload (parse-json-output add-page-result)
                        add-block-result (run-cli ["--repo" "tags-graph"
                                                   "upsert" "block"
                                                   "--target-page" "Home"
                                                   "--content" "Tagged block"
-                                                  "--tags" "[\"Quote\"]"
-                                                  "--properties" "{:logseq.property/deadline \"2026-01-25T12:00:00Z\"}"]
+                                                  "--update-tags" "[\"Quote\"]"
+                                                  "--update-properties" "{:logseq.property/deadline \"2026-01-25T12:00:00Z\"}"]
                                                  data-dir cfg-path)
                        add-block-payload (parse-json-output add-block-result)
                        add-block-ident-result (run-cli ["--repo" "tags-graph"
                                                         "upsert" "block"
                                                         "--target-page" "Home"
                                                         "--content" "Tagged block ident"
-                                                        "--tags" "[:logseq.class/Quote-block]"]
+                                                        "--update-tags" "[:logseq.class/Quote-block]"]
                                                        data-dir cfg-path)
                        add-block-ident-payload (parse-json-output add-block-ident-result)
                        deadline-prop-title (get-in db-property/built-in-properties [:logseq.property/deadline :title])
@@ -697,14 +808,14 @@
                        add-page-title-result (run-cli ["--repo" "tags-graph"
                                                        "upsert" "page"
                                                        "--page" "TaggedPageTitle"
-                                                       "--properties" (str "{\"" publishing-prop-title "\" true}")]
+                                                       "--update-properties" (str "{\"" publishing-prop-title "\" true}")]
                                                       data-dir cfg-path)
                        add-page-title-payload (parse-json-output add-page-title-result)
                        add-block-title-result (run-cli ["--repo" "tags-graph"
                                                         "upsert" "block"
                                                         "--target-page" "Home"
                                                         "--content" "Tagged block title"
-                                                        "--properties" (str "{\"" deadline-prop-title "\" \"2026-01-25T12:00:00Z\"}")]
+                                                        "--update-properties" (str "{\"" deadline-prop-title "\" \"2026-01-25T12:00:00Z\"}")]
                                                        data-dir cfg-path)
                        add-block-title-payload (parse-json-output add-block-title-result)
                        _ (p/delay 100)
@@ -755,16 +866,16 @@
                        add-page-id-result (run-cli ["--repo" repo
                                                     "upsert" "page"
                                                     "--page" "TaggedPageId"
-                                                    "--tags" (pr-str [quote-tag-id])
-                                                    "--properties" (pr-str {publishing-id true})]
+                                                    "--update-tags" (pr-str [quote-tag-id])
+                                                    "--update-properties" (pr-str {publishing-id true})]
                                                    data-dir cfg-path)
                        add-page-id-payload (parse-json-output add-page-id-result)
                        add-block-id-result (run-cli ["--repo" repo
                                                      "upsert" "block"
                                                      "--target-page" "Home"
                                                      "--content" "Tagged block id"
-                                                     "--tags" (pr-str [quote-tag-id])
-                                                     "--properties" (pr-str {deadline-id "2026-01-25T12:00:00Z"})]
+                                                     "--update-tags" (pr-str [quote-tag-id])
+                                                     "--update-properties" (pr-str {deadline-id "2026-01-25T12:00:00Z"})]
                                                     data-dir cfg-path)
                        add-block-id-payload (parse-json-output add-block-id-result)
                        _ (p/delay 100)
@@ -879,8 +990,8 @@
                                                   "upsert" "block"
                                                   "--target-page" "Home"
                                                   "--content" "Update block"
-                                                  "--tags" "[:logseq.class/Quote-block]"
-                                                  "--properties" "{:logseq.property/publishing-public? true}"]
+                                                  "--update-tags" "[:logseq.class/Quote-block]"
+                                                  "--update-properties" "{:logseq.property/publishing-public? true}"]
                                                  data-dir cfg-path)
                        add-block-payload (parse-json-output add-block-result)
                        _ (p/delay 100)
@@ -978,7 +1089,7 @@
                                                   "upsert" "block"
                                                   "--target-page" "Home"
                                                   "--content" "Block with missing tag"
-                                                  "--tags" "[\"MissingTag\"]"]
+                                                  "--update-tags" "[\"MissingTag\"]"]
                                                  data-dir cfg-path)
                        add-block-payload (parse-json-output add-block-result)
                        list-tag-result (run-cli ["--repo" "tags-missing-graph" "list" "tag"] data-dir cfg-path)
@@ -988,8 +1099,8 @@
                                       set)
                        stop-result (run-cli ["server" "stop" "--repo" "tags-missing-graph"] data-dir cfg-path)
                        stop-payload (parse-json-output stop-result)]
-                 (is (= 1 (:exit-code add-block-result)))
                  (is (= "error" (:status add-block-payload)))
+                 (is (= :tag-not-found (keyword (get-in add-block-payload [:error :code]))))
                  (is (not (contains? tag-names "MissingTag")))
                  (is (= "ok" (:status stop-payload)))
                  (done))
@@ -1019,7 +1130,7 @@
                                                   "upsert" "block"
                                                   "--target-page" "Home"
                                                   "--content" "Tagged by upsert tag"
-                                                  "--tags" "[\"CliQuote\"]"]
+                                                  "--update-tags" "[\"CliQuote\"]"]
                                                  data-dir cfg-path)
                        add-block-payload (parse-json-output add-block-result)
                        _ (p/delay 100)
