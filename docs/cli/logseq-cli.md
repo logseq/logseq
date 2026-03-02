@@ -101,7 +101,8 @@ Inspect and edit commands:
 - `upsert page --page <name> [--update-tags <edn-vector>] [--update-properties <edn-map>] [--remove-tags <edn-vector>] [--remove-properties <edn-vector>]` - create (or update by page name) a page
 - `upsert page --id <id> [--update-tags <edn-vector>] [--update-properties <edn-map>] [--remove-tags <edn-vector>] [--remove-properties <edn-vector>]` - update a page by id (cannot be combined with `--page`)
 - `upsert tag --name <name>` - create or upsert a tag by name
-- `upsert tag --id <id>` - validate and upsert a tag by id (no-op when no other mutation options are provided)
+- `upsert tag --id <id> [--name <name>]` - validate a tag by id; when `--name` is provided, rename that tag id (no-op if normalized name is unchanged)
+- `upsert tag --id <id> --name <name>` conflicts: returns `tag-name-conflict` when target name is a non-tag page, and `tag-rename-conflict` when target name is another existing tag
 - `upsert property --name <name> [--type <type>] [--cardinality one|many] [--hide true|false] [--public true|false]` - create or update a property by name
 - `upsert property --id <id> [--type <type>] [--cardinality one|many] [--hide true|false] [--public true|false]` - update a property by id
 - `move --id <id>|--uuid <uuid> --target-id <id>|--target-uuid <uuid>|--target-page <name> [--pos first-child|last-child|sibling]` - move a block and its children (defaults to first-child)
