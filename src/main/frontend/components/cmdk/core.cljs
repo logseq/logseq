@@ -833,6 +833,7 @@
 (rum/defc render-result-list-item < rum/static
   [state group highlighted? mouse-mode? item hls-page? text input]
   (let [item-idx (:item-index item)
+        scroll-root @(::scroll-container-ref state)
         item (list-item/root
               (assoc item
                      :group group
@@ -866,7 +867,8 @@
               nil)]
     [:div {:data-item-index item-idx}
      (if (= group :nodes)
-       (ui/lazy-visible (fn [] item) {:trigger-once? true})
+       (ui/lazy-visible (fn [] item) {:root scroll-root
+                                      :root-margin "500px 0px"})
        item)]))
 
 (rum/defcs result-group
