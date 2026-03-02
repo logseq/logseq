@@ -11,7 +11,7 @@ Goal: Based on the current `logseq-cli` and `db-worker-node` implementations, re
 ## Requirements
 
 1. Refactor `db-worker-node`: startup must require `--repo`; on startup it must open or create that graph; it must not switch graphs at runtime; it must create a lock file so a graph can be served by only one db-worker-node instance; it only needs to bind to localhost.
-2. In `logseq-cli`, all commands requiring `--repo` or any graph operations must connect to or create the corresponding db-worker-node server.
+2. In `logseq-cli`, all commands requiring `--graph` or any graph operations must connect to or create the corresponding db-worker-node server.
 3. db-worker-node server must not be started manually; logseq-cli is fully responsible.
 4. Add `server` subcommand(s) to logseq-cli for managing db-worker-node servers.
 
@@ -59,7 +59,7 @@ Files:
 - New: `src/main/logseq/cli/server.cljs` (process management + lock handling)
 
 Key changes:
-- **Repo resolution**: for all graph/content commands, require `--repo` or resolved repo from config; otherwise error.
+- **Repo resolution**: for all graph/content commands, require `--graph` or resolved repo from config; otherwise error.
 - **Ensure server** (new helper `ensure-server!`):
   1. Derive data-dir, repo dir, and lock file path from repo.
   2. If lock file exists, read port/pid; probe `/healthz` + `/readyz`.
@@ -73,12 +73,12 @@ Key changes:
 
 Suggested command group:
 - `server list`: list servers from lock files (repo, pid, port, status).
-- `server start --repo <name>`: start server for repo.
-- `server stop --repo <name>`: stop server (SIGTERM or `/v1/shutdown`).
-- `server restart --repo <name>`: stop + start.
+- `server start --graph <name>`: start server for repo.
+- `server stop --graph <name>`: stop server (SIGTERM or `/v1/shutdown`).
+- `server restart --graph <name>`: stop + start.
 
 Implementation notes:
-- `start|stop|restart` require `--repo`.
+- `start|stop|restart` require `--graph`.
 - `list` scans data-dir for repo directories, reads lock files, and verifies status.
 - Consider adding `/v1/shutdown` in db-worker-node for graceful stop.
 
@@ -104,8 +104,8 @@ Implementation notes:
 
 ## Open Questions
 
-1. Should `graph list` require `--repo`? If not, define a “global” server or out-of-band access to data-dir.
-   - Answer: No --repo needed, using 'out-of-band access to data-dir' way
+1. Should `graph list` require `--graph`? If not, define a “global” server or out-of-band access to data-dir.
+   - Answer: No --graph needed, using 'out-of-band access to data-dir' way
 2. Lock file format and location: confirm cross-platform expectations (Windows paths/permissions).
    - lockfile name:`db-worker.lock`,
    - Location: inside repo dir (e.g. `~/logseq/cli-graphs/<graph>/db-worker.lock`).

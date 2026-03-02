@@ -12,7 +12,7 @@
    :version {:desc "Show version"
              :coerce :boolean}
    :config {:desc "Path to cli.edn (default ~/logseq/cli.edn)"}
-   :repo {:desc "Graph name"}
+   :graph {:desc "Graph name"}
    :data-dir {:desc "Path to db-worker data dir (default ~/logseq/graphs)"}
    :timeout-ms {:desc "Request timeout in ms (default 10000)"
                 :coerce :long}
@@ -197,13 +197,6 @@
               {:opts opts :args (rest remaining)}))
           {:opts opts :args remaining})))))
 
-(defn legacy-graph-opt?
-  [raw-args]
-  (some (fn [token]
-          (or (= token "--graph")
-              (string/starts-with? token "--graph=")))
-        raw-args))
-
 (defn cli-error->result
   [summary {:keys [msg]}]
   (invalid-options-result summary (or msg "invalid options")))
@@ -227,5 +220,5 @@
 
 (defn pick-graph
   [options _command-args config]
-  (or (:repo options)
-      (:repo config)))
+  (or (:graph options)
+      (:graph config)))

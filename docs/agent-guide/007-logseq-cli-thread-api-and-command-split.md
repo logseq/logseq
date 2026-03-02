@@ -1,6 +1,6 @@
 # Logseq CLI Thread API Keywords And Command Split Implementation Plan
 
-Goal: Replace thread-api string usage with keywords, standardize CLI repo option to --repo, and split logseq.cli.commands into per-subcommand namespaces.
+Goal: Replace thread-api string usage with keywords, standardize CLI repo/graph option to --graph, and split logseq.cli.commands into per-subcommand namespaces.
 
 Architecture: Update transport and db-worker-node boundaries to accept keyword methods while still serializing over HTTP. Refactor CLI command parsing into a shared dispatcher plus per-subcommand namespaces under a new command directory. Keep existing CLI behavior and output stable while updating option naming and error hints.
 
@@ -10,11 +10,11 @@ Related: Builds on docs/agent-guide/004-logseq-cli-verb-subcommands.md, docs/age
 
 ## Problem statement
 
-The current CLI and db-worker-node codebase mixes thread-api method strings with keyword-based APIs, which makes it easy to introduce mismatches and reduces consistency with the thread-api macro design. The CLI option naming also has legacy --graph hints and expectations that conflict with the newer --repo naming, which creates confusion for users and tests. The logseq.cli.commands namespace has grown large and mixes parsing, validation, and execution for multiple command groups, which makes maintenance and ownership difficult.
+The current CLI and db-worker-node codebase mixes thread-api method strings with keyword-based APIs, which makes it easy to introduce mismatches and reduces consistency with the thread-api macro design. The logseq.cli.commands namespace has grown large and mixes parsing, validation, and execution for multiple command groups, which makes maintenance and ownership difficult.
 
 ## Testing Plan
 
-I will add unit tests to ensure all CLI thread-api method invocations use keywords and still serialize correctly through transport when invoking db-worker-node. I will add unit tests to ensure any error hint or help text for missing graph/repo uses --repo and no longer mentions --graph. I will add unit tests for command parsing and action building to cover the new per-subcommand namespaces and ensure summaries and help still match expected output. I will update db-worker-node tests to assert keyword method handling for repo validation and allowed non-repo methods. NOTE: I will write *all* tests before I add any implementation behavior.
+I will add unit tests to ensure all CLI thread-api method invocations use keywords and still serialize correctly through transport when invoking db-worker-node. I will add unit tests for command parsing and action building to cover the new per-subcommand namespaces and ensure summaries and help still match expected output. I will update db-worker-node tests to assert keyword method handling for repo validation and allowed non-repo methods. NOTE: I will write *all* tests before I add any implementation behavior.
 
 ## Plan
 
@@ -36,7 +36,7 @@ I will add unit tests to ensure all CLI thread-api method invocations use keywor
 
 9. Update any db-worker-node tests in `src/test/frontend/worker/db_worker_node_test.cljs` that assert method strings to use keyword expectations and verify non-repo method handling.
 
-10. Replace any --graph option references in CLI formatting and tests by updating `src/main/logseq/cli/format.cljs` and `src/test/logseq/cli/format_test.cljs` to use --repo.
+10. ~~Replace any --graph option references in CLI formatting and tests by updating `src/main/logseq/cli/format.cljs` and `src/test/logseq/cli/format_test.cljs` to use --repo.~~
 
 11. Search for any `:graph` option wiring in `src/main/logseq/cli/commands.cljs` and remove CLI option parsing for --graph, including any help or usage text, while preserving graph-specific subcommands like `graph create`.
 
@@ -62,15 +62,14 @@ The tests will focus on behavior by asserting that CLI invocations still produce
 
 - Normalize thread-api method values at transport and db-worker-node boundaries to accept keywords and serialize as strings over HTTP.
 - Replace all explicit "thread-api/..." literals in CLI and db-worker-node call sites with :thread-api/... keywords.
-- Remove --graph option handling and update error hints to use --repo.
-- Preserve graph subcommands and graph naming semantics while standardizing on :repo options.
+- Preserve graph subcommands and graph naming semantics while standardizing on :graph options.
 - Move per-subcommand parsing and execution helpers into `src/main/logseq/cli/command/` namespaces and keep `logseq.cli.commands` as a facade.
 - Keep action map shapes stable to avoid downstream changes in format or execution.
 - Update tests to match keyword method expectations and new module layout.
-- Ensure public CLI output and behavior remain unchanged aside from --repo messaging.
+- Ensure public CLI output and behavior remain unchanged
 
 ## Question
 
-Resolved: Remove --graph entirely and fail fast on any --graph usage.
+~~Resolved: Remove --graph entirely and fail fast on any --graph usage.~~
 
 ---

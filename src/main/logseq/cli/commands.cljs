@@ -26,13 +26,6 @@
            :message "graph name is required"}
    :summary summary})
 
-(defn- missing-repo-result
-  [summary]
-  {:ok? false
-   :error {:code :missing-repo
-           :message "repo is required"}
-   :summary summary})
-
 (defn- missing-content-result
   [summary]
   {:ok? false
@@ -167,7 +160,7 @@
   (let [opts (command-core/normalize-opts opts)
         args (vec args)
         cmd-summary (command-core/command-summary {:cmds cmds :spec spec})
-        graph (:repo opts)
+        graph (:graph opts)
         has-args? (seq args)
         has-content? (or (seq (:content opts))
                          (seq (:blocks opts))
@@ -262,8 +255,8 @@
       (and (= command :graph-import) (not (seq (:input opts))))
       (missing-input-result summary)
 
-      (and (= command :graph-import) (not (seq (:repo opts))))
-      (missing-repo-result summary)
+      (and (= command :graph-import) (not (seq (:graph opts))))
+      (missing-graph-result summary)
 
       (and (= command :graph-import)
            (not (contains? (graph-command/import-export-types)
@@ -271,8 +264,8 @@
       (command-core/invalid-options-result summary (str "invalid type: " (:type opts)))
 
       (and (#{:server-status :server-start :server-stop :server-restart} command)
-           (not (seq (:repo opts))))
-      (missing-repo-result summary)
+           (not (seq (:graph opts))))
+      (missing-graph-result summary)
 
       :else
       (command-core/ok-result command opts args summary))))
@@ -282,13 +275,9 @@
 (defn parse-args
   [raw-args]
   (let [summary (command-core/top-level-summary table)
-        legacy-graph-opt? (command-core/legacy-graph-opt? raw-args)
         {:keys [opts args]} (command-core/parse-leading-global-opts raw-args)
         {:keys [args id-from-stdin?]} (inject-stdin-id-arg (vec args))]
     (cond
-      legacy-graph-opt?
-      (command-core/invalid-options-result summary "unknown option: --graph")
-
       (:version opts)
       (command-core/ok-result :version opts [] summary)
 
@@ -380,7 +369,7 @@
     (let [{:keys [command options args]} parsed
           graph (command-core/pick-graph options args config)
           repo (command-core/resolve-repo graph)
-          server-repo (command-core/resolve-repo (:repo options))]
+          server-repo (command-core/resolve-repo (:graph options))]
       (case command
         (:graph-list :graph-create :graph-switch :graph-remove :graph-validate :graph-info)
         (graph-command/build-graph-action command graph repo)
@@ -390,7 +379,7 @@
           (graph-command/build-export-action repo export-type (:file options)))
 
         :graph-import
-        (let [import-repo (command-core/resolve-repo (:repo options))
+        (let [import-repo (command-core/resolve-repo (:graph options))
               import-type (graph-command/normalize-import-export-type (:type options))]
           (graph-command/build-import-action import-repo import-type (:input options)))
 
