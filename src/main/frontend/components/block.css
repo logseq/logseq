@@ -1211,8 +1211,20 @@ html.is-mac {
   }
 }
 
-.property-value .ls-resize-image {
-  max-width: 35%;
+.property-value {
+  .ls-resize-image {
+    max-width: 35%;
+  }
+
+  .as-plain-image-link {
+    .ls-resize-image {
+      max-width: 80px;
+    }
+
+    .image-resize {
+      display: none;
+    }
+  }
 }
 
 .recent-block {

@@ -510,7 +510,8 @@
                     (if (assets-handler/check-alias-path? href)
                       (assets-handler/normalize-asset-resource-url href)
                       href))]
-         (resizable-image config title href metadata full_text false))))))
+         [:div.as-plain-image-link
+          (resizable-image config title href metadata full_text false)])))))
 
 (def timestamp-to-string export-common-handler/timestamp-to-string)
 
