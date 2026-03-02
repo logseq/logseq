@@ -150,7 +150,7 @@
                                        (:direct-pass? action)
                                        (:args action))]
         (when-let [repo (:persist-repo action)]
-          (cli-config/update-config! config {:repo repo}))
+          (cli-config/update-config! config {:graph repo}))
         (if-let [write (:write action)]
           (let [{:keys [format path]} write]
             (transport/write-output {:format format :path path :data result})
@@ -167,7 +167,7 @@
            :error {:code :graph-not-found
                    :message (str "graph not found: " graph)}}
           (p/let [_ (cli-server/ensure-server! config (:repo action))]
-            (cli-config/update-config! config {:repo graph})
+            (cli-config/update-config! config {:graph graph})
             {:status :ok
              :data {:message (str "switched to " graph)}})))))
 

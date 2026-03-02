@@ -284,7 +284,7 @@
                                                           :pid 9876
                                                           :owner-source :cli}]}}
                                        {:output-format nil})]
-      (is (= (str "REPO       STATUS  HOST       PORT  PID   OWNER\n"
+      (is (= (str "GRAPH      STATUS  HOST       PORT  PID   OWNER\n"
                   "demo-repo  :ready  127.0.0.1  1234  9876  :cli\n"
                   "Count: 1")
              result))))
@@ -298,7 +298,7 @@
                                                           :port 1234
                                                           :pid 9876}]}}
                                        {:output-format nil})]
-      (is (= (str "REPO       STATUS  HOST       PORT  PID   OWNER\n"
+      (is (= (str "GRAPH      STATUS  HOST       PORT  PID   OWNER\n"
                   "demo-repo  :ready  127.0.0.1  1234  9876  -\n"
                   "Count: 1")
              result)))))
@@ -460,7 +460,7 @@
                                                 :message "graph name is required"}}
                                        {:output-format nil})]
       (is (= (str "Error (missing-graph): graph name is required\n"
-                  "Hint: Use --repo <name>")
+                  "Hint: Use --graph <name>")
              result))))
 
   (testing "owner mismatch includes ownership hint"

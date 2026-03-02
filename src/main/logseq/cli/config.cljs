@@ -46,7 +46,7 @@
   (let [path (or config-path (default-config-path))
         current (or (read-config-file path) {})
         filtered-current (dissoc current :auth-token :retries)
-        filtered-updates (dissoc updates :auth-token :retries)
+        filtered-updates (dissoc (or updates {}) :auth-token :retries)
         next (merge filtered-current filtered-updates)]
     (ensure-config-dir! path)
     (.writeFileSync fs path (pr-str next))
@@ -56,8 +56,8 @@
   []
   (let [env (.-env js/process)]
     (cond-> {}
-      (seq (gobj/get env "LOGSEQ_CLI_REPO"))
-      (assoc :repo (gobj/get env "LOGSEQ_CLI_REPO"))
+      (seq (gobj/get env "LOGSEQ_CLI_GRAPH"))
+      (assoc :graph (gobj/get env "LOGSEQ_CLI_GRAPH"))
 
       (seq (gobj/get env "LOGSEQ_CLI_DATA_DIR"))
       (assoc :data-dir (gobj/get env "LOGSEQ_CLI_DATA_DIR"))
