@@ -1631,7 +1631,8 @@
 (deftest pr-endpoint-pr-created-terminates-runtime-test
   (testing "session publish endpoint terminates runtime and clears sandbox runtime when PR is created"
     (async done
-           (let [terminate-calls (atom [])
+           (let [checkpoint-calls (atom [])
+                 terminate-calls (atom [])
                  snapshot-calls (atom [])
                  env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"}
                  self (make-self env)
@@ -1668,6 +1669,10 @@
                                         (fn [_env _token _repo-url _opts]
                                           (js/Promise.resolve {:url "https://github.com/example/repo/pull/88"
                                                                :id 88}))
+                                        agent-do/<checkpoint-existing-snapshot!
+                                        (fn [_self _current-session opts]
+                                          (swap! checkpoint-calls conj opts)
+                                          (js/Promise.resolve true))
                                         runtime-provider/<snapshot-runtime!
                                         (fn [_provider runtime _opts]
                                           (swap! snapshot-calls conj runtime)
@@ -1693,6 +1698,10 @@
                                           (fn [session]
                                             (let [session (js->clj session :keywordize-keys true)]
                                               (is (= 1 (count @terminate-calls)))
+                                              (is (= [{:by "system"
+                                                       :reason "pr-ready"
+                                                       :head-branch "m14/pr-created"}]
+                                                     @checkpoint-calls))
                                               (is (empty? @snapshot-calls))
                                               (is (nil? (:runtime session)))
                                               (is (= "checkpoint-existing-pr"

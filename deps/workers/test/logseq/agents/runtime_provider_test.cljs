@@ -384,7 +384,8 @@
                                           "__BUNDLE_DATA__:ZmFrZS1idW5kbGUtZGF0YQ==\n")
                              :stderr ""
                              :exit-code 0}))]
-             (-> (runtime-provider/<export-workspace-bundle! provider runtime {:task task})
+             (-> (runtime-provider/<export-workspace-bundle! provider runtime {:task task
+                                                                               :head-branch "feat/preferred"})
                  (.then (fn [result]
                           (is (= "abc123" (:head-sha result)))
                           (is (= "base123" (:base-sha result)))
@@ -392,6 +393,8 @@
                           (is (= "sha256-123" (:checksum result)))
                           (is (= "feat/m22" (:head-branch result)))
                           (is (= "ZmFrZS1idW5kbGUtZGF0YQ==" (:bundle-base64 result)))
+                          (is (string/includes? @captured "current_head_branch=$(git symbolic-ref --quiet --short HEAD"))
+                          (is (string/includes? @captured "refs/heads/feat/preferred"))
                           (is (string/includes? @captured "git bundle create"))
                           (done)))
                  (.catch (fn [error]
@@ -425,7 +428,11 @@
                           (is (true? ok?))
                           (is (string/includes? @captured "git bundle verify"))
                           (is (string/includes? @captured "git fetch"))
-                          (is (string/includes? @captured "git checkout -B 'feat/m22' 'abc123'"))
+                          (is (string/includes? @captured "git checkout -B 'feat/m22'"))
+                          (is (string/includes? @captured "bundle restore branch mismatch"))
+                          (is (string/includes? @captured "bundle restore commit mismatch"))
+                          (is (string/includes? @captured "git reset --hard"))
+                          (is (string/includes? @captured "git clean -fd"))
                           (done)))
                  (.catch (fn [error]
                            (is false (str "unexpected error: " error))

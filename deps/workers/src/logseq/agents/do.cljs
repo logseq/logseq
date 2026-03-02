@@ -266,7 +266,7 @@
       (string? bundle-head-branch) (assoc :bundle-head-branch bundle-head-branch))))
 
 (defn- <checkpoint-workspace-bundle!
-  [^js self current-session checkpoint {:keys [by reason]}]
+  [^js self current-session checkpoint {:keys [by reason head-branch]}]
   (let [runtime (:runtime current-session)
         task (session-task current-session)
         env (.-env self)]
@@ -284,7 +284,9 @@
                                               :ts (common/now-ms)})
                       export-result (runtime-provider/<export-workspace-bundle! provider
                                                                                 runtime
-                                                                                {:task task})
+                                                                                (cond-> {:task task}
+                                                                                  (string? head-branch)
+                                                                                  (assoc :head-branch head-branch)))
                       bundle-base64 (some-> (:bundle-base64 export-result) str string/trim not-empty)
                       _ (when-not (string? bundle-base64)
                           (throw (ex-info "missing workspace bundle payload"
@@ -403,7 +405,7 @@
                        nil)))))))
 
 (defn- <checkpoint-existing-snapshot!
-  [^js self current-session {:keys [by reason]}]
+  [^js self current-session {:keys [by reason head-branch]}]
   (-> (p/let [d1-checkpoint (-> (checkpoint-store/<load-checkpoint-for-task! (.-env self)
                                                                              (session-task current-session))
                                 (p/catch (fn [error]
@@ -420,8 +422,10 @@
                                               (string? reason) (assoc :reason reason))
                                       :ts (common/now-ms)})]
         (if (map? checkpoint)
-          (p/let [checkpoint (<checkpoint-workspace-bundle! self current-session checkpoint {:by by
-                                                                                             :reason reason})
+          (p/let [checkpoint (<checkpoint-workspace-bundle! self current-session checkpoint (cond-> {:by by
+                                                                                                     :reason reason}
+                                                                                              (string? head-branch)
+                                                                                              (assoc :head-branch head-branch)))
                   _ (<persist-session-checkpoint! self (:id current-session) checkpoint)
                   _ (<append-event! self {:type "sandbox.checkpoint.succeeded"
                                           :data (checkpoint-event-data checkpoint
@@ -689,29 +693,35 @@
     (let [provider (runtime-provider/resolve-provider (.-env self) runtime)]
       (runtime-provider/<terminate-runtime! provider runtime))))
 
-(defn- <cleanup-runtime-after-pr-ready! [^js self]
-  (p/let [current-session (<get-session self)]
-    (if-not (map? current-session)
-      nil
-      (let [runtime (:runtime current-session)]
-        (if-not (map? runtime)
-          nil
-          (p/let [_ (<checkpoint-existing-snapshot! self current-session {:by "system"
-                                                                          :reason "pr-ready"})
-                  terminated? (-> (<terminate-runtime! self runtime)
-                                  (p/then (fn [_] true))
-                                  (p/catch (fn [error]
-                                             (log/error :agent/pr-runtime-terminate-failed
-                                                        {:session-id (:id current-session)
-                                                         :runtime-session-id (:session-id runtime)
-                                                         :sandbox-id (:sandbox-id runtime)
-                                                         :error error})
-                                             false)))
-                  latest-session (<get-session self)]
-            (when (and terminated?
-                       (map? latest-session)
-                       (map? (:runtime latest-session)))
-              (<save-session! self (assoc latest-session :runtime nil)))))))))
+(defn- <cleanup-runtime-after-pr-ready!
+  ([^js self]
+   (<cleanup-runtime-after-pr-ready! self nil))
+  ([^js self head-branch]
+   (p/let [current-session (<get-session self)]
+     (if-not (map? current-session)
+       nil
+       (let [runtime (:runtime current-session)]
+         (if-not (map? runtime)
+           nil
+           (p/let [_ (<checkpoint-existing-snapshot! self current-session
+                                                     (cond-> {:by "system"
+                                                              :reason "pr-ready"}
+                                                       (string? head-branch)
+                                                       (assoc :head-branch head-branch)))
+                   terminated? (-> (<terminate-runtime! self runtime)
+                                   (p/then (fn [_] true))
+                                   (p/catch (fn [error]
+                                              (log/error :agent/pr-runtime-terminate-failed
+                                                         {:session-id (:id current-session)
+                                                          :runtime-session-id (:session-id runtime)
+                                                          :sandbox-id (:sandbox-id runtime)
+                                                          :error error})
+                                              false)))
+                   latest-session (<get-session self)]
+             (when (and terminated?
+                        (map? latest-session)
+                        (map? (:runtime latest-session)))
+               (<save-session! self (assoc latest-session :runtime nil))))))))))
 
 (defn- <checkpoint-and-terminate-completed-runtime!
   [^js self session-id]
@@ -1213,7 +1223,7 @@
                                          :base-branch base-branch
                                          :pr-url (:url pr-result)
                                          :pr-id (:id pr-result)})
-              _ (<cleanup-runtime-after-pr-ready! self)]
+              _ (<cleanup-runtime-after-pr-ready! self head-branch)]
         (http/json-response :sessions/pr
                             (cond-> {:status "pr-created"
                                      :head-branch head-branch
@@ -1238,7 +1248,7 @@
                                                           :pr-url (:url existing-pr)
                                                           :pr-id (:id existing-pr)
                                                           :existing true})
-                               _ (<cleanup-runtime-after-pr-ready! self)]
+                               _ (<cleanup-runtime-after-pr-ready! self head-branch)]
                          (http/json-response :sessions/pr
                                              (cond-> {:status "pr-created"
                                                       :head-branch head-branch

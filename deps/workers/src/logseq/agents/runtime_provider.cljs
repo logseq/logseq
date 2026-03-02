@@ -650,11 +650,12 @@
       parsed)))
 
 (defn- export-workspace-bundle-command
-  [repo-dir base-branch]
+  [repo-dir base-branch preferred-head-branch]
   (let [repo-dir (escape-shell-single repo-dir)
         bundle-path (str "/tmp/workspace-" (random-uuid) ".bundle")
         bundle-path (escape-shell-single bundle-path)
-        base-branch (or (some-> base-branch source-control/sanitize-branch-name) "main")]
+        base-branch (or (some-> base-branch source-control/sanitize-branch-name) "main")
+        preferred-head-branch (some-> preferred-head-branch source-control/sanitize-branch-name)]
     (str "set -e; "
          "cd '" repo-dir "'; "
          "git rev-parse --is-inside-work-tree >/dev/null; "
@@ -665,18 +666,29 @@
          "commit -m 'chore(agent): checkpoint workspace' >/dev/null 2>&1 || true; "
          "fi; "
          "fi; "
-         "head_sha=$(git rev-parse HEAD); "
-         "base_sha=$(git rev-list --max-parents=0 HEAD | tail -n 1); "
-         "head_branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo '"
+         "current_head_branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true); "
+         "head_branch=''; "
+         (when (string? preferred-head-branch)
+           (str "if git show-ref --verify --quiet 'refs/heads/"
+                (escape-shell-single preferred-head-branch)
+                "'; then head_branch='"
+                (escape-shell-single preferred-head-branch)
+                "'; fi; "))
+         "if [ -z \"$head_branch\" ] && [ -n \"$current_head_branch\" ] && git show-ref --verify --quiet \"refs/heads/$current_head_branch\"; then head_branch=\"$current_head_branch\"; fi; "
+         "if [ -z \"$head_branch\" ]; then head_branch='"
          (escape-shell-single base-branch)
-         "'); "
+         "'; fi; "
+         "head_ref='refs/heads/'\"$head_branch\"; "
+         "if git show-ref --verify --quiet \"$head_ref\"; then bundle_target=\"$head_ref\"; else bundle_target='HEAD'; fi; "
+         "head_sha=$(git rev-parse \"$bundle_target\"); "
+         "base_sha=$(git rev-list --max-parents=0 HEAD | tail -n 1); "
          "base_ref='refs/remotes/origin/"
          (escape-shell-single base-branch)
          "'; "
          "if git show-ref --verify --quiet \"$base_ref\"; then "
-         "git bundle create '" bundle-path "' HEAD ^\"$base_ref\" >/dev/null; "
+         "git bundle create '" bundle-path "' \"$bundle_target\" ^\"$base_ref\" >/dev/null; "
          "else "
-         "git bundle create '" bundle-path "' HEAD >/dev/null; "
+         "git bundle create '" bundle-path "' \"$bundle_target\" >/dev/null; "
          "fi; "
          "byte_size=$(wc -c < '" bundle-path "' | tr -d '[:space:]'); "
          "checksum=$((sha256sum '" bundle-path "' 2>/dev/null || shasum -a 256 '" bundle-path "') | awk '{print $1}'); "
@@ -723,8 +735,22 @@
          "printf '%s' '" bundle-base64 "' > '" base64-path "'; "
          "base64 -d '" base64-path "' > '" bundle-path "'; "
          "git bundle verify '" bundle-path "' >/dev/null; "
+         "git reset --hard >/dev/null; "
+         "git clean -fd >/dev/null; "
          "git fetch '" bundle-path "' '" head-sha "' >/dev/null; "
          "git checkout -B '" head-branch "' '" head-sha "'; "
+         "git reset --hard '" head-sha "' >/dev/null; "
+         "git clean -fd >/dev/null; "
+         "current_branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true); "
+         "if [ \"$current_branch\" != '" head-branch "' ]; then "
+         "echo \"bundle restore branch mismatch: expected " head-branch ", got $current_branch\" >&2; "
+         "exit 1; "
+         "fi; "
+         "current_sha=$(git rev-parse HEAD); "
+         "if [ \"$current_sha\" != '" head-sha "' ]; then "
+         "echo \"bundle restore commit mismatch: expected " head-sha ", got $current_sha\" >&2; "
+         "exit 1; "
+         "fi; "
          "rm -f '" base64-path "' '" bundle-path "'; ")))
 
 (defn session-payload [task]
@@ -968,7 +994,8 @@
         repo-dir (or (:backup-dir runtime)
                      (get-repo-dir session-id task "cloudflare"))
         base-branch (or (some-> (get-in task [:project :base-branch]) source-control/sanitize-branch-name)
-                        "main")]
+                        "main")
+        head-branch (some-> (:head-branch opts) source-control/sanitize-branch-name)]
     (when-not (string? sandbox-id)
       (throw (ex-info "missing sandbox-id on runtime"
                       {:reason :missing-sandbox-id
@@ -978,7 +1005,7 @@
                       {:reason :missing-repo-dir
                        :session-id session-id})))
     (let [sandbox (cloudflare-sandbox env sandbox-id)]
-      (p/let [result (<cloudflare-exec! sandbox (export-workspace-bundle-command repo-dir base-branch))
+      (p/let [result (<cloudflare-exec! sandbox (export-workspace-bundle-command repo-dir base-branch head-branch))
               {:keys [stdout]} (cloudflare-exec-output result)]
         (or (parse-exported-workspace-bundle stdout)
             (throw (ex-info "invalid workspace bundle export output"
@@ -1512,7 +1539,8 @@
         repo-dir (or (:backup-dir runtime)
                      (get-repo-dir session-id task "vercel"))
         base-branch (or (some-> (get-in task [:project :base-branch]) source-control/sanitize-branch-name)
-                        "main")]
+                        "main")
+        head-branch (some-> (:head-branch opts) source-control/sanitize-branch-name)]
     (when-not (string? sandbox-id)
       (throw (ex-info "missing sandbox-id on runtime"
                       {:reason :missing-sandbox-id
@@ -1522,7 +1550,7 @@
                       {:reason :missing-repo-dir
                        :session-id session-id})))
     (p/let [sandbox (<vercel-get-sandbox! env sandbox-id)
-            result (<vercel-run-shell! sandbox (export-workspace-bundle-command repo-dir base-branch))]
+            result (<vercel-run-shell! sandbox (export-workspace-bundle-command repo-dir base-branch head-branch))]
       (or (parse-exported-workspace-bundle (:stdout result))
           (throw (ex-info "invalid workspace bundle export output"
                           {:reason :invalid-bundle-export-output
