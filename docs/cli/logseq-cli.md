@@ -94,10 +94,11 @@ Inspect and edit commands:
 - `list page [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list pages
 - `list tag [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list tags
 - `list property [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list properties
-- `add block --content <text> [--target-page-name <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - add blocks; defaults to today’s journal page if no target is given
-- `add block --blocks <edn> [--target-page-name <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks via EDN vector
-- `add block --blocks-file <path> [--target-page-name <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks from an EDN file
-- `add page --page <name>` - create a page
+- `upsert block --content <text> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - create blocks; defaults to today’s journal page if no target is given
+- `upsert block --blocks <edn> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks via EDN vector
+- `upsert block --blocks-file <path> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks from an EDN file
+- `upsert block --id <id>|--uuid <uuid> [--target-id <id>|--target-uuid <uuid>|--target-page <name>] [--pos first-child|last-child|sibling] [--update-tags <edn-vector>] [--update-properties <edn-map>] [--remove-tags <edn-vector>] [--remove-properties <edn-vector>]` - update and/or move a block
+- `upsert page --page <name> [--tags <edn-vector>] [--properties <edn-map>] [--update-tags <edn-vector>] [--update-properties <edn-map>] [--remove-tags <edn-vector>] [--remove-properties <edn-vector>]` - create or update a page
 - `move --id <id>|--uuid <uuid> --target-id <id>|--target-uuid <uuid>|--target-page <name> [--pos first-child|last-child|sibling]` - move a block and its children (defaults to first-child)
 - `remove --id <id>|--uuid <uuid>|--page <name>` - remove blocks (by db/id or UUID) or pages
 - `search <query> [--type page|block|tag|property|all] [--tag <name>] [--case-sensitive] [--sort updated-at|created-at] [--order asc|desc]` - search across pages, blocks, tags, and properties (query is positional)
@@ -115,8 +116,10 @@ Subcommands:
   list page [options]      List pages
   list tag [options]       List tags
   list property [options]  List properties
-  add block [options]      Add blocks
-  add page [options]       Create page
+  upsert block [options]   Upsert block
+  upsert page [options]    Upsert page
+  upsert tag [options]     Upsert tag
+  upsert property [options] Upsert property
   move [options]           Move block
   remove [options]         Remove block or page
   search <query> [options] Search graph
@@ -138,15 +141,15 @@ Output formats:
 - Global `--output <human|json|edn>` applies to all commands
 - For `graph export`, `--output` refers to the destination file path. Output formatting is controlled via `:output-format` in config or `LOGSEQ_CLI_OUTPUT`.
 - Human output is plain text. List/search commands render tables with a final `Count: N` line. For list and search subcommands, the ID column uses `:db/id` (not UUID). If `:db/ident` exists, an `IDENT` column is included. Search table columns are `ID` and `TITLE`. Block titles can include multiple lines; multi-line rows align additional lines under the `TITLE` column. Times such as list `UPDATED-AT`/`CREATED-AT` and `graph info` `Created at` are shown in human-friendly relative form. Errors include error codes and may include a `Hint:` line. Use `--output json|edn` for structured output.
-- `add page` and `add block` return created entity ids in `data.result` for JSON/EDN output, and include ids in human output.
+- `upsert page` and `upsert block` return entity ids in `data.result` for JSON/EDN output, and include ids in human output.
   - Human example:
     ```text
-    Added page:
+    Upserted page:
     [123]
     ```
   - Human example:
     ```text
-    Added blocks:
+    Upserted blocks:
     [201 202]
     ```
   - JSON example: `{"status":"ok","data":{"result":[123]}}`
@@ -180,7 +183,7 @@ Examples:
 node ./dist/logseq.js graph create --repo demo
 node ./dist/logseq.js graph export --type edn --output /tmp/demo.edn --repo demo
 node ./dist/logseq.js graph import --type edn --input /tmp/demo.edn --repo demo-import
-node ./dist/logseq.js add block --target-page-name TestPage --content "hello world"
+node ./dist/logseq.js upsert block --target-page TestPage --content "hello world"
 node ./dist/logseq.js move --uuid <uuid> --target-page TargetPage
 node ./dist/logseq.js search "hello"
 node ./dist/logseq.js show --page TestPage --output json
