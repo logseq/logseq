@@ -357,6 +357,80 @@
                            (is (= "vercel" (:provider data))))
                          (done)))))))
 
+(deftest vercel-provider-export-workspace-bundle-test
+  (async done
+         (let [captured (atom nil)
+               env #js {"VERCEL_TEAM_ID" "team-1"
+                        "VERCEL_PROJECT_ID" "project-1"
+                        "VERCEL_TOKEN" "token-vercel"}
+               provider (runtime-provider/create-provider env "vercel")
+               runtime {:provider "vercel"
+                        :sandbox-id "vercel-sbx-bundle"
+                        :backup-dir "/vercel/sandbox/logseq"
+                        :session-id "sess-vercel-bundle"}
+               task {:project {:base-branch "main"}}]
+           (with-redefs [runtime-provider/<vercel-get-sandbox!
+                         (fn [_env _sandbox-id]
+                           (js/Promise.resolve #js {:sandboxId "vercel-sbx-bundle"}))
+                         runtime-provider/<vercel-run-shell!
+                         (fn [_sandbox cmd & _]
+                           (reset! captured cmd)
+                           (js/Promise.resolve
+                            {:stdout (str "__BUNDLE_HEAD__:abc123\n"
+                                          "__BUNDLE_BASE__:base123\n"
+                                          "__BUNDLE_BYTES__:16\n"
+                                          "__BUNDLE_SHA256__:sha256-123\n"
+                                          "__BUNDLE_BRANCH__:feat/m22\n"
+                                          "__BUNDLE_DATA__:ZmFrZS1idW5kbGUtZGF0YQ==\n")
+                             :stderr ""
+                             :exit-code 0}))]
+             (-> (runtime-provider/<export-workspace-bundle! provider runtime {:task task})
+                 (.then (fn [result]
+                          (is (= "abc123" (:head-sha result)))
+                          (is (= "base123" (:base-sha result)))
+                          (is (= 16 (:byte-size result)))
+                          (is (= "sha256-123" (:checksum result)))
+                          (is (= "feat/m22" (:head-branch result)))
+                          (is (= "ZmFrZS1idW5kbGUtZGF0YQ==" (:bundle-base64 result)))
+                          (is (string/includes? @captured "git bundle create"))
+                          (done)))
+                 (.catch (fn [error]
+                           (is false (str "unexpected error: " error))
+                           (done))))))))
+
+(deftest vercel-provider-apply-workspace-bundle-test
+  (async done
+         (let [captured (atom nil)
+               env #js {"VERCEL_TEAM_ID" "team-1"
+                        "VERCEL_PROJECT_ID" "project-1"
+                        "VERCEL_TOKEN" "token-vercel"}
+               provider (runtime-provider/create-provider env "vercel")
+               runtime {:provider "vercel"
+                        :sandbox-id "vercel-sbx-bundle-apply"
+                        :backup-dir "/vercel/sandbox/logseq"
+                        :session-id "sess-vercel-bundle-apply"}]
+           (with-redefs [runtime-provider/<vercel-get-sandbox!
+                         (fn [_env _sandbox-id]
+                           (js/Promise.resolve #js {:sandboxId "vercel-sbx-bundle-apply"}))
+                         runtime-provider/<vercel-run-shell!
+                         (fn [_sandbox cmd & _]
+                           (reset! captured cmd)
+                           (js/Promise.resolve {:stdout "" :stderr "" :exit-code 0}))]
+             (-> (runtime-provider/<apply-workspace-bundle! provider
+                                                            runtime
+                                                            {:head-sha "abc123"
+                                                             :head-branch "feat/m22"
+                                                             :bundle-base64 "ZmFrZS1idW5kbGUtZGF0YQ=="})
+                 (.then (fn [ok?]
+                          (is (true? ok?))
+                          (is (string/includes? @captured "git bundle verify"))
+                          (is (string/includes? @captured "git fetch"))
+                          (is (string/includes? @captured "git checkout -B 'feat/m22' 'abc123'"))
+                          (done)))
+                 (.catch (fn [error]
+                           (is false (str "unexpected error: " error))
+                           (done))))))))
+
 (deftest vercel-provider-push-branch-command-test
   (async done
          (let [captured (atom nil)

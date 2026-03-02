@@ -28,13 +28,12 @@ class_name = "Sandbox"
 
 [[r2_buckets]]
 binding = "BACKUP_BUCKET"
-bucket_name = "logseq-sync-assets-prod"
-preview_bucket_name = "logseq-sync-assets-prod"
-remote = true
+bucket_name = "logseq-sync-assets-dev"
+preview_bucket_name = "logseq-sync-assets-dev"
 
 [[d1_databases]]
 binding = "AGENTS_DB"
-database_name = "logseq-agents-staging"
+database_name = "logseq-agents-dev"
 database_id = "00325aa2-c805-4693-b599-900a25dcde42"
 
 [[migrations]]
@@ -85,7 +84,6 @@ class_name = "Sandbox"
 binding = "BACKUP_BUCKET"
 bucket_name = "logseq-sync-assets-dev"
 preview_bucket_name = "logseq-sync-assets-dev"
-remote = true
 
 [[env.staging.d1_databases]]
 binding = "AGENTS_DB"
@@ -135,7 +133,6 @@ class_name = "Sandbox"
 binding = "BACKUP_BUCKET"
 bucket_name = "logseq-sync-assets-prod"
 preview_bucket_name = "logseq-sync-assets-prod"
-remote = true
 
 [[env.prod.d1_databases]]
 binding = "AGENTS_DB"

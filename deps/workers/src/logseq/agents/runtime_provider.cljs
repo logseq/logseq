@@ -627,6 +627,106 @@
          "git push '" remote "' HEAD:refs/heads/" branch
          (when force? " --force"))))
 
+(def ^:private bundle-head-marker "__BUNDLE_HEAD__")
+(def ^:private bundle-base-marker "__BUNDLE_BASE__")
+(def ^:private bundle-bytes-marker "__BUNDLE_BYTES__")
+(def ^:private bundle-checksum-marker "__BUNDLE_SHA256__")
+(def ^:private bundle-branch-marker "__BUNDLE_BRANCH__")
+(def ^:private bundle-data-marker "__BUNDLE_DATA__")
+
+(defn- marker-value
+  [output marker]
+  (some->> output
+           (re-find (re-pattern (str "(?m)^" marker ":(.*)$")))
+           second
+           string/trim
+           not-empty))
+
+(defn- parse-int-safe
+  [value]
+  (let [parsed (some-> value js/parseInt)]
+    (when (and (number? parsed)
+               (not (js/isNaN parsed)))
+      parsed)))
+
+(defn- export-workspace-bundle-command
+  [repo-dir base-branch]
+  (let [repo-dir (escape-shell-single repo-dir)
+        bundle-path (str "/tmp/workspace-" (random-uuid) ".bundle")
+        bundle-path (escape-shell-single bundle-path)
+        base-branch (or (some-> base-branch source-control/sanitize-branch-name) "main")]
+    (str "set -e; "
+         "cd '" repo-dir "'; "
+         "git rev-parse --is-inside-work-tree >/dev/null; "
+         "if ! git diff --quiet || ! git diff --cached --quiet || [ -n \"$(git ls-files --others --exclude-standard)\" ]; then "
+         "git add -A; "
+         "if ! git diff --cached --quiet; then "
+         "git -c user.name='Logseq Agent' -c user.email='agent@logseq.local' "
+         "commit -m 'chore(agent): checkpoint workspace' >/dev/null 2>&1 || true; "
+         "fi; "
+         "fi; "
+         "head_sha=$(git rev-parse HEAD); "
+         "base_sha=$(git rev-list --max-parents=0 HEAD | tail -n 1); "
+         "head_branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || echo '"
+         (escape-shell-single base-branch)
+         "'); "
+         "base_ref='refs/remotes/origin/"
+         (escape-shell-single base-branch)
+         "'; "
+         "if git show-ref --verify --quiet \"$base_ref\"; then "
+         "git bundle create '" bundle-path "' HEAD ^\"$base_ref\" >/dev/null; "
+         "else "
+         "git bundle create '" bundle-path "' HEAD >/dev/null; "
+         "fi; "
+         "byte_size=$(wc -c < '" bundle-path "' | tr -d '[:space:]'); "
+         "checksum=$((sha256sum '" bundle-path "' 2>/dev/null || shasum -a 256 '" bundle-path "') | awk '{print $1}'); "
+         "printf '" bundle-head-marker ":%s\\n' \"$head_sha\"; "
+         "printf '" bundle-base-marker ":%s\\n' \"$base_sha\"; "
+         "printf '" bundle-bytes-marker ":%s\\n' \"$byte_size\"; "
+         "printf '" bundle-checksum-marker ":%s\\n' \"$checksum\"; "
+         "printf '" bundle-branch-marker ":%s\\n' \"$head_branch\"; "
+         "printf '" bundle-data-marker ":'; "
+         "base64 < '" bundle-path "' | tr -d '\\n'; "
+         "printf '\\n'; ")))
+
+(defn- parse-exported-workspace-bundle
+  [output]
+  (let [head-sha (marker-value output bundle-head-marker)
+        base-sha (marker-value output bundle-base-marker)
+        byte-size (some-> (marker-value output bundle-bytes-marker) parse-int-safe)
+        checksum (marker-value output bundle-checksum-marker)
+        head-branch (some-> (marker-value output bundle-branch-marker) source-control/sanitize-branch-name)
+        bundle-base64 (marker-value output bundle-data-marker)]
+    (when (and (string? head-sha)
+               (number? byte-size)
+               (pos? byte-size)
+               (string? bundle-base64))
+      (cond-> {:head-sha head-sha
+               :byte-size byte-size
+               :bundle-base64 bundle-base64}
+        (string? base-sha) (assoc :base-sha base-sha)
+        (string? checksum) (assoc :checksum checksum)
+        (string? head-branch) (assoc :head-branch head-branch)))))
+
+(defn- apply-workspace-bundle-command
+  [repo-dir {:keys [head-sha head-branch bundle-base64]}]
+  (let [repo-dir (escape-shell-single repo-dir)
+        head-sha (escape-shell-single head-sha)
+        head-branch (escape-shell-single (or (source-control/sanitize-branch-name head-branch) "main"))
+        bundle-base64 (escape-shell-single bundle-base64)
+        bundle-id (str (random-uuid))
+        base64-path (escape-shell-single (str "/tmp/workspace-" bundle-id ".bundle.b64"))
+        bundle-path (escape-shell-single (str "/tmp/workspace-" bundle-id ".bundle"))]
+    (str "set -e; "
+         "cd '" repo-dir "'; "
+         "git rev-parse --is-inside-work-tree >/dev/null; "
+         "printf '%s' '" bundle-base64 "' > '" base64-path "'; "
+         "base64 -d '" base64-path "' > '" bundle-path "'; "
+         "git bundle verify '" bundle-path "' >/dev/null; "
+         "git fetch '" bundle-path "' '" head-sha "' >/dev/null; "
+         "git checkout -B '" head-branch "' '" head-sha "'; "
+         "rm -f '" base64-path "' '" bundle-path "'; ")))
+
 (defn session-payload [task]
   (let [agent (or (get-in task [:agent :provider])
                   (get-in task [:agent :id])
@@ -857,6 +957,67 @@
   (if (js-method sandbox "exec")
     (->promise (.exec sandbox cmd))
     (throw (ex-info "cloudflare sandbox missing exec method" {}))))
+
+(declare cloudflare-exec-output)
+
+(defn- <cloudflare-export-workspace-bundle!
+  [^js env runtime opts]
+  (let [sandbox-id (:sandbox-id runtime)
+        task (:task opts)
+        session-id (:session-id runtime)
+        repo-dir (or (:backup-dir runtime)
+                     (get-repo-dir session-id task "cloudflare"))
+        base-branch (or (some-> (get-in task [:project :base-branch]) source-control/sanitize-branch-name)
+                        "main")]
+    (when-not (string? sandbox-id)
+      (throw (ex-info "missing sandbox-id on runtime"
+                      {:reason :missing-sandbox-id
+                       :runtime runtime})))
+    (when-not (string? repo-dir)
+      (throw (ex-info "missing repo dir for workspace bundle export"
+                      {:reason :missing-repo-dir
+                       :session-id session-id})))
+    (let [sandbox (cloudflare-sandbox env sandbox-id)]
+      (p/let [result (<cloudflare-exec! sandbox (export-workspace-bundle-command repo-dir base-branch))
+              {:keys [stdout]} (cloudflare-exec-output result)]
+        (or (parse-exported-workspace-bundle stdout)
+            (throw (ex-info "invalid workspace bundle export output"
+                            {:reason :invalid-bundle-export-output
+                             :provider "cloudflare"})))))))
+
+(defn- <cloudflare-apply-workspace-bundle!
+  [^js env runtime opts]
+  (let [sandbox-id (:sandbox-id runtime)
+        task (:task opts)
+        session-id (:session-id runtime)
+        repo-dir (or (:backup-dir runtime)
+                     (get-repo-dir session-id task "cloudflare"))
+        head-sha (some-> (:head-sha opts) str string/trim not-empty)
+        bundle-base64 (some-> (:bundle-base64 opts) str string/trim not-empty)
+        head-branch (some-> (:head-branch opts) source-control/sanitize-branch-name)]
+    (when-not (string? sandbox-id)
+      (throw (ex-info "missing sandbox-id on runtime"
+                      {:reason :missing-sandbox-id
+                       :runtime runtime})))
+    (when-not (string? repo-dir)
+      (throw (ex-info "missing repo dir for workspace bundle apply"
+                      {:reason :missing-repo-dir
+                       :session-id session-id})))
+    (when-not (string? head-sha)
+      (throw (ex-info "missing bundle head sha"
+                      {:reason :missing-bundle-head-sha
+                       :provider "cloudflare"})))
+    (when-not (string? bundle-base64)
+      (throw (ex-info "missing bundle payload"
+                      {:reason :missing-bundle-payload
+                       :provider "cloudflare"})))
+    (let [sandbox (cloudflare-sandbox env sandbox-id)]
+      (p/let [_ (<cloudflare-exec! sandbox
+                                   (apply-workspace-bundle-command repo-dir
+                                                                   {:head-sha head-sha
+                                                                    :head-branch head-branch
+                                                                    :bundle-base64 bundle-base64}))]
+        true))))
 
 (defn- cloudflare-exec-output
   [result]
@@ -1343,6 +1504,66 @@
          :stderr stderr
          :exit-code exit-code}))))
 
+(defn- <vercel-export-workspace-bundle!
+  [^js env runtime opts]
+  (let [sandbox-id (:sandbox-id runtime)
+        task (:task opts)
+        session-id (:session-id runtime)
+        repo-dir (or (:backup-dir runtime)
+                     (get-repo-dir session-id task "vercel"))
+        base-branch (or (some-> (get-in task [:project :base-branch]) source-control/sanitize-branch-name)
+                        "main")]
+    (when-not (string? sandbox-id)
+      (throw (ex-info "missing sandbox-id on runtime"
+                      {:reason :missing-sandbox-id
+                       :runtime runtime})))
+    (when-not (string? repo-dir)
+      (throw (ex-info "missing repo dir for workspace bundle export"
+                      {:reason :missing-repo-dir
+                       :session-id session-id})))
+    (p/let [sandbox (<vercel-get-sandbox! env sandbox-id)
+            result (<vercel-run-shell! sandbox (export-workspace-bundle-command repo-dir base-branch))]
+      (or (parse-exported-workspace-bundle (:stdout result))
+          (throw (ex-info "invalid workspace bundle export output"
+                          {:reason :invalid-bundle-export-output
+                           :provider "vercel"}))))))
+
+(defn- <vercel-apply-workspace-bundle!
+  [^js env runtime opts]
+  (let [sandbox-id (:sandbox-id runtime)
+        task (:task opts)
+        session-id (:session-id runtime)
+        repo-dir (or (:backup-dir runtime)
+                     (get-repo-dir session-id task "vercel"))
+        head-sha (some-> (:head-sha opts) str string/trim not-empty)
+        bundle-base64 (some-> (:bundle-base64 opts) str string/trim not-empty)
+        head-branch (some-> (:head-branch opts) source-control/sanitize-branch-name)]
+    (when-not (string? sandbox-id)
+      (throw (ex-info "missing sandbox-id on runtime"
+                      {:reason :missing-sandbox-id
+                       :runtime runtime})))
+    (when-not (string? repo-dir)
+      (throw (ex-info "missing repo dir for workspace bundle apply"
+                      {:reason :missing-repo-dir
+                       :session-id session-id})))
+    (when-not (string? head-sha)
+      (throw (ex-info "missing bundle head sha"
+                      {:reason :missing-bundle-head-sha
+                       :provider "vercel"})))
+    (when-not (string? bundle-base64)
+      (throw (ex-info "missing bundle payload"
+                      {:reason :missing-bundle-payload
+                       :provider "vercel"})))
+    (p/let [sandbox (<vercel-get-sandbox! env sandbox-id)
+            command (apply-workspace-bundle-command repo-dir
+                                                    {:head-sha head-sha
+                                                     :head-branch head-branch
+                                                     :bundle-base64 bundle-base64})
+            _ (prn :debug :apply-bundle-command command)
+            _ (<vercel-run-shell! sandbox
+                                  command)]
+      true)))
+
 (defn- vercel-health-command [port agent-token]
   (str "if curl -fsS "
        (curl-auth-arg agent-token)
@@ -1496,12 +1717,13 @@
     (p/resolved nil)
 
     :else
-    (<vercel-run-shell! sandbox
-                        (str "set -e; "
-                             "if [ -d '" (escape-shell-single snapshot-dir) "' ]; then "
-                             "rm -rf '" (escape-shell-single repo-dir) "'; "
-                             "cp -a '" (escape-shell-single snapshot-dir) "' '" (escape-shell-single repo-dir) "'; "
-                             "fi"))))
+    (let [command (str "set -e; "
+                       "if [ -d '" (escape-shell-single snapshot-dir) "' ]; then "
+                       "rm -rf '" (escape-shell-single repo-dir) "'; "
+                       "cp -a '" (escape-shell-single snapshot-dir) "' '" (escape-shell-single repo-dir) "'; "
+                       "fi")]
+      (prn :debug :<vercel-restore-repo-dir! :command command)
+      (<vercel-run-shell! sandbox command))))
 
 (defn- vercel-snapshot-expiration-ms
   []
@@ -1547,6 +1769,8 @@
   (<send-message! [this runtime message])
   (<open-terminal! [this runtime request opts])
   (<snapshot-runtime! [this runtime opts])
+  (<export-workspace-bundle! [this runtime opts])
+  (<apply-workspace-bundle! [this runtime opts])
   (<push-branch! [this runtime opts])
   (<terminate-runtime! [this runtime]))
 
@@ -1632,6 +1856,18 @@
     (p/rejected
      (ex-info "sprites runtime provider does not support snapshots"
               {:reason :unsupported-snapshot
+               :provider "sprites"})))
+
+  (<export-workspace-bundle! [_ _runtime _opts]
+    (p/rejected
+     (ex-info "sprites runtime provider does not support workspace bundle export"
+              {:reason :unsupported-workspace-bundle
+               :provider "sprites"})))
+
+  (<apply-workspace-bundle! [_ _runtime _opts]
+    (p/rejected
+     (ex-info "sprites runtime provider does not support workspace bundle restore"
+              {:reason :unsupported-workspace-bundle
                :provider "sprites"})))
 
   (<push-branch! [_ runtime opts]
@@ -1727,6 +1963,18 @@
               {:reason :unsupported-snapshot
                :provider "local-dev"})))
 
+  (<export-workspace-bundle! [_ _runtime _opts]
+    (p/rejected
+     (ex-info "local-dev runtime provider does not support workspace bundle export"
+              {:reason :unsupported-workspace-bundle
+               :provider "local-dev"})))
+
+  (<apply-workspace-bundle! [_ _runtime _opts]
+    (p/rejected
+     (ex-info "local-dev runtime provider does not support workspace bundle restore"
+              {:reason :unsupported-workspace-bundle
+               :provider "local-dev"})))
+
   (<push-branch! [_ _runtime _opts]
     (p/rejected
      (ex-info "local-dev runtime provider does not support managed git push"
@@ -1754,8 +2002,8 @@
           checkpoint (task-sandbox-checkpoint task)
           backup-key (or (:backup-key checkpoint)
                          (repo-backup-key task))]
-      (p/let [{:keys [sandbox snapshot-id snapshot-dir restored?]} (<vercel-create-sandbox-for-restore! env
-                                                                                                        checkpoint)
+      (p/let [{:keys [sandbox snapshot-id snapshot-dir restored?] :as result} (<vercel-create-sandbox-for-restore! env checkpoint)
+              _ (prn :debug :vercel-create-sandbox-result result)
               _ (<vercel-ensure-running! env sandbox session-id task port agent-token)
               _ (when restored?
                   (<vercel-restore-repo-dir! sandbox snapshot-dir repo-dir))
@@ -1811,12 +2059,17 @@
                         {:reason :missing-sandbox-id
                          :runtime runtime})))
       (p/let [sandbox (<vercel-get-sandbox! env sandbox-id)
-              result (<vercel-create-snapshot! sandbox backup-dir snapshot-name)
-              snapshot-id (:snapshot-id result)]
+              result (<vercel-create-snapshot! sandbox backup-dir snapshot-name)]
         (cond-> result
           (string? backup-key) (assoc :backup-key backup-key)
           (string? backup-dir) (assoc :backup-dir backup-dir)
           :always (assoc :provider "vercel")))))
+
+  (<export-workspace-bundle! [_ runtime opts]
+    (<vercel-export-workspace-bundle! env runtime opts))
+
+  (<apply-workspace-bundle! [_ runtime opts]
+    (<vercel-apply-workspace-bundle! env runtime opts))
 
   (<push-branch! [_ runtime opts]
     (let [sandbox-id (:sandbox-id runtime)
@@ -1982,6 +2235,12 @@
             (string? backup-key) (assoc :backup-key backup-key)
             (string? backup-dir) (assoc :backup-dir backup-dir)
             :always (assoc :provider "cloudflare"))))))
+
+  (<export-workspace-bundle! [_ runtime opts]
+    (<cloudflare-export-workspace-bundle! env runtime opts))
+
+  (<apply-workspace-bundle! [_ runtime opts]
+    (<cloudflare-apply-workspace-bundle! env runtime opts))
 
   (<push-branch! [_ runtime opts]
     (let [sandbox-id (:sandbox-id runtime)

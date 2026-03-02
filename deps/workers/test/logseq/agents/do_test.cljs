@@ -1,9 +1,12 @@
 (ns logseq.agents.do-test
   (:require [cljs.test :refer [async deftest is testing]]
             [clojure.string :as string]
+            [logseq.agents.checkpoint-store :as checkpoint-store]
             [logseq.agents.do :as agent-do]
             [logseq.agents.runtime-provider :as runtime-provider]
             [logseq.agents.source-control :as source-control]
+            [logseq.agents.workspace-bundle-r2 :as workspace-bundle-r2]
+            [logseq.agents.workspace-bundle-store :as workspace-bundle-store]
             [logseq.sync.common :as common]))
 
 (defn- make-agent-storage []
@@ -253,6 +256,10 @@
                               (js/Promise.resolve nil))
                             (<snapshot-runtime! [_ _runtime _opts]
                               (js/Promise.resolve nil))
+                            (<export-workspace-bundle! [_ _runtime _opts]
+                              (js/Promise.resolve nil))
+                            (<apply-workspace-bundle! [_ _runtime _opts]
+                              (js/Promise.resolve true))
                             (<push-branch! [_ _runtime _opts]
                               (js/Promise.resolve nil))
                             (<terminate-runtime! [_ _runtime]
@@ -312,6 +319,10 @@
                               (js/Promise.resolve nil))
                             (<snapshot-runtime! [_ _runtime _opts]
                               (js/Promise.resolve nil))
+                            (<export-workspace-bundle! [_ _runtime _opts]
+                              (js/Promise.resolve nil))
+                            (<apply-workspace-bundle! [_ _runtime _opts]
+                              (js/Promise.resolve true))
                             (<push-branch! [_ _runtime _opts]
                               (js/Promise.resolve nil))
                             (<terminate-runtime! [_ _runtime]
@@ -376,6 +387,10 @@
                               (js/Promise.resolve nil))
                             (<snapshot-runtime! [_ _runtime _opts]
                               (js/Promise.resolve nil))
+                            (<export-workspace-bundle! [_ _runtime _opts]
+                              (js/Promise.resolve nil))
+                            (<apply-workspace-bundle! [_ _runtime _opts]
+                              (js/Promise.resolve true))
                             (<push-branch! [_ _runtime _opts]
                               (js/Promise.resolve nil))
                             (<terminate-runtime! [_ _runtime]
@@ -484,6 +499,179 @@
                           (done)))
                  (.catch (fn [error]
                            (is false (str "unexpected checkpoint d1 upsert error: " error))
+                           (done))))))))
+
+(deftest checkpoint-existing-snapshot-persists-workspace-bundle-test
+  (testing "checkpoint refresh exports workspace bundle and persists bundle pointer metadata"
+    (async done
+           (let [env #js {"AGENT_RUNTIME_PROVIDER" "vercel"}
+                 self (make-self env)
+                 session {:id "sess-checkpoint-bundle"
+                          :status "running"
+                          :task {:id "sess-checkpoint-bundle"
+                                 :project {:repo-url "https://github.com/logseq/logseq"
+                                           :base-branch "main"}}
+                          :runtime {:provider "vercel"
+                                    :session-id "sess-checkpoint-bundle"
+                                    :sandbox-id "sbx-checkpoint-bundle"
+                                    :snapshot-id "runtime-snapshot-bundle"
+                                    :backup-key "github/logseq/logseq#main"
+                                    :backup-dir "/vercel/sandbox/logseq"}
+                          :audit {}
+                          :created-at 0
+                          :updated-at 0}]
+             (-> (.put (.-storage self) "session" (clj->js session))
+                 (.then (fn [_]
+                          (with-redefs [checkpoint-store/<upsert-checkpoint-for-task! (fn [_env _task checkpoint]
+                                                                                        (js/Promise.resolve checkpoint))
+                                        runtime-provider/<export-workspace-bundle! (fn [_provider _runtime _opts]
+                                                                                     (js/Promise.resolve {:head-sha "abc123"
+                                                                                                          :base-sha "base123"
+                                                                                                          :byte-size 16
+                                                                                                          :checksum "sha256-123"
+                                                                                                          :head-branch "feat/m22"
+                                                                                                          :bundle-base64 "ZmFrZS1idW5kbGUtZGF0YQ=="}))
+                                        workspace-bundle-r2/<put-bundle-base64! (fn [_env object-key bundle-base64 _metadata]
+                                                                                  (js/Promise.resolve {:object-key object-key
+                                                                                                       :bundle-base64 bundle-base64}))
+                                        workspace-bundle-store/<upsert-bundle-for-task! (fn [_env _task bundle]
+                                                                                          (js/Promise.resolve (assoc bundle
+                                                                                                                     :bundle-id "bundle-1"
+                                                                                                                     :bundle-seq 1
+                                                                                                                     :object-key "workspace-bundles/github/logseq/logseq/main/bundle-1.bundle.b64")))]
+                            (#'agent-do/<checkpoint-existing-snapshot! self
+                                                                       session
+                                                                       {:by "system"
+                                                                        :reason "pr-ready"}))))
+                 (.then (fn [ok?]
+                          (is (true? ok?))
+                          (.then (.get (.-storage self) "session")
+                                 (fn [session-js]
+                                   (let [stored (js->clj session-js :keywordize-keys true)
+                                         checkpoint (get-in stored [:task :sandbox-checkpoint])]
+                                     (is (= "bundle-1" (:bundle-id checkpoint)))
+                                     (is (= 1 (:bundle-seq checkpoint)))
+                                     (is (= "abc123" (:bundle-head-sha checkpoint)))
+                                     (is (= "workspace-bundles/github/logseq/logseq/main/bundle-1.bundle.b64"
+                                            (:bundle-object-key checkpoint)))
+                                     (done))))))
+                 (.catch (fn [error]
+                           (is false (str "unexpected checkpoint bundle error: " error))
+                           (done))))))))
+
+(deftest provision-runtime-restores-workspace-bundle-test
+  (testing "provision runtime applies latest workspace bundle and stores bundle metadata in checkpoint"
+    (async done
+           (let [env #js {"AGENT_RUNTIME_PROVIDER" "vercel"}
+                 self (make-self env)
+                 task {:id "sess-restore-bundle"
+                       :agent "codex"
+                       :project {:repo-url "https://github.com/logseq/logseq"
+                                 :base-branch "main"}}
+                 runtime {:provider "vercel"
+                          :session-id "runtime-restore-bundle"
+                          :sandbox-id "sbx-restore-bundle"}
+                 applied (atom nil)
+                 provider (reify runtime-provider/RuntimeProvider
+                            (<provision-runtime! [_ _session-id _task]
+                              (js/Promise.resolve runtime))
+                            (<open-events-stream! [_ _runtime]
+                              (js/Promise.resolve nil))
+                            (<send-message! [_ _runtime _message]
+                              (js/Promise.resolve true))
+                            (<open-terminal! [_ _runtime _request _opts]
+                              (js/Promise.resolve nil))
+                            (<snapshot-runtime! [_ _runtime _opts]
+                              (js/Promise.resolve nil))
+                            (<export-workspace-bundle! [_ _runtime _opts]
+                              (js/Promise.resolve nil))
+                            (<apply-workspace-bundle! [_ runtime opts]
+                              (reset! applied {:runtime runtime :opts opts})
+                              (js/Promise.resolve true))
+                            (<push-branch! [_ _runtime _opts]
+                              (js/Promise.resolve nil))
+                            (<terminate-runtime! [_ _runtime]
+                              (js/Promise.resolve nil)))]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-restore-bundle"
+                                 :status "running"
+                                 :task task
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (with-redefs [runtime-provider/resolve-provider (fn [_env _runtime] provider)
+                                        runtime-provider/provider-id (fn [_provider] "vercel")
+                                        agent-do/start-runtime-events-stream-background! (fn [& _] nil)
+                                        checkpoint-store/<load-checkpoint-for-task! (fn [_env _task] (js/Promise.resolve nil))
+                                        workspace-bundle-store/<load-latest-bundle-for-task! (fn [_env _task session-id]
+                                                                                               (is (= "sess-restore-bundle" session-id))
+                                                                                               (js/Promise.resolve {:bundle-id "bundle-restore-1"
+                                                                                                                    :session-id session-id
+                                                                                                                    :bundle-seq 3
+                                                                                                                    :object-key "workspace-bundles/github/logseq/logseq/main/bundle-restore-1.bundle.b64"
+                                                                                                                    :head-sha "abc123"
+                                                                                                                    :head-branch "feat/m22"}))
+                                        workspace-bundle-r2/<get-bundle-base64! (fn [_env object-key]
+                                                                                  (js/Promise.resolve {:object-key object-key
+                                                                                                       :bundle-base64 "ZmFrZS1idW5kbGUtZGF0YQ=="}))]
+                            (#'agent-do/<provision-runtime! self task "sess-restore-bundle"))))
+                 (.then (fn [_]
+                          (is (= "runtime-restore-bundle" (get-in @applied [:runtime :session-id])))
+                          (is (= "abc123" (get-in @applied [:opts :head-sha])))
+                          (.then (.get (.-storage self) "session")
+                                 (fn [session-js]
+                                   (let [stored (js->clj session-js :keywordize-keys true)
+                                         checkpoint (get-in stored [:task :sandbox-checkpoint])]
+                                     (is (= "bundle-restore-1" (:bundle-id checkpoint)))
+                                     (is (= 3 (:bundle-seq checkpoint)))
+                                     (done))))))
+                 (.catch (fn [error]
+                           (is false (str "unexpected restore bundle error: " error))
+                           (done))))))))
+
+(deftest restore-workspace-bundle-skips-when-session-changed-test
+  (testing "bundle apply should be skipped when expected session is no longer current"
+    (async done
+           (let [env #js {"AGENT_RUNTIME_PROVIDER" "vercel"}
+                 self (make-self env)
+                 apply-calls (atom 0)
+                 task {:id "sess-old"
+                       :agent "codex"
+                       :project {:repo-url "https://github.com/logseq/logseq"
+                                 :base-branch "main"}}
+                 runtime {:provider "vercel"
+                          :session-id "runtime-old"
+                          :sandbox-id "sbx-old"}]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-new"
+                                 :status "running"
+                                 :task task
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (with-redefs [workspace-bundle-store/<load-latest-bundle-for-task! (fn [_env _task _session-id]
+                                                                                               (js/Promise.resolve {:bundle-id "bundle-stale-1"
+                                                                                                                    :session-id "sess-old"
+                                                                                                                    :bundle-seq 1
+                                                                                                                    :object-key "workspace-bundles/github/logseq/logseq/main/bundle-stale-1.bundle.b64"
+                                                                                                                    :head-sha "abc123"
+                                                                                                                    :head-branch "feat/m22"}))
+                                        workspace-bundle-r2/<get-bundle-base64! (fn [_env _object-key]
+                                                                                  (js/Promise.resolve {:bundle-base64 "ZmFrZS1idW5kbGUtZGF0YQ=="}))
+                                        runtime-provider/<apply-workspace-bundle! (fn [_provider _runtime _opts]
+                                                                                    (swap! apply-calls inc)
+                                                                                    (js/Promise.resolve true))]
+                            (#'agent-do/<restore-workspace-bundle! self "sess-old" task runtime))))
+                 (.then (fn [result]
+                          (is (nil? result))
+                          (is (zero? @apply-calls))
+                          (done)))
+                 (.catch (fn [error]
+                           (is false (str "unexpected stale-session restore error: " error))
                            (done))))))))
 
 (deftest runtime-session-completed-checkpoints-existing-and-terminates-test

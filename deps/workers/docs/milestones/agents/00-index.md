@@ -25,3 +25,4 @@ Milestones are tracked as separate files in this folder:
 - `19-m19-vercel-sandbox-runtime-and-snapshot.md`
 - `20-m20-resume-session-with-persisted-workspace.md`
 - `21-m21-store-snapshots-metadata-in-d1.md`
+- `22-m22-persist-workspace-git-bundles.md`
