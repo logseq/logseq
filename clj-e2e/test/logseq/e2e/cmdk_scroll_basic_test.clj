@@ -12,15 +12,17 @@
 (use-fixtures :each fixtures/new-logseq-page fixtures/validate-graph)
 
 (def ^:private scroll-container ".cp__cmdk .overflow-y-auto")
-(def ^:private kbd-highlight (str scroll-container " [data-keyboard-highlight]"))
+(def ^:private kbd-highlight (str scroll-container " [data-kb-highlighted]"))
 (def ^:private mouse-item (str scroll-container " .transition-colors.cursor-pointer"))
 
 (defn- setup-search
-  "Creates `n` pages with `prefix`, opens cmdk and types the prefix."
-  [prefix n]
-  (dotimes [i n] (p/new-page (str prefix i)))
-  (util/search prefix)
-  (util/wait-timeout 500))
+  "Creates `n` pages with `prefix` and `suffix`, opens cmdk and types the `prefix`."
+  ([prefix n] (setup-search prefix n ""))
+  ([prefix n suffix]
+   [prefix n suffix]
+   (dotimes [i n] (p/new-page (str prefix i suffix)))
+   (util/search prefix)
+   (util/wait-timeout 500)))
 
 (defn- simulate-mouse-move-into-results!
   "Dispatches a synthetic mousemove with non-zero movementX/Y on a result item.
@@ -44,12 +46,26 @@
            target.dispatchEvent(evt);
          })()")))
 
+(defn- kbd-highlight-in-viewport?
+  "Returns true when the keyboard-highlighted element is fully within
+   the visible scroll area.  Allows ±5 px tolerance for borders/padding."
+  []
+  (w/eval-js
+   (str "(() => {
+           const el = document.querySelector('" kbd-highlight "');
+           if (!el) return false;
+           const c  = document.querySelector('" scroll-container "');
+           const cr = c.getBoundingClientRect();
+           const er = el.getBoundingClientRect();
+           return er.top >= cr.top - 5 && er.bottom <= cr.bottom + 5;
+         })()")))
+
 ;; ---------------------------------------------------------------------------
 ;; Highlight mode switching
 ;;
 ;; Cycles  keyboard → mouse → keyboard → mouse  and verifies:
-;;   • keyboard mode:  [data-keyboard-highlight] = 1,  mouse-item count = 0
-;;   • mouse    mode:  [data-keyboard-highlight] = 0,  mouse-item count > 0
+;;   • keyboard mode:  [data-kb-highlighted] = 1,  mouse-item count = 0
+;;   • mouse    mode:  [data-kb-highlighted] = 0,  mouse-item count > 0
 ;; ---------------------------------------------------------------------------
 
 (deftest cmdk-highlight-mode-switching
@@ -180,17 +196,7 @@
 
     ;; The highlighted element must be fully within the visible scroll area,
     ;; proving lerp converged within the 120 ms budget.
-    (is (true?
-         (w/eval-js
-          (str "(() => {
-                  const el = document.querySelector('" kbd-highlight "');
-                  if (!el) return false;
-                  const c  = document.querySelector('" scroll-container "');
-                  const cr = c.getBoundingClientRect();
-                  const er = el.getBoundingClientRect();
-                  return er.top >= cr.top - 5 && er.bottom <= cr.bottom + 5;
-                })()")))
-        "after settle, highlight is in viewport")))
+    (is (kbd-highlight-in-viewport?) "after settle, highlight is in viewport")))
 
 ;; ---------------------------------------------------------------------------
 ;; Lazy-visible keyboard scroll verification
@@ -230,14 +236,115 @@
         "keyboard highlight present after navigating through lazy items")
 
     ;; Verify the highlighted element is within the visible scroll area.
-    (is (true?
-         (w/eval-js
-          (str "(() => {
-                  const el = document.querySelector('" kbd-highlight "');
-                  if (!el) return false;
-                  const c  = document.querySelector('" scroll-container "');
-                  const cr = c.getBoundingClientRect();
-                  const er = el.getBoundingClientRect();
-                  return er.top >= cr.top - 5 && er.bottom <= cr.bottom + 5;
-                })()")))
-        "highlight is in viewport after navigating through lazy-visible items")))
+    (is (kbd-highlight-in-viewport?) "highlight is in viewport after navigating through lazy-visible items")))
+
+;; ---------------------------------------------------------------------------
+;; Lazy-visible hold-ArrowDown scroll verification
+;;
+;; Goal:
+;;   Verify that holding ArrowDown (triggering keyboard acceleration) through
+;;   lazy-visible :nodes items keeps the highlighted row in the visible
+;;   scroll area after keyup.  This exercises the reconcile path inside
+;;   start-scroll-animation!, which recomputes the scroll target on every
+;;   rAF frame while lazy placeholders are being replaced by mounted rows.
+;;
+;; Why long titles:
+;;   Pages carry a 230-character suffix.  The rendered row is taller than
+;;   the lazy placeholder (a fixed 32 px div), maximising height variance
+;;   and thus the scroll-target drift that reconcile must correct.
+;;
+;; Key-hold simulation (see inline comment for the protocol):
+;;   1 initial keydown  +  210 ms OS-initial-repeat delay
+;;   +  20 repeat keydowns at 30 ms intervals  +  1 keyup
+;;   ≈ 820 ms total JS wall time.
+;;   eval-js blocks the Clojure thread until the returned Promise resolves,
+;;   so the full hold completes before wait-timeout begins.
+;;
+;; Layout:
+;;   viewport_height = 65dvh × 720 px (Playwright default) = 468 px
+;;   row_height >> 32 px with long titles (text wraps).
+;;   60 nodes items × tall row ≫ viewport — deep lazy territory.
+;;
+;; Expected navigation depth (accel-delay=200 ms, interval=150 ms, max-step=5):
+;;
+;;   Note: keydown-accel-step tracks hold duration via ::accel-start-ts rather
+;;   than event.repeat, because goog.events.BrowserEvent does not forward the
+;;   native repeat field.  ::accel-start-ts is nil after keyup and is set to
+;;   Date.now() on the first keydown that finds it nil.
+;;
+;;   T=0      first keydown → set accel-start-ts=0  step 1  →  +1
+;;   T=210    repeat  1  held=210     step 1  →  +1
+;;   T=240–330  repeats  2–5          step 1  →  +5   (total  +7)
+;;   T=360–480  repeats  6–10         step 2  →  +10  (total +17)
+;;   T=510–630  repeats 11–15         step 3  →  +15  (total +32)
+;;   T=660–780  repeats 16–20         step 4  →  +20  (total +52 → item-index ≈ 53)
+;;   threshold 40 is a conservative lower bound well below the expected ~52.
+;; ---------------------------------------------------------------------------
+
+(deftest cmdk-lazy-visible-hold-arrow-down-scroll
+  (testing "holding ArrowDown in expanded lazy-visible results keeps highlight in viewport after keyup"
+    ;; Use long titles to increase row-height variance between lazy placeholder and mounted rows.
+    (setup-search "cmdkholdlong" 60 (apply str (repeat 230 "x")))
+
+    ;; Expand :nodes group so we navigate a long lazy-visible list.
+    (k/arrow-down)
+    (util/wait-timeout 100)
+    (k/press "ControlOrMeta+ArrowDown")
+    (util/wait-timeout 300)
+
+    ;; Simulate a real OS key hold:
+    ;; • keydown (repeat=false) starts the acceleration timer at T=0.
+    ;; • 210 ms pause — crosses accel-delay-ms (200 ms), matching the OS
+    ;;   initial-repeat delay so that acceleration is already active when the
+    ;;   first repeat fires (same as real hardware behavior).
+    ;; • 20 repeated keydown events (repeat=true) at 30 ms intervals — OS
+    ;;   key-repeat rate; each setTimeout yields the browser event loop so
+    ;;   rAF frames and React re-renders run between keydowns.
+    ;; • keyup resets the accel timer.
+    ;;
+    ;; Async (setTimeout) is required: without yielding between events,
+    ;; all keydowns fire in the same tick, Date.now() does not advance,
+    ;; held-ms ≈ 0, and accel-step returns 1 throughout — no acceleration.
+    ;;
+    ;; (See block comment above for the step-by-step derivation of ≈52 total moves.)
+    (w/eval-js
+     "((async () => {
+         const input = document.querySelector('.cp__cmdk-search-input');
+         if (!input) return;
+         input.focus();
+         const fire = (type, repeat = false) =>
+           input.dispatchEvent(new KeyboardEvent(type, {
+             key: 'ArrowDown',
+             bubbles: true,
+             cancelable: true,
+             repeat
+           }));
+         fire('keydown', false);
+         await new Promise(r => setTimeout(r, 210));
+         for (let i = 0; i < 20; i++) {
+           fire('keydown', true);
+           await new Promise(r => setTimeout(r, 30));
+         }
+         fire('keyup', false);
+       })())")
+
+    ;; eval-js awaits the async IIFE (~810 ms); this timeout covers rAF settle.
+    (util/wait-timeout 400)
+
+    (is (= 1 (util/count-elements kbd-highlight))
+        "keyboard highlight exists after hold + keyup")
+
+    ;; Verify the highlight has actually advanced deep into the list.
+    ;; item-index must exceed 20 (the initial 10-item :less window cap),
+    ;; confirming navigation reached lazy territory.
+    (let [item-index (w/eval-js
+                      (str "(() => {
+                              const el = document.querySelector('" kbd-highlight "');
+                              if (!el) return -1;
+                              const w = el.closest('[data-item-index]');
+                              return w ? parseInt(w.getAttribute('data-item-index'), 10) : -1;
+                            })()"))]
+      (is (>= item-index 40)
+          (str "highlight should have advanced deep into list (got item-index " item-index ")")))
+
+    (is (kbd-highlight-in-viewport?) "highlight should remain in viewport after hold + keyup")))
