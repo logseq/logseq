@@ -489,6 +489,30 @@
   [status]
   (contains? #{"failed" "canceled"} status))
 
+(defn- resumable-status?
+  [status]
+  (contains? #{"completed" "failed" "canceled"} status))
+
+(defn- resume-reason-for-status
+  [status]
+  (case status
+    "completed" "resume-after-completed"
+    "failed" "resume-after-failed"
+    "canceled" "resume-after-canceled"
+    "resume-after-terminal"))
+
+(defn- <maybe-resume-session-for-message!
+  [^js self current-session user-id]
+  (if (and (map? current-session)
+           (resumable-status? (:status current-session)))
+    (p/let [_ (<append-event! self {:type "session.running"
+                                    :data {:by user-id
+                                           :reason (resume-reason-for-status (:status current-session))}
+                                    :ts (common/now-ms)})
+            resumed-session (<get-session self)]
+      resumed-session)
+    (p/resolved current-session)))
+
 (defn- session-runtime-provider [session]
   (some-> (get-in session [:runtime :provider]) str string/lower-case))
 
@@ -1171,14 +1195,7 @@
                                                           :kind (:kind body)
                                                           :by user-id}})
                          session-before (<get-session self)
-                         current-session (if (= "completed" (:status session-before))
-                                           (p/let [_ (<append-event! self {:type "session.running"
-                                                                           :data {:by user-id
-                                                                                  :reason "resume-after-completed"}
-                                                                           :ts (common/now-ms)})
-                                                   resumed-session (<get-session self)]
-                                             resumed-session)
-                                           session-before)]
+                         current-session (<maybe-resume-session-for-message! self session-before user-id)]
                    (cond
                      (= (:error res) :missing-session)
                      (http/not-found)

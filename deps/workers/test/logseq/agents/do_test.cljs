@@ -293,8 +293,8 @@
                        (is false (str "unexpected completed-resume error: " error))
                        (done)))))))
 
-(deftest messages-canceled-session-does-not-resume-or-provision-runtime-test
-  (testing "session messages should not auto-resume canceled session"
+(deftest messages-canceled-session-resumes-and-provisions-runtime-test
+  (testing "session messages should resume canceled session and provision runtime"
     (async done
            (let [env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"
                           "SANDBOX_AGENT_URL" "http://sandbox.local"}
@@ -302,7 +302,7 @@
                  headers {"content-type" "application/json"
                           "x-user-id" "user-1"}
                  provision-calls (atom 0)
-                 send-calls (atom 0)]
+                 sent-runtime-ids (atom [])]
              (-> (.put (.-storage self)
                        "session"
                        (clj->js {:id "sess-canceled-no-resume"
@@ -316,28 +316,36 @@
                           (with-redefs [agent-do/<provision-runtime!
                                         (fn [_self _task _session-id]
                                           (swap! provision-calls inc)
-                                          (js/Promise.resolve {:provider "local-dev"
-                                                               :session-id "runtime-unexpected"}))
+                                          (-> (.get (.-storage self) "session")
+                                              (.then (fn [session-js]
+                                                       (let [session (js->clj session-js :keywordize-keys true)
+                                                             next-session (assoc session
+                                                                                 :runtime {:provider "local-dev"
+                                                                                           :session-id "runtime-resumed-canceled"})]
+                                                         (.put (.-storage self) "session" (clj->js next-session)))))
+                                              (.then (fn [_]
+                                                       {:provider "local-dev"
+                                                        :session-id "runtime-resumed-canceled"}))))
                                         runtime-provider/<send-message!
-                                        (fn [_provider _runtime _message]
-                                          (swap! send-calls inc)
+                                        (fn [_provider runtime _message]
+                                          (swap! sent-runtime-ids conj (:session-id runtime))
                                           (js/Promise.resolve true))]
                             (agent-do/handle-fetch self
                                                    (json-request "http://db-sync.local/__session__/messages"
                                                                  "POST"
-                                                                 {:message "should fail"}
+                                                                 {:message "resume after cancel"}
                                                                  headers)))))
                  (.then (fn [resp]
-                          (is (= 409 (.-status resp)))
+                          (is (= 200 (.-status resp)))
                           (.get (.-storage self) "session")))
                  (.then (fn [session-js]
                           (let [session (js->clj session-js :keywordize-keys true)]
-                            (is (= "canceled" (:status session)))
-                            (is (= 0 @provision-calls))
-                            (is (= 0 @send-calls))
+                            (is (= "running" (:status session)))
+                            (is (= 1 @provision-calls))
+                            (is (= ["runtime-resumed-canceled"] @sent-runtime-ids))
                             (done))))
                  (.catch (fn [error]
-                           (is false (str "unexpected canceled-no-resume error: " error))
+                           (is false (str "unexpected canceled-resume error: " error))
                            (done))))))))
 
 (deftest provision-runtime-persists-runtime-checkpoint-test
