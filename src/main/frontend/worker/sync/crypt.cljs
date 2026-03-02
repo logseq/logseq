@@ -27,11 +27,11 @@
 (def ^:private invalid-coerce ::invalid-coerce)
 (def ^:private invalid-transit ::invalid-transit)
 
-(defn- native-worker?
+(defn native-worker?
   []
   native-env?)
 
-(defn- <native-save-password-text!
+(defn <native-save-password-text!
   [encrypted-text]
   (worker-state/<invoke-main-thread :thread-api/native-save-e2ee-password encrypted-text))
 
