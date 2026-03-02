@@ -618,6 +618,8 @@
                        (some-> block-uuid str))
         base (db-sync/http-base)
         repo-url (agent-handler/project-repo-url block)
+        task-pr-url (agent-handler/task-pr-url block)
+        pr-created? (string? task-pr-url)
         agent-value (:logseq.property/agent block)
         agent-label (agent-title agent-value)
         session-messages (session->messages session block)
@@ -919,7 +921,7 @@
       terminal-enabled?
       terminal-url
       terminal-connection-key])
-    [:div.max-w-full.flex.flex-col.gap-3
+    [:div.max-w-full.flex.flex-col.gap-2
      {:style (when session-started?
                {:height "72vh" :overflow "hidden"})}
      (if-not session-started?
@@ -976,29 +978,31 @@
             "Starting..."
             "Start session"))]]
        [:<>
-        [:div.flex.items-center.gap-3
-         [:div.min-w-0.flex.flex-col.gap-2
-          [:div {:class "inline-flex w-fit items-center gap-1 rounded-lg border border-border bg-muted/40 p-1"}
-           (shui/button
-            {:size :sm
-             :variant (if (= active-view "chat") :default :ghost)
-             :class "h-7 px-3 text-xs"
-             :on-click (fn [_] (set-active-view! "chat"))}
-            "Chat")
-           (when terminal-enabled?
-             (shui/button
-              {:size :sm
-               :variant (if terminal-tab-active? :default :ghost)
-               :class "h-7 px-3 text-xs"
-               :on-click (fn [_] (open-terminal-tab!))}
-              [:span.inline-flex.items-center.gap-1
-               [:span.inline-block.h-1.5.w-1.5.rounded-full
-                {:class (terminal-status-dot-class terminal-status)}]
-               "Terminal"]))]]
-
-         (cond
-           (and terminal-enabled? terminal-tab-active?)
-           [:div.flex.items-center.gap-2
+        [:div.flex.flex-wrap.items-center.gap-2
+         [:div {:class "inline-flex w-fit items-center gap-1 rounded-lg border border-border bg-muted/40 p-1"}
+          (shui/button
+           {:size :sm
+            :variant (if (= active-view "chat") :default :ghost)
+            :class "h-7 px-3 text-xs"
+            :on-click (fn [_] (set-active-view! "chat"))}
+           [:span.inline-flex.items-center.gap-1
+            [:span (or agent-label "Agent")]
+            (when busy?
+              [:span.inline-flex.items-center.gap-1.text-emerald-600
+               [:span.inline-block.h-1.5.w-1.5.animate-pulse.rounded-full.bg-emerald-500]
+               "Streaming"])])
+          (when terminal-enabled?
+            (shui/button
+             {:size :sm
+              :variant (if terminal-tab-active? :default :ghost)
+              :class "h-7 px-3 text-xs"
+              :on-click (fn [_] (open-terminal-tab!))}
+             [:span.inline-flex.items-center.gap-1
+              [:span.inline-block.h-1.5.w-1.5.rounded-full
+               {:class (terminal-status-dot-class terminal-status)}]
+              "Terminal"]))]
+         (when (and terminal-enabled? terminal-tab-active?)
+           [:<>
             (shui/button
              {:size :sm
               :variant :outline
@@ -1015,14 +1019,38 @@
                 :variant :outline
                 :class "h-7 px-2 text-xs"
                 :on-click (fn [_] (close-terminal!))}
-               "Disconnect"))]
-           (not terminal-tab-active?)
-           [:div {:class "inline-flex items-center gap-2 rounded-full bg-muted/70 px-2.5 py-1 text-xs"}
-            [:span.font-medium (or agent-label "Agent")]
-            (when busy?
-              [:span.inline-flex.items-center.gap-1.text-emerald-600
-               [:span.inline-block.h-1.5.w-1.5.animate-pulse.rounded-full.bg-emerald-500]
-               "Streaming"])])]
+               "Disconnect"))])
+         (when-not pr-created?
+           (shui/button
+            {:size :sm
+             :variant :outline
+             :class "h-7 px-2 text-xs"
+             :disabled snapshot-disabled?
+             :on-click (fn [_]
+                         (snapshot!))}
+            (if snapshot-busy?
+              "Snapshotting..."
+              "Snapshot")))
+         (shui/button
+          {:size :sm
+           :variant :outline
+           :class "h-7 px-2 text-xs"
+           :disabled publish-disabled?
+           :on-click (fn [_]
+                       (publish! false))}
+          (if (= publish-mode :push)
+            "Pushing..."
+            "Push"))
+         (when-not pr-created?
+           (shui/button
+            {:size :sm
+             :class "h-7 px-2 text-xs"
+             :disabled publish-disabled?
+             :on-click (fn [_]
+                         (publish! true))}
+            (if (= publish-mode :pr)
+              "Creating PR..."
+              "Push + PR")))]
         (when (string? error)
           [:div {:class "mt-0.5 rounded-lg border border-red-300/40 bg-red-500/5 px-3 py-1.5 text-xs text-red-500"}
            error])
@@ -1052,47 +1080,6 @@
                     :class "h-full w-full"}]
                   [:div {:class "flex h-full items-center justify-center text-xs text-white/70"}
                    "Connect terminal to start interactive shell"])])]])]
-        (when-not terminal-tab-active?
-          [:div.flex.items-center.justify-between.gap-2
-           [:div.text-xs.opacity-60
-            (cond
-              snapshot-busy?
-              "Creating snapshot..."
-
-              publish-busy?
-              "Publishing changes..."
-              :else
-              "Publish session changes")]
-           [:div.flex.items-center.gap-2
-            (shui/button
-             {:size :sm
-              :variant :outline
-              :class "h-7 px-2 text-xs"
-              :disabled snapshot-disabled?
-              :on-click (fn [_]
-                          (snapshot!))}
-             (if snapshot-busy?
-               "Snapshotting..."
-               "Snapshot"))
-            (shui/button
-             {:size :sm
-              :variant :outline
-              :class "h-7 px-2 text-xs"
-              :disabled publish-disabled?
-              :on-click (fn [_]
-                          (publish! false))}
-             (if (= publish-mode :push)
-               "Pushing..."
-               "Push"))
-            (shui/button
-             {:size :sm
-              :class "h-7 px-2 text-xs"
-              :disabled publish-disabled?
-              :on-click (fn [_]
-                          (publish! true))}
-             (if (= publish-mode :pr)
-               "Creating PR..."
-               "Push + PR"))]])
         (when-not terminal-tab-active?
           (shui/agent-chat-prompt-input
            {:value draft

@@ -402,6 +402,10 @@
   [block]
   (blank->nil (pu/get-block-property-value block task-session-id-property)))
 
+(defn task-pr-url
+  [block]
+  (blank->nil (pu/get-block-property-value block task-pr-property)))
+
 (defn task-session-created?
   [block]
   (string? (task-session-id block)))
