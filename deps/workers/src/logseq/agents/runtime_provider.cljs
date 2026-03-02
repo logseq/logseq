@@ -1,5 +1,6 @@
 (ns logseq.agents.runtime-provider
   (:require ["@cloudflare/sandbox" :as cf-sandbox]
+            ["@vercel/sandbox" :as vercel-sandbox]
             [clojure.string :as string]
             [lambdaisland.glogi :as log]
             [logseq.agents.sandbox :as sandbox]
@@ -34,7 +35,7 @@
       (when-not (string/blank? normalized) normalized))))
 
 (def ^:private supported-provider-kinds
-  #{"sprites" "local-dev" "cloudflare"})
+  #{"sprites" "local-dev" "cloudflare" "vercel"})
 
 (defn- known-provider-kind [value]
   (let [provider (normalize-provider value)]
@@ -120,13 +121,19 @@
   (str "http://127.0.0.1:" port path))
 
 (def ^:private default-repo-base-dir "/workspace")
+(def ^:private vercel-repo-base-dir "/vercel/sandbox")
 (def ^:private cloudflare-local-host "http://localhost")
 (def ^:private cloudflare-snapshot-ttl-seconds (* 7 24 60 60))
 (defonce ^:private cloudflare-backup-cache (atom {}))
+(defonce ^:private vercel-snapshot-cache (atom {}))
 
 (defn clear-cloudflare-backup-cache!
   []
   (reset! cloudflare-backup-cache {}))
+
+(defn clear-vercel-snapshot-cache!
+  []
+  (reset! vercel-snapshot-cache {}))
 
 (defn- cloudflare-agent-port [^js env]
   (parse-int (env-str env "CLOUDFLARE_SANDBOX_AGENT_PORT") 2468))
@@ -345,15 +352,42 @@
            "printf '%s\\n' '" (escape-shell-single credentials-url) "' > ~/.git-credentials; "
            "chmod 600 ~/.git-credentials; "))))
 
-(defn- get-repo-dir [session-id]
-  (let [session-id (some-> session-id str)]
-    (when (string? session-id)
-      (str default-repo-base-dir "/" (sanitize-name session-id)))))
+(declare task-repo-url)
+
+(defn- task-repo-name
+  [task]
+  (let [repo-url (task-repo-url task)
+        from-ref (some-> repo-url source-control/repo-ref :name sanitize-name)
+        from-url (some-> repo-url
+                         (string/replace #"/+$" "")
+                         (string/split #"/")
+                         last
+                         (string/replace #"\.git$" "")
+                         sanitize-name)]
+    (or from-ref from-url "repo")))
+
+(defn- repo-base-dir
+  [provider]
+  (if (= "vercel" (normalize-provider provider))
+    vercel-repo-base-dir
+    default-repo-base-dir))
+
+(defn- get-repo-dir
+  ([session-id]
+   (get-repo-dir session-id nil nil))
+  ([session-id task provider]
+   (if (= "vercel" (normalize-provider provider))
+     (str vercel-repo-base-dir "/" (task-repo-name task))
+     (let [session-id (some-> session-id str)]
+       (when (string? session-id)
+         (str default-repo-base-dir "/" (sanitize-name session-id)))))))
 
 (defn- repo-cd-command
-  [session-id]
-  (when-let [dir (get-repo-dir session-id)]
-    (str "cd '" (escape-shell-single dir) "'")))
+  ([session-id]
+   (repo-cd-command session-id nil nil))
+  ([session-id task provider]
+   (when-let [dir (get-repo-dir session-id task provider)]
+     (str "cd '" (escape-shell-single dir) "'"))))
 
 ;; FIXME: sandbox-agent 2.x.x changes session routes to opencode/session
 (defn- sandbox-agent-version
@@ -507,6 +541,45 @@
   (when (string? backup-key)
     (swap! cloudflare-backup-cache dissoc backup-key)))
 
+(defn- prune-vercel-snapshot-cache!
+  []
+  (let [now (js/Date.now)]
+    (swap! vercel-snapshot-cache
+           (fn [entries]
+             (reduce-kv (fn [acc k v]
+                          (let [expires-at-ms (:expires-at-ms v)
+                                snapshot-id (:id v)]
+                            (if (and (string? k)
+                                     (string? snapshot-id)
+                                     (number? expires-at-ms)
+                                     (> expires-at-ms now))
+                              (assoc acc k v)
+                              acc)))
+                        {}
+                        entries)))))
+
+(defn- vercel-snapshot-entry
+  [backup-key]
+  (prune-vercel-snapshot-cache!)
+  (when (string? backup-key)
+    (get @vercel-snapshot-cache backup-key)))
+
+(defn- remember-vercel-snapshot!
+  [backup-key snapshot-id source-dir]
+  (when (and (string? backup-key) (string? snapshot-id))
+    (let [now (js/Date.now)
+          ttl-ms (* cloudflare-snapshot-ttl-seconds 1000)]
+      (swap! vercel-snapshot-cache assoc backup-key {:id snapshot-id
+                                                     :dir source-dir
+                                                     :ttl-seconds cloudflare-snapshot-ttl-seconds
+                                                     :expires-at-ms (+ now ttl-ms)
+                                                     :updated-at-ms now}))))
+
+(defn- forget-vercel-snapshot!
+  [backup-key]
+  (when (string? backup-key)
+    (swap! vercel-snapshot-cache dissoc backup-key)))
+
 (defn- sanitize-backup-name
   [value]
   (let [raw (or (some-> value str string/lower-case) "snapshot")
@@ -542,9 +615,11 @@
   ([^js env session-id task provider]
    (let [repo-url (task-repo-url task)
          session-id (some-> session-id str)
-         repo-dir (get-repo-dir session-id)
-         override-key (if (= "cloudflare" provider)
-                        "CLOUDFLARE_REPO_CLONE_COMMAND"
+         repo-dir (get-repo-dir session-id task provider)
+         base-dir (repo-base-dir provider)
+         override-key (case provider
+                        "cloudflare" "CLOUDFLARE_REPO_CLONE_COMMAND"
+                        "vercel" "VERCEL_REPO_CLONE_COMMAND"
                         "SPRITES_REPO_CLONE_COMMAND")
          override (env-str env override-key)]
      (when (and (string? repo-url) (string? session-id) (string? repo-dir))
@@ -552,19 +627,21 @@
          (fill-repo-template override {:repo-url repo-url
                                        :session-id session-id
                                        :repo-dir repo-dir})
-         (str "mkdir -p " default-repo-base-dir
-              " && cd " default-repo-base-dir
+         (str "mkdir -p '" (escape-shell-single base-dir) "'"
+              " && cd '" (escape-shell-single base-dir) "'"
               " && git clone --depth 1 --single-branch --no-tags '"
               (escape-shell-single repo-url) "' '" (escape-shell-single repo-dir) "'"
               " && chmod -R u+rw '" (escape-shell-single repo-dir) "'"))))))
 
 (defn- project-init-setup-command
-  [session-id task]
-  (let [setup-script (task-project-init-setup task)
-        session-id (some-> session-id str)
-        repo-dir (get-repo-dir session-id)]
-    (when (and (string? setup-script) (string? repo-dir))
-      (str "set -e; cd '" (escape-shell-single repo-dir) "'; " setup-script))))
+  ([session-id task]
+   (project-init-setup-command session-id task "sprites"))
+  ([session-id task provider]
+   (let [setup-script (task-project-init-setup task)
+         session-id (some-> session-id str)
+         repo-dir (get-repo-dir session-id task provider)]
+     (when (and (string? setup-script) (string? repo-dir))
+       (str "set -e; cd '" (escape-shell-single repo-dir) "'; " setup-script)))))
 
 (defn- classify-push-error
   [error]
@@ -765,6 +842,54 @@
 (defn- local-dev-token [^js env runtime]
   (or (:agent-token runtime)
       (env-str env "SANDBOX_AGENT_TOKEN")))
+
+(defn- vercel-agent-token [^js env runtime]
+  (or (:agent-token runtime)
+      (env-str env "SANDBOX_AGENT_TOKEN")))
+
+(defn- vercel-agent-port [^js env runtime]
+  (or (:sandbox-port runtime)
+      (parse-int (env-str env "VERCEL_SANDBOX_AGENT_PORT") 2468)))
+
+(defn- vercel-health-retries [^js env]
+  (parse-int (env-str env "VERCEL_HEALTH_RETRIES") 30))
+
+(defn- vercel-health-interval-ms [^js env]
+  (parse-int (env-str env "VERCEL_HEALTH_INTERVAL_MS") 300))
+
+(defn- vercel-sandbox-timeout-ms [^js env]
+  (parse-int (env-str env "VERCEL_SANDBOX_TIMEOUT_MS") (* 30 60 1000)))
+
+(defn- vercel-sandbox-runtime [^js env]
+  (or (env-str env "VERCEL_SANDBOX_RUNTIME")
+      "node24"))
+
+(defn- vercel-sandbox-vcpus [^js env]
+  (let [v (parse-int (env-str env "VERCEL_SANDBOX_VCPUS") 0)]
+    (when (pos? v) v)))
+
+(defn- vercel-sdk-credentials [^js env]
+  (let [team-id (env-str env "VERCEL_TEAM_ID")
+        project-id (env-str env "VERCEL_PROJECT_ID")
+        token (env-str env "VERCEL_TOKEN")
+        has-explicit? (or (string? team-id) (string? project-id) (string? token))]
+    (cond
+      (and (string? team-id) (string? project-id) (string? token))
+      {:teamId team-id
+       :projectId project-id
+       :token token}
+
+      has-explicit?
+      (throw (ex-info "missing VERCEL_TEAM_ID/VERCEL_PROJECT_ID/VERCEL_TOKEN for vercel runtime provider"
+                      {:reason :missing-vercel-credentials
+                       :team-id? (boolean (string? team-id))
+                       :project-id? (boolean (string? project-id))
+                       :token? (boolean (string? token))}))
+
+      :else
+      (throw (ex-info "missing vercel sdk credentials"
+                      {:reason :missing-vercel-credentials
+                       :required ["VERCEL_TEAM_ID" "VERCEL_PROJECT_ID" "VERCEL_TOKEN"]})))))
 
 (defn- cloudflare-sandbox-namespace [^js env]
   (let [sandbox-ns (aget env "Sandbox")]
@@ -1190,6 +1315,299 @@
                              :session-id session-id})))
           (->promise (.call terminal session request (clj->js opts))))))))
 
+(defn vercel-sandbox-class
+  []
+  (let [sandbox-class (aget vercel-sandbox "Sandbox")]
+    (when-not sandbox-class
+      (throw (ex-info "missing @vercel/sandbox Sandbox export"
+                      {:reason :missing-vercel-sdk})))
+    sandbox-class))
+
+(defn- vercel-create-params
+  [^js env source]
+  (let [port (vercel-agent-port env nil)
+        timeout-ms (vercel-sandbox-timeout-ms env)
+        runtime (vercel-sandbox-runtime env)
+        vcpus (vercel-sandbox-vcpus env)
+        creds (vercel-sdk-credentials env)]
+    (cond-> (merge creds
+                   {:ports [port]
+                    :timeout timeout-ms
+                    :runtime runtime}
+                   (when (map? source)
+                     {:source source}))
+      (number? vcpus) (assoc :resources {:vcpus vcpus}))))
+
+(defn <vercel-create-sandbox!
+  [^js env source]
+  (let [sandbox-class (vercel-sandbox-class)
+        create (js-method sandbox-class "create")]
+    (when-not (fn? create)
+      (throw (ex-info "vercel sdk missing Sandbox.create" {:reason :missing-vercel-create})))
+    (->promise (.call create sandbox-class (clj->js (vercel-create-params env source))))))
+
+(defn <vercel-get-sandbox!
+  [^js env sandbox-id]
+  (let [sandbox-class (vercel-sandbox-class)
+        get-sandbox (js-method sandbox-class "get")]
+    (when-not (string? sandbox-id)
+      (throw (ex-info "missing sandbox-id on runtime"
+                      {:reason :missing-sandbox-id})))
+    (when-not (fn? get-sandbox)
+      (throw (ex-info "vercel sdk missing Sandbox.get" {:reason :missing-vercel-get})))
+    (->promise (.call get-sandbox sandbox-class
+                      (clj->js (assoc (vercel-sdk-credentials env)
+                                      :sandboxId sandbox-id))))))
+
+(defn vercel-sandbox-domain
+  [sandbox port]
+  (let [domain (js-method sandbox "domain")]
+    (when-not (fn? domain)
+      (throw (ex-info "vercel sandbox missing domain method"
+                      {:reason :missing-vercel-domain})))
+    (.call domain sandbox port)))
+
+(defn <vercel-stop-sandbox!
+  [sandbox]
+  (let [stop (js-method sandbox "stop")]
+    (if (fn? stop)
+      (->promise (.call stop sandbox #js {:blocking false}))
+      (p/resolved nil))))
+
+(defn- <vercel-command-output!
+  [command]
+  (let [stdout-fn (js-method command "stdout")
+        stderr-fn (js-method command "stderr")]
+    (p/let [stdout (if (fn? stdout-fn)
+                     (->promise (.call stdout-fn command))
+                     "")
+            stderr (if (fn? stderr-fn)
+                     (->promise (.call stderr-fn command))
+                     "")]
+      {:stdout (or stdout "")
+       :stderr (or stderr "")
+       :exit-code (aget command "exitCode")})))
+
+(defn <vercel-run-shell!
+  [sandbox command & [opts]]
+  (let [run-command (js-method sandbox "runCommand")
+        params (cond-> {:cmd "bash"
+                        :args ["-lc" command]}
+                 (map? (:env opts)) (assoc :env (:env opts))
+                 (true? (:detached opts)) (assoc :detached true))]
+    (when-not (fn? run-command)
+      (throw (ex-info "vercel sandbox missing runCommand method"
+                      {:reason :missing-vercel-run-command})))
+    (if (true? (:detached opts))
+      (->promise (.call run-command sandbox (clj->js params)))
+      (p/let [result (->promise (.call run-command sandbox (clj->js params)))
+              {:keys [stdout stderr exit-code]} (<vercel-command-output! result)]
+        (when (and (number? exit-code) (not (zero? exit-code)))
+          (throw (ex-info "vercel sandbox command failed"
+                          {:reason :vercel-command-failed
+                           :command command
+                           :exit-code exit-code
+                           :stdout stdout
+                           :stderr stderr})))
+        {:stdout stdout
+         :stderr stderr
+         :exit-code exit-code}))))
+
+(defn- vercel-health-command [port agent-token]
+  (str "if curl -fsS "
+       (curl-auth-arg agent-token)
+       " "
+       cloudflare-local-host
+       ":"
+       port
+       "/v1/health >/dev/null; then echo __HEALTH_OK__; else echo __HEALTH_FAIL__; fi"))
+
+(defn- <vercel-health-once! [sandbox port agent-token]
+  (-> (<vercel-run-shell! sandbox (vercel-health-command port agent-token))
+      (p/then (fn [{:keys [stdout stderr]}]
+                (let [output (str stdout "\n" stderr)]
+                  (string/includes? output "__HEALTH_OK__"))))
+      (p/catch (fn [_] false))))
+
+(defn- <vercel-health!
+  [^js env sandbox port agent-token]
+  (let [retries (vercel-health-retries env)
+        interval-ms (vercel-health-interval-ms env)]
+    (letfn [(step [left]
+              (if (<= left 0)
+                (throw (ex-info "sandbox-agent health check timed out in vercel sandbox"
+                                {:port port}))
+                (p/let [healthy? (<vercel-health-once! sandbox port agent-token)]
+                  (if healthy?
+                    true
+                    (p/let [_ (p/delay interval-ms)]
+                      (step (dec left)))))))]
+      (step retries))))
+
+(defn- <vercel-agent-env-vars!
+  [^js env task]
+  (let [base (reduce (fn [acc k]
+                       (if-let [v (env-str env k)]
+                         (assoc acc k v)
+                         acc))
+                     {}
+                     cloudflare-env-pass-through)
+        task-env (normalize-agent-env-map (get-in task [:agent :env]))
+        agent-id (:agent (session-payload task))
+        api-token (some-> (get-in task [:agent :api-token]) str string/trim not-empty)]
+    (p/let [github-token (<github-installation-token-for-task! env task)]
+      (cond-> (merge base task-env)
+        (and (string? api-token) (= "codex" agent-id)) (assoc "OPENAI_API_KEY" api-token)
+        (and (string? api-token) (= "claude" agent-id)) (assoc "ANTHROPIC_API_KEY" api-token)
+        (string? github-token) (assoc-github-installation-token github-token)))))
+
+(defn- vercel-server-command
+  [^js env task session-id port agent-token env-vars]
+  (let [auth-json (get-in task [:agent :auth-json])
+        write-auth (or (auth-json-write-command auth-json) "")
+        repo-cd (or (repo-cd-command session-id task "vercel") "")
+        token-exports (shell-export-command env-vars)
+        github-auth-setup (github-auth-setup-command (get env-vars "GITHUB_TOKEN"))]
+    (str (sandbox-agent-install-command env)
+         token-exports
+         github-auth-setup
+         write-auth
+         (when (string? repo-cd) (str repo-cd "; "))
+         "nohup sandbox-agent server "
+         (if (string? agent-token)
+           (str "--token '" (escape-shell-single agent-token) "'")
+           "--no-token")
+         " --host 0.0.0.0 --port " port
+         " --no-telemetry >/tmp/sandbox-agent.log 2>&1 &")))
+
+(defn- <vercel-clone-repo!
+  [^js env sandbox session-id task]
+  (when-let [cmd (repo-clone-command env session-id task "vercel")]
+    (<vercel-run-shell! sandbox cmd)))
+
+(defn- <vercel-run-project-init-setup!
+  [sandbox session-id task]
+  (when-let [cmd (project-init-setup-command session-id task "vercel")]
+    (<vercel-run-shell! sandbox cmd)))
+
+(defn- start-vercel-project-init-setup-background!
+  [sandbox session-id task sandbox-id]
+  (js/setTimeout
+   (fn []
+     (when-let [setup-promise (<vercel-run-project-init-setup! sandbox session-id task)]
+       (-> setup-promise
+           (p/catch (fn [error]
+                      (log/error :agent/vercel-project-init-setup-failed
+                                 {:session-id session-id
+                                  :sandbox-id sandbox-id
+                                  :error (str error)}))))))
+   0)
+  nil)
+
+(defn- <vercel-ensure-running!
+  [^js env sandbox session-id task port agent-token]
+  (p/let [env-vars (<vercel-agent-env-vars! env task)
+          bootstrap-cmd (vercel-server-command env task session-id port agent-token env-vars)
+          _ (<vercel-run-shell! sandbox bootstrap-cmd)
+          _ (<vercel-health! env sandbox port agent-token)]
+    true))
+
+(defn- <vercel-create-sandbox-from-cache!
+  [^js env backup-key]
+  (let [entry (vercel-snapshot-entry backup-key)
+        snapshot-id (:id entry)
+        snapshot-dir (:dir entry)]
+    (if-not (string? snapshot-id)
+      (p/let [sandbox (<vercel-create-sandbox! env nil)]
+        {:sandbox sandbox
+         :snapshot-dir nil
+         :restored? false})
+      (-> (<vercel-create-sandbox! env {:type "snapshot"
+                                        :snapshotId snapshot-id})
+          (p/then (fn [sandbox]
+                    (log/debug :agent/vercel-snapshot-restored
+                               {:backup-key backup-key
+                                :snapshot-id snapshot-id})
+                    {:sandbox sandbox
+                     :snapshot-dir snapshot-dir
+                     :restored? true}))
+          (p/catch (fn [error]
+                     (forget-vercel-snapshot! backup-key)
+                     (log/error :agent/vercel-snapshot-restore-failed
+                                {:backup-key backup-key
+                                 :snapshot-id snapshot-id
+                                 :error (str error)})
+                     (p/let [sandbox (<vercel-create-sandbox! env nil)]
+                       {:sandbox sandbox
+                        :snapshot-dir nil
+                        :restored? false})))))))
+
+(defn- <vercel-runtime-base-url!
+  [^js env runtime]
+  (let [cached (:base-url runtime)
+        port (vercel-agent-port env runtime)
+        sandbox-id (:sandbox-id runtime)]
+    (if (string? cached)
+      (p/resolved cached)
+      (p/let [sandbox (<vercel-get-sandbox! env sandbox-id)]
+        (vercel-sandbox-domain sandbox port)))))
+
+(defn- <vercel-restore-repo-dir!
+  [sandbox snapshot-dir repo-dir]
+  (cond
+    (not (string? repo-dir))
+    (p/resolved nil)
+
+    (or (not (string? snapshot-dir))
+        (= snapshot-dir repo-dir))
+    (p/resolved nil)
+
+    :else
+    (<vercel-run-shell! sandbox
+                        (str "set -e; "
+                             "if [ -d '" (escape-shell-single snapshot-dir) "' ]; then "
+                             "rm -rf '" (escape-shell-single repo-dir) "'; "
+                             "cp -a '" (escape-shell-single snapshot-dir) "' '" (escape-shell-single repo-dir) "'; "
+                             "fi"))))
+
+(defn- vercel-snapshot-expiration-ms
+  []
+  (* cloudflare-snapshot-ttl-seconds 1000))
+
+(defn <vercel-create-snapshot!
+  [sandbox source-dir snapshot-name]
+  (let [snapshot-fn (js-method sandbox "snapshot")]
+    (cond
+      (not (string? source-dir))
+      (p/rejected (ex-info "invalid snapshot source dir"
+                           {:reason :invalid-snapshot-source-dir
+                            :source-dir source-dir}))
+
+      (not (fn? snapshot-fn))
+      (p/rejected (ex-info "vercel runtime does not support snapshots"
+                           {:reason :unsupported-snapshot
+                            :provider "vercel"}))
+
+      :else
+      (-> (->promise (.call snapshot-fn sandbox
+                            (clj->js {:expiration (vercel-snapshot-expiration-ms)})))
+          (p/then (fn [snapshot]
+                    (let [snapshot-id (aget snapshot "snapshotId")]
+                      (if (string? snapshot-id)
+                        {:snapshot-id snapshot-id
+                         :name snapshot-name
+                         :dir source-dir}
+                        (throw (ex-info "vercel snapshot create returned invalid id"
+                                        {:reason :invalid-snapshot-id
+                                         :snapshot snapshot}))))))
+          (p/catch (fn [error]
+                     (p/rejected
+                      (ex-info (or (some-> error ex-message str string/trim not-empty)
+                                   "vercel snapshot create failed")
+                               {:reason :unsupported-snapshot
+                                :provider "vercel"
+                                :raw-error (str error)}))))))))
+
 (defprotocol RuntimeProvider
   (<provision-runtime! [this session-id task])
   (<open-events-stream! [this runtime])
@@ -1392,6 +1810,92 @@
          (sandbox/<terminate-session base-url agent-token session-id)
          (fn [_] nil))))))
 
+(defrecord VercelProvider [env]
+  RuntimeProvider
+
+  (<provision-runtime! [_ session-id task]
+    (let [agent-token (vercel-agent-token env nil)
+          port (vercel-agent-port env nil)
+          payload (session-payload task)
+          repo-dir (get-repo-dir session-id task "vercel")
+          backup-key (repo-backup-key task)]
+      (p/let [{:keys [sandbox snapshot-dir restored?]} (<vercel-create-sandbox-from-cache! env backup-key)
+              _ (<vercel-ensure-running! env sandbox session-id task port agent-token)
+              _ (when restored?
+                  (<vercel-restore-repo-dir! sandbox snapshot-dir repo-dir))
+              _ (when-not restored?
+                  (p/catch
+                   (<vercel-clone-repo! env sandbox session-id task)
+                   (fn [error]
+                     (log/error :agent/vercel-repo-clone-failed
+                                {:session-id session-id
+                                 :error (str error)})
+                     nil)))
+              base-url (vercel-sandbox-domain sandbox port)
+              response (sandbox/<create-session base-url agent-token session-id payload)
+              sandbox-id (aget sandbox "sandboxId")]
+        ;; (start-vercel-project-init-setup-background! sandbox session-id task sandbox-id)
+        {:provider "vercel"
+         :sandbox-id sandbox-id
+         :sandbox-name sandbox-id
+         :sandbox-port port
+         :base-url base-url
+         :agent-token agent-token
+         :session-id (:session-id response)
+         :backup-key backup-key
+         :backup-dir repo-dir})))
+
+  (<open-events-stream! [_ runtime]
+    (let [agent-token (vercel-agent-token env runtime)]
+      (p/let [base-url (<vercel-runtime-base-url! env runtime)]
+        (sandbox/<open-events-stream base-url agent-token (:session-id runtime)))))
+
+  (<send-message! [_ runtime message]
+    (let [agent-token (vercel-agent-token env runtime)]
+      (p/let [base-url (<vercel-runtime-base-url! env runtime)]
+        (sandbox/<send-message base-url agent-token (:session-id runtime) message))))
+
+  (<open-terminal! [_ _runtime _request _opts]
+    (p/rejected
+     (ex-info "vercel runtime provider does not support browser terminal"
+              {:reason :unsupported-terminal
+               :provider "vercel"})))
+
+  (<snapshot-runtime! [_ runtime opts]
+    (let [session-id (:session-id runtime)
+          sandbox-id (:sandbox-id runtime)
+          backup-dir (or (:backup-dir runtime)
+                         (get-repo-dir session-id (:task opts) "vercel"))
+          task (:task opts)
+          backup-key (repo-backup-key task)
+          snapshot-name (snapshot-backup-name runtime task)]
+      (when-not (string? sandbox-id)
+        (throw (ex-info "missing sandbox-id on runtime"
+                        {:reason :missing-sandbox-id
+                         :runtime runtime})))
+      (p/let [sandbox (<vercel-get-sandbox! env sandbox-id)
+              result (<vercel-create-snapshot! sandbox backup-dir snapshot-name)
+              snapshot-id (:snapshot-id result)]
+        (when (and (string? backup-key) (string? snapshot-id))
+          (remember-vercel-snapshot! backup-key snapshot-id backup-dir))
+        result)))
+
+  (<push-branch! [_ _runtime _opts]
+    (p/rejected
+     (ex-info "vercel runtime provider does not support managed git push yet"
+              {:reason :unsupported
+               :provider "vercel"})))
+
+  (<terminate-runtime! [_ runtime]
+    (let [sandbox-id (:sandbox-id runtime)]
+      (if-not (string? sandbox-id)
+        (p/resolved nil)
+        (p/catch
+         (p/let [sandbox (<vercel-get-sandbox! env sandbox-id)]
+           (<vercel-stop-sandbox! sandbox)
+           nil)
+         (fn [_] nil))))))
+
 (defrecord CloudflareProvider [env]
   RuntimeProvider
 
@@ -1570,6 +2074,7 @@
   (cond
     (instance? SpritesProvider provider) "sprites"
     (instance? LocalDevProvider provider) "local-dev"
+    (instance? VercelProvider provider) "vercel"
     (instance? CloudflareProvider provider) "cloudflare"
     :else nil))
 
@@ -1579,6 +2084,7 @@
               :resolved (known-provider-kind kind)})
   (case (known-provider-kind kind)
     "local-dev" (->LocalDevProvider env)
+    "vercel" (->VercelProvider env)
     "cloudflare" (->CloudflareProvider env)
     (->SpritesProvider env)))
 

@@ -29,6 +29,7 @@
     "@fly/sprites": "^0.0.1",
     "@sentry/cloudflare": "^10.38.0",
     "@sentry/node": "^10.38.0",
+    "@vercel/sandbox": "1.7.1",
     "better-sqlite3": "^12.6.2",
     "shadow-cljs": "^3.3.4",
     "ws": "^8.18.3"

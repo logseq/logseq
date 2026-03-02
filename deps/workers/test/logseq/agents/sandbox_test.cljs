@@ -23,6 +23,18 @@
       (is (= "https://sandbox.example/v1/sessions/sess-1/messages/stream"
              (sandbox/messages-stream-url base session-id))))))
 
+(deftest snapshot-endpoint-test
+  (testing "builds sandbox snapshot and exec endpoints"
+    (let [base "https://sandbox.example"]
+      (is (= "https://sandbox.example/v1/commands/exec"
+             (sandbox/exec-command-url base)))
+      (is (= "https://sandbox.example/v1/snapshots"
+             (sandbox/snapshots-base-url base)))
+      (is (= "https://sandbox.example/v1/snapshots/snap-1"
+             (sandbox/snapshot-url base "snap-1")))
+      (is (= "https://sandbox.example/v1/snapshots/snap-1/restore"
+             (sandbox/snapshot-restore-url base "snap-1"))))))
+
 (deftest normalize-agent-id-test
   (testing "normalizes known sandbox-agent aliases"
     (is (= "claude" (sandbox/normalize-agent-id "claude-code")))

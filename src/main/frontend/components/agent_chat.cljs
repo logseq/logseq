@@ -654,6 +654,7 @@
         [loading-branches? set-loading-branches?!] (rum/use-state false)
         [starting-session? set-starting-session?!] (rum/use-state false)
         [publish-mode set-publish-mode!] (rum/use-state nil)
+        [snapshot-busy? set-snapshot-busy?!] (rum/use-state false)
         [terminal-visible? set-terminal-visible!] (rum/use-state false)
         [terminal-status set-terminal-status!] (rum/use-state :idle)
         [terminal-error set-terminal-error!] (rum/use-state nil)
@@ -678,7 +679,11 @@
                                     session-started?
                                     (not (string? selected-start-branch))
                                     (not (agent-handler/task-ready? block)))
-        publish-disabled? (or input-disabled? busy? publish-busy?)
+        publish-disabled? (or input-disabled? busy? publish-busy? snapshot-busy?)
+        snapshot-disabled? (or input-disabled?
+                               busy?
+                               publish-busy?
+                               snapshot-busy?)
         can-send? (and (not input-disabled?)
                        (not (string/blank? trimmed-draft))
                        (not busy?))
@@ -727,6 +732,12 @@
                        (-> (agent-handler/<publish-session! block opts)
                            (p/catch (fn [_] nil))
                            (p/finally (fn [] (set-publish-mode! nil)))))))
+        snapshot! (fn []
+                    (when (and base session-id (not snapshot-disabled?))
+                      (set-snapshot-busy?! true)
+                      (-> (agent-handler/<snapshot-session! block)
+                          (p/catch (fn [_] nil))
+                          (p/finally (fn [] (set-snapshot-busy?! false))))))
         open-terminal! (fn []
                          (when (and terminal-enabled? (not terminal-open-disabled?))
                            (set-terminal-visible! true)
@@ -1044,11 +1055,24 @@
           [:div.flex.items-center.justify-between.gap-2
            [:div.text-xs.opacity-60
             (cond
+              snapshot-busy?
+              "Creating snapshot..."
+
               publish-busy?
               "Publishing changes..."
               :else
               "Publish session changes")]
            [:div.flex.items-center.gap-2
+            (shui/button
+             {:size :sm
+              :variant :outline
+              :class "h-7 px-2 text-xs"
+              :disabled snapshot-disabled?
+              :on-click (fn [_]
+                          (snapshot!))}
+             (if snapshot-busy?
+               "Snapshotting..."
+               "Snapshot"))
             (shui/button
              {:size :sm
               :variant :outline

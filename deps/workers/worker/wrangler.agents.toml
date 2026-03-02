@@ -1,6 +1,6 @@
 name = "logseq-agents"
 main = "dist/agents/main.js"
-compatibility_date = "2025-12-10"
+compatibility_date = "2026-02-28"
 compatibility_flags = [ "nodejs_compat" ]
 
 [[containers]]
@@ -44,7 +44,7 @@ new_sqlite_classes = [ "Sandbox" ]
 COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
 COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
 COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
-AGENT_RUNTIME_PROVIDER = "cloudflare"
+AGENT_RUNTIME_PROVIDER = "vercel"
 CLOUDFLARE_ACCOUNT_ID = "2553ea8236c11ea0f88de28fce1cbfee"
 BACKUP_BUCKET_NAME = "logseq-sync-assets-prod"
 
@@ -61,7 +61,7 @@ max_instances = 100
 COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
 COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
 COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
-AGENT_RUNTIME_PROVIDER = "cloudflare"
+AGENT_RUNTIME_PROVIDER = "vercel"
 CLOUDFLARE_ACCOUNT_ID = "2553ea8236c11ea0f88de28fce1cbfee"
 BACKUP_BUCKET_NAME = "logseq-sync-assets-dev"
 SENTRY_DSN = "https://dc09d27243b9492bbe15e0dd279ad7de@o416451.ingest.us.sentry.io/5311485"
@@ -100,7 +100,7 @@ name = "logseq-agents-prod"
 COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
 COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
 COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
-AGENT_RUNTIME_PROVIDER = "cloudflare"
+AGENT_RUNTIME_PROVIDER = "vercel"
 CLOUDFLARE_ACCOUNT_ID = "2553ea8236c11ea0f88de28fce1cbfee"
 BACKUP_BUCKET_NAME = "logseq-sync-assets-prod"
 SENTRY_DSN = "https://dc09d27243b9492bbe15e0dd279ad7de@o416451.ingest.us.sentry.io/5311485"

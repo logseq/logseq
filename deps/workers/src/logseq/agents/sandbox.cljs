@@ -24,6 +24,18 @@
 (defn terminate-url [base session-id]
   (str (session-url base session-id) "/terminate"))
 
+(defn exec-command-url [base]
+  (str (normalize-base-url base) "/v1/commands/exec"))
+
+(defn snapshots-base-url [base]
+  (str (normalize-base-url base) "/v1/snapshots"))
+
+(defn snapshot-url [base snapshot-id]
+  (str (snapshots-base-url base) "/" snapshot-id))
+
+(defn snapshot-restore-url [base snapshot-id]
+  (str (snapshot-url base snapshot-id) "/restore"))
+
 (def ^:private agent-aliases
   {"claude-code" "claude"
    "claude_code" "claude"
@@ -125,3 +137,56 @@
                         {:status status
                          :session-id session-id})))
       true)))
+
+(defn <exec-command
+  [base token command]
+  (let [headers (js/Headers.)
+        _ (.set headers "content-type" "application/json")
+        _ (when (string? token) (.set headers "authorization" (str "Bearer " token)))
+        req (json-request (exec-command-url base) "POST" headers {:command command})]
+    (p/let [resp (js/fetch req)
+            status (.-status resp)
+            json (parse-json-or-default resp {})]
+      (if (<= 200 status 299)
+        json
+        (throw (ex-info "sandbox exec-command failed"
+                        {:status status
+                         :command command
+                         :response json}))))))
+
+(defn <create-snapshot
+  [base token {:keys [dir name ttl] :as opts}]
+  (let [headers (js/Headers.)
+        _ (.set headers "content-type" "application/json")
+        _ (when (string? token) (.set headers "authorization" (str "Bearer " token)))
+        body (cond-> {}
+               (string? dir) (assoc :dir dir)
+               (string? name) (assoc :name name)
+               (number? ttl) (assoc :ttl ttl))
+        req (json-request (snapshots-base-url base) "POST" headers body)]
+    (p/let [resp (js/fetch req)
+            status (.-status resp)
+            json (parse-json-or-default resp {})]
+      (if (<= 200 status 299)
+        (if (map? json) json opts)
+        (throw (ex-info "sandbox create-snapshot failed"
+                        {:status status
+                         :response json}))))))
+
+(defn <restore-snapshot
+  [base token snapshot-id dir]
+  (let [headers (js/Headers.)
+        _ (.set headers "content-type" "application/json")
+        _ (when (string? token) (.set headers "authorization" (str "Bearer " token)))
+        body (cond-> {}
+               (string? dir) (assoc :dir dir))
+        req (json-request (snapshot-restore-url base snapshot-id) "POST" headers body)]
+    (p/let [resp (js/fetch req)
+            status (.-status resp)
+            json (parse-json-or-default resp {})]
+      (if (<= 200 status 299)
+        json
+        (throw (ex-info "sandbox restore-snapshot failed"
+                        {:status status
+                         :snapshot-id snapshot-id
+                         :response json}))))))

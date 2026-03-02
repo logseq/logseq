@@ -124,6 +124,7 @@ The control plane forwards each task message through sandbox-agent
 Agent runtime is selected by `AGENT_RUNTIME_PROVIDER`:
 - `sprites`: provisions a Sprite and runs `sandbox-agent` inside it.
 - `local-dev`: uses `SANDBOX_AGENT_URL` directly.
+- `vercel`: provisions/manages Vercel sandboxes via `@vercel/sandbox`, then runs `sandbox-agent` inside the sandbox.
 - `cloudflare`: provisions a sandbox first, then connects to the sandbox-hosted `sandbox-agent`.
 - Agents worker default is `cloudflare` (set in `worker/wrangler.agents.toml`).
 
@@ -151,7 +152,7 @@ Cloudflare runtime flow:
 | DB_SYNC_STATIC_USER_ID | Static user id for local dev |
 | DB_SYNC_STATIC_EMAIL | Static user email for local dev |
 | DB_SYNC_STATIC_USERNAME | Static username for local dev |
-| AGENT_RUNTIME_PROVIDER | Runtime backend (`sprites`, `local-dev`, `cloudflare`) |
+| AGENT_RUNTIME_PROVIDER | Runtime backend (`sprites`, `local-dev`, `vercel`, `cloudflare`) |
 | SENTRY_DSN | Sentry DSN |
 | SENTRY_RELEASE | Release identifier for Sentry events and sourcemaps |
 | SENTRY_ENVIRONMENT | Sentry environment name (prod, staging, etc.) |
@@ -180,6 +181,16 @@ Cloudflare runtime flow:
 | CLOUDFLARE_REPO_CLONE_COMMAND | Optional repo clone command template for Cloudflare sandbox |
 | CLOUDFLARE_HEALTH_RETRIES | Cloudflare sandbox health check retry count |
 | CLOUDFLARE_HEALTH_INTERVAL_MS | Cloudflare sandbox health check retry interval (ms) |
+| VERCEL_TEAM_ID | Vercel team ID for Sandbox SDK (required with `VERCEL_TOKEN`) |
+| VERCEL_PROJECT_ID | Vercel project ID for Sandbox SDK (required with `VERCEL_TOKEN`) |
+| VERCEL_TOKEN | Vercel API token for Sandbox SDK |
+| VERCEL_REPO_CLONE_COMMAND | Optional repo clone command template for Vercel runtime |
+| VERCEL_SANDBOX_AGENT_PORT | sandbox-agent port inside Vercel sandbox (default `2468`) |
+| VERCEL_SANDBOX_TIMEOUT_MS | Vercel sandbox timeout in milliseconds (default `1800000`) |
+| VERCEL_SANDBOX_RUNTIME | Vercel sandbox runtime image (default `node24`) |
+| VERCEL_SANDBOX_VCPUS | Optional Vercel sandbox vCPU count |
+| VERCEL_HEALTH_RETRIES | Vercel sandbox health check retry count |
+| VERCEL_HEALTH_INTERVAL_MS | Vercel sandbox health check retry interval (ms) |
 | GITHUB_APP_ID | GitHub App ID used to mint installation tokens |
 | GITHUB_APP_INSTALLATION_ID | Optional fixed installation ID (if omitted, resolved from repo) |
 | GITHUB_APP_PRIVATE_KEY | GitHub App private key PEM used for JWT signing |

@@ -1,6 +1,7 @@
 (ns logseq.agents.runtime-provider-test
   (:require [cljs.test :refer [async deftest is testing]]
             [clojure.string :as string]
+            [logseq.agents.sandbox :as sandbox]
             [logseq.agents.runtime-provider :as runtime-provider]))
 
 (defn- fetch-url [request]
@@ -20,6 +21,7 @@
     (is (= "sprites" (runtime-provider/provider-kind #js {})))
     (is (= "sprites" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "SPRITES"})))
     (is (= "local-dev" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "LOCAL-DEV"})))
+    (is (= "vercel" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "VERCEL"})))
     (is (= "cloudflare" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "CLOUDFLARE"})))
     (is (= "sprites" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "unknown"})))))
 
@@ -37,6 +39,8 @@
              (runtime-provider/runtime-provider-kind env {:provider "local-dev"})))
       (is (= "sprites"
              (runtime-provider/runtime-provider-kind env {:provider "sprites"})))
+      (is (= "vercel"
+             (runtime-provider/runtime-provider-kind env {:provider "vercel"})))
       (is (= "cloudflare"
              (runtime-provider/runtime-provider-kind env {:provider "cloudflare"})))
       (is (= "cloudflare"
@@ -49,6 +53,8 @@
              (runtime-provider/provider-id (runtime-provider/create-provider env "sprites"))))
       (is (= "local-dev"
              (runtime-provider/provider-id (runtime-provider/create-provider env "local-dev"))))
+      (is (= "vercel"
+             (runtime-provider/provider-id (runtime-provider/create-provider env "vercel"))))
       (is (= "cloudflare"
              (runtime-provider/provider-id (runtime-provider/create-provider env "cloudflare"))))
       (is (= "sprites"
@@ -72,7 +78,7 @@
     (let [env #js {}
           task {:project {:repo-url "https://github.com/example/repo"}}
           session-id "sess-1"]
-      (is (= "mkdir -p /workspace && cd /workspace && git clone --depth 1 --single-branch --no-tags 'https://github.com/example/repo' '/workspace/sess-1' && chmod -R u+rw '/workspace/sess-1'"
+      (is (= "mkdir -p '/workspace' && cd '/workspace' && git clone --depth 1 --single-branch --no-tags 'https://github.com/example/repo' '/workspace/sess-1' && chmod -R u+rw '/workspace/sess-1'"
              (runtime-provider/repo-clone-command env session-id task)))))
 
   (testing "fills override repo clone command template"
@@ -81,6 +87,20 @@
           session-id "sess-1"]
       (is (= "echo https://github.com/example/repo sess-1 /workspace/sess-1"
              (runtime-provider/repo-clone-command env session-id task)))))
+
+  (testing "fills vercel override repo clone command template"
+    (let [env #js {"VERCEL_REPO_CLONE_COMMAND" "echo vercel {repo_url} {session_id} {repo_dir}"}
+          task {:project {:repo-url "https://github.com/example/repo"}}
+          session-id "sess-1"]
+      (is (= "echo vercel https://github.com/example/repo sess-1 /vercel/sandbox/repo"
+             (runtime-provider/repo-clone-command env session-id task "vercel")))))
+
+  (testing "uses /vercel/sandbox/<repo-name> for vercel default clone path"
+    (let [env #js {}
+          task {:project {:repo-url "https://github.com/logseq/logseq.git"}}
+          session-id "sess-1"]
+      (is (= "mkdir -p '/vercel/sandbox' && cd '/vercel/sandbox' && git clone --depth 1 --single-branch --no-tags 'https://github.com/logseq/logseq.git' '/vercel/sandbox/logseq' && chmod -R u+rw '/vercel/sandbox/logseq'"
+             (runtime-provider/repo-clone-command env session-id task "vercel")))))
 
   (testing "returns nil when repo url missing"
     (is (nil? (runtime-provider/repo-clone-command #js {} "sess-1" {})))))
@@ -204,7 +224,93 @@
                (.catch (fn [error]
                          (let [data (ex-data error)]
                            (is (= :unsupported (:reason data)))
-                           (is (= "local-dev" (:provider data))))
+                         (is (= "local-dev" (:provider data))))
+                         (done)))))))
+
+(deftest vercel-provider-snapshot-restore-flow-test
+  (async done
+         (runtime-provider/clear-vercel-snapshot-cache!)
+         (let [calls (atom {:clone 0
+                            :sessions 0
+                            :snapshots 0
+                            :restores 0})
+               sandboxes (atom {})
+               next-id (atom 0)
+               make-sandbox (fn [sandbox-id]
+                              #js {:sandboxId sandbox-id
+                                   :domain (fn [_port] "https://vercel-agent.local")})
+               env #js {"VERCEL_TEAM_ID" "team-1"
+                        "VERCEL_PROJECT_ID" "project-1"
+                        "VERCEL_TOKEN" "token-vercel"}
+               provider (runtime-provider/create-provider env "vercel")
+               task {:agent {:provider "codex"}
+                     :project {:repo-url "https://github.com/example/repo"
+                               :base-branch "main"}}]
+           (with-redefs [runtime-provider/<vercel-create-sandbox!
+                         (fn [_env source]
+                           (let [sandbox-id (str "vercel-sbx-" (swap! next-id inc))
+                                 sandbox (make-sandbox sandbox-id)]
+                             (when (= "snapshot" (:type source))
+                               (swap! calls update :restores inc))
+                             (swap! sandboxes assoc sandbox-id sandbox)
+                             (js/Promise.resolve sandbox)))
+                         runtime-provider/<vercel-get-sandbox!
+                         (fn [_env sandbox-id]
+                           (js/Promise.resolve (get @sandboxes sandbox-id)))
+                         runtime-provider/<vercel-run-shell!
+                         (fn [_sandbox cmd & _]
+                           (when (string/includes? cmd "git clone --depth 1 --single-branch --no-tags")
+                             (swap! calls update :clone inc))
+                           (js/Promise.resolve {:stdout "" :stderr "" :exit-code 0}))
+                         sandbox/<create-session
+                         (fn [_base-url _agent-token session-id _payload]
+                           (swap! calls update :sessions inc)
+                           (js/Promise.resolve {:session-id session-id}))
+                         runtime-provider/<vercel-create-snapshot!
+                         (fn [_sandbox _source-dir _snapshot-name]
+                           (swap! calls update :snapshots inc)
+                           (js/Promise.resolve {:snapshot-id "vercel-snap-1"}))]
+             (-> (runtime-provider/<provision-runtime! provider "sess-vercel-1" task)
+                 (.then (fn [runtime-1]
+                          (is (= "vercel" (:provider runtime-1)))
+                          (is (= 1 (:clone @calls)))
+                          (-> (runtime-provider/<snapshot-runtime! provider runtime-1 {:task task})
+                              (.then (fn [snapshot-result]
+                                       (is (= "vercel-snap-1" (:snapshot-id snapshot-result)))
+                                       (is (= 1 (:snapshots @calls)))
+                                       (-> (runtime-provider/<provision-runtime! provider "sess-vercel-2" task)
+                                           (.then (fn [_runtime-2]
+                                                    (is (= 1 (:clone @calls)))
+                                                    (is (= 1 (:restores @calls)))
+                                                    (is (= 2 (:sessions @calls)))
+                                                    (done)))
+                                           (.catch (fn [error]
+                                                     (is false (str "unexpected second provision error: " error))
+                                                     (done))))))
+                              (.catch (fn [error]
+                                        (is false (str "unexpected snapshot error: " error))
+                                        (done))))))
+                 (.catch (fn [error]
+                           (is false (str "unexpected first provision error: " error))
+                           (done)))))))))
+
+(deftest vercel-provider-open-terminal-unsupported-test
+  (async done
+         (let [env #js {}
+               provider (runtime-provider/create-provider env "vercel")
+               runtime {:provider "vercel"
+                        :base-url "https://vercel-agent.local"
+                        :session-id "sess-vercel-terminal"}
+               request (js/Request. "https://db-sync.local/sessions/sess-vercel-terminal/terminal"
+                                    #js {:method "GET"})]
+           (-> (runtime-provider/<open-terminal! provider runtime request {:cols 80 :rows 24})
+               (.then (fn [_]
+                        (is false "expected vercel terminal to reject as unsupported")
+                        (done)))
+               (.catch (fn [error]
+                         (let [data (ex-data error)]
+                           (is (= :unsupported-terminal (:reason data)))
+                           (is (= "vercel" (:provider data))))
                          (done)))))))
 
 (deftest sprites-provider-push-branch-command-test

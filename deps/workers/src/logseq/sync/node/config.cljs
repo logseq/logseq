@@ -44,6 +44,16 @@
      :cloudflare-repo-clone-command (env-value env "CLOUDFLARE_REPO_CLONE_COMMAND")
      :cloudflare-health-retries (env-value env "CLOUDFLARE_HEALTH_RETRIES")
      :cloudflare-health-interval-ms (env-value env "CLOUDFLARE_HEALTH_INTERVAL_MS")
+     :vercel-team-id (env-value env "VERCEL_TEAM_ID")
+     :vercel-project-id (env-value env "VERCEL_PROJECT_ID")
+     :vercel-token (env-value env "VERCEL_TOKEN")
+     :vercel-repo-clone-command (env-value env "VERCEL_REPO_CLONE_COMMAND")
+     :vercel-sandbox-agent-port (env-value env "VERCEL_SANDBOX_AGENT_PORT")
+     :vercel-sandbox-timeout-ms (env-value env "VERCEL_SANDBOX_TIMEOUT_MS")
+     :vercel-sandbox-runtime (env-value env "VERCEL_SANDBOX_RUNTIME")
+     :vercel-sandbox-vcpus (env-value env "VERCEL_SANDBOX_VCPUS")
+     :vercel-health-retries (env-value env "VERCEL_HEALTH_RETRIES")
+     :vercel-health-interval-ms (env-value env "VERCEL_HEALTH_INTERVAL_MS")
      :github-app-id (env-value env "GITHUB_APP_ID")
      :github-app-installation-id (env-value env "GITHUB_APP_INSTALLATION_ID")
      :github-app-private-key (env-value env "GITHUB_APP_PRIVATE_KEY")
@@ -69,6 +79,9 @@
    :cloudflare-sandbox-name-prefix :cloudflare-sandbox-agent-port
    :cloudflare-bootstrap-command :cloudflare-repo-clone-command
    :cloudflare-health-retries :cloudflare-health-interval-ms
+   :vercel-team-id :vercel-project-id :vercel-token :vercel-repo-clone-command
+   :vercel-sandbox-agent-port :vercel-sandbox-timeout-ms :vercel-sandbox-runtime
+   :vercel-sandbox-vcpus :vercel-health-retries :vercel-health-interval-ms
    :github-app-id :github-app-installation-id :github-app-private-key :github-app-slug :github-api-base
    :openai-api-key :anthropic-api-key :openai-base-url :anthropic-base-url
    :log-level :cognito-issuer :cognito-client-id :cognito-jwks-url])
