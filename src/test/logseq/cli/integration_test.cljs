@@ -2190,7 +2190,7 @@
                        export-result (run-cli ["--repo" export-graph
                                                "graph" "export"
                                                "--type" "edn"
-                                               "--output" export-path] data-dir cfg-path)
+                                               "--file" export-path] data-dir cfg-path)
                        export-payload (parse-json-output export-result)
                        _ (run-cli ["--repo" import-graph
                                    "graph" "import"
@@ -2229,7 +2229,7 @@
                        export-result (run-cli ["--repo" export-graph
                                                "graph" "export"
                                                "--type" "sqlite"
-                                               "--output" export-path] data-dir cfg-path)
+                                               "--file" export-path] data-dir cfg-path)
                        export-payload (parse-json-output export-result)
                        _ (run-cli ["--repo" import-graph
                                    "graph" "import"
