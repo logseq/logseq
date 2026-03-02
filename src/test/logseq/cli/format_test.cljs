@@ -207,7 +207,7 @@
     (let [result (format/format-result {:status :ok
                                         :command :graph-export
                                         :context {:export-type "edn"
-                                                  :output "/tmp/export.edn"}}
+                                                  :file "/tmp/export.edn"}}
                                        {:output-format nil})]
       (is (= "Exported edn to /tmp/export.edn" result))))
 
