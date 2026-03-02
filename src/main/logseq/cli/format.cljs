@@ -249,17 +249,24 @@
                  (cond-> [(str "Server " (name status) ": " repo)]
                    (and host port) (conj (str "Host: " host "  Port: " port))))))
 
-(defn- format-add-block
-  [_context ids]
-  (str "Added blocks:\n" (pr-str (vec (or ids [])))))
+(defn- format-upsert-block
+  [{:keys [repo source target update-tags update-properties remove-tags remove-properties]} result]
+  (if (vector? result)
+    (str "Upserted blocks:\n" (pr-str (vec (or result []))))
+    (let [change-parts (cond-> []
+                         (seq update-tags) (conj (str "tags:+" (count update-tags)))
+                         (seq update-properties) (conj (str "properties:+" (count update-properties)))
+                         (seq remove-tags) (conj (str "remove-tags:+" (count remove-tags)))
+                         (seq remove-properties) (conj (str "remove-properties:+" (count remove-properties))))
+          changes (when (seq change-parts)
+                    (str ", " (string/join ", " change-parts)))
+          move-fragment (when (seq target)
+                          (str " -> " target))]
+      (str "Upserted block: " source (or move-fragment "") " (repo: " repo (or changes "") ")"))))
 
-(defn- format-add-page
+(defn- format-upsert-page
   [_context ids]
-  (str "Added page:\n" (pr-str (vec (or ids [])))))
-
-(defn- format-add-tag
-  [_context ids]
-  (str "Added tag:\n" (pr-str (vec (or ids [])))))
+  (str "Upserted page:\n" (pr-str (vec (or ids [])))))
 
 (defn- format-upsert-tag
   [_context ids]
@@ -292,19 +299,6 @@
   (if (seq name)
     (str "Removed property: " name " (repo: " repo ")")
     (str "Removed property: " id " (repo: " repo ")")))
-
-(defn- format-update-block
-  [{:keys [repo source target update-tags update-properties remove-tags remove-properties]}]
-  (let [change-parts (cond-> []
-                       (seq update-tags) (conj (str "tags:+" (count update-tags)))
-                       (seq update-properties) (conj (str "properties:+" (count update-properties)))
-                       (seq remove-tags) (conj (str "remove-tags:+" (count remove-tags)))
-                       (seq remove-properties) (conj (str "remove-properties:+" (count remove-properties))))
-        changes (when (seq change-parts)
-                  (str ", " (string/join ", " change-parts)))
-        move-fragment (when (seq target)
-                        (str " -> " target))]
-    (str "Updated block: " source (or move-fragment "") " (repo: " repo (or changes "") ")")))
 
 (defn- format-graph-export
   [{:keys [export-type output]}]
@@ -352,16 +346,14 @@
         (format-server-action command data)
         :list-page (format-list-page (:items data) now-ms)
         (:list-tag :list-property) (format-list-tag-or-property (:items data) now-ms)
-        :add-block (format-add-block context (:result data))
-        :add-page (format-add-page context (:result data))
-        :add-tag (format-add-tag context (:result data))
+        :upsert-block (format-upsert-block context (:result data))
+        :upsert-page (format-upsert-page context (:result data))
         :upsert-tag (format-upsert-tag context (:result data))
         :upsert-property (format-upsert-property context (:result data))
         :remove-block (format-remove-block context)
         :remove-page (format-remove-page context)
         :remove-tag (format-remove-tag context)
         :remove-property (format-remove-property context)
-        :update-block (format-update-block context)
         :graph-export (format-graph-export context)
         :graph-import (format-graph-import context)
         :query (format-query-results (:result data))

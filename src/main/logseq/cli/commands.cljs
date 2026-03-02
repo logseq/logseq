@@ -2,7 +2,6 @@
   "Command parsing and action building for the Logseq CLI."
   (:require [babashka.cli :as cli]
             [clojure.string :as string]
-            [logseq.cli.command.add :as add-command]
             [logseq.cli.command.core :as command-core]
             [logseq.cli.command.doctor :as doctor-command]
             [logseq.cli.command.graph :as graph-command]
@@ -12,7 +11,6 @@
             [logseq.cli.command.server :as server-command]
             [logseq.cli.command.show :as show-command]
             [logseq.cli.command.upsert :as upsert-command]
-            [logseq.cli.command.update :as update-command]
             [logseq.cli.server :as cli-server]
             [promesa.core :as p]))
 
@@ -47,13 +45,6 @@
   {:ok? false
    :error {:code :missing-target
            :message "block or page is required"}
-   :summary summary})
-
-(defn- missing-source-result
-  [summary]
-  {:ok? false
-   :error {:code :missing-source
-           :message "source block is required"}
    :summary summary})
 
 (defn- missing-page-name-result
@@ -113,10 +104,8 @@
   (vec (concat graph-command/entries
                server-command/entries
                list-command/entries
-               add-command/entries
                upsert-command/entries
                remove-command/entries
-               update-command/entries
                query-command/entries
                show-command/entries
                doctor-command/entries)))
@@ -162,7 +151,7 @@
                          (seq (:blocks-file opts))
                          has-args?)
         show-targets (filter some? [(:id opts) (:uuid opts) (:page opts)])
-        update-sources (filter some? [(:id opts) (some-> (:uuid opts) string/trim)])]
+        upsert-update-mode? (upsert-command/update-mode? opts)]
     (cond
       (:help opts)
       (command-core/help-result cmd-summary)
@@ -171,13 +160,13 @@
            (not (seq graph)))
       (missing-graph-result summary)
 
-      (and (= command :add-block) (not has-content?))
+      (and (= command :upsert-block) (not upsert-update-mode?) (not has-content?))
       (missing-content-result summary)
 
-      (and (= command :add-block) (add-command/invalid-options? opts))
-      (command-core/invalid-options-result summary (add-command/invalid-options? opts))
+      (and (= command :upsert-block) (upsert-command/invalid-options? command opts))
+      (command-core/invalid-options-result summary (upsert-command/invalid-options? command opts))
 
-      (and (= command :add-page) (not (seq (:page opts))))
+      (and (= command :upsert-page) (not (seq (:page opts))))
       (missing-page-name-result summary)
 
       (and (= command :upsert-tag) (not (seq (some-> (:name opts) string/trim))))
@@ -198,12 +187,6 @@
       (and (#{:remove-tag :remove-property} command)
            (empty? (filter some? [(:id opts) (some-> (:name opts) string/trim)])))
       (missing-target-result summary)
-
-      (and (= command :update-block) (update-command/invalid-options? opts))
-      (command-core/invalid-options-result summary (update-command/invalid-options? opts))
-
-      (and (= command :update-block) (empty? update-sources))
-      (missing-source-result summary)
 
       (and (= command :show) (empty? show-targets))
       (missing-target-result summary)
@@ -282,7 +265,7 @@
                  :message "missing command"}
          :summary summary})
 
-      (and (= 1 (count args)) (#{"graph" "server" "list" "add" "upsert" "remove" "query"} (first args)))
+      (and (= 1 (count args)) (#{"graph" "server" "list" "upsert" "remove" "query"} (first args)))
       (command-core/help-result (command-core/group-summary (first args) table))
 
       :else
@@ -380,20 +363,17 @@
         (:list-page :list-tag :list-property)
         (list-command/build-action command options repo)
 
-        :add-block
-        (add-command/build-add-block-action options args repo)
+        :upsert-block
+        (upsert-command/build-block-action options args repo)
 
-        :add-page
-        (add-command/build-add-page-action options repo)
+        :upsert-page
+        (upsert-command/build-page-action options repo)
 
         :upsert-tag
         (upsert-command/build-tag-action options repo)
 
         :upsert-property
         (upsert-command/build-property-action options repo)
-
-        :update-block
-        (update-command/build-action options repo)
 
         (:remove-block :remove-page :remove-tag :remove-property)
         (remove-command/build-action command options repo)
@@ -438,11 +418,10 @@
                          :list-page (list-command/execute-list-page action config)
                          :list-tag (list-command/execute-list-tag action config)
                          :list-property (list-command/execute-list-property action config)
-                         :add-block (add-command/execute-add-block action config)
-                         :add-page (add-command/execute-add-page action config)
+                         :upsert-block (upsert-command/execute-upsert-block action config)
+                         :upsert-page (upsert-command/execute-upsert-page action config)
                          :upsert-tag (upsert-command/execute-upsert-tag action config)
                          :upsert-property (upsert-command/execute-upsert-property action config)
-                         :update-block (update-command/execute-update action config)
                          :remove-block (remove-command/execute-remove-block action config)
                          :remove-page (remove-command/execute-remove-page action config)
                          :remove-tag (remove-command/execute-remove-tag action config)
