@@ -22,7 +22,8 @@
            :block/title (:block/title e)
            :block/created-at (:block/created-at e)
            :block/updated-at (:block/updated-at e)}
-    (:db/ident e) (assoc :db/ident (:db/ident e))))
+    (:db/ident e) (assoc :db/ident (:db/ident e))
+    (:logseq.property/type e) (assoc :logseq.property/type (:logseq.property/type e))))
 
 (defn list-properties
   "Main fn for ListProperties tool"
@@ -46,7 +47,9 @@
                     (update :logseq.property/classes #(mapv :db/ident %))
                     (:logseq.property/description e)
                     (update :logseq.property/description db-property/property-value-content))
-                  (minimal-list-item e)))))))
+                  ;; Keep property type in default list output (without --expand).
+                  (assoc (minimal-list-item e)
+                         :logseq.property/type (:logseq.property/type e))))))))
 
 (defn list-tags
   "Main fn for ListTags tool"
