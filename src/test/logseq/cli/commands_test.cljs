@@ -1183,14 +1183,14 @@
       (is (false? (:ok? result)))
       (is (= :missing-graph (get-in result [:error :code])))))
 
-  (testing "graph export parses with type and output"
+  (testing "graph export parses with type and file"
     (let [result (commands/parse-args ["graph" "export"
                                        "--type" "edn"
-                                       "--output" "export.edn"])]
+                                       "--file" "export.edn"])]
       (is (true? (:ok? result)))
       (is (= :graph-export (:command result)))
       (is (= "edn" (get-in result [:options :type])))
-      (is (= "export.edn" (get-in result [:options :output])))))
+      (is (= "export.edn" (get-in result [:options :file])))))
 
   (testing "graph import parses with type, input, and repo"
     (let [result (commands/parse-args ["graph" "import"
@@ -1204,14 +1204,19 @@
       (is (= "demo" (get-in result [:options :repo])))))
 
   (testing "graph export requires type"
-    (let [result (commands/parse-args ["graph" "export" "--output" "export.edn"])]
+    (let [result (commands/parse-args ["graph" "export" "--file" "export.edn"])]
       (is (false? (:ok? result)))
       (is (= :missing-type (get-in result [:error :code])))))
 
-  (testing "graph export requires output"
+  (testing "graph export requires file"
     (let [result (commands/parse-args ["graph" "export" "--type" "edn"])]
       (is (false? (:ok? result)))
-      (is (= :missing-output (get-in result [:error :code])))))
+      (is (= :missing-file (get-in result [:error :code])))))
+
+  (testing "graph export accepts global output format and still requires file"
+    (let [result (commands/parse-args ["graph" "export" "--type" "edn" "--output" "json"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-file (get-in result [:error :code])))))
 
   (testing "graph import requires repo"
     (let [result (commands/parse-args ["graph" "import"
@@ -1280,7 +1285,7 @@
   (testing "graph export uses config repo"
     (let [parsed {:ok? true
                   :command :graph-export
-                  :options {:type "edn" :output "export.edn"}}
+                  :options {:type "edn" :file "export.edn"}}
           result (commands/build-action parsed {:repo "demo"})]
       (is (true? (:ok? result)))
       (is (= :graph-export (get-in result [:action :type])))))
@@ -2485,22 +2490,22 @@
                                                      :repo "logseq_db_demo"
                                                      :graph "demo"
                                                      :export-type "edn"
-                                                     :output "/tmp/export.edn"
+                                                     :file "/tmp/export.edn"
                                                      :allow-missing-graph true}
                                                     {})
                        sqlite-result (commands/execute {:type :graph-export
                                                         :repo "logseq_db_demo"
                                                         :graph "demo"
                                                         :export-type "sqlite"
-                                                        :output "/tmp/export.sqlite"
+                                                        :file "/tmp/export.sqlite"
                                                         :allow-missing-graph true}
                                                        {})]
                  (is (= :ok (:status edn-result)))
                  (is (= :ok (:status sqlite-result)))
                  (is (= "edn" (get-in edn-result [:context :export-type])))
-                 (is (= "/tmp/export.edn" (get-in edn-result [:context :output])))
+                 (is (= "/tmp/export.edn" (get-in edn-result [:context :file])))
                  (is (= "sqlite" (get-in sqlite-result [:context :export-type])))
-                 (is (= "/tmp/export.sqlite" (get-in sqlite-result [:context :output])))
+                 (is (= "/tmp/export.sqlite" (get-in sqlite-result [:context :file])))
                  (is (= [[:thread-api/export-edn false ["logseq_db_demo" {:export-type :graph}]]
                          [:thread-api/export-db-base64 true ["logseq_db_demo"]]]
                         @invoke-calls))

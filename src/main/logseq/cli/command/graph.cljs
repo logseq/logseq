@@ -9,7 +9,7 @@
 
 (def ^:private graph-export-spec
   {:type {:desc "Export type (edn, sqlite)"}
-   :output {:desc "Output path"}})
+   :file {:desc "Export file path"}})
 
 (def ^:private graph-import-spec
   {:type {:desc "Import type (edn, sqlite)"}
@@ -107,7 +107,7 @@
                 :graph (core/repo->graph repo)}})))
 
 (defn build-export-action
-  [repo export-type output]
+  [repo export-type file]
   (if-not (seq repo)
     {:ok? false
      :error {:code :missing-repo
@@ -117,7 +117,7 @@
               :repo repo
               :graph (core/repo->graph repo)
               :export-type export-type
-              :output output}}))
+              :file file}}))
 
 (defn build-import-action
   [repo import-type input]
@@ -201,9 +201,9 @@
                      (js/Buffer.from export-result "base64")
                      export-result)
               format (if (= export-type "sqlite") :sqlite :edn)]
-        (transport/write-output {:format format :path (:output action) :data data})
+        (transport/write-output {:format format :path (:file action) :data data})
         {:status :ok
-         :data {:message (str "wrote " (:output action))}})))
+         :data {:message (str "wrote " (:file action))}})))
 
 (defn execute-graph-import
   [action config]
