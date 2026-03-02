@@ -232,6 +232,67 @@
                            (is false (str "unexpected error: " error))
                            (done))))))))
 
+(deftest messages-resume-completed-session-and-provision-runtime-test
+  (testing "session messages should auto-resume completed session and provision runtime"
+    (async done
+           (let [env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"
+                          "SANDBOX_AGENT_URL" "http://sandbox.local"}
+                 self (make-self env)
+                 headers {"content-type" "application/json"
+                          "x-user-id" "user-1"}
+                 provision-calls (atom 0)
+                 sent-runtime-ids (atom [])]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-completed-resume"
+                                 :status "completed"
+                                 :task {:project {:repo-url "https://github.com/example/repo"}}
+                                 :runtime nil
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (with-redefs [agent-do/<provision-runtime!
+                                        (fn [self _task _session-id]
+                                          (swap! provision-calls inc)
+                                          (-> (.get (.-storage self) "session")
+                                              (.then (fn [session-js]
+                                                       (let [session (js->clj session-js :keywordize-keys true)
+                                                             next-session (assoc session
+                                                                                 :runtime {:provider "local-dev"
+                                                                                           :session-id "runtime-resumed"})]
+                                                         (.put (.-storage self) "session" (clj->js next-session)))))
+                                              (.then (fn [_]
+                                                       {:provider "local-dev"
+                                                        :session-id "runtime-resumed"}))))
+                                        runtime-provider/<send-message!
+                                        (fn [_provider runtime _message]
+                                          (swap! sent-runtime-ids conj (:session-id runtime))
+                                          (js/Promise.resolve true))]
+                            (agent-do/handle-fetch self
+                                                   (json-request "http://db-sync.local/__session__/messages"
+                                                                 "POST"
+                                                                 {:message "continue"}
+                                                                 headers)))))
+                 (.then (fn [resp]
+                          (is (= 200 (.-status resp)))
+                          (js/setTimeout
+                           (fn []
+                             (-> (.get (.-storage self) "session")
+                                 (.then (fn [session-js]
+                                          (let [session (js->clj session-js :keywordize-keys true)]
+                                            (is (= "running" (:status session)))
+                                            (is (= 1 @provision-calls))
+                                            (is (= ["runtime-resumed"] @sent-runtime-ids))
+                                            (done)))))
+                             (.catch (fn [error]
+                                       (is false (str "unexpected readback error: " error))
+                                       (done)))))
+                          30)))
+             (.catch (fn [error]
+                       (is false (str "unexpected completed-resume error: " error))
+                       (done)))))))
+
 (deftest provision-runtime-persists-runtime-checkpoint-test
   (testing "provisioned runtime snapshot metadata is persisted to task sandbox checkpoint"
     (async done

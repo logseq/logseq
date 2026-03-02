@@ -481,6 +481,10 @@
 (defn- terminal-status? [status]
   (contains? #{"completed" "failed" "canceled"} status))
 
+(defn- non-writable-status?
+  [status]
+  (contains? #{"failed" "canceled"} status))
+
 (defn- session-runtime-provider [session]
   (some-> (get-in session [:runtime :provider]) str string/lower-case))
 
@@ -935,7 +939,7 @@
                       (p/let [latest-session (<get-session self)]
                         (if (or (not (map? latest-session))
                                 (not= session-id (:id latest-session))
-                                (terminal-status? (:status latest-session)))
+                                (non-writable-status? (:status latest-session)))
                           (p/rejected error)
                           (let [latest-runtime (:runtime latest-session)
                                 failed-runtime-id (some-> (:session-id runtime) str)
@@ -1137,12 +1141,17 @@
                                                    :data {:event "user-message"
                                                           :kind (:kind body)
                                                           :by user-id}})
-                         current-session (<get-session self)]
+                         current-session (p/let [_ (<append-event! self {:type "session.running"
+                                                                         :data {:by user-id
+                                                                                :reason "resume-after-completed"}
+                                                                         :ts (common/now-ms)})
+                                                 resumed-session (<get-session self)]
+                                           resumed-session)]
                    (cond
                      (= (:error res) :missing-session)
                      (http/not-found)
 
-                     (terminal-status? (:status current-session))
+                     (non-writable-status? (:status current-session))
                      (session-conflict "session is not writable")
 
                      (= "paused" (:status current-session))
