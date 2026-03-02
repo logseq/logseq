@@ -635,16 +635,23 @@
       (is (= (str "1 See [[Target [[Inner]]]]")
              (strip-ansi output))))))
 
-(deftest test-help-tags-properties-identifiers
-  (testing "add help mentions tag and property identifiers"
+(deftest test-help-upsert-update-options
+  (testing "upsert block help includes update options and removes legacy flags"
     (let [summary (:summary (binding [style/*color-enabled?* true]
                               (commands/parse-args ["upsert" "block" "--help"])))]
-      (is (string/includes? (strip-ansi summary)
-                            "Identifiers can be id, :db/ident, or :block/title.")))
+      (is (string/includes? (strip-ansi summary) "--update-tags"))
+      (is (string/includes? (strip-ansi summary) "--update-properties"))
+      (is (not (string/includes? (strip-ansi summary) "--tags")))
+      (is (not (string/includes? (strip-ansi summary) "--properties")))))
+
+  (testing "upsert page help includes update options and removes legacy flags"
     (let [summary (:summary (binding [style/*color-enabled?* true]
                               (commands/parse-args ["upsert" "page" "--help"])))]
-      (is (string/includes? (strip-ansi summary)
-                            "Identifiers can be id, :db/ident, or :block/title.")))))
+      (is (string/includes? (strip-ansi summary) "--id"))
+      (is (string/includes? (strip-ansi summary) "--update-tags"))
+      (is (string/includes? (strip-ansi summary) "--update-properties"))
+      (is (not (string/includes? (strip-ansi summary) "--tags")))
+      (is (not (string/includes? (strip-ansi summary) "--properties"))))))
 
 (deftest test-show-json-edn-strips-block-uuid
   (testing "show json/edn removes :block/uuid recursively while keeping :db/id"
@@ -908,6 +915,12 @@
       (is (= :upsert-tag (:command result)))
       (is (= "Quote" (get-in result [:options :name])))))
 
+  (testing "upsert tag parses with id"
+    (let [result (commands/parse-args ["upsert" "tag" "--id" "10"])]
+      (is (true? (:ok? result)))
+      (is (= :upsert-tag (:command result)))
+      (is (= 10 (get-in result [:options :id])))))
+
   (testing "upsert property parses with type and cardinality"
     (let [result (commands/parse-args ["upsert" "property"
                                        "--name" "owner"
@@ -918,6 +931,15 @@
       (is (= "owner" (get-in result [:options :name])))
       (is (= "node" (get-in result [:options :type])))
       (is (= "many" (get-in result [:options :cardinality])))))
+
+  (testing "upsert property parses with id and type"
+    (let [result (commands/parse-args ["upsert" "property"
+                                       "--id" "11"
+                                       "--type" "node"])]
+      (is (true? (:ok? result)))
+      (is (= :upsert-property (:command result)))
+      (is (= 11 (get-in result [:options :id])))
+      (is (= "node" (get-in result [:options :type])))))
 
   (testing "upsert property rejects invalid type"
     (let [result (commands/parse-args ["upsert" "property"
@@ -1002,15 +1024,15 @@
       (is (= "abc" (get-in result [:options :target-uuid])))
       (is (= "first-child" (get-in result [:options :pos])))))
 
-  (testing "upsert block create mode parses with tags and properties"
+  (testing "upsert block create mode parses with update tags and update properties"
     (let [result (commands/parse-args ["upsert" "block"
                                        "--content" "hello"
-                                       "--tags" "[\"TagA\" \"TagB\"]"
-                                       "--properties" "{:logseq.property/publishing-public? true}"])]
+                                       "--update-tags" "[\"TagA\" \"TagB\"]"
+                                       "--update-properties" "{:logseq.property/publishing-public? true}"])]
       (is (true? (:ok? result)))
       (is (= :upsert-block (:command result)))
-      (is (= "[\"TagA\" \"TagB\"]" (get-in result [:options :tags])))
-      (is (= "{:logseq.property/publishing-public? true}" (get-in result [:options :properties])))))
+      (is (= "[\"TagA\" \"TagB\"]" (get-in result [:options :update-tags])))
+      (is (= "{:logseq.property/publishing-public? true}" (get-in result [:options :update-properties])))))
 
   (testing "upsert block rejects invalid pos"
     (let [result (commands/parse-args ["upsert" "block"
@@ -1019,20 +1041,21 @@
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
 
-  (testing "upsert block rejects tags with blocks payload"
+  (testing "upsert block rejects removed --tags option"
     (let [result (commands/parse-args ["upsert" "block"
-                                       "--blocks" "[]"
+                                       "--content" "hello"
                                        "--tags" "[\"TagA\"]"])]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
 
-  (testing "upsert block rejects properties with blocks-file payload"
+  (testing "upsert block rejects removed --properties option"
     (let [result (commands/parse-args ["upsert" "block"
-                                       "--blocks-file" "/tmp/blocks.edn"
+                                       "--content" "hello"
                                        "--properties" "{:logseq.property/publishing-public? true}"])]
       (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code])))))
+      (is (= :invalid-options (get-in result [:error :code]))))))
 
+(deftest test-verb-subcommand-parse-upsert-page-mode
   (testing "upsert page requires page name"
     (let [result (commands/parse-args ["upsert" "page"])]
       (is (false? (:ok? result)))
@@ -1044,15 +1067,22 @@
       (is (= :upsert-page (:command result)))
       (is (= "Home" (get-in result [:options :page])))))
 
-  (testing "upsert page parses with tags and properties"
+  (testing "upsert page parses with id update mode"
+    (let [result (commands/parse-args ["upsert" "page"
+                                       "--id" "42"
+                                       "--update-properties" "{:logseq.property/publishing-public? true}"])]
+      (is (true? (:ok? result)))
+      (is (= :upsert-page (:command result)))
+      (is (= 42 (get-in result [:options :id])))
+      (is (= "{:logseq.property/publishing-public? true}" (get-in result [:options :update-properties])))))
+
+  (testing "upsert page rejects removed --tags and --properties options"
     (let [result (commands/parse-args ["upsert" "page"
                                        "--page" "Home"
                                        "--tags" "[\"TagA\"]"
                                        "--properties" "{:logseq.property/publishing-public? true}"])]
-      (is (true? (:ok? result)))
-      (is (= :upsert-page (:command result)))
-      (is (= "[\"TagA\"]" (get-in result [:options :tags])))
-      (is (= "{:logseq.property/publishing-public? true}" (get-in result [:options :properties])))))
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
 
   (testing "upsert page parses update and remove options"
     (let [result (commands/parse-args ["upsert" "page"
@@ -1063,6 +1093,13 @@
       (is (= :upsert-page (:command result)))
       (is (= "[\"TagB\"]" (get-in result [:options :update-tags])))
       (is (= "[:logseq.property/deadline]" (get-in result [:options :remove-properties])))))
+
+  (testing "upsert page rejects selector conflict for --id and --page"
+    (let [result (commands/parse-args ["upsert" "page"
+                                       "--id" "10"
+                                       "--page" "Home"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
 
   (testing "legacy add tag is no longer supported"
     (let [result (commands/parse-args ["add" "tag" "--name" "Quote"])]
@@ -1313,6 +1350,18 @@
       (is (false? (:ok? result)))
       (is (= :missing-page-name (get-in result [:error :code])))))
 
+  (testing "upsert page by id builds update action"
+    (let [parsed {:ok? true
+                  :command :upsert-page
+                  :options {:id 42
+                            :update-properties "{:logseq.property/publishing-public? true}"}}
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :update (get-in result [:action :mode])))
+      (is (= 42 (get-in result [:action :id]))))))
+
+(deftest test-build-action-upsert-tag-property
+
   (testing "upsert tag requires name"
     (let [parsed {:ok? true :command :upsert-tag :options {}}
           result (commands/build-action parsed {:repo "demo"})]
@@ -1324,9 +1373,21 @@
           result (commands/build-action parsed {:repo "demo"})]
       (is (true? (:ok? result)))
       (is (= {:type :upsert-tag
+              :mode :create
               :repo "logseq_db_demo"
               :graph "demo"
               :name "Quote"}
+             (:action result)))))
+
+  (testing "upsert tag by id builds update action"
+    (let [parsed {:ok? true :command :upsert-tag :options {:id 123}}
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (true? (:ok? result)))
+      (is (= {:type :upsert-tag
+              :mode :update
+              :repo "logseq_db_demo"
+              :graph "demo"
+              :id 123}
              (:action result)))))
 
   (testing "upsert property coerces schema options"
@@ -1340,6 +1401,7 @@
           result (commands/build-action parsed {:repo "demo"})]
       (is (true? (:ok? result)))
       (is (= {:type :upsert-property
+              :mode :create
               :repo "logseq_db_demo"
               :graph "demo"
               :name "owner"
@@ -1347,6 +1409,23 @@
                        :db/cardinality :db.cardinality/many
                        :logseq.property/hide? true
                        :logseq.property/public? false}}
+             (:action result)))))
+
+  (testing "upsert property by id builds update action"
+    (let [parsed {:ok? true
+                  :command :upsert-property
+                  :options {:id 654
+                            :type "node"
+                            :cardinality "many"}}
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (true? (:ok? result)))
+      (is (= {:type :upsert-property
+              :mode :update
+              :repo "logseq_db_demo"
+              :graph "demo"
+              :id 654
+              :schema {:logseq.property/type :node
+                       :db/cardinality :db.cardinality/many}}
              (:action result)))))
 
   )
@@ -1400,27 +1479,27 @@
       (is (= [1 2] (get-in result [:action :ids]))))))
 
 (deftest test-build-action-add-validates-properties
-  (testing "add block rejects unknown property"
+  (testing "add block accepts custom property key in update-properties"
     (let [parsed (commands/parse-args ["upsert" "block"
                                        "--content" "hello"
-                                       "--properties" "{:not/a 1}"])
+                                       "--update-properties" "{:not/a 1}"])
           result (commands/build-action parsed {:repo "demo"})]
-      (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code])))))
+      (is (true? (:ok? result)))
+      (is (= {:not/a 1} (get-in result [:action :update-properties])))))
 
   (testing "add block accepts property title key"
     (let [parsed (commands/parse-args ["upsert" "block"
                                        "--content" "hello"
-                                       "--properties" "{\"Publishing Public?\" true}"])
+                                       "--update-properties" "{\"Publishing Public?\" true}"])
           result (commands/build-action parsed {:repo "demo"})]
       (is (true? (:ok? result)))
       (is (= :logseq.property/publishing-public?
-             (-> result :action :properties keys first)))))
+             (-> result :action :update-properties keys first)))))
 
   (testing "add block rejects non-public built-in property"
     (let [parsed (commands/parse-args ["upsert" "block"
                                        "--content" "hello"
-                                       "--properties" "{:logseq.property/heading 1}"])
+                                       "--update-properties" "{:logseq.property/heading 1}"])
           result (commands/build-action parsed {:repo "demo"})]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
@@ -1428,7 +1507,7 @@
   (testing "add block rejects invalid checkbox value"
     (let [parsed (commands/parse-args ["upsert" "block"
                                        "--content" "hello"
-                                       "--properties" "{:logseq.property/publishing-public? \"nope\"}"])
+                                       "--update-properties" "{:logseq.property/publishing-public? \"nope\"}"])
           result (commands/build-action parsed {:repo "demo"})]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code]))))))
@@ -1437,10 +1516,10 @@
   (testing "add block accepts numeric tag ids"
     (let [parsed (commands/parse-args ["upsert" "block"
                                        "--content" "hello"
-                                       "--tags" "[42]"])
+                                       "--update-tags" "[42]"])
           result (commands/build-action parsed {:repo "demo"})]
       (is (true? (:ok? result)))
-      (is (= [42] (get-in result [:action :tags]))))))
+      (is (= [42] (get-in result [:action :update-tags]))))))
 
 (deftest test-tag-lookup-ref-accepts-id
   (let [tag-lookup-ref #'add-command/tag-lookup-ref]
@@ -1688,6 +1767,120 @@
                             (set! transport/invoke orig-invoke)
                             (done)))))))
 
+(deftest test-execute-upsert-tag-by-id-no-op
+  (async done
+         (let [apply-calls* (atom 0)
+               orig-list-graphs cli-server/list-graphs
+               orig-ensure-server! cli-server/ensure-server!
+               orig-invoke transport/invoke
+               action {:type :upsert-tag
+                       :mode :update
+                       :repo "demo"
+                       :id 4242}]
+           (set! cli-server/list-graphs (fn [_] ["demo"]))
+           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
+           (set! transport/invoke (fn [_ method _ args]
+                                    (case method
+                                      :thread-api/pull (let [[_ _ lookup] args]
+                                                         (if (= lookup 4242)
+                                                           {:db/id 4242
+                                                            :block/name "quote"
+                                                            :block/title "Quote"
+                                                            :block/tags [{:db/ident :logseq.class/Tag}]}
+                                                           {}))
+                                      :thread-api/apply-outliner-ops (do
+                                                                       (swap! apply-calls* inc)
+                                                                       {:result :ok})
+                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
+           (-> (p/let [result (commands/execute action {})]
+                 (is (= :ok (:status result)))
+                 (is (= [4242] (get-in result [:data :result])))
+                 (is (= 0 @apply-calls*)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! cli-server/list-graphs orig-list-graphs)
+                            (set! cli-server/ensure-server! orig-ensure-server!)
+                            (set! transport/invoke orig-invoke)
+                            (done)))))))
+
+(deftest test-execute-upsert-id-mode-validates-target-entity
+  (async done
+         (let [orig-list-graphs cli-server/list-graphs
+               orig-ensure-server! cli-server/ensure-server!
+               orig-invoke transport/invoke]
+           (set! cli-server/list-graphs (fn [_] ["demo"]))
+           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
+           (set! transport/invoke (fn [_ method _ args]
+                                    (case method
+                                      :thread-api/pull (let [[_ _ lookup] args]
+                                                         (case lookup
+                                                           100 {}
+                                                           101 {:db/id 101
+                                                                :block/uuid (uuid "00000000-0000-0000-0000-000000000101")}
+                                                           200 {}
+                                                           201 {:db/id 201
+                                                                :block/name "not-a-tag"
+                                                                :block/title "Not a tag"
+                                                                :block/tags [{:db/ident :logseq.class/Page}]}
+                                                           300 {}
+                                                           301 {:db/id 301
+                                                                :block/name "not-a-property"
+                                                                :block/title "Not a property"}
+                                                           {}))
+                                      :thread-api/apply-outliner-ops
+                                      (throw (ex-info "should not mutate on invalid id update mode" {:args args}))
+                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
+           (-> (p/let [page-missing (commands/execute {:type :upsert-page
+                                                       :mode :update
+                                                       :repo "demo"
+                                                       :id 100}
+                                                      {})
+                       page-mismatch (commands/execute {:type :upsert-page
+                                                        :mode :update
+                                                        :repo "demo"
+                                                        :id 101}
+                                                       {})
+                       tag-missing (commands/execute {:type :upsert-tag
+                                                      :mode :update
+                                                      :repo "demo"
+                                                      :id 200}
+                                                     {})
+                       tag-mismatch (commands/execute {:type :upsert-tag
+                                                       :mode :update
+                                                       :repo "demo"
+                                                       :id 201}
+                                                      {})
+                       property-missing (commands/execute {:type :upsert-property
+                                                           :mode :update
+                                                           :repo "demo"
+                                                           :id 300}
+                                                          {})
+                       property-mismatch (commands/execute {:type :upsert-property
+                                                            :mode :update
+                                                            :repo "demo"
+                                                            :id 301}
+                                                           {})]
+                 (is (= :error (:status page-missing)))
+                 (is (= :upsert-id-not-found (get-in page-missing [:error :code])))
+                 (is (= :error (:status page-mismatch)))
+                 (is (= :upsert-id-type-mismatch (get-in page-mismatch [:error :code])))
+                 (is (= :error (:status tag-missing)))
+                 (is (= :upsert-id-not-found (get-in tag-missing [:error :code])))
+                 (is (= :error (:status tag-mismatch)))
+                 (is (= :upsert-id-type-mismatch (get-in tag-mismatch [:error :code])))
+                 (is (= :error (:status property-missing)))
+                 (is (= :upsert-id-not-found (get-in property-missing [:error :code])))
+                 (is (= :error (:status property-mismatch)))
+                 (is (= :upsert-id-type-mismatch (get-in property-mismatch [:error :code]))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! cli-server/list-graphs orig-list-graphs)
+                            (set! cli-server/ensure-server! orig-ensure-server!)
+                            (set! transport/invoke orig-invoke)
+                            (done)))))))
+
 (deftest test-execute-upsert-block-create-applies-extra-tag-property-ops
   (async done
          (let [ops* (atom nil)
@@ -1760,17 +1953,14 @@
                action {:type :upsert-page
                        :repo "demo"
                        :page "Home"
-                       :tags [:tag/new]
                        :update-tags [:tag/next]
                        :remove-tags [:tag/old]
-                       :properties {:logseq.property/deadline "2026-01-25T12:00:00Z"}
                        :update-properties {:logseq.property/publishing-public? true}
                        :remove-properties [:logseq.property/deadline]}]
            (set! cli-server/list-graphs (fn [_] ["demo"]))
            (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
            (set! add-command/resolve-tags (fn [_ _ tags]
                                             (p/resolved (cond
-                                                          (= tags [:tag/new]) [{:db/id 101}]
                                                           (= tags [:tag/next]) [{:db/id 303}]
                                                           (= tags [:tag/old]) [{:db/id 202}]
                                                           :else nil))))
@@ -1796,12 +1986,10 @@
                        ops @ops*]
                  (is (= :ok (:status result)))
                  (is (= [50] (get-in result [:data :result])))
-                 (is (= 6 (count ops)))
+                 (is (= 4 (count ops)))
                  (is (some #(= [:batch-delete-property-value [[50] :block/tags 202]] %) ops))
                  (is (some #(= [:batch-remove-property [[50] :logseq.property/deadline]] %) ops))
-                 (is (some #(= [:batch-set-property [[50] :block/tags 101 {}]] %) ops))
                  (is (some #(= [:batch-set-property [[50] :block/tags 303 {}]] %) ops))
-                 (is (some #(= [:batch-set-property [[50] :logseq.property/deadline "2026-01-25T12:00:00Z" {}]] %) ops))
                  (is (some #(= [:batch-set-property [[50] :logseq.property/publishing-public? true {}]] %) ops)))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))

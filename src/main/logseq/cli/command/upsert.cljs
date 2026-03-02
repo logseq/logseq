@@ -22,27 +22,29 @@
    :blocks {:desc "EDN vector of blocks for create mode"}
    :blocks-file {:desc "EDN file of blocks for create mode"}
    :status {:desc "Task status (todo, doing, done, etc.)"}
-   :tags {:desc "Tags to add in create mode (EDN vector). Identifiers can be id, :db/ident, or :block/title."}
-   :properties {:desc "Properties to add in create mode (EDN map). Identifiers can be id, :db/ident, or :block/title."}
    :update-tags {:desc "Tags to add/update (EDN vector)"}
    :update-properties {:desc "Properties to add/update (EDN map)"}
    :remove-tags {:desc "Tags to remove (EDN vector)"}
    :remove-properties {:desc "Properties to remove (EDN vector)"}})
 
 (def ^:private upsert-page-spec
-  {:page {:desc "Page name"}
-   :tags {:desc "Tags to add (EDN vector). Identifiers can be id, :db/ident, or :block/title."}
-   :properties {:desc "Properties to add (EDN map). Identifiers can be id, :db/ident, or :block/title."}
+  {:id {:desc "Target page db/id (forces update mode)"
+        :coerce :long}
+   :page {:desc "Page name"}
    :update-tags {:desc "Tags to add/update (EDN vector)"}
    :update-properties {:desc "Properties to add/update (EDN map)"}
    :remove-tags {:desc "Tags to remove (EDN vector)"}
    :remove-properties {:desc "Properties to remove (EDN vector)"}})
 
 (def ^:private upsert-tag-spec
-  {:name {:desc "Tag name"}})
+  {:id {:desc "Target tag db/id (forces update mode)"
+        :coerce :long}
+   :name {:desc "Tag name"}})
 
 (def ^:private upsert-property-spec
-  {:name {:desc "Property name"}
+  {:id {:desc "Target property db/id (forces update mode)"
+        :coerce :long}
+   :name {:desc "Property name"}
    :type {:desc "Property type (default, number, date, datetime, checkbox, url, node, json, string)"}
    :cardinality {:desc "Property cardinality (one, many)"}
    :hide {:desc "Hide property"
@@ -101,8 +103,13 @@
 
     :upsert-property
     (let [type' (normalize-property-type (:type opts))
-          cardinality' (normalize-property-cardinality (:cardinality opts))]
+          cardinality' (normalize-property-cardinality (:cardinality opts))
+          name (normalize-property-name (:name opts))
+          selectors (filter some? [(:id opts) name])]
       (cond
+        (> (count selectors) 1)
+        "only one of --id or --name is allowed"
+
         (and (seq (:type opts)) (not (contains? property-types type')))
         (str "invalid type: " (:type opts))
 
@@ -111,6 +118,18 @@
 
         :else
         nil))
+
+    :upsert-page
+    (let [page (some-> (:page opts) string/trim)
+          selectors (filter some? [(:id opts) page])]
+      (when (> (count selectors) 1)
+        "only one of --id or --page is allowed"))
+
+    :upsert-tag
+    (let [name (normalize-tag-name (:name opts))
+          selectors (filter some? [(:id opts) name])]
+      (when (> (count selectors) 1)
+        "only one of --id or --name is allowed"))
 
     nil))
 
@@ -179,24 +198,23 @@
     {:ok? false
      :error {:code :missing-repo
              :message "repo is required for upsert"}}
-    (let [page (some-> (:page options) string/trim)
-          tags-result (add-command/parse-tags-option (:tags options))
-          properties-result (add-command/parse-properties-option (:properties options))
+    (let [id (:id options)
+          page (some-> (:page options) string/trim)
           update-tags-result (add-command/parse-tags-option (:update-tags options))
           update-properties-result (add-command/parse-properties-option (:update-properties options))
           remove-tags-result (add-command/parse-tags-vector-option (:remove-tags options))
-          remove-properties-result (add-command/parse-properties-vector-option (:remove-properties options))]
+          remove-properties-result (add-command/parse-properties-vector-option (:remove-properties options))
+          invalid-message (invalid-options? :upsert-page options)]
       (cond
-        (not (seq page))
+        (seq invalid-message)
+        {:ok? false
+         :error {:code :invalid-options
+                 :message invalid-message}}
+
+        (and (not (some? id)) (not (seq page)))
         {:ok? false
          :error {:code :missing-page-name
                  :message "page name is required"}}
-
-        (not (:ok? tags-result))
-        tags-result
-
-        (not (:ok? properties-result))
-        properties-result
 
         (not (:ok? update-tags-result))
         update-tags-result
@@ -212,16 +230,16 @@
 
         :else
         {:ok? true
-         :action {:type :upsert-page
-                  :repo repo
-                  :graph (core/repo->graph repo)
-                  :page page
-                  :tags (:value tags-result)
-                  :properties (:value properties-result)
-                  :update-tags (:value update-tags-result)
-                  :update-properties (:value update-properties-result)
-                  :remove-tags (:value remove-tags-result)
-                  :remove-properties (:value remove-properties-result)}}))))
+         :action (cond-> {:type :upsert-page
+                          :repo repo
+                          :graph (core/repo->graph repo)
+                          :mode (if (some? id) :update :create)
+                          :update-tags (:value update-tags-result)
+                          :update-properties (:value update-properties-result)
+                          :remove-tags (:value remove-tags-result)
+                          :remove-properties (:value remove-properties-result)}
+                   (some? id) (assoc :id id)
+                   (seq page) (assoc :page page))}))))
 
 (defn build-tag-action
   [options repo]
@@ -229,13 +247,32 @@
     {:ok? false
      :error {:code :missing-repo
              :message "repo is required for upsert"}}
-    (let [name (normalize-tag-name (:name options))]
-      (if (seq name)
+    (let [id (:id options)
+          name (normalize-tag-name (:name options))
+          invalid-message (invalid-options? :upsert-tag options)]
+      (cond
+        (seq invalid-message)
+        {:ok? false
+         :error {:code :invalid-options
+                 :message invalid-message}}
+
+        (some? id)
         {:ok? true
          :action {:type :upsert-tag
+                  :mode :update
+                  :id id
+                  :repo repo
+                  :graph (core/repo->graph repo)}}
+
+        (seq name)
+        {:ok? true
+         :action {:type :upsert-tag
+                  :mode :create
                   :repo repo
                   :graph (core/repo->graph repo)
                   :name name}}
+
+        :else
         {:ok? false
          :error {:code :missing-tag-name
                  :message "tag name is required"}}))))
@@ -269,10 +306,11 @@
     {:ok? false
      :error {:code :missing-repo
              :message "repo is required for upsert"}}
-    (let [name (normalize-property-name (:name options))
+    (let [id (:id options)
+          name (normalize-property-name (:name options))
           invalid-message (invalid-options? :upsert-property options)]
       (cond
-        (not (seq name))
+        (and (not (some? id)) (not (seq name)))
         {:ok? false
          :error {:code :missing-property-name
                  :message "property name is required"}}
@@ -284,11 +322,13 @@
 
         :else
         {:ok? true
-         :action {:type :upsert-property
-                  :repo repo
-                  :graph (core/repo->graph repo)
-                  :name name
-                  :schema (property-schema options)}}))))
+         :action (cond-> {:type :upsert-property
+                          :mode (if (some? id) :update :create)
+                          :repo repo
+                          :graph (core/repo->graph repo)
+                          :schema (property-schema options)}
+                   (some? id) (assoc :id id)
+                   (seq name) (assoc :name name))}))))
 
 (defn- pull-page-by-name
   [config repo page-name selector]
@@ -322,6 +362,93 @@
           (throw (ex-info "page not found after upsert"
                           {:code :page-not-found
                            :page page-name})))))))
+
+(def ^:private upsert-id-not-found-code
+  :upsert-id-not-found)
+
+(def ^:private upsert-id-type-mismatch-code
+  :upsert-id-type-mismatch)
+
+(def ^:private page-selector
+  [:db/id :block/uuid :block/name :block/title])
+
+(def ^:private tag-selector
+  [:db/id :block/uuid :block/name :block/title
+   {:block/tags [:db/ident]}])
+
+(def ^:private property-selector
+  [:db/id :db/ident :block/uuid :block/name :block/title :logseq.property/type])
+
+(defn- page-entity?
+  [entity]
+  (seq (:block/name entity)))
+
+(defn- tag-entity?
+  [entity]
+  (some #(= :logseq.class/Tag (:db/ident %))
+        (:block/tags entity)))
+
+(defn- property-entity?
+  [entity]
+  (some? (:logseq.property/type entity)))
+
+(defn- pull-entity-by-id
+  [config repo selector id]
+  (transport/invoke config :thread-api/pull false
+                    [repo selector id]))
+
+(defn- throw-upsert-id-not-found!
+  [entity-type id]
+  (throw (ex-info (str entity-type " not found for id")
+                  {:code upsert-id-not-found-code
+                   :entity-type entity-type
+                   :id id})))
+
+(defn- throw-upsert-id-type-mismatch!
+  [entity-type id]
+  (throw (ex-info (str "id does not reference expected " entity-type)
+                  {:code upsert-id-type-mismatch-code
+                   :entity-type entity-type
+                   :id id})))
+
+(defn- ensure-page-by-id!
+  [config repo id]
+  (p/let [entity (pull-entity-by-id config repo page-selector id)]
+    (cond
+      (not (:db/id entity))
+      (throw-upsert-id-not-found! "page" id)
+
+      (not (page-entity? entity))
+      (throw-upsert-id-type-mismatch! "page" id)
+
+      :else
+      entity)))
+
+(defn- ensure-tag-by-id!
+  [config repo id]
+  (p/let [entity (pull-entity-by-id config repo tag-selector id)]
+    (cond
+      (not (:db/id entity))
+      (throw-upsert-id-not-found! "tag" id)
+
+      (not (tag-entity? entity))
+      (throw-upsert-id-type-mismatch! "tag" id)
+
+      :else
+      entity)))
+
+(defn- ensure-property-by-id!
+  [config repo id]
+  (p/let [entity (pull-entity-by-id config repo property-selector id)]
+    (cond
+      (not (:db/id entity))
+      (throw-upsert-id-not-found! "property" id)
+
+      (not (property-entity? entity))
+      (throw-upsert-id-type-mismatch! "property" id)
+
+      :else
+      entity)))
 
 (defn- append-tag-and-property-ops
   [ops block-ids {:keys [update-tag-ids remove-tag-ids update-properties remove-properties]}]
@@ -389,20 +516,20 @@
 (defn execute-upsert-page
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              page (ensure-page-entity! cfg (:repo action) (:page action))
+              update-by-id? (= :update (:mode action))
+              page (if update-by-id?
+                     (ensure-page-by-id! cfg (:repo action) (:id action))
+                     (ensure-page-entity! cfg (:repo action) (:page action)))
               page-id (:db/id page)
               block-ids [page-id]
-              add-tags (add-command/resolve-tags cfg (:repo action) (:tags action))
               update-tags (add-command/resolve-tags cfg (:repo action) (:update-tags action))
               remove-tags (add-command/resolve-tags cfg (:repo action) (:remove-tags action))
-              add-properties (add-command/resolve-properties cfg (:repo action) (:properties action))
               update-properties (add-command/resolve-properties cfg (:repo action) (:update-properties action))
               remove-properties (add-command/resolve-property-identifiers cfg (:repo action)
                                                                           (:remove-properties action))
-              merged-properties (merge (or add-properties {}) (or update-properties {}))
-              _ (ensure-property-identifiers-exist! cfg (:repo action) (keys merged-properties))
+              _ (ensure-property-identifiers-exist! cfg (:repo action) (keys (or update-properties {})))
               _ (ensure-property-identifiers-exist! cfg (:repo action) remove-properties)
-              update-tag-ids (->> (concat (or add-tags []) (or update-tags []))
+              update-tag-ids (->> (or update-tags [])
                                   (map :db/id)
                                   (remove nil?)
                                   distinct
@@ -412,7 +539,7 @@
                                                block-ids
                                                {:update-tag-ids update-tag-ids
                                                 :remove-tag-ids remove-tag-ids
-                                                :update-properties merged-properties
+                                                :update-properties update-properties
                                                 :remove-properties remove-properties})
               _ (when (seq ops)
                   (transport/invoke cfg :thread-api/apply-outliner-ops false
@@ -424,85 +551,99 @@
                   :error {:code (or (get-in (ex-data e) [:code]) :exception)
                           :message (or (ex-message e) (str e))}}))))
 
-(defn- tag-entity?
-  [entity]
-  (some #(= :logseq.class/Tag (:db/ident %))
-        (:block/tags entity)))
-
 (defn execute-upsert-tag
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              existing (pull-page-by-name cfg (:repo action) (:name action)
-                                          [:db/id :block/name :block/title
-                                           {:block/tags [:db/ident]}])
-              existing-id (:db/id existing)]
-        (cond
-          (and existing-id (not (tag-entity? existing)))
-          {:status :error
-           :error {:code :tag-name-conflict
-                   :message "tag already exists as a page and is not a tag"}}
-
-          :else
-          (p/let [_ (when-not existing-id
-                      (transport/invoke cfg :thread-api/apply-outliner-ops false
-                                        [(:repo action)
-                                         [[:create-page [(:name action) {:class? true}]]]
-                                         {}]))
-                  page (or (when existing-id existing)
-                           (pull-page-by-name cfg (:repo action) (:name action)
+              update-by-id? (= :update (:mode action))]
+        (if update-by-id?
+          (p/let [entity (ensure-tag-by-id! cfg (:repo action) (:id action))]
+            {:status :ok
+             :data {:result [(:db/id entity)]}})
+          (p/let [existing (pull-page-by-name cfg (:repo action) (:name action)
                                               [:db/id :block/name :block/title
-                                               {:block/tags [:db/ident]}]))
-                  page-id (:db/id page)]
+                                               {:block/tags [:db/ident]}])
+                  existing-id (:db/id existing)]
             (cond
-              (not page-id)
+              (and existing-id (not (tag-entity? existing)))
               {:status :error
-               :error {:code :tag-not-found
-                       :message "tag not found after upsert"}}
-
-              (not (tag-entity? page))
-              {:status :error
-               :error {:code :tag-create-not-tag
-                       :message "created entity is not tagged as :logseq.class/Tag"}}
+               :error {:code :tag-name-conflict
+                       :message "tag already exists as a page and is not a tag"}}
 
               :else
-              {:status :ok
-               :data {:result [page-id]}}))))))
+              (p/let [_ (when-not existing-id
+                          (transport/invoke cfg :thread-api/apply-outliner-ops false
+                                            [(:repo action)
+                                             [[:create-page [(:name action) {:class? true}]]]
+                                             {}]))
+                      page (or (when existing-id existing)
+                               (pull-page-by-name cfg (:repo action) (:name action)
+                                                  [:db/id :block/name :block/title
+                                                   {:block/tags [:db/ident]}]))
+                      page-id (:db/id page)]
+                (cond
+                  (not page-id)
+                  {:status :error
+                   :error {:code :tag-not-found
+                           :message "tag not found after upsert"}}
 
-(def ^:private property-selector
-  [:db/id :db/ident :block/name :block/title :logseq.property/type])
+                  (not (tag-entity? page))
+                  {:status :error
+                   :error {:code :tag-create-not-tag
+                           :message "created entity is not tagged as :logseq.class/Tag"}}
 
-(defn- property-entity?
-  [entity]
-  (some? (:logseq.property/type entity)))
+                  :else
+                  {:status :ok
+                   :data {:result [page-id]}}))))))
+      (p/catch (fn [e]
+                 {:status :error
+                  :error {:code (or (get-in (ex-data e) [:code]) :exception)
+                          :message (or (ex-message e) (str e))}}))))
 
 (defn execute-upsert-property
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              existing (pull-page-by-name cfg (:repo action) (:name action) property-selector)
-              existing-id (:db/id existing)]
-        (cond
-          (and existing-id (not (property-entity? existing)))
-          {:status :error
-           :error {:code :property-name-conflict
-                   :message "property already exists as a page and is not a property"}}
-
-          :else
-          (p/let [property-ident (when (property-entity? existing)
-                                   (:db/ident existing))
-                  property-opts (cond-> {}
-                                  (nil? property-ident)
-                                  (assoc :property-name (:name action)))
-                  _ (transport/invoke cfg :thread-api/apply-outliner-ops false
-                                      [(:repo action)
-                                       [[:upsert-property [property-ident
-                                                           (:schema action)
-                                                           property-opts]]]
-                                       {}])
-                  property (pull-page-by-name cfg (:repo action) (:name action) property-selector)
-                  property-id (:db/id property)]
-            (if property-id
-              {:status :ok
-               :data {:result [property-id]}}
+              update-by-id? (= :update (:mode action))]
+        (if update-by-id?
+          (p/let [existing (ensure-property-by-id! cfg (:repo action) (:id action))
+                  property-ident (:db/ident existing)
+                  _ (when (seq (:schema action))
+                      (transport/invoke cfg :thread-api/apply-outliner-ops false
+                                        [(:repo action)
+                                         [[:upsert-property [property-ident
+                                                             (:schema action)
+                                                             {}]]]
+                                         {}]))]
+            {:status :ok
+             :data {:result [(:db/id existing)]}})
+          (p/let [existing (pull-page-by-name cfg (:repo action) (:name action) property-selector)
+                  existing-id (:db/id existing)]
+            (cond
+              (and existing-id (not (property-entity? existing)))
               {:status :error
-               :error {:code :property-not-found
-                       :message "property not found after upsert"}}))))))
+               :error {:code :property-name-conflict
+                       :message "property already exists as a page and is not a property"}}
+
+              :else
+              (p/let [property-ident (when (property-entity? existing)
+                                       (:db/ident existing))
+                      property-opts (cond-> {}
+                                      (nil? property-ident)
+                                      (assoc :property-name (:name action)))
+                      _ (transport/invoke cfg :thread-api/apply-outliner-ops false
+                                          [(:repo action)
+                                           [[:upsert-property [property-ident
+                                                               (:schema action)
+                                                               property-opts]]]
+                                           {}])
+                      property (pull-page-by-name cfg (:repo action) (:name action) property-selector)
+                      property-id (:db/id property)]
+                (if property-id
+                  {:status :ok
+                   :data {:result [property-id]}}
+                  {:status :error
+                   :error {:code :property-not-found
+                           :message "property not found after upsert"}}))))))
+      (p/catch (fn [e]
+                 {:status :error
+                  :error {:code (or (get-in (ex-data e) [:code]) :exception)
+                          :message (or (ex-message e) (str e))}}))))

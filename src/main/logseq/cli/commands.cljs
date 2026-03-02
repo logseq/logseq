@@ -139,6 +139,29 @@
   (string/join " " (cond-> (vec dispatch)
                      wrong-input (conj wrong-input))))
 
+(defn- legacy-upsert-option-guidance
+  [args message]
+  (let [subcommand (vec (take 2 args))]
+    (cond
+      (and (= ["upsert" "block"] subcommand)
+           (re-find #"Unknown option:\s*:tags" (or message "")))
+      "unknown option: --tags; use --update-tags"
+
+      (and (= ["upsert" "block"] subcommand)
+           (re-find #"Unknown option:\s*:properties" (or message "")))
+      "unknown option: --properties; use --update-properties"
+
+      (and (= ["upsert" "page"] subcommand)
+           (re-find #"Unknown option:\s*:tags" (or message "")))
+      "unknown option: --tags; use --update-tags"
+
+      (and (= ["upsert" "page"] subcommand)
+           (re-find #"Unknown option:\s*:properties" (or message "")))
+      "unknown option: --properties; use --update-properties"
+
+      :else
+      nil)))
+
 (defn- ^:large-vars/cleanup-todo finalize-command
   [summary {:keys [command opts args cmds spec]}]
   (let [opts (command-core/normalize-opts opts)
@@ -166,17 +189,29 @@
       (and (= command :upsert-block) (upsert-command/invalid-options? command opts))
       (command-core/invalid-options-result summary (upsert-command/invalid-options? command opts))
 
-      (and (= command :upsert-page) (not (seq (:page opts))))
+      (and (= command :upsert-page) (upsert-command/invalid-options? command opts))
+      (command-core/invalid-options-result summary (upsert-command/invalid-options? command opts))
+
+      (and (= command :upsert-page)
+           (not (some? (:id opts)))
+           (not (seq (:page opts))))
       (missing-page-name-result summary)
 
-      (and (= command :upsert-tag) (not (seq (some-> (:name opts) string/trim))))
-      (missing-tag-name-result summary)
+      (and (= command :upsert-tag) (upsert-command/invalid-options? command opts))
+      (command-core/invalid-options-result summary (upsert-command/invalid-options? command opts))
 
-      (and (= command :upsert-property) (not (seq (some-> (:name opts) string/trim))))
-      (missing-property-name-result summary)
+      (and (= command :upsert-tag)
+           (not (some? (:id opts)))
+           (not (seq (some-> (:name opts) string/trim))))
+      (missing-tag-name-result summary)
 
       (and (= command :upsert-property) (upsert-command/invalid-options? command opts))
       (command-core/invalid-options-result summary (upsert-command/invalid-options? command opts))
+
+      (and (= command :upsert-property)
+           (not (some? (:id opts)))
+           (not (seq (some-> (:name opts) string/trim))))
+      (missing-property-name-result summary)
 
       (and (= command :remove-block) (empty? (filter some? [(:id opts) (some-> (:uuid opts) string/trim)])))
       (missing-target-result summary)
@@ -291,7 +326,9 @@
               (command-core/unknown-command-result summary (str "unknown command: " (unknown-command-message data)))
 
               (some? data)
-              (command-core/cli-error->result summary data)
+              (if-let [guided-message (legacy-upsert-option-guidance args (:msg data))]
+                (command-core/invalid-options-result summary guided-message)
+                (command-core/cli-error->result summary data))
 
               :else
               (command-core/unknown-command-result summary (str "unknown command: " (string/join " " args))))))))))
