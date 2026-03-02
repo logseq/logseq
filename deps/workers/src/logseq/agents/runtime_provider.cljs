@@ -919,7 +919,7 @@
   (parse-int (env-str env "VERCEL_HEALTH_INTERVAL_MS") 300))
 
 (defn- vercel-sandbox-timeout-ms [^js env]
-  (parse-int (env-str env "VERCEL_SANDBOX_TIMEOUT_MS") (* 30 60 1000)))
+  (parse-int (env-str env "VERCEL_SANDBOX_TIMEOUT_MS") (* 3 60 1000)))
 
 (defn- vercel-sandbox-runtime [^js env]
   (or (env-str env "VERCEL_SANDBOX_RUNTIME")
