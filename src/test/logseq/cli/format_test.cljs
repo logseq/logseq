@@ -81,12 +81,27 @@
                                         :command :list-property
                                         :data {:items [{:block/title "Prop"
                                                         :db/id 99
+                                                        :logseq.property/type :node
                                                         :block/created-at 40000
                                                         :block/updated-at 90000}]}}
                                        {:output-format nil
                                         :now-ms 100000})]
-      (is (= (str "ID  TITLE  UPDATED-AT  CREATED-AT\n"
-                  "99  Prop   10s ago     1m ago\n"
+      (is (= (str "ID  TITLE  TYPE  UPDATED-AT  CREATED-AT\n"
+                  "99  Prop   node  10s ago     1m ago\n"
+                  "Count: 1")
+             result))))
+
+  (testing "list property renders missing type as -"
+    (let [result (format/format-result {:status :ok
+                                        :command :list-property
+                                        :data {:items [{:block/title "Untyped"
+                                                        :db/id 100
+                                                        :block/created-at 40000
+                                                        :block/updated-at 90000}]}}
+                                       {:output-format nil
+                                        :now-ms 100000})]
+      (is (= (str "ID   TITLE    TYPE  UPDATED-AT  CREATED-AT\n"
+                  "100  Untyped  -     10s ago     1m ago\n"
                   "Count: 1")
              result)))))
 

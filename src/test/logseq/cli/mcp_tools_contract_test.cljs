@@ -48,6 +48,7 @@
 (deftest test-list-non-expanded-contract
   (let [db (create-test-db)
         required-keys #{:db/id :block/title :block/created-at :block/updated-at}
+        required-property-keys #{:db/id :block/title :block/created-at :block/updated-at :logseq.property/type}
         visible-page (some #(when (= "Visible Page" (:block/title %)) %)
                            (cli-common-mcp-tools/list-pages db {}))
         custom-tag-entity (first-user-tag-entity db)
@@ -68,7 +69,7 @@
 
     (testing "list-properties non-expanded includes stable id and timestamps"
       (is (some? custom-property))
-      (is (set/subset? required-keys (set (keys custom-property)))))))
+      (is (set/subset? required-property-keys (set (keys custom-property)))))))
 
 (deftest test-list-tags-and-properties-include-built-in-default
   (let [db (create-test-db)
