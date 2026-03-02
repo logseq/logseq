@@ -179,11 +179,6 @@
             (dissoc :data)
             (bean/->js))))
 
-(def export_debug_log_db
-  (fn []
-    (when-let [repo (state/get-current-repo)]
-      (export-handler/export-repo-as-debug-log-sqlite! repo))))
-
 (def reset_debug_log_db
   (fn []
     (when-let [repo (state/get-current-repo)]
