@@ -946,13 +946,15 @@
       (notification/show! "No link for this search item." :warning))))
 
 (defn- keydown-accel-step
-  [state e]
-  (let [repeat? (.-repeat e)
-        now (js/Date.now)]
-    (when-not repeat?
-      (reset! (::accel-start-ts state) now))
-    (let [held-ms (- now (or @(::accel-start-ts state) now))]
-      (scroll/accel-step held-ms accel-delay-ms accel-step-interval-ms accel-max-step))))
+  "Returns the number of items to move per keydown, ramping up while the key is
+  held.  Uses `::accel-start-ts` to track hold duration instead of event.repeat,
+  which is not reliably forwarded by the Goog events BrowserEvent wrapper."
+  [state _e]
+  (let [now (js/Date.now)
+        start (or @(::accel-start-ts state)
+                  (reset! (::accel-start-ts state) now))
+        held-ms (- now start)]
+    (scroll/accel-step held-ms accel-delay-ms accel-step-interval-ms accel-max-step)))
 
 (defn- keydown-handler
   [state e]
