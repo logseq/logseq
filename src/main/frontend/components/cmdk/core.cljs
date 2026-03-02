@@ -686,11 +686,49 @@
   "Maximum items to move per keypress during acceleration."
   5)
 
+;; --- Synchronous keyboard highlight DOM manipulation ---
+;; React/Rum re-renders asynchronously (via rAF). When a keydown fires,
+;; scrollTop is set synchronously but the highlight attribute is only updated in
+;; the next frame when React reconciles — producing a visible 1-frame gap.
+;; `sync-keyboard-highlight!` toggles [data-kb-highlighted] directly so
+;; both changes land in the same browser paint frame.
+
+(defn- sync-keyboard-highlight!
+  "Synchronously toggles [data-kb-highlighted] on the DOM, with CSS
+  transition suppressed to prevent flicker. The CSS rule in cmdk.css provides
+  the visual style; React reconcile confirms the same attribute — visual no-op."
+  [container old-item-idx new-item-idx]
+  ;; Clear old highlight — suppress transition, remove attribute, restore transition.
+  (when-let [old-el (if (some? old-item-idx)
+                      (.querySelector container (str "[data-item-index='" old-item-idx "'] [data-cmdk-item]"))
+                      (.querySelector container "[data-kb-highlighted]"))]
+    (set! (.-transition (.-style old-el)) "none")
+    (.removeAttribute old-el "data-kb-highlighted")
+    (js/requestAnimationFrame #(set! (.-transition (.-style old-el)) "")))
+  ;; Set new highlight — suppress transition for instant appearance, restore after.
+  (when-let [new-el (.querySelector container (str "[data-item-index='" new-item-idx "'] [data-cmdk-item]"))]
+    (set! (.-transition (.-style new-el)) "none")
+    (.setAttribute new-el "data-kb-highlighted" "true")
+    (js/requestAnimationFrame #(set! (.-transition (.-style new-el)) ""))))
+
 (defn- highlighted-row-wrapper-el
   "Returns the current highlighted row wrapper (`[data-item-index]`) in container."
   [state container]
-  (when-let [item-index (some-> state state->highlighted-item :item-index)]
-    (.querySelector container (str "[data-item-index='" item-index "']"))))
+  (when-let [item-idx (some-> state state->highlighted-item :item-index)]
+    (.querySelector container (str "[data-item-index='" item-idx "']"))))
+
+(defn- row-el-needs-target-reconcile?
+  "Returns true only when `row-el` is a lazy wrapper still rendering placeholder.
+
+  Reconcile is needed only in this case because placeholder height can differ
+  from mounted row height."
+  [row-el]
+  (if-let [row-wrapper (some-> row-el (.closest "[data-item-index]"))]
+    (let [wrapper-el? (= row-el row-wrapper)
+          lazy-wrapper? (boolean (.querySelector row-wrapper ".lazy-visibility"))
+          mounted-row? (boolean (.querySelector row-wrapper ".lazy-visibility [data-cmdk-item]"))]
+      (and wrapper-el? lazy-wrapper? (not mounted-row?)))
+    false))
 
 (defn- current-highlight-target-top
   "Recomputes scroll target from latest highlighted-row geometry.
@@ -712,9 +750,12 @@
     (let [animate (fn animate []
                     (if-let [container @(::scroll-container-ref state)]
                       (let [pending-target @(::scroll-target state)
-                            target (current-highlight-target-top state container pending-target)
+                            reconcile? @(::scroll-target-needs-reconcile? state)
+                            target (if reconcile?
+                                     (current-highlight-target-top state container pending-target)
+                                     pending-target)
                             current (.-scrollTop container)]
-                        (when (not= target pending-target)
+                        (when (and reconcile? (not= target pending-target))
                           (reset! (::scroll-target state) target))
                         (if (or (nil? target) (= (js/Math.round current) target))
                           (reset! (::scroll-raf state) nil)
@@ -731,9 +772,20 @@
       (reset! (::scroll-raf state) (js/requestAnimationFrame animate)))))
 
 (defn- scroll-to-highlight!
-  "Updates the scroll target to bring the highlighted row into view,
-   then starts the rAF animation loop (if not already running).
-   For large jumps (e.g. wrap-around) scrolls instantly."
+  "Updates the scroll target to bring the highlighted row into view.
+
+  Decision: instant vs lerp is driven by whether the row is already fully
+  inside the ACTUAL (current) viewport:
+
+  - Row outside actual viewport → instant snap.
+    During rapid keydown hold the lerp animation cannot converge between OS
+    key-repeat events (~30 ms ≈ 2 frames). Using lerp in this case causes the
+    row to be only partially visible. Snapping guarantees it is always fully in
+    view immediately.
+
+  - Row fully inside viewport but target ≠ current → lerp (lazy-placeholder reconcile).
+
+  - Wrap-around (distance > 2 × viewport-height) → instant (via scroll-behavior)."
   [state row-el]
   (when-let [container @(::scroll-container-ref state)]
     (when row-el
@@ -748,19 +800,34 @@
         (when-not stale-row?
           (let [rect (scroll/focus-row-visible-rect container row-el)]
             (when rect
-              (let [target-top (scroll/ensure-focus-visible-scroll-top rect)
-                    current-top (.-scrollTop container)]
+              (let [current-top   (.-scrollTop container)
+                    viewport-h    (.-clientHeight container)
+                    focus-top     (:focus-top rect)
+                    focus-bottom  (+ focus-top (:focus-height rect))
+                    item-in-view? (and (>= focus-top current-top)
+                                       (<= focus-bottom (+ current-top viewport-h)))
+                    target-top    (scroll/ensure-focus-visible-scroll-top rect)
+                    instant?      (or (not item-in-view?)
+                                      (= :instant (scroll/scroll-behavior current-top target-top viewport-h)))]
                 (when (not= target-top (js/Math.round current-top))
-                  (if (= :instant (scroll/scroll-behavior current-top target-top (.-clientHeight container)))
+                  (if instant?
                     (do
+                      (when-let [raf @(::scroll-raf state)]
+                        (js/cancelAnimationFrame raf)
+                        (reset! (::scroll-raf state) nil))
                       (set! (.-scrollTop container) target-top)
-                      (reset! (::scroll-target state) nil))
-                    (let [pending-target @(::scroll-target state)
-                          scrolling? (some? @(::scroll-raf state))]
-                      ;; Sync path may run before row mount and async path may fire after mount.
-                      ;; Skip duplicate scheduling only when already animating to the same target.
-                      (when-not (and scrolling? (= pending-target target-top))
+                      (reset! (::scroll-target state) nil)
+                      (reset! (::scroll-target-needs-reconcile? state) false))
+                    ;; lerp path: only for lazy-placeholder reconcile
+                    (let [scrolling?         (some? @(::scroll-raf state))
+                          pending-target     @(::scroll-target state)
+                          pending-reconcile? @(::scroll-target-needs-reconcile? state)
+                          needs-reconcile?   (row-el-needs-target-reconcile? row-el)]
+                      (when-not (and scrolling?
+                                     (= pending-target target-top)
+                                     (= pending-reconcile? needs-reconcile?))
                         (reset! (::scroll-target state) target-top)
+                        (reset! (::scroll-target-needs-reconcile? state) needs-reconcile?)
                         (start-scroll-animation! state)))))))))))))
 
 (rum/defc render-result-list-item < rum/static
@@ -864,36 +931,40 @@
           (render-result-list-item state group highlighted? mouse-mode? item hls-page? text input)
           (:item-index item)))]]))
 
-(defn move-highlight [state n]
+(defn move-highlight
+  [state n]
   (let [items @(::all-items-cache state)
         focus-source @(::focus-source state)
         highlighted-item (some-> state ::highlighted-item deref)
+        old-item-idx (some-> highlighted-item :item-index)
         fallback-highlighted? (and (nil? highlighted-item)
                                    (= :keyboard focus-source)
                                    (seq items))
-        current-item-index (cond
-                             highlighted-item
-                             (let [idx (:item-index highlighted-item)]
-                               (if (and (some? idx) (= highlighted-item (nth items idx nil)))
-                                 idx
-                                 (.indexOf items highlighted-item)))
-                             fallback-highlighted? 0
-                             :else nil)
+        cur-item-idx (cond
+                       highlighted-item
+                       (let [idx (:item-index highlighted-item)]
+                         (if (and (some? idx) (= highlighted-item (nth items idx nil)))
+                           idx
+                           (.indexOf items highlighted-item)))
+                       fallback-highlighted? 0
+                       :else nil)
         items-count (count items)]
     (if (pos? items-count)
-      (let [base-index (if (some? current-item-index)
-                         current-item-index
-                         (if (pos? n) -1 0))
-            raw-index (+ base-index n)
-            next-item-index (mod raw-index items-count)
-            next-highlighted-item (nth items next-item-index nil)]
+      (let [base-idx (if (some? cur-item-idx)
+                       cur-item-idx
+                       (if (pos? n) -1 0))
+            raw-idx (+ base-idx n)
+            next-item-idx (mod raw-idx items-count)
+            next-highlighted-item (nth items next-item-idx nil)]
         (if next-highlighted-item
-          (do
+          (let [container @(::scroll-container-ref state)
+                next-idx (:item-index next-highlighted-item)]
+            (when (and container next-idx)
+              (sync-keyboard-highlight! container old-item-idx next-idx))
             (reset! (::highlighted-item state) next-highlighted-item)
-            (when-let [container @(::scroll-container-ref state)]
-              (when-let [idx (:item-index next-highlighted-item)]
-                (when-let [el (.querySelector container (str "[data-item-index='" idx "']"))]
-                  (scroll-to-highlight! state el)))))
+            (when (and container next-idx)
+              (when-let [el (.querySelector container (str "[data-item-index='" next-idx "']"))]
+                (scroll-to-highlight! state el))))
           (reset! (::highlighted-item state) nil)))
       (reset! (::highlighted-item state) nil))))
 
@@ -1230,6 +1301,7 @@
            ::all-items-cache (atom [])
            ::scroll-raf (atom nil)
            ::scroll-target (atom nil)
+           ::scroll-target-needs-reconcile? (atom false)
            ::scroll-container-ref (atom nil)
            ::accel-start-ts (atom nil))))
 
