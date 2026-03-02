@@ -90,6 +90,94 @@
   (p/let [_ (<put-session! self session)]
     session))
 
+(declare <append-event!)
+
+(defn- session-task
+  [session]
+  (if (map? (:task session))
+    (:task session)
+    {}))
+
+(defn- runtime-snapshot-id
+  [result]
+  (or (some-> (:snapshot-id result) str string/trim not-empty)
+      (some-> (:id result) str string/trim not-empty)))
+
+(defn- runtime-checkpoint-payload
+  [runtime result reason]
+  (let [snapshot-id (runtime-snapshot-id result)
+        provider (some-> (:provider runtime) str string/lower-case)
+        backup-key (some-> (or (:backup-key result)
+                               (:backup-key runtime))
+                           str
+                           string/trim
+                           not-empty)
+        backup-dir (some-> (or (:backup-dir result)
+                               (:dir result)
+                               (:backup-dir runtime))
+                           str
+                           string/trim
+                           not-empty)]
+    (when (string? snapshot-id)
+      (cond-> {:provider provider
+               :snapshot-id snapshot-id
+               :checkpoint-at (common/now-ms)}
+        (string? backup-key) (assoc :backup-key backup-key)
+        (string? backup-dir) (assoc :backup-dir backup-dir)
+        (string? reason) (assoc :reason reason)))))
+
+(defn- <persist-session-checkpoint!
+  [^js self expected-session-id checkpoint]
+  (if-not (and (string? expected-session-id) (map? checkpoint))
+    (p/resolved nil)
+    (p/let [latest-session (<get-session self)]
+      (if (and (map? latest-session)
+               (= expected-session-id (:id latest-session)))
+        (let [task (session-task latest-session)
+              task (assoc task :sandbox-checkpoint checkpoint)]
+          (<save-session! self (assoc latest-session :task task)))
+        nil))))
+
+(defn- existing-checkpoint-payload
+  [session reason]
+  (let [checkpoint (some-> (session-task session) :sandbox-checkpoint)
+        snapshot-id (some-> (:snapshot-id checkpoint) str string/trim not-empty)]
+    (when (string? snapshot-id)
+      (cond-> (assoc checkpoint :checkpoint-at (common/now-ms))
+        (string? reason) (assoc :reason reason)))))
+
+(defn- <checkpoint-existing-snapshot!
+  [^js self current-session {:keys [by reason]}]
+  (let [checkpoint (existing-checkpoint-payload current-session reason)
+        snapshot-id (runtime-snapshot-id checkpoint)]
+    (-> (p/let [_ (<append-event! self {:type "sandbox.checkpoint.started"
+                                        :data (cond-> {}
+                                                (string? by) (assoc :by by)
+                                                (string? reason) (assoc :reason reason))
+                                        :ts (common/now-ms)})]
+          (if (map? checkpoint)
+            (p/let [_ (<persist-session-checkpoint! self (:id current-session) checkpoint)
+                    _ (<append-event! self {:type "sandbox.checkpoint.succeeded"
+                                            :data (cond-> {:reused true}
+                                                    (string? by) (assoc :by by)
+                                                    (string? reason) (assoc :reason reason)
+                                                    (string? snapshot-id) (assoc :snapshot-id snapshot-id))
+                                            :ts (common/now-ms)})]
+              true)
+            (p/let [_ (<append-event! self {:type "sandbox.checkpoint.failed"
+                                            :data (cond-> {:error "missing existing checkpoint snapshot"}
+                                                    (string? by) (assoc :by by)
+                                                    (string? reason) (assoc :reason reason))
+                                            :ts (common/now-ms)})]
+              false)))
+        (p/catch (fn [error]
+                   (log/error :agent/checkpoint-existing-snapshot-failed
+                              {:session-id (:id current-session)
+                               :runtime-session-id (get-in current-session [:runtime :session-id])
+                               :sandbox-id (get-in current-session [:runtime :sandbox-id])
+                               :error (str error)})
+                   nil)))))
+
 (defn- stream-url [request session-id]
   (let [base (or (header request "x-stream-base")
                  (.-origin (platform/request-url request)))]
@@ -341,7 +429,9 @@
       (let [runtime (:runtime current-session)]
         (if-not (map? runtime)
           nil
-          (p/let [terminated? (-> (<terminate-runtime! self runtime)
+          (p/let [_ (<checkpoint-existing-snapshot! self current-session {:by "system"
+                                                                          :reason "pr-ready"})
+                  terminated? (-> (<terminate-runtime! self runtime)
                                   (p/then (fn [_] true))
                                   (p/catch (fn [error]
                                              (log/error :agent/pr-runtime-terminate-failed
@@ -466,6 +556,25 @@
 
 (def ^:private events-stream-ready-timeout-ms 1000)
 
+(defn- runtime-ready?
+  [runtime]
+  (and (map? runtime)
+       (string? (:session-id runtime))))
+
+(declare <provision-runtime!)
+
+(defn- <ensure-runtime-for-session!
+  [^js self current-session]
+  (if-not (map? current-session)
+    (p/resolved current-session)
+    (let [runtime (:runtime current-session)
+          session-id (:id current-session)]
+      (if (runtime-ready? runtime)
+        (p/resolved current-session)
+        (p/let [_ (<provision-runtime! self (:task current-session) session-id)
+                refreshed-session (<get-session self)]
+          refreshed-session)))))
+
 (defn- start-runtime-events-stream-background! [^js self session-id runtime]
   ;; Fire-and-forget start. Returning nil avoids p/let awaiting the stream task.
   (when (and (map? runtime)
@@ -475,30 +584,56 @@
 
 (defn- send-runtime-message!
   [^js self current-session runtime provider message kind]
-  (let [ready-promise (ensure-runtime-events-stream-ready! self (:id current-session) runtime)]
-    (-> (<await-events-stream-ready ready-promise events-stream-ready-timeout-ms)
-        (.then (fn [_]
-                 (runtime-provider/<send-message! provider
-                                                  runtime
-                                                  {:message message
-                                                   :kind kind})))
-        (.catch (fn [error]
-                  (log/error :agent/runtime-message-error
-                             {:session-id (:id current-session)
-                              :runtime-session-id (:session-id runtime)
-                              :error error})
-                  (<append-event! self {:type "agent.runtime.error"
-                                        :data {:session-id (:id current-session)
-                                               :message (str error)}
-                                        :ts (common/now-ms)})))
+  (let [session-id (:id current-session)
+        send-once! (fn [session-value]
+                     (let [runtime-value (:runtime session-value)
+                           provider-value (when (runtime-ready? runtime-value)
+                                            (runtime-provider/resolve-provider (.-env self) runtime-value))]
+                       (if-not (and provider-value (runtime-ready? runtime-value))
+                         (p/rejected (ex-info "session runtime unavailable"
+                                              {:session-id (:id session-value)}))
+                         (let [ready-promise (ensure-runtime-events-stream-ready! self (:id session-value) runtime-value)]
+                           (-> (<await-events-stream-ready ready-promise events-stream-ready-timeout-ms)
+                               (.then (fn [_]
+                                        (runtime-provider/<send-message! provider-value
+                                                                         runtime-value
+                                                                         {:message message
+                                                                          :kind kind}))))))))
+        retry-send! (fn [error]
+                      (p/let [latest-session (<get-session self)]
+                        (if (or (not (map? latest-session))
+                                (not= session-id (:id latest-session))
+                                (terminal-status? (:status latest-session)))
+                          (p/rejected error)
+                          (let [latest-runtime (:runtime latest-session)
+                                failed-runtime-id (some-> (:session-id runtime) str)
+                                latest-runtime-id (some-> (:session-id latest-runtime) str)
+                                same-runtime? (and (string? failed-runtime-id)
+                                                   (= failed-runtime-id latest-runtime-id))]
+                            (p/let [_ (when same-runtime?
+                                        (<save-session! self (assoc latest-session :runtime nil)))
+                                    retry-session (if same-runtime?
+                                                    (<get-session self)
+                                                    latest-session)
+                                    session-with-runtime (<ensure-runtime-for-session! self retry-session)]
+                              (send-once! session-with-runtime))))))]
+    (-> (send-once! current-session)
+        (p/catch retry-send!)
+        (p/catch (fn [error]
+                   (log/error :agent/runtime-message-error
+                              {:session-id session-id
+                               :runtime-session-id (:session-id runtime)
+                               :error error})
+                   (<append-event! self {:type "agent.runtime.error"
+                                         :data {:session-id session-id
+                                                :message (str error)}
+                                         :ts (common/now-ms)})))
         (.catch (fn [_] nil)))))
 
 (defn- send-runtime-message-background!
-  [^js self current-session runtime provider message kind]
-  (when (and runtime
-             provider
-             (string? (:session-id runtime)))
-    (send-runtime-message! self current-session runtime provider message kind)
+  [^js self current-session _runtime _provider message kind]
+  (when (map? current-session)
+    (send-runtime-message! self current-session _runtime _provider message kind)
     nil))
 
 (defn- <transition! [^js self to-status event-type data]
@@ -949,6 +1084,8 @@
                         result (runtime-provider/<snapshot-runtime! provider
                                                                     runtime
                                                                     {:task (:task current-session)})
+                        checkpoint (runtime-checkpoint-payload runtime result "manual")
+                        _ (<persist-session-checkpoint! self (:id current-session) checkpoint)
                         snapshot-id (or (:snapshot-id result)
                                         (:id result))
                         _ (<append-event! self {:type "sandbox.snapshot.succeeded"
@@ -979,6 +1116,9 @@
       (p/let [res (<append-event! self {:type "session.canceled"
                                         :data {:by user-id}})
               current-session (<get-session self)
+              _ (when (map? (:runtime current-session))
+                  (<checkpoint-existing-snapshot! self current-session {:by user-id
+                                                                        :reason "cancel"}))
               _ (<terminate-runtime! self (:runtime current-session))
               current-session (when current-session (assoc current-session :runtime nil))
               _ (when current-session (<save-session! self current-session))]
@@ -990,26 +1130,22 @@
   (p/let [current-session (<get-session self)]
     (if (nil? current-session)
       nil
-      (let [[orders next-session] (session/drain-orders current-session)
-            runtime (:runtime current-session)
-            provider (when runtime
-                       (runtime-provider/resolve-provider (.-env self) runtime))]
-        (p/let [_ (<save-session! self next-session)
-                _ (when (and runtime
-                             provider
-                             (string? (:session-id runtime)))
-                    (start-runtime-events-stream-background! self (:id current-session) runtime))
-                _ (when (and runtime
-                             provider
-                             (string? (:session-id runtime)))
-                    (p/all
-                     (map (fn [order]
-                            (runtime-provider/<send-message! provider
-                                                             runtime
-                                                             {:message (:message order)
-                                                              :kind (:kind order)}))
-                          orders)))]
-          (count orders))))))
+      (p/let [session-with-runtime (<ensure-runtime-for-session! self current-session)
+              runtime (:runtime session-with-runtime)]
+        (if-not (runtime-ready? runtime)
+          0
+          (let [[orders next-session] (session/drain-orders session-with-runtime)
+                provider (runtime-provider/resolve-provider (.-env self) runtime)]
+            (p/let [_ (<save-session! self next-session)
+                    _ (start-runtime-events-stream-background! self (:id session-with-runtime) runtime)
+                    _ (p/all
+                       (map (fn [order]
+                              (runtime-provider/<send-message! provider
+                                                               runtime
+                                                               {:message (:message order)
+                                                                :kind (:kind order)}))
+                            orders))]
+              (count orders))))))))
 
 (defn- handle-pause [^js self request]
   (let [user-id (user-id-from-request request)]

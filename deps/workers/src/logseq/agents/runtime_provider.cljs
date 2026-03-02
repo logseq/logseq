@@ -503,6 +503,19 @@
                        (string/lower-case repo-url))]
         (str repo-key "#" (string/lower-case branch))))))
 
+(defn- task-sandbox-checkpoint
+  [task]
+  (let [checkpoint (when (map? task) (:sandbox-checkpoint task))
+        provider (normalize-provider (:provider checkpoint))
+        snapshot-id (some-> (:snapshot-id checkpoint) str string/trim not-empty)
+        backup-key (some-> (:backup-key checkpoint) str string/trim not-empty)
+        backup-dir (some-> (:backup-dir checkpoint) str string/trim not-empty)]
+    (when (and (map? checkpoint) (string? snapshot-id))
+      (cond-> {:snapshot-id snapshot-id}
+        (string? provider) (assoc :provider provider)
+        (string? backup-key) (assoc :backup-key backup-key)
+        (string? backup-dir) (assoc :backup-dir backup-dir)))))
+
 (defn- prune-cloudflare-backup-cache!
   []
   (let [now (js/Date.now)]
@@ -1143,31 +1156,37 @@
                               :json-body (message-payload message)}))
 
 (defn- <cloudflare-restore-backup!
-  [^js sandbox backup-key target-dir]
+  [^js sandbox backup-key target-dir {:keys [backup-id]}]
   (let [entry (cloudflare-backup-entry backup-key)
+        explicit-backup-id (some-> backup-id str string/trim not-empty)
+        backup-id (or explicit-backup-id
+                      (:id entry))
+        from-cache? (and (nil? explicit-backup-id)
+                         (map? entry))
         restore-backup (js-method sandbox "restoreBackup")]
     (cond
-      (or (not (string? backup-key))
-          (not (string? target-dir))
-          (nil? entry))
+      (or (not (string? target-dir))
+          (not (string? backup-id)))
       (p/resolved false)
 
       (not (fn? restore-backup))
       (p/resolved false)
 
       :else
-      (let [backup-id (:id entry)
-            backup #js {:id backup-id
+      (let [backup #js {:id backup-id
                         :dir target-dir}]
         (-> (->promise (.restoreBackup sandbox backup))
             (p/then (fn [_]
+                      (when (and (string? backup-key) (string? backup-id))
+                        (remember-cloudflare-backup! backup-key backup-id))
                       (log/debug :agent/cloudflare-backup-restored
                                  {:backup-key backup-key
                                   :backup-id backup-id
                                   :dir target-dir})
                       true))
             (p/catch (fn [error]
-                       (forget-cloudflare-backup! backup-key)
+                       (when (and from-cache? (string? backup-key))
+                         (forget-cloudflare-backup! backup-key))
                        (log/error :agent/cloudflare-backup-restore-failed
                                   {:backup-key backup-key
                                    :backup-id backup-id
@@ -1542,6 +1561,36 @@
                         :snapshot-dir nil
                         :restored? false})))))))
 
+(defn- <vercel-create-sandbox-from-checkpoint!
+  [^js env checkpoint]
+  (let [snapshot-id (:snapshot-id checkpoint)
+        snapshot-dir (:backup-dir checkpoint)]
+    (if-not (string? snapshot-id)
+      (p/resolved nil)
+      (-> (<vercel-create-sandbox! env {:type "snapshot"
+                                        :snapshotId snapshot-id})
+          (p/then (fn [sandbox]
+                    (log/debug :agent/vercel-snapshot-restored
+                               {:snapshot-id snapshot-id
+                                :source "task-checkpoint"})
+                    {:sandbox sandbox
+                     :snapshot-id snapshot-id
+                     :snapshot-dir snapshot-dir
+                     :restored? true}))
+          (p/catch (fn [error]
+                     (log/error :agent/vercel-snapshot-restore-failed
+                                {:snapshot-id snapshot-id
+                                 :source "task-checkpoint"
+                                 :error (str error)})
+                     nil))))))
+
+(defn- <vercel-create-sandbox-for-restore!
+  [^js env backup-key checkpoint]
+  (p/let [checkpoint-restore (<vercel-create-sandbox-from-checkpoint! env checkpoint)]
+    (if (map? checkpoint-restore)
+      checkpoint-restore
+      (<vercel-create-sandbox-from-cache! env backup-key))))
+
 (defn- <vercel-runtime-base-url!
   [^js env runtime]
   (let [cached (:base-url runtime)
@@ -1818,9 +1867,19 @@
           port (vercel-agent-port env nil)
           payload (session-payload task)
           repo-dir (get-repo-dir session-id task "vercel")
-          backup-key (repo-backup-key task)]
-      (p/let [{:keys [sandbox snapshot-dir restored?]} (<vercel-create-sandbox-from-cache! env backup-key)
+          checkpoint (task-sandbox-checkpoint task)
+          backup-key (or (:backup-key checkpoint)
+                         (repo-backup-key task))]
+      (p/let [{:keys [sandbox snapshot-id snapshot-dir restored?]} (<vercel-create-sandbox-for-restore! env
+                                                                                                        backup-key
+                                                                                                        checkpoint)
               _ (<vercel-ensure-running! env sandbox session-id task port agent-token)
+              _ (when (and restored?
+                           (string? backup-key)
+                           (string? snapshot-id))
+                  (remember-vercel-snapshot! backup-key
+                                             snapshot-id
+                                             (or snapshot-dir repo-dir)))
               _ (when restored?
                   (<vercel-restore-repo-dir! sandbox snapshot-dir repo-dir))
               _ (when-not restored?
@@ -1878,7 +1937,10 @@
               snapshot-id (:snapshot-id result)]
         (when (and (string? backup-key) (string? snapshot-id))
           (remember-vercel-snapshot! backup-key snapshot-id backup-dir))
-        result)))
+        (cond-> result
+          (string? backup-key) (assoc :backup-key backup-key)
+          (string? backup-dir) (assoc :backup-dir backup-dir)
+          :always (assoc :provider "vercel")))))
 
   (<push-branch! [_ _runtime _opts]
     (p/rejected
@@ -1906,7 +1968,11 @@
           agent-token (env-str env "SANDBOX_AGENT_TOKEN")
           payload (session-payload task)
           repo-dir (get-repo-dir session-id)
-          backup-key (repo-backup-key task)]
+          checkpoint (task-sandbox-checkpoint task)
+          backup-key (or (:backup-key checkpoint)
+                         (repo-backup-key task))
+          checkpoint-backup-id (when (= "cloudflare" (:provider checkpoint))
+                                 (:snapshot-id checkpoint))]
       (log/debug :agent/cloudflare-provision-start
                  {:session-id session-id
                   :sandbox-id sandbox-id
@@ -1915,7 +1981,10 @@
                   :backup-key backup-key
                   :repo-dir repo-dir})
       (p/let [_ (<cloudflare-ensure-running! env sandbox task port agent-token)
-              restored? (<cloudflare-restore-backup! sandbox backup-key repo-dir)
+              restored? (<cloudflare-restore-backup! sandbox
+                                                     backup-key
+                                                     repo-dir
+                                                     {:backup-id checkpoint-backup-id})
               _ (when-not restored?
                   (<cloudflare-clone-repo! env sandbox session-id task))
               response (<cloudflare-create-session! sandbox port agent-token session-id payload)]
@@ -1990,7 +2059,10 @@
                 snapshot-id (:snapshot-id result)]
           (when (and (string? backup-key) (string? snapshot-id))
             (remember-cloudflare-backup! backup-key snapshot-id))
-          result))))
+          (cond-> result
+            (string? backup-key) (assoc :backup-key backup-key)
+            (string? backup-dir) (assoc :backup-dir backup-dir)
+            :always (assoc :provider "cloudflare"))))))
 
   (<push-branch! [_ runtime opts]
     (let [sandbox-id (:sandbox-id runtime)

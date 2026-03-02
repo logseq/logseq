@@ -1,8 +1,8 @@
 (ns logseq.agents.runtime-provider-test
   (:require [cljs.test :refer [async deftest is testing]]
             [clojure.string :as string]
-            [logseq.agents.sandbox :as sandbox]
-            [logseq.agents.runtime-provider :as runtime-provider]))
+            [logseq.agents.runtime-provider :as runtime-provider]
+            [logseq.agents.sandbox :as sandbox]))
 
 (defn- fetch-url [request]
   (cond
@@ -224,7 +224,7 @@
                (.catch (fn [error]
                          (let [data (ex-data error)]
                            (is (= :unsupported (:reason data)))
-                         (is (= "local-dev" (:provider data))))
+                           (is (= "local-dev" (:provider data))))
                          (done)))))))
 
 (deftest vercel-provider-snapshot-restore-flow-test
@@ -292,7 +292,49 @@
                                         (done))))))
                  (.catch (fn [error]
                            (is false (str "unexpected first provision error: " error))
-                           (done)))))))))
+                           (done))))))))
+
+(deftest vercel-provider-restores-from-task-checkpoint-test
+  (async done
+         (runtime-provider/clear-vercel-snapshot-cache!)
+         (let [calls (atom {:clone 0
+                            :sources []})
+               env #js {"VERCEL_TEAM_ID" "team-1"
+                        "VERCEL_PROJECT_ID" "project-1"
+                        "VERCEL_TOKEN" "token-vercel"}
+               provider (runtime-provider/create-provider env "vercel")
+               task {:agent {:provider "codex"}
+                     :project {:repo-url "https://github.com/example/repo"
+                               :base-branch "main"}
+                     :sandbox-checkpoint {:provider "vercel"
+                                          :snapshot-id "persisted-snap-7"
+                                          :backup-dir "/vercel/sandbox/repo"}}]
+           (with-redefs [runtime-provider/<vercel-create-sandbox!
+                         (fn [_env source]
+                           (swap! calls update :sources conj source)
+                           (js/Promise.resolve
+                            #js {:sandboxId "vercel-sbx-checkpoint"
+                                 :domain (fn [_port] "https://vercel-agent.local")}))
+                         runtime-provider/<vercel-run-shell!
+                         (fn [_sandbox cmd & _]
+                           (when (string/includes? cmd "git clone --depth 1 --single-branch --no-tags")
+                             (swap! calls update :clone inc))
+                           (js/Promise.resolve {:stdout "" :stderr "" :exit-code 0}))
+                         sandbox/<create-session
+                         (fn [_base-url _agent-token session-id _payload]
+                           (js/Promise.resolve {:session-id session-id}))]
+             (-> (runtime-provider/<provision-runtime! provider "sess-vercel-checkpoint" task)
+                 (.then (fn [runtime]
+                          (is (= "vercel" (:provider runtime)))
+                          (is (= 0 (:clone @calls)))
+                          (is (= "snapshot"
+                                 (get-in (first (:sources @calls)) [:type])))
+                          (is (= "persisted-snap-7"
+                                 (get-in (first (:sources @calls)) [:snapshotId])))
+                          (done)))
+                 (.catch (fn [error]
+                           (is false (str "unexpected task-checkpoint restore error: " error))
+                           (done))))))))
 
 (deftest vercel-provider-open-terminal-unsupported-test
   (async done
@@ -1090,6 +1132,68 @@
                                       (done))))))
                (.catch (fn [error]
                          (is false (str "unexpected snapshot error: " error))
+                         (done)))))))
+
+(deftest cloudflare-provider-restores-from-task-checkpoint-test
+  (async done
+         (runtime-provider/clear-cloudflare-backup-cache!)
+         (let [calls (atom {:clone 0
+                            :restore []})
+               sandboxes (atom {})
+               make-sandbox
+               (fn [sandbox-id]
+                 #js {:exec
+                      (fn [cmd]
+                        (cond
+                          (string/includes? cmd "/v1/health")
+                          (js/Promise.resolve #js {:success true})
+
+                          (string/includes? cmd "git clone --depth 1 --single-branch --no-tags")
+                          (do
+                            (swap! calls update :clone inc)
+                            (js/Promise.resolve #js {:success true}))
+
+                          :else
+                          (js/Promise.resolve #js {:success true :stdout "" :stderr ""})))
+                      :setEnvVars (fn [_] (js/Promise.resolve nil))
+                      :startProcess (fn [_] (js/Promise.resolve nil))
+                      :containerFetch
+                      (fn [_req _port]
+                        (js/Promise.resolve
+                         (js/Response.
+                          (js/JSON.stringify #js {:ok true})
+                          #js {:status 200 :headers #js {"content-type" "application/json"}})))
+                      :restoreBackup
+                      (fn [backup]
+                        (swap! calls update :restore conj (js->clj backup :keywordize-keys true))
+                        (js/Promise.resolve #js {:success true}))
+                      :delete (fn [] (js/Promise.resolve nil))})
+               sandbox-ns
+               #js {:idFromName (fn [name] name)
+                    :get (fn [id]
+                           (or (get @sandboxes id)
+                               (let [sandbox (make-sandbox id)]
+                                 (swap! sandboxes assoc id sandbox)
+                                 sandbox)))}
+               env #js {"Sandbox" sandbox-ns
+                        "CLOUDFLARE_SANDBOX_AGENT_PORT" "8000"}
+               provider (runtime-provider/create-provider env "cloudflare")
+               task {:agent {:provider "codex"}
+                     :project {:repo-url "https://github.com/example/repo"
+                               :base-branch "main"}
+                     :sandbox-checkpoint {:provider "cloudflare"
+                                          :snapshot-id "backup-from-task-1"}}]
+           (-> (runtime-provider/<provision-runtime! provider "sess-cf-checkpoint" task)
+               (.then (fn [_runtime]
+                        (is (= 0 (:clone @calls)))
+                        (is (= 1 (count (:restore @calls))))
+                        (is (= "backup-from-task-1"
+                               (get-in @calls [:restore 0 :id])))
+                        (is (= "/workspace/sess-cf-checkpoint"
+                               (get-in @calls [:restore 0 :dir])))
+                        (done)))
+               (.catch (fn [error]
+                         (is false (str "unexpected cloudflare task-checkpoint restore error: " error))
                          (done)))))))
 
 (deftest cloudflare-provider-snapshot-runtime-test

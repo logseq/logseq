@@ -171,6 +171,63 @@
                          (is false (str "unexpected error: " error))
                          (done))))))))
 
+(deftest messages-reprovision-runtime-after-send-failure-test
+  (testing "session messages reprovision runtime and retry send when current runtime is stale"
+    (async done
+           (let [env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"
+                          "SANDBOX_AGENT_URL" "http://sandbox.local"}
+                 self (make-self env)
+                 headers {"content-type" "application/json"
+                          "x-user-id" "user-1"}
+                 send-runtime-ids (atom [])
+                 provision-calls (atom 0)]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-reprovision"
+                                 :status "running"
+                                 :task {:project {:repo-url "https://github.com/example/repo"}}
+                                 :runtime {:provider "local-dev"
+                                           :session-id "runtime-old"}
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (with-redefs [runtime-provider/<send-message!
+                                        (fn [_provider runtime _message]
+                                          (swap! send-runtime-ids conj (:session-id runtime))
+                                          (if (= "runtime-old" (:session-id runtime))
+                                            (js/Promise.reject (ex-info "stale runtime" {}))
+                                            (js/Promise.resolve true)))
+                                        agent-do/<provision-runtime!
+                                        (fn [self _task _session-id]
+                                          (swap! provision-calls inc)
+                                          (-> (.get (.-storage self) "session")
+                                              (.then (fn [session-js]
+                                                       (let [session (js->clj session-js :keywordize-keys true)
+                                                             next-session (assoc session
+                                                                                 :runtime {:provider "local-dev"
+                                                                                           :session-id "runtime-new"})]
+                                                         (.put (.-storage self) "session" (clj->js next-session)))))
+                                              (.then (fn [_]
+                                                       {:provider "local-dev"
+                                                        :session-id "runtime-new"}))))]
+                            (agent-do/handle-fetch self
+                                                   (json-request "http://db-sync.local/__session__/messages"
+                                                                 "POST"
+                                                                 {:message "retry me"}
+                                                                 headers)))))
+                 (.then (fn [resp]
+                          (is (= 200 (.-status resp)))
+                          (js/setTimeout
+                           (fn []
+                             (is (= 1 @provision-calls))
+                             (is (= ["runtime-old" "runtime-new"] @send-runtime-ids))
+                             (done))
+                           30)))
+                 (.catch (fn [error]
+                           (is false (str "unexpected error: " error))
+                           (done))))))))
+
 (deftest init-does-not-wait-for-open-events-stream-test
   (testing "session init returns immediately even when runtime events stream stays open"
     (async done
@@ -755,7 +812,13 @@
                                    (is (= "snapshot-created" (:status body)))
                                    (is (= "backup-1" (:snapshot-id body)))
                                    (is (= 1 (count @snapshot-calls)))
-                                   (done)))))
+                                   (.then (.get (.-storage self) "session")
+                                          (fn [session]
+                                            (let [session (js->clj session :keywordize-keys true)
+                                                  checkpoint (get-in session [:task :sandbox-checkpoint])]
+                                              (is (= "backup-1" (:snapshot-id checkpoint)))
+                                              (is (= "cloudflare" (:provider checkpoint)))
+                                              (done))))))))
                  (.catch (fn [error]
                            (is false (str "unexpected error: " error))
                            (done))))))))
@@ -978,6 +1041,7 @@
   (testing "session publish endpoint terminates runtime and clears sandbox runtime when PR is created"
     (async done
            (let [terminate-calls (atom [])
+                 snapshot-calls (atom [])
                  env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"}
                  self (make-self env)
                  headers {"content-type" "application/json"
@@ -986,7 +1050,9 @@
                        "session"
                        (clj->js {:id "sess-pr-created"
                                  :status "running"
-                                 :task {:project {:repo-url "https://github.com/example/repo"}}
+                                 :task {:project {:repo-url "https://github.com/example/repo"}
+                                        :sandbox-checkpoint {:provider "cloudflare"
+                                                             :snapshot-id "checkpoint-existing-pr"}}
                                  :runtime {:provider "cloudflare"
                                            :sandbox-id "sbx-pr-created"
                                            :session-id "sess-pr-created"}
@@ -1011,6 +1077,10 @@
                                         (fn [_env _token _repo-url _opts]
                                           (js/Promise.resolve {:url "https://github.com/example/repo/pull/88"
                                                                :id 88}))
+                                        runtime-provider/<snapshot-runtime!
+                                        (fn [_provider runtime _opts]
+                                          (swap! snapshot-calls conj runtime)
+                                          (js/Promise.resolve {:snapshot-id "backup-pr-1"}))
                                         agent-do/<terminate-runtime!
                                         (fn [_self runtime]
                                           (swap! terminate-calls conj runtime)
@@ -1032,8 +1102,64 @@
                                           (fn [session]
                                             (let [session (js->clj session :keywordize-keys true)]
                                               (is (= 1 (count @terminate-calls)))
+                                              (is (empty? @snapshot-calls))
                                               (is (nil? (:runtime session)))
+                                              (is (= "checkpoint-existing-pr"
+                                                     (get-in session [:task :sandbox-checkpoint :snapshot-id])))
+                                              (is (number? (get-in session [:task :sandbox-checkpoint :checkpoint-at])))
                                               (done))))))))
+                 (.catch (fn [error]
+                           (is false (str "unexpected error: " error))
+                           (done))))))))
+
+(deftest cancel-endpoint-checkpoints-before-terminate-test
+  (testing "session cancel checkpoints existing snapshot pointer before terminating runtime"
+    (async done
+           (let [terminate-calls (atom [])
+                 snapshot-calls (atom [])
+                 env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"}
+                 self (make-self env)
+                 headers {"content-type" "application/json"
+                          "x-user-id" "user-1"}]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-cancel-checkpoint"
+                                 :status "running"
+                                 :task {:project {:repo-url "https://github.com/example/repo"}
+                                        :sandbox-checkpoint {:provider "cloudflare"
+                                                             :snapshot-id "checkpoint-existing-cancel"}}
+                                 :runtime {:provider "cloudflare"
+                                           :sandbox-id "sbx-cancel-checkpoint"
+                                           :session-id "sess-cancel-checkpoint"}
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (with-redefs [runtime-provider/<snapshot-runtime!
+                                        (fn [_provider runtime _opts]
+                                          (swap! snapshot-calls conj runtime)
+                                          (js/Promise.resolve {:snapshot-id "backup-cancel-1"}))
+                                        agent-do/<terminate-runtime!
+                                        (fn [_self runtime]
+                                          (swap! terminate-calls conj runtime)
+                                          (js/Promise.resolve nil))]
+                            (agent-do/handle-fetch self
+                                                   (json-request "http://db-sync.local/__session__/cancel"
+                                                                 "POST"
+                                                                 nil
+                                                                 headers)))))
+                 (.then (fn [resp]
+                          (is (= 200 (.-status resp)))
+                          (.then (.get (.-storage self) "session")
+                                 (fn [session]
+                                   (let [session (js->clj session :keywordize-keys true)]
+                                     (is (empty? @snapshot-calls))
+                                     (is (= 1 (count @terminate-calls)))
+                                     (is (nil? (:runtime session)))
+                                     (is (= "checkpoint-existing-cancel"
+                                            (get-in session [:task :sandbox-checkpoint :snapshot-id])))
+                                     (is (number? (get-in session [:task :sandbox-checkpoint :checkpoint-at])))
+                                     (done))))))
                  (.catch (fn [error]
                            (is false (str "unexpected error: " error))
                            (done))))))))
