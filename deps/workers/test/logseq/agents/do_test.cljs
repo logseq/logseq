@@ -3,7 +3,8 @@
             [clojure.string :as string]
             [logseq.agents.do :as agent-do]
             [logseq.agents.runtime-provider :as runtime-provider]
-            [logseq.agents.source-control :as source-control]))
+            [logseq.agents.source-control :as source-control]
+            [logseq.sync.common :as common]))
 
 (defn- make-agent-storage []
   (let [data (js/Map.)]
@@ -285,6 +286,129 @@
                            (is false (str "unexpected provision checkpoint error: " error))
                            (done))))))))
 
+(deftest provision-runtime-loads-checkpoint-from-d1-test
+  (testing "provision runtime should load sandbox checkpoint from D1 metadata by repo+branch"
+    (async done
+           (let [env #js {"AGENT_RUNTIME_PROVIDER" "vercel"
+                          "AGENTS_DB" #js {}}
+                 self (make-self env)
+                 task {:id "sess-d1-checkpoint"
+                       :agent "codex"
+                       :project {:repo-url "https://github.com/logseq/logseq"
+                                 :base-branch "main"}}
+                 passed-task (atom nil)
+                 runtime {:provider "vercel"
+                          :session-id "runtime-d1"
+                          :sandbox-id "sbx-d1"}
+                 provider (reify runtime-provider/RuntimeProvider
+                            (<provision-runtime! [_ _session-id task]
+                              (reset! passed-task task)
+                              (js/Promise.resolve runtime))
+                            (<open-events-stream! [_ _runtime]
+                              (js/Promise.resolve nil))
+                            (<send-message! [_ _runtime _message]
+                              (js/Promise.resolve true))
+                            (<open-terminal! [_ _runtime _request _opts]
+                              (js/Promise.resolve nil))
+                            (<snapshot-runtime! [_ _runtime _opts]
+                              (js/Promise.resolve nil))
+                            (<push-branch! [_ _runtime _opts]
+                              (js/Promise.resolve nil))
+                            (<terminate-runtime! [_ _runtime]
+                              (js/Promise.resolve nil)))
+                 row #js {"provider" "vercel"
+                          "snapshot_id" "snapshot-from-d1"
+                          "backup_key" "github/logseq/logseq#main"
+                          "backup_dir" "/vercel/sandbox/logseq"
+                          "checkpoint_at" 1000}]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-d1-checkpoint"
+                                 :status "running"
+                                 :task task
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (with-redefs [runtime-provider/resolve-provider (fn [_env _runtime] provider)
+                                        runtime-provider/provider-id (fn [_provider] "vercel")
+                                        agent-do/start-runtime-events-stream-background! (fn [& _] nil)
+                                        common/<d1-all (fn [_db _sql & _args]
+                                                         (js/Promise.resolve #js {:results #js [row]}))
+                                        common/get-sql-rows (fn [result]
+                                                              (aget result "results"))]
+                            (#'agent-do/<provision-runtime! self task "sess-d1-checkpoint"))))
+                 (.then (fn [_]
+                          (is (= "snapshot-from-d1"
+                                 (get-in @passed-task [:sandbox-checkpoint :snapshot-id])))
+                          (is (= "vercel"
+                                 (get-in @passed-task [:sandbox-checkpoint :provider])))
+                          (is (= "github/logseq/logseq#main"
+                                 (get-in @passed-task [:sandbox-checkpoint :backup-key])))
+                          (done)))
+                 (.catch (fn [error]
+                           (is false (str "unexpected d1 checkpoint provision error: " error))
+                           (done))))))))
+
+(deftest provision-runtime-does-not-use-storage-checkpoint-fallback-test
+  (testing "provision runtime should not use Durable Object storage checkpoint fallback"
+    (async done
+           (let [env #js {"AGENT_RUNTIME_PROVIDER" "vercel"
+                          "AGENTS_DB" #js {}}
+                 self (make-self env)
+                 task {:id "sess-no-storage-fallback"
+                       :agent "codex"
+                       :project {:repo-url "https://github.com/logseq/logseq"
+                                 :base-branch "main"}}
+                 passed-task (atom nil)
+                 runtime {:provider "vercel"
+                          :session-id "runtime-no-storage-fallback"
+                          :sandbox-id "sbx-no-storage-fallback"}
+                 provider (reify runtime-provider/RuntimeProvider
+                            (<provision-runtime! [_ _session-id task]
+                              (reset! passed-task task)
+                              (js/Promise.resolve runtime))
+                            (<open-events-stream! [_ _runtime]
+                              (js/Promise.resolve nil))
+                            (<send-message! [_ _runtime _message]
+                              (js/Promise.resolve true))
+                            (<open-terminal! [_ _runtime _request _opts]
+                              (js/Promise.resolve nil))
+                            (<snapshot-runtime! [_ _runtime _opts]
+                              (js/Promise.resolve nil))
+                            (<push-branch! [_ _runtime _opts]
+                              (js/Promise.resolve nil))
+                            (<terminate-runtime! [_ _runtime]
+                              (js/Promise.resolve nil)))]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-no-storage-fallback"
+                                 :status "running"
+                                 :task task
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (.put (.-storage self)
+                                "sandbox.checkpoint"
+                                (clj->js {:provider "vercel"
+                                          :snapshot-id "from-storage-should-not-be-used"}))))
+                 (.then (fn [_]
+                          (with-redefs [runtime-provider/resolve-provider (fn [_env _runtime] provider)
+                                        runtime-provider/provider-id (fn [_provider] "vercel")
+                                        agent-do/start-runtime-events-stream-background! (fn [& _] nil)
+                                        common/<d1-all (fn [_db _sql & _args]
+                                                         (js/Promise.resolve #js {:results #js []}))
+                                        common/get-sql-rows (fn [result]
+                                                              (aget result "results"))]
+                            (#'agent-do/<provision-runtime! self task "sess-no-storage-fallback"))))
+                 (.then (fn [_]
+                          (is (nil? (get-in @passed-task [:sandbox-checkpoint :snapshot-id])))
+                          (done)))
+                 (.catch (fn [error]
+                           (is false (str "unexpected no-storage-fallback error: " error))
+                           (done))))))))
+
 (deftest checkpoint-existing-snapshot-falls-back-to-runtime-snapshot-test
   (testing "checkpoint refresh reuses runtime snapshot metadata when task checkpoint is missing"
     (async done
@@ -323,6 +447,43 @@
                                      (done))))))
                  (.catch (fn [error]
                            (is false (str "unexpected runtime-checkpoint fallback error: " error))
+                           (done))))))))
+
+(deftest checkpoint-existing-snapshot-upserts-d1-metadata-test
+  (testing "checkpoint refresh should upsert checkpoint metadata into D1"
+    (async done
+           (let [env #js {"AGENT_RUNTIME_PROVIDER" "vercel"
+                          "AGENTS_DB" #js {}}
+                 self (make-self env)
+                 session {:id "sess-checkpoint-d1-upsert"
+                          :status "running"
+                          :task {:project {:repo-url "https://github.com/logseq/logseq"
+                                           :base-branch "main"}}
+                          :runtime {:provider "vercel"
+                                    :session-id "sess-checkpoint-d1-upsert"
+                                    :sandbox-id "sbx-checkpoint-d1-upsert"
+                                    :snapshot-id "runtime-snapshot-d1-upsert"
+                                    :backup-key "github/logseq/logseq#main"
+                                    :backup-dir "/vercel/sandbox/logseq"}
+                          :audit {}
+                          :created-at 0
+                          :updated-at 0}
+                 d1-runs (atom 0)]
+             (-> (.put (.-storage self) "session" (clj->js session))
+                 (.then (fn [_]
+                          (with-redefs [common/<d1-run (fn [_db _sql & _args]
+                                                         (swap! d1-runs inc)
+                                                         (js/Promise.resolve {:ok true}))]
+                            (#'agent-do/<checkpoint-existing-snapshot! self
+                                                                       session
+                                                                       {:by "system"
+                                                                        :reason "session-completed"}))))
+                 (.then (fn [ok?]
+                          (is (true? ok?))
+                          (is (= 1 @d1-runs))
+                          (done)))
+                 (.catch (fn [error]
+                           (is false (str "unexpected checkpoint d1 upsert error: " error))
                            (done))))))))
 
 (deftest runtime-session-completed-checkpoints-existing-and-terminates-test

@@ -124,16 +124,14 @@
 (def ^:private vercel-repo-base-dir "/vercel/sandbox")
 (def ^:private cloudflare-local-host "http://localhost")
 (def ^:private cloudflare-snapshot-ttl-seconds (* 30 24 60 60))
-(defonce ^:private cloudflare-backup-cache (atom {}))
-(defonce ^:private vercel-snapshot-cache (atom {}))
 
 (defn clear-cloudflare-backup-cache!
   []
-  (reset! cloudflare-backup-cache {}))
+  nil)
 
 (defn clear-vercel-snapshot-cache!
   []
-  (reset! vercel-snapshot-cache {}))
+  nil)
 
 (defn- cloudflare-agent-port [^js env]
   (parse-int (env-str env "CLOUDFLARE_SANDBOX_AGENT_PORT") 2468))
@@ -516,83 +514,6 @@
         (string? provider) (assoc :provider provider)
         (string? backup-key) (assoc :backup-key backup-key)
         (string? backup-dir) (assoc :backup-dir backup-dir)))))
-
-(defn- prune-cloudflare-backup-cache!
-  []
-  (let [now (js/Date.now)]
-    (swap! cloudflare-backup-cache
-           (fn [entries]
-             (reduce-kv (fn [acc k v]
-                          (let [expires-at-ms (:expires-at-ms v)
-                                backup-id (:id v)]
-                            (if (and (string? k)
-                                     (string? backup-id)
-                                     (number? expires-at-ms)
-                                     (> expires-at-ms now))
-                              (assoc acc k v)
-                              acc)))
-                        {}
-                        entries)))))
-
-(defn- cloudflare-backup-entry
-  [backup-key]
-  (prune-cloudflare-backup-cache!)
-  (when (string? backup-key)
-    (get @cloudflare-backup-cache backup-key)))
-
-(defn- remember-cloudflare-backup!
-  [backup-key backup-id]
-  (when (and (string? backup-key) (string? backup-id))
-    (let [now (js/Date.now)
-          ttl-ms (* cloudflare-snapshot-ttl-seconds 1000)]
-      (swap! cloudflare-backup-cache assoc backup-key {:id backup-id
-                                                       :ttl-seconds cloudflare-snapshot-ttl-seconds
-                                                       :expires-at-ms (+ now ttl-ms)
-                                                       :updated-at-ms now}))))
-
-(defn- forget-cloudflare-backup!
-  [backup-key]
-  (when (string? backup-key)
-    (swap! cloudflare-backup-cache dissoc backup-key)))
-
-(defn- prune-vercel-snapshot-cache!
-  []
-  (let [now (js/Date.now)]
-    (swap! vercel-snapshot-cache
-           (fn [entries]
-             (reduce-kv (fn [acc k v]
-                          (let [expires-at-ms (:expires-at-ms v)
-                                snapshot-id (:id v)]
-                            (if (and (string? k)
-                                     (string? snapshot-id)
-                                     (number? expires-at-ms)
-                                     (> expires-at-ms now))
-                              (assoc acc k v)
-                              acc)))
-                        {}
-                        entries)))))
-
-(defn- vercel-snapshot-entry
-  [backup-key]
-  (prune-vercel-snapshot-cache!)
-  (when (string? backup-key)
-    (get @vercel-snapshot-cache backup-key)))
-
-(defn- remember-vercel-snapshot!
-  [backup-key snapshot-id source-dir]
-  (when (and (string? backup-key) (string? snapshot-id))
-    (let [now (js/Date.now)
-          ttl-ms (* cloudflare-snapshot-ttl-seconds 1000)]
-      (swap! vercel-snapshot-cache assoc backup-key {:id snapshot-id
-                                                     :dir source-dir
-                                                     :ttl-seconds cloudflare-snapshot-ttl-seconds
-                                                     :expires-at-ms (+ now ttl-ms)
-                                                     :updated-at-ms now}))))
-
-(defn- forget-vercel-snapshot!
-  [backup-key]
-  (when (string? backup-key)
-    (swap! vercel-snapshot-cache dissoc backup-key)))
 
 (defn- sanitize-backup-name
   [value]
@@ -1157,13 +1078,8 @@
                               :json-body (message-payload message)}))
 
 (defn- <cloudflare-restore-backup!
-  [^js sandbox backup-key target-dir {:keys [backup-id]}]
-  (let [entry (cloudflare-backup-entry backup-key)
-        explicit-backup-id (some-> backup-id str string/trim not-empty)
-        backup-id (or explicit-backup-id
-                      (:id entry))
-        from-cache? (and (nil? explicit-backup-id)
-                         (map? entry))
+  [^js sandbox _backup-key target-dir {:keys [backup-id]}]
+  (let [backup-id (some-> backup-id str string/trim not-empty)
         restore-backup (js-method sandbox "restoreBackup")]
     (cond
       (or (not (string? target-dir))
@@ -1178,19 +1094,13 @@
                         :dir target-dir}]
         (-> (->promise (.restoreBackup sandbox backup))
             (p/then (fn [_]
-                      (when (and (string? backup-key) (string? backup-id))
-                        (remember-cloudflare-backup! backup-key backup-id))
                       (log/debug :agent/cloudflare-backup-restored
-                                 {:backup-key backup-key
-                                  :backup-id backup-id
+                                 {:backup-id backup-id
                                   :dir target-dir})
                       true))
             (p/catch (fn [error]
-                       (when (and from-cache? (string? backup-key))
-                         (forget-cloudflare-backup! backup-key))
                        (log/error :agent/cloudflare-backup-restore-failed
-                                  {:backup-key backup-key
-                                   :backup-id backup-id
+                                  {:backup-id backup-id
                                    :dir target-dir
                                    :error (str error)})
                        false)))))))
@@ -1532,38 +1442,6 @@
           _ (<vercel-health! env sandbox port agent-token)]
     true))
 
-(defn- <vercel-create-sandbox-from-cache!
-  [^js env backup-key]
-  (let [entry (vercel-snapshot-entry backup-key)
-        snapshot-id (:id entry)
-        snapshot-dir (:dir entry)]
-    (if-not (string? snapshot-id)
-      (p/let [sandbox (<vercel-create-sandbox! env nil)]
-        {:sandbox sandbox
-         :snapshot-dir nil
-         :restored? false})
-      (-> (<vercel-create-sandbox! env {:type "snapshot"
-                                        :snapshotId snapshot-id})
-          (p/then (fn [sandbox]
-                    (log/debug :agent/vercel-snapshot-restored
-                               {:backup-key backup-key
-                                :snapshot-id snapshot-id})
-                    {:sandbox sandbox
-                     :snapshot-id snapshot-id
-                     :snapshot-dir snapshot-dir
-                     :restored? true}))
-          (p/catch (fn [error]
-                     (forget-vercel-snapshot! backup-key)
-                     (log/error :agent/vercel-snapshot-restore-failed
-                                {:backup-key backup-key
-                                 :snapshot-id snapshot-id
-                                 :error (str error)})
-                     (p/let [sandbox (<vercel-create-sandbox! env nil)]
-                       {:sandbox sandbox
-                        :snapshot-id nil
-                        :snapshot-dir nil
-                        :restored? false})))))))
-
 (defn- <vercel-create-sandbox-from-checkpoint!
   [^js env checkpoint]
   (let [snapshot-id (:snapshot-id checkpoint)
@@ -1588,11 +1466,14 @@
                      nil))))))
 
 (defn- <vercel-create-sandbox-for-restore!
-  [^js env backup-key checkpoint]
+  [^js env checkpoint]
   (p/let [checkpoint-restore (<vercel-create-sandbox-from-checkpoint! env checkpoint)]
     (if (map? checkpoint-restore)
       checkpoint-restore
-      (<vercel-create-sandbox-from-cache! env backup-key))))
+      (p/let [sandbox (<vercel-create-sandbox! env nil)]
+        {:sandbox sandbox
+         :snapshot-dir nil
+         :restored? false}))))
 
 (defn- <vercel-runtime-base-url!
   [^js env runtime]
@@ -1874,15 +1755,8 @@
           backup-key (or (:backup-key checkpoint)
                          (repo-backup-key task))]
       (p/let [{:keys [sandbox snapshot-id snapshot-dir restored?]} (<vercel-create-sandbox-for-restore! env
-                                                                                                        backup-key
                                                                                                         checkpoint)
               _ (<vercel-ensure-running! env sandbox session-id task port agent-token)
-              _ (when (and restored?
-                           (string? backup-key)
-                           (string? snapshot-id))
-                  (remember-vercel-snapshot! backup-key
-                                             snapshot-id
-                                             (or snapshot-dir repo-dir)))
               _ (when restored?
                   (<vercel-restore-repo-dir! sandbox snapshot-dir repo-dir))
               _ (when-not restored?
@@ -1939,8 +1813,6 @@
       (p/let [sandbox (<vercel-get-sandbox! env sandbox-id)
               result (<vercel-create-snapshot! sandbox backup-dir snapshot-name)
               snapshot-id (:snapshot-id result)]
-        (when (and (string? backup-key) (string? snapshot-id))
-          (remember-vercel-snapshot! backup-key snapshot-id backup-dir))
         (cond-> result
           (string? backup-key) (assoc :backup-key backup-key)
           (string? backup-dir) (assoc :backup-dir backup-dir)
@@ -2105,9 +1977,7 @@
                          :runtime runtime})))
       (let [sandbox (cloudflare-sandbox env sandbox-id)]
         (p/let [result (<cloudflare-create-backup! sandbox backup-dir backup-name)
-                snapshot-id (:snapshot-id result)]
-          (when (and (string? backup-key) (string? snapshot-id))
-            (remember-cloudflare-backup! backup-key snapshot-id))
+                _snapshot-id (:snapshot-id result)]
           (cond-> result
             (string? backup-key) (assoc :backup-key backup-key)
             (string? backup-dir) (assoc :backup-dir backup-dir)

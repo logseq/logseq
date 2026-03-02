@@ -227,7 +227,7 @@
                            (is (= "local-dev" (:provider data))))
                          (done)))))))
 
-(deftest vercel-provider-snapshot-restore-flow-test
+(deftest vercel-provider-does-not-restore-from-in-memory-cache-test
   (async done
          (runtime-provider/clear-vercel-snapshot-cache!)
          (let [calls (atom {:clone 0
@@ -280,10 +280,10 @@
                                        (is (= 1 (:snapshots @calls)))
                                        (-> (runtime-provider/<provision-runtime! provider "sess-vercel-2" task)
                                            (.then (fn [runtime-2]
-                                                    (is (= 1 (:clone @calls)))
-                                                    (is (= 1 (:restores @calls)))
+                                                    (is (= 2 (:clone @calls)))
+                                                    (is (= 0 (:restores @calls)))
                                                     (is (= 2 (:sessions @calls)))
-                                                    (is (= "vercel-snap-1" (:snapshot-id runtime-2)))
+                                                    (is (nil? (:snapshot-id runtime-2)))
                                                     (done)))
                                            (.catch (fn [error]
                                                      (is false (str "unexpected second provision error: " error))
@@ -1138,7 +1138,7 @@
                          (is false (str "unexpected provision error: " error))
                          (done)))))))
 
-(deftest cloudflare-provider-restores-from-cached-snapshot-test
+(deftest cloudflare-provider-does-not-restore-from-in-memory-cache-test
   (async done
          (runtime-provider/clear-cloudflare-backup-cache!)
          (let [calls (atom {:clone 0
@@ -1199,12 +1199,8 @@
                         (is (= 1 (:backup @calls)))
                         (-> (runtime-provider/<provision-runtime! provider "sess-cache-next" task)
                             (.then (fn [_next-runtime]
-                                     (is (= 0 (:clone @calls)))
-                                     (is (= 1 (count (:restore @calls))))
-                                     (is (= "backup-restore-1"
-                                            (get-in @calls [:restore 0 :id])))
-                                     (is (= "/workspace/sess-cache-next"
-                                            (get-in @calls [:restore 0 :dir])))
+                                     (is (= 1 (:clone @calls)))
+                                     (is (= 0 (count (:restore @calls))))
                                      (done)))
                             (.catch (fn [error]
                                       (is false (str "unexpected reprovision error: " error))

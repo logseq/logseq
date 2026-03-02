@@ -1,6 +1,7 @@
 (ns logseq.agents.do
   (:require [clojure.string :as string]
             [lambdaisland.glogi :as log]
+            [logseq.agents.checkpoint-store :as checkpoint-store]
             [logseq.agents.runtime-provider :as runtime-provider]
             [logseq.agents.session :as session]
             [logseq.agents.source-control :as source-control]
@@ -125,8 +126,6 @@
         (string? backup-dir) (assoc :backup-dir backup-dir)
         (string? reason) (assoc :reason reason)))))
 
-(def ^:private checkpoint-storage-key "sandbox.checkpoint")
-
 (defn- checkpoint-payload-with-reason
   [checkpoint reason]
   (let [snapshot-id (runtime-snapshot-id checkpoint)]
@@ -148,19 +147,6 @@
       (string? backup-key) (assoc :backup-key backup-key)
       (string? backup-dir) (assoc :backup-dir backup-dir))))
 
-(defn- <stored-checkpoint-payload
-  [^js self reason]
-  (p/let [checkpoint (<storage-get (.-storage self) checkpoint-storage-key)]
-    (checkpoint-payload-with-reason checkpoint reason)))
-
-(defn- <persist-stored-checkpoint!
-  [^js self checkpoint]
-  (if-let [checkpoint (checkpoint-payload-with-reason checkpoint nil)]
-    (do
-      (prn :debug :persist :checkpoint-storage-key checkpoint)
-      (<storage-put! (.-storage self) checkpoint-storage-key checkpoint))
-    (p/resolved nil)))
-
 (defn- <persist-session-checkpoint!
   [^js self expected-session-id checkpoint]
   (if-not (and (string? expected-session-id) (map? checkpoint))
@@ -171,7 +157,15 @@
         (let [task (session-task latest-session)
               task (assoc task :sandbox-checkpoint checkpoint)]
           (p/let [_ (<save-session! self (assoc latest-session :task task))
-                  _ (<persist-stored-checkpoint! self checkpoint)]
+                  _ (-> (checkpoint-store/<upsert-checkpoint-for-task! (.-env self)
+                                                                       task
+                                                                       checkpoint)
+                        (p/catch (fn [error]
+                                   (log/error :agent/checkpoint-d1-upsert-failed
+                                              {:session-id expected-session-id
+                                               :task-id (:id task)
+                                               :error (str error)})
+                                   nil)))]
             nil))
         nil))))
 
@@ -187,9 +181,16 @@
 
 (defn- <checkpoint-existing-snapshot!
   [^js self current-session {:keys [by reason]}]
-  (-> (p/let [stored-checkpoint (<stored-checkpoint-payload self reason)
+  (-> (p/let [d1-checkpoint (-> (checkpoint-store/<load-checkpoint-for-task! (.-env self)
+                                                                             (session-task current-session))
+                                (p/catch (fn [error]
+                                           (log/error :agent/checkpoint-d1-load-failed
+                                                      {:session-id (:id current-session)
+                                                       :task-id (get-in current-session [:task :id])
+                                                       :error (str error)})
+                                           nil)))
               checkpoint (or (existing-checkpoint-payload current-session reason)
-                             stored-checkpoint)
+                             (checkpoint-payload-with-reason d1-checkpoint reason))
               _ (<append-event! self {:type "sandbox.checkpoint.started"
                                       :data (cond-> {}
                                               (string? by) (assoc :by by)
@@ -746,24 +747,19 @@
 (defn- <provision-runtime! [^js self task session-id]
   (let [provider (runtime-provider/resolve-provider (.-env self) nil)
         provider-kind (runtime-provider/provider-id provider)]
-    (p/let [stored-checkpoint (<stored-checkpoint-payload self nil)
-            _ (prn :debug :stored-checkpoint stored-checkpoint)
-            task-checkpoint (when (map? task) (:sandbox-checkpoint task))
-            task-has-snapshot? (string? (runtime-snapshot-id task-checkpoint))
-            _ (when task-has-snapshot?
-                (<persist-stored-checkpoint! self task-checkpoint))
-            task (cond
-                   (not (map? task))
-                   task
-
-                   task-has-snapshot?
-                   task
-
-                   (map? stored-checkpoint)
-                   (assoc task :sandbox-checkpoint stored-checkpoint)
-
-                   :else
-                   task)
+    (p/let [base-task (if (map? task) (dissoc task :sandbox-checkpoint) task)
+            d1-checkpoint (if (map? base-task)
+                            (-> (checkpoint-store/<load-checkpoint-for-task! (.-env self) base-task)
+                                (p/catch (fn [error]
+                                           (log/error :agent/provision-checkpoint-d1-load-failed
+                                                      {:session-id session-id
+                                                       :task-id (:id base-task)
+                                                       :error (str error)})
+                                           nil)))
+                            nil)
+            task (if (and (map? base-task) (map? d1-checkpoint))
+                   (assoc base-task :sandbox-checkpoint d1-checkpoint)
+                   base-task)
             runtime (runtime-provider/<provision-runtime! provider session-id task)
             session (<get-session self)]
       (cond

@@ -32,6 +32,11 @@ bucket_name = "logseq-sync-assets-prod"
 preview_bucket_name = "logseq-sync-assets-prod"
 remote = true
 
+[[d1_databases]]
+binding = "AGENTS_DB"
+database_name = "logseq-agents-staging"
+database_id = "00325aa2-c805-4693-b599-900a25dcde42"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = [ "AgentSessionDO" ]
@@ -82,6 +87,11 @@ bucket_name = "logseq-sync-assets-dev"
 preview_bucket_name = "logseq-sync-assets-dev"
 remote = true
 
+[[env.staging.d1_databases]]
+binding = "AGENTS_DB"
+database_name = "logseq-agents-staging"
+database_id = "00325aa2-c805-4693-b599-900a25dcde42"
+
 [[env.staging.migrations]]
 tag = "v1"
 new_sqlite_classes = [ "AgentSessionDO" ]
@@ -126,6 +136,11 @@ binding = "BACKUP_BUCKET"
 bucket_name = "logseq-sync-assets-prod"
 preview_bucket_name = "logseq-sync-assets-prod"
 remote = true
+
+[[env.prod.d1_databases]]
+binding = "AGENTS_DB"
+database_name = "logseq-agents-prod"
+database_id = "4c80e058-69b5-4985-88d1-f53711d817ba"
 
 [[env.prod.migrations]]
 tag = "v1"
