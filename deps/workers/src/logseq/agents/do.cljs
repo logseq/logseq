@@ -1151,12 +1151,15 @@
                                                    :data {:event "user-message"
                                                           :kind (:kind body)
                                                           :by user-id}})
-                         current-session (p/let [_ (<append-event! self {:type "session.running"
-                                                                         :data {:by user-id
-                                                                                :reason "resume-after-completed"}
-                                                                         :ts (common/now-ms)})
-                                                 resumed-session (<get-session self)]
-                                           resumed-session)]
+                         session-before (<get-session self)
+                         current-session (if (= "completed" (:status session-before))
+                                           (p/let [_ (<append-event! self {:type "session.running"
+                                                                           :data {:by user-id
+                                                                                  :reason "resume-after-completed"}
+                                                                           :ts (common/now-ms)})
+                                                   resumed-session (<get-session self)]
+                                             resumed-session)
+                                           session-before)]
                    (cond
                      (= (:error res) :missing-session)
                      (http/not-found)
@@ -1484,18 +1487,28 @@
   (let [user-id (user-id-from-request request)]
     (if-not (string? user-id)
       (http/unauthorized)
-      (p/let [res (<append-event! self {:type "session.canceled"
-                                        :data {:by user-id}})
-              current-session (<get-session self)
-              _ (when (map? (:runtime current-session))
-                  (<checkpoint-existing-snapshot! self current-session {:by user-id
-                                                                        :reason "cancel"}))
-              _ (<terminate-runtime! self (:runtime current-session))
-              current-session (when current-session (assoc current-session :runtime nil))
-              _ (when current-session (<save-session! self current-session))]
-        (if (= (:error res) :missing-session)
+      (p/let [session-before (<get-session self)]
+        (if-not (map? session-before)
           (http/not-found)
-          (http/json-response :sessions/cancel {:ok true}))))))
+          (p/let [res (<append-event! self {:type "session.canceled"
+                                            :data {:by user-id}})
+                  session-after (<get-session self)
+                  current-session (or session-after session-before)
+                  runtime (or (:runtime session-after) (:runtime session-before))
+                  _ (when (and (map? current-session)
+                               (map? runtime))
+                      (<checkpoint-existing-snapshot! self
+                                                      (assoc current-session :runtime runtime)
+                                                      {:by user-id
+                                                       :reason "cancel"}))
+                  _ (<terminate-runtime! self runtime)
+                  latest-session (<get-session self)
+                  _ (when (and (map? latest-session)
+                               (map? (:runtime latest-session)))
+                      (<save-session! self (assoc latest-session :runtime nil)))]
+            (if (= (:error res) :missing-session)
+              (http/not-found)
+              (http/json-response :sessions/cancel {:ok true}))))))))
 
 (defn- <flush-pending-orders! [^js self]
   (p/let [current-session (<get-session self)]

@@ -754,8 +754,7 @@
         session-id (or (:session-id session)
                        (task-session-id block))]
     (when (and (task-status-canceled? block)
-               (string? session-id)
-               (not (terminal-status? (:status session))))
+               (string? session-id))
       (<cancel-session! block))))
 
 (defn <start-session!

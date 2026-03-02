@@ -6,9 +6,6 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
 
-(def ^:private terminal-session-statuses
-  #{"completed" "failed" "canceled"})
-
 (defn- session-key
   [block-uuid]
   (some-> block-uuid str))
@@ -34,8 +31,7 @@
         session-id (:session-id session)
         base (db-sync/http-base)]
     (when (and (string? base)
-               (string? session-id)
-               (not (contains? terminal-session-statuses (:status session))))
+               (string? session-id))
       (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)]
         (-> (db-sync/fetch-json (str base "/sessions/" session-id "/cancel")
                                 {:method "POST"

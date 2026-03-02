@@ -293,6 +293,53 @@
                        (is false (str "unexpected completed-resume error: " error))
                        (done)))))))
 
+(deftest messages-canceled-session-does-not-resume-or-provision-runtime-test
+  (testing "session messages should not auto-resume canceled session"
+    (async done
+           (let [env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"
+                          "SANDBOX_AGENT_URL" "http://sandbox.local"}
+                 self (make-self env)
+                 headers {"content-type" "application/json"
+                          "x-user-id" "user-1"}
+                 provision-calls (atom 0)
+                 send-calls (atom 0)]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-canceled-no-resume"
+                                 :status "canceled"
+                                 :task {:project {:repo-url "https://github.com/example/repo"}}
+                                 :runtime nil
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (with-redefs [agent-do/<provision-runtime!
+                                        (fn [_self _task _session-id]
+                                          (swap! provision-calls inc)
+                                          (js/Promise.resolve {:provider "local-dev"
+                                                               :session-id "runtime-unexpected"}))
+                                        runtime-provider/<send-message!
+                                        (fn [_provider _runtime _message]
+                                          (swap! send-calls inc)
+                                          (js/Promise.resolve true))]
+                            (agent-do/handle-fetch self
+                                                   (json-request "http://db-sync.local/__session__/messages"
+                                                                 "POST"
+                                                                 {:message "should fail"}
+                                                                 headers)))))
+                 (.then (fn [resp]
+                          (is (= 409 (.-status resp)))
+                          (.get (.-storage self) "session")))
+                 (.then (fn [session-js]
+                          (let [session (js->clj session-js :keywordize-keys true)]
+                            (is (= "canceled" (:status session)))
+                            (is (= 0 @provision-calls))
+                            (is (= 0 @send-calls))
+                            (done))))
+                 (.catch (fn [error]
+                           (is false (str "unexpected canceled-no-resume error: " error))
+                           (done))))))))
+
 (deftest provision-runtime-persists-runtime-checkpoint-test
   (testing "provisioned runtime snapshot metadata is persisted to task sandbox checkpoint"
     (async done
@@ -1759,6 +1806,57 @@
                                      (is (= "checkpoint-existing-cancel"
                                             (get-in session [:task :sandbox-checkpoint :snapshot-id])))
                                      (is (number? (get-in session [:task :sandbox-checkpoint :checkpoint-at])))
+                                     (done))))))
+                 (.catch (fn [error]
+                           (is false (str "unexpected error: " error))
+                           (done))))))))
+
+(deftest cancel-endpoint-terminates-runtime-when-session-not-running-test
+  (testing "session cancel still terminates runtime for completed session"
+    (async done
+           (let [terminate-calls (atom [])
+                 checkpoint-calls (atom [])
+                 env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"}
+                 self (make-self env)
+                 headers {"content-type" "application/json"
+                          "x-user-id" "user-1"}]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-cancel-completed"
+                                 :status "completed"
+                                 :task {:project {:repo-url "https://github.com/example/repo"}
+                                        :sandbox-checkpoint {:provider "cloudflare"
+                                                             :snapshot-id "checkpoint-existing-completed-cancel"}}
+                                 :runtime {:provider "cloudflare"
+                                           :sandbox-id "sbx-cancel-completed"
+                                           :session-id "sess-cancel-completed"}
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (with-redefs [agent-do/<checkpoint-existing-snapshot!
+                                        (fn [_self current-session opts]
+                                          (swap! checkpoint-calls conj {:session-id (:id current-session)
+                                                                        :opts opts})
+                                          (js/Promise.resolve true))
+                                        agent-do/<terminate-runtime!
+                                        (fn [_self runtime]
+                                          (swap! terminate-calls conj runtime)
+                                          (js/Promise.resolve nil))]
+                            (agent-do/handle-fetch self
+                                                   (json-request "http://db-sync.local/__session__/cancel"
+                                                                 "POST"
+                                                                 nil
+                                                                 headers)))))
+                 (.then (fn [resp]
+                          (is (= 200 (.-status resp)))
+                          (.then (.get (.-storage self) "session")
+                                 (fn [session]
+                                   (let [session (js->clj session :keywordize-keys true)]
+                                     (is (= 1 (count @checkpoint-calls)))
+                                     (is (= 1 (count @terminate-calls)))
+                                     (is (nil? (:runtime session)))
+                                     (is (= "completed" (:status session)))
                                      (done))))))
                  (.catch (fn [error]
                            (is false (str "unexpected error: " error))

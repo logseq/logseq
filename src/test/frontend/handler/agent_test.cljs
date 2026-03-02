@@ -334,7 +334,7 @@
                           (is false (str e))
                           (done)))))))
 
-(deftest cancel-session-if-task-canceled-triggers-only-for-active-session-test
+(deftest cancel-session-if-task-canceled-triggers-for-non-running-session-test
   (async done
          (let [calls (atom 0)
                block {:block/uuid #uuid "12121212-1212-1212-1212-121212121212"}
@@ -352,7 +352,7 @@
                          _ (swap! state/state assoc-in [:agent/sessions (str (:block/uuid block)) :status] "completed")
                          _ (agent-handler/<cancel-session-if-task-canceled! block)
                          _ (reset! state/state prev-state)]
-                   (is (= 1 @calls))
+                   (is (= 2 @calls))
                    (done)))
                (p/catch (fn [e]
                           (reset! state/state prev-state)
