@@ -1213,6 +1213,98 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
+(deftest ^:long test-cli-upsert-tag-id-rename
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-upsert-tag-id-rename")]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       repo "upsert-tag-id-rename-graph"
+                       source-name "CliRenameSource"
+                       target-name "CliRenameTarget"
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
+                       create-result (run-cli ["--repo" repo "upsert" "tag" "--name" source-name]
+                                              data-dir cfg-path)
+                       create-payload (parse-json-output create-result)
+                       source-id (first-result-id create-payload)
+                       rename-result (run-cli ["--repo" repo
+                                               "upsert" "tag"
+                                               "--id" (str source-id)
+                                               "--name" target-name]
+                                              data-dir cfg-path)
+                       rename-payload (parse-json-output rename-result)
+                       list-tag-result (run-cli ["--repo" repo "list" "tag"] data-dir cfg-path)
+                       list-tag-payload (parse-json-output list-tag-result)
+                       tags (get-in list-tag-payload [:data :items])
+                       tag-names (->> tags
+                                      (map #(or (:block/title %) (:title %) (:name %)))
+                                      set)
+                       target-id (find-item-id tags target-name)
+                       source-id-after (find-item-id tags source-name)
+                       stop-result (run-cli ["server" "stop" "--repo" repo] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= 0 (:exit-code create-result)))
+                 (is (= "ok" (:status create-payload)))
+                 (is (number? source-id))
+                 (is (= 0 (:exit-code rename-result))
+                     (pr-str rename-payload))
+                 (is (= "ok" (:status rename-payload))
+                     (pr-str rename-payload))
+                 (is (= [source-id] (get-in rename-payload [:data :result])))
+                 (is (contains? tag-names target-name))
+                 (is (not (contains? tag-names source-name)))
+                 (is (= source-id target-id))
+                 (is (nil? source-id-after))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest ^:long test-cli-upsert-tag-id-rename-conflict
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-upsert-tag-id-rename-conflict")]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       repo "upsert-tag-id-rename-conflict-graph"
+                       source-name "CliRenameConflictSource"
+                       existing-name "CliRenameConflictExisting"
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
+                       source-upsert-result (run-cli ["--repo" repo "upsert" "tag" "--name" source-name]
+                                                     data-dir cfg-path)
+                       source-upsert-payload (parse-json-output source-upsert-result)
+                       source-id (first-result-id source-upsert-payload)
+                       existing-upsert-result (run-cli ["--repo" repo "upsert" "tag" "--name" existing-name]
+                                                       data-dir cfg-path)
+                       existing-upsert-payload (parse-json-output existing-upsert-result)
+                       rename-result (run-cli ["--repo" repo
+                                               "upsert" "tag"
+                                               "--id" (str source-id)
+                                               "--name" existing-name]
+                                              data-dir cfg-path)
+                       rename-payload (parse-json-output rename-result)
+                       list-tag-result (run-cli ["--repo" repo "list" "tag"] data-dir cfg-path)
+                       list-tag-payload (parse-json-output list-tag-result)
+                       tag-names (->> (get-in list-tag-payload [:data :items])
+                                      (map #(or (:block/title %) (:title %) (:name %)))
+                                      set)
+                       stop-result (run-cli ["server" "stop" "--repo" repo] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= 0 (:exit-code source-upsert-result)))
+                 (is (= "ok" (:status source-upsert-payload)))
+                 (is (number? source-id))
+                 (is (= 0 (:exit-code existing-upsert-result)))
+                 (is (= "ok" (:status existing-upsert-payload)))
+                 (is (= 0 (:exit-code rename-result)))
+                 (is (= "error" (:status rename-payload)))
+                 (is (= :tag-rename-conflict (keyword (get-in rename-payload [:error :code]))))
+                 (is (contains? tag-names source-name))
+                 (is (contains? tag-names existing-name))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
 (deftest ^:long test-cli-upsert-and-remove-tag-property
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-upsert-remove-tag-property")]

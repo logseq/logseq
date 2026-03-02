@@ -921,6 +921,15 @@
       (is (= :upsert-tag (:command result)))
       (is (= 10 (get-in result [:options :id])))))
 
+  (testing "upsert tag parses with id and name"
+    (let [result (commands/parse-args ["upsert" "tag"
+                                       "--id" "10"
+                                       "--name" "Project Renamed"])]
+      (is (true? (:ok? result)))
+      (is (= :upsert-tag (:command result)))
+      (is (= 10 (get-in result [:options :id])))
+      (is (= "Project Renamed" (get-in result [:options :name])))))
+
   (testing "upsert property parses with type and cardinality"
     (let [result (commands/parse-args ["upsert" "property"
                                        "--name" "owner"
@@ -1390,6 +1399,24 @@
               :id 123}
              (:action result)))))
 
+  (testing "upsert tag by id with name builds update action"
+    (let [parsed {:ok? true :command :upsert-tag :options {:id 123 :name "  #Project Renamed  "}}
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (true? (:ok? result)))
+      (is (= {:type :upsert-tag
+              :mode :update
+              :repo "logseq_db_demo"
+              :graph "demo"
+              :id 123
+              :name "Project Renamed"}
+             (:action result)))))
+
+  (testing "upsert tag by id rejects blank rename name"
+    (let [parsed {:ok? true :command :upsert-tag :options {:id 123 :name "   "}}
+          result (commands/build-action parsed {:repo "demo"})]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
   (testing "upsert property coerces schema options"
     (let [parsed {:ok? true
                   :command :upsert-property
@@ -1426,9 +1453,7 @@
               :id 654
               :schema {:logseq.property/type :node
                        :db/cardinality :db.cardinality/many}}
-             (:action result)))))
-
-  )
+             (:action result))))))
 
 (deftest test-build-action-inspect-edit-remove-show
 
@@ -1795,6 +1820,192 @@
            (-> (p/let [result (commands/execute action {})]
                  (is (= :ok (:status result)))
                  (is (= [4242] (get-in result [:data :result])))
+                 (is (= 0 @apply-calls*)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! cli-server/list-graphs orig-list-graphs)
+                            (set! cli-server/ensure-server! orig-ensure-server!)
+                            (set! transport/invoke orig-invoke)
+                            (done)))))))
+
+(deftest test-execute-upsert-tag-by-id-with-name-emits-rename-op
+  (async done
+         (let [ops* (atom nil)
+               apply-calls* (atom 0)
+               orig-list-graphs cli-server/list-graphs
+               orig-ensure-server! cli-server/ensure-server!
+               orig-invoke transport/invoke
+               action {:type :upsert-tag
+                       :mode :update
+                       :repo "demo"
+                       :id 4242
+                       :name "Project Renamed"}
+               tag-uuid (uuid "00000000-0000-0000-0000-000000004242")]
+           (set! cli-server/list-graphs (fn [_] ["demo"]))
+           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
+           (set! transport/invoke (fn [_ method _ args]
+                                    (case method
+                                      :thread-api/pull (let [[_ _ lookup] args]
+                                                         (cond
+                                                           (= lookup 4242)
+                                                           {:db/id 4242
+                                                            :block/uuid tag-uuid
+                                                            :block/name "project"
+                                                            :block/title "Project"
+                                                            :block/tags [{:db/ident :logseq.class/Tag}]}
+
+                                                           (= lookup [:block/name "project renamed"])
+                                                           {}
+
+                                                           :else
+                                                           {}))
+                                      :thread-api/apply-outliner-ops (let [[_ ops _] args]
+                                                                       (swap! apply-calls* inc)
+                                                                       (reset! ops* ops)
+                                                                       {:result :ok})
+                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
+           (-> (p/let [result (commands/execute action {})]
+                 (is (= :ok (:status result)))
+                 (is (= [4242] (get-in result [:data :result])))
+                 (is (= 1 @apply-calls*))
+                 (is (= [[:rename-page [tag-uuid "Project Renamed"]]]
+                        @ops*)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! cli-server/list-graphs orig-list-graphs)
+                            (set! cli-server/ensure-server! orig-ensure-server!)
+                            (set! transport/invoke orig-invoke)
+                            (done)))))))
+
+(deftest test-execute-upsert-tag-by-id-with-name-no-op-when-normalized-name-matches
+  (async done
+         (let [apply-calls* (atom 0)
+               orig-list-graphs cli-server/list-graphs
+               orig-ensure-server! cli-server/ensure-server!
+               orig-invoke transport/invoke
+               action {:type :upsert-tag
+                       :mode :update
+                       :repo "demo"
+                       :id 4242
+                       :name "  #QUOTE "}]
+           (set! cli-server/list-graphs (fn [_] ["demo"]))
+           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
+           (set! transport/invoke (fn [_ method _ args]
+                                    (case method
+                                      :thread-api/pull (let [[_ _ lookup] args]
+                                                         (if (= lookup 4242)
+                                                           {:db/id 4242
+                                                            :block/uuid (uuid "00000000-0000-0000-0000-000000004242")
+                                                            :block/name "quote"
+                                                            :block/title "Quote"
+                                                            :block/tags [{:db/ident :logseq.class/Tag}]}
+                                                           {}))
+                                      :thread-api/apply-outliner-ops (do
+                                                                       (swap! apply-calls* inc)
+                                                                       {:result :ok})
+                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
+           (-> (p/let [result (commands/execute action {})]
+                 (is (= :ok (:status result)))
+                 (is (= [4242] (get-in result [:data :result])))
+                 (is (= 0 @apply-calls*)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! cli-server/list-graphs orig-list-graphs)
+                            (set! cli-server/ensure-server! orig-ensure-server!)
+                            (set! transport/invoke orig-invoke)
+                            (done)))))))
+
+(deftest test-execute-upsert-tag-by-id-with-name-rejects-existing-non-tag-page
+  (async done
+         (let [apply-calls* (atom 0)
+               orig-list-graphs cli-server/list-graphs
+               orig-ensure-server! cli-server/ensure-server!
+               orig-invoke transport/invoke
+               action {:type :upsert-tag
+                       :mode :update
+                       :repo "demo"
+                       :id 4242
+                       :name "Project Renamed"}]
+           (set! cli-server/list-graphs (fn [_] ["demo"]))
+           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
+           (set! transport/invoke (fn [_ method _ args]
+                                    (case method
+                                      :thread-api/pull (let [[_ _ lookup] args]
+                                                         (cond
+                                                           (= lookup 4242)
+                                                           {:db/id 4242
+                                                            :block/uuid (uuid "00000000-0000-0000-0000-000000004242")
+                                                            :block/name "project"
+                                                            :block/title "Project"
+                                                            :block/tags [{:db/ident :logseq.class/Tag}]}
+
+                                                           (= lookup [:block/name "project renamed"])
+                                                           {:db/id 5000
+                                                            :block/name "project renamed"
+                                                            :block/title "Project Renamed"
+                                                            :block/tags [{:db/ident :logseq.class/Page}]}
+
+                                                           :else
+                                                           {}))
+                                      :thread-api/apply-outliner-ops (do
+                                                                       (swap! apply-calls* inc)
+                                                                       {:result :ok})
+                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
+           (-> (p/let [result (commands/execute action {})]
+                 (is (= :error (:status result)))
+                 (is (= :tag-name-conflict (get-in result [:error :code])))
+                 (is (= 0 @apply-calls*)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! cli-server/list-graphs orig-list-graphs)
+                            (set! cli-server/ensure-server! orig-ensure-server!)
+                            (set! transport/invoke orig-invoke)
+                            (done)))))))
+
+(deftest test-execute-upsert-tag-by-id-with-name-rejects-existing-tag
+  (async done
+         (let [apply-calls* (atom 0)
+               orig-list-graphs cli-server/list-graphs
+               orig-ensure-server! cli-server/ensure-server!
+               orig-invoke transport/invoke
+               action {:type :upsert-tag
+                       :mode :update
+                       :repo "demo"
+                       :id 4242
+                       :name "Project Renamed"}]
+           (set! cli-server/list-graphs (fn [_] ["demo"]))
+           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
+           (set! transport/invoke (fn [_ method _ args]
+                                    (case method
+                                      :thread-api/pull (let [[_ _ lookup] args]
+                                                         (cond
+                                                           (= lookup 4242)
+                                                           {:db/id 4242
+                                                            :block/uuid (uuid "00000000-0000-0000-0000-000000004242")
+                                                            :block/name "project"
+                                                            :block/title "Project"
+                                                            :block/tags [{:db/ident :logseq.class/Tag}]}
+
+                                                           (= lookup [:block/name "project renamed"])
+                                                           {:db/id 9001
+                                                            :block/uuid (uuid "00000000-0000-0000-0000-000000009001")
+                                                            :block/name "project renamed"
+                                                            :block/title "Project Renamed"
+                                                            :block/tags [{:db/ident :logseq.class/Tag}]}
+
+                                                           :else
+                                                           {}))
+                                      :thread-api/apply-outliner-ops (do
+                                                                       (swap! apply-calls* inc)
+                                                                       {:result :ok})
+                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
+           (-> (p/let [result (commands/execute action {})]
+                 (is (= :error (:status result)))
+                 (is (= :tag-rename-conflict (get-in result [:error :code])))
                  (is (= 0 @apply-calls*)))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
