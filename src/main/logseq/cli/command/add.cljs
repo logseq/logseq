@@ -16,28 +16,6 @@
             [logseq.db.frontend.property.type :as db-property-type]
             [promesa.core :as p]))
 
-(def ^:private content-add-spec
-  {:content {:desc "Block content for add"}
-   :blocks {:desc "EDN vector of blocks for add"}
-   :blocks-file {:desc "EDN file of blocks for add"}
-   :tags {:desc "EDN vector of tags. Identifiers can be id, :db/ident, or :block/title."}
-   :properties {:desc "EDN map of built-in properties. Identifiers can be id, :db/ident, or :block/title."}
-   :target-id {:desc "Target block db/id"
-               :coerce :long}
-   :target-uuid {:desc "Target block UUID"}
-   :target-page-name {:desc "Target page name"}
-   :pos {:desc "Position (first-child, last-child, sibling). Default: last-child"}
-   :status {:desc "Task status (todo, doing, done, etc.)"}})
-
-(def ^:private add-page-spec
-  {:page {:desc "Page name"}
-   :tags {:desc "EDN vector of tags. Identifiers can be id, :db/ident, or :block/title."}
-   :properties {:desc "EDN map of built-in properties. Identifiers can be id, :db/ident, or :block/title."}})
-
-(def entries
-  [(core/command-entry ["add" "block"] :add-block "Add blocks" content-add-spec)
-   (core/command-entry ["add" "page"] :add-page "Create page" add-page-spec)])
-
 (defn- today-page-title
   [config repo]
   (p/let [journal (transport/invoke config :thread-api/pull false
@@ -193,24 +171,6 @@
                                                  [repo [:db/id :block/uuid] [:block/uuid block-uuid]]))
                              ordered-uuids))]
         (created-ids-in-order ordered-uuids entities :block)))))
-
-(defn- resolve-created-page-ids
-  [config repo page create-result]
-  (let [page-uuid (some-> create-result second normalized-uuid)]
-    (if page-uuid
-      (p/let [page-entity (transport/invoke config :thread-api/pull false
-                                            [repo [:db/id :block/uuid] [:block/uuid page-uuid]])]
-        (created-ids-in-order [page-uuid] [page-entity] :page))
-      (p/let [page-entity (transport/invoke config :thread-api/pull false
-                                            [repo [:db/id :block/uuid]
-                                             [:block/name (common-util/page-name-sanity-lc page)]])
-              page-id (:db/id page-entity)]
-        (if (some? page-id)
-          [page-id]
-          (throw (ex-info "unable to resolve created page id"
-                          {:code :add-id-resolution-failed
-                           :entity-kind :page
-                           :page page})))))))
 
 (defn- extract-page-refs
   [title]
@@ -531,85 +491,95 @@
   (true? (get-in property [:schema :public?])))
 
 (defn parse-properties-option
-  [value]
-  (if-not (seq value)
-    {:ok? true :value nil}
-    (let [parsed (parse-edn-option value)]
-      (cond
-        (nil? parsed)
-        (invalid-options-result "properties must be valid EDN map")
+  ([value]
+   (parse-properties-option value {:allow-non-built-in? false}))
+  ([value {:keys [allow-non-built-in?]
+           :or {allow-non-built-in? false}}]
+   (if-not (seq value)
+     {:ok? true :value nil}
+     (let [parsed (parse-edn-option value)]
+       (cond
+         (nil? parsed)
+         (invalid-options-result "properties must be valid EDN map")
 
-        (not (map? parsed))
-        (invalid-options-result "properties must be a map")
+         (not (map? parsed))
+         (invalid-options-result "properties must be a map")
 
-        (empty? parsed)
-        (invalid-options-result "properties must be a non-empty map")
+         (empty? parsed)
+         (invalid-options-result "properties must be a non-empty map")
 
-        :else
-        (loop [prop-entries (seq parsed)
-               acc {}]
-          (if (empty? prop-entries)
-            {:ok? true :value acc}
-            (let [[k v] (first prop-entries)
-                  key-result (normalize-property-key-input k)]
-              (if-not key-result
-                (invalid-options-result (str "invalid property key: " k))
-                (let [{:keys [type value]} key-result
-                      key-ident value]
-                  (if (= type :id)
-                    (recur (rest prop-entries) (assoc acc key-ident v))
-                    (let [property (get db-property/built-in-properties key-ident)]
-                      (cond
-                        (nil? property)
-                        (invalid-options-result (str "unknown built-in property: " key-ident))
+         :else
+         (loop [prop-entries (seq parsed)
+                acc {}]
+           (if (empty? prop-entries)
+             {:ok? true :value acc}
+             (let [[k v] (first prop-entries)
+                   key-result (normalize-property-key-input k)]
+               (if-not key-result
+                 (invalid-options-result (str "invalid property key: " k))
+                 (let [{:keys [type value]} key-result
+                       key-ident value]
+                   (if (= type :id)
+                     (recur (rest prop-entries) (assoc acc key-ident v))
+                     (let [property (get db-property/built-in-properties key-ident)]
+                       (cond
+                         (nil? property)
+                         (if allow-non-built-in?
+                           (recur (rest prop-entries) (assoc acc key-ident v))
+                           (invalid-options-result (str "unknown built-in property: " key-ident)))
 
-                        (not (property-public? property))
-                        (invalid-options-result (str "property is not public: " key-ident))
+                         (not (property-public? property))
+                         (invalid-options-result (str "property is not public: " key-ident))
 
-                        :else
-                        (let [{:keys [ok? value message]} (normalize-property-values property v)
-                              normalized-value value]
-                          (if-not ok?
-                            (invalid-options-result (str "invalid value for " key-ident ": " message))
-                            (recur (rest prop-entries) (assoc acc key-ident normalized-value))))))))))))))))
+                         :else
+                         (let [{:keys [ok? value message]} (normalize-property-values property v)
+                               normalized-value value]
+                           (if-not ok?
+                             (invalid-options-result (str "invalid value for " key-ident ": " message))
+                             (recur (rest prop-entries) (assoc acc key-ident normalized-value)))))))))))))))))
 
 (defn parse-properties-vector-option
-  [value]
-  (if-not (seq value)
-    {:ok? true :value nil}
-    (let [parsed (parse-edn-option value)]
-      (cond
-        (nil? parsed)
-        (invalid-options-result "properties must be valid EDN vector")
+  ([value]
+   (parse-properties-vector-option value {:allow-non-built-in? false}))
+  ([value {:keys [allow-non-built-in?]
+           :or {allow-non-built-in? false}}]
+   (if-not (seq value)
+     {:ok? true :value nil}
+     (let [parsed (parse-edn-option value)]
+       (cond
+         (nil? parsed)
+         (invalid-options-result "properties must be valid EDN vector")
 
-        (not (vector? parsed))
-        (invalid-options-result "properties must be a vector")
+         (not (vector? parsed))
+         (invalid-options-result "properties must be a vector")
 
-        (empty? parsed)
-        (invalid-options-result "properties must be a non-empty vector")
+         (empty? parsed)
+         (invalid-options-result "properties must be a non-empty vector")
 
-        :else
-        (loop [prop-entries (seq parsed)
-               acc []]
-          (if (empty? prop-entries)
-            {:ok? true :value acc}
-            (let [entry (first prop-entries)
-                  key-result (normalize-property-key-input entry)]
-              (if-not key-result
-                (invalid-options-result (str "invalid property key: " entry))
-                (let [{:keys [type value]} key-result]
-                  (if (= type :id)
-                    (recur (rest prop-entries) (conj acc value))
-                    (let [property (get db-property/built-in-properties value)]
-                      (cond
-                        (nil? property)
-                        (invalid-options-result (str "unknown built-in property: " value))
+         :else
+         (loop [prop-entries (seq parsed)
+                acc []]
+           (if (empty? prop-entries)
+             {:ok? true :value acc}
+             (let [entry (first prop-entries)
+                   key-result (normalize-property-key-input entry)]
+               (if-not key-result
+                 (invalid-options-result (str "invalid property key: " entry))
+                 (let [{:keys [type value]} key-result]
+                   (if (= type :id)
+                     (recur (rest prop-entries) (conj acc value))
+                     (let [property (get db-property/built-in-properties value)]
+                       (cond
+                         (nil? property)
+                         (if allow-non-built-in?
+                           (recur (rest prop-entries) (conj acc value))
+                           (invalid-options-result (str "unknown built-in property: " value)))
 
-                        (not (property-public? property))
-                        (invalid-options-result (str "property is not public: " value))
+                         (not (property-public? property))
+                         (invalid-options-result (str "property is not public: " value))
 
-                        :else
-                        (recur (rest prop-entries) (conj acc value))))))))))))))
+                         :else
+                         (recur (rest prop-entries) (conj acc value)))))))))))))))
 
 (defn invalid-options?
   [opts]
@@ -755,129 +725,219 @@
       :date (resolve-date-page-id config repo value)
       (p/resolved value))))
 
+(def ^:private property-entity-selector
+  [:db/id :db/ident :block/name :block/title
+   :logseq.property/type :db/cardinality :logseq.property/public?])
+
+(defn- property-entity?
+  [entity]
+  (some? (:logseq.property/type entity)))
+
+(defn- property-entity-public?
+  [entity]
+  (not (false? (:logseq.property/public? entity))))
+
+(defn- property-entity->property
+  [entity]
+  {:schema {:type (or (:logseq.property/type entity) :default)
+            :cardinality (if (= :db.cardinality/many (:db/cardinality entity))
+                           :many
+                           :one)
+            :public? (property-entity-public? entity)}})
+
+(defn- lookup-property-entity
+  [config repo property-key]
+  (let [lookup-by-title (fn [title]
+                          (pull-entity config repo property-entity-selector
+                                       [:block/name (common-util/page-name-sanity-lc title)]))]
+    (cond
+      (number? property-key)
+      (pull-entity config repo property-entity-selector property-key)
+
+      (keyword? property-key)
+      (p/let [entity (pull-entity config repo property-entity-selector [:db/ident property-key])]
+        (if (or (:db/id entity) (qualified-keyword? property-key))
+          entity
+          (lookup-by-title (name property-key))))
+
+      (string? property-key)
+      (let [text (string/trim property-key)
+            ident (normalize-property-key text)]
+        (if-not (seq text)
+          (p/resolved nil)
+          (p/let [entity (lookup-by-title text)]
+            (if (:db/id entity)
+              entity
+              (if ident
+                (pull-entity config repo property-entity-selector [:db/ident ident])
+                (p/resolved nil))))))
+
+      :else
+      (p/resolved nil))))
+
+(defn- resolve-property-entry-allow-non-built-in
+  [config repo property-key]
+  (p/let [entity (lookup-property-entity config repo property-key)
+          ident (:db/ident entity)]
+    (cond
+      (nil? (:db/id entity))
+      (throw (ex-info "property not found"
+                      {:code :property-not-found
+                       :property property-key}))
+
+      (not (property-entity? entity))
+      (throw (ex-info "target is not a property"
+                      {:code :invalid-property-target
+                       :property property-key}))
+
+      (nil? ident)
+      (throw (ex-info "property not found"
+                      {:code :property-not-found
+                       :property property-key}))
+
+      (not (property-entity-public? entity))
+      (throw (ex-info "property is not public"
+                      {:code :property-not-public
+                       :property ident}))
+
+      :else
+      {:ident ident
+       :property (property-entity->property entity)})))
+
 (defn resolve-properties
-  [config repo properties]
-  (if-not (seq properties)
-    (p/resolved nil)
-    (p/let [resolved-entries (p/all
-                              (map (fn [[k v]]
-                                     (p/let [{:keys [ident property]}
-                                             (cond
-                                               (keyword? k)
-                                               (let [property (get db-property/built-in-properties k)]
-                                                 (when-not property
-                                                   (throw (ex-info "unknown built-in property"
-                                                                   {:code :unknown-property :property k})))
-                                                 (when-not (property-public? property)
-                                                   (throw (ex-info "property is not public"
-                                                                   {:code :property-not-public :property k})))
-                                                 (p/resolved {:ident k :property property}))
+  ([config repo properties]
+   (resolve-properties config repo properties {:allow-non-built-in? false}))
+  ([config repo properties {:keys [allow-non-built-in?]
+                            :or {allow-non-built-in? false}}]
+   (if-not (seq properties)
+     (p/resolved nil)
+     (p/let [resolved-entries (p/all
+                               (map (fn [[k v]]
+                                      (p/let [{:keys [ident property]}
+                                              (if allow-non-built-in?
+                                                (resolve-property-entry-allow-non-built-in config repo k)
+                                                (cond
+                                                  (keyword? k)
+                                                  (let [property (get db-property/built-in-properties k)]
+                                                    (when-not property
+                                                      (throw (ex-info "unknown built-in property"
+                                                                      {:code :unknown-property :property k})))
+                                                    (when-not (property-public? property)
+                                                      (throw (ex-info "property is not public"
+                                                                      {:code :property-not-public :property k})))
+                                                    (p/resolved {:ident k :property property}))
 
-                                               (number? k)
-                                               (p/let [entity (pull-entity config repo [:db/ident] k)
-                                                       ident (:db/ident entity)
-                                                       property (get db-property/built-in-properties ident)]
-                                                 (cond
-                                                   (nil? ident)
-                                                   (throw (ex-info "property not found"
-                                                                   {:code :property-not-found :property k}))
+                                                  (number? k)
+                                                  (p/let [entity (pull-entity config repo [:db/ident] k)
+                                                          ident (:db/ident entity)
+                                                          property (get db-property/built-in-properties ident)]
+                                                    (cond
+                                                      (nil? ident)
+                                                      (throw (ex-info "property not found"
+                                                                      {:code :property-not-found :property k}))
 
-                                                   (nil? property)
-                                                   (throw (ex-info "unknown built-in property"
-                                                                   {:code :unknown-property :property ident}))
+                                                      (nil? property)
+                                                      (throw (ex-info "unknown built-in property"
+                                                                      {:code :unknown-property :property ident}))
 
-                                                   (not (property-public? property))
-                                                   (throw (ex-info "property is not public"
-                                                                   {:code :property-not-public :property ident}))
+                                                      (not (property-public? property))
+                                                      (throw (ex-info "property is not public"
+                                                                      {:code :property-not-public :property ident}))
 
-                                                   :else
-                                                   {:ident ident :property property}))
+                                                      :else
+                                                      {:ident ident :property property}))
 
-                                               (string? k)
-                                               (let [ident (or (property-title->ident k)
-                                                               (normalize-property-key k))
-                                                     property (get db-property/built-in-properties ident)]
-                                                 (when-not property
-                                                   (throw (ex-info "unknown built-in property"
-                                                                   {:code :unknown-property :property k})))
-                                                 (when-not (property-public? property)
-                                                   (throw (ex-info "property is not public"
-                                                                   {:code :property-not-public :property ident})))
-                                                 (p/resolved {:ident ident :property property}))
+                                                  (string? k)
+                                                  (let [ident (or (property-title->ident k)
+                                                                  (normalize-property-key k))
+                                                        property (get db-property/built-in-properties ident)]
+                                                    (when-not property
+                                                      (throw (ex-info "unknown built-in property"
+                                                                      {:code :unknown-property :property k})))
+                                                    (when-not (property-public? property)
+                                                      (throw (ex-info "property is not public"
+                                                                      {:code :property-not-public :property ident})))
+                                                    (p/resolved {:ident ident :property property}))
 
-                                               :else
-                                               (p/rejected (ex-info "invalid property key"
-                                                                    {:code :invalid-property :property k})))
-                                             {:keys [ok? value message]} (normalize-property-values property v)]
-                                       (when-not ok?
-                                         (throw (ex-info "invalid property value"
-                                                         {:code :invalid-property-value
-                                                          :property ident
-                                                          :message message})))
-                                       (let [many? (= :many (get-in property [:schema :cardinality]))
-                                             values (if many?
-                                                      (if (and (coll? value) (not (string? value))) value [value])
-                                                      [value])]
-                                         (p/let [resolved (p/all (map #(resolve-property-value config repo property %) values))
-                                                 final-value (if many? (vec resolved) (first resolved))]
-                                           [ident final-value]))))
-                                   properties))]
-      (into {} resolved-entries))))
+                                                  :else
+                                                  (p/rejected (ex-info "invalid property key"
+                                                                       {:code :invalid-property :property k}))))
+                                              {:keys [ok? value message]} (normalize-property-values property v)]
+                                        (when-not ok?
+                                          (throw (ex-info "invalid property value"
+                                                          {:code :invalid-property-value
+                                                           :property ident
+                                                           :message message})))
+                                        (let [many? (= :many (get-in property [:schema :cardinality]))
+                                              values (if many?
+                                                       (if (and (coll? value) (not (string? value))) value [value])
+                                                       [value])]
+                                          (p/let [resolved (p/all (map #(resolve-property-value config repo property %) values))
+                                                  final-value (if many? (vec resolved) (first resolved))]
+                                            [ident final-value]))))
+                                    properties))]
+       (into {} resolved-entries)))))
 
 (defn resolve-property-identifiers
-  [config repo properties]
-  (if-not (seq properties)
-    (p/resolved nil)
-    (p/let [resolved-entries (p/all
-                              (map (fn [k]
-                                     (cond
-                                       (keyword? k)
-                                       (let [property (get db-property/built-in-properties k)]
-                                         (when-not property
-                                           (throw (ex-info "unknown built-in property"
-                                                           {:code :unknown-property :property k})))
-                                         (when-not (property-public? property)
-                                           (throw (ex-info "property is not public"
-                                                           {:code :property-not-public :property k})))
-                                         (p/resolved k))
+  ([config repo properties]
+   (resolve-property-identifiers config repo properties {:allow-non-built-in? false}))
+  ([config repo properties {:keys [allow-non-built-in?]
+                            :or {allow-non-built-in? false}}]
+   (if-not (seq properties)
+     (p/resolved nil)
+     (p/let [resolved-entries (p/all
+                               (map (fn [k]
+                                      (if allow-non-built-in?
+                                        (p/let [{:keys [ident]} (resolve-property-entry-allow-non-built-in config repo k)]
+                                          ident)
+                                        (cond
+                                          (keyword? k)
+                                          (let [property (get db-property/built-in-properties k)]
+                                            (when-not property
+                                              (throw (ex-info "unknown built-in property"
+                                                              {:code :unknown-property :property k})))
+                                            (when-not (property-public? property)
+                                              (throw (ex-info "property is not public"
+                                                              {:code :property-not-public :property k})))
+                                            (p/resolved k))
 
-                                       (number? k)
-                                       (p/let [entity (pull-entity config repo [:db/ident] k)
-                                               ident (:db/ident entity)
-                                               property (get db-property/built-in-properties ident)]
-                                         (cond
-                                           (nil? ident)
-                                           (throw (ex-info "property not found"
-                                                           {:code :property-not-found :property k}))
+                                          (number? k)
+                                          (p/let [entity (pull-entity config repo [:db/ident] k)
+                                                  ident (:db/ident entity)
+                                                  property (get db-property/built-in-properties ident)]
+                                            (cond
+                                              (nil? ident)
+                                              (throw (ex-info "property not found"
+                                                              {:code :property-not-found :property k}))
 
-                                           (nil? property)
-                                           (throw (ex-info "unknown built-in property"
-                                                           {:code :unknown-property :property ident}))
+                                              (nil? property)
+                                              (throw (ex-info "unknown built-in property"
+                                                              {:code :unknown-property :property ident}))
 
-                                           (not (property-public? property))
-                                           (throw (ex-info "property is not public"
-                                                           {:code :property-not-public :property ident}))
+                                              (not (property-public? property))
+                                              (throw (ex-info "property is not public"
+                                                              {:code :property-not-public :property ident}))
 
-                                           :else
-                                           ident))
+                                              :else
+                                              ident))
 
-                                       (string? k)
-                                       (let [ident (or (property-title->ident k)
-                                                       (normalize-property-key k))
-                                             property (get db-property/built-in-properties ident)]
-                                         (when-not property
-                                           (throw (ex-info "unknown built-in property"
-                                                           {:code :unknown-property :property k})))
-                                         (when-not (property-public? property)
-                                           (throw (ex-info "property is not public"
-                                                           {:code :property-not-public :property ident})))
-                                         (p/resolved ident))
+                                          (string? k)
+                                          (let [ident (or (property-title->ident k)
+                                                          (normalize-property-key k))
+                                                property (get db-property/built-in-properties ident)]
+                                            (when-not property
+                                              (throw (ex-info "unknown built-in property"
+                                                              {:code :unknown-property :property k})))
+                                            (when-not (property-public? property)
+                                              (throw (ex-info "property is not public"
+                                                              {:code :property-not-public :property ident})))
+                                            (p/resolved ident))
 
-                                       :else
-                                       (p/rejected (ex-info "invalid property key"
-                                                            {:code :invalid-property :property k}))))
-                                   properties))]
-      (vec resolved-entries))))
+                                          :else
+                                          (p/rejected (ex-info "invalid property key"
+                                                               {:code :invalid-property :property k})))))
+                                    properties))]
+       (vec resolved-entries)))))
 
 (defn- resolve-add-target
   [config {:keys [repo target-id target-uuid target-page-name]}]
@@ -978,35 +1038,6 @@
                           :properties properties
                           :blocks blocks}}))))))))
 
-(defn build-add-page-action
-  [options repo]
-  (if-not (seq repo)
-    {:ok? false
-     :error {:code :missing-repo
-             :message "repo is required for add"}}
-    (let [page (some-> (:page options) string/trim)]
-      (if (seq page)
-        (let [tags-result (parse-tags-option (:tags options))
-              properties-result (parse-properties-option (:properties options))]
-          (cond
-            (not (:ok? tags-result))
-            tags-result
-
-            (not (:ok? properties-result))
-            properties-result
-
-            :else
-            {:ok? true
-             :action {:type :add-page
-                      :repo repo
-                      :graph (core/repo->graph repo)
-                      :page page
-                      :tags (:value tags-result)
-                      :properties (:value properties-result)}}))
-        {:ok? false
-         :error {:code :missing-page-name
-                 :message "page name is required"}}))))
-
 (defn execute-add-block
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
@@ -1063,33 +1094,5 @@
                                              {}]))
                         properties)))
               created-ids (resolve-created-block-ids cfg (:repo action) blocks-for-insert insert-result)]
-        {:status :ok
-         :data {:result created-ids}})))
-
-(defn execute-add-page
-  [action config]
-  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              tags (resolve-tags cfg (:repo action) (:tags action))
-              tag-ids (when (seq tags)
-                        (->> tags (map :db/id) (remove nil?) vec))
-              properties (resolve-properties cfg (:repo action) (:properties action))
-              options (cond-> {}
-                        (seq properties) (assoc :properties properties))
-              ops [[:create-page [(:page action) options]]]
-              create-result (transport/invoke cfg :thread-api/apply-outliner-ops false [(:repo action) ops {}])
-              _ (when (seq tag-ids)
-                  (p/let [page-name (common-util/page-name-sanity-lc (:page action))
-                          page (pull-entity cfg (:repo action) [:db/id :block/uuid] [:block/name page-name])
-                          page-uuid (:block/uuid page)]
-                    (when-not page-uuid
-                      (throw (ex-info "page not found" {:code :page-not-found :page (:page action)})))
-                    (p/all
-                     (map (fn [tag-id]
-                            (transport/invoke cfg :thread-api/apply-outliner-ops false
-                                              [(:repo action)
-                                               [[:batch-set-property [[page-uuid] :block/tags tag-id {}]]]
-                                               {}]))
-                          tag-ids))))
-              created-ids (resolve-created-page-ids cfg (:repo action) (:page action) create-result)]
         {:status :ok
          :data {:result created-ids}})))

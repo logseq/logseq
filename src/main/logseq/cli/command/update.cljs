@@ -8,23 +8,6 @@
             [logseq.common.util :as common-util]
             [promesa.core :as p]))
 
-(def ^:private update-spec
-  {:id {:desc "Source block db/id"
-        :coerce :long}
-   :uuid {:desc "Source block UUID"}
-   :target-id {:desc "Target block db/id"
-               :coerce :long}
-   :target-uuid {:desc "Target block UUID"}
-   :target-page {:desc "Target page name"}
-   :pos {:desc "Position (first-child, last-child, sibling). Default: first-child"}
-   :update-tags {:desc "Tags to add/update (EDN vector)"}
-   :update-properties {:desc "Properties to add/update (EDN map)"}
-   :remove-tags {:desc "Tags to remove (EDN vector)"}
-   :remove-properties {:desc "Properties to remove (EDN vector)"}})
-
-(def entries
-  [(core/command-entry ["update"] :update-block "Update block" update-spec)])
-
 (def ^:private update-positions
   #{"first-child" "last-child" "sibling"})
 
@@ -152,9 +135,13 @@
           page-name (some-> (:target-page options) string/trim)
           pos (some-> (:pos options) string/trim string/lower-case)
           update-tags-result (add-command/parse-tags-option (:update-tags options))
-          update-properties-result (add-command/parse-properties-option (:update-properties options))
+          update-properties-result (add-command/parse-properties-option
+                                    (:update-properties options)
+                                    {:allow-non-built-in? true})
           remove-tags-result (add-command/parse-tags-vector-option (:remove-tags options))
-          remove-properties-result (add-command/parse-properties-vector-option (:remove-properties options))
+          remove-properties-result (add-command/parse-properties-vector-option
+                                    (:remove-properties options)
+                                    {:allow-non-built-in? true})
           update-tags (:value update-tags-result)
           update-properties (:value update-properties-result)
           remove-tags (:value remove-tags-result)
@@ -222,9 +209,12 @@
               opts (when target (pos->opts (:pos action)))
               update-tags (add-command/resolve-tags cfg (:repo action) (:update-tags action))
               remove-tags (add-command/resolve-tags cfg (:repo action) (:remove-tags action))
-              update-properties (add-command/resolve-properties cfg (:repo action) (:update-properties action))
-              remove-properties (add-command/resolve-property-identifiers cfg (:repo action)
-                                                                          (:remove-properties action))
+              update-properties (add-command/resolve-properties
+                                 cfg (:repo action) (:update-properties action)
+                                 {:allow-non-built-in? true})
+              remove-properties (add-command/resolve-property-identifiers
+                                 cfg (:repo action) (:remove-properties action)
+                                 {:allow-non-built-in? true})
               block-id (:db/id source)
               block-ids [block-id]
               update-tag-ids (when (seq update-tags)
