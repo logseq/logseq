@@ -658,6 +658,7 @@
         [starting-session? set-starting-session?!] (rum/use-state false)
         [publish-mode set-publish-mode!] (rum/use-state nil)
         [snapshot-busy? set-snapshot-busy?!] (rum/use-state false)
+        [terminating? set-terminating?!] (rum/use-state false)
         [terminal-visible? set-terminal-visible!] (rum/use-state false)
         [terminal-status set-terminal-status!] (rum/use-state :idle)
         [terminal-error set-terminal-error!] (rum/use-state nil)
@@ -687,6 +688,8 @@
                                busy?
                                publish-busy?
                                snapshot-busy?)
+        terminate-disabled? (or (not session-started?)
+                                terminating?)
         can-send? (and (not input-disabled?)
                        (not (string/blank? trimmed-draft))
                        (not busy?))
@@ -741,6 +744,12 @@
                       (-> (agent-handler/<snapshot-session! block)
                           (p/catch (fn [_] nil))
                           (p/finally (fn [] (set-snapshot-busy?! false))))))
+        terminate! (fn []
+                     (when (and base session-id (not terminate-disabled?))
+                       (set-terminating?! true)
+                       (-> (agent-handler/<cancel-session! block)
+                           (p/catch (fn [_] nil))
+                           (p/finally (fn [] (set-terminating?! false))))))
         open-terminal! (fn []
                          (when (and terminal-enabled? (not terminal-open-disabled?))
                            (set-terminal-visible! true)
@@ -1020,6 +1029,15 @@
                 :class "h-7 px-2 text-xs"
                 :on-click (fn [_] (close-terminal!))}
                "Disconnect"))])
+         (shui/button
+          {:size :sm
+           :variant :outline
+           :class "h-7 px-2 text-xs text-red-600 hover:text-red-700"
+           :disabled terminate-disabled?
+           :on-click (fn [_] (terminate!))}
+          (if terminating?
+            "Terminating..."
+            "Terminate"))
          (when-not pr-created?
            (shui/button
             {:size :sm

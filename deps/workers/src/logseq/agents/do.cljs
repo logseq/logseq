@@ -629,6 +629,25 @@
   []
   "main")
 
+(defn- choose-base-branch
+  [candidates avoid-branch]
+  (let [avoid-branch (source-control/sanitize-branch-name avoid-branch)
+        valid-candidates (->> candidates
+                              (map source-control/sanitize-branch-name)
+                              (remove nil?)
+                              vec)
+        pick-non-avoid (fn [xs]
+                         (if (string? avoid-branch)
+                           (some (fn [candidate]
+                                   (when (not= candidate avoid-branch)
+                                     candidate))
+                                 xs)
+                           (first xs)))
+        fallback-non-avoid (pick-non-avoid ["main" "master"])]
+    (or (pick-non-avoid valid-candidates)
+        fallback-non-avoid
+        (first valid-candidates))))
+
 (defn- task-requested-base-branch
   [task]
   (or (some-> (get-in task [:project :base-branch]) source-control/sanitize-branch-name)
@@ -1285,30 +1304,13 @@
   (let [requested-base-branch (source-control/sanitize-branch-name (:base-branch body))
         task-base-branch (some-> (get-in current-session [:task :project :base-branch])
                                  source-control/sanitize-branch-name)
-        default-base (source-control/sanitize-branch-name (default-base-branch))
-        choose-base-branch (fn [candidates]
-                             (let [valid-candidates (->> candidates
-                                                         (map source-control/sanitize-branch-name)
-                                                         (remove nil?)
-                                                         vec)
-                                   non-head-candidate (some (fn [candidate]
-                                                              (when (not= candidate head-branch)
-                                                                candidate))
-                                                            valid-candidates)
-                                   fallback-non-head (some (fn [candidate]
-                                                             (let [candidate (source-control/sanitize-branch-name candidate)]
-                                                               (when (and (string? candidate)
-                                                                          (not= candidate head-branch))
-                                                                 candidate)))
-                                                           ["main" "master"])]
-                               (or non-head-candidate
-                                   fallback-non-head
-                                   (first valid-candidates))))]
+        default-base (source-control/sanitize-branch-name (default-base-branch))]
     (cond
       (false? create-pr?)
       (let [base-branch (choose-base-branch [requested-base-branch
                                              task-base-branch
-                                             default-base])]
+                                             default-base]
+                                            nil)]
         (http/json-response :sessions/pr
                             (cond-> {:status "pushed"
                                      :head-branch head-branch
@@ -1327,7 +1329,8 @@
               base-branch (choose-base-branch [detected-base-branch
                                                requested-base-branch
                                                task-base-branch
-                                               default-base])]
+                                               default-base]
+                                              head-branch)]
         (let [description (or (some-> (:body body) str string/trim not-empty)
                               "Automated changes from agent session.")
               title (or (some-> (:title body) str string/trim not-empty)
@@ -1350,8 +1353,31 @@
   (let [provider (runtime-provider/resolve-provider (.-env self) runtime)
         env (.-env self)
         commit-message (some-> (:commit-message body) str string/trim not-empty)
-        head-branch (source-control/resolve-head-branch (:head-branch body)
-                                                        (generated-head-branch current-session body))]
+        requested-base-branch (source-control/sanitize-branch-name (:base-branch body))
+        task-base-branch (some-> (get-in current-session [:task :project :base-branch])
+                                 source-control/sanitize-branch-name)
+        checkpoint-head-branch (or (some-> (get-in current-session [:task :sandbox-checkpoint :bundle-head-branch])
+                                           source-control/sanitize-branch-name)
+                                   (some-> (get-in current-session [:task :sandbox-checkpoint :head-branch])
+                                           source-control/sanitize-branch-name))
+        default-base (source-control/sanitize-branch-name (default-base-branch))
+        push-base-branch (choose-base-branch [requested-base-branch
+                                              task-base-branch
+                                              default-base]
+                                             nil)
+        generated-branch (generated-head-branch current-session body)
+        resolved-head-branch (if create-pr?
+                               (source-control/resolve-head-branch (:head-branch body)
+                                                                   generated-branch)
+                               (source-control/resolve-head-branch (:head-branch body)
+                                                                   (or checkpoint-head-branch
+                                                                       push-base-branch)))
+        head-branch (if (and create-pr?
+                             (string? resolved-head-branch)
+                             (string? push-base-branch)
+                             (= resolved-head-branch push-base-branch))
+                      (source-control/resolve-head-branch nil generated-branch)
+                      resolved-head-branch)]
     (if-not (string? head-branch)
       (http/bad-request "invalid head branch")
       (-> (p/let [push-token (source-control/<push-token! env repo-url)

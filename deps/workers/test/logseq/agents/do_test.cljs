@@ -1474,7 +1474,8 @@
                        "session"
                        (clj->js {:id "sess-pr-push-only"
                                  :status "running"
-                                 :task {:project {:repo-url "https://github.com/example/repo"}}
+                                 :task {:project {:repo-url "https://github.com/example/repo"
+                                                  :base-branch "develop"}}
                                  :runtime {:provider "local-dev"
                                            :session-id "sess-pr-push-only"}
                                  :audit {}
@@ -1507,7 +1508,9 @@
                                  (fn [body]
                                    (is (= "pushed" (:status body)))
                                    (is (= "m14/push-only" (:head-branch body)))
+                                   (is (= "develop" (:base-branch body)))
                                    (is (= true (:force body)))
+                                   (is (= "m14/push-only" (:head-branch (first @push-calls))))
                                    (is (= "feat: summarize PR changes"
                                           (:commit-message (first @push-calls))))
                                    (is (empty? @terminate-calls))
@@ -1516,8 +1519,57 @@
                            (is false (str "unexpected error: " error))
                            (done))))))))
 
+(deftest pr-endpoint-push-only-prefers-checkpoint-head-branch-test
+  (testing "session publish endpoint push-only uses restored checkpoint branch when head is omitted"
+    (async done
+           (let [push-calls (atom [])
+                 env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"}
+                 self (make-self env)
+                 headers {"content-type" "application/json"
+                          "x-user-id" "user-1"}]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-pr-push-only-checkpoint-branch"
+                                 :status "running"
+                                 :task {:project {:repo-url "https://github.com/example/repo"
+                                                  :base-branch "main"}
+                                        :sandbox-checkpoint {:bundle-head-branch "feat/restored-pr-branch"}}
+                                 :runtime {:provider "local-dev"
+                                           :session-id "sess-pr-push-only-checkpoint-branch"}
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (with-redefs [runtime-provider/<push-branch!
+                                        (fn [_provider _runtime opts]
+                                          (swap! push-calls conj opts)
+                                          (js/Promise.resolve
+                                           {:head-branch (:head-branch opts)
+                                            :repo-url (:repo-url opts)
+                                            :force (:force opts)
+                                            :remote "origin"}))]
+                            (agent-do/handle-fetch self
+                                                   (json-request "http://db-sync.local/__session__/pr"
+                                                                 "POST"
+                                                                 {:create-pr false
+                                                                  :commit-message "chore: update colors"}
+                                                                 headers)))))
+                 (.then (fn [resp]
+                          (is (= 200 (.-status resp)))
+                          (.then (<json resp)
+                                 (fn [body]
+                                   (is (= "pushed" (:status body)))
+                                   (is (= "feat/restored-pr-branch" (:head-branch body)))
+                                   (is (= "main" (:base-branch body)))
+                                   (is (= "feat/restored-pr-branch"
+                                          (:head-branch (first @push-calls))))
+                                   (done)))))
+                 (.catch (fn [error]
+                           (is false (str "unexpected error: " error))
+                           (done))))))))
+
 (deftest pr-endpoint-generates-friendly-unique-head-branch-test
-  (testing "session publish endpoint derives head branch from task and summary when omitted"
+  (testing "session publish endpoint derives head branch from task and summary when creating PR"
     (async done
            (let [push-calls (atom [])
                  env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"}
@@ -1544,17 +1596,31 @@
                                            {:head-branch (:head-branch opts)
                                             :repo-url (:repo-url opts)
                                             :force (:force opts)
-                                            :remote "origin"}))]
+                                            :remote "origin"}))
+                                        source-control/<pr-token!
+                                        (fn [_env _repo-url]
+                                          (js/Promise.resolve "pr-token"))
+                                        source-control/<default-branch!
+                                        (fn [_env _token _repo-url]
+                                          (js/Promise.resolve "main"))
+                                        source-control/<create-pull-request!
+                                        (fn [_env _token _repo-url _opts]
+                                          (js/Promise.resolve {:url "https://github.com/example/repo/pull/123"
+                                                               :id 123}))
+                                        agent-do/<cleanup-runtime-after-pr-ready!
+                                        (fn [_self _head-branch]
+                                          (js/Promise.resolve nil))]
                             (agent-do/handle-fetch self
                                                    (json-request "http://db-sync.local/__session__/pr"
                                                                  "POST"
-                                                                 {:create-pr false
+                                                                 {:create-pr true
                                                                   :body "Optimize batch write latency in sync pipeline"}
                                                                  headers)))))
                  (.then (fn [resp]
                           (is (= 200 (.-status resp)))
                           (.then (<json resp)
                                  (fn [body]
+                                   (is (= "pr-created" (:status body)))
                                    (let [generated-branch (:head-branch body)]
                                      (is (string/starts-with? generated-branch "perf/"))
                                      (is (string/includes? generated-branch "improve-sync-performance"))
@@ -1592,20 +1658,31 @@
                                             :repo-url (:repo-url opts)
                                             :force (:force opts)
                                             :remote "origin"}))
+                                        source-control/<pr-token!
+                                        (fn [_env _repo-url]
+                                          (js/Promise.resolve "pr-token"))
                                         source-control/<default-branch!
                                         (fn [_env _token _repo-url]
-                                          (js/Promise.resolve same-branch))]
+                                          (js/Promise.resolve same-branch))
+                                        source-control/<create-pull-request!
+                                        (fn [_env _token _repo-url opts]
+                                          (js/Promise.resolve {:url "https://github.com/example/repo/pull/77"
+                                                               :id 77
+                                                               :base-branch (:base-branch opts)}))
+                                        agent-do/<cleanup-runtime-after-pr-ready!
+                                        (fn [_self _head-branch]
+                                          (js/Promise.resolve nil))]
                             (agent-do/handle-fetch self
                                                    (json-request "http://db-sync.local/__session__/pr"
                                                                  "POST"
-                                                                 {:create-pr false
+                                                                 {:create-pr true
                                                                   :head-branch same-branch}
                                                                  headers)))))
                  (.then (fn [resp]
                           (is (= 200 (.-status resp)))
                           (.then (<json resp)
                                  (fn [body]
-                                   (is (= "pushed" (:status body)))
+                                   (is (= "pr-created" (:status body)))
                                    (is (= same-branch (:head-branch body)))
                                    (is (= "main" (:base-branch body)))
                                    (done)))))

@@ -907,7 +907,8 @@
                           (when (= "pr-created" status)
                             (maybe-update-task-pr-url! block-uuid (:pr-url resp)))
                           (maybe-update-task-status! block-uuid status))
-                        (maybe-insert-pr-sibling-blocks! block-uuid (:body raw-body))
+                        (when (:create-pr raw-body)
+                          (maybe-insert-pr-sibling-blocks! block-uuid (:body raw-body)))
                         (notification/show! (publish-status-message resp)
                                             (if (= "manual-pr-required" (:status resp))
                                               :warning
