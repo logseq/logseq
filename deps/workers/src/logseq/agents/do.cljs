@@ -446,6 +446,32 @@
                        (map? (:runtime latest-session)))
               (<save-session! self (assoc latest-session :runtime nil)))))))))
 
+(defn- <checkpoint-and-terminate-completed-runtime!
+  [^js self session-id]
+  (p/let [current-session (<get-session self)]
+    (when (and (map? current-session)
+               (= session-id (:id current-session))
+               (= "completed" (:status current-session))
+               (map? (:runtime current-session)))
+      (let [runtime (:runtime current-session)]
+        (p/let [_ (<checkpoint-existing-snapshot! self current-session {:by "system"
+                                                                        :reason "session-completed"})
+                terminated? (-> (<terminate-runtime! self runtime)
+                                (p/then (fn [_] true))
+                                (p/catch (fn [error]
+                                           (log/error :agent/completed-runtime-terminate-failed
+                                                      {:session-id session-id
+                                                       :runtime-session-id (:session-id runtime)
+                                                       :sandbox-id (:sandbox-id runtime)
+                                                       :error error})
+                                           false)))
+                latest-session (<get-session self)]
+          (when (and terminated?
+                     (map? latest-session)
+                     (= session-id (:id latest-session))
+                     (map? (:runtime latest-session)))
+            (<save-session! self (assoc latest-session :runtime nil))))))))
+
 (defn- parse-sse-data [frame]
   (let [lines (string/split frame #"\n")
         data-lines (keep (fn [line]
@@ -463,9 +489,11 @@
   (p/let [current-session (<get-session self)]
     (when (= session-id (:id current-session))
       (let [event-type (or (:type payload) "agent.runtime")]
-        (<append-event! self {:type event-type
-                              :data payload
-                              :ts (common/now-ms)})))))
+        (p/let [_ (<append-event! self {:type event-type
+                                        :data payload
+                                        :ts (common/now-ms)})]
+          (when (= "session.completed" event-type)
+            (<checkpoint-and-terminate-completed-runtime! self session-id)))))))
 
 (defn- <consume-events-stream! [^js self session-id runtime on-ready]
   (let [provider (runtime-provider/resolve-provider (.-env self) runtime)]

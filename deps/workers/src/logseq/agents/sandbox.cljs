@@ -60,8 +60,11 @@
       (js/Promise.resolve fallback))))
 
 (defn <create-session
-  [base token session-id {:keys [agent agent-mode permission-mode]}]
-  (let [headers (js/Headers.)
+  [base token session-id payload]
+  (let [agent (:agent payload)
+        agent-mode (or (:agent-mode payload) (:agentMode payload))
+        permission-mode (or (:permission-mode payload) (:permissionMode payload))
+        headers (js/Headers.)
         _ (.set headers "content-type" "application/json")
         _ (when (string? token) (.set headers "authorization" (str "Bearer " token)))
         body (cond-> {:agent (normalize-agent-id agent)}

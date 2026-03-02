@@ -228,6 +228,53 @@
                            (is false (str "unexpected error: " error))
                            (done))))))))
 
+(deftest runtime-session-completed-checkpoints-existing-and-terminates-test
+  (testing "session.completed runtime event checkpoints existing pointer and terminates runtime without snapshot creation"
+    (async done
+           (let [env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"}
+                 self (make-self env)
+                 terminate-calls (atom [])
+                 snapshot-calls (atom [])]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-completed"
+                                 :status "running"
+                                 :task {:project {:repo-url "https://github.com/example/repo"}
+                                        :sandbox-checkpoint {:provider "cloudflare"
+                                                             :snapshot-id "checkpoint-existing-completed"}}
+                                 :runtime {:provider "cloudflare"
+                                           :sandbox-id "sbx-completed"
+                                           :session-id "sess-completed"}
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (with-redefs [runtime-provider/<snapshot-runtime!
+                                        (fn [_provider runtime _opts]
+                                          (swap! snapshot-calls conj runtime)
+                                          (js/Promise.resolve {:snapshot-id "new-snapshot-should-not-happen"}))
+                                        agent-do/<terminate-runtime!
+                                        (fn [_self runtime]
+                                          (swap! terminate-calls conj runtime)
+                                          (js/Promise.resolve nil))]
+                            (#'agent-do/<append-runtime-event! self
+                                                               "sess-completed"
+                                                               {:type "session.completed"}))))
+                 (.then (fn [_]
+                          (.then (.get (.-storage self) "session")
+                                 (fn [session]
+                                   (let [session (js->clj session :keywordize-keys true)]
+                                     (is (empty? @snapshot-calls))
+                                     (is (= 1 (count @terminate-calls)))
+                                     (is (nil? (:runtime session)))
+                                     (is (= "checkpoint-existing-completed"
+                                            (get-in session [:task :sandbox-checkpoint :snapshot-id])))
+                                     (is (number? (get-in session [:task :sandbox-checkpoint :checkpoint-at])))
+                                     (done))))))
+                 (.catch (fn [error]
+                           (is false (str "unexpected error: " error))
+                           (done))))))))
+
 (deftest init-does-not-wait-for-open-events-stream-test
   (testing "session init returns immediately even when runtime events stream stays open"
     (async done

@@ -194,3 +194,39 @@
   (and (string? event-type)
        (or (= "item.delta" event-type)
            (string/includes? event-type ".delta"))))
+
+(defn permission-event-text
+  [event-type payload]
+  (let [metadata (if (map? (:metadata payload)) (:metadata payload) {})
+        reason (or (non-empty-str (:reason metadata))
+                   (non-empty-str (:message metadata))
+                   (non-empty-str (:reason payload))
+                   (non-empty-str (:message payload)))
+        action (or (non-empty-str (:action payload))
+                   (non-empty-str (:codexRequestKind metadata))
+                   (non-empty-str (:action metadata)))
+        action-label (when (string? action)
+                       (-> action
+                           (string/replace #"([a-z0-9])([A-Z])" "$1 $2")
+                           (string/replace #"[_-]+" " ")
+                           string/lower-case
+                           non-empty-str))
+        requested-prefix (if (string? action-label)
+                           (str "Permission requested for " action-label ".")
+                           "Permission requested.")]
+    (cond
+      (= "permission.requested" event-type)
+      (if (string? reason)
+        (str requested-prefix " " reason)
+        requested-prefix)
+
+      (= "permission.approved" event-type)
+      "Permission approved."
+
+      (= "permission.denied" event-type)
+      "Permission denied."
+
+      (= "permission.canceled" event-type)
+      "Permission canceled."
+
+      :else nil)))

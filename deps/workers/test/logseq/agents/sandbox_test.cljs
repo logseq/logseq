@@ -1,5 +1,5 @@
 (ns logseq.agents.sandbox-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.test :refer [async deftest is testing]]
             [logseq.agents.sandbox :as sandbox]))
 
 (deftest normalize-base-url-test
@@ -43,3 +43,37 @@
     (is (= "opencode" (sandbox/normalize-agent-id "open-code")))
     (is (= "codex" (sandbox/normalize-agent-id "codex")))
     (is (nil? (sandbox/normalize-agent-id "   ")))))
+
+(deftest create-session-payload-test
+  (async done
+         (let [original-fetch js/fetch
+               payloads (atom [])]
+           (set! js/fetch
+                 (fn [request]
+                   (-> (.text (.clone request))
+                       (.then (fn [body-text]
+                                (swap! payloads conj (js->clj (js/JSON.parse body-text)
+                                                              :keywordize-keys true))
+                                (js/Response.
+                                 (js/JSON.stringify #js {:ok true})
+                                 #js {:status 200
+                                      :headers #js {"content-type" "application/json"}}))))))
+           (-> (sandbox/<create-session "https://sandbox.example" "token" "sess-1"
+                                        {:agent "codex"
+                                         :agentMode "build"
+                                         :permissionMode "bypass"})
+               (.then (fn [_]
+                        (sandbox/<create-session "https://sandbox.example" "token" "sess-2"
+                                                 {:agent "codex"
+                                                  :agent-mode "build"
+                                                  :permission-mode "read-only"})))
+               (.then (fn [_]
+                        (set! js/fetch original-fetch)
+                        (is (= "bypass" (get-in @payloads [0 :permissionMode])))
+                        (is (= "build" (get-in @payloads [0 :agentMode])))
+                        (is (= "read-only" (get-in @payloads [1 :permissionMode])))
+                        (is (= "build" (get-in @payloads [1 :agentMode])))
+                        (done)))
+               (.catch (fn [error]
+                         (set! js/fetch original-fetch)
+                         (throw error)))))))
