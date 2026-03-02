@@ -275,6 +275,43 @@
                            (is false (str "unexpected error: " error))
                            (done))))))))
 
+(deftest runtime-session-canceled-terminates-runtime-test
+  (testing "session.canceled runtime event terminates runtime and clears sandbox runtime"
+    (async done
+           (let [env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"}
+                 self (make-self env)
+                 terminate-calls (atom [])]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-canceled"
+                                 :status "running"
+                                 :task {:project {:repo-url "https://github.com/example/repo"}}
+                                 :runtime {:provider "cloudflare"
+                                           :sandbox-id "sbx-canceled"
+                                           :session-id "sess-canceled"}
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (with-redefs [agent-do/<terminate-runtime!
+                                        (fn [_self runtime]
+                                          (swap! terminate-calls conj runtime)
+                                          (js/Promise.resolve nil))]
+                            (#'agent-do/<append-runtime-event! self
+                                                               "sess-canceled"
+                                                               {:type "session.canceled"}))))
+                 (.then (fn [_]
+                          (.then (.get (.-storage self) "session")
+                                 (fn [session]
+                                   (let [session (js->clj session :keywordize-keys true)]
+                                     (is (= 1 (count @terminate-calls)))
+                                     (is (= "canceled" (:status session)))
+                                     (is (nil? (:runtime session)))
+                                     (done))))))
+                 (.catch (fn [error]
+                           (is false (str "unexpected error: " error))
+                           (done))))))))
+
 (deftest init-does-not-wait-for-open-events-stream-test
   (testing "session init returns immediately even when runtime events stream stays open"
     (async done

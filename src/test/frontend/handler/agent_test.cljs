@@ -111,7 +111,7 @@
                           (is false (str e))
                           (done)))))))
 
-(deftest publish-session-pr-created-inserts-summary-sibling-block-test
+(deftest publish-session-pr-created-sets-in-review-and-inserts-summary-sibling-block-test
   (async done
          (let [insert-calls (atom [])
                fetch-calls (atom [])
@@ -135,8 +135,8 @@
                                              (= lookup [:block/uuid (:block/uuid block)])
                                              {:block/uuid (:block/uuid block)}
 
-                                             (= lookup :logseq.property/status.done)
-                                             {:block/title "Done"}
+                                             (= lookup :logseq.property/status.in-review)
+                                             {:block/title "In review"}
 
                                              :else nil))
                                pu/get-block-property-value (fn [block k]
@@ -153,7 +153,7 @@
                          _ (reset! state/state prev-state)]
                    (is (= "http://base/sessions/sess-pr-1/pr" (:url first-call)))
                    (is (= #{[:logseq.property/pr "https://github.com/example/repo/pull/123"]
-                            [:logseq.property/status :logseq.property/status.done]}
+                            [:logseq.property/status :logseq.property/status.in-review]}
                           (set (map (juxt :key :value) @property-calls))))
                    (is (= 1 (count @insert-calls)))
                    (is (= "PR Summary: Agent summary for PR"
@@ -246,6 +246,58 @@
                          _ (reset! state/state prev-state)]
                    (is (= "feat: summarize PR changes"
                           (:commit-message (first @request-bodies))))
+                   (done)))
+               (p/catch (fn [e]
+                          (reset! state/state prev-state)
+                          (is false (str e))
+                          (done)))))))
+
+(deftest cancel-session-calls-endpoint-and-updates-status-test
+  (async done
+         (let [fetch-calls (atom [])
+               block {:block/uuid #uuid "99999999-9999-9999-9999-999999999999"}
+               prev-state @state/state]
+           (swap! state/state assoc :agent/sessions {(str (:block/uuid block))
+                                                     {:session-id "sess-cancel-1"
+                                                      :status "running"}})
+           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                               db-sync/fetch-json (fn [url opts _]
+                                                    (swap! fetch-calls conj {:url url :opts opts})
+                                                    (p/resolved {:ok true}))
+                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
+                                                                           (resolve true))]
+                 (p/let [_ (agent-handler/<cancel-session! block)
+                         session (get (:agent/sessions @state/state) (str (:block/uuid block)))
+                         [first-call] @fetch-calls
+                         _ (reset! state/state prev-state)]
+                   (is (= "http://base/sessions/sess-cancel-1/cancel" (:url first-call)))
+                   (is (= "POST" (get-in first-call [:opts :method])))
+                   (is (= "canceled" (:status session)))
+                   (done)))
+               (p/catch (fn [e]
+                          (reset! state/state prev-state)
+                          (is false (str e))
+                          (done)))))))
+
+(deftest cancel-session-if-task-canceled-triggers-only-for-active-session-test
+  (async done
+         (let [calls (atom 0)
+               block {:block/uuid #uuid "12121212-1212-1212-1212-121212121212"}
+               prev-state @state/state]
+           (swap! state/state assoc :agent/sessions {(str (:block/uuid block))
+                                                     {:session-id "sess-cancel-2"
+                                                      :status "running"}})
+           (-> (p/with-redefs [pu/get-block-property-value (fn [_entity key]
+                                                             (when (= key :logseq.property/status)
+                                                               :logseq.property/status.canceled))
+                               agent-handler/<cancel-session! (fn [_]
+                                                                (swap! calls inc)
+                                                                (p/resolved {:ok true}))]
+                 (p/let [_ (agent-handler/<cancel-session-if-task-canceled! block)
+                         _ (swap! state/state assoc-in [:agent/sessions (str (:block/uuid block)) :status] "completed")
+                         _ (agent-handler/<cancel-session-if-task-canceled! block)
+                         _ (reset! state/state prev-state)]
+                   (is (= 1 @calls))
                    (done)))
                (p/catch (fn [e]
                           (reset! state/state prev-state)

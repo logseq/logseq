@@ -285,7 +285,7 @@
    "running" :logseq.property/status.doing
    "paused" :logseq.property/status.todo
    "completed" :logseq.property/status.done
-   "pr-created" :logseq.property/status.done
+   "pr-created" :logseq.property/status.in-review
    "failed" :logseq.property/status.canceled
    "canceled" :logseq.property/status.canceled})
 (def ^:private task-session-created-property :logseq.property/agent-session-created?)
@@ -597,6 +597,49 @@
                            (when-not (= status 404)
                              (log/error :agent/ensure-session-failed error)))
                          nil))))))))
+
+(defn <cancel-session!
+  [block]
+  (let [base (db-sync/http-base)
+        block-uuid (:block/uuid block)
+        session (session-state block-uuid)
+        session-id (or (:session-id session)
+                       (some-> block-uuid str))]
+    (cond
+      (not (string? base))
+      (p/resolved nil)
+
+      (not (string? session-id))
+      (p/resolved nil)
+
+      :else
+      (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)]
+        (-> (db-sync/fetch-json (str base "/sessions/" session-id "/cancel")
+                                {:method "POST"
+                                 :headers {"content-type" "application/json"}}
+                                {:response-schema :sessions/cancel})
+            (p/then (fn [resp]
+                      (update-session-state! block-uuid {:status "canceled"})
+                      (stop-session-stream! block-uuid)
+                      resp))
+            (p/catch (fn [error]
+                       (when-not (= 404 (:status (ex-data error)))
+                         (log/error :agent/cancel-session-failed error))
+                       nil)))))))
+
+(defn- task-status-canceled?
+  [block]
+  (= :logseq.property/status.canceled
+     (:db/ident (:logseq.property/status block))))
+
+(defn <cancel-session-if-task-canceled!
+  [block]
+  (let [block-uuid (:block/uuid block)
+        session (session-state block-uuid)]
+    (when (and (task-status-canceled? block)
+               (string? (:session-id session))
+               (not (terminal-status? (:status session))))
+      (<cancel-session! block))))
 
 (defn <start-session!
   ([block]

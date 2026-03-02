@@ -355,6 +355,83 @@
                            (is (= "vercel" (:provider data))))
                          (done)))))))
 
+(deftest vercel-provider-push-branch-command-test
+  (async done
+         (let [captured (atom nil)
+               captured-opts (atom nil)
+               env #js {"VERCEL_TEAM_ID" "team-1"
+                        "VERCEL_PROJECT_ID" "project-1"
+                        "VERCEL_TOKEN" "token-vercel"}
+               provider (runtime-provider/create-provider env "vercel")
+               runtime {:provider "vercel"
+                        :sandbox-id "vercel-sbx-push"
+                        :backup-dir "/vercel/sandbox/logseq"
+                        :session-id "sess-vercel-push"}]
+           (with-redefs [runtime-provider/<vercel-get-sandbox!
+                         (fn [_env _sandbox-id]
+                           (js/Promise.resolve #js {:sandboxId "vercel-sbx-push"}))
+                         runtime-provider/<vercel-run-shell!
+                         (fn [_sandbox cmd & [opts]]
+                           (reset! captured cmd)
+                           (reset! captured-opts opts)
+                           (js/Promise.resolve {:stdout "" :stderr "" :exit-code 0}))]
+             (-> (runtime-provider/<push-branch! provider
+                                                 runtime
+                                                 {:session-id "sess-vercel-push"
+                                                  :repo-url "https://github.com/example/repo"
+                                                  :head-branch "feature/m14"
+                                                  :commit-message "feat: summarize PR updates"
+                                                  :force true
+                                                  :push-token "token-1"})
+                 (.then (fn [result]
+                          (is (= "feature/m14" (:head-branch result)))
+                          (is (= "https://github.com/example/repo" (:repo-url result)))
+                          (is (= true (:force result)))
+                          (is (string/includes? @captured "cd '/vercel/sandbox/logseq'"))
+                          (is (string/includes? @captured "git push"))
+                          (is (string/includes? @captured "feature/m14"))
+                          (is (string/includes? @captured "commit -m 'feat: summarize PR updates'"))
+                          (is (string/includes? @captured "x-access-token:token-1"))
+                          (is (= "token-1" (get-in @captured-opts [:env "GITHUB_TOKEN"])))
+                          (is (= "token-1" (get-in @captured-opts [:env "GH_TOKEN"])))
+                          (is (= "token-1" (get-in @captured-opts [:env "GITHUB_APP_INSTALLATION_TOKEN"])))
+                          (done)))
+                 (.catch (fn [error]
+                           (is false (str "unexpected error: " error))
+                           (done))))))))
+
+(deftest vercel-provider-push-branch-classifies-error-test
+  (async done
+         (let [env #js {"VERCEL_TEAM_ID" "team-1"
+                        "VERCEL_PROJECT_ID" "project-1"
+                        "VERCEL_TOKEN" "token-vercel"}
+               provider (runtime-provider/create-provider env "vercel")
+               runtime {:provider "vercel"
+                        :sandbox-id "vercel-sbx-push"
+                        :backup-dir "/vercel/sandbox/logseq"
+                        :session-id "sess-vercel-push"}]
+           (with-redefs [runtime-provider/<vercel-get-sandbox!
+                         (fn [_env _sandbox-id]
+                           (js/Promise.resolve #js {:sandboxId "vercel-sbx-push"}))
+                         runtime-provider/<vercel-run-shell!
+                         (fn [_sandbox _cmd & _opts]
+                           (js/Promise.reject
+                            (ex-info "git failed"
+                                     {:stderr "remote: permission denied"})))]
+             (-> (runtime-provider/<push-branch! provider
+                                                 runtime
+                                                 {:session-id "sess-vercel-push"
+                                                  :repo-url "https://github.com/example/repo"
+                                                  :head-branch "feature/m14"})
+                 (.then (fn [_]
+                          (is false "expected vercel push to fail")
+                          (done)))
+                 (.catch (fn [error]
+                           (let [data (ex-data error)]
+                             (is (= "vercel" (:provider data)))
+                             (is (= :auth (:reason data))))
+                           (done))))))))
+
 (deftest sprites-provider-push-branch-command-test
   (async done
          (let [captured (atom nil)

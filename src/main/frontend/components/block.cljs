@@ -2525,6 +2525,13 @@
           btn-title (if runnable?
                       (if session-created? "Open chat" "Run agent")
                       "Set Project + Agent")]
+      (hooks/use-effect!
+       (fn []
+         (agent-handler/<cancel-session-if-task-canceled! block)
+         nil)
+       [(:logseq.property/status block)
+        (:status session)
+        (:session-id session)])
       [:div.flex.flex-row.items-center.gap-1
        (shui/button
         {:variant :ghost

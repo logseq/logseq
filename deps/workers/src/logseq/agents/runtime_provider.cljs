@@ -1942,11 +1942,56 @@
           (string? backup-dir) (assoc :backup-dir backup-dir)
           :always (assoc :provider "vercel")))))
 
-  (<push-branch! [_ _runtime _opts]
-    (p/rejected
-     (ex-info "vercel runtime provider does not support managed git push yet"
-              {:reason :unsupported
-               :provider "vercel"})))
+  (<push-branch! [_ runtime opts]
+    (let [sandbox-id (:sandbox-id runtime)
+          session-id (:session-id opts)
+          repo-url (:repo-url opts)
+          head-branch (:head-branch opts)
+          force? (true? (:force opts))
+          repo-dir (or (:backup-dir runtime)
+                       (get-repo-dir session-id (:task opts) "vercel"))
+          remote-url (or (source-control/push-remote-url repo-url (:push-token opts))
+                         repo-url)]
+      (when-not (string? sandbox-id)
+        (throw (ex-info "missing sandbox-id on runtime" {:runtime runtime})))
+      (when-not (string? repo-dir)
+        (throw (ex-info "missing repo dir for push"
+                        {:reason :missing-repo-dir
+                         :session-id session-id})))
+      (when-not (string? remote-url)
+        (throw (ex-info "missing remote url for push"
+                        {:reason :missing-remote-url
+                         :repo-url repo-url})))
+      (when-not (string? head-branch)
+        (throw (ex-info "missing head branch for push"
+                        {:reason :missing-branch})))
+      (let [script (push-command {:repo-dir repo-dir
+                                  :remote-url remote-url
+                                  :head-branch head-branch
+                                  :commit-message (:commit-message opts)
+                                  :force force?})
+            env-vars (assoc-github-installation-token {}
+                                                      (some-> (:push-token opts) str string/trim not-empty))
+            run-opts (when (seq env-vars)
+                       {:env env-vars})]
+        (-> (p/let [sandbox (<vercel-get-sandbox! env sandbox-id)
+                    _ (<vercel-run-shell! sandbox script run-opts)]
+              {:head-branch head-branch
+               :repo-url repo-url
+               :force force?
+               :remote "origin"})
+            (p/catch (fn [error]
+                       (p/rejected
+                        (if-let [data (ex-data error)]
+                          (ex-info (ex-message error)
+                                   (assoc data
+                                          :provider "vercel"
+                                          :reason (or (:reason data)
+                                                      (classify-push-error error))))
+                          (ex-info "git push failed"
+                                   {:provider "vercel"
+                                    :reason (classify-push-error error)
+                                    :error (str error)})))))))))
 
   (<terminate-runtime! [_ runtime]
     (let [sandbox-id (:sandbox-id runtime)]

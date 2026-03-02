@@ -472,6 +472,31 @@
                      (map? (:runtime latest-session)))
             (<save-session! self (assoc latest-session :runtime nil))))))))
 
+(defn- <terminate-runtime-on-status!
+  [^js self session-id status]
+  (p/let [current-session (<get-session self)]
+    (when (and (map? current-session)
+               (= session-id (:id current-session))
+               (= status (:status current-session))
+               (map? (:runtime current-session)))
+      (let [runtime (:runtime current-session)]
+        (p/let [terminated? (-> (<terminate-runtime! self runtime)
+                                (p/then (fn [_] true))
+                                (p/catch (fn [error]
+                                           (log/error :agent/runtime-status-terminate-failed
+                                                      {:session-id session-id
+                                                       :status status
+                                                       :runtime-session-id (:session-id runtime)
+                                                       :sandbox-id (:sandbox-id runtime)
+                                                       :error error})
+                                           false)))
+                latest-session (<get-session self)]
+          (when (and terminated?
+                     (map? latest-session)
+                     (= session-id (:id latest-session))
+                     (map? (:runtime latest-session)))
+            (<save-session! self (assoc latest-session :runtime nil))))))))
+
 (defn- parse-sse-data [frame]
   (let [lines (string/split frame #"\n")
         data-lines (keep (fn [line]
@@ -493,7 +518,9 @@
                                         :data payload
                                         :ts (common/now-ms)})]
           (when (= "session.completed" event-type)
-            (<checkpoint-and-terminate-completed-runtime! self session-id)))))))
+            (<checkpoint-and-terminate-completed-runtime! self session-id))
+          (when (= "session.canceled" event-type)
+            (<terminate-runtime-on-status! self session-id "canceled")))))))
 
 (defn- <consume-events-stream! [^js self session-id runtime on-ready]
   (let [provider (runtime-provider/resolve-provider (.-env self) runtime)]
