@@ -215,9 +215,6 @@
 (defn- terminal-status? [status]
   (contains? #{"completed" "failed" "canceled"} status))
 
-(defn- runtime-auto-terminate-status? [status]
-  (contains? #{"failed" "canceled"} status))
-
 (defn- session-runtime-provider [session]
   (some-> (get-in session [:runtime :provider]) str string/lower-case))
 

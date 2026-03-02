@@ -425,9 +425,9 @@
             [[:logseq.property/agent.codex "Codex"]
              [:logseq.property/agent.claude-code "Claude Code"]])
       :queryable? true}
-     :logseq.property/agent-session-created?
-     {:title "Agent session created?"
-      :schema {:type :checkbox
+     :logseq.property/agent-session-id
+     {:title "Agent session id"
+      :schema {:type :string
                :public? false
                :hide? true}
       :queryable? false}

@@ -8,7 +8,6 @@
             [frontend.handler.agent :as agent-handler]
             [frontend.handler.agent-chat-transport :as chat-transport]
             [frontend.handler.db-based.sync :as db-sync]
-            [frontend.handler.property.util :as pu]
             [frontend.modules.agent-chat.event :as chat-event]
             [frontend.state :as state]
             [logseq.shui.hooks :as hooks]
@@ -614,7 +613,9 @@
   (let [block-uuid (:block/uuid block)
         [sessions] (hooks/use-atom (:agent/sessions @state/state))
         session (get sessions (str block-uuid))
-        session-id (or (:session-id session) (some-> block-uuid str))
+        session-id (or (:session-id session)
+                       (agent-handler/task-session-id block)
+                       (some-> block-uuid str))
         base (db-sync/http-base)
         repo-url (agent-handler/project-repo-url block)
         agent-value (:logseq.property/agent block)
@@ -638,7 +639,7 @@
         error (or chat-error (:stream-error session))
         session-started? (boolean (:session-id session))
         session-created? (or session-started?
-                             (true? (pu/get-block-property-value block :logseq.property/agent-session-created?)))
+                             (agent-handler/task-session-created? block))
         terminal-enabled? (agent-handler/session-terminal-enabled? session)
         session-chat-messages (->> session-messages
                                    (map message->chat-message)

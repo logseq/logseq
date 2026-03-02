@@ -67,3 +67,16 @@
     (is (= {:major 65 :minor 26}
            (:kv/value (d/entity @conn :logseq.kv/schema-version))))
     (is (some? (d/entity @conn property-ident)))))
+
+(deftest migrate-adds-agent-session-id-property-builtin
+  (let [conn (db-test/create-conn)
+        property-ident :logseq.property/agent-session-id
+        _ (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                              :kv/value {:major 65 :minor 26}}])
+        existing-eid (d/entid @conn property-ident)
+        _ (when existing-eid
+            (d/transact! conn [[:db/retractEntity existing-eid]]))
+        _ (db-migrate/migrate conn :target-version "65.27")]
+    (is (= {:major 65 :minor 27}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (is (some? (d/entity @conn property-ident)))))

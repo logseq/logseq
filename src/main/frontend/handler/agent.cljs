@@ -288,7 +288,7 @@
    "pr-created" :logseq.property/status.in-review
    "failed" :logseq.property/status.canceled
    "canceled" :logseq.property/status.canceled})
-(def ^:private task-session-created-property :logseq.property/agent-session-created?)
+(def ^:private task-session-id-property :logseq.property/agent-session-id)
 (def ^:private task-pr-property :logseq.property/pr)
 
 (defn- terminal-status? [status]
@@ -333,11 +333,21 @@
         (when (not= current pr-url)
           (property-handler/set-block-property! block-uuid task-pr-property pr-url))))))
 
-(defn- mark-task-session-created!
-  [block-uuid]
+(defn task-session-id
+  [block]
+  (blank->nil (pu/get-block-property-value block task-session-id-property)))
+
+(defn task-session-created?
+  [block]
+  (string? (task-session-id block)))
+
+(defn- maybe-store-task-session-id!
+  [block-uuid session-id]
   (when-let [block (db/entity [:block/uuid block-uuid])]
-    (when-not (true? (pu/get-block-property-value block task-session-created-property))
-      (property-handler/set-block-property! block-uuid task-session-created-property true))))
+    (let [session-id (blank->nil session-id)
+          current-session-id (task-session-id block)]
+      (when (and session-id (not= current-session-id session-id))
+        (property-handler/set-block-property! block-uuid task-session-id-property session-id)))))
 
 (defn- update-session!
   [block-uuid f]
@@ -420,7 +430,9 @@
   [block]
   (let [base (db-sync/http-base)
         block-uuid (:block/uuid block)
-        session-id (some-> block-uuid str)
+        session-id (or (:session-id (session-state block-uuid))
+                       (task-session-id block)
+                       (some-> block-uuid str))
         session (session-state block-uuid)
         since (when (number? (:last-event-ts session)) (:last-event-ts session))
         query (when since (str "?since=" since))]
@@ -443,7 +455,9 @@
   [block]
   (let [base (db-sync/http-base)
         block-uuid (:block/uuid block)
-        session-id (some-> block-uuid str)
+        session-id (or (:session-id (session-state block-uuid))
+                       (task-session-id block)
+                       (some-> block-uuid str))
         repo-url (project-repo-url block)]
     (if-not (and (string? base) (string? session-id) (string? repo-url))
       (p/resolved [])
@@ -559,8 +573,10 @@
   [block]
   (let [block-uuid (:block/uuid block)
         base (db-sync/http-base)
-        session-id (some-> block-uuid str)
-        session (session-state block-uuid)]
+        session (session-state block-uuid)
+        session-id (or (:session-id session)
+                       (task-session-id block)
+                       (some-> block-uuid str))]
     (when (and base session-id (task-ready? block))
       (cond
         (:loading? session)
@@ -568,7 +584,7 @@
 
         (:session-id session)
         (do
-          (mark-task-session-created! block-uuid)
+          (maybe-store-task-session-id! block-uuid (:session-id session))
           (when-not (:streaming? session)
             (<connect-session-stream! block-uuid (or (:stream-url session)
                                                      (session-stream-url base session-id))))
@@ -580,14 +596,15 @@
           (-> (p/let [resp (db-sync/fetch-json (str base "/sessions/" session-id)
                                                {:method "GET"}
                                                {:response-schema :sessions/get})
-                      stream-url (session-stream-url base session-id)]
-                (update-session-state! block-uuid {:session-id session-id
+                      session-id' (or (:session-id resp) session-id)
+                      stream-url (session-stream-url base session-id')]
+                (update-session-state! block-uuid {:session-id session-id'
                                                    :status (:status resp)
                                                    :runtime-provider (:runtime-provider resp)
                                                    :terminal-enabled (true? (:terminal-enabled resp))
                                                    :stream-url stream-url
                                                    :loading? false})
-                (mark-task-session-created! block-uuid)
+                (maybe-store-task-session-id! block-uuid session-id')
                 (maybe-update-task-status! block-uuid (:status resp))
                 (<connect-session-stream! block-uuid stream-url)
                 resp)
@@ -604,6 +621,7 @@
         block-uuid (:block/uuid block)
         session (session-state block-uuid)
         session-id (or (:session-id session)
+                       (task-session-id block)
                        (some-> block-uuid str))]
     (cond
       (not (string? base))
@@ -635,9 +653,11 @@
 (defn <cancel-session-if-task-canceled!
   [block]
   (let [block-uuid (:block/uuid block)
-        session (session-state block-uuid)]
+        session (session-state block-uuid)
+        session-id (or (:session-id session)
+                       (task-session-id block))]
     (when (and (task-status-canceled? block)
-               (string? (:session-id session))
+               (string? session-id)
                (not (terminal-status? (:status session))))
       (<cancel-session! block))))
 
@@ -689,7 +709,7 @@
                                                     :terminal-enabled (true? (:terminal-enabled resp))
                                                     :stream-url stream-url
                                                     :started-at (util/time-ms)})
-                 (mark-task-session-created! block-uuid)
+                 (maybe-store-task-session-id! block-uuid session-id)
                  (<connect-session-stream! block-uuid stream-url)
                  resp)
                (p/catch (fn [error]
@@ -753,6 +773,7 @@
         block-uuid (:block/uuid block)
         session (session-state block-uuid)
         session-id (or (:session-id session)
+                       (task-session-id block)
                        (some-> block-uuid str))]
     (cond
       (not base)
@@ -765,7 +786,7 @@
         (notification/show! "Task needs Project (with Git Repo) and Agent." :warning)
         (p/resolved nil))
 
-      (not (:session-id session))
+      (not (string? session-id))
       (do
         (notification/show! "Start the agent session before publishing." :warning)
         (p/resolved nil))
@@ -808,6 +829,7 @@
         block-uuid (:block/uuid block)
         session (session-state block-uuid)
         session-id (or (:session-id session)
+                       (task-session-id block)
                        (some-> block-uuid str))]
     (cond
       (not base)
@@ -820,7 +842,7 @@
         (notification/show! "Task needs Project (with Git Repo) and Agent." :warning)
         (p/resolved nil))
 
-      (not (:session-id session))
+      (not (string? session-id))
       (do
         (notification/show! "Start the agent session before snapshotting." :warning)
         (p/resolved nil))

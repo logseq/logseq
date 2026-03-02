@@ -2521,7 +2521,7 @@
           running? (contains? #{"running" "paused"} status)
           session-started? (boolean (:session-id session))
           session-created? (or session-started?
-                               (true? (pu/get-block-property-value block :logseq.property/agent-session-created?)))
+                               (agent-handler/task-session-created? block))
           btn-title (if runnable?
                       (if session-created? "Open chat" "Run agent")
                       "Set Project + Agent")]
