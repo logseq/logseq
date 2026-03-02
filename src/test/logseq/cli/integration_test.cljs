@@ -129,7 +129,7 @@
   (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
           _ (fs/writeFileSync cfg-path "{:output-format :json}")
           _ (run-cli ["graph" "create" "--repo" "tags-graph"] data-dir cfg-path)
-          _ (run-cli ["--repo" "tags-graph" "add" "page" "--page" "Home"] data-dir cfg-path)]
+          _ (run-cli ["--repo" "tags-graph" "upsert" "page" "--page" "Home"] data-dir cfg-path)]
     {:cfg-path cfg-path :repo "tags-graph"}))
 
 (defn- stop-repo!
@@ -269,7 +269,7 @@
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" "content-graph"] data-dir cfg-path)
-                       add-page-result (run-cli ["--repo" "content-graph" "add" "page" "--page" "TestPage"] data-dir cfg-path)
+                       add-page-result (run-cli ["--repo" "content-graph" "upsert" "page" "--page" "TestPage"] data-dir cfg-path)
                        add-page-payload (parse-json-output add-page-result)
                        list-page-result (run-cli ["--repo" "content-graph" "list" "page"] data-dir cfg-path)
                        list-page-payload (parse-json-output list-page-result)
@@ -277,7 +277,7 @@
                        list-tag-payload (parse-json-output list-tag-result)
                        list-property-result (run-cli ["--repo" "content-graph" "list" "property"] data-dir cfg-path)
                        list-property-payload (parse-json-output list-property-result)
-                       add-block-result (run-cli ["--repo" "content-graph" "add" "block" "--target-page-name" "TestPage" "--content" "Test block"] data-dir cfg-path)
+                       add-block-result (run-cli ["--repo" "content-graph" "upsert" "block" "--target-page" "TestPage" "--content" "Test block"] data-dir cfg-path)
                        add-block-payload (parse-json-output add-block-result)
                        _ (p/delay 100)
                        show-result (run-cli ["--repo" "content-graph" "show" "--page" "TestPage"] data-dir cfg-path)
@@ -288,7 +288,8 @@
                        stop-payload (parse-json-output stop-result)]
                  (is (= 0 (:exit-code add-page-result)))
                  (is (= "ok" (:status add-page-payload)))
-                 (is (= "ok" (:status add-block-payload)))
+                 (is (= "ok" (:status add-block-payload))
+                     (pr-str (:error add-block-payload)))
                  (is (= "ok" (:status list-page-payload)))
                  (is (vector? (get-in list-page-payload [:data :items])))
                  (is (= "ok" (:status list-tag-payload)))
@@ -306,14 +307,14 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest ^:long test-cli-add-page-json-output-returns-id
+(deftest ^:long test-cli-upsert-page-json-output-returns-id
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-add-page-json-id")
                repo "add-page-json-id-graph"]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
-                       add-page-result (run-cli ["--repo" repo "add" "page" "--page" "Home"] data-dir cfg-path)
+                       add-page-result (run-cli ["--repo" repo "upsert" "page" "--page" "Home"] data-dir cfg-path)
                        add-page-payload (parse-json-output add-page-result)
                        page-ids (get-in add-page-payload [:data :result])
                        page-id (first page-ids)
@@ -335,7 +336,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest ^:long test-cli-add-block-json-output-returns-ids
+(deftest ^:long test-cli-upsert-block-create-json-output-returns-ids
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-add-block-json-ids")
                repo "add-block-json-ids-graph"]
@@ -345,10 +346,10 @@
                                            {:block/title "Sibling"}])
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
-                       _ (run-cli ["--repo" repo "add" "page" "--page" "Home"] data-dir cfg-path)
+                       _ (run-cli ["--repo" repo "upsert" "page" "--page" "Home"] data-dir cfg-path)
                        add-block-result (run-cli ["--repo" repo
-                                                  "add" "block"
-                                                  "--target-page-name" "Home"
+                                                  "upsert" "block"
+                                                  "--target-page" "Home"
                                                   "--blocks" blocks-edn]
                                                  data-dir cfg-path)
                        add-block-payload (parse-json-output add-block-result)
@@ -361,8 +362,10 @@
                                          set)
                        stop-result (run-cli ["server" "stop" "--repo" repo] data-dir cfg-path)
                        stop-payload (parse-json-output stop-result)]
-                 (is (= 0 (:exit-code add-block-result)))
-                 (is (= "ok" (:status add-block-payload)))
+                 (is (= 0 (:exit-code add-block-result))
+                     (pr-str (:error add-block-payload)))
+                 (is (= "ok" (:status add-block-payload))
+                     (pr-str (:error add-block-payload)))
                  (is (vector? block-ids))
                  (is (= 3 (count block-ids)))
                  (is (= 3 (count (distinct block-ids))))
@@ -383,15 +386,15 @@
                        _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
                        add-page-result (run-cli ["--repo" repo
                                                  "--output" "edn"
-                                                 "add" "page"
+                                                 "upsert" "page"
                                                  "--page" "Home"]
                                                 data-dir cfg-path)
                        add-page-payload (parse-edn-output add-page-result)
                        page-ids (get-in add-page-payload [:data :result])
                        add-block-result (run-cli ["--repo" repo
                                                   "--output" "edn"
-                                                  "add" "block"
-                                                  "--target-page-name" "Home"
+                                                  "upsert" "block"
+                                                  "--target-page" "Home"
                                                   "--content" "EDN block"]
                                                  data-dir cfg-path)
                        add-block-payload (parse-edn-output add-block-result)
@@ -421,18 +424,18 @@
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
-                       add-page-result (run-cli ["--repo" repo "add" "page" "--page" "ChainPage"] data-dir cfg-path)
+                       add-page-result (run-cli ["--repo" repo "upsert" "page" "--page" "ChainPage"] data-dir cfg-path)
                        add-page-payload (parse-json-output add-page-result)
                        page-id (first-result-id add-page-payload)
                        add-block-result (run-cli ["--repo" repo
-                                                  "add" "block"
+                                                  "upsert" "block"
                                                   "--target-id" (str page-id)
                                                   "--content" "Chain block"]
                                                  data-dir cfg-path)
                        add-block-payload (parse-json-output add-block-result)
                        block-id (first-result-id add-block-payload)
                        update-result (run-cli ["--repo" repo
-                                               "update"
+                                               "upsert" "block"
                                                "--id" (str block-id)
                                                "--update-properties" "{:logseq.property/publishing-public? true}"]
                                               data-dir cfg-path)
@@ -462,16 +465,96 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
+(deftest ^:long test-cli-upsert-page-create-and-update-existing
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-upsert-page-existing")
+               repo "upsert-page-existing-graph"]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
+                       create-result (run-cli ["--repo" repo "upsert" "page" "--page" "Home"] data-dir cfg-path)
+                       create-payload (parse-json-output create-result)
+                       page-id (first-result-id create-payload)
+                       update-result (run-cli ["--repo" repo
+                                               "upsert" "page"
+                                               "--page" "Home"
+                                               "--update-properties" "{:logseq.property/publishing-public? true}"]
+                                              data-dir cfg-path)
+                       update-payload (parse-json-output update-result)
+                       update-id (first-result-id update-payload)
+                       property-after-update (query-property data-dir cfg-path repo "Home"
+                                                             ":logseq.property/publishing-public?")
+                       remove-result (run-cli ["--repo" repo
+                                               "upsert" "page"
+                                               "--page" "Home"
+                                               "--remove-properties" "[:logseq.property/publishing-public?]"]
+                                              data-dir cfg-path)
+                       remove-payload (parse-json-output remove-result)
+                       remove-id (first-result-id remove-payload)
+                       property-after-remove (query-property data-dir cfg-path repo "Home"
+                                                             ":logseq.property/publishing-public?")
+                       stop-result (run-cli ["server" "stop" "--repo" repo] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= 0 (:exit-code create-result)))
+                 (is (= "ok" (:status create-payload)))
+                 (is (number? page-id))
+                 (is (= 0 (:exit-code update-result)))
+                 (is (= "ok" (:status update-payload)))
+                 (is (= page-id update-id))
+                 (is (= true property-after-update))
+                 (is (= 0 (:exit-code remove-result)))
+                 (is (= "ok" (:status remove-payload)))
+                 (is (= page-id remove-id))
+                 (is (nil? property-after-remove))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest ^:long test-cli-upsert-page-errors-on-missing-tags-properties
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-upsert-page-missing")
+               repo "upsert-page-missing-graph"]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
+                       missing-tag-result (run-cli ["--repo" repo
+                                                    "upsert" "page"
+                                                    "--page" "Home"
+                                                    "--update-tags" "[\"MissingTag\"]"]
+                                                   data-dir cfg-path)
+                       missing-tag-payload (parse-json-output missing-tag-result)
+                       missing-property-result (run-cli ["--repo" repo
+                                                         "upsert" "page"
+                                                         "--page" "Home"
+                                                         "--update-properties" "{:not/a 1}"]
+                                                        data-dir cfg-path)
+                       missing-property-payload (parse-json-output missing-property-result)
+                       stop-result (run-cli ["server" "stop" "--repo" repo] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= 1 (:exit-code missing-tag-result)))
+                 (is (= "error" (:status missing-tag-payload)))
+                 (is (= :tag-not-found (keyword (get-in missing-tag-payload [:error :code]))))
+                 (is (= 1 (:exit-code missing-property-result)))
+                 (is (= "error" (:status missing-property-payload)))
+                 (is (= :invalid-options (keyword (get-in missing-property-payload [:error :code]))))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
 (deftest ^:long test-cli-add-block-rewrites-page-ref
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-ref-rewrite")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" "ref-rewrite-graph"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "ref-rewrite-graph" "add" "page" "--page" "Home"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "ref-rewrite-graph" "upsert" "page" "--page" "Home"] data-dir cfg-path)
                        add-block-result (run-cli ["--repo" "ref-rewrite-graph"
-                                                  "add" "block"
-                                                  "--target-page-name" "Home"
+                                                  "upsert" "block"
+                                                  "--target-page" "Home"
                                                   "--content" "See [[New Page]]"]
                                                  data-dir cfg-path)
                        add-block-payload (parse-json-output-safe add-block-result "add-block")
@@ -513,10 +596,10 @@
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" "uuid-ref-graph"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "uuid-ref-graph" "add" "page" "--page" "Home"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "uuid-ref-graph" "upsert" "page" "--page" "Home"] data-dir cfg-path)
                        _ (run-cli ["--repo" "uuid-ref-graph"
-                                   "add" "block"
-                                   "--target-page-name" "Home"
+                                   "upsert" "block"
+                                   "--target-page" "Home"
                                    "--content" "Target block"]
                                   data-dir cfg-path)
                        _ (p/delay 100)
@@ -525,8 +608,8 @@
                                                        (pr-str ["Target block"]))
                        target-uuid (first (first (get-in target-query-payload [:data :result])))
                        add-block-result (run-cli ["--repo" "uuid-ref-graph"
-                                                  "add" "block"
-                                                  "--target-page-name" "Home"
+                                                  "upsert" "block"
+                                                  "--target-page" "Home"
                                                   "--content" (str "See [[" target-uuid "]]")]
                                                  data-dir cfg-path)
                        add-block-payload (parse-json-output add-block-result)
@@ -564,11 +647,11 @@
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" "missing-uuid-ref-graph"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "missing-uuid-ref-graph" "add" "page" "--page" "Home"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "missing-uuid-ref-graph" "upsert" "page" "--page" "Home"] data-dir cfg-path)
                        missing-uuid (str (random-uuid))
                        add-block-result (run-cli ["--repo" "missing-uuid-ref-graph"
-                                                  "add" "block"
-                                                  "--target-page-name" "Home"
+                                                  "upsert" "block"
+                                                  "--target-page" "Home"
                                                   "--content" (str "See [[" missing-uuid "]]")]
                                                  data-dir cfg-path)
                        add-block-payload (parse-json-output add-block-result)
@@ -588,23 +671,23 @@
          (let [data-dir (node-helper/create-tmp-dir "db-worker-tags")]
            (-> (p/let [{:keys [cfg-path repo]} (setup-tags-graph data-dir)
                        add-page-result (run-cli ["--repo" "tags-graph"
-                                                 "add" "page"
+                                                 "upsert" "page"
                                                  "--page" "TaggedPage"
                                                  "--tags" "[\"Quote\"]"
                                                  "--properties" "{:logseq.property/publishing-public? true}"]
                                                 data-dir cfg-path)
                        add-page-payload (parse-json-output add-page-result)
                        add-block-result (run-cli ["--repo" "tags-graph"
-                                                  "add" "block"
-                                                  "--target-page-name" "Home"
+                                                  "upsert" "block"
+                                                  "--target-page" "Home"
                                                   "--content" "Tagged block"
                                                   "--tags" "[\"Quote\"]"
                                                   "--properties" "{:logseq.property/deadline \"2026-01-25T12:00:00Z\"}"]
                                                  data-dir cfg-path)
                        add-block-payload (parse-json-output add-block-result)
                        add-block-ident-result (run-cli ["--repo" "tags-graph"
-                                                        "add" "block"
-                                                        "--target-page-name" "Home"
+                                                        "upsert" "block"
+                                                        "--target-page" "Home"
                                                         "--content" "Tagged block ident"
                                                         "--tags" "[:logseq.class/Quote-block]"]
                                                        data-dir cfg-path)
@@ -612,14 +695,14 @@
                        deadline-prop-title (get-in db-property/built-in-properties [:logseq.property/deadline :title])
                        publishing-prop-title (get-in db-property/built-in-properties [:logseq.property/publishing-public? :title])
                        add-page-title-result (run-cli ["--repo" "tags-graph"
-                                                       "add" "page"
+                                                       "upsert" "page"
                                                        "--page" "TaggedPageTitle"
                                                        "--properties" (str "{\"" publishing-prop-title "\" true}")]
                                                       data-dir cfg-path)
                        add-page-title-payload (parse-json-output add-page-title-result)
                        add-block-title-result (run-cli ["--repo" "tags-graph"
-                                                        "add" "block"
-                                                        "--target-page-name" "Home"
+                                                        "upsert" "block"
+                                                        "--target-page" "Home"
                                                         "--content" "Tagged block title"
                                                         "--properties" (str "{\"" deadline-prop-title "\" \"2026-01-25T12:00:00Z\"}")]
                                                        data-dir cfg-path)
@@ -670,15 +753,15 @@
                        deadline-id (find-item-id (get-in list-property-payload [:data :items]) deadline-title)
                        publishing-id (find-item-id (get-in list-property-payload [:data :items]) publishing-title)
                        add-page-id-result (run-cli ["--repo" repo
-                                                    "add" "page"
+                                                    "upsert" "page"
                                                     "--page" "TaggedPageId"
                                                     "--tags" (pr-str [quote-tag-id])
                                                     "--properties" (pr-str {publishing-id true})]
                                                    data-dir cfg-path)
                        add-page-id-payload (parse-json-output add-page-id-result)
                        add-block-id-result (run-cli ["--repo" repo
-                                                     "add" "block"
-                                                     "--target-page-name" "Home"
+                                                     "upsert" "block"
+                                                     "--target-page" "Home"
                                                      "--content" "Tagged block id"
                                                      "--tags" (pr-str [quote-tag-id])
                                                      "--properties" (pr-str {deadline-id "2026-01-25T12:00:00Z"})]
@@ -793,8 +876,8 @@
                        tag-a-name "Quote"
                        tag-b-name "Math"
                        add-block-result (run-cli ["--repo" repo
-                                                  "add" "block"
-                                                  "--target-page-name" "Home"
+                                                  "upsert" "block"
+                                                  "--target-page" "Home"
                                                   "--content" "Update block"
                                                   "--tags" "[:logseq.class/Quote-block]"
                                                   "--properties" "{:logseq.property/publishing-public? true}"]
@@ -806,7 +889,7 @@
                        block-node (find-block-by-title (get-in show-home-payload [:data :root]) "Update block")
                        block-id (node-id block-node)
                        update-result (run-cli ["--repo" repo
-                                               "update"
+                                               "upsert" "block"
                                                "--id" (str block-id)
                                                "--update-tags" "[:logseq.class/Math-block]"
                                                "--remove-tags" "[:logseq.class/Quote-block]"
@@ -828,6 +911,63 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
+(deftest ^:long test-cli-upsert-block-update-custom-property
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-upsert-block-custom-property")]
+           (-> (p/let [{:keys [cfg-path repo]} (setup-tags-graph data-dir)
+                       upsert-property-result (run-cli ["--repo" repo
+                                                       "upsert" "property"
+                                                       "--name" "owner"
+                                                       "--type" "default"]
+                                                      data-dir cfg-path)
+                       upsert-property-payload (parse-json-output upsert-property-result)
+                       add-block-result (run-cli ["--repo" repo
+                                                  "upsert" "block"
+                                                  "--target-page" "Home"
+                                                  "--content" "Block with custom property"]
+                                                 data-dir cfg-path)
+                       add-block-payload (parse-json-output add-block-result)
+                       _ (p/delay 100)
+                       show-home (run-cli ["--repo" repo "show" "--page" "Home"] data-dir cfg-path)
+                       show-home-payload (parse-json-output show-home)
+                       block-node (find-block-by-title (get-in show-home-payload [:data :root]) "Block with custom property")
+                       block-id (node-id block-node)
+                       update-result (run-cli ["--repo" repo
+                                               "upsert" "block"
+                                               "--id" (str block-id)
+                                               "--update-properties" "{:user.property/owner \"alice\"}"]
+                                              data-dir cfg-path)
+                       update-payload (parse-json-output update-result)
+                       _ (p/delay 100)
+                       property-after-update (query-property data-dir cfg-path repo "Block with custom property"
+                                                             ":user.property/owner")
+                       remove-result (run-cli ["--repo" repo
+                                               "upsert" "block"
+                                               "--id" (str block-id)
+                                               "--remove-properties" "[:user.property/owner]"]
+                                              data-dir cfg-path)
+                       remove-payload (parse-json-output remove-result)
+                       _ (p/delay 100)
+                       property-after-remove (query-property data-dir cfg-path repo "Block with custom property"
+                                                             ":user.property/owner")
+                       stop-payload (stop-repo! data-dir cfg-path repo)]
+                 (is (= 0 (:exit-code upsert-property-result)))
+                 (is (= "ok" (:status upsert-property-payload)))
+                 (is (= 0 (:exit-code add-block-result)))
+                 (is (= "ok" (:status add-block-payload)))
+                 (is (some? block-id))
+                 (is (= 0 (:exit-code update-result)))
+                 (is (= "ok" (:status update-payload)))
+                 (is (some? property-after-update))
+                 (is (= 0 (:exit-code remove-result)))
+                 (is (= "ok" (:status remove-payload)))
+                 (is (nil? property-after-remove))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
 (deftest ^:long test-cli-add-tags-rejects-missing-tag
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-tags-missing")]
@@ -835,8 +975,8 @@
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" "tags-missing-graph"] data-dir cfg-path)
                        add-block-result (run-cli ["--repo" "tags-missing-graph"
-                                                  "add" "block"
-                                                  "--target-page-name" "Home"
+                                                  "upsert" "block"
+                                                  "--target-page" "Home"
                                                   "--content" "Block with missing tag"
                                                   "--tags" "[\"MissingTag\"]"]
                                                  data-dir cfg-path)
@@ -864,7 +1004,7 @@
                        repo "upsert-tag-create-graph"
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
-                       _ (run-cli ["--repo" repo "add" "page" "--page" "Home"] data-dir cfg-path)
+                       _ (run-cli ["--repo" repo "upsert" "page" "--page" "Home"] data-dir cfg-path)
                        upsert-tag-result (run-cli ["--repo" repo
                                                    "upsert" "tag"
                                                    "--name" "CliQuote"]
@@ -876,8 +1016,8 @@
                                       (map #(or (:block/title %) (:title %) (:name %)))
                                       set)
                        add-block-result (run-cli ["--repo" repo
-                                                  "add" "block"
-                                                  "--target-page-name" "Home"
+                                                  "upsert" "block"
+                                                  "--target-page" "Home"
                                                   "--content" "Tagged by upsert tag"
                                                   "--tags" "[\"CliQuote\"]"]
                                                  data-dir cfg-path)
@@ -908,7 +1048,7 @@
                        repo "upsert-tag-conflict-graph"
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" repo] data-dir cfg-path)
-                       _ (run-cli ["--repo" repo "add" "page" "--page" "ConflictPage"] data-dir cfg-path)
+                       _ (run-cli ["--repo" repo "upsert" "page" "--page" "ConflictPage"] data-dir cfg-path)
                        upsert-tag-result (run-cli ["--repo" repo
                                                    "upsert" "tag"
                                                    "--name" "ConflictPage"]
@@ -1037,13 +1177,13 @@
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        create-result (run-cli ["graph" "create" "--repo" "query-graph"] data-dir cfg-path)
                        create-payload (parse-json-output create-result)
-                       _ (run-cli ["--repo" "query-graph" "add" "page" "--page" "QueryPage"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "query-graph" "add" "block"
-                                   "--target-page-name" "QueryPage"
+                       _ (run-cli ["--repo" "query-graph" "upsert" "page" "--page" "QueryPage"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "query-graph" "upsert" "block"
+                                   "--target-page" "QueryPage"
                                    "--content" "Query block"]
                                   data-dir cfg-path)
-                       _ (run-cli ["--repo" "query-graph" "add" "block"
-                                   "--target-page-name" "QueryPage"
+                       _ (run-cli ["--repo" "query-graph" "upsert" "block"
+                                   "--target-page" "QueryPage"
                                    "--content" "Query block"]
                                   data-dir cfg-path)
                        _ (p/delay 100)
@@ -1074,22 +1214,22 @@
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        create-result (run-cli ["graph" "create" "--repo" "task-query-graph"] data-dir cfg-path)
                        create-payload (parse-json-output create-result)
-                       _ (run-cli ["--repo" "task-query-graph" "add" "page" "--page" "Tasks"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "task-query-graph" "upsert" "page" "--page" "Tasks"] data-dir cfg-path)
                        _ (run-cli ["--repo" "task-query-graph"
-                                   "add" "block"
-                                   "--target-page-name" "Tasks"
+                                   "upsert" "block"
+                                   "--target-page" "Tasks"
                                    "--content" "Task one"
                                    "--status" "doing"]
                                   data-dir cfg-path)
                        _ (run-cli ["--repo" "task-query-graph"
-                                   "add" "block"
-                                   "--target-page-name" "Tasks"
+                                   "upsert" "block"
+                                   "--target-page" "Tasks"
                                    "--content" "Task two"
                                    "--status" "doing"]
                                   data-dir cfg-path)
                        _ (run-cli ["--repo" "task-query-graph"
-                                   "add" "block"
-                                   "--target-page-name" "Tasks"
+                                   "upsert" "block"
+                                   "--target-page" "Tasks"
                                    "--content" "Task three"
                                    "--status" "todo"]
                                   data-dir cfg-path)
@@ -1194,9 +1334,9 @@
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" "recent-updated-graph"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "recent-updated-graph" "add" "page" "--page" "RecentPage"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "recent-updated-graph" "add" "block"
-                                   "--target-page-name" "RecentPage"
+                       _ (run-cli ["--repo" "recent-updated-graph" "upsert" "page" "--page" "RecentPage"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "recent-updated-graph" "upsert" "block"
+                                   "--target-page" "RecentPage"
                                    "--content" "Recent block"]
                                   data-dir cfg-path)
                        _ (p/delay 100)
@@ -1291,20 +1431,20 @@
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" "nested-refs"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "nested-refs" "add" "page" "--page" "NestedPage"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "nested-refs" "add" "block" "--target-page-name" "NestedPage" "--content" "Inner"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "nested-refs" "upsert" "page" "--page" "NestedPage"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "nested-refs" "upsert" "block" "--target-page" "NestedPage" "--content" "Inner"] data-dir cfg-path)
                        show-nested (run-cli ["--repo" "nested-refs" "show" "--page" "NestedPage"] data-dir cfg-path)
                        show-nested-payload (parse-json-output show-nested)
                        _inner-node (find-block-by-title (get-in show-nested-payload [:data :root]) "Inner")
                        inner-uuid (query-block-uuid-by-title data-dir cfg-path "nested-refs" "Inner")
                        middle-content (str "See [[" inner-uuid "]]")
-                       _ (run-cli ["--repo" "nested-refs" "add" "block" "--target-page-name" "NestedPage"
+                       _ (run-cli ["--repo" "nested-refs" "upsert" "block" "--target-page" "NestedPage"
                                    "--content" middle-content] data-dir cfg-path)
                        show-middle (run-cli ["--repo" "nested-refs" "show" "--page" "NestedPage"] data-dir cfg-path)
                        show-middle-payload (parse-json-output show-middle)
                        _middle-node (find-block-by-title (get-in show-middle-payload [:data :root]) middle-content)
                        middle-uuid (query-block-uuid-by-title data-dir cfg-path "nested-refs" middle-content)
-                       _ (run-cli ["--repo" "nested-refs" "add" "block" "--target-page-name" "NestedPage"
+                       _ (run-cli ["--repo" "nested-refs" "upsert" "block" "--target-page" "NestedPage"
                                    "--content" (str "Outer [[" middle-uuid "]]")] data-dir cfg-path)
                        show-outer (run-cli ["--repo" "nested-refs" "show" "--page" "NestedPage"] data-dir cfg-path)
                        show-outer-payload (parse-json-output show-outer)
@@ -1327,15 +1467,15 @@
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" "linked-refs-graph"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "linked-refs-graph" "add" "page" "--page" "TargetPage"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "linked-refs-graph" "add" "page" "--page" "SourcePage"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "linked-refs-graph" "upsert" "page" "--page" "TargetPage"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "linked-refs-graph" "upsert" "page" "--page" "SourcePage"] data-dir cfg-path)
                        target-show (run-cli ["--repo" "linked-refs-graph" "show" "--page" "TargetPage"] data-dir cfg-path)
                        _target-show-payload (parse-json-output target-show)
                        target-uuid (query-block-uuid-by-title data-dir cfg-path "linked-refs-graph" "TargetPage")
                        target-title "TargetPage"
                        ref-content (str "See [[" target-uuid "]]")
                        ref-title (str "See [[" target-title "]]")
-                       _ (run-cli ["--repo" "linked-refs-graph" "add" "block" "--target-page-name" "SourcePage" "--content" ref-content] data-dir cfg-path)
+                       _ (run-cli ["--repo" "linked-refs-graph" "upsert" "block" "--target-page" "SourcePage" "--content" ref-content] data-dir cfg-path)
                        _ (p/delay 100)
                        source-show (run-cli ["--repo" "linked-refs-graph" "show" "--page" "SourcePage"] data-dir cfg-path)
                        source-payload (parse-json-output source-show)
@@ -1365,22 +1505,22 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest ^:long test-cli-update-block-move
+(deftest ^:long test-cli-upsert-block-update-move
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-move")]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" "move-graph"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "move-graph" "add" "page" "--page" "SourcePage"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "move-graph" "add" "page" "--page" "TargetPage"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "move-graph" "add" "block" "--target-page-name" "SourcePage" "--content" "Parent Block"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "move-graph" "upsert" "page" "--page" "SourcePage"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "move-graph" "upsert" "page" "--page" "TargetPage"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "move-graph" "upsert" "block" "--target-page" "SourcePage" "--content" "Parent Block"] data-dir cfg-path)
                        _ (p/delay 100)
                        source-show (run-cli ["--repo" "move-graph" "show" "--page" "SourcePage"] data-dir cfg-path)
                        source-payload (parse-json-output source-show)
                        parent-node (find-block-by-title (get-in source-payload [:data :root]) "Parent Block")
                        parent-id (node-id parent-node)
-                       _ (run-cli ["--repo" "move-graph" "add" "block" "--target-id" (str parent-id) "--content" "Child Block"] data-dir cfg-path)
-                       update-result (run-cli ["--repo" "move-graph" "update" "--id" (str parent-id) "--target-page" "TargetPage"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "move-graph" "upsert" "block" "--target-id" (str parent-id) "--content" "Child Block"] data-dir cfg-path)
+                       update-result (run-cli ["--repo" "move-graph" "upsert" "block" "--id" (str parent-id) "--target-page" "TargetPage"] data-dir cfg-path)
                        update-payload (parse-json-output update-result)
                        target-show (run-cli ["--repo" "move-graph" "show" "--page" "TargetPage"] data-dir cfg-path)
                        target-payload (parse-json-output target-show)
@@ -1404,15 +1544,15 @@
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" "add-pos-graph"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "add-pos-graph" "add" "page" "--page" "PosPage"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "add-pos-graph" "add" "block" "--target-page-name" "PosPage" "--content" "Parent"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "add-pos-graph" "upsert" "page" "--page" "PosPage"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "add-pos-graph" "upsert" "block" "--target-page" "PosPage" "--content" "Parent"] data-dir cfg-path)
                        _ (p/delay 100)
                        parent-show (run-cli ["--repo" "add-pos-graph" "show" "--page" "PosPage"] data-dir cfg-path)
                        parent-payload (parse-json-output parent-show)
                        parent-node (find-block-by-title (get-in parent-payload [:data :root]) "Parent")
                        parent-id (node-id parent-node)
-                       _ (run-cli ["--repo" "add-pos-graph" "add" "block" "--target-id" (str parent-id) "--pos" "first-child" "--content" "First"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "add-pos-graph" "add" "block" "--target-id" (str parent-id) "--pos" "last-child" "--content" "Last"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "add-pos-graph" "upsert" "block" "--target-id" (str parent-id) "--pos" "first-child" "--content" "First"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "add-pos-graph" "upsert" "block" "--target-id" (str parent-id) "--pos" "last-child" "--content" "Last"] data-dir cfg-path)
                        final-show (run-cli ["--repo" "add-pos-graph" "show" "--page" "PosPage"] data-dir cfg-path)
                        final-payload (parse-json-output final-show)
                        final-parent (find-block-by-title (get-in final-payload [:data :root]) "Parent")
@@ -1452,7 +1592,7 @@
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" "list-id-graph"] data-dir cfg-path)
-                       _ (run-cli ["add" "page" "--page" "TestPage"] data-dir cfg-path)
+                       _ (run-cli ["upsert" "page" "--page" "TestPage"] data-dir cfg-path)
                        list-page-result (run-cli ["list" "page"] data-dir cfg-path)
                        list-page-payload (parse-json-output list-page-result)
                        list-tag-result (run-cli ["list" "tag"] data-dir cfg-path)
@@ -1479,7 +1619,7 @@
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" "human-list-graph"] data-dir cfg-path)
-                       _ (run-cli ["add" "page" "--page" "TestPage"] data-dir cfg-path)
+                       _ (run-cli ["upsert" "page" "--page" "TestPage"] data-dir cfg-path)
                        list-page-result (run-cli ["list" "page" "--output" "human"] data-dir cfg-path)
                        output (:output list-page-result)]
                  (is (= 0 (:exit-code list-page-result)))
@@ -1497,7 +1637,7 @@
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" "show-page-block-graph"] data-dir cfg-path)
-                       _ (run-cli ["add" "page" "--page" "TestPage"] data-dir cfg-path)
+                       _ (run-cli ["upsert" "page" "--page" "TestPage"] data-dir cfg-path)
                        list-page-result (run-cli ["list" "page" "--expand"] data-dir cfg-path)
                        list-page-payload (parse-json-output list-page-result)
                        page-item (some (fn [item]
@@ -1536,14 +1676,14 @@
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" "show-multi-id-graph"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "show-multi-id-graph" "add" "page" "--page" "MultiPage"]
+                       _ (run-cli ["--repo" "show-multi-id-graph" "upsert" "page" "--page" "MultiPage"]
                                   data-dir cfg-path)
-                       _ (run-cli ["--repo" "show-multi-id-graph" "add" "block"
-                                   "--target-page-name" "MultiPage"
+                       _ (run-cli ["--repo" "show-multi-id-graph" "upsert" "block"
+                                   "--target-page" "MultiPage"
                                    "--content" "Multi show one"]
                                   data-dir cfg-path)
-                       _ (run-cli ["--repo" "show-multi-id-graph" "add" "block"
-                                   "--target-page-name" "MultiPage"
+                       _ (run-cli ["--repo" "show-multi-id-graph" "upsert" "block"
+                                   "--target-page" "MultiPage"
                                    "--content" "Multi show two"]
                                   data-dir cfg-path)
                        _ (p/delay 100)
@@ -1608,10 +1748,10 @@
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" "show-multi-id-contained-graph"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "show-multi-id-contained-graph" "add" "page" "--page" "ParentPage"]
+                       _ (run-cli ["--repo" "show-multi-id-contained-graph" "upsert" "page" "--page" "ParentPage"]
                                   data-dir cfg-path)
-                       _ (run-cli ["--repo" "show-multi-id-contained-graph" "add" "block"
-                                   "--target-page-name" "ParentPage"
+                       _ (run-cli ["--repo" "show-multi-id-contained-graph" "upsert" "block"
+                                   "--target-page" "ParentPage"
                                    "--content" "Parent Block"]
                                   data-dir cfg-path)
                        parent-query (run-cli ["--repo" "show-multi-id-contained-graph" "query"
@@ -1620,7 +1760,7 @@
                                              data-dir cfg-path)
                        parent-payload (parse-json-output parent-query)
                        parent-id (get-in parent-payload [:data :result])
-                       _ (run-cli ["--repo" "show-multi-id-contained-graph" "add" "block"
+                       _ (run-cli ["--repo" "show-multi-id-contained-graph" "upsert" "block"
                                    "--target-id" (str parent-id)
                                    "--content" "Child Block"]
                                   data-dir cfg-path)
@@ -1662,14 +1802,14 @@
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" "query-pipe-graph"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "query-pipe-graph" "add" "page" "--page" "PipePage"]
+                       _ (run-cli ["--repo" "query-pipe-graph" "upsert" "page" "--page" "PipePage"]
                                   data-dir cfg-path)
-                       _ (run-cli ["--repo" "query-pipe-graph" "add" "block"
-                                   "--target-page-name" "PipePage"
+                       _ (run-cli ["--repo" "query-pipe-graph" "upsert" "block"
+                                   "--target-page" "PipePage"
                                    "--content" "Pipe One"]
                                   data-dir cfg-path)
-                       _ (run-cli ["--repo" "query-pipe-graph" "add" "block"
-                                   "--target-page-name" "PipePage"
+                       _ (run-cli ["--repo" "query-pipe-graph" "upsert" "block"
+                                   "--target-page" "PipePage"
                                    "--content" "Pipe Two"]
                                   data-dir cfg-path)
                        _ (p/delay 100)
@@ -1736,14 +1876,14 @@
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" "query-stdin-graph"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "query-stdin-graph" "add" "page" "--page" "PipePage"]
+                       _ (run-cli ["--repo" "query-stdin-graph" "upsert" "page" "--page" "PipePage"]
                                   data-dir cfg-path)
-                       _ (run-cli ["--repo" "query-stdin-graph" "add" "block"
-                                   "--target-page-name" "PipePage"
+                       _ (run-cli ["--repo" "query-stdin-graph" "upsert" "block"
+                                   "--target-page" "PipePage"
                                    "--content" "Pipe One"]
                                   data-dir cfg-path)
-                       _ (run-cli ["--repo" "query-stdin-graph" "add" "block"
-                                   "--target-page-name" "PipePage"
+                       _ (run-cli ["--repo" "query-stdin-graph" "upsert" "block"
+                                   "--target-page" "PipePage"
                                    "--content" "Pipe Two"]
                                   data-dir cfg-path)
                        _ (p/delay 100)
@@ -1798,8 +1938,8 @@
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--repo" "linked-refs-graph"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "linked-refs-graph" "add" "page" "--page" "TargetPage"] data-dir cfg-path)
-                       _ (run-cli ["--repo" "linked-refs-graph" "add" "page" "--page" "SourcePage"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "linked-refs-graph" "upsert" "page" "--page" "TargetPage"] data-dir cfg-path)
+                       _ (run-cli ["--repo" "linked-refs-graph" "upsert" "page" "--page" "SourcePage"] data-dir cfg-path)
                        list-page-result (run-cli ["--repo" "linked-refs-graph" "list" "page" "--expand"]
                                                  data-dir cfg-path)
                        list-page-payload (parse-json-output list-page-result)
@@ -1809,7 +1949,7 @@
                                        (get-in list-page-payload [:data :items]))
                        page-id (or (:db/id page-item) (:id page-item))
                        blocks-edn (str "[{:block/title \"Ref to TargetPage\" :block/refs [{:db/id " page-id "}]}]")
-                       _ (run-cli ["--repo" "linked-refs-graph" "add" "block" "--target-page-name" "SourcePage"
+                       _ (run-cli ["--repo" "linked-refs-graph" "upsert" "block" "--target-page" "SourcePage"
                                    "--blocks" blocks-edn] data-dir cfg-path)
                        show-result (run-cli ["--repo" "linked-refs-graph" "show" "--page" "TargetPage"]
                                             data-dir cfg-path)
@@ -1842,8 +1982,8 @@
                        import-graph "import-edn-graph"
                        export-path (node-path/join (node-helper/create-tmp-dir "exports") "graph.edn")
                        _ (run-cli ["graph" "create" "--repo" export-graph] data-dir cfg-path)
-                       _ (run-cli ["--repo" export-graph "add" "page" "--page" "ExportPage"] data-dir cfg-path)
-                       _ (run-cli ["--repo" export-graph "add" "block" "--target-page-name" "ExportPage" "--content" "Export content"] data-dir cfg-path)
+                       _ (run-cli ["--repo" export-graph "upsert" "page" "--page" "ExportPage"] data-dir cfg-path)
+                       _ (run-cli ["--repo" export-graph "upsert" "block" "--target-page" "ExportPage" "--content" "Export content"] data-dir cfg-path)
                        export-result (run-cli ["--repo" export-graph
                                                "graph" "export"
                                                "--type" "edn"
@@ -1881,8 +2021,8 @@
                        import-graph "import-sqlite-graph"
                        export-path (node-path/join (node-helper/create-tmp-dir "exports") "graph.sqlite")
                        _ (run-cli ["graph" "create" "--repo" export-graph] data-dir cfg-path)
-                       _ (run-cli ["--repo" export-graph "add" "page" "--page" "SQLiteExportPage"] data-dir cfg-path)
-                       _ (run-cli ["--repo" export-graph "add" "block" "--target-page-name" "SQLiteExportPage" "--content" "SQLite export content"] data-dir cfg-path)
+                       _ (run-cli ["--repo" export-graph "upsert" "page" "--page" "SQLiteExportPage"] data-dir cfg-path)
+                       _ (run-cli ["--repo" export-graph "upsert" "block" "--target-page" "SQLiteExportPage" "--content" "SQLite export content"] data-dir cfg-path)
                        export-result (run-cli ["--repo" export-graph
                                                "graph" "export"
                                                "--type" "sqlite"
