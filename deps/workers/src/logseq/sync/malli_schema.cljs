@@ -240,6 +240,12 @@
              [:permission-mode {:optional true} :string]
              [:api-token {:optional true} :string]
              [:auth-json {:optional true} :string]]]]
+   [:sandbox-checkpoint {:optional true}
+    [:map
+     [:provider {:optional true} :string]
+     [:snapshot-id :string]
+     [:backup-key {:optional true} :string]
+     [:backup-dir {:optional true} :string]]]
    [:capabilities {:optional true}
     [:map
      [:push-enabled {:optional true} :boolean]

@@ -80,3 +80,18 @@
     (is (= {:major 65 :minor 27}
            (:kv/value (d/entity @conn :logseq.kv/schema-version))))
     (is (some? (d/entity @conn property-ident)))))
+
+(deftest migrate-adds-sandbox-checkpoint-property-builtin
+  (let [conn (db-test/create-conn)
+        property-ident :logseq.property/sandbox-checkpoint
+        _ (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                              :kv/value {:major 65 :minor 27}}])
+        existing-eid (d/entid @conn property-ident)
+        _ (when existing-eid
+            (d/transact! conn [[:db/retractEntity existing-eid]]))
+        _ (db-migrate/migrate conn :target-version "65.28")
+        property (d/entity @conn property-ident)]
+    (is (= {:major 65 :minor 28}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (is (some? property))
+    (is (= :map (:logseq.property/type property)))))

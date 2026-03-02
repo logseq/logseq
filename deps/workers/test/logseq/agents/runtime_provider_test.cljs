@@ -279,10 +279,11 @@
                                        (is (= "vercel-snap-1" (:snapshot-id snapshot-result)))
                                        (is (= 1 (:snapshots @calls)))
                                        (-> (runtime-provider/<provision-runtime! provider "sess-vercel-2" task)
-                                           (.then (fn [_runtime-2]
+                                           (.then (fn [runtime-2]
                                                     (is (= 1 (:clone @calls)))
                                                     (is (= 1 (:restores @calls)))
                                                     (is (= 2 (:sessions @calls)))
+                                                    (is (= "vercel-snap-1" (:snapshot-id runtime-2)))
                                                     (done)))
                                            (.catch (fn [error]
                                                      (is false (str "unexpected second provision error: " error))
@@ -326,6 +327,7 @@
              (-> (runtime-provider/<provision-runtime! provider "sess-vercel-checkpoint" task)
                  (.then (fn [runtime]
                           (is (= "vercel" (:provider runtime)))
+                          (is (= "persisted-snap-7" (:snapshot-id runtime)))
                           (is (= 0 (:clone @calls)))
                           (is (= "snapshot"
                                  (get-in (first (:sources @calls)) [:type])))

@@ -431,6 +431,12 @@
                :public? false
                :hide? true}
       :queryable? false}
+     :logseq.property/sandbox-checkpoint
+     {:title "Sandbox checkpoint"
+      :schema {:type :map
+               :public? false
+               :hide? true}
+      :queryable? false}
      :logseq.property/git-repo
      {:title "Git Repo"
       :schema {:type :url

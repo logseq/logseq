@@ -37,6 +37,36 @@
     (let [value (string/trim value)]
       (when-not (string/blank? value) value))))
 
+(def ^:private task-sandbox-checkpoint-property :logseq.property/sandbox-checkpoint)
+(def ^:private task-session-id-property :logseq.property/agent-session-id)
+(def ^:private task-pr-property :logseq.property/pr)
+
+(defn- normalize-sandbox-checkpoint
+  [checkpoint]
+  (when (map? checkpoint)
+    (let [snapshot-id (blank->nil (or (:snapshot-id checkpoint) (get checkpoint "snapshot-id")))
+          provider (some-> (or (:provider checkpoint) (get checkpoint "provider"))
+                           str
+                           string/trim
+                           string/lower-case
+                           blank->nil)
+          backup-key (blank->nil (or (:backup-key checkpoint) (get checkpoint "backup-key")))
+          backup-dir (blank->nil (or (:backup-dir checkpoint) (get checkpoint "backup-dir")))]
+      (when (string? snapshot-id)
+        (cond-> {:snapshot-id snapshot-id}
+          (string? provider) (assoc :provider provider)
+          (string? backup-key) (assoc :backup-key backup-key)
+          (string? backup-dir) (assoc :backup-dir backup-dir))))))
+
+(defn task-sandbox-checkpoint
+  [block]
+  (let [checkpoint (:logseq.property/sandbox-checkpoint block)]
+    (normalize-sandbox-checkpoint checkpoint)))
+
+(defn- checkpoint->property-value
+  [checkpoint]
+  (normalize-sandbox-checkpoint checkpoint))
+
 (defn- agent-config
   [agent-page]
   (let [api-token (blank->nil (:logseq.property/agent-api-token agent-page))
@@ -94,6 +124,9 @@
          node-title (blank->nil (:block/title block))
          content (task-content block)
          project-page (:logseq.property/project block)
+         sandbox-checkpoint (or (task-sandbox-checkpoint block)
+                                (when project-page
+                                  (task-sandbox-checkpoint project-page)))
          agent-page (:logseq.property/agent block)
          project (when project-page (project-config project-page opts))
          agent (when agent-page (agent-config agent-page))]
@@ -102,6 +135,7 @@
       :node-title node-title
       :content content
       :attachments []
+      :sandbox-checkpoint sandbox-checkpoint
       :project project
       :agent agent})))
 
@@ -229,18 +263,19 @@
   ([block]
    (build-session-body block nil))
   ([block opts]
-   (let [{:keys [block-uuid node-id node-title content attachments project agent]} (task-context block opts)
+   (let [{:keys [block-uuid node-id node-title content attachments sandbox-checkpoint project agent]} (task-context block opts)
          session-id (some-> block-uuid str)]
      (when (and session-id node-id (string? node-title) (string? content) (map? project) (map? agent))
-       {:session-id session-id
-        :node-id node-id
-        :node-title node-title
-        :content content
-        :attachments attachments
-        :project project
-        :agent agent
-        :capabilities {:push-enabled true
-                       :pr-enabled true}}))))
+       (cond-> {:session-id session-id
+                :node-id node-id
+                :node-title node-title
+                :content content
+                :attachments attachments
+                :project project
+                :agent agent
+                :capabilities {:push-enabled true
+                               :pr-enabled true}}
+         (map? sandbox-checkpoint) (assoc :sandbox-checkpoint sandbox-checkpoint))))))
 
 (def ^:private stream-reconnect-delay-ms 1500)
 
@@ -288,9 +323,6 @@
    "pr-created" :logseq.property/status.in-review
    "failed" :logseq.property/status.canceled
    "canceled" :logseq.property/status.canceled})
-(def ^:private task-session-id-property :logseq.property/agent-session-id)
-(def ^:private task-pr-property :logseq.property/pr)
-
 (defn- terminal-status? [status]
   (contains? #{"completed" "failed" "canceled"} status))
 
@@ -303,6 +335,18 @@
 (defn- event-runtime-provider [event]
   (when (= "session.provisioned" (:type event))
     (some-> (get-in event [:data :provider]) normalize-runtime-provider)))
+
+(defn- event->sandbox-checkpoint
+  [event runtime-provider]
+  (when (contains? #{"sandbox.snapshot.succeeded"
+                     "sandbox.checkpoint.succeeded"}
+                   (:type event))
+    (normalize-sandbox-checkpoint
+     (cond-> (:data event)
+       (and (map? (:data event))
+            (nil? (get-in event [:data :provider]))
+            (string? runtime-provider))
+       (assoc :provider runtime-provider)))))
 
 (defn session-terminal-enabled?
   [session]
@@ -348,6 +392,24 @@
           current-session-id (task-session-id block)]
       (when (and session-id (not= current-session-id session-id))
         (property-handler/set-block-property! block-uuid task-session-id-property session-id)))))
+
+(defn- maybe-store-task-sandbox-checkpoint!
+  [block-uuid checkpoint]
+  (when-let [block (db/entity [:block/uuid block-uuid])]
+    (when-let [checkpoint (normalize-sandbox-checkpoint checkpoint)]
+      (let [current (task-sandbox-checkpoint block)]
+        (when (not= current checkpoint)
+          (property-handler/set-block-property! block-uuid
+                                                task-sandbox-checkpoint-property
+                                                (checkpoint->property-value checkpoint))))
+      (when-let [project-page (:logseq.property/project block)]
+        (let [project-uuid (:block/uuid project-page)
+              current-project-checkpoint (task-sandbox-checkpoint project-page)]
+          (when (and project-uuid
+                     (not= current-project-checkpoint checkpoint))
+            (property-handler/set-block-property! project-uuid
+                                                  task-sandbox-checkpoint-property
+                                                  (checkpoint->property-value checkpoint))))))))
 
 (defn- update-session!
   [block-uuid f]
@@ -443,12 +505,18 @@
           (p/then (fn [resp]
                     (when (seq (:events resp))
                       (append-events! block-uuid (:events resp))
-                      (when-let [provider (some->> (:events resp)
-                                                   reverse
-                                                   (keep event-runtime-provider)
-                                                   first)]
-                        (update-session-state! block-uuid {:runtime-provider provider
-                                                           :terminal-enabled (runtime-provider-terminal-enabled? provider)})))))
+                      (let [provider (some->> (:events resp)
+                                              reverse
+                                              (keep event-runtime-provider)
+                                              first)]
+                        (when-let [checkpoint (some->> (:events resp)
+                                                       reverse
+                                                       (keep #(event->sandbox-checkpoint % provider))
+                                                       first)]
+                          (maybe-store-task-sandbox-checkpoint! block-uuid checkpoint))
+                        (when provider
+                          (update-session-state! block-uuid {:runtime-provider provider
+                                                             :terminal-enabled (runtime-provider-terminal-enabled? provider)}))))))
           (p/catch (fn [_] nil))))))
 
 (defn <fetch-project-branches!
@@ -499,6 +567,10 @@
   (when-let [provider (event-runtime-provider event)]
     (update-session-state! block-uuid {:runtime-provider provider
                                        :terminal-enabled (runtime-provider-terminal-enabled? provider)}))
+  (let [runtime-provider (or (event-runtime-provider event)
+                             (:runtime-provider (session-state block-uuid)))]
+    (when-let [checkpoint (event->sandbox-checkpoint event runtime-provider)]
+      (maybe-store-task-sandbox-checkpoint! block-uuid checkpoint)))
   (when-let [status (event->status event)]
     (update-session-state! block-uuid {:status status})
     (maybe-update-task-status! block-uuid status)

@@ -123,7 +123,7 @@
 (def ^:private default-repo-base-dir "/workspace")
 (def ^:private vercel-repo-base-dir "/vercel/sandbox")
 (def ^:private cloudflare-local-host "http://localhost")
-(def ^:private cloudflare-snapshot-ttl-seconds (* 7 24 60 60))
+(def ^:private cloudflare-snapshot-ttl-seconds (* 30 24 60 60))
 (defonce ^:private cloudflare-backup-cache (atom {}))
 (defonce ^:private vercel-snapshot-cache (atom {}))
 
@@ -505,7 +505,8 @@
 
 (defn- task-sandbox-checkpoint
   [task]
-  (let [checkpoint (when (map? task) (:sandbox-checkpoint task))
+  (let [checkpoint (when (map? task)
+                     (:sandbox-checkpoint task))
         provider (normalize-provider (:provider checkpoint))
         snapshot-id (some-> (:snapshot-id checkpoint) str string/trim not-empty)
         backup-key (some-> (:backup-key checkpoint) str string/trim not-empty)
@@ -1548,6 +1549,7 @@
                                {:backup-key backup-key
                                 :snapshot-id snapshot-id})
                     {:sandbox sandbox
+                     :snapshot-id snapshot-id
                      :snapshot-dir snapshot-dir
                      :restored? true}))
           (p/catch (fn [error]
@@ -1558,6 +1560,7 @@
                                  :error (str error)})
                      (p/let [sandbox (<vercel-create-sandbox! env nil)]
                        {:sandbox sandbox
+                        :snapshot-id nil
                         :snapshot-dir nil
                         :restored? false})))))))
 
@@ -1902,7 +1905,8 @@
          :agent-token agent-token
          :session-id (:session-id response)
          :backup-key backup-key
-         :backup-dir repo-dir})))
+         :backup-dir repo-dir
+         :snapshot-id snapshot-id})))
 
   (<open-events-stream! [_ runtime]
     (let [agent-token (vercel-agent-token env runtime)]

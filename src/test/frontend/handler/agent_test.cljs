@@ -30,6 +30,61 @@
              (get-in (agent-handler/build-session-body block)
                      [:project :sandbox-init-setup]))))))
 
+(deftest build-session-body-includes-sandbox-checkpoint-test
+  (let [project-page {:block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                      :block/title "Project"}
+        checkpoint {:provider "vercel"
+                    :snapshot-id "snap-77"
+                    :backup-key "github/logseq/agent-test#main"
+                    :backup-dir "/vercel/sandbox/agent-test"}
+        block {:block/uuid #uuid "22222222-2222-2222-2222-222222222223"
+               :block/title "Task"
+               :logseq.property/project project-page
+               :logseq.property/agent {:block/title "Codex"}}]
+    (p/with-redefs [pu/get-block-property-value (fn [entity k]
+                                                  (cond
+                                                    (= entity project-page)
+                                                    (case k
+                                                      :logseq.property/git-repo "https://github.com/example/repo"
+                                                      nil)
+
+                                                    (and (= entity block)
+                                                         (= k :logseq.property/sandbox-checkpoint))
+                                                    checkpoint
+
+                                                    :else
+                                                    (get entity k)))]
+      (is (= checkpoint
+             (:sandbox-checkpoint (agent-handler/build-session-body block)))))))
+
+(deftest build-session-body-falls-back-to-project-sandbox-checkpoint-test
+  (let [project-page {:block/uuid #uuid "11111111-1111-1111-1111-111111111112"
+                      :block/title "Project"}
+        checkpoint {:provider "vercel"
+                    :snapshot-id "snap-project-1"
+                    :backup-key "github/logseq/agent-test#main"
+                    :backup-dir "/vercel/sandbox/agent-test"}
+        block {:block/uuid #uuid "22222222-2222-2222-2222-222222222224"
+               :block/title "Task"
+               :logseq.property/project project-page
+               :logseq.property/agent {:block/title "Codex"}}]
+    (p/with-redefs [pu/get-block-property-value (fn [entity k]
+                                                  (cond
+                                                    (= entity project-page)
+                                                    (case k
+                                                      :logseq.property/git-repo "https://github.com/example/repo"
+                                                      :logseq.property/sandbox-checkpoint checkpoint
+                                                      nil)
+
+                                                    (and (= entity block)
+                                                         (= k :logseq.property/sandbox-checkpoint))
+                                                    nil
+
+                                                    :else
+                                                    (get entity k)))]
+      (is (= checkpoint
+             (:sandbox-checkpoint (agent-handler/build-session-body block)))))))
+
 (deftest start-session-sends-initial-message-test
   (async done
          (let [calls (atom [])

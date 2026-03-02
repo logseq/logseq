@@ -228,6 +228,103 @@
                            (is false (str "unexpected error: " error))
                            (done))))))))
 
+(deftest provision-runtime-persists-runtime-checkpoint-test
+  (testing "provisioned runtime snapshot metadata is persisted to task sandbox checkpoint"
+    (async done
+           (let [env #js {"AGENT_RUNTIME_PROVIDER" "vercel"}
+                 self (make-self env)
+                 task {:agent "codex"
+                       :project {:repo-url "https://github.com/example/repo"}}
+                 runtime {:provider "vercel"
+                          :session-id "sess-runtime"
+                          :sandbox-id "sbx-runtime"
+                          :backup-key "github/logseq/agent-test#main"
+                          :backup-dir "/vercel/sandbox/agent-test"
+                          :snapshot-id "vercel-snapshot-42"}
+                 provider (reify runtime-provider/RuntimeProvider
+                            (<provision-runtime! [_ _session-id _task]
+                              (js/Promise.resolve runtime))
+                            (<open-events-stream! [_ _runtime]
+                              (js/Promise.resolve nil))
+                            (<send-message! [_ _runtime _message]
+                              (js/Promise.resolve true))
+                            (<open-terminal! [_ _runtime _request _opts]
+                              (js/Promise.resolve nil))
+                            (<snapshot-runtime! [_ _runtime _opts]
+                              (js/Promise.resolve nil))
+                            (<push-branch! [_ _runtime _opts]
+                              (js/Promise.resolve nil))
+                            (<terminate-runtime! [_ _runtime]
+                              (js/Promise.resolve nil)))]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-runtime"
+                                 :status "running"
+                                 :task task
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (with-redefs [runtime-provider/resolve-provider (fn [_env _runtime] provider)
+                                        runtime-provider/provider-id (fn [_provider] "vercel")
+                                        agent-do/start-runtime-events-stream-background! (fn [& _] nil)]
+                            (#'agent-do/<provision-runtime! self task "sess-runtime"))))
+                 (.then (fn [_]
+                          (.then (.get (.-storage self) "session")
+                                 (fn [session-js]
+                                   (let [session (js->clj session-js :keywordize-keys true)
+                                         checkpoint (get-in session [:task :sandbox-checkpoint])]
+                                     (is (= "vercel-snapshot-42" (:snapshot-id checkpoint)))
+                                     (is (= "vercel" (:provider checkpoint)))
+                                     (is (= "github/logseq/agent-test#main" (:backup-key checkpoint)))
+                                     (is (= "/vercel/sandbox/agent-test" (:backup-dir checkpoint)))
+                                     (is (= "provisioned" (:reason checkpoint)))
+                                     (is (number? (:checkpoint-at checkpoint)))
+                                     (done))))))
+                 (.catch (fn [error]
+                           (is false (str "unexpected provision checkpoint error: " error))
+                           (done))))))))
+
+(deftest checkpoint-existing-snapshot-falls-back-to-runtime-snapshot-test
+  (testing "checkpoint refresh reuses runtime snapshot metadata when task checkpoint is missing"
+    (async done
+           (let [env #js {"AGENT_RUNTIME_PROVIDER" "local-dev"}
+                 self (make-self env)
+                 session {:id "sess-runtime-checkpoint"
+                          :status "running"
+                          :task {:project {:repo-url "https://github.com/example/repo"}}
+                          :runtime {:provider "vercel"
+                                    :session-id "sess-runtime-checkpoint"
+                                    :sandbox-id "sbx-runtime-checkpoint"
+                                    :snapshot-id "runtime-snapshot-7"
+                                    :backup-key "github/logseq/agent-test#main"
+                                    :backup-dir "/vercel/sandbox/agent-test"}
+                          :audit {}
+                          :created-at 0
+                          :updated-at 0}]
+             (-> (.put (.-storage self) "session" (clj->js session))
+                 (.then (fn [_]
+                          (#'agent-do/<checkpoint-existing-snapshot! self
+                                                                     session
+                                                                     {:by "system"
+                                                                      :reason "pr-ready"})))
+                 (.then (fn [ok?]
+                          (is (true? ok?))
+                          (.then (.get (.-storage self) "session")
+                                 (fn [session-js]
+                                   (let [session (js->clj session-js :keywordize-keys true)
+                                         checkpoint (get-in session [:task :sandbox-checkpoint])]
+                                     (is (= "runtime-snapshot-7" (:snapshot-id checkpoint)))
+                                     (is (= "vercel" (:provider checkpoint)))
+                                     (is (= "github/logseq/agent-test#main" (:backup-key checkpoint)))
+                                     (is (= "/vercel/sandbox/agent-test" (:backup-dir checkpoint)))
+                                     (is (= "pr-ready" (:reason checkpoint)))
+                                     (is (number? (:checkpoint-at checkpoint)))
+                                     (done))))))
+                 (.catch (fn [error]
+                           (is false (str "unexpected runtime-checkpoint fallback error: " error))
+                           (done))))))))
+
 (deftest runtime-session-completed-checkpoints-existing-and-terminates-test
   (testing "session.completed runtime event checkpoints existing pointer and terminates runtime without snapshot creation"
     (async done

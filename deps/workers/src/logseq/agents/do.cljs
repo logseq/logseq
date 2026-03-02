@@ -100,8 +100,7 @@
 
 (defn- runtime-snapshot-id
   [result]
-  (or (some-> (:snapshot-id result) str string/trim not-empty)
-      (some-> (:id result) str string/trim not-empty)))
+  (some-> (:snapshot-id result) str string/trim not-empty))
 
 (defn- runtime-checkpoint-payload
   [runtime result reason]
@@ -126,6 +125,42 @@
         (string? backup-dir) (assoc :backup-dir backup-dir)
         (string? reason) (assoc :reason reason)))))
 
+(def ^:private checkpoint-storage-key "sandbox.checkpoint")
+
+(defn- checkpoint-payload-with-reason
+  [checkpoint reason]
+  (let [snapshot-id (runtime-snapshot-id checkpoint)]
+    (when (string? snapshot-id)
+      (cond-> (assoc checkpoint
+                     :snapshot-id snapshot-id
+                     :checkpoint-at (common/now-ms))
+        (string? reason) (assoc :reason reason)))))
+
+(defn- checkpoint-event-data
+  [checkpoint data]
+  (let [snapshot-id (runtime-snapshot-id checkpoint)
+        provider (some-> (:provider checkpoint) str string/trim not-empty)
+        backup-key (some-> (:backup-key checkpoint) str string/trim not-empty)
+        backup-dir (some-> (:backup-dir checkpoint) str string/trim not-empty)]
+    (cond-> data
+      (string? snapshot-id) (assoc :snapshot-id snapshot-id)
+      (string? provider) (assoc :provider provider)
+      (string? backup-key) (assoc :backup-key backup-key)
+      (string? backup-dir) (assoc :backup-dir backup-dir))))
+
+(defn- <stored-checkpoint-payload
+  [^js self reason]
+  (p/let [checkpoint (<storage-get (.-storage self) checkpoint-storage-key)]
+    (checkpoint-payload-with-reason checkpoint reason)))
+
+(defn- <persist-stored-checkpoint!
+  [^js self checkpoint]
+  (if-let [checkpoint (checkpoint-payload-with-reason checkpoint nil)]
+    (do
+      (prn :debug :persist :checkpoint-storage-key checkpoint)
+      (<storage-put! (.-storage self) checkpoint-storage-key checkpoint))
+    (p/resolved nil)))
+
 (defn- <persist-session-checkpoint!
   [^js self expected-session-id checkpoint]
   (if-not (and (string? expected-session-id) (map? checkpoint))
@@ -135,48 +170,53 @@
                (= expected-session-id (:id latest-session)))
         (let [task (session-task latest-session)
               task (assoc task :sandbox-checkpoint checkpoint)]
-          (<save-session! self (assoc latest-session :task task)))
+          (p/let [_ (<save-session! self (assoc latest-session :task task))
+                  _ (<persist-stored-checkpoint! self checkpoint)]
+            nil))
         nil))))
 
 (defn- existing-checkpoint-payload
   [session reason]
-  (let [checkpoint (some-> (session-task session) :sandbox-checkpoint)
-        snapshot-id (some-> (:snapshot-id checkpoint) str string/trim not-empty)]
-    (when (string? snapshot-id)
-      (cond-> (assoc checkpoint :checkpoint-at (common/now-ms))
-        (string? reason) (assoc :reason reason)))))
+  (let [task-checkpoint (some-> (session-task session) :sandbox-checkpoint)
+        task-snapshot-id (some-> (:snapshot-id task-checkpoint) str string/trim not-empty)
+        runtime-checkpoint (runtime-checkpoint-payload (:runtime session) (:runtime session) nil)
+        checkpoint (if (string? task-snapshot-id)
+                     task-checkpoint
+                     runtime-checkpoint)]
+    (checkpoint-payload-with-reason checkpoint reason)))
 
 (defn- <checkpoint-existing-snapshot!
   [^js self current-session {:keys [by reason]}]
-  (let [checkpoint (existing-checkpoint-payload current-session reason)
-        snapshot-id (runtime-snapshot-id checkpoint)]
-    (-> (p/let [_ (<append-event! self {:type "sandbox.checkpoint.started"
-                                        :data (cond-> {}
-                                                (string? by) (assoc :by by)
-                                                (string? reason) (assoc :reason reason))
-                                        :ts (common/now-ms)})]
-          (if (map? checkpoint)
-            (p/let [_ (<persist-session-checkpoint! self (:id current-session) checkpoint)
-                    _ (<append-event! self {:type "sandbox.checkpoint.succeeded"
-                                            :data (cond-> {:reused true}
-                                                    (string? by) (assoc :by by)
-                                                    (string? reason) (assoc :reason reason)
-                                                    (string? snapshot-id) (assoc :snapshot-id snapshot-id))
-                                            :ts (common/now-ms)})]
-              true)
-            (p/let [_ (<append-event! self {:type "sandbox.checkpoint.failed"
-                                            :data (cond-> {:error "missing existing checkpoint snapshot"}
-                                                    (string? by) (assoc :by by)
-                                                    (string? reason) (assoc :reason reason))
-                                            :ts (common/now-ms)})]
-              false)))
-        (p/catch (fn [error]
-                   (log/error :agent/checkpoint-existing-snapshot-failed
-                              {:session-id (:id current-session)
-                               :runtime-session-id (get-in current-session [:runtime :session-id])
-                               :sandbox-id (get-in current-session [:runtime :sandbox-id])
-                               :error (str error)})
-                   nil)))))
+  (-> (p/let [stored-checkpoint (<stored-checkpoint-payload self reason)
+              checkpoint (or (existing-checkpoint-payload current-session reason)
+                             stored-checkpoint)
+              _ (<append-event! self {:type "sandbox.checkpoint.started"
+                                      :data (cond-> {}
+                                              (string? by) (assoc :by by)
+                                              (string? reason) (assoc :reason reason))
+                                      :ts (common/now-ms)})]
+        (if (map? checkpoint)
+          (p/let [_ (<persist-session-checkpoint! self (:id current-session) checkpoint)
+                  _ (<append-event! self {:type "sandbox.checkpoint.succeeded"
+                                          :data (checkpoint-event-data checkpoint
+                                                                       (cond-> {:reused true}
+                                                                         (string? by) (assoc :by by)
+                                                                         (string? reason) (assoc :reason reason)))
+                                          :ts (common/now-ms)})]
+            true)
+          (p/let [_ (<append-event! self {:type "sandbox.checkpoint.failed"
+                                          :data (cond-> {:error "missing existing checkpoint snapshot"}
+                                                  (string? by) (assoc :by by)
+                                                  (string? reason) (assoc :reason reason))
+                                          :ts (common/now-ms)})]
+            false)))
+      (p/catch (fn [error]
+                 (log/error :agent/checkpoint-existing-snapshot-failed
+                            {:session-id (:id current-session)
+                             :runtime-session-id (get-in current-session [:runtime :session-id])
+                             :sandbox-id (get-in current-session [:runtime :sandbox-id])
+                             :error (str error)})
+                 nil))))
 
 (defn- stream-url [request session-id]
   (let [base (or (header request "x-stream-base")
@@ -706,7 +746,25 @@
 (defn- <provision-runtime! [^js self task session-id]
   (let [provider (runtime-provider/resolve-provider (.-env self) nil)
         provider-kind (runtime-provider/provider-id provider)]
-    (p/let [runtime (runtime-provider/<provision-runtime! provider session-id task)
+    (p/let [stored-checkpoint (<stored-checkpoint-payload self nil)
+            _ (prn :debug :stored-checkpoint stored-checkpoint)
+            task-checkpoint (when (map? task) (:sandbox-checkpoint task))
+            task-has-snapshot? (string? (runtime-snapshot-id task-checkpoint))
+            _ (when task-has-snapshot?
+                (<persist-stored-checkpoint! self task-checkpoint))
+            task (cond
+                   (not (map? task))
+                   task
+
+                   task-has-snapshot?
+                   task
+
+                   (map? stored-checkpoint)
+                   (assoc task :sandbox-checkpoint stored-checkpoint)
+
+                   :else
+                   task)
+            runtime (runtime-provider/<provision-runtime! provider session-id task)
             session (<get-session self)]
       (cond
         (nil? runtime)
@@ -718,7 +776,11 @@
         nil
 
         :else
-        (let [session (assoc session :runtime runtime)
+        (let [runtime-checkpoint (runtime-checkpoint-payload runtime runtime "provisioned")
+              session (-> session
+                          (assoc :runtime runtime)
+                          (cond-> (map? runtime-checkpoint)
+                            (assoc-in [:task :sandbox-checkpoint] runtime-checkpoint)))
               [session _ event] (session/append-event session [] {:type "session.provisioned"
                                                                   :data {:provider (:provider runtime)
                                                                          :runtime-session-id (:session-id runtime)
@@ -1138,16 +1200,14 @@
                                                                     {:task (:task current-session)})
                         checkpoint (runtime-checkpoint-payload runtime result "manual")
                         _ (<persist-session-checkpoint! self (:id current-session) checkpoint)
-                        snapshot-id (or (:snapshot-id result)
-                                        (:id result))
                         _ (<append-event! self {:type "sandbox.snapshot.succeeded"
-                                                :data (cond-> {:by user-id}
-                                                        (string? snapshot-id) (assoc :snapshot-id snapshot-id))
+                                                :data (checkpoint-event-data checkpoint {:by user-id})
                                                 :ts (common/now-ms)})]
                   (http/json-response :sessions/snapshot
                                       (cond-> {:status "snapshot-created"
                                                :message "Sandbox snapshot created."}
-                                        (string? snapshot-id) (assoc :snapshot-id snapshot-id))))
+                                        (string? (runtime-snapshot-id checkpoint))
+                                        (assoc :snapshot-id (runtime-snapshot-id checkpoint)))))
                 (p/catch (fn [error]
                            (let [reason (error-reason error)
                                  unsupported? (= reason "unsupported-snapshot")]

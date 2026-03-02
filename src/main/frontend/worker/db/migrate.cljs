@@ -85,7 +85,8 @@
                           :logseq.property/agent-auth-json]}]
    ["65.25" {:properties [:logseq.property/pr]}]
    ["65.26" {:properties [:logseq.property/project-sandbox-init-setup]}]
-   ["65.27" {:properties [:logseq.property/agent-session-id]}]])
+   ["65.27" {:properties [:logseq.property/agent-session-id]}]
+   ["65.28" {:properties [:logseq.property/sandbox-checkpoint]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
