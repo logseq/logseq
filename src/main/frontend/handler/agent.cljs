@@ -81,7 +81,8 @@
 
 (defn task-sandbox-checkpoint
   [block]
-  (let [checkpoint (:logseq.property/sandbox-checkpoint block)]
+  (let [checkpoint (or (pu/get-block-property-value block task-sandbox-checkpoint-property)
+                       (:logseq.property/sandbox-checkpoint block))]
     (normalize-sandbox-checkpoint checkpoint)))
 
 (defn- checkpoint->property-value
@@ -102,8 +103,10 @@
   ([project-page]
    (project-config project-page nil))
   ([project-page {:keys [base-branch]}]
-   (let [repo-url (blank->nil (pu/get-block-property-value project-page :logseq.property/git-repo))
-         sandbox-init-setup (blank->nil (pu/get-block-property-value project-page :logseq.property/project-sandbox-init-setup))
+   (let [repo-url (blank->nil (or (pu/get-block-property-value project-page :logseq.property/git-repo)
+                                  (:logseq.property/git-repo project-page)))
+         sandbox-init-setup (blank->nil (or (pu/get-block-property-value project-page :logseq.property/project-sandbox-init-setup)
+                                            (:logseq.property/project-sandbox-init-setup project-page)))
          project-id (some-> (:block/uuid project-page) str)
          title (blank->nil (:block/title project-page))
          base-branch (blank->nil base-branch)]
@@ -744,8 +747,9 @@
 
 (defn- task-status-canceled?
   [block]
-  (= :logseq.property/status.canceled
-     (:db/ident (:logseq.property/status block))))
+  (let [status (pu/get-block-property-value block :logseq.property/status)]
+    (or (= :logseq.property/status.canceled status)
+        (= :logseq.property/status.canceled (:db/ident status)))))
 
 (defn <cancel-session-if-task-canceled!
   [block]
@@ -833,7 +837,7 @@
   (when-let [summary (blank->nil summary)]
     (editor-handler/api-insert-new-block! (str "PR Summary: " summary)
                                           {:block-uuid block-uuid
-                                           :sibling? false})))
+                                           :sibling? true})))
 
 (defn- publish-status-message
   [resp]

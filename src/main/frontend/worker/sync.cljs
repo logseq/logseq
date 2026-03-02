@@ -41,14 +41,17 @@
 (defn- sync-counts
   [repo]
   (when (worker-state/get-datascript-conn repo)
-    (let [pending-local (when-let [conn (client-ops-conn repo)]
-                          (count (d/datoms @conn :avet :db-sync/created-at)))
+    (let [ops-conn (client-ops-conn repo)
+          pending-local (when ops-conn
+                          (count (d/datoms @ops-conn :avet :db-sync/created-at)))
           pending-asset (client-op/get-unpushed-asset-ops-count repo)
-          local-tx (client-op/get-local-tx repo)
+          local-tx (when ops-conn
+                     (client-op/get-local-tx repo))
           remote-tx (get @*repo->latest-remote-tx repo)
           pending-server (when (and (number? local-tx) (number? remote-tx))
                            (max 0 (- remote-tx local-tx)))
-          graph-uuid (client-op/get-graph-uuid repo)]
+          graph-uuid (when ops-conn
+                       (client-op/get-graph-uuid repo))]
       {:pending-local pending-local
        :pending-asset pending-asset
        :pending-server pending-server

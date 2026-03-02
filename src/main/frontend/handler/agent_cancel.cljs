@@ -10,6 +10,8 @@
   [block-uuid]
   (some-> block-uuid str))
 
+(def ^:private canceled-status-ident :logseq.property/status.canceled)
+
 (defn- stop-session-stream!
   [block-uuid]
   (when-let [controller (get-in (state/sub :agent/sessions) [(session-key block-uuid) :stream-controller])]
@@ -45,19 +47,37 @@
                          (log/error :agent/cancel-on-status-change-failed error))
                        nil)))))))
 
+(defn- canceled-status-value?
+  [status-value canceled-status-id]
+  (or (= canceled-status-ident status-value)
+      (= canceled-status-id status-value)))
+
 (defn- status-canceled-datom?
   [datom canceled-status-id]
   (and (:added datom)
        (= :logseq.property/status (:a datom))
-       (= canceled-status-id (:v datom))))
+       (canceled-status-value? (:v datom) canceled-status-id)))
+
+(defn maybe-cancel-session-on-status-change!
+  [block property-id property-value]
+  (let [canceled-status-id (:db/id (db/entity canceled-status-ident))]
+    (when (and (= :logseq.property/status property-id)
+               (canceled-status-value? property-value canceled-status-id))
+      (<cancel-session-by-block-uuid! (:block/uuid block)))))
 
 (defn maybe-cancel-sessions-on-db-change!
   [tx-data]
-  (when (seq tx-data)
-    (let [canceled-status-id (:db/id (db/entity :logseq.property/status.canceled))]
-      (doseq [block-uuid (->> tx-data
-                              (filter #(status-canceled-datom? % canceled-status-id))
-                              (keep (fn [datom]
-                                      (:block/uuid (db/entity (:e datom)))))
-                              distinct)]
-        (<cancel-session-by-block-uuid! block-uuid)))))
+  (if (seq tx-data)
+    (let [canceled-status-id (:db/id (db/entity canceled-status-ident))
+          cancel-promises (->> tx-data
+                               (filter #(status-canceled-datom? % canceled-status-id))
+                               (keep (fn [datom]
+                                       (:block/uuid (db/entity (:e datom)))))
+                               distinct
+                               (map <cancel-session-by-block-uuid!)
+                               (remove nil?)
+                               vec)]
+      (if (seq cancel-promises)
+        (p/all cancel-promises)
+        (p/resolved nil)))
+    (p/resolved nil)))

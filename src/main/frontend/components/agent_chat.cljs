@@ -906,7 +906,7 @@
                    (.removeEventListener js/window "resize" handle-window-resize)
                    (when dispose-data
                      (.dispose dispose-data))
-                   (doseq [disposable query-suppressors]
+                   (doseq [^js disposable query-suppressors]
                      (when (fn? (aget disposable "dispose"))
                        (.dispose disposable)))
                    (when (or (= (.-readyState socket) js/WebSocket.CONNECTING)
