@@ -19,8 +19,8 @@ Related: Builds on docs/agent-guide/004-logseq-cli-verb-subcommands.md and docs/
 
 Prefer graph-scoped subcommands to keep import/export with graph management:
 
-- `logseq graph export --type edn --output <path> [--repo <graph>]`
-- `logseq graph export --type sqlite --output <path> [--repo <graph>]`
+- `logseq graph export --type edn --file <path> [--repo <graph>]`
+- `logseq graph export --type sqlite --file <path> [--repo <graph>]`
 - `logseq graph import --type edn --input <path> --repo <graph>`
 - `logseq graph import --type sqlite --input <path> --repo <graph>`
 

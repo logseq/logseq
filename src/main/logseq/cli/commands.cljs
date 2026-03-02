@@ -82,11 +82,11 @@
            :message "input is required"}
    :summary summary})
 
-(defn- missing-output-result
+(defn- missing-file-result
   [summary]
   {:ok? false
-   :error {:code :missing-output
-           :message "output is required"}
+   :error {:code :missing-file
+           :message "file is required"}
    :summary summary})
 
 (defn- missing-query-result
@@ -248,8 +248,8 @@
       (and (= command :graph-export) (not (seq (graph-command/normalize-import-export-type (:type opts)))))
       (missing-type-result summary)
 
-      (and (= command :graph-export) (not (seq (:output opts))))
-      (missing-output-result summary)
+      (and (= command :graph-export) (not (seq (:file opts))))
+      (missing-file-result summary)
 
       (and (= command :graph-export)
            (not (contains? (graph-command/import-export-types)
@@ -387,7 +387,7 @@
 
         :graph-export
         (let [export-type (graph-command/normalize-import-export-type (:type options))]
-          (graph-command/build-export-action repo export-type (:output options)))
+          (graph-command/build-export-action repo export-type (:file options)))
 
         :graph-import
         (let [import-repo (command-core/resolve-repo (:repo options))
@@ -481,4 +481,4 @@
                                              :schema
                                              :source :target :update-tags :update-properties
                                              :remove-tags :remove-properties
-                                             :export-type :output :import-type :input])))))
+                                             :export-type :file :import-type :input])))))
