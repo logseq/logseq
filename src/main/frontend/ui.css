@@ -360,7 +360,6 @@ input[type='range'] {
   .ls-foldable-content-inner {
     overflow: hidden;
     opacity: 1;
-    transform: translateY(0);
     transition: opacity 200ms ease-in-out, transform 200ms ease-in-out;
   }
 
@@ -369,7 +368,6 @@ input[type='range'] {
 
     .ls-foldable-content-inner {
       opacity: 0;
-      transform: translateY(-2px);
       pointer-events: none;
     }
   }
