@@ -87,8 +87,8 @@
 (defn- error-hint
   [{:keys [code]}]
   (case code
-    :missing-graph "Use --repo <name>"
-    :missing-repo "Use --repo <name>"
+    :missing-graph "Use --graph <name>"
+    :missing-repo "Use --graph <name>"
     :missing-content "Use --content or pass content as args"
     :missing-tag-name "Use --name <tag-name>"
     :missing-query "Use --query <edn>"
@@ -221,7 +221,7 @@
 (defn- format-server-list
   [servers]
   (format-counted-table
-   ["REPO" "STATUS" "HOST" "PORT" "PID" "OWNER"]
+   ["GRAPH" "STATUS" "HOST" "PORT" "PID" "OWNER"]
    (mapv (fn [server]
            [(:repo server)
             (:status server)

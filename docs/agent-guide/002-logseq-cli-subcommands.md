@@ -57,7 +57,7 @@ Global options apply to all subcommands and are parsed before subcommand options
 | --help | Show help | Available at top level and per subcommand. |
 | --version | Show version | Prints build time and revision. |
 | --config PATH | Config file path | Defaults to ~/logseq/cli.edn. |
-| --repo REPO | Graph name | Used as current repo. |
+| --graph GRAPH | Graph name | Used as current graph. |
 | --timeout-ms MS | Request timeout | Integer milliseconds. |
 | --output FORMAT | Output format | One of human, json, edn. |
 
@@ -66,11 +66,11 @@ Each subcommand uses a nested path and its own options.
 | Subcommand path | Required args | Options | Notes |
 | --- | --- | --- | --- |
 | graph list | none | --output | Lists all graphs. |
-| graph create | none | --repo GRAPH, --output | Creates and switches graph. |
-| graph switch | none | --repo GRAPH, --output | Switches current graph. |
-| graph remove | none | --repo GRAPH, --output | Removes graph. |
-| graph validate | none | --repo GRAPH, --output | Validates graph. |
-| graph info | none | --repo GRAPH, --output | Shows metadata, defaults to config repo if omitted. |
+| graph create | none | --graph GRAPH, --output | Creates and switches graph. |
+| graph switch | none | --graph GRAPH, --output | Switches current graph. |
+| graph remove | none | --graph GRAPH, --output | Removes graph. |
+| graph validate | none | --graph GRAPH, --output | Validates graph. |
+| graph info | none | --graph GRAPH, --output | Shows metadata, defaults to config repo if omitted. |
 | block add | none | --content TEXT, --blocks EDN, --blocks-file PATH, --page PAGE, --parent UUID, --output | Content source is required, with file and text variants. |
 | block remove | none | --block UUID, --page PAGE, --output | One of block or page is required. |
 | search | QUERY | --type page|block|tag|property|all, --tag NAME, --case-sensitive, --sort updated-at|created-at, --order asc|desc, --output | Search text is positional and required. Human output columns: ID (db/id), TITLE. Block reference UUIDs in text are resolved recursively up to 10 levels. |

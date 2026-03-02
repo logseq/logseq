@@ -18,7 +18,7 @@ Current update mode in `execute-upsert-tag` only calls `ensure-tag-by-id!` and r
 
 Current db-worker-node path already supports page rename through `:thread-api/apply-outliner-ops` with `[:rename-page [page-uuid new-title]]` in `/Users/rcmerci/gh-repos/logseq/src/main/frontend/worker/db_core.cljs`, so rename behavior can be reused without adding new APIs.
 
-The user-visible gap is that a command like `logseq upsert tag --repo <repo> --id 180 --name "Project Renamed"` should rename tag `180`, but currently fails at option validation.
+The user-visible gap is that a command like `logseq upsert tag --graph <GRAPH> --id 180 --name "Project Renamed"` should rename tag `180`, but currently fails at option validation.
 
 ## Testing Plan
 
