@@ -330,8 +330,8 @@
     (str "Removed property: " id " (repo: " repo ")")))
 
 (defn- format-graph-export
-  [{:keys [export-type output]}]
-  (str "Exported " export-type " to " output))
+  [{:keys [export-type file]}]
+  (str "Exported " export-type " to " file))
 
 (defn- format-graph-import
   [{:keys [import-type input]}]
