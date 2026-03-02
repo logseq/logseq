@@ -5,7 +5,7 @@
             [promesa.core :as p]))
 
 (def ^:private server-spec
-  {:repo {:desc "Graph name"}})
+  {:graph {:desc "Graph name"}})
 
 (def entries
   [(core/command-entry ["server" "list"] :server-list "List db-worker-node servers" {})

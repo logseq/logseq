@@ -87,7 +87,7 @@
       (is (contains-bold? summary "server list"))
       (is (contains-bold? summary "server start"))
       (is (contains-bold? summary "--help"))
-      (is (contains-bold? summary "--repo"))
+      (is (contains-bold? summary "--graph"))
       (is (re-find #"\u001b\[[0-9;]*mCommands\u001b\[[0-9;]*m:" summary))
       (is (re-find #"\u001b\[[0-9;]*moptions\u001b\[[0-9;]*m:" summary))))
 
@@ -316,14 +316,6 @@
     (let [result (commands/parse-args ["add" "tag" "--name" "Quote"])]
       (is (false? (:ok? result)))
       (is (= :unknown-command (get-in result [:error :code]))))))
-
-(deftest test-parse-args-rejects-graph-option
-  (testing "rejects legacy --graph option"
-    (let [result (commands/parse-args ["--graph" "demo" "graph" "list"])]
-      (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code])))
-      (is (= "unknown option: --graph"
-             (strip-ansi (get-in result [:error :message])))))))
 
 (deftest test-parse-args-global-options
   (testing "global output option is accepted"
@@ -1178,7 +1170,7 @@
       (is (= "[\"Hello\"]" (get-in result [:options :inputs]))))))
 
 (deftest test-verb-subcommand-parse-graph-import-export
-  (testing "graph create requires --repo even with positional args"
+  (testing "graph create requires --graph even with positional args"
     (let [result (commands/parse-args ["graph" "create" "demo"])]
       (is (false? (:ok? result)))
       (is (= :missing-graph (get-in result [:error :code])))))
@@ -1196,12 +1188,12 @@
     (let [result (commands/parse-args ["graph" "import"
                                        "--type" "sqlite"
                                        "--input" "import.sqlite"
-                                       "--repo" "demo"])]
+                                       "--graph" "demo"])]
       (is (true? (:ok? result)))
       (is (= :graph-import (:command result)))
       (is (= "sqlite" (get-in result [:options :type])))
       (is (= "import.sqlite" (get-in result [:options :input])))
-      (is (= "demo" (get-in result [:options :repo])))))
+      (is (= "demo" (get-in result [:options :graph])))))
 
   (testing "graph export requires type"
     (let [result (commands/parse-args ["graph" "export" "--file" "export.edn"])]
@@ -1218,27 +1210,27 @@
       (is (false? (:ok? result)))
       (is (= :missing-file (get-in result [:error :code])))))
 
-  (testing "graph import requires repo"
+  (testing "graph import requires graph"
     (let [result (commands/parse-args ["graph" "import"
                                        "--type" "edn"
                                        "--input" "import.edn"])]
       (is (false? (:ok? result)))
-      (is (= :missing-repo (get-in result [:error :code])))))
+      (is (= :missing-graph (get-in result [:error :code])))))
 
   (testing "graph import rejects unknown type"
     (let [result (commands/parse-args ["graph" "import"
                                        "--type" "zip"
                                        "--input" "import.zip"
-                                       "--repo" "demo"])]
+                                       "--graph" "demo"])]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
 
   (testing "server status accepts prefix-like repo option values"
     (let [result (commands/parse-args ["server" "status"
-                                       "--repo" "logseq_db_logseq_db_demo"])]
+                                       "--graph" "logseq_db_logseq_db_demo"])]
       (is (true? (:ok? result)))
       (is (= :server-status (:command result)))
-      (is (= "logseq_db_logseq_db_demo" (get-in result [:options :repo]))))))
+      (is (= "logseq_db_logseq_db_demo" (get-in result [:options :graph]))))))
 
 (deftest test-verb-subcommand-parse-flags
   (testing "verb subcommands reject unknown flags"
@@ -1271,14 +1263,14 @@
       (is (= :missing-graph (get-in result [:error :code])))))
 
   (testing "graph-switch uses graph name"
-    (let [parsed {:ok? true :command :graph-switch :options {:repo "demo"}}
+    (let [parsed {:ok? true :command :graph-switch :options {:graph "demo"}}
           result (commands/build-action parsed {})]
       (is (true? (:ok? result)))
       (is (= :graph-switch (get-in result [:action :type])))))
 
   (testing "graph-info defaults to config repo"
     (let [parsed {:ok? true :command :graph-info :options {}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= :graph-info (get-in result [:action :type])))))
 
@@ -1286,7 +1278,7 @@
     (let [parsed {:ok? true
                   :command :graph-export
                   :options {:type "edn" :file "export.edn"}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= :graph-export (get-in result [:action :type])))))
 
@@ -1312,13 +1304,13 @@
       (is (= :missing-repo (get-in result [:error :code])))))
 
   (testing "server stop builds action"
-    (let [parsed {:ok? true :command :server-stop :options {:repo "demo"}}
+    (let [parsed {:ok? true :command :server-stop :options {:graph "demo"}}
           result (commands/build-action parsed {})]
       (is (true? (:ok? result)))
       (is (= :server-stop (get-in result [:action :type])))))
 
   (testing "server status canonicalizes multi-prefixed repo option"
-    (let [parsed {:ok? true :command :server-status :options {:repo "logseq_db_logseq_db_demo"}}
+    (let [parsed {:ok? true :command :server-status :options {:graph "logseq_db_logseq_db_demo"}}
           result (commands/build-action parsed {})]
       (is (true? (:ok? result)))
       (is (= :server-status (get-in result [:action :type])))
@@ -1348,19 +1340,19 @@
 
   (testing "add block requires content"
     (let [parsed {:ok? true :command :upsert-block :options {}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (false? (:ok? result)))
       (is (= :missing-content (get-in result [:error :code])))))
 
   (testing "add block builds insert-blocks op"
     (let [parsed {:ok? true :command :upsert-block :options {:content "hello"}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= :upsert-block (get-in result [:action :type])))))
 
   (testing "add page requires name"
     (let [parsed {:ok? true :command :upsert-page :options {}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (false? (:ok? result)))
       (is (= :missing-page-name (get-in result [:error :code])))))
 
@@ -1369,7 +1361,7 @@
                   :command :upsert-page
                   :options {:id 42
                             :update-properties "{:logseq.property/publishing-public? true}"}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= :update (get-in result [:action :mode])))
       (is (= 42 (get-in result [:action :id]))))))
@@ -1378,13 +1370,13 @@
 
   (testing "upsert tag requires name"
     (let [parsed {:ok? true :command :upsert-tag :options {}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (false? (:ok? result)))
       (is (= :missing-tag-name (get-in result [:error :code])))))
 
   (testing "upsert tag builds normalized action"
     (let [parsed {:ok? true :command :upsert-tag :options {:name "  #Quote  "}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= {:type :upsert-tag
               :mode :create
@@ -1395,7 +1387,7 @@
 
   (testing "upsert tag by id builds update action"
     (let [parsed {:ok? true :command :upsert-tag :options {:id 123}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= {:type :upsert-tag
               :mode :update
@@ -1406,7 +1398,7 @@
 
   (testing "upsert tag by id with name builds update action"
     (let [parsed {:ok? true :command :upsert-tag :options {:id 123 :name "  #Project Renamed  "}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= {:type :upsert-tag
               :mode :update
@@ -1418,7 +1410,7 @@
 
   (testing "upsert tag by id rejects blank rename name"
     (let [parsed {:ok? true :command :upsert-tag :options {:id 123 :name "   "}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
 
@@ -1430,7 +1422,7 @@
                             :cardinality "many"
                             :hide true
                             :public false}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= {:type :upsert-property
               :mode :create
@@ -1449,7 +1441,7 @@
                   :options {:id 654
                             :type "node"
                             :cardinality "many"}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= {:type :upsert-property
               :mode :update
@@ -1464,46 +1456,46 @@
 
   (testing "remove block requires target"
     (let [parsed {:ok? true :command :remove-block :options {}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (false? (:ok? result)))
       (is (= :missing-target (get-in result [:error :code])))))
 
   (testing "remove block normalizes id vector in build action"
     (let [parsed {:ok? true :command :remove-block :options {:id "[1 2]"}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= :remove-block (get-in result [:action :type])))
       (is (= [1 2] (get-in result [:action :ids])))))
 
   (testing "remove page requires name"
     (let [parsed {:ok? true :command :remove-page :options {}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (false? (:ok? result)))
       (is (= :missing-page-name (get-in result [:error :code])))))
 
   (testing "remove tag parses by id"
     (let [parsed {:ok? true :command :remove-tag :options {:id 42}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= :remove-tag (get-in result [:action :type])))
       (is (= 42 (get-in result [:action :id])))))
 
   (testing "remove property parses by name"
     (let [parsed {:ok? true :command :remove-property :options {:name "owner"}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= :remove-property (get-in result [:action :type])))
       (is (= "owner" (get-in result [:action :name])))))
 
   (testing "show requires target"
     (let [parsed {:ok? true :command :show :options {}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (false? (:ok? result)))
       (is (= :missing-target (get-in result [:error :code])))))
 
   (testing "show normalizes id vector in build action"
     (let [parsed {:ok? true :command :show :options {:id "[1 2]"}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= :show (get-in result [:action :type])))
       (is (= [1 2] (get-in result [:action :ids]))))))
@@ -1513,7 +1505,7 @@
     (let [parsed (commands/parse-args ["upsert" "block"
                                        "--content" "hello"
                                        "--update-properties" "{:not/a 1}"])
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= {:not/a 1} (get-in result [:action :update-properties])))))
 
@@ -1521,7 +1513,7 @@
     (let [parsed (commands/parse-args ["upsert" "block"
                                        "--content" "hello"
                                        "--update-properties" "{\"Publishing Public?\" true}"])
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= :logseq.property/publishing-public?
              (-> result :action :update-properties keys first)))))
@@ -1530,7 +1522,7 @@
     (let [parsed (commands/parse-args ["upsert" "block"
                                        "--content" "hello"
                                        "--update-properties" "{:logseq.property/heading 1}"])
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
 
@@ -1538,7 +1530,7 @@
     (let [parsed (commands/parse-args ["upsert" "block"
                                        "--content" "hello"
                                        "--update-properties" "{:logseq.property/publishing-public? \"nope\"}"])
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code]))))))
 
@@ -1547,7 +1539,7 @@
     (let [parsed (commands/parse-args ["upsert" "block"
                                        "--content" "hello"
                                        "--update-tags" "[42]"])
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= [42] (get-in result [:action :update-tags]))))))
 
@@ -1562,13 +1554,13 @@
 (deftest test-build-action-update
   (testing "upsert block create mode requires content when source selector is absent"
     (let [parsed {:ok? true :command :upsert-block :options {:target-id 2}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (false? (:ok? result)))
       (is (= :missing-content (get-in result [:error :code])))))
 
   (testing "upsert block update mode requires target or update/remove options"
     (let [parsed {:ok? true :command :upsert-block :options {:id 1}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
 
@@ -1576,7 +1568,7 @@
     (let [parsed {:ok? true
                   :command :upsert-block
                   :options {:id 1 :update-tags "[\"TagA\"]"}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= :upsert-block (get-in result [:action :type])))
       (is (= ["TagA"] (get-in result [:action :update-tags])))))
@@ -1585,7 +1577,7 @@
     (let [parsed {:ok? true
                   :command :upsert-block
                   :options {:id 1 :update-tags "{:tag \"no\"}"}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
 
@@ -1593,7 +1585,7 @@
     (let [parsed {:ok? true
                   :command :upsert-block
                   :options {:id 1 :content "hello" :update-tags "[\"TagA\"]"}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= :upsert-block (get-in result [:action :type])))
       (is (= 1 (get-in result [:action :id])))
@@ -1605,7 +1597,7 @@
                   :options {:id 1
                             :update-properties "{:user.property/owner \"alice\"}"
                             :remove-properties "[:user.property/owner]"}}
-          result (commands/build-action parsed {:repo "demo"})]
+          result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= :upsert-block (get-in result [:action :type])))
       (is (= {:user.property/owner "alice"}

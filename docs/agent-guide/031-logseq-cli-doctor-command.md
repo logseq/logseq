@@ -178,6 +178,6 @@ Resolved: `doctor` will fail fast on the first failed check.
 
 Resolved: `doctor` will treat `:starting` servers as warnings when script and data-dir checks pass.
 
-Resolved: `doctor` will support a future `--repo` scoped deep check that verifies per-graph lock path and repo directory access without starting the daemon.
+Resolved: `doctor` will support a future `--graph` scoped deep check that verifies per-graph lock path and repo directory access without starting the daemon.
 
 ---

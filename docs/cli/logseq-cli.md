@@ -52,7 +52,7 @@ Graph directories on disk are stored as user-facing graph names (for example, `d
 Migration note: If you previously used `~/.logseq/cli-graphs` or `~/.logseq/cli.edn`, pass `--data-dir` or `--config` to continue using those locations.
 
 Supported keys include:
-- `:repo`
+- `:graph`
 - `:data-dir`
 - `:timeout-ms`
 - `:output-format` (use `:json` or `:edn` for scripting)
@@ -67,22 +67,22 @@ Verbose logging:
 
 Graph commands:
 - `graph list` - list all db graphs
-- `graph create --repo <name>` - create a new db graph and switch to it
-- `graph switch --repo <name>` - switch current graph
-- `graph remove --repo <name>` - remove a graph
-- `graph validate --repo <name>` - validate graph data
-- `graph info [--repo <name>]` - show graph metadata (defaults to current graph)
-- `graph export --type edn|sqlite --file <path> [--repo <name>]` - export a graph to EDN or SQLite
-- `graph import --type edn|sqlite --input <path> --repo <name>` - import a graph from EDN or SQLite (new graph only)
+- `graph create --graph <name>` - create a new db graph and switch to it
+- `graph switch --graph <name>` - switch current graph
+- `graph remove --graph <name>` - remove a graph
+- `graph validate --graph <name>` - validate graph data
+- `graph info [--graph <name>]` - show graph metadata (defaults to current graph)
+- `graph export --type edn|sqlite --file <path> [--graph <name>]` - export a graph to EDN or SQLite
+- `graph import --type edn|sqlite --input <path> --graph <name>` - import a graph from EDN or SQLite (new graph only)
 
-For any command that requires `--repo`, if the target graph does not exist, the CLI returns `graph not exists` (except for `graph create`). `graph import` fails if the target graph already exists.
+For any command that requires `--graph`, if the target graph does not exist, the CLI returns `graph not exists` (except for `graph create`). `graph import` fails if the target graph already exists.
 
 Server commands:
 - `server list` - list running db-worker-node servers
-- `server status --repo <name>` - show server status for a graph
-- `server start --repo <name>` - start db-worker-node for a graph
-- `server stop --repo <name>` - stop db-worker-node for a graph
-- `server restart --repo <name>` - restart db-worker-node for a graph
+- `server status --graph <name>` - show server status for a graph
+- `server start --graph <name>` - start db-worker-node for a graph
+- `server stop --graph <name>` - stop db-worker-node for a graph
+- `server restart --graph <name>` - restart db-worker-node for a graph
 - `doctor [--dev-script]` - run runtime diagnostics for `db-worker-node.js`, `data-dir` permissions, and running server readiness (`--dev-script` checks `static/db-worker-node.js` explicitly)
 
 Server ownership behavior:
@@ -187,9 +187,9 @@ id8 └── b8
 Examples:
 
 ```bash
-node ./dist/logseq.js graph create --repo demo
-node ./dist/logseq.js graph export --type edn --file /tmp/demo.edn --repo demo
-node ./dist/logseq.js graph import --type edn --input /tmp/demo.edn --repo demo-import
+node ./dist/logseq.js graph create --graph demo
+node ./dist/logseq.js graph export --type edn --file /tmp/demo.edn --graph demo
+node ./dist/logseq.js graph import --type edn --input /tmp/demo.edn --graph demo-import
 node ./dist/logseq.js upsert block --target-page TestPage --content "hello world"
 node ./dist/logseq.js move --uuid <uuid> --target-page TargetPage
 node ./dist/logseq.js search "hello"

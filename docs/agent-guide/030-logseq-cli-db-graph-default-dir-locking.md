@@ -53,7 +53,7 @@ NOTE: I will write *all* tests before I add any implementation behavior.
 ## Integration sketch
 
 ```text
-CLI --repo demo
+CLI --graph demo
   -> command-core resolves internal repo: logseq_db_demo
   -> graph-dir resolver maps repo to graph key: demo
   -> fs paths use ~/logseq/graphs/demo

@@ -19,14 +19,14 @@ Related: Builds on docs/agent-guide/004-logseq-cli-verb-subcommands.md and docs/
 
 Prefer graph-scoped subcommands to keep import/export with graph management:
 
-- `logseq graph export --type edn --file <path> [--repo <graph>]`
-- `logseq graph export --type sqlite --file <path> [--repo <graph>]`
-- `logseq graph import --type edn --input <path> --repo <graph>`
-- `logseq graph import --type sqlite --input <path> --repo <graph>`
+- `logseq graph export --type edn --file <path> [--graph <graph>]`
+- `logseq graph export --type sqlite --file <path> [--graph <graph>]`
+- `logseq graph import --type edn --input <path> --graph <graph>`
+- `logseq graph import --type sqlite --input <path> --graph <graph>`
 
 Notes:
 - `graph import` only supports importing into a new graph name; it must not overwrite an existing graph.
-- `--repo` is required for import, and required unless the current graph is set in config for export.
+- `--graph` is required for import, and required unless the current graph is set in config for export.
 
 ## Current Capabilities (Baseline)
 
@@ -70,7 +70,7 @@ Notes:
 ## Edge Cases
 
 - Large SQLite exports may exceed JSON limits if not base64/transit encoded; ensure streaming-safe or chunked base64 handling.
-- Import should fail fast if the repo is missing and `--repo` is not provided, or if input file does not exist.
+- Import should fail fast if the repo is missing and `--graph` is not provided, or if input file does not exist.
 - SQLite import while the repo is open must close/reopen connections to avoid stale datascript state.
 - EDN import should validate the export shape and surface readable errors when EDN is invalid or incompatible.
 - Overwrite behavior should be explicit for SQLite imports to prevent accidental data loss.

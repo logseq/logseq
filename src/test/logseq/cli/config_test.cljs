@@ -24,22 +24,22 @@
   (let [dir (node-helper/create-tmp-dir)
         cfg-path (node-path/join dir "cli.edn")
         _ (fs/writeFileSync cfg-path
-                            (str "{:repo \"file-repo\" "
+                            (str "{:graph \"file-repo\" "
                                  ":data-dir \"file-data\" "
                                  ":timeout-ms 111 "
                                  ":output-format :edn}"))
-        env {"LOGSEQ_CLI_REPO" "env-repo"
+        env {"LOGSEQ_CLI_GRAPH" "env-repo"
              "LOGSEQ_CLI_DATA_DIR" "env-data"
              "LOGSEQ_CLI_TIMEOUT_MS" "222"
              "LOGSEQ_CLI_OUTPUT" "json"}
         opts {:config-path cfg-path
-              :repo "cli-repo"
+              :graph "cli-repo"
               :data-dir "cli-data"
               :timeout-ms 333
               :output-format :human}
         result (with-env env #(config/resolve-config opts))]
     (is (= cfg-path (:config-path result)))
-    (is (= "cli-repo" (:repo result)))
+    (is (= "cli-repo" (:graph result)))
     (is (= "cli-data" (:data-dir result)))
     (is (= 333 (:timeout-ms result)))
     (is (nil? (:auth-token result)))
@@ -49,11 +49,11 @@
 (deftest test-env-overrides-file
   (let [dir (node-helper/create-tmp-dir)
         cfg-path (node-path/join dir "cli.edn")
-        _ (fs/writeFileSync cfg-path "{:repo \"file-repo\" :data-dir \"file-data\"}")
-        env {"LOGSEQ_CLI_REPO" "env-repo"
+        _ (fs/writeFileSync cfg-path "{:graph \"file-repo\" :data-dir \"file-data\"}")
+        env {"LOGSEQ_CLI_GRAPH" "env-repo"
              "LOGSEQ_CLI_DATA_DIR" "env-data"}
         result (with-env env #(config/resolve-config {:config-path cfg-path}))]
-    (is (= "env-repo" (:repo result)))
+    (is (= "env-repo" (:graph result)))
     (is (= "env-data" (:data-dir result)))))
 
 (deftest test-output-format-env-overrides-file
@@ -87,22 +87,22 @@
 (deftest test-update-config
   (let [dir (node-helper/create-tmp-dir "cli")
         cfg-path (node-path/join dir "cli.edn")
-        _ (fs/writeFileSync cfg-path "{:repo \"old\"}")
-        _ (config/update-config! {:config-path cfg-path} {:repo "new"})
+        _ (fs/writeFileSync cfg-path "{:graph \"old\"}")
+        _ (config/update-config! {:config-path cfg-path} {:graph "new"})
         contents (.toString (fs/readFileSync cfg-path) "utf8")
         parsed (reader/read-string contents)]
-    (is (= "new" (:repo parsed)))))
+    (is (= "new" (:graph parsed)))))
 
 (deftest test-update-config-strips-removed-options
   (let [dir (node-helper/create-tmp-dir "cli")
         cfg-path (node-path/join dir "cli.edn")
-        _ (fs/writeFileSync cfg-path "{:repo \"old\"}")
+        _ (fs/writeFileSync cfg-path "{:graph \"old\"}")
         _ (config/update-config! {:config-path cfg-path}
-                                 {:repo "new"
+                                 {:graph "new"
                                   :auth-token "secret"
                                   :retries 2})
         contents (.toString (fs/readFileSync cfg-path) "utf8")
         parsed (reader/read-string contents)]
-    (is (= "new" (:repo parsed)))
+    (is (= "new" (:graph parsed)))
     (is (not (contains? parsed :auth-token)))
     (is (not (contains? parsed :retries)))))
