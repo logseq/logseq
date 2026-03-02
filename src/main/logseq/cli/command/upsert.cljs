@@ -126,10 +126,14 @@
         "only one of --id or --page is allowed"))
 
     :upsert-tag
-    (let [name (normalize-tag-name (:name opts))
-          selectors (filter some? [(:id opts) name])]
-      (when (> (count selectors) 1)
-        "only one of --id or --name is allowed"))
+    (let [name-provided? (contains? opts :name)
+          name (normalize-tag-name (:name opts))]
+      (cond
+        (and name-provided? (not (seq name)))
+        "tag name must not be blank"
+
+        :else
+        nil))
 
     nil))
 
@@ -258,11 +262,12 @@
 
         (some? id)
         {:ok? true
-         :action {:type :upsert-tag
-                  :mode :update
-                  :id id
-                  :repo repo
-                  :graph (core/repo->graph repo)}}
+         :action (cond-> {:type :upsert-tag
+                          :mode :update
+                          :id id
+                          :repo repo
+                          :graph (core/repo->graph repo)}
+                   (seq name) (assoc :name name))}
 
         (seq name)
         {:ok? true
@@ -437,6 +442,35 @@
       :else
       entity)))
 
+(def ^:private tag-rename-conflict-code
+  :tag-rename-conflict)
+
+(defn- normalized-tag-lookup-name
+  [value]
+  (some-> value normalize-tag-name common-util/page-name-sanity-lc))
+
+(defn- rename-target-same-as-current?
+  [entity target-name]
+  (= (:block/name entity)
+     (normalized-tag-lookup-name target-name)))
+
+(defn- rename-target-conflict
+  [entity target]
+  (let [target-id (:db/id target)
+        current-id (:db/id entity)]
+    (cond
+      (or (nil? target-id)
+          (= target-id current-id))
+      nil
+
+      (not (tag-entity? target))
+      {:code :tag-name-conflict
+       :message "tag already exists as a page and is not a tag"}
+
+      :else
+      {:code tag-rename-conflict-code
+       :message "rename target already exists as a tag"})))
+
 (defn- ensure-property-by-id!
   [config repo id]
   (p/let [entity (pull-entity-by-id config repo property-selector id)]
@@ -556,9 +590,25 @@
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
               update-by-id? (= :update (:mode action))]
         (if update-by-id?
-          (p/let [entity (ensure-tag-by-id! cfg (:repo action) (:id action))]
-            {:status :ok
-             :data {:result [(:db/id entity)]}})
+          (p/let [entity (ensure-tag-by-id! cfg (:repo action) (:id action))
+                  target-name (:name action)
+                  target (when (seq target-name)
+                           (pull-page-by-name cfg (:repo action) target-name tag-selector))
+                  conflict (when (and (seq target-name)
+                                      (not (rename-target-same-as-current? entity target-name)))
+                             (rename-target-conflict entity target))
+                  _ (when (and (seq target-name)
+                               (not conflict)
+                               (not (rename-target-same-as-current? entity target-name)))
+                      (transport/invoke cfg :thread-api/apply-outliner-ops false
+                                        [(:repo action)
+                                         [[:rename-page [(:block/uuid entity) target-name]]]
+                                         {}]))]
+            (if conflict
+              {:status :error
+               :error conflict}
+              {:status :ok
+               :data {:result [(:db/id entity)]}}))
           (p/let [existing (pull-page-by-name cfg (:repo action) (:name action)
                                               [:db/id :block/name :block/title
                                                {:block/tags [:db/ident]}])
