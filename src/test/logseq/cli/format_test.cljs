@@ -91,23 +91,23 @@
              result)))))
 
 (deftest test-human-output-add-upsert-remove
-  (testing "add block renders ids in two lines"
+  (testing "upsert block renders ids in two lines"
     (let [result (format/format-result {:status :ok
-                                        :command :add-block
+                                        :command :upsert-block
                                         :context {:repo "demo-repo"
                                                   :blocks ["a" "b"]}
                                         :data {:result [201 202]}}
                                        {:output-format nil})]
-      (is (= "Added blocks:\n[201 202]" result))))
+      (is (= "Upserted blocks:\n[201 202]" result))))
 
-  (testing "add page renders ids in two lines"
+  (testing "upsert page renders ids in two lines"
     (let [result (format/format-result {:status :ok
-                                        :command :add-page
+                                        :command :upsert-page
                                         :context {:repo "demo-repo"
                                                   :page "Home"}
                                         :data {:result [123]}}
                                        {:output-format nil})]
-      (is (= "Added page:\n[123]" result))))
+      (is (= "Upserted page:\n[123]" result))))
 
   (testing "upsert tag renders ids in two lines"
     (let [result (format/format-result {:status :ok
@@ -163,9 +163,9 @@
                                        {:output-format nil})]
       (is (= "Removed property: owner (repo: demo-repo)" result))))
 
-  (testing "update block renders a succinct success line"
+  (testing "upsert block update mode renders a succinct success line"
     (let [result (format/format-result {:status :ok
-                                        :command :update-block
+                                        :command :upsert-block
                                         :context {:repo "demo-repo"
                                                   :source "source-uuid"
                                                   :target "target-uuid"
@@ -175,17 +175,17 @@
                                                   :remove-properties [:logseq.property/deadline]}
                                         :data {:result {:ok true}}}
                                        {:output-format nil})]
-      (is (= "Updated block: source-uuid -> target-uuid (repo: demo-repo, tags:+1, properties:+1, remove-tags:+1, remove-properties:+1)" result))))
+      (is (= "Upserted block: source-uuid -> target-uuid (repo: demo-repo, tags:+1, properties:+1, remove-tags:+1, remove-properties:+1)" result))))
 
-  (testing "update without move target renders a succinct success line"
+  (testing "upsert block update without move target renders a succinct success line"
     (let [result (format/format-result {:status :ok
-                                        :command :update-block
+                                        :command :upsert-block
                                         :context {:repo "demo-repo"
                                                   :source "source-uuid"
                                                   :update-tags ["TagA"]}
                                         :data {:result {:ok true}}}
                                        {:output-format nil})]
-      (is (= "Updated block: source-uuid (repo: demo-repo, tags:+1)" result)))))
+      (is (= "Upserted block: source-uuid (repo: demo-repo, tags:+1)" result)))))
 
 (deftest test-human-output-graph-import-export
   (testing "graph export renders a succinct success line"
