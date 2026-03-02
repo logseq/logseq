@@ -5,7 +5,6 @@
    [frontend.components.icon :as icon-component]
    [frontend.handler.block :as block-handler]
    [goog.string :as gstring]
-   [logseq.shui.hooks :as hooks]
    [logseq.shui.ui :as shui]
    [rum.core :as rum]))
 
@@ -74,28 +73,13 @@
         text-badge (current-page-badge-node (:text-badge badge-placement))
         header-badge (current-page-badge-node (:header-badge badge-placement))
         [hover? set-hover?] (rum/use-state false)
-        mouse-highlighted? (and highlighted hoverable hover?)
-        keyboard-highlighted? (and highlighted (not hoverable))
-        interaction-bg "var(--lx-gray-03, var(--ls-a-chosen-bg, var(--ls-tertiary-background-color, rgba(0,0,0,0.10))))"
-        interaction-border "var(--ls-border-color, var(--lx-gray-08, rgba(0,0,0,0.24)))"
-        mouse-selected-border "var(--ls-border-color, var(--lx-gray-09, rgba(0,0,0,0.32)))"
-        keyboard-ring "var(--lx-accent-09, #3b82f6)"
-        keyboard-overlay "rgba(0,0,0,0.07)"]
+        keyboard-highlighted? (and highlighted (not hoverable))]
     [:div (merge
-           {:style (cond-> {:opacity 1
-                            :background-color "transparent"
-                            :box-shadow "inset 0 0 0 0 transparent"}
-                     (and hover? hoverable (not highlighted))
-                     (assoc :background-color interaction-bg
-                            :box-shadow (str "inset 0 0 0 1px " interaction-border))
-                     mouse-highlighted?
-                     (assoc :background-color interaction-bg
-                            :box-shadow (str "inset 0 0 0 1px " mouse-selected-border))
-                     keyboard-highlighted?
-                     (assoc :background-color interaction-bg
-                            :box-shadow (str "inset 0 0 0 9999px " keyboard-overlay
-                                             ", inset 0 0 0 2px " keyboard-ring)))
-            :data-keyboard-highlight (when keyboard-highlighted? true)
+           {:style {:opacity 1}
+            :data-cmdk-item true
+            :data-hoverable (when hoverable true)
+            :data-highlighted (when highlighted true)
+            :data-kb-highlighted (when keyboard-highlighted? true)
             :class (cond-> "flex flex-col transition-colors duration-75 ease-in"
                      hoverable (str " cursor-pointer")
                      rounded (str " rounded-lg")
