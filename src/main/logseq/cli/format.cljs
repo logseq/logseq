@@ -172,7 +172,7 @@
      headers
      (mapv #(format-list-row % include-ident? now-ms) items))))
 
-(defn- format-list-tag-or-property
+(defn- format-list-tag
   [items now-ms]
   (let [items (or items [])
         include-ident? (boolean (some :db/ident items))
@@ -182,6 +182,35 @@
     (format-counted-table
      headers
      (mapv #(format-list-row % include-ident? now-ms) items))))
+
+(defn- normalize-property-type
+  [value]
+  (cond
+    (keyword? value) (name value)
+    (nil? value) "-"
+    :else (str value)))
+
+(defn- format-list-property-row
+  [item include-ident? now-ms]
+  (let [base [(or (:db/id item) (:id item))
+              (or (:title item) (:block/title item) (:name item))
+              (normalize-property-type (:logseq.property/type item))]
+        with-ident (cond-> base
+                     include-ident? (conj (:db/ident item)))
+        updated (human-ago (or (:updated-at item) (:block/updated-at item)) now-ms)
+        created (human-ago (or (:created-at item) (:block/created-at item)) now-ms)]
+    (conj with-ident updated created)))
+
+(defn- format-list-property
+  [items now-ms]
+  (let [items (or items [])
+        include-ident? (boolean (some :db/ident items))
+        headers (into ["ID" "TITLE" "TYPE"]
+                      (concat (or (maybe-ident-header items) [])
+                              ["UPDATED-AT" "CREATED-AT"]))]
+    (format-counted-table
+     headers
+     (mapv #(format-list-property-row % include-ident? now-ms) items))))
 
 (defn- format-graph-list
   [graphs]
@@ -345,7 +374,8 @@
         (:server-start :server-stop :server-restart)
         (format-server-action command data)
         :list-page (format-list-page (:items data) now-ms)
-        (:list-tag :list-property) (format-list-tag-or-property (:items data) now-ms)
+        :list-tag (format-list-tag (:items data) now-ms)
+        :list-property (format-list-property (:items data) now-ms)
         :upsert-block (format-upsert-block context (:result data))
         :upsert-page (format-upsert-page context (:result data))
         :upsert-tag (format-upsert-tag context (:result data))
