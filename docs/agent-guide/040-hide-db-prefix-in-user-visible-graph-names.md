@@ -59,7 +59,7 @@ I will add RTC tests in `/Users/rcmerci/gh-repos/logseq/src/test/frontend/handle
 
 I will extend CLI formatter tests in `/Users/rcmerci/gh-repos/logseq/src/test/logseq/cli/format_test.cljs` to assert user-facing fields strip exactly one prefix and never introduce additional prefixes.
 
-I will extend CLI command tests in `/Users/rcmerci/gh-repos/logseq/src/test/logseq/cli/commands_test.cljs` for `graph list` and server output paths with unprefixed and prefix-like graph names, and assert prefix-like `--repo` values are treated as graph-name content instead of invalid input.
+I will extend CLI command tests in `/Users/rcmerci/gh-repos/logseq/src/test/logseq/cli/commands_test.cljs` for `graph list` and server output paths with unprefixed and prefix-like graph names, and assert prefix-like `--graph` values are treated as graph-name content instead of invalid input.
 
 I will add legacy graph discovery tests in `/Users/rcmerci/gh-repos/logseq/src/test/logseq/cli/common/graph_test.cljs` to verify old directory names do not produce multi-prefix repo ids.
 
@@ -77,7 +77,7 @@ NOTE: I will write all tests before I add any implementation behavior.
 2. Add failing tests in `/Users/rcmerci/gh-repos/logseq/src/test/frontend/db/persist_test.cljs` to verify worker and Electron graph sources are canonicalized to one internal prefix.
 3. Add failing tests in `/Users/rcmerci/gh-repos/logseq/src/test/frontend/handler/db_based/rtc_test.cljs` for remote graph mapping and download paths with prefixed and double-prefixed payload names.
 4. Extend `/Users/rcmerci/gh-repos/logseq/src/test/logseq/cli/format_test.cljs` with failing cases where `:repo` or `:graph` includes one or two prefixes and output uses one-layer stripping only.
-5. Extend `/Users/rcmerci/gh-repos/logseq/src/test/logseq/cli/commands_test.cljs` with failing cases for graph list and server output using unprefixed and prefix-like `--repo` values, and assert prefix-like values are not rejected by argument validation.
+5. Extend `/Users/rcmerci/gh-repos/logseq/src/test/logseq/cli/commands_test.cljs` with failing cases for graph list and server output using unprefixed and prefix-like `--graph` values, and assert prefix-like values are not rejected by argument validation.
 6. Add failing tests in `/Users/rcmerci/gh-repos/logseq/src/test/logseq/cli/common/graph_test.cljs` for legacy directory names that already contain `logseq_db_`.
 7. Run focused tests and confirm failures reflect behavior gaps rather than setup errors.
 
@@ -116,7 +116,7 @@ NOTE: I will write all tests before I add any implementation behavior.
 26. Update `/Users/rcmerci/gh-repos/logseq/src/main/logseq/cli/command/core.cljs` so `repo->graph` strips exactly one leading prefix for user-visible output.
 27. Verify `/Users/rcmerci/gh-repos/logseq/src/main/logseq/cli/format.cljs` uses one-layer display normalization consistently for human, JSON, and EDN user-facing graph fields.
 28. Update `/Users/rcmerci/gh-repos/logseq/deps/cli/src/logseq/cli/commands/graph.cljs` to canonicalize internal repo identifiers before list rendering and server-target resolution.
-29. Ensure CLI parsing and command execution treat `--repo` as a graph-name string, so leading `logseq_db_` is interpreted as part of graph name when present and is not rejected by input validation.
+29. Ensure CLI parsing and command execution treat `--graph` as a graph-name string, so leading `logseq_db_` is interpreted as part of graph name when present and is not rejected by input validation.
 
 ### Phase 7: Verification and release gate.
 
@@ -124,11 +124,11 @@ NOTE: I will write all tests before I add any implementation behavior.
 31. Run `bb dev:test -v 'frontend.db.persist-test'` and confirm merged-source canonicalization behavior is stable.
 32. Run `bb dev:test -v 'frontend.handler.db-based.rtc-test'` and confirm remote ingestion cannot produce multi-prefix repos.
 33. Run `bb dev:test -v 'logseq.cli.format-test'` and confirm CLI display fields apply one-layer strip behavior.
-34. Run `bb dev:test -v 'logseq.cli.commands-test'` and confirm graph command behavior remains stable with unprefixed and prefix-like `--repo` input.
+34. Run `bb dev:test -v 'logseq.cli.commands-test'` and confirm graph command behavior remains stable with unprefixed and prefix-like `--graph` input.
 35. Run `bb dev:test -v 'logseq.cli.common.graph-test'` and confirm legacy graph discovery does not emit double-prefixed repo names.
 36. Run `bb dev:lint-and-test` and confirm `0 failures, 0 errors`.
 37. Perform a manual graph-list smoke check on web and Electron to confirm normal graphs display without prefix and legacy doubles display with one remaining prefix.
-38. Perform a manual CLI smoke check with `logseq graph list`, `logseq server status --repo demo`, and `logseq server status --repo logseq_db_demo` to confirm both inputs are accepted as graph names.
+38. Perform a manual CLI smoke check with `logseq graph list`, `logseq server status --graph demo`, and `logseq server status --graph logseq_db_demo` to confirm both inputs are accepted as graph names.
 
 ## Edge cases
 
@@ -141,9 +141,9 @@ NOTE: I will write all tests before I add any implementation behavior.
 | Legacy disk directory is named `logseq_db_logseq_db_demo`. | Discovery canonicalization collapses to internal repo `logseq_db_demo`. |
 | Remote graph payload returns `graph-name` as `logseq_db_demo`. | RTC mapping keeps internal repo `logseq_db_demo` and user-visible name `demo`. |
 | Remote graph payload returns `graph-name` as `logseq_db_logseq_db_demo`. | RTC mapping canonicalizes to internal repo `logseq_db_demo`, and user-visible name is `demo` after one-layer display strip. |
-| CLI receives `--repo demo`. | Command works and output graph name is `demo`. |
-| CLI receives `--repo logseq_db_demo`. | Command treats `logseq_db_` as part of graph name and does not fail argument validation. |
-| CLI receives `--repo logseq_db_logseq_db_demo`. | Command treats the full value as graph name content and does not fail argument validation. |
+| CLI receives `--graph demo`. | Command works and output graph name is `demo`. |
+| CLI receives `--graph logseq_db_demo`. | Command treats `logseq_db_` as part of graph name and does not fail argument validation. |
+| CLI receives `--graph logseq_db_logseq_db_demo`. | Command treats the full value as graph name content and does not fail argument validation. |
 | Non-user-visible fields like `data-testid` include repo id. | Existing selectors remain unchanged unless canonicalization is required to prevent duplicate graph entries. |
 
 ## Verification commands and expected outputs
@@ -164,7 +164,7 @@ Web and Electron manual checks should show no new multi-prefix repo entries.
 
 Web and Electron display should strip one prefix only at render time.
 
-CLI human output should match one-layer strip semantics, and CLI `--repo` should treat prefix-like values as normal graph names.
+CLI human output should match one-layer strip semantics, and CLI `--graph` should treat prefix-like values as normal graph names.
 
 ## Testing Details
 
@@ -184,7 +184,7 @@ CLI tests assert command behavior and output formatting remain stable for unpref
 - Reuse shared helpers across frontend, Electron, and CLI.
 - Preserve `data-testid` compatibility unless canonicalization makes key updates unavoidable.
 - Avoid one-time metadata migration for existing persisted graphs.
-- Treat CLI `--repo` input as raw graph name where `logseq_db_` may be part of the name.
+- Treat CLI `--graph` input as raw graph name where `logseq_db_` may be part of the name.
 - Keep internal thread-api contracts based on prefixed repo ids.
 - Follow `@test-driven-development` for RED, GREEN, and REFACTOR order.
 - Validate final patch with `@prompts/review.md` checklist.
@@ -197,7 +197,7 @@ Decision: The implementation focus is to identify and fix all paths that can cre
 
 Decision: This change does not include a one-time metadata migration for existing persisted legacy values.
 
-Decision: CLI `--repo` option treats leading `logseq_db_` as graph-name content, not as forbidden prefix.
+Decision: CLI `--graph` option treats leading `logseq_db_` as graph-name content, not as forbidden prefix.
 
 Decision: Treat `data-testid` stability as a strict compatibility requirement for `clj-e2e`.
 
