@@ -90,9 +90,7 @@
                  (.on client "message" push-message)
                  (.on client "open"
                       (fn []
-                        (.send client (protocol/encode-message {:type "hello"
-                                                                :client "test"
-                                                                :since 0}))))
+                        (.send client (protocol/encode-message {:type "hello" :client "test"}))))
                  (p/let [_ (p/delay 50)
                          tx-data [{:block/uuid (random-uuid)
                                    :block/content "ws"}]

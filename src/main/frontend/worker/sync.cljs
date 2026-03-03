@@ -1445,6 +1445,9 @@
                   (require-non-negative remote-tx {:repo repo :type "hello"})
                   (mark-hello-received! client local-tx remote-tx)
                   (broadcast-rtc-state! client)
+                  (when (> remote-tx local-tx)
+                    (mark-first-pull-sent! client :hello local-tx)
+                    (send! (:ws client) {:type "pull" :since local-tx}))
                   (enqueue-asset-sync! repo client)
                   (flush-pending! repo client))
         "online-users" (let [users (:online-users message)]
@@ -1614,8 +1617,7 @@
               (touch-last-ws-message! updated)
               (set-ws-state! updated :open)
               (mark-ws-open! updated)
-              (let [local-tx (or (client-op/get-local-tx repo) 0)]
-                (send! ws {:type "hello" :client repo :since local-tx}))
+              (send! ws {:type "hello" :client repo})
               (enqueue-asset-sync! repo updated)))
       (close-stale-ws-loop updated ws))))
 

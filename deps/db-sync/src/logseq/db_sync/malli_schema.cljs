@@ -12,8 +12,7 @@
    ["hello"
     [:map
      [:type [:= "hello"]]
-     [:client :string]
-     [:since :int]]]
+     [:client :string]]]
    ["presence"
     [:map
      [:type [:= "presence"]]
