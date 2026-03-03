@@ -134,6 +134,28 @@
 (defn- auth-token []
   (worker-state/get-id-token))
 
+(defn- id-token-expired?
+  [token]
+  (if-not (string? token)
+    true
+    (try
+      (let [exp-ms (some-> token worker-util/parse-jwt :exp (* 1000))]
+        (or (not (number? exp-ms))
+            (<= exp-ms (common-util/time-ms))))
+      (catch :default _
+        true))))
+
+(defn- <resolve-ws-token
+  []
+  (let [token (auth-token)]
+    (if (id-token-expired? token)
+      (p/let [resp (worker-state/<invoke-main-thread :thread-api/ensure-id&access-token)
+              refreshed-token (:id-token resp)]
+        (when (string? refreshed-token)
+          (worker-state/set-new-state! {:auth/id-token refreshed-token})
+          refreshed-token))
+      (p/resolved token))))
+
 (defn- get-user-uuid []
   (some-> (worker-state/get-id-token)
           worker-util/parse-jwt
@@ -1376,8 +1398,12 @@
                             (when-let [current @worker-state/*db-sync-client]
                               (when (and (= (:repo current) repo)
                                          (= (:graph-id current) (:graph-id client)))
-                                (let [updated (connect! repo current url)]
-                                  (reset! worker-state/*db-sync-client updated)))))
+                                (-> (p/let [token (<resolve-ws-token)
+                                            updated (connect! repo current url token)]
+                                      (reset! worker-state/*db-sync-client updated))
+                                    (p/catch (fn [error]
+                                               (log/error :db-sync/ws-reconnect-failed {:repo repo :error error})
+                                               (schedule-reconnect! repo current url :connect-failed)))))))
                           delay)]
           (swap! reconnect assoc :timer timeout-id :attempt (inc attempt))
           (log/info :db-sync/ws-reconnect-scheduled
@@ -1443,20 +1469,21 @@
       (catch :default _
         nil))))
 
-(defn- connect! [repo client url]
+(defn- connect! [repo client url token]
   (when (:ws client)
     (stop-client! client))
-  (let [ws (js/WebSocket. (append-token url (auth-token)))
-        updated (assoc client :ws ws)]
-    (attach-ws-handlers! repo updated ws url)
-    (set! (.-onopen ws)
-          (fn [_]
-            (reset-reconnect! updated)
-            (touch-last-ws-message! updated)
-            (set-ws-state! updated :open)
-            (send! ws {:type "hello" :client repo})
-            (enqueue-asset-sync! repo updated)))
-    (close-stale-ws-loop updated ws)))
+  (when token
+    (let [ws (js/WebSocket. (append-token url token))
+          updated (assoc client :ws ws)]
+      (attach-ws-handlers! repo updated ws url)
+      (set! (.-onopen ws)
+            (fn [_]
+              (reset-reconnect! updated)
+              (touch-last-ws-message! updated)
+              (set-ws-state! updated :open)
+              (send! ws {:type "hello" :client repo})
+              (enqueue-asset-sync! repo updated)))
+      (close-stale-ws-loop updated ws))))
 
 (defn stop!
   []
@@ -1505,7 +1532,8 @@
                 url (format-ws-url base graph-id)
                 _ (ensure-client-graph-uuid! repo graph-id)
                 connected (assoc client :graph-id graph-id)
-                connected (connect! repo connected url)]
+                token (<resolve-ws-token)
+                connected (connect! repo connected url token)]
             (reset! worker-state/*db-sync-client connected)
             nil))
          (p/finally
