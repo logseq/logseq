@@ -282,12 +282,7 @@
       (command-core/ok-result :version opts [] summary)
 
       (empty? args)
-      (if (:help opts)
-        (command-core/help-result summary)
-        {:ok? false
-         :error {:code :missing-command
-                 :message "missing command"}
-         :summary summary})
+      (command-core/help-result summary)
 
       (and (= 1 (count args)) (#{"graph" "server" "list" "upsert" "remove" "query"} (first args)))
       (command-core/help-result (command-core/group-summary (first args) table))
@@ -304,12 +299,7 @@
           (let [{:keys [cause] :as data} (ex-data e)]
             (cond
               (= cause :input-exhausted)
-              (if (:help opts)
-                (command-core/help-result summary)
-                {:ok? false
-                 :error {:code :missing-command
-                         :message "missing command"}
-                 :summary summary})
+              (command-core/help-result summary)
 
               (= cause :no-match)
               (command-core/unknown-command-result summary (str "unknown command: " (unknown-command-message data)))
