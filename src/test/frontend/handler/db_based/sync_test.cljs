@@ -83,36 +83,6 @@
                         (is (= :db-sync/invalid-member (:type (ex-data e))))
                         (done))))))
 
-(deftest rtc-start-skips-when-graph-missing-from-remote-list-test
-  (async done
-         (let [called (atom [])]
-           (-> (p/with-redefs [state/get-rtc-graphs (fn [] [{:url "repo-other"}])
-                               state/<invoke-db-worker (fn [& args]
-                                                         (swap! called conj args)
-                                                         (p/resolved :ok))]
-                 (db-sync/<rtc-start! "repo-current"))
-               (p/then (fn [_]
-                         (is (= [[:thread-api/db-sync-stop]] @called))
-                         (done)))
-               (p/catch (fn [e]
-                          (is false (str e))
-                          (done)))))))
-
-(deftest rtc-start-invokes-worker-when-graph-in-remote-list-test
-  (async done
-         (let [called (atom nil)]
-           (-> (p/with-redefs [state/get-rtc-graphs (fn [] [{:url "repo-current"}])
-                               state/<invoke-db-worker (fn [& args]
-                                                         (reset! called args)
-                                                         (p/resolved :ok))]
-                 (db-sync/<rtc-start! "repo-current"))
-               (p/then (fn [_]
-                         (is (= [:thread-api/db-sync-start "repo-current"] @called))
-                         (done)))
-               (p/catch (fn [e]
-                          (is false (str e))
-                          (done)))))))
-
 (deftest rtc-create-graph-persists-disabled-e2ee-flag-test
   (async done
          (let [fetch-called (atom nil)

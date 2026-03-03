@@ -32,7 +32,7 @@
         (c.m/<? (rtc-handler/<rtc-start! (state/get-current-repo) :stop-before-start? false)))))))
 
 (run-background-task-when-not-publishing
- ;; stop rtc when [graph-switch user-logout]
+ ;; stop rtc when [user-logout]
  ::stop-rtc-if-needed
  (m/reduce
   (constantly nil)

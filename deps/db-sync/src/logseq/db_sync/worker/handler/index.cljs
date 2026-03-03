@@ -336,25 +336,25 @@
    :access-check-ms jwt-verify-ms})
 
 (defn- fresh-cache?
-  [cached-at now-ms]
+  [cached-at current-ms]
   (and (number? cached-at)
-       (< (- now-ms cached-at) graph-access-cache-ttl-ms)))
+       (< (- current-ms cached-at) graph-access-cache-ttl-ms)))
 
 (defn- lookup-graph-access-cache
-  [graph-id token now-ms]
+  [graph-id token current-ms]
   (let [cache-key [graph-id token]]
     (when-let [{:keys [allowed? cached-at]} (get @*graph-access-cache cache-key)]
-      (if (fresh-cache? cached-at now-ms)
+      (if (fresh-cache? cached-at current-ms)
         {:allowed? allowed?}
         (do
           (swap! *graph-access-cache dissoc cache-key)
           nil)))))
 
 (defn- prune-graph-access-cache
-  [cache now-ms]
+  [cache current-ms]
   (let [fresh (into {}
                     (filter (fn [[_ {:keys [cached-at]}]]
-                              (fresh-cache? cached-at now-ms)))
+                              (fresh-cache? cached-at current-ms)))
                     cache)]
     (if (<= (count fresh) graph-access-cache-capacity)
       fresh
@@ -365,13 +365,13 @@
              (into {}))))))
 
 (defn- cache-graph-access!
-  [graph-id token allowed? now-ms]
+  [graph-id token allowed? current-ms]
   (let [cache-key [graph-id token]]
     (swap! *graph-access-cache
            (fn [cache]
              (-> cache
-                 (assoc cache-key {:allowed? allowed? :cached-at now-ms})
-                 (prune-graph-access-cache now-ms))))))
+                 (assoc cache-key {:allowed? allowed? :cached-at current-ms})
+                 (prune-graph-access-cache current-ms))))))
 
 (defn graph-access-response-with-timing
   [request env graph-id]

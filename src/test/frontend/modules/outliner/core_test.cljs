@@ -477,6 +477,36 @@
           (is (= "2" (:block/title (get-block (first replaced-children))))))
         (is (= "3" (:block/title (get-block (first new-top-level)))))))))
 
+(deftest test-cut-paste-parent-child-into-empty-block
+  (testing "keep-uuid + replace-empty-target remaps child parent to replaced target uuid"
+    (transact-tree! [[25]])
+    (db/transact! test-db [{:block/uuid 25
+                            :block/title ""}])
+    (let [target-block (get-block 25)
+          copied-blocks (->> (build-blocks [[101 [[102]]]])
+                             (map (fn [block]
+                                    (case (:block/uuid block)
+                                      101 (assoc block :block/title "parent")
+                                      102 (-> block
+                                              (assoc :block/title "child")
+                                              ;; Simulate clipboard payload parent lookup format.
+                                              (assoc :block/parent [:block/uuid 101]))
+                                      block))))]
+      (outliner-tx/transact!
+       (transact-opts)
+       (outliner-core/insert-blocks! (db/get-db test-db false)
+                                     copied-blocks
+                                     target-block
+                                     {:sibling? true
+                                      :keep-uuid? true
+                                      :outliner-op :paste
+                                      :replace-empty-target? true}))
+      (is (= "parent" (:block/title (get-block 25))))
+      (is (= [25] (get-children 1)))
+      (let [children (get-children 25)]
+        (is (= 1 (count children)))
+        (is (= "child" (:block/title (get-block (first children)))))))))
+
 (deftest test-batch-transact
   (testing "add 4, 5 after 2 and delete 3"
     (let [tree' [[10 [[2] [3]]]]]
