@@ -697,6 +697,26 @@
             (is (empty? (map :entity (:errors validation)))
                 (str (:errors validation)))))))))
 
+(deftest ^:long remote-retract-required-page-attr-is-ignored-test
+  (testing "remote tx retracting required page attrs should be ignored"
+    (let [{:keys [conn parent]} (setup-parent-child)
+          page (:block/page parent)
+          page-id (:db/id page)
+          updated-at (:block/updated-at page)
+          malformed-tx [[:db/retract page-id :block/updated-at updated-at]]]
+      (with-datascript-conns conn nil
+        (fn []
+          (is (nil? (try
+                      (#'db-sync/apply-remote-tx! test-repo nil malformed-tx)
+                      nil
+                      (catch :default e
+                        e))))
+          (let [page' (d/entity @conn page-id)
+                validation (db-validate/validate-local-db! @conn)]
+            (is (number? (:block/updated-at page')))
+            (is (empty? (map :entity (:errors validation)))
+                (str (:errors validation)))))))))
+
 (deftest ^:long offload-large-title-test
   (testing "large titles are offloaded to object storage with placeholder"
     (async done

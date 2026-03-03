@@ -702,6 +702,18 @@
         tx-data')
       tx-data)))
 
+(def ^:private non-retractable-block-attrs
+  #{:block/created-at :block/updated-at :block/title})
+
+(defn- drop-non-retractable-attr-datoms
+  [tx-data]
+  (remove (fn [item]
+            (and (vector? item)
+                 (>= (count item) 3)
+                 (= :db/retract (first item))
+                 (contains? non-retractable-block-attrs (nth item 2))))
+          tx-data))
+
 (defn- sanitize-tx-data
   [db tx-data local-deleted-ids]
   (let [sanitized-tx-data (->> tx-data
@@ -709,7 +721,7 @@
                                (remove (fn [item]
                                          (or (= :db/retractEntity (first item))
                                              (and (= :db/retract (first item))
-                                                  (contains? #{:block/created-at :block/updated-at :block/title}
+                                                  (contains? non-retractable-block-attrs
                                                              (nth item 2)))
                                              (contains? local-deleted-ids (get-lookup-id (last item))))))
                                ;; Notice: rebase should generate larger tx-id than reverse tx
@@ -1240,6 +1252,7 @@
     (if-let [conn (worker-state/get-datascript-conn repo)]
       (let [tx-data (->> tx-data*
                          (db-normalize/remove-retract-entity-ref @conn)
+                         drop-non-retractable-attr-datoms
                          (#(drop-anonymous-temp-entity-datoms @conn %)))
             local-txs (pending-txs repo)
             reversed-tx-data (get-reverse-tx-data local-txs)
