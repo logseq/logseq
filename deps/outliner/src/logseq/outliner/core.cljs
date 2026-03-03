@@ -560,7 +560,7 @@
                       (if keep-uuid?
                         block-uuids
                         (repeatedly common-uuid/gen-uuid)))
-        uuids (if (and (not keep-uuid?) replace-empty-target?)
+        uuids (if replace-empty-target?
                 (assoc uuids (:block/uuid (first blocks)) (:block/uuid target-block))
                 uuids)
         id->new-uuid (->> (map (fn [block] (when-let [id (:db/id block)]

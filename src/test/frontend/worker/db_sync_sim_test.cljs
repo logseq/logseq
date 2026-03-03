@@ -1,7 +1,6 @@
 (ns frontend.worker.db-sync-sim-test
   (:require [cljs.test :refer [deftest is testing]]
             [clojure.data :as data]
-            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.state :as worker-state]
@@ -207,7 +206,7 @@
 (defn- server-pull [server since]
   (let [{:keys [txs]} @server]
     (->> (filter (fn [{:keys [t]}] (> t since)) txs)
-         (mapcat :tx))))
+         (mapv :tx))))
 
 (defn- server-upload! [server t-before tx-data]
   (swap! server
@@ -234,10 +233,10 @@
           server-t (:t @server)]
       ;; (prn :debug :repo repo :local-tx local-tx :server-t server-t)
       (when (< local-tx server-t)
-        (let [tx (server-pull server local-tx)]
+        (let [txs (server-pull server local-tx)]
           ;; (prn :debug :apply-remote-tx :repo repo
           ;;      :tx tx)
-          (#'db-sync/apply-remote-tx! repo client tx)
+          (#'db-sync/apply-remote-tx! repo client txs)
           (client-op/update-local-tx repo server-t)
           (reset! progress? true)))
       (let [pending (#'db-sync/pending-txs repo)
@@ -371,9 +370,8 @@
       (let [parent-uuid (:block/uuid parent)
             parent (d/entity db [:block/uuid parent-uuid])]
         (when parent
-          (let [uuid ((or gen-uuid random-uuid))
-                title (str "Block-" (rand-int! rng 1000000))]
-            (create-block! conn parent title uuid)
+          (let [uuid ((or gen-uuid random-uuid))]
+            (create-block! conn parent "" uuid)
             (swap! state update :blocks conj uuid)
             {:op :create-block :uuid uuid :parent parent-uuid}))))))
 
@@ -384,7 +382,7 @@
         block (d/entity db [:block/uuid (:block/uuid ent)])]
     (when (and block (not (ldb/page? block)))
       (let [uuid (:block/uuid block)
-            new-title (string/replace (:block/title (d/entity @conn [:block/uuid uuid])) "block" "title")]
+            new-title (str "title-" (:db/id block))]
         (update-title! conn uuid new-title)
         {:op :update-title :uuid uuid :title new-title}))))
 

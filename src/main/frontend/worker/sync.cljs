@@ -134,6 +134,28 @@
 (defn- auth-token []
   (worker-state/get-id-token))
 
+(defn- id-token-expired?
+  [token]
+  (if-not (string? token)
+    true
+    (try
+      (let [exp-ms (some-> token worker-util/parse-jwt :exp (* 1000))]
+        (or (not (number? exp-ms))
+            (<= exp-ms (common-util/time-ms))))
+      (catch :default _
+        true))))
+
+(defn- <resolve-ws-token
+  []
+  (let [token (auth-token)]
+    (if (id-token-expired? token)
+      (p/let [resp (worker-state/<invoke-main-thread :thread-api/ensure-id&access-token)
+              refreshed-token (:id-token resp)]
+        (when (string? refreshed-token)
+          (worker-state/set-new-state! {:auth/id-token refreshed-token})
+          refreshed-token))
+      (p/resolved token))))
+
 (defn- get-user-uuid []
   (some-> (worker-state/get-id-token)
           worker-util/parse-jwt
@@ -500,48 +522,158 @@
              (= :block/uuid (first x)))
     (second x)))
 
-(defn- drop-anonymous-temp-entity-datoms
-  "Drop malformed temp entities from remote txs.
-   A temp entity must declare one identity attr (:block/uuid or :db/ident)
-   in its :db/add datoms; otherwise it can create anonymous entities that fail validation."
+(defn- canonical-entity-id
+  [db e]
+  (cond
+    (vector? e) (or (get-lookup-id e) e)
+    (and (number? e) (not (neg? e))) (or (:block/uuid (d/entity db e)) e)
+    :else e))
+
+(defn- remote-updated-attr-keys
   [db tx-data]
-  (let [identity-attrs #{:block/uuid :db/ident}
-        temp-id? (fn [x]
-                   (or (string? x)
-                       (and (integer? x) (neg? x))))
-        add-attrs-by-entity
-        (reduce (fn [acc item]
-                  (if (and (vector? item)
-                           (= :db/add (first item))
-                           (>= (count item) 4))
-                    (update acc (second item) (fnil conj #{}) (nth item 2))
-                    acc))
-                {}
-                tx-data)
-        dropped-entities
-        (->> add-attrs-by-entity
-             (keep (fn [[entity attrs]]
-                     (when (and (temp-id? entity)
-                                (empty? (set/intersection identity-attrs attrs)))
-                       entity)))
-             set)]
-    (if (seq dropped-entities)
-      (let [tx-data' (->> tx-data
-                          (remove (fn [item]
-                                    (and (vector? item)
-                                         (>= (count item) 2)
-                                         (contains? dropped-entities (second item)))))
-                          (remove (fn [item]
-                                    (and (vector? item)
-                                         (>= (count item) 4)
-                                         (keyword? (nth item 2))
-                                         (= :db.type/ref (:db/valueType (d/entity db (nth item 2))))
-                                         (contains? dropped-entities (nth item 3))))))]
-        (log/warn :db-sync/drop-anonymous-temp-entities
-                  {:count (count dropped-entities)
-                   :entities dropped-entities})
-        tx-data')
+  (->> tx-data
+       (keep (fn [item]
+               (when (and (vector? item)
+                          (>= (count item) 4)
+                          (contains? #{:db/add :db/retract} (first item)))
+                 [(canonical-entity-id db (second item))
+                  (nth item 2)])))
+       set))
+
+(defn- drop-remote-conflicted-local-tx
+  [db remote-updated-keys tx-data]
+  (if (seq remote-updated-keys)
+    (remove (fn [item]
+              (and (vector? item)
+                   (>= (count item) 4)
+                   (contains? #{:db/add :db/retract} (first item))
+                   (contains? remote-updated-keys
+                              [(canonical-entity-id db (second item))
+                               (nth item 2)])))
+            tx-data)
+    tx-data))
+
+(defn- remote-temp-id?
+  [x]
+  (or (and (integer? x) (neg? x))
+      (string? x)))
+
+(defn- remappable-remote-temp-id?
+  [x]
+  (and (integer? x) (neg? x)))
+
+(defn- remap-remote-batch-temp-ids
+  [batch-index tx-data]
+  (let [ops #{:db/add :db/retract :db/retractEntity}
+        entity-temp-ids (->> tx-data
+                             (keep (fn [item]
+                                     (when (and (vector? item)
+                                                (>= (count item) 2)
+                                                (contains? ops (first item))
+                                                (remappable-remote-temp-id? (second item)))
+                                       (second item))))
+                             distinct)
+        temp-id-map (when (seq entity-temp-ids)
+                      (zipmap entity-temp-ids
+                              (map-indexed (fn [idx _]
+                                             (str "remote-batch-" batch-index "-tempid-" idx))
+                                           entity-temp-ids)))]
+    (if (seq temp-id-map)
+      (mapv (fn [item]
+              (if (and (vector? item)
+                       (>= (count item) 2)
+                       (contains? ops (first item)))
+                (let [entity (second item)
+                      item' (if-let [entity' (get temp-id-map entity)]
+                              (assoc item 1 entity')
+                              item)]
+                  (cond-> item'
+                    (>= (count item') 4)
+                    (#(if-let [value' (get temp-id-map (nth % 3))]
+                        (assoc % 3 value')
+                        %))
+
+                    (>= (count item') 5)
+                    (#(if-let [tx' (get temp-id-map (nth % 4))]
+                        (assoc % 4 tx')
+                        %))))
+                item))
+            tx-data)
       tx-data)))
+
+(defn- lookup-ref?
+  [x]
+  (and (vector? x)
+       (= 2 (count x))
+       (keyword? (first x))))
+
+(defn- created-lookup->temp-id
+  [tx-data]
+  (->> tx-data
+       (keep (fn [item]
+               (when (and (vector? item)
+                          (= :db/add (first item))
+                          (>= (count item) 4)
+                          (contains? #{:block/uuid :db/ident} (nth item 2))
+                          (remote-temp-id? (second item)))
+                 [[(nth item 2) (nth item 3)]
+                  (second item)])))
+       (into {})))
+
+(defn- resolve-lookup-refs
+  [lookup->temp-id tx-data]
+  (if (seq lookup->temp-id)
+    (mapv (fn [item]
+            (if (and (vector? item)
+                     (>= (count item) 2)
+                     (= :db/add (first item)))
+              (let [entity (second item)
+                    item' (if-let [entity' (and (lookup-ref? entity)
+                                                (get lookup->temp-id entity))]
+                            (assoc item 1 entity')
+                            item)]
+                (if (>= (count item') 4)
+                  (let [value (nth item' 3)]
+                    (if-let [value' (and (lookup-ref? value)
+                                         (get lookup->temp-id value))]
+                      (assoc item' 3 value')
+                      item'))
+                  item'))
+              item))
+          tx-data)
+    tx-data))
+
+(defn- flatten-batched-remote-tx-data
+  [tx-data*]
+  (loop [remaining (map-indexed vector tx-data*)
+         lookup->temp-id {}
+         acc []]
+    (if-let [[batch-index tx-data] (first remaining)]
+      (let [remapped-batch (remap-remote-batch-temp-ids batch-index tx-data)
+            lookup->temp-id (merge lookup->temp-id (created-lookup->temp-id remapped-batch))
+            resolved-batch (resolve-lookup-refs lookup->temp-id remapped-batch)]
+        (recur (rest remaining)
+               lookup->temp-id
+               (into acc resolved-batch)))
+      acc)))
+
+(defn- batched-remote-tx-data?
+  [tx-data*]
+  (and (seq tx-data*)
+       (sequential? (first tx-data*))
+       (sequential? (first (first tx-data*)))))
+
+(def ^:private non-retractable-block-attrs
+  #{:block/created-at :block/updated-at :block/title})
+
+(defn- drop-non-retractable-attr-datoms
+  [tx-data]
+  (remove (fn [item]
+            (and (vector? item)
+                 (>= (count item) 3)
+                 (= :db/retract (first item))
+                 (contains? non-retractable-block-attrs (nth item 2))))
+          tx-data))
 
 (defn- sanitize-tx-data
   [db tx-data local-deleted-ids]
@@ -550,7 +682,7 @@
                                (remove (fn [item]
                                          (or (= :db/retractEntity (first item))
                                              (and (= :db/retract (first item))
-                                                  (contains? #{:block/created-at :block/updated-at :block/title}
+                                                  (contains? non-retractable-block-attrs
                                                              (nth item 2)))
                                              (contains? local-deleted-ids (get-lookup-id (last item))))))
                                ;; Notice: rebase should generate larger tx-id than reverse tx
@@ -1029,11 +1161,25 @@
              ;; 3. rebase pending local txs
              rebase-tx-report (when (seq local-txs)
                                 (let [pending-tx-data (mapcat :tx local-txs)
-                                      rebased-tx-data (sanitize-tx-data
-                                                       (or (:db-after remote-tx-report)
-                                                           (:db-after reversed-tx-report))
-                                                       pending-tx-data
-                                                       (set (map :block/uuid local-deleted-blocks)))]
+                                      remote-db (or (:db-after remote-tx-report)
+                                                    (:db-after reversed-tx-report))
+                                      remote-updated-keys (remote-updated-attr-keys remote-db safe-remote-tx-data)
+                                      remote-tx-data-set (->> safe-remote-tx-data
+                                                              (map (fn [item]
+                                                                     (if (and (vector? item)
+                                                                              (= 5 (count item)))
+                                                                       (vec (butlast item))
+                                                                       item)))
+                                                              set)
+                                      pending-tx-data (drop-remote-conflicted-local-tx
+                                                       remote-db
+                                                       remote-updated-keys
+                                                       pending-tx-data)
+                                      rebased-tx-data (->> (sanitize-tx-data
+                                                            remote-db
+                                                            pending-tx-data
+                                                            (set (map :block/uuid local-deleted-blocks)))
+                                                           (remove remote-tx-data-set))]
                                   (when (seq rebased-tx-data)
                                     (ldb/transact! temp-conn rebased-tx-data (assoc tx-meta :op :rebase)))))
              ;; 4. fix tx data and delete nodes
@@ -1062,79 +1208,81 @@
 
 (defn- apply-remote-tx!
   [repo client tx-data*]
-  (if-let [conn (worker-state/get-datascript-conn repo)]
-    (let [tx-data (->> tx-data*
-                       (db-normalize/remove-retract-entity-ref @conn)
-                       (#(drop-anonymous-temp-entity-datoms @conn %)))
-          local-txs (pending-txs repo)
-          reversed-tx-data (get-reverse-tx-data local-txs)
-          has-local-changes? (seq reversed-tx-data)
-          *remote-tx-report (atom nil)
-          *reversed-tx-report (atom nil)
-          *remote-deleted-ids (atom #{})
-          *rebase-tx-data (atom [])
-          db @conn
-          remote-deleted-blocks (->> tx-data
-                                     (keep (fn [item]
-                                             (when (= :db/retractEntity (first item))
-                                               (d/entity db (second item))))))
-          remote-deleted-block-ids (set (map :block/uuid remote-deleted-blocks))
-          safe-remote-tx-data (->> tx-data
-                                   (remove (fn [item]
-                                             (or (= :db/retractEntity (first item))
-                                                 (contains? remote-deleted-block-ids (get-lookup-id (last item))))))
-                                   seq)
-          temp-tx-meta {:rtc-tx? true
-                        :temp-conn? true
-                        :gen-undo-ops? false
-                        :persist-op? false}
-          apply-context {:conn conn
-                         :local-txs local-txs
-                         :reversed-tx-data reversed-tx-data
-                         :safe-remote-tx-data safe-remote-tx-data
-                         :remote-deleted-blocks remote-deleted-blocks
-                         :remote-deleted-block-ids remote-deleted-block-ids
-                         :temp-tx-meta temp-tx-meta
-                         :*remote-tx-report *remote-tx-report
-                         :*reversed-tx-report *reversed-tx-report
-                         :*remote-deleted-ids *remote-deleted-ids
-                         :*rebase-tx-data *rebase-tx-data}
-          tx-report (if has-local-changes?
-                      (apply-remote-tx-with-local-changes! apply-context)
-                      (apply-remote-tx-without-local-changes! apply-context))
-          remote-tx-report @*remote-tx-report]
-      ;; persist rebase tx to client ops
-      (when has-local-changes?
-        (when-let [tx-data (seq @*rebase-tx-data)]
-          (let [remote-tx-data-set (set tx-data*)
-                normalized (->> tx-data
-                                (normalize-tx-data (:db-after tx-report)
-                                                   (or (:db-after remote-tx-report)
-                                                       (:db-after @*reversed-tx-report)))
-                                (remove (fn [[op _e a]]
-                                          (and (= op :db/retract)
-                                               (contains? #{:block/updated-at :block/created-at :block/title} a)))))
-                normalized-tx-data (remove remote-tx-data-set normalized)
-                reversed-datoms (reverse-tx-data tx-data)]
-            ;; (prn :debug :normalized-tx-data normalized-tx-data)
-            ;; (prn :debug :remote-tx-data tx-data*)
-            ;; (prn :debug :diff (data/diff remote-tx-data-set
-            ;;                              (set normalized)))
-            (when (seq normalized-tx-data)
-              (persist-local-tx! repo normalized-tx-data reversed-datoms {:op :rtc-rebase}))))
-        (remove-pending-txs! repo (map :tx-id local-txs)))
+  (if (batched-remote-tx-data? tx-data*)
+    (apply-remote-tx! repo client (flatten-batched-remote-tx-data tx-data*))
+    (if-let [conn (worker-state/get-datascript-conn repo)]
+      (let [tx-data (->> tx-data*
+                         (db-normalize/remove-retract-entity-ref @conn)
+                         drop-non-retractable-attr-datoms)
+            local-txs (pending-txs repo)
+            reversed-tx-data (get-reverse-tx-data local-txs)
+            has-local-changes? (seq reversed-tx-data)
+            *remote-tx-report (atom nil)
+            *reversed-tx-report (atom nil)
+            *remote-deleted-ids (atom #{})
+            *rebase-tx-data (atom [])
+            db @conn
+            remote-deleted-blocks (->> tx-data
+                                       (keep (fn [item]
+                                               (when (= :db/retractEntity (first item))
+                                                 (d/entity db (second item))))))
+            remote-deleted-block-ids (set (map :block/uuid remote-deleted-blocks))
+            safe-remote-tx-data (->> tx-data
+                                     (remove (fn [item]
+                                               (or (= :db/retractEntity (first item))
+                                                   (contains? remote-deleted-block-ids (get-lookup-id (last item))))))
+                                     seq)
+            temp-tx-meta {:rtc-tx? true
+                          :temp-conn? true
+                          :gen-undo-ops? false
+                          :persist-op? false}
+            apply-context {:conn conn
+                           :local-txs local-txs
+                           :reversed-tx-data reversed-tx-data
+                           :safe-remote-tx-data safe-remote-tx-data
+                           :remote-deleted-blocks remote-deleted-blocks
+                           :remote-deleted-block-ids remote-deleted-block-ids
+                           :temp-tx-meta temp-tx-meta
+                           :*remote-tx-report *remote-tx-report
+                           :*reversed-tx-report *reversed-tx-report
+                           :*remote-deleted-ids *remote-deleted-ids
+                           :*rebase-tx-data *rebase-tx-data}
+            tx-report (if has-local-changes?
+                        (apply-remote-tx-with-local-changes! apply-context)
+                        (apply-remote-tx-without-local-changes! apply-context))
+            remote-tx-report @*remote-tx-report]
+        ;; persist rebase tx to client ops
+        (when has-local-changes?
+          (when-let [tx-data (seq @*rebase-tx-data)]
+            (let [remote-tx-data-set (set tx-data*)
+                  normalized (->> tx-data
+                                  (normalize-tx-data (:db-after tx-report)
+                                                     (or (:db-after remote-tx-report)
+                                                         (:db-after @*reversed-tx-report)))
+                                  (remove (fn [[op _e a]]
+                                            (and (= op :db/retract)
+                                                 (contains? #{:block/updated-at :block/created-at :block/title} a)))))
+                  normalized-tx-data (remove remote-tx-data-set normalized)
+                  reversed-datoms (reverse-tx-data tx-data)]
+              ;; (prn :debug :normalized-tx-data normalized-tx-data)
+              ;; (prn :debug :remote-tx-data tx-data*)
+              ;; (prn :debug :diff (data/diff remote-tx-data-set
+              ;;                              (set normalized)))
+              (when (seq normalized-tx-data)
+                (persist-local-tx! repo normalized-tx-data reversed-datoms {:op :rtc-rebase}))))
+          (remove-pending-txs! repo (map :tx-id local-txs)))
 
-      (when-let [*inflight (:inflight client)]
-        (reset! *inflight []))
+        (when-let [*inflight (:inflight client)]
+          (reset! *inflight []))
 
-      (-> (rehydrate-large-titles! repo {:tx-data tx-data
-                                         :graph-id (:graph-id client)})
-          (p/catch (fn [error]
-                     (log/error :db-sync/large-title-rehydrate-failed
-                                {:repo repo :error error}))))
+        (-> (rehydrate-large-titles! repo {:tx-data tx-data
+                                           :graph-id (:graph-id client)})
+            (p/catch (fn [error]
+                       (log/error :db-sync/large-title-rehydrate-failed
+                                  {:repo repo :error error}))))
 
-      (reset! *remote-tx-report nil))
-    (fail-fast :db-sync/missing-db {:repo repo :op :apply-remote-tx})))
+        (reset! *remote-tx-report nil))
+      (fail-fast :db-sync/missing-db {:repo repo :op :apply-remote-tx}))))
 
 (defn- handle-message! [repo client raw]
   (let [message (-> raw parse-message coerce-ws-server-message)]
@@ -1170,23 +1318,23 @@
                         (reset! (:inflight client) [])
                         (flush-pending! repo client))
         ;; Download response
-        ;; Merge batch txs to one tx, does it really work? We'll see
         "pull/ok" (when (> remote-tx local-tx)
                     (let [txs (:txs message)
                           _ (require-non-negative remote-tx {:repo repo :type "pull/ok"})
                           _ (require-seq txs {:repo repo :type "pull/ok" :field :txs})
                           txs-data (mapv (fn [data]
                                            (parse-transit (:tx data) {:repo repo :type "pull/ok"}))
-                                         txs)
-                          tx (distinct (mapcat identity txs-data))]
-                      (when (seq tx)
+                                         txs)]
+                      (when (seq txs-data)
                         (p/let [aes-key (sync-crypt/<ensure-graph-aes-key repo (:graph-id client))
                                 _ (when (and (sync-crypt/graph-e2ee? repo) (nil? aes-key))
                                     (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
-                                tx* (if aes-key
-                                      (sync-crypt/<decrypt-tx-data aes-key tx)
-                                      (p/resolved tx))]
-                          (apply-remote-tx! repo client tx*)
+                                tx-batches (if aes-key
+                                             (p/all (mapv (fn [tx-data]
+                                                            (sync-crypt/<decrypt-tx-data aes-key tx-data))
+                                                          txs-data))
+                                             (p/resolved txs-data))]
+                          (apply-remote-tx! repo client tx-batches)
                           (client-op/update-local-tx repo remote-tx)
                           (broadcast-rtc-state! client)
                           (flush-pending! repo client)))))
@@ -1223,8 +1371,12 @@
                             (when-let [current @worker-state/*db-sync-client]
                               (when (and (= (:repo current) repo)
                                          (= (:graph-id current) (:graph-id client)))
-                                (let [updated (connect! repo current url)]
-                                  (reset! worker-state/*db-sync-client updated)))))
+                                (-> (p/let [token (<resolve-ws-token)
+                                            updated (connect! repo current url token)]
+                                      (reset! worker-state/*db-sync-client updated))
+                                    (p/catch (fn [error]
+                                               (log/error :db-sync/ws-reconnect-failed {:repo repo :error error})
+                                               (schedule-reconnect! repo current url :connect-failed)))))))
                           delay)]
           (swap! reconnect assoc :timer timeout-id :attempt (inc attempt))
           (log/info :db-sync/ws-reconnect-scheduled
@@ -1290,20 +1442,22 @@
       (catch :default _
         nil))))
 
-(defn- connect! [repo client url]
+(defn- connect! [repo client url token]
   (when (:ws client)
     (stop-client! client))
-  (let [ws (js/WebSocket. (append-token url (auth-token)))
-        updated (assoc client :ws ws)]
-    (attach-ws-handlers! repo updated ws url)
-    (set! (.-onopen ws)
-          (fn [_]
-            (reset-reconnect! updated)
-            (touch-last-ws-message! updated)
-            (set-ws-state! updated :open)
-            (send! ws {:type "hello" :client repo})
-            (enqueue-asset-sync! repo updated)))
-    (close-stale-ws-loop updated ws)))
+  ;; use cache token for faster websocket connection
+  (when-let [token' (or token (auth-token))]
+    (let [ws (js/WebSocket. (append-token url token'))
+          updated (assoc client :ws ws)]
+      (attach-ws-handlers! repo updated ws url)
+      (set! (.-onopen ws)
+            (fn [_]
+              (reset-reconnect! updated)
+              (touch-last-ws-message! updated)
+              (set-ws-state! updated :open)
+              (send! ws {:type "hello" :client repo})
+              (enqueue-asset-sync! repo updated)))
+      (close-stale-ws-loop updated ws))))
 
 (defn stop!
   []
@@ -1348,11 +1502,12 @@
         (->
          (p/do!
           (stop!)
-          (let [client (ensure-client-state! repo)
-                url (format-ws-url base graph-id)
-                _ (ensure-client-graph-uuid! repo graph-id)
-                connected (assoc client :graph-id graph-id)
-                connected (connect! repo connected url)]
+          (p/let [client (ensure-client-state! repo)
+                  url (format-ws-url base graph-id)
+                  _ (ensure-client-graph-uuid! repo graph-id)
+                  connected (assoc client :graph-id graph-id)
+                  token (<resolve-ws-token)
+                  connected (connect! repo connected url token)]
             (reset! worker-state/*db-sync-client connected)
             nil))
          (p/finally
