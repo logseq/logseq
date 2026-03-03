@@ -64,8 +64,8 @@
   (when-not (string/blank? label)
     [:span.cp__cmdk-current-page-badge label]))
 
-(rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted
-                        header on-click hoverable compact rounded on-mouse-enter on-mouse-move source-block] :as props
+(rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted header hoverable
+                        compact rounded on-mounted on-click on-mouse-enter on-mouse-move source-block] :as props
                  :or {hoverable true rounded true}}
                 {:keys [app-config]}]
   (let [highlight-query (partial highlight-query* app-config query)
@@ -85,11 +85,13 @@
                      rounded (str " rounded-lg")
                      (not compact) (str " py-4 px-6 gap-1")
                      compact (str " py-1.5 px-3 gap-0.5"))
+            :ref (when on-mounted on-mounted)
             :on-click (when on-click on-click)
-            :on-mouse-enter (fn [e]
-                              (set-hover? true)
-                              (when on-mouse-enter
-                                (on-mouse-enter e)))
+            :on-mouse-enter (when on-mouse-enter
+                              (fn [e]
+                                (set-hover? true)
+                                (on-mouse-enter e))
+                              #(set-hover? true))
             :on-mouse-move (when on-mouse-move on-mouse-move)
             :on-mouse-leave #(set-hover? false)})
      ;; header
