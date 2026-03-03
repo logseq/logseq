@@ -540,7 +540,7 @@
   (when-let [item (some-> state state->highlighted-item)]
     (let [page? (page-item? item)
           block? (boolean (:source-block item))
-          shift?  (event-shift? event)
+          shift? (event-shift? event)
           shift-or-sidebar? (or shift? (boolean (:open-sidebar? (:opts state))))
           search-mode (:search/mode @state/state)
           graph-view? (= search-mode :graph)]
@@ -646,7 +646,7 @@
       (load-results group state)
       (.focus input-ref))))
 
-(defmethod handle-action :theme [_ state]
+(defmethod handle-action :theme [_ state _event]
   (when-let [item (some-> state state->highlighted-item)]
     (js/LSPluginCore.selectTheme (bean/->js (:source-theme item)))
     (shui/dialog-close!)))
@@ -1039,14 +1039,14 @@
       (reset! (::accel-start-ts state) nil))))
 
 (defn- input-placeholder
-  [sidebar?]
+  []
   (let [search-mode (:search/mode @state/state)
         action (get-action)]
     (cond
       (= action :move-blocks)
       "Move blocks to"
 
-      (and (= search-mode :graph) (not sidebar?))
+      (= search-mode :graph)
       "Add graph filter"
 
       (= action :new-page)
@@ -1068,7 +1068,10 @@
                                   (when-let [on-change (:on-input-change opts)]
                                     (on-change new-value))))
                               200)
-                             [])]
+                             [])
+        debounced-composition-end (hooks/use-callback
+                                   (gfun/debounce (fn [e] (handle-input-change state e)) 100)
+                                   [])]
     (hooks/use-effect! (fn []
                          (reset! (::all-items-cache state) (vec all-items))
                          (when highlighted-item
@@ -1099,13 +1102,13 @@
        :auto-focus true
        :autoComplete "off"
        :autoCapitalize "off"
-       :placeholder (input-placeholder false)
+       :placeholder (input-placeholder)
        :ref #(when-not @input-ref (reset! input-ref %))
        :on-change debounced-on-change
        :on-blur (fn [_e]
                   (when-let [on-blur (:on-input-blur opts)]
                     (on-blur input)))
-       :on-composition-end (gfun/debounce (fn [e] (handle-input-change state e)) 100)
+       :on-composition-end debounced-composition-end
        :default-value input}]]))
 
 (defn rand-tip
