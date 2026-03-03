@@ -110,7 +110,7 @@
                           :timeout-ms 5000
                           :body payload})))
 
-(deftest bundle-only-daemon-startup-smoke-test
+(deftest ^:long bundle-only-daemon-startup-smoke-test
   (async done
          (let [child* (atom nil)]
            (-> (p/let [_ (ensure-bundle-built!)
@@ -156,7 +156,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest bundle-daemon-starts-with-empty-asset-manifest
+(deftest ^:long bundle-daemon-starts-with-empty-asset-manifest
   (async done
          (let [child* (atom nil)
                original-manifest* (atom nil)]
@@ -216,7 +216,7 @@
                               (write-asset-manifest! manifest))
                             (done)))))))
 
-(deftest bundle-errors-are-actionable-when-manifest-or-entry-is-missing
+(deftest ^:long bundle-errors-are-actionable-when-manifest-or-entry-is-missing
   (let [_ (ensure-bundle-built!)
         manifest-path (dist-path "db-worker-node-assets.json")
         manifest-backup-path (dist-path "db-worker-node-assets.json.bak")
