@@ -11,13 +11,17 @@
           :coerce :boolean}
    :version {:desc "Show version"
              :coerce :boolean}
-   :config {:desc "Path to cli.edn (default ~/logseq/cli.edn)"}
-   :graph {:desc "Graph name"}
+   :config {:desc "Path to cli.edn (default ~/logseq/cli.edn)"
+            :alias :c}
+   :graph {:desc "Graph name"
+           :alias :g}
    :data-dir {:desc "Path to db-worker data dir (default ~/logseq/graphs)"}
    :timeout-ms {:desc "Request timeout in ms (default 10000)"
                 :coerce :long}
-   :output {:desc "Output format (human, json, edn). Default: human"}
+   :output {:desc "Output format (human, json, edn). Default: human"
+            :alias :o}
    :verbose {:desc "Enable verbose debug logging to stderr"
+             :alias :v
              :coerce :boolean}})
 
 (defn global-spec
