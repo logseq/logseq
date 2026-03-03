@@ -61,6 +61,57 @@
      :child2 child2
      :child3 child3}))
 
+(deftest resolve-ws-token-refreshes-when-token-expired-test
+  (async done
+         (let [refresh-calls (atom 0)
+               main-thread-prev @worker-state/*main-thread
+               worker-state-prev @worker-state/*state]
+           (reset! worker-state/*state (assoc worker-state-prev :auth/id-token "expired-token"))
+           (reset! worker-state/*main-thread
+                   (fn [qkw _direct-pass? _args-list]
+                     (if (= qkw :thread-api/ensure-id&access-token)
+                       (do
+                         (swap! refresh-calls inc)
+                         (p/resolved {:id-token "fresh-token"}))
+                       (p/resolved nil))))
+           (with-redefs [db-sync/auth-token (fn [] "expired-token")
+                         db-sync/id-token-expired? (fn [_token] true)]
+             (-> (#'db-sync/<resolve-ws-token)
+                 (p/then (fn [token]
+                           (is (= 1 @refresh-calls))
+                           (is (= "fresh-token" token))
+                           (is (= "fresh-token" (worker-state/get-id-token)))
+                           (reset! worker-state/*main-thread main-thread-prev)
+                           (reset! worker-state/*state worker-state-prev)
+                           (done)))
+                 (p/catch (fn [error]
+                            (reset! worker-state/*main-thread main-thread-prev)
+                            (reset! worker-state/*state worker-state-prev)
+                            (is nil (str error))
+                            (done))))))))
+
+(deftest resolve-ws-token-skips-refresh-when-token-not-expired-test
+  (async done
+         (let [refresh-calls (atom 0)
+               main-thread-prev @worker-state/*main-thread]
+           (reset! worker-state/*main-thread
+                   (fn [qkw _direct-pass? _args-list]
+                     (when (= qkw :thread-api/ensure-id&access-token)
+                       (swap! refresh-calls inc))
+                     (p/resolved {:id-token "fresh-token"})))
+           (with-redefs [db-sync/auth-token (fn [] "valid-token")
+                         db-sync/id-token-expired? (fn [_token] false)]
+             (-> (#'db-sync/<resolve-ws-token)
+                 (p/then (fn [token]
+                           (reset! worker-state/*main-thread main-thread-prev)
+                           (is (= 0 @refresh-calls))
+                           (is (= "valid-token" token))
+                           (done)))
+                 (p/catch (fn [error]
+                            (reset! worker-state/*main-thread main-thread-prev)
+                            (is nil (str error))
+                            (done))))))))
+
 (deftest update-online-users-dedupes-identical-messages-test
   (let [client {:repo test-repo
                 :online-users (atom [])
@@ -172,6 +223,52 @@
                              parent' (d/entity @conn parent-id)]
                        (is (= "remote-new-title" (:block/title parent')))
                        (is (= 2 (client-op/get-local-tx test-repo))))
+                     (p/finally (fn []
+                                  (reset! db-sync/*repo->latest-remote-tx latest-prev)
+                                  (done))))))))))
+
+(deftest pull-ok-batched-txs-preserve-tempid-boundaries-test
+  (testing "pull/ok applies tx batches without cross-tx tempid collisions"
+    (async done
+           (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+                 page-uuid (:block/uuid (:block/page parent))
+                 block-uuid-a (random-uuid)
+                 block-uuid-b (random-uuid)
+                 now 1760000000000
+                 tx-a (sqlite-util/write-transit-str
+                       [[:db/add -1 :block/uuid block-uuid-a]
+                        [:db/add -1 :block/title "remote-a"]
+                        [:db/add -1 :block/parent [:block/uuid page-uuid]]
+                        [:db/add -1 :block/page [:block/uuid page-uuid]]
+                        [:db/add -1 :block/order 1]
+                        [:db/add -1 :block/updated-at now]
+                        [:db/add -1 :block/created-at now]])
+                 tx-b (sqlite-util/write-transit-str
+                       [[:db/add -1 :block/uuid block-uuid-b]
+                        [:db/add -1 :block/title "remote-b"]
+                        [:db/add -1 :block/parent [:block/uuid page-uuid]]
+                        [:db/add -1 :block/page [:block/uuid page-uuid]]
+                        [:db/add -1 :block/order 2]
+                        [:db/add -1 :block/updated-at now]
+                        [:db/add -1 :block/created-at now]])
+                 raw-message (js/JSON.stringify
+                              (clj->js {:type "pull/ok"
+                                        :t 2
+                                        :txs [{:t 1 :tx tx-a}
+                                              {:t 2 :tx tx-b}]}))
+                 latest-prev @db-sync/*repo->latest-remote-tx
+                 client {:repo test-repo
+                         :graph-id "graph-1"
+                         :inflight (atom [])
+                         :online-users (atom [])
+                         :ws-state (atom :open)}]
+             (with-datascript-conns conn client-ops-conn
+               (fn []
+                 (reset! db-sync/*repo->latest-remote-tx {})
+                 (-> (p/let [_ (client-op/update-local-tx test-repo 0)
+                             _ (#'db-sync/handle-message! test-repo client raw-message)]
+                       (is (= "remote-a" (:block/title (d/entity @conn [:block/uuid block-uuid-a]))))
+                       (is (= "remote-b" (:block/title (d/entity @conn [:block/uuid block-uuid-b])))))
                      (p/finally (fn []
                                   (reset! db-sync/*repo->latest-remote-tx latest-prev)
                                   (done))))))))))
@@ -551,14 +648,13 @@
                 (is (empty? (map :entity (:errors validation)))
                     (str (:errors validation)))))))))))
 
-(deftest ^:long malformed-remote-anonymous-entity-tx-is-ignored-test
-  (testing "remote tx creating anonymous entities should be ignored instead of invalidating db"
+(deftest ^:long remote-retract-required-page-attr-is-ignored-test
+  (testing "remote tx retracting required page attrs should be ignored"
     (let [{:keys [conn parent]} (setup-parent-child)
-          created-by-id (:db/id (:block/page parent))
-          ts 1771435997392
-          malformed-tx [[:db/add "missing-uuid-entity" :block/created-at ts]
-                        [:db/add "missing-uuid-entity" :block/updated-at ts]
-                        [:db/add "missing-uuid-entity" :logseq.property/created-by-ref created-by-id]]]
+          page (:block/page parent)
+          page-id (:db/id page)
+          updated-at (:block/updated-at page)
+          malformed-tx [[:db/retract page-id :block/updated-at updated-at]]]
       (with-datascript-conns conn nil
         (fn []
           (is (nil? (try
@@ -566,16 +662,9 @@
                       nil
                       (catch :default e
                         e))))
-          (let [anonymous-ents (->> (d/datoms @conn :avet :logseq.property/created-by-ref)
-                                    (keep (fn [datom]
-                                            (let [ent (d/entity @conn (:e datom))]
-                                              (when (and (nil? (:block/uuid ent))
-                                                         (nil? (:db/ident ent))
-                                                         (= ts (:block/created-at ent))
-                                                         (= ts (:block/updated-at ent)))
-                                                (select-keys ent [:db/id :block/created-at :block/updated-at :logseq.property/created-by-ref]))))))
+          (let [page' (d/entity @conn page-id)
                 validation (db-validate/validate-local-db! @conn)]
-            (is (empty? anonymous-ents) (str anonymous-ents))
+            (is (number? (:block/updated-at page')))
             (is (empty? (map :entity (:errors validation)))
                 (str (:errors validation)))))))))
 

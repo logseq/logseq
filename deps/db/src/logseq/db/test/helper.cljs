@@ -92,3 +92,14 @@
         _ (when (::sqlite-export/graph-files export-map)
             (d/transact! conn (::sqlite-export/graph-files export-map)))]
     conn))
+
+(defmacro silence-stderr
+  "Silence stderr as successful tests should print long stderr messages"
+  [& body]
+  `(let [orig-write# (.-write js/process.stderr)]
+     (set! (.-write js/process.stderr)
+           (fn [& _] true))
+     (try
+       ~@body
+       (finally
+         (set! (.-write js/process.stderr) orig-write#)))))
