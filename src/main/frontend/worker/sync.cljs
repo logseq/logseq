@@ -358,6 +358,18 @@
        (remove (fn [[_op e]]
                  (contains? rtc-const/ignore-entities-when-init-upload e)))))
 
+(def ^:private non-retractable-block-attrs
+  #{:block/created-at :block/updated-at :block/title})
+
+(defn- drop-non-retractable-attr-datoms
+  [tx-data]
+  (remove (fn [item]
+            (and (vector? item)
+                 (>= (count item) 3)
+                 (= :db/retract (first item))
+                 (contains? non-retractable-block-attrs (nth item 2))))
+          tx-data))
+
 (defn- reverse-tx-data
   [tx-data]
   (->> tx-data
@@ -662,18 +674,6 @@
   (and (seq tx-data*)
        (sequential? (first tx-data*))
        (sequential? (first (first tx-data*)))))
-
-(def ^:private non-retractable-block-attrs
-  #{:block/created-at :block/updated-at :block/title})
-
-(defn- drop-non-retractable-attr-datoms
-  [tx-data]
-  (remove (fn [item]
-            (and (vector? item)
-                 (>= (count item) 3)
-                 (= :db/retract (first item))
-                 (contains? non-retractable-block-attrs (nth item 2))))
-          tx-data))
 
 (defn- sanitize-tx-data
   [db tx-data local-deleted-ids]
@@ -1122,7 +1122,8 @@
   [local-txs]
   (let [tx-data (->> local-txs
                      reverse
-                     (mapcat :reversed-tx))
+                     (mapcat :reversed-tx)
+                     drop-non-retractable-attr-datoms)
         retract-block-ids (->> (keep (fn [[op e a _v _t]]
                                        (when (and (= op :db/retract) (= :block/uuid a))
                                          e)) tx-data)
