@@ -95,7 +95,7 @@
 
 (defn- timing-platform-fields
   []
-  {:mobile? (:mobile? (worker-state/get-context))})
+  {:mobile? (boolean (:mobile? (worker-state/get-context)))})
 
 (defn- mark-ws-open!
   [client]
