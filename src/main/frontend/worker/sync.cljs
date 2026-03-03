@@ -558,6 +558,10 @@
   (or (and (integer? x) (neg? x))
       (string? x)))
 
+(defn- remappable-remote-temp-id?
+  [x]
+  (and (integer? x) (neg? x)))
+
 (defn- remap-remote-batch-temp-ids
   [batch-index tx-data]
   (let [ops #{:db/add :db/retract :db/retractEntity}
@@ -566,7 +570,7 @@
                                      (when (and (vector? item)
                                                 (>= (count item) 2)
                                                 (contains? ops (first item))
-                                                (remote-temp-id? (second item)))
+                                                (remappable-remote-temp-id? (second item)))
                                        (second item))))
                              distinct)
         temp-id-map (when (seq entity-temp-ids)
