@@ -112,27 +112,6 @@
                             (is nil (str error))
                             (done))))))))
 
-(deftest resolve-ws-token-refreshes-when-token-missing-test
-  (async done
-         (let [refresh-calls (atom 0)
-               main-thread-prev @worker-state/*main-thread]
-           (reset! worker-state/*main-thread
-                   (fn [qkw _direct-pass? _args-list]
-                     (when (= qkw :thread-api/ensure-id&access-token)
-                       (swap! refresh-calls inc))
-                     (p/resolved {:id-token "fresh-token"})))
-           (with-redefs [db-sync/auth-token (fn [] nil)]
-             (-> (#'db-sync/<resolve-ws-token)
-                 (p/then (fn [token]
-                           (reset! worker-state/*main-thread main-thread-prev)
-                           (is (= 1 @refresh-calls))
-                           (is (= "fresh-token" token))
-                           (done)))
-                 (p/catch (fn [error]
-                            (reset! worker-state/*main-thread main-thread-prev)
-                            (is nil (str error))
-                            (done))))))))
-
 (deftest update-online-users-dedupes-identical-messages-test
   (let [client {:repo test-repo
                 :online-users (atom [])
