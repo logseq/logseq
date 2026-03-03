@@ -1489,8 +1489,9 @@
 (defn- connect! [repo client url token]
   (when (:ws client)
     (stop-client! client))
-  (when token
-    (let [ws (js/WebSocket. (append-token url token))
+  ;; use cache token for faster websocket connection
+  (when-let [token' (or token (auth-token))]
+    (let [ws (js/WebSocket. (append-token url token'))
           updated (assoc client :ws ws)]
       (attach-ws-handlers! repo updated ws url)
       (set! (.-onopen ws)
@@ -1545,12 +1546,12 @@
         (->
          (p/do!
           (stop!)
-          (let [client (ensure-client-state! repo)
-                url (format-ws-url base graph-id)
-                _ (ensure-client-graph-uuid! repo graph-id)
-                connected (assoc client :graph-id graph-id)
-                token (<resolve-ws-token)
-                connected (connect! repo connected url token)]
+          (p/let [client (ensure-client-state! repo)
+                  url (format-ws-url base graph-id)
+                  _ (ensure-client-graph-uuid! repo graph-id)
+                  connected (assoc client :graph-id graph-id)
+                  token (<resolve-ws-token)
+                  connected (connect! repo connected url token)]
             (reset! worker-state/*db-sync-client connected)
             nil))
          (p/finally
