@@ -286,10 +286,10 @@
         (is (false? (:ok? result)))
         (is (= :unknown-command (get-in result [:error :code]))))))
 
-  (testing "errors on missing command"
+  (testing "no commands prints help"
     (let [result (commands/parse-args [])]
       (is (false? (:ok? result)))
-      (is (= :missing-command (get-in result [:error :code])))))
+      (is (true? (:help? result)))))
 
   (testing "errors on unknown command"
     (let [result (commands/parse-args ["wat"])]
