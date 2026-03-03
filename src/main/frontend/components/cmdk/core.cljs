@@ -910,12 +910,16 @@
          e-type (gobj/getValueByKeys e "type")
          composing-end? (= e-type "compositionend")
          !input (::input state)
-         input-ref @(::input-ref state)]
-
+         input-ref @(::input-ref state)
+         container @(::scroll-container-ref state)]
      ;; update the input value in the UI
      (reset! !input input)
      (set! (.-value input-ref) input)
-
+     (reset! (::focus-source state) :keyboard)
+     (reset! (::highlighted-item state) nil)
+     (reset! (::pending-scroll-item-idx state) nil)
+     (when container
+       (set! (.-scrollTop container) 0))
      ;; retrieve the load-results function and update all the results
      (when (or (not composing?) composing-end?)
        (persist-cmdk-query-state! state)
