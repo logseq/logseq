@@ -61,6 +61,78 @@
      :child2 child2
      :child3 child3}))
 
+(deftest resolve-ws-token-refreshes-when-token-expired-test
+  (async done
+         (let [refresh-calls (atom 0)
+               main-thread-prev @worker-state/*main-thread
+               worker-state-prev @worker-state/*state]
+           (reset! worker-state/*state (assoc worker-state-prev :auth/id-token "expired-token"))
+           (reset! worker-state/*main-thread
+                   (fn [qkw _direct-pass? _args-list]
+                     (if (= qkw :thread-api/ensure-id&access-token)
+                       (do
+                         (swap! refresh-calls inc)
+                         (p/resolved {:id-token "fresh-token"}))
+                       (p/resolved nil))))
+           (with-redefs [db-sync/auth-token (fn [] "expired-token")
+                         db-sync/id-token-expired? (fn [_token] true)]
+             (-> (#'db-sync/<resolve-ws-token)
+                 (p/then (fn [token]
+                           (is (= 1 @refresh-calls))
+                           (is (= "fresh-token" token))
+                           (is (= "fresh-token" (worker-state/get-id-token)))
+                           (reset! worker-state/*main-thread main-thread-prev)
+                           (reset! worker-state/*state worker-state-prev)
+                           (done)))
+                 (p/catch (fn [error]
+                            (reset! worker-state/*main-thread main-thread-prev)
+                            (reset! worker-state/*state worker-state-prev)
+                            (is nil (str error))
+                            (done))))))))
+
+(deftest resolve-ws-token-skips-refresh-when-token-not-expired-test
+  (async done
+         (let [refresh-calls (atom 0)
+               main-thread-prev @worker-state/*main-thread]
+           (reset! worker-state/*main-thread
+                   (fn [qkw _direct-pass? _args-list]
+                     (when (= qkw :thread-api/ensure-id&access-token)
+                       (swap! refresh-calls inc))
+                     (p/resolved {:id-token "fresh-token"})))
+           (with-redefs [db-sync/auth-token (fn [] "valid-token")
+                         db-sync/id-token-expired? (fn [_token] false)]
+             (-> (#'db-sync/<resolve-ws-token)
+                 (p/then (fn [token]
+                           (reset! worker-state/*main-thread main-thread-prev)
+                           (is (= 0 @refresh-calls))
+                           (is (= "valid-token" token))
+                           (done)))
+                 (p/catch (fn [error]
+                            (reset! worker-state/*main-thread main-thread-prev)
+                            (is nil (str error))
+                            (done))))))))
+
+(deftest resolve-ws-token-refreshes-when-token-missing-test
+  (async done
+         (let [refresh-calls (atom 0)
+               main-thread-prev @worker-state/*main-thread]
+           (reset! worker-state/*main-thread
+                   (fn [qkw _direct-pass? _args-list]
+                     (when (= qkw :thread-api/ensure-id&access-token)
+                       (swap! refresh-calls inc))
+                     (p/resolved {:id-token "fresh-token"})))
+           (with-redefs [db-sync/auth-token (fn [] nil)]
+             (-> (#'db-sync/<resolve-ws-token)
+                 (p/then (fn [token]
+                           (reset! worker-state/*main-thread main-thread-prev)
+                           (is (= 1 @refresh-calls))
+                           (is (= "fresh-token" token))
+                           (done)))
+                 (p/catch (fn [error]
+                            (reset! worker-state/*main-thread main-thread-prev)
+                            (is nil (str error))
+                            (done))))))))
+
 (deftest update-online-users-dedupes-identical-messages-test
   (let [client {:repo test-repo
                 :online-users (atom [])
