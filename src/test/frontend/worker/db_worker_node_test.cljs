@@ -381,8 +381,7 @@
                            (is (= 200 (:status ready))))
                        _ (invoke host port "thread-api/create-or-open-db" [repo {}])
                        dbs (invoke host port "thread-api/list-db" [])
-                       _ (do
-                           (is (some #(= repo (:name %)) dbs)))
+                       _ (is (some #(= repo (:name %)) dbs))
                        lock-file (lock-path data-dir repo)
                        _ (is (fs/existsSync lock-file))
                        lock-contents (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
