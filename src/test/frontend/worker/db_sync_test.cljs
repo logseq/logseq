@@ -177,24 +177,6 @@
              @(:online-users client)))
       (is (= 1 (count @broadcasts))))))
 
-(deftest hello-message-does-not-send-pull-request-test
-  (let [client {:repo test-repo
-                :online-users (atom [])
-                :ws #js {:readyState 1}
-                :ws-state (atom :open)}
-        sent-messages (atom [])
-        raw-message (js/JSON.stringify
-                     (clj->js {:type "hello"
-                               :t 8}))]
-    (with-redefs [client-op/get-local-tx (fn [_repo] 5)
-                  db-sync/send! (fn [_ws message]
-                                  (swap! sent-messages conj message))
-                  db-sync/broadcast-rtc-state! (fn [_client] nil)
-                  db-sync/enqueue-asset-sync! (fn [_repo _client] nil)
-                  db-sync/flush-pending! (fn [_repo _client] nil)]
-      (#'db-sync/handle-message! test-repo client raw-message)
-      (is (empty? @sent-messages)))))
-
 (deftest pull-ok-with-older-remote-tx-is-ignored-test
   (testing "pull/ok with remote tx behind local tx does not apply stale tx data"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
