@@ -11,7 +11,14 @@
       (ws/send! ws {:type "error" :message "invalid request"})
       (case (:type message)
         "hello"
-        (ws/send! ws {:type "hello" :t (sync-handler/t-now self)})
+        (let [raw-since (:since message)
+              since (if (some? raw-since) (sync-handler/parse-int raw-since) 0)
+              current-t (sync-handler/t-now self)]
+          (if (or (and (some? raw-since) (not (number? since))) (neg? since))
+            (ws/send! ws {:type "error" :message "invalid since"})
+            (if (< since current-t)
+              (ws/send! ws (sync-handler/pull-response self since))
+              (ws/send! ws {:type "hello" :t current-t}))))
 
         "ping"
         (ws/send! ws {:type "pong"})
