@@ -7,8 +7,8 @@
 - Note: keep this document in sync with the current implementation.
 
 ## Client -> Server
-- `{"type":"hello","client":"<repo-id>","since":<t>}`
-  - Initial handshake from client, including current local tx (`since`).
+- `{"type":"hello","client":"<repo-id>"}`
+  - Initial handshake from client.
 - `{"type":"presence","editing-block-uuid":"<uuid|null>"}`
   - Update current editing block for presence (omit or null to clear).
 - `{"type":"pull","since":<t>}`
@@ -20,13 +20,12 @@
 
 ## Server -> Client
 - `{"type":"hello","t":<t>}`
-  - Server hello with current t when client is already up-to-date (`since >= t`).
+  - Server hello with current t.
 - `{"type":"online-users","online-users":[{"user-id":"...","email":"...","username":"...","name":"..."}...]}`
   - Presence update
   - Optional `editing-block-uuid` indicates the block the user is editing.
 - `{"type":"pull/ok","t":<t>,"txs":[{"t":<t>,"tx":"<tx-transit>"}...]}`
   - Pull response with txs.
-  - On initial `hello`, server sends `pull/ok` directly (without `hello`) when client is behind (`since < t`).
 - `{"type":"tx/batch/ok","t":<t>}`
   - Batch accepted; server advanced to t.
 - `{"type":"changed","t":<t>}`
