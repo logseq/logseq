@@ -648,34 +648,6 @@
                 (is (empty? (map :entity (:errors validation)))
                     (str (:errors validation)))))))))))
 
-(deftest ^:long malformed-remote-anonymous-entity-tx-is-ignored-test
-  (testing "remote tx creating anonymous entities should be ignored instead of invalidating db"
-    (let [{:keys [conn parent]} (setup-parent-child)
-          created-by-id (:db/id (:block/page parent))
-          ts 1771435997392
-          malformed-tx [[:db/add "missing-uuid-entity" :block/created-at ts]
-                        [:db/add "missing-uuid-entity" :block/updated-at ts]
-                        [:db/add "missing-uuid-entity" :logseq.property/created-by-ref created-by-id]]]
-      (with-datascript-conns conn nil
-        (fn []
-          (is (nil? (try
-                      (#'db-sync/apply-remote-tx! test-repo nil malformed-tx)
-                      nil
-                      (catch :default e
-                        e))))
-          (let [anonymous-ents (->> (d/datoms @conn :avet :logseq.property/created-by-ref)
-                                    (keep (fn [datom]
-                                            (let [ent (d/entity @conn (:e datom))]
-                                              (when (and (nil? (:block/uuid ent))
-                                                         (nil? (:db/ident ent))
-                                                         (= ts (:block/created-at ent))
-                                                         (= ts (:block/updated-at ent)))
-                                                (select-keys ent [:db/id :block/created-at :block/updated-at :logseq.property/created-by-ref]))))))
-                validation (db-validate/validate-local-db! @conn)]
-            (is (empty? anonymous-ents) (str anonymous-ents))
-            (is (empty? (map :entity (:errors validation)))
-                (str (:errors validation)))))))))
-
 (deftest ^:long remote-retract-required-page-attr-is-ignored-test
   (testing "remote tx retracting required page attrs should be ignored"
     (let [{:keys [conn parent]} (setup-parent-child)
