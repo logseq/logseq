@@ -112,6 +112,16 @@
                             (is nil (str error))
                             (done))))))))
 
+(deftest get-reverse-tx-data-skips-non-retractable-block-attrs-test
+  (testing "pending reversed txs should not retract required block attrs"
+    (let [local-txs [{:reversed-tx [[:db/retract 1 :block/updated-at 100 10]
+                                    [:db/retract 1 :block/created-at 90 10]
+                                    [:db/retract 1 :block/title "Home" 10]
+                                    [:db/retract 1 :block/name "home" 10]]}]
+          reversed (#'db-sync/get-reverse-tx-data local-txs)]
+      (is (= [[:db/retract 1 :block/name "home" 10]]
+             reversed)))))
+
 (deftest update-online-users-dedupes-identical-messages-test
   (let [client {:repo test-repo
                 :online-users (atom [])
