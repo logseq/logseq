@@ -65,14 +65,13 @@
     [:span.cp__cmdk-current-page-badge label]))
 
 (rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value title highlighted header hoverable
-                        compact rounded on-mounted on-click on-mouse-enter on-mouse-move source-block] :as props
+                        compact rounded on-mounted on-click on-mouse-move source-block] :as props
                  :or {hoverable true rounded true}}
                 {:keys [app-config]}]
   (let [highlight-query (partial highlight-query* app-config query)
         badge-placement (current-page-badge-placement props)
         text-badge (current-page-badge-node (:text-badge badge-placement))
         header-badge (current-page-badge-node (:header-badge badge-placement))
-        [hover? set-hover?] (rum/use-state false)
         keyboard-highlighted? (and highlighted (not hoverable))]
     [:div (merge
            {:style {:opacity 1}
@@ -87,13 +86,7 @@
                      compact (str " py-1.5 px-3 gap-0.5"))
             :ref (when on-mounted on-mounted)
             :on-click (when on-click on-click)
-            :on-mouse-enter (when on-mouse-enter
-                              (fn [e]
-                                (set-hover? true)
-                                (on-mouse-enter e))
-                              #(set-hover? true))
-            :on-mouse-move (when on-mouse-move on-mouse-move)
-            :on-mouse-leave #(set-hover? false)})
+            :on-mouse-move (when on-mouse-move on-mouse-move)})
      ;; header
      (when header
        [:div.text-xs.pl-8.font-light.flex.items-center.gap-2.flex-wrap {:class "-mt-1"
@@ -134,5 +127,5 @@
            [:span.text-gray-11 (to-string value)])])
       (when shortcut
         [:div {:class "flex gap-1"
-               :style {:opacity (if (or highlighted hover?) 1 0.9)}}
+               :style {:opacity (if highlighted 1 0.9)}}
          (shui/shortcut shortcut)])]]))
