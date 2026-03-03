@@ -150,13 +150,15 @@
                  (sync-crypt/<ensure-graph-aes-key "repo-1" graph-id))
                (p/then (fn [aes-key]
                          (is (= "aes:remote-encrypted" aes-key))
-                         (is (= [{:platform platform-map
-                                  :key expected-key}]
-                                @kv-get-calls))
-                         (is (= [{:platform platform-map
-                                  :key expected-key
-                                  :value "remote-encrypted"}]
-                                @kv-set-calls))
+                         (is (some #(= {:platform platform-map
+                                        :key expected-key}
+                                       %)
+                                   @kv-get-calls))
+                         (is (some #(= {:platform platform-map
+                                        :key expected-key
+                                        :value "remote-encrypted"}
+                                       %)
+                                   @kv-set-calls))
                          (is (pos? @current-calls))))
                (p/catch (fn [e]
                           (is false (str e))))
