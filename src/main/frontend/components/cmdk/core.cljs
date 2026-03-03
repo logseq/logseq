@@ -655,20 +655,9 @@
   (when-let [action (state->action state)]
     (handle-action action state event)))
 
-(def ^:private scroll-lerp-base-factor
-  "Minimum lerp factor used near target (smooth settle). Range 0..1."
-  0.3)
-
-(def ^:private scroll-lerp-max-factor
-  "Maximum lerp factor used far from target (fast tracking). Range 0..1."
-  0.8)
-
-(def ^:private scroll-lerp-ramp-px
-  "Pixel distance at which max-factor is fully reached.
-   During rapid keypresses the gap is typically 40-120px;
-   this value should be tuned so most of that range maps
-   to the upper half of the factor curve."
-  120)
+(def ^:private scroll-padding
+  "Pixel clearance reserved at the top and bottom of the scroll container."
+  32)
 
 ;; --- Keyboard acceleration ---
 ;; When holding ArrowDown/Up, step starts at 1 and ramps up
@@ -689,146 +678,87 @@
 ;; --- Synchronous keyboard highlight DOM manipulation ---
 ;; React/Rum re-renders asynchronously (via rAF). When a keydown fires,
 ;; scrollTop is set synchronously but the highlight attribute is only updated in
-;; the next frame when React reconciles — producing a visible 1-frame gap.
+;; the next frame when React reconciles - producing a visible 1-frame gap.
 ;; `sync-keyboard-highlight!` toggles [data-kb-highlighted] directly so
 ;; both changes land in the same browser paint frame.
 
 (defn- sync-keyboard-highlight!
   "Synchronously toggles [data-kb-highlighted] on the DOM, with CSS
-  transition suppressed to prevent flicker. The CSS rule in cmdk.css provides
-  the visual style; React reconcile confirms the same attribute — visual no-op."
+  transition suppressed to prevent flicker."
   [container old-item-idx new-item-idx]
-  ;; Clear old highlight — suppress transition, remove attribute, restore transition.
+  ;; Clear old highlight - suppress transition, remove attribute, restore transition.
   (when-let [old-el (if (some? old-item-idx)
                       (.querySelector container (str "[data-item-index='" old-item-idx "'] [data-cmdk-item]"))
                       (.querySelector container "[data-kb-highlighted]"))]
     (set! (.-transition (.-style old-el)) "none")
     (.removeAttribute old-el "data-kb-highlighted")
     (js/requestAnimationFrame #(set! (.-transition (.-style old-el)) "")))
-  ;; Set new highlight — suppress transition for instant appearance, restore after.
+  ;; Set new highlight - suppress transition for instant appearance, restore after.
   (when-let [new-el (.querySelector container (str "[data-item-index='" new-item-idx "'] [data-cmdk-item]"))]
     (set! (.-transition (.-style new-el)) "none")
     (.setAttribute new-el "data-kb-highlighted" "true")
     (js/requestAnimationFrame #(set! (.-transition (.-style new-el)) ""))))
 
-(defn- highlighted-row-wrapper-el
-  "Returns the current highlighted row wrapper (`[data-item-index]`) in container."
-  [state container]
-  (when-let [item-idx (some-> state state->highlighted-item :item-index)]
-    (.querySelector container (str "[data-item-index='" item-idx "']"))))
-
-(defn- row-el-needs-target-reconcile?
-  "Returns true only when `row-el` is a lazy wrapper still rendering placeholder.
-
-  Reconcile is needed only in this case because placeholder height can differ
-  from mounted row height."
-  [row-el]
-  (if-let [row-wrapper (some-> row-el (.closest "[data-item-index]"))]
-    (let [wrapper-el? (= row-el row-wrapper)
-          lazy-wrapper? (boolean (.querySelector row-wrapper ".lazy-visibility"))
-          mounted-row? (boolean (.querySelector row-wrapper ".lazy-visibility [data-cmdk-item]"))]
-      (and wrapper-el? lazy-wrapper? (not mounted-row?)))
-    false))
-
-(defn- current-highlight-target-top
-  "Recomputes scroll target from latest highlighted-row geometry.
-
-  This keeps target tracking accurate while lazy placeholders are replaced by
-  real rows (which can change cumulative list height during animation)."
-  [state container fallback-target]
-  (if-let [row-el (highlighted-row-wrapper-el state container)]
-    (if-let [rect (scroll/focus-row-visible-rect container row-el)]
-      (scroll/ensure-focus-visible-scroll-top rect)
-      fallback-target)
-    fallback-target))
-
-(defn- start-scroll-animation!
-  "Starts (or continues) a requestAnimationFrame loop that lerps scrollTop
-   towards `::scroll-target`. Stops when target is reached or cleared."
-  [state]
-  (when-not @(::scroll-raf state)
-    (let [animate (fn animate []
-                    (if-let [container @(::scroll-container-ref state)]
-                      (let [pending-target @(::scroll-target state)
-                            reconcile? @(::scroll-target-needs-reconcile? state)
-                            target (if reconcile?
-                                     (current-highlight-target-top state container pending-target)
-                                     pending-target)
-                            current (.-scrollTop container)]
-                        (when (and reconcile? (not= target pending-target))
-                          (reset! (::scroll-target state) target))
-                        (if (or (nil? target) (= (js/Math.round current) target))
-                          (reset! (::scroll-raf state) nil)
-                          (let [distance (js/Math.abs (- target current))
-                                factor (scroll/adaptive-lerp-factor
-                                        scroll-lerp-base-factor
-                                        scroll-lerp-max-factor
-                                        distance
-                                        scroll-lerp-ramp-px)
-                                next-top (scroll/lerp-scroll-top current target factor)]
-                            (set! (.-scrollTop container) next-top)
-                            (reset! (::scroll-raf state) (js/requestAnimationFrame animate)))))
-                      (reset! (::scroll-raf state) nil)))]
-      (reset! (::scroll-raf state) (js/requestAnimationFrame animate)))))
-
 (defn- scroll-to-highlight!
-  "Updates the scroll target to bring the highlighted row into view.
+  "Updates the scroll position to bring the highlighted row into view.
 
-  Decision: instant vs lerp is driven by whether the row is already fully
-  inside the ACTUAL (current) viewport:
+  - Row not yet rendered (lazy-visible placeholder, no [data-cmdk-item] child)
+    -> defers scrolling until item mount callback re-enters this function.
+    No scroll is attempted until the item is present.
+    (`focus-height <= 4` serves as a structural fallback for edge cases.)
 
-  - Row outside actual viewport → instant snap.
-    During rapid keydown hold the lerp animation cannot converge between OS
-    key-repeat events (~30 ms ≈ 2 frames). Using lerp in this case causes the
-    row to be only partially visible. Snapping guarantees it is always fully in
-    view immediately.
+  - Row outside viewport -> instant snap (`scrollTop` assignment).
+    During rapid key-repeat (~30 ms) even native smooth scroll cannot converge
+    before the next event fires, leaving the row partially or fully out of view.
 
-  - Row fully inside viewport but target ≠ current → lerp (lazy-placeholder reconcile).
+  - Row inside viewport but within scroll-padding zone -> browser-native smooth
+    scroll via `scrollTo {behavior: 'smooth'}` for a small (<=32 px) nudge.
 
-  - Wrap-around (distance > 2 × viewport-height) → instant (via scroll-behavior)."
+  - Wrap-around (first -> last): in long lists the target is outside the current
+    viewport and instant snap applies. In short lists where all items are visible
+    the item may remain in viewport; logic is unified via item-in-viewport?."
   [state row-el]
   (when-let [container @(::scroll-container-ref state)]
     (when row-el
-      (let [highlighted-item-index (some-> state state->highlighted-item :item-index)
-            row-item-index (some-> (.closest row-el "[data-item-index]")
-                                   (.getAttribute "data-item-index"))
-            stale-row? (and (some? highlighted-item-index)
-                            (some? row-item-index)
-                            (not= (str highlighted-item-index) row-item-index))]
-        ;; Async highlight callback can lag behind keyboard navigation.
-        ;; Drop stale row updates before any rect/math/animation work.
+      (let [highlighted-item-idx (some-> state state->highlighted-item :item-index)
+            row-item-idx (some-> (.closest row-el "[data-item-index]")
+                                 (.getAttribute "data-item-index"))
+            stale-row? (and (some? highlighted-item-idx)
+                            (some? row-item-idx)
+                            (not= (str highlighted-item-idx) row-item-idx))]
         (when-not stale-row?
-          (let [rect (scroll/focus-row-visible-rect container row-el)]
-            (when rect
-              (let [current-top   (.-scrollTop container)
-                    viewport-h    (.-clientHeight container)
-                    focus-top     (:focus-top rect)
-                    focus-bottom  (+ focus-top (:focus-height rect))
-                    item-in-view? (and (>= focus-top current-top)
-                                       (<= focus-bottom (+ current-top viewport-h)))
-                    target-top    (scroll/ensure-focus-visible-scroll-top rect)
-                    instant?      (or (not item-in-view?)
-                                      (= :instant (scroll/scroll-behavior current-top target-top viewport-h)))]
-                (when (not= target-top (js/Math.round current-top))
-                  (if instant?
-                    (do
-                      (when-let [raf @(::scroll-raf state)]
-                        (js/cancelAnimationFrame raf)
-                        (reset! (::scroll-raf state) nil))
-                      (set! (.-scrollTop container) target-top)
-                      (reset! (::scroll-target state) nil)
-                      (reset! (::scroll-target-needs-reconcile? state) false))
-                    ;; lerp path: only for lazy-placeholder reconcile
-                    (let [scrolling?         (some? @(::scroll-raf state))
-                          pending-target     @(::scroll-target state)
-                          pending-reconcile? @(::scroll-target-needs-reconcile? state)
-                          needs-reconcile?   (row-el-needs-target-reconcile? row-el)]
-                      (when-not (and scrolling?
-                                     (= pending-target target-top)
-                                     (= pending-reconcile? needs-reconcile?))
-                        (reset! (::scroll-target state) target-top)
-                        (reset! (::scroll-target-needs-reconcile? state) needs-reconcile?)
-                        (start-scroll-animation! state)))))))))))))
+          (when-let [rect (scroll/focus-row-visible-rect container row-el)]
+            (let [focus-height (:focus-height rect)
+                  not-rendered? (or (not (.querySelector row-el "[data-cmdk-item]"))
+                                    (<= focus-height 4))]
+              (when-not not-rendered?
+                (let [current-top (.-scrollTop container)
+                      viewport-h (.-clientHeight container)
+                      focus-top (:focus-top rect)
+                      focus-bottom (+ focus-top focus-height)
+                      item-in-viewport? (and (>= focus-top current-top)
+                                             (<= focus-bottom (+ current-top viewport-h)))
+                      target-top (scroll/ensure-focus-visible-scroll-top
+                                  (assoc rect
+                                         :scroll-padding-top    scroll-padding
+                                         :scroll-padding-bottom scroll-padding))]
+                  (reset! (::pending-scroll-item-idx state) nil)
+                  (when (not= target-top (js/Math.round current-top))
+                    (if item-in-viewport?
+                      (.scrollTo container #js {:top target-top :behavior "smooth"})
+                      (set! (.-scrollTop container) target-top))))))))))))
+
+(defn- on-item-mounted-scroll!
+  "Runs deferred keyboard scroll correction when the highlighted row mounts."
+  [state item-idx item-el]
+  (when (and item-el
+             (scroll/should-scroll-on-item-mounted?
+              @(::focus-source state)
+              @(::pending-scroll-item-idx state)
+              (some-> state state->highlighted-item :item-index)
+              item-idx))
+    (when-let [row-el (.closest item-el "[data-item-index]")]
+      (scroll-to-highlight! state row-el))))
 
 (rum/defc render-result-list-item < rum/static
   [state group highlighted? mouse-mode? item hls-page? text input]
@@ -844,16 +774,14 @@
                      :rounded true
                      :hoverable mouse-mode?
                      :highlighted highlighted?
+                     :on-mounted (fn [item-el]
+                                   (on-item-mounted-scroll! state item-idx item-el))
                      :on-click (fn [e]
                                  (util/stop-propagation e)
                                  (reset! (::highlighted-item state) item)
                                  (handle-action :default state e)
                                  (when-let [on-click (:on-click item)]
                                    (on-click e)))
-                     ;; :on-mouse-enter (fn [_e]
-                     ;;                   (when (= :mouse @(::focus-source state))
-                     ;;                     (when (not= item @(::highlighted-item state))
-                     ;;                       (reset! (::highlighted-item state) item))))
                      :on-mouse-move (fn [e]
                                       (let [dx (or (.-movementX e) 0)
                                             dy (or (.-movementY e) 0)
@@ -965,10 +893,15 @@
               (sync-keyboard-highlight! container old-item-idx next-idx))
             (reset! (::highlighted-item state) next-highlighted-item)
             (when (and container next-idx)
+              (reset! (::pending-scroll-item-idx state) next-idx)
               (when-let [el (.querySelector container (str "[data-item-index='" next-idx "']"))]
                 (scroll-to-highlight! state el))))
-          (reset! (::highlighted-item state) nil)))
-      (reset! (::highlighted-item state) nil))))
+          (do
+            (reset! (::pending-scroll-item-idx state) nil)
+            (reset! (::highlighted-item state) nil))))
+      (do
+        (reset! (::pending-scroll-item-idx state) nil)
+        (reset! (::highlighted-item state) nil)))))
 
 (defn handle-input-change
   ([state e] (handle-input-change state e (.. e -target -value)))
@@ -1156,16 +1089,6 @@
            (when timeout-id
              (js/clearTimeout timeout-id)))))
      [])
-    ;; fired when highlighted item changes (normal keyboard navigation)
-    (hooks/use-effect!
-     (fn []
-       (when (and highlighted-item (= :keyboard @(::focus-source state)))
-         (when-let [container @(::scroll-container-ref state)]
-           (when-let [idx (:item-index highlighted-item)]
-             (when-let [el (.querySelector container (str "[data-item-index='" idx "']"))]
-               (scroll-to-highlight! state el)))))
-       nil)
-     [highlighted-item])
     [:div {:class "bg-gray-02 border-b border-1 border-gray-07"}
      [:input.cp__cmdk-search-input
       {:class "text-xl bg-transparent border-none w-full outline-none px-3 py-3"
@@ -1301,17 +1224,13 @@
            ::input (atom input)
            ::input-ref (atom nil)
            ::all-items-cache (atom [])
-           ::scroll-raf (atom nil)
-           ::scroll-target (atom nil)
-           ::scroll-target-needs-reconcile? (atom false)
            ::scroll-container-ref (atom nil)
+           ::pending-scroll-item-idx (atom nil)
            ::accel-start-ts (atom nil))))
 
 (defn- cmdk-will-unmount
-  "Clean up cmdk component: cancel pending rAF, persist state, clear search mode."
+  "Clean up cmdk component: persist state, clear search mode."
   [state]
-  (when-let [raf @(::scroll-raf state)]
-    (js/cancelAnimationFrame raf))
   (persist-cmdk-query-state! state)
   (state/set-state! :search/mode nil)
   (state/set-state! :search/args nil)
@@ -1362,7 +1281,7 @@
             :ref #(let [*ref (::scroll-container-ref state)]
                     (when-not @*ref (reset! *ref %)))
             :style {:background "var(--lx-gray-02)"
-                    :scroll-padding-block 32}}
+                    :scroll-padding-block scroll-padding}}
 
       (when group-filter
         [:div.flex.flex-col.px-3.py-1.opacity-70.text-sm
@@ -1395,3 +1314,4 @@
 (rum/defc cmdk-block [props]
   [:div {:class "cp__cmdk__block rounded-md"}
    (cmdk props)])
+
