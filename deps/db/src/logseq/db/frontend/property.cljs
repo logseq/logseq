@@ -567,6 +567,11 @@
                                              :schema {:type :map
                                                       :hide? true
                                                       :public? false}}
+     :logseq.property.asset/align {:title "Image alignment"
+                                   :schema {:type :string
+                                            :hide? true
+                                            :public? false}
+                                   :queryable? false}
      :logseq.property.fsrs/due {:title "Due"
                                 :schema
                                 {:type :datetime

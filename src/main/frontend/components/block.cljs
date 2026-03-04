@@ -203,10 +203,12 @@
     (set! (.-src img) url)))
 
 (defonce *resizing-image? (atom false))
+
 (rum/defc ^:large-vars/cleanup-todo asset-container
   [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text]}]
   (let [asset-width (:logseq.property.asset/width asset-block)
-        asset-height (:logseq.property.asset/height asset-block)]
+        asset-height (:logseq.property.asset/height asset-block)
+        asset-align (:logseq.property.asset/align asset-block)]
     (hooks/use-effect!
      (fn []
        (when (:block/uuid asset-block)
@@ -275,7 +277,13 @@
                                       :repo (state/get-current-repo)
                                       :href src
                                       :title title
-                                      :full-text full-text})))))))]
+                                      :full-text full-text})))))))
+                handle-set-align!
+                (fn [align]
+                  (when-let [asset-id (:block/uuid asset-block)]
+                    (property-handler/set-block-property! asset-id
+                                                          :logseq.property.asset/align
+                                                          align)))]
             (when asset-block
               [:.asset-action-bar {:aria-hidden "true"}
                (shui/dropdown-menu
@@ -288,6 +296,33 @@
                    :class "h-6 w-6"}
                   (shui/tabler-icon "dots-vertical")))
                 (shui/dropdown-menu-content
+                 (shui/dropdown-menu-sub
+                  (shui/dropdown-menu-sub-trigger
+                   [:span.flex.items-center.gap-1
+                    (ui/icon "layout-align-left") (t :asset/align)])
+                  (shui/dropdown-menu-sub-content
+                   (shui/dropdown-menu-item
+                    {:on-click #(handle-set-align! "left")}
+                    [:span.flex.items-center.gap-2
+                     (ui/icon "layout-align-left")
+                     (t :asset/align-left)
+                     (when (or (nil? asset-align) (= asset-align "left"))
+                       (ui/icon "check"))])
+                   (shui/dropdown-menu-item
+                    {:on-click #(handle-set-align! "center")}
+                    [:span.flex.items-center.gap-2
+                     (ui/icon "layout-align-center")
+                     (t :asset/align-center)
+                     (when (= asset-align "center")
+                       (ui/icon "check"))])
+                   (shui/dropdown-menu-item
+                    {:on-click #(handle-set-align! "right")}
+                    [:span.flex.items-center.gap-2
+                     (ui/icon "layout-align-right")
+                     (t :asset/align-right)
+                     (when (= asset-align "right")
+                       (ui/icon "check"))])))
+
                  (shui/dropdown-menu-item
                   {:on-click handle-copy!}
                   [:span.flex.items-center.gap-1
@@ -301,6 +336,7 @@
                                    (js/window.apis.openExternal image-src)))}
                     [:span.flex.items-center.gap-1
                      (ui/icon "folder-pin") (t (if local? :asset/show-in-folder :asset/open-in-browser))]))
+
                  (when-not config/publishing?
                    [:<>
                     (shui/dropdown-menu-separator)
@@ -318,6 +354,7 @@
   (let [breadcrumb? (:breadcrumb? config)
         positioned? (:property-position config)
         asset-block (:asset-block config)
+        asset-align (:logseq.property.asset/align asset-block)
         width (:width metadata)
         *width (get state ::size)
         width (or @*width width)
@@ -335,6 +372,10 @@
             (not resizable?))
       asset-container-cp
       [:div.ls-resize-image.rounded-md
+       {:class (case asset-align
+                 "center" "align-center"
+                 "right"  "align-right"
+                 "align-left")}
        asset-container-cp
        (resize-image-handles
         (fn [k ^js event]
