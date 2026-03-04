@@ -74,7 +74,7 @@
   (let [nodes-base {:limit 100
                     :dev? dev?
                     :built-in? true
-                    :enable-snippet? false}]
+                    :enable-snippet? true}]
     (case filter-group
       :code
       (assoc nodes-base
@@ -84,7 +84,7 @@
 
       :current-page
       (cond-> {:limit 100
-               :enable-snippet? false}
+               :enable-snippet? true}
         page-uuid
         (assoc :page (str page-uuid)))
 
