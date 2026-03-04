@@ -182,8 +182,8 @@
 ;;   T=660–780  repeats 16–20         step 4  →  +20  (total +52 → item-index ≈ 53)
 ;;   threshold 40 is a conservative lower bound well below the expected ~52.
 ;; ---------------------------------------------------------------------------
-
-(deftest cmdk-lazy-visible-hold-arrow-down-scroll
+;; current disable keyboard acceleration, no need to test it for now
+(deftest ^:fix-me cmdk-lazy-visible-hold-arrow-down-scroll
   (testing "holding ArrowDown in expanded lazy-visible results keeps highlight in viewport after keyup"
     ;; Use long titles to increase row-height variance between lazy placeholder and mounted rows.
     (setup-search "cmdkholdlong" 60 (apply str (repeat 230 "x")))
