@@ -85,23 +85,3 @@
        (some? pending-item-index)
        (= pending-item-index mounted-item-index)
        (= highlighted-item-index mounted-item-index)))
-
-(defn accel-step
-  "Compute keyboard acceleration step based on held duration.
-
-  Returns 1 during the initial `delay-ms` and then increases by 1
-  every `interval-ms`, capped at `max-step`.
-
-  Input:
-  - `held-ms`:     how long the key has been held (non-negative).
-  - `delay-ms`:    grace period before acceleration starts.
-  - `interval-ms`: milliseconds between each step increase.
-  - `max-step`:    upper bound on returned step.
-
-  Output:
-  - A positive integer in [1, max-step]."
-  [held-ms delay-ms interval-ms max-step]
-  (if (< held-ms delay-ms)
-    1
-    (min max-step
-         (inc (quot (- held-ms delay-ms) (max 1 interval-ms))))))
