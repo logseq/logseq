@@ -86,7 +86,7 @@
         (is (= 0 @set-count*))))))
 
 (deftest cmdk-block-search-options-default-and-nodes
-  (testing "default and nodes options keep snippet disabled and include expected base params"
+  (testing "default and nodes options keep snippet enabled and include expected base params"
     (is (= {:limit 100 :dev? false :built-in? true :enable-snippet? true}
            (state/cmdk-block-search-options {:dev? false})))
     (is (= {:limit 100 :dev? true :built-in? true :enable-snippet? true}
