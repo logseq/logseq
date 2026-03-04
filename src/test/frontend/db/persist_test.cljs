@@ -12,7 +12,7 @@
                                               (p/resolved [{:name "demo"}
                                                            {:name "logseq_db_prefixed"}
                                                            {:name "logseq_db_logseq_db_legacy"}
-                                                           {:name "logseq_local_local-only"}]))
+                                                           {:name "logseq_db_logseq_local_local-only"}]))
                         util/electron? (constantly true)
                         ipc/ipc (fn [_channel]
                                   (p/resolved #js ["logseq_db_remote"
@@ -25,7 +25,8 @@
                      "logseq_db_remote"
                      "logseq_db_remote-legacy"}
                    (set names)))
-            (is (not-any? #(re-find #"^logseq_db_logseq_db_" %) names))))
+            (is (not-any? #(re-find #"^logseq_db_logseq_db_" %) names))
+            (is (not-any? #(re-find #"logseq_local_" %) names))))
         (p/catch (fn [error]
                    (is false (str error))))
         (p/finally done))))
