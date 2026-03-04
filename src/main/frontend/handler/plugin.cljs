@@ -844,12 +844,6 @@
                                (assoc :installedFromUserWebUrl url))}}))
       url)))
 
-(defn add-right-sidebar-renderer!
-  [pid key]
-  (let [repo (state/get-current-repo)
-        key' (str (name pid) "." (name key))]
-    (state/sidebar-add-block! repo key' :plugin)))
-
 ;; components
 (rum/defc lsp-indicator < rum/reactive
   []
