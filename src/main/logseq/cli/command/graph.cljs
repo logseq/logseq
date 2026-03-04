@@ -16,12 +16,17 @@
   {:type {:desc "Import type (edn, sqlite)"}
    :input {:desc "Input path"}})
 
+(def ^:private graph-validate-spec
+  {:fix {:desc "Attempt to fix validation errors"
+         :alias :f
+         :default false}})
+
 (def entries
   [(core/command-entry ["graph" "list"] :graph-list "List graphs" {})
    (core/command-entry ["graph" "create"] :graph-create "Create graph" {})
    (core/command-entry ["graph" "switch"] :graph-switch "Switch current graph" {})
    (core/command-entry ["graph" "remove"] :graph-remove "Remove graph" {})
-   (core/command-entry ["graph" "validate"] :graph-validate "Validate graph" {})
+   (core/command-entry ["graph" "validate"] :graph-validate "Validate graph" graph-validate-spec)
    (core/command-entry ["graph" "info"] :graph-info "Graph metadata" {})
    (core/command-entry ["graph" "export"] :graph-export "Export graph" graph-export-spec)
    (core/command-entry ["graph" "import"] :graph-import "Import graph" graph-import-spec)])
@@ -44,7 +49,7 @@
            :message "graph name is required"}})
 
 (defn build-graph-action
-  [command graph repo]
+  [command graph repo options]
   (case command
     :graph-list
     {:ok? true
@@ -94,7 +99,7 @@
                 :command :graph-validate
                 :method :thread-api/validate-db
                 :direct-pass? false
-                :args [repo]
+                :args [repo options]
                 :repo repo
                 :graph (core/repo->graph repo)}})
 
