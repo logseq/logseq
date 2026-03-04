@@ -25,3 +25,9 @@
                    (is false (str "unexpected error: " e))
                    (done)))
         (p/finally done))))
+
+(deftest test-result->exit-code
+  (let [result->exit-code #'cli-main/result->exit-code]
+    (is (= 0 (result->exit-code {:status :ok})))
+    (is (= 1 (result->exit-code {:status :error})))
+    (is (= 7 (result->exit-code {:status :error :exit-code 7})))))
