@@ -115,9 +115,11 @@
         hint (error-hint error)
         message* (style/bold-keywords message ["option" "command" "argument"])
         candidates* (format-candidates candidates)]
-    (cond-> (str "Error (" (name (or code :error)) "): " message*)
-      candidates* (str candidates*)
-      hint (str "\nHint: " hint))))
+    (if (= :graph-validation-failed code)
+      message*
+      (cond-> (str "Error (" (name (or code :error)) "): " message*)
+        candidates* (str candidates*)
+        hint (str "\nHint: " hint)))))
 
 (defn- maybe-ident-header
   [items]
@@ -340,12 +342,12 @@
 (defn- format-graph-action
   [command {:keys [graph]}]
   (let [verb (case command
-               :graph-create "created"
-               :graph-switch "switched"
-               :graph-remove "removed"
-               :graph-validate "validated"
-               "updated")]
-    (str "Graph " verb ": " graph)))
+               :graph-create "Created"
+               :graph-switch "Switched to"
+               :graph-remove "Removed"
+               :graph-validate "Validated"
+               "Updated")]
+    (str verb " graph " (pr-str graph))))
 
 (defn- format-doctor
   [status checks]

@@ -1172,7 +1172,7 @@
                                       set)
                        stop-result (run-cli ["server" "stop" "--graph" repo] data-dir cfg-path)
                        stop-payload (parse-json-output stop-result)]
-                 (is (= 0 (:exit-code upsert-tag-result)))
+                 (is (= 1 (:exit-code upsert-tag-result)))
                  (is (= "error" (:status upsert-tag-payload)))
                  (is (string/includes? (get-in upsert-tag-payload [:error :message])
                                        "already exists as a page and is not a tag"))
@@ -1294,7 +1294,7 @@
                  (is (number? source-id))
                  (is (= 0 (:exit-code existing-upsert-result)))
                  (is (= "ok" (:status existing-upsert-payload)))
-                 (is (= 0 (:exit-code rename-result)))
+                 (is (= 1 (:exit-code rename-result)))
                  (is (= "error" (:status rename-payload)))
                  (is (= :tag-rename-conflict (keyword (get-in rename-payload [:error :code]))))
                  (is (contains? tag-names source-name))
