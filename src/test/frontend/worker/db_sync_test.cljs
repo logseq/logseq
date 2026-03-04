@@ -61,6 +61,67 @@
      :child2 child2
      :child3 child3}))
 
+(deftest resolve-ws-token-refreshes-when-token-expired-test
+  (async done
+         (let [refresh-calls (atom 0)
+               main-thread-prev @worker-state/*main-thread
+               worker-state-prev @worker-state/*state]
+           (reset! worker-state/*state (assoc worker-state-prev :auth/id-token "expired-token"))
+           (reset! worker-state/*main-thread
+                   (fn [qkw _direct-pass? _args-list]
+                     (if (= qkw :thread-api/ensure-id&access-token)
+                       (do
+                         (swap! refresh-calls inc)
+                         (p/resolved {:id-token "fresh-token"}))
+                       (p/resolved nil))))
+           (with-redefs [db-sync/auth-token (fn [] "expired-token")
+                         db-sync/id-token-expired? (fn [_token] true)]
+             (-> (#'db-sync/<resolve-ws-token)
+                 (p/then (fn [token]
+                           (is (= 1 @refresh-calls))
+                           (is (= "fresh-token" token))
+                           (is (= "fresh-token" (worker-state/get-id-token)))
+                           (reset! worker-state/*main-thread main-thread-prev)
+                           (reset! worker-state/*state worker-state-prev)
+                           (done)))
+                 (p/catch (fn [error]
+                            (reset! worker-state/*main-thread main-thread-prev)
+                            (reset! worker-state/*state worker-state-prev)
+                            (is nil (str error))
+                            (done))))))))
+
+(deftest resolve-ws-token-skips-refresh-when-token-not-expired-test
+  (async done
+         (let [refresh-calls (atom 0)
+               main-thread-prev @worker-state/*main-thread]
+           (reset! worker-state/*main-thread
+                   (fn [qkw _direct-pass? _args-list]
+                     (when (= qkw :thread-api/ensure-id&access-token)
+                       (swap! refresh-calls inc))
+                     (p/resolved {:id-token "fresh-token"})))
+           (with-redefs [db-sync/auth-token (fn [] "valid-token")
+                         db-sync/id-token-expired? (fn [_token] false)]
+             (-> (#'db-sync/<resolve-ws-token)
+                 (p/then (fn [token]
+                           (reset! worker-state/*main-thread main-thread-prev)
+                           (is (= 0 @refresh-calls))
+                           (is (= "valid-token" token))
+                           (done)))
+                 (p/catch (fn [error]
+                            (reset! worker-state/*main-thread main-thread-prev)
+                            (is nil (str error))
+                            (done))))))))
+
+(deftest get-reverse-tx-data-skips-non-retractable-block-attrs-test
+  (testing "pending reversed txs should not retract required block attrs"
+    (let [local-txs [{:reversed-tx [[:db/retract 1 :block/updated-at 100 10]
+                                    [:db/retract 1 :block/created-at 90 10]
+                                    [:db/retract 1 :block/title "Home" 10]
+                                    [:db/retract 1 :block/name "home" 10]]}]
+          reversed (#'db-sync/get-reverse-tx-data local-txs)]
+      (is (= [[:db/retract 1 :block/name "home" 10]]
+             reversed)))))
+
 (deftest update-online-users-dedupes-identical-messages-test
   (let [client {:repo test-repo
                 :online-users (atom [])
@@ -597,14 +658,13 @@
                 (is (empty? (map :entity (:errors validation)))
                     (str (:errors validation)))))))))))
 
-(deftest ^:long malformed-remote-anonymous-entity-tx-is-ignored-test
-  (testing "remote tx creating anonymous entities should be ignored instead of invalidating db"
+(deftest ^:long remote-retract-required-page-attr-is-ignored-test
+  (testing "remote tx retracting required page attrs should be ignored"
     (let [{:keys [conn parent]} (setup-parent-child)
-          created-by-id (:db/id (:block/page parent))
-          ts 1771435997392
-          malformed-tx [[:db/add "missing-uuid-entity" :block/created-at ts]
-                        [:db/add "missing-uuid-entity" :block/updated-at ts]
-                        [:db/add "missing-uuid-entity" :logseq.property/created-by-ref created-by-id]]]
+          page (:block/page parent)
+          page-id (:db/id page)
+          updated-at (:block/updated-at page)
+          malformed-tx [[:db/retract page-id :block/updated-at updated-at]]]
       (with-datascript-conns conn nil
         (fn []
           (is (nil? (try
@@ -612,16 +672,9 @@
                       nil
                       (catch :default e
                         e))))
-          (let [anonymous-ents (->> (d/datoms @conn :avet :logseq.property/created-by-ref)
-                                    (keep (fn [datom]
-                                            (let [ent (d/entity @conn (:e datom))]
-                                              (when (and (nil? (:block/uuid ent))
-                                                         (nil? (:db/ident ent))
-                                                         (= ts (:block/created-at ent))
-                                                         (= ts (:block/updated-at ent)))
-                                                (select-keys ent [:db/id :block/created-at :block/updated-at :logseq.property/created-by-ref]))))))
+          (let [page' (d/entity @conn page-id)
                 validation (db-validate/validate-local-db! @conn)]
-            (is (empty? anonymous-ents) (str anonymous-ents))
+            (is (number? (:block/updated-at page')))
             (is (empty? (map :entity (:errors validation)))
                 (str (:errors validation)))))))))
 
