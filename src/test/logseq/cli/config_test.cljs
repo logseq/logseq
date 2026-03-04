@@ -104,5 +104,16 @@
         contents (.toString (fs/readFileSync cfg-path) "utf8")
         parsed (reader/read-string contents)]
     (is (= "new" (:graph parsed)))
-    (is (not (contains? parsed :auth-token)))
+    (is (= "secret" (:auth-token parsed)))
     (is (not (contains? parsed :retries)))))
+
+(deftest test-update-config-removes-nil-values
+  (let [dir (node-helper/create-tmp-dir "cli")
+        cfg-path (node-path/join dir "cli.edn")
+        _ (fs/writeFileSync cfg-path "{:graph \"old\" :auth-token \"secret\"}")
+        _ (config/update-config! {:config-path cfg-path}
+                                 {:auth-token nil})
+        contents (.toString (fs/readFileSync cfg-path) "utf8")
+        parsed (reader/read-string contents)]
+    (is (= "old" (:graph parsed)))
+    (is (not (contains? parsed :auth-token)))))

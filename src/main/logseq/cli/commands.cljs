@@ -10,6 +10,7 @@
             [logseq.cli.command.remove :as remove-command]
             [logseq.cli.command.server :as server-command]
             [logseq.cli.command.show :as show-command]
+            [logseq.cli.command.sync :as sync-command]
             [logseq.cli.command.upsert :as upsert-command]
             [logseq.cli.server :as cli-server]
             [promesa.core :as p]))
@@ -101,7 +102,8 @@
                remove-command/entries
                query-command/entries
                show-command/entries
-               doctor-command/entries)))
+               doctor-command/entries
+               sync-command/entries)))
 
 ;; Global option parsing lives in logseq.cli.command.core.
 
@@ -267,6 +269,10 @@
            (not (seq (:graph opts))))
       (missing-graph-result summary)
 
+      (and (= command :sync-download)
+           (not (seq (:graph opts))))
+      (missing-graph-result summary)
+
       :else
       (command-core/ok-result command opts args summary))))
 
@@ -284,7 +290,7 @@
       (empty? args)
       (command-core/help-result summary)
 
-      (and (= 1 (count args)) (#{"graph" "server" "list" "upsert" "remove" "query"} (first args)))
+      (and (= 1 (count args)) (#{"graph" "server" "list" "upsert" "remove" "query" "sync"} (first args)))
       (command-core/help-result (command-core/group-summary (first args) table))
 
       :else
@@ -328,7 +334,9 @@
 
 (defn- ensure-missing-graph
   [action config]
-  (if (and (= :graph-import (:type action)) (:repo action))
+  (if (and (:repo action)
+           (or (:require-missing-graph action)
+               (= :graph-import (:type action))))
     (p/let [graphs (cli-server/list-graphs config)
             graph (command-core/repo->graph (:repo action))]
       (if (some #(= graph %) graphs)
@@ -406,6 +414,11 @@
         :doctor
         (doctor-command/build-action options)
 
+        (:sync-status :sync-start :sync-stop :sync-upload :sync-download
+         :sync-remote-graphs :sync-ensure-keys :sync-grant-access
+         :sync-config-set :sync-config-get :sync-config-unset)
+        (sync-command/build-action command options args repo)
+
         {:ok? false
          :error {:code :unknown-command
                  :message (str "unknown command: " command)}}))))
@@ -451,6 +464,10 @@
                          :server-start (server-command/execute-start action config)
                          :server-stop (server-command/execute-stop action config)
                          :server-restart (server-command/execute-restart action config)
+                         (:sync-status :sync-start :sync-stop :sync-upload :sync-download
+                          :sync-remote-graphs :sync-ensure-keys :sync-grant-access
+                          :sync-config-set :sync-config-get :sync-config-unset)
+                         (sync-command/execute action config)
                          {:status :error
                           :error {:code :unknown-action
                                   :message "unknown action"}}))]
@@ -460,4 +477,5 @@
                                              :schema
                                              :source :target :update-tags :update-properties
                                              :remove-tags :remove-properties
-                                             :export-type :file :import-type :input])))))
+                                             :export-type :file :import-type :input
+                                             :graph-id :email :config-key :config-value])))))

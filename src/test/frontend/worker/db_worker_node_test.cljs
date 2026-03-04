@@ -330,6 +330,8 @@
   (let [repo-error #'db-worker-node/repo-error
         bound-repo "logseq_db_bound"]
     (is (nil? (repo-error :thread-api/list-db [] bound-repo)))
+    (is (nil? (repo-error :thread-api/get-db-sync-config [] bound-repo)))
+    (is (nil? (repo-error :thread-api/db-sync-list-remote-graphs [] bound-repo)))
     (is (nil? (repo-error "thread-api/list-db" [] bound-repo)))
     (is (nil? (repo-error :thread-api/rtc-get-graphs ["token"] bound-repo)))
     (is (nil? (repo-error :thread-api/set-context [{:repo "not-a-repo-arg"}] bound-repo)))
@@ -353,8 +355,45 @@
                        (start-daemon! {:data-dir data-dir
                                        :repo repo})
                        _ (reset! daemon {:host host :port port :stop! stop!})
+                       _ (invoke host port "thread-api/set-db-sync-config"
+                                 [{:ws-url "wss://example.com/sync/%s"
+                                   :auth-token "token-value"}])
+                       config (invoke host port "thread-api/get-db-sync-config" [])
+                       _ (is (= "wss://example.com/sync/%s" (:ws-url config)))
+                       _ (is (= "token-value" (:auth-token config)))
                        result (invoke host port "thread-api/set-context" [{:app "desktop"}])]
                  (is (nil? result)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
+
+(deftest db-worker-node-sync-status-requires-repo-and-returns-structured-status
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-sync-status")
+               repo (str "logseq_db_sync_status_" (subs (str (random-uuid)) 0 8))]
+           (-> (p/let [{:keys [host port stop!]}
+                       (db-worker-node/start-daemon! {:data-dir data-dir
+                                                      :repo repo})
+                       _ (reset! daemon {:host host :port port :stop! stop!})
+                       {:keys [status body]} (invoke-raw host port "thread-api/db-sync-status" [])
+                       parsed (js->clj (js/JSON.parse body) :keywordize-keys true)
+                       _ (is (= 400 status))
+                       _ (is (= false (:ok parsed)))
+                       _ (is (= "missing-repo" (get-in parsed [:error :code])))
+                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
+                       status-result (invoke host port "thread-api/db-sync-status" [repo])]
+                 (is (= repo (:repo status-result)))
+                 (is (contains? status-result :ws-state))
+                 (is (contains? status-result :pending-local))
+                 (is (contains? status-result :pending-asset))
+                 (is (contains? status-result :pending-server))
+                 (is (contains? status-result :local-tx))
+                 (is (contains? status-result :remote-tx))
+                 (is (contains? status-result :graph-id)))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally (fn []

@@ -90,6 +90,30 @@ Server ownership behavior:
 - `server start` can return `server-start-timeout-orphan` when lock creation times out and orphan matching processes are detected.
 - `server list` human output includes an `OWNER` column, and `server status` / `server list` include owner metadata in structured output (`--output json|edn`).
 
+Sync commands:
+- `sync status --graph <name>` - show db-sync runtime state for a graph daemon
+- `sync start --graph <name>` - start db-sync websocket client for a graph
+- `sync stop --graph <name>` - stop db-sync client on a graph daemon
+- `sync upload --graph <name>` - upload local graph snapshot to remote
+- `sync download --graph <name>` - download remote graph `<name>` into a same-name local graph directory
+- `sync remote-graphs [--graph <name>]` - list remote graphs visible to the current auth context
+- `sync ensure-keys [--graph <name>]` - ensure user RSA keys for sync/e2ee
+- `sync grant-access --graph <name> --graph-id <uuid> --email <email>` - grant encrypted graph access to a user
+- `sync config set [--graph <name>] ws-url|http-base|auth-token|e2ee-password <value>` - set db-sync runtime config key
+- `sync config get [--graph <name>] ws-url|http-base|auth-token|e2ee-password` - get db-sync runtime config key
+- `sync config unset [--graph <name>] ws-url|http-base|auth-token|e2ee-password` - remove db-sync runtime config key
+
+Sync download behavior:
+- `sync download` requires `--graph <name>`.
+- If a local graph with the same name already exists, the CLI returns `graph-exists`.
+- If no remote graph with that name exists, the CLI returns `remote-graph-not-found`.
+- For e2ee remote graphs in headless CLI mode, set `e2ee-password` via `sync config set` (or in `--config`) before download.
+
+Sync config persistence:
+- `sync config set/unset` writes to the CLI config file selected by `--config`.
+- If `--config` is not provided, the default config path is `~/logseq/cli.edn`.
+- `sync config get` reads from that same config source.
+
 Inspect and edit commands:
 - `list page [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list pages
 - `list tag [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list tags

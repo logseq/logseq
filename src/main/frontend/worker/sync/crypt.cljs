@@ -1,7 +1,6 @@
 (ns frontend.worker.sync.crypt
   "E2EE helpers for db-sync."
-  (:require ["/frontend/idbkv" :as idb-keyval]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [frontend.common.crypt :as crypt]
             [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.worker-common.util :as worker-util]
@@ -15,7 +14,6 @@
 
 (defonce ^:private *graph->aes-key (atom {}))
 (defonce ^:private *user-rsa-key-pair-inflight (atom {}))
-(defonce ^:private e2ee-store (delay (idb-keyval/newStore "localforage" "keyvaluepairs" 2)))
 (defonce ^:private e2ee-password-file "e2ee-password")
 (defonce ^:private native-env?
   (let [href (try (.. js/self -location -href)
@@ -61,7 +59,8 @@
     password))
 
 (defn- auth-token []
-  (worker-state/get-id-token))
+  (or (worker-state/get-id-token)
+      (:auth-token @worker-state/*db-sync-config)))
 
 (defn- auth-headers []
   (let [token (auth-token)]
@@ -160,8 +159,8 @@
 
 (defn- <clear-item!
   [k]
-  (assert (and k @e2ee-store))
-  (idb-keyval/del k @e2ee-store))
+  (assert k)
+  (platform/kv-set! (platform/current) k nil))
 
 (defn- graph-encrypted-aes-key-idb-key
   [graph-id]
@@ -271,11 +270,65 @@
 
 (defn- <decrypt-private-key
   [encrypted-private-key-str]
-  (p/let [encrypted-private-key (ldb/read-transit-str encrypted-private-key-str)
-          exported-private-key (worker-state/<invoke-main-thread
-                                :thread-api/decrypt-user-e2ee-private-key
-                                encrypted-private-key)]
-    (crypt/<import-private-key exported-private-key)))
+  (let [decrypt-on-main-thread
+        (fn [encrypted-private-key]
+          (p/let [exported-private-key (worker-state/<invoke-main-thread
+                                        :thread-api/decrypt-user-e2ee-private-key
+                                        encrypted-private-key)]
+            (crypt/<import-private-key exported-private-key)))
+
+        main-thread-unavailable?
+        (fn [error]
+          (let [message (some-> error ex-message)
+                data (ex-data error)]
+            (or (= :thread-api/decrypt-user-e2ee-private-key (:method data))
+                (and (string? message)
+                     (string/includes? message "main-thread is not available")))))
+
+        <decrypt-in-headless
+        (fn [encrypted-private-key]
+          (let [sync-config @worker-state/*db-sync-config
+                configured-password (:e2ee-password sync-config)
+                refresh-token (:auth/refresh-token @worker-state/*state)
+                auth-token (:auth-token sync-config)
+                candidates (cond-> []
+                             (seq configured-password) (conj {:source :config
+                                                              :value configured-password})
+                             (seq refresh-token) (conj {:source :saved-password
+                                                        :value refresh-token})
+                             (and (seq auth-token)
+                                  (not= auth-token refresh-token))
+                             (conj {:source :saved-password
+                                    :value auth-token}))]
+            (letfn [(<candidate-password
+                      [{:keys [source value]}]
+                      (case source
+                        :config
+                        (p/resolved value)
+
+                        :saved-password
+                        (<read-e2ee-password value)))
+
+                    (<decrypt-with-candidates
+                      [remaining]
+                            (if-let [candidate (first remaining)]
+                        (-> (p/let [password (<candidate-password candidate)]
+                              (when-not (seq password)
+                                (fail-fast :db-sync/missing-e2ee-password {:field :e2ee-password
+                                                                           :source (:source candidate)}))
+                              (crypt/<decrypt-private-key password encrypted-private-key))
+                            (p/catch (fn [_error]
+                                       (<decrypt-with-candidates (rest remaining)))))
+                        (fail-fast :db-sync/missing-e2ee-password {:field :e2ee-password
+                                                                   :reason :headless-decrypt-private-key
+                                                                   :hint "set :e2ee-password in --config for CLI sync"})))]
+              (<decrypt-with-candidates candidates))))]
+    (p/let [encrypted-private-key (ldb/read-transit-str encrypted-private-key-str)]
+      (-> (decrypt-on-main-thread encrypted-private-key)
+          (p/catch (fn [error]
+                     (if (main-thread-unavailable? error)
+                       (<decrypt-in-headless encrypted-private-key)
+                       (p/rejected error))))))))
 
 (defn- <import-public-key
   [public-key-str]

@@ -280,6 +280,60 @@
                  (cond-> [(str "Server " (name status) ": " repo)]
                    (and host port) (conj (str "Host: " host "  Port: " port))))))
 
+(def ^:private redacted-token "[REDACTED]")
+
+(defn- format-sync-status
+  [{:keys [repo graph-id ws-state pending-local pending-asset pending-server local-tx remote-tx]}]
+  (string/join "\n"
+               [(str "Sync status")
+                (str "repo: " (or repo "-"))
+                (str "graph-id: " (or graph-id "-"))
+                (str "ws-state: " (or ws-state :unknown))
+                (str "pending-local: " (or pending-local 0))
+                (str "pending-asset: " (or pending-asset 0))
+                (str "pending-server: " (or pending-server 0))
+                (str "local-tx: " (or local-tx "-"))
+                (str "remote-tx: " (or remote-tx "-"))]))
+
+(defn- format-sync-remote-graphs
+  [graphs]
+  (format-counted-table
+   ["GRAPH-ID" "GRAPH-NAME" "ROLE" "E2EE"]
+   (mapv (fn [{:keys [graph-id graph-name role graph-e2ee?]}]
+           [graph-id
+            graph-name
+            (or role "-")
+            (if (nil? graph-e2ee?)
+              "-"
+              (if graph-e2ee? "true" "false"))])
+         (or graphs []))))
+
+(defn- format-sync-action
+  [command {:keys [repo email]}]
+  (case command
+    :sync-start (str "Sync started: " repo)
+    :sync-stop (str "Sync stopped: " repo)
+    :sync-upload (str "Sync upload requested: " repo)
+    :sync-download (str "Sync download requested: " repo)
+    :sync-ensure-keys "Sync keys ensured"
+    :sync-grant-access (str "Sync access granted: " email " (repo: " repo ")")
+    "Sync updated"))
+
+(defn- format-sync-config-get
+  [{:keys [key value]}]
+  (let [display-value (if (contains? #{:auth-token :e2ee-password} key)
+                        redacted-token
+                        (if (some? value) value "-"))]
+    (str "sync config " (name key) ": " display-value)))
+
+(defn- format-sync-config-set
+  [{:keys [key]}]
+  (str "sync config set: " (name key)))
+
+(defn- format-sync-config-unset
+  [{:keys [key]}]
+  (str "sync config unset: " (name key)))
+
 (defn- format-upsert-block
   [{:keys [repo source target update-tags update-properties remove-tags remove-properties]} result]
   (if (vector? result)
@@ -375,6 +429,13 @@
         :server-status (format-server-status data)
         (:server-start :server-stop :server-restart)
         (format-server-action command data)
+        :sync-status (format-sync-status data)
+        :sync-remote-graphs (format-sync-remote-graphs (:graphs data))
+        (:sync-start :sync-stop :sync-upload :sync-download :sync-ensure-keys :sync-grant-access)
+        (format-sync-action command context)
+        :sync-config-get (format-sync-config-get data)
+        :sync-config-set (format-sync-config-set data)
+        :sync-config-unset (format-sync-config-unset data)
         :list-page (format-list-page (:items data) now-ms)
         :list-tag (format-list-tag (:items data) now-ms)
         :list-property (format-list-property (:items data) now-ms)

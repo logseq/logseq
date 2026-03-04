@@ -57,6 +57,22 @@
        :remote-tx remote-tx
        :graph-uuid graph-uuid})))
 
+(defn status
+  [repo]
+  (let [client (current-client repo)
+        counts (or (sync-counts repo) {})
+        ws-url (:ws-url @worker-state/*db-sync-config)
+        ws-state (or (some-> client :ws-state deref)
+                     (if (seq ws-url) :stopped :inactive))]
+    {:repo repo
+     :graph-id (or (:graph-id client) (:graph-uuid counts))
+     :ws-state ws-state
+     :pending-local (or (:pending-local counts) 0)
+     :pending-asset (or (:pending-asset counts) 0)
+     :pending-server (or (:pending-server counts) 0)
+     :local-tx (:local-tx counts)
+     :remote-tx (:remote-tx counts)}))
+
 (defn- normalize-online-users
   [users]
   (->> users
@@ -133,7 +149,8 @@
           (string/replace base #"/sync/%s$" "")))))
 
 (defn- auth-token []
-  (worker-state/get-id-token))
+  (or (worker-state/get-id-token)
+      (:auth-token @worker-state/*db-sync-config)))
 
 (defn- id-token-expired?
   [token]
@@ -407,6 +424,102 @@
                         {:status (.-status resp)
                          :url url
                          :body body}))))))
+
+(defn- require-auth-token!
+  [context]
+  (when-not (seq (auth-token))
+    (fail-fast :db-sync/missing-field (assoc context :field :auth-token))))
+
+(defn- ->uint8
+  [payload]
+  (cond
+    (instance? js/Uint8Array payload) payload
+    (instance? js/ArrayBuffer payload) (js/Uint8Array. payload)
+    (string? payload) (.encode text-encoder payload)
+    :else (js/Uint8Array. payload)))
+
+(defn- decode-snapshot-rows
+  [payload]
+  (sqlite-util/read-transit-str (.decode text-decoder (->uint8 payload))))
+
+(defn- frame-len
+  [^js payload offset]
+  (let [view (js/DataView. (.-buffer payload) offset 4)]
+    (.getUint32 view 0 false)))
+
+(defn- concat-payload
+  [^js a ^js b]
+  (cond
+    (nil? a) b
+    (nil? b) a
+    :else
+    (let [combined (js/Uint8Array. (+ (.-byteLength a) (.-byteLength b)))]
+      (.set combined a 0)
+      (.set combined b (.-byteLength a))
+      combined)))
+
+(defn- parse-framed-chunk
+  [buffer chunk]
+  (let [payload (concat-payload buffer chunk)
+        total (.-byteLength payload)]
+    (loop [offset 0
+           rows []]
+      (if (< (- total offset) 4)
+        {:rows rows
+         :buffer (when (< offset total)
+                   (.slice payload offset total))}
+        (let [len (frame-len payload offset)
+              next-offset (+ offset 4 len)]
+          (if (<= next-offset total)
+            (let [frame-payload (.slice payload (+ offset 4) next-offset)
+                  decoded (decode-snapshot-rows frame-payload)]
+              (recur next-offset (into rows decoded)))
+            {:rows rows
+             :buffer (.slice payload offset total)}))))))
+
+(defn- finalize-framed-buffer
+  [buffer]
+  (if (or (nil? buffer) (zero? (.-byteLength buffer)))
+    []
+    (let [{:keys [rows buffer]} (parse-framed-chunk nil buffer)]
+      (if (and (seq rows) (or (nil? buffer) (zero? (.-byteLength buffer))))
+        rows
+        (fail-fast :db-sync/incomplete-snapshot-frame
+                   {:rows (count rows)
+                    :remaining-buffer-bytes (some-> buffer .-byteLength)})))))
+
+(defn- gzip-payload?
+  [^js payload]
+  (and (some? payload)
+       (>= (.-byteLength payload) 2)
+       (= 31 (aget payload 0))
+       (= 139 (aget payload 1))))
+
+(defn- payload->stream
+  [^js payload]
+  (js/ReadableStream.
+   #js {:start (fn [controller]
+                 (.enqueue controller payload)
+                 (.close controller))}))
+
+(defn- <decompress-gzip-payload
+  [^js payload]
+  (if (exists? js/DecompressionStream)
+    (p/let [stream (payload->stream payload)
+            decompressed (.pipeThrough stream (js/DecompressionStream. "gzip"))
+            resp (js/Response. decompressed)
+            array-buffer (.arrayBuffer resp)]
+      (->uint8 array-buffer))
+    (p/rejected (ex-info "gzip decompression not supported"
+                         {:type :db-sync/decompression-not-supported}))))
+
+(defn- <snapshot-response-payload
+  [^js resp]
+  (p/let [array-buffer (.arrayBuffer resp)
+          payload (->uint8 array-buffer)]
+    (if (gzip-payload? payload)
+      (<decompress-gzip-payload payload)
+      payload)))
 
 (defn- upsert-addr-content!
   [^js db data]
@@ -1942,6 +2055,65 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (ldb/transact! conn [(ldb/kv :logseq.kv/graph-remote? true)
                          (ldb/kv :logseq.kv/graph-rtc-e2ee? (true? graph-e2ee?))])))
+
+(defn list-remote-graphs!
+  []
+  (let [base (http-base-url)]
+    (if-not (seq base)
+      (p/resolved [])
+      (do
+        (require-auth-token! {:op :list-remote-graphs})
+        (p/let [resp (fetch-json (str base "/graphs")
+                                 {:method "GET"}
+                                 {:response-schema :graphs/list})]
+          (vec (or (:graphs resp) [])))))))
+
+(defn- download-graph-with-id!
+  [repo graph-id graph-e2ee?]
+  (let [base (http-base-url)
+        graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))]
+    (cond
+      (not (seq base))
+      (fail-fast :db-sync/missing-field {:repo repo :field :http-base})
+
+      (not (seq graph-id))
+      (fail-fast :db-sync/missing-field {:repo repo :field :graph-id})
+
+      :else
+      (do
+        (require-auth-token! {:repo repo :field :auth-token})
+        (p/let [pull-resp (fetch-json (str base "/sync/" graph-id "/pull")
+                                      {:method "GET"}
+                                      {:response-schema :sync/pull})
+                remote-tx (:t pull-resp)
+                _ (when-not (integer? remote-tx)
+                    (fail-fast :db-sync/invalid-field {:repo repo
+                                                       :field :remote-tx
+                                                       :value remote-tx}))
+                resp (js/fetch (str base "/sync/" graph-id "/snapshot/stream")
+                               (clj->js (with-auth-headers {:method "GET"})))
+                _ (when-not (.-ok resp)
+                    (fail-fast :db-sync/snapshot-download-failed {:repo repo
+                                                                  :graph-id graph-id
+                                                                  :status (.-status resp)}))
+                payload (<snapshot-response-payload resp)
+                rows (finalize-framed-buffer payload)]
+          {:repo repo
+           :graph-id graph-id
+           :remote-tx remote-tx
+           :graph-e2ee? graph-e2ee?
+           :rows rows})))))
+
+(defn download-graph!
+  [repo]
+  (let [graph-id (get-graph-id repo)
+        graph-e2ee?-raw (sync-crypt/graph-e2ee? repo)
+        graph-e2ee? (if (nil? graph-e2ee?-raw) true (true? graph-e2ee?-raw))]
+    (download-graph-with-id! repo graph-id graph-e2ee?)))
+
+(defn download-graph-by-id!
+  [repo graph-id graph-e2ee?]
+  (download-graph-with-id! repo graph-id graph-e2ee?))
 
 (defn upload-graph!
   [repo]
