@@ -8,10 +8,10 @@
             [logseq.common.config :as common-config]
             [promesa.core :as p]))
 
-(defn local-file-based-graph?
+(defn- local-file-based-graph?
   [s]
   (and (string? s)
-       (string/starts-with? s common-config/file-version-prefix)))
+       (string/starts-with? s (str common-config/db-version-prefix common-config/file-version-prefix))))
 
 (defn get-all-graphs
   []
@@ -27,9 +27,9 @@
     (distinct
      (concat
       repos'
-      (map (fn [repo-name]
-             {:name (common-config/canonicalize-db-version-repo repo-name)})
-           (some-> electron-disk-graphs bean/->clj))))))
+      (->> (some-> electron-disk-graphs bean/->clj)
+           (map (fn [repo-name]
+                  {:name (common-config/canonicalize-db-version-repo repo-name)})))))))
 
 (defn delete-graph!
   [graph]
