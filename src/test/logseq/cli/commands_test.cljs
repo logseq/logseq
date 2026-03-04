@@ -66,6 +66,7 @@
       (is (string/includes? plain-summary "doctor"))
       (is (string/includes? plain-summary "graph"))
       (is (string/includes? plain-summary "server"))
+      (is (string/includes? plain-summary "sync"))
       (is (string/includes? plain-summary "Path to db-worker data dir (default ~/logseq/graphs)"))
       (is (contains-bold? summary "list page"))
       (is (contains-bold? summary "list tag"))
@@ -86,6 +87,8 @@
       (is (contains-bold? summary "graph create"))
       (is (contains-bold? summary "server list"))
       (is (contains-bold? summary "server start"))
+      (is (contains-bold? summary "sync status"))
+      (is (contains-bold? summary "sync start"))
       (is (contains-bold? summary "--help"))
       (is (contains-bold? summary "--graph"))
       (is (re-find #"\u001b\[[0-9;]*mCommands\u001b\[[0-9;]*m:" summary))
@@ -204,6 +207,28 @@
           lines (command-lines summary)]
       (is (seq lines))
       (is (every? #(not (string/includes? % "[options]")) lines)))))
+
+(deftest test-parse-args-help-sync-group
+  (testing "sync group shows subcommands"
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["sync"]))
+          summary (:summary result)
+          plain-summary (strip-ansi summary)]
+      (is (true? (:help? result)))
+      (is (string/includes? plain-summary "sync status"))
+      (is (string/includes? plain-summary "sync start"))
+      (is (string/includes? plain-summary "sync stop"))
+      (is (string/includes? plain-summary "sync upload"))
+      (is (string/includes? plain-summary "sync download"))
+      (is (string/includes? plain-summary "sync remote-graphs"))
+      (is (string/includes? plain-summary "sync ensure-keys"))
+      (is (string/includes? plain-summary "sync grant-access"))
+      (is (string/includes? plain-summary "sync config set"))
+      (is (string/includes? plain-summary "sync config get"))
+      (is (string/includes? plain-summary "sync config unset"))
+      (is (contains-bold? summary "sync status"))
+      (is (contains-bold? summary "sync config set"))
+      (is (contains-bold? summary "sync grant-access")))))
 
 (deftest test-parse-args-help-upsert-group
   (testing "add group is removed"
@@ -1214,6 +1239,11 @@
     (let [result (commands/parse-args ["graph" "import"
                                        "--type" "edn"
                                        "--input" "import.edn"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-graph (get-in result [:error :code])))))
+
+  (testing "sync download requires graph"
+    (let [result (commands/parse-args ["sync" "download"])]
       (is (false? (:ok? result)))
       (is (= :missing-graph (get-in result [:error :code])))))
 
@@ -2450,6 +2480,28 @@
            (-> (p/let [result (commands/execute {:type :graph-import
                                                  :repo "logseq_db_demo"
                                                  :allow-missing-graph true}
+                                                {})]
+                 (is (= :error (:status result)))
+                 (is (= :graph-exists (get-in result [:error :code]))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! cli-server/list-graphs orig-list-graphs)
+                            (set! cli-server/ensure-server! orig-ensure-server!)
+                            (done)))))))
+
+(deftest test-execute-sync-download-rejects-existing-graph
+  (async done
+         (let [orig-list-graphs cli-server/list-graphs
+               orig-ensure-server! cli-server/ensure-server!]
+           (set! cli-server/list-graphs (fn [_] ["demo"]))
+           (set! cli-server/ensure-server! (fn [_ _]
+                                             (throw (ex-info "should not start server" {}))))
+           (-> (p/let [result (commands/execute {:type :sync-download
+                                                 :repo "logseq_db_demo"
+                                                 :graph "demo"
+                                                 :allow-missing-graph true
+                                                 :require-missing-graph true}
                                                 {})]
                  (is (= :error (:status result)))
                  (is (= :graph-exists (get-in result [:error :code]))))

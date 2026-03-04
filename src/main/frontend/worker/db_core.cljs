@@ -394,6 +394,14 @@
   (reset! worker-state/*db-sync-config config)
   nil)
 
+(def-thread-api :thread-api/get-db-sync-config
+  []
+  @worker-state/*db-sync-config)
+
+(def-thread-api :thread-api/db-sync-status
+  [repo]
+  (db-sync/status repo))
+
 (def-thread-api :thread-api/db-sync-start
   [repo]
   (db-sync/start! repo))
@@ -418,9 +426,39 @@
   []
   (sync-crypt/ensure-user-rsa-keys!))
 
+(def-thread-api :thread-api/db-sync-list-remote-graphs
+  []
+  (db-sync/list-remote-graphs!))
+
 (def-thread-api :thread-api/db-sync-upload-graph
   [repo]
   (db-sync/upload-graph! repo))
+
+(def-thread-api :thread-api/db-sync-download-graph
+  [repo]
+  (p/let [{:keys [rows graph-id remote-tx graph-e2ee?]} (db-sync/download-graph! repo)
+          row-count (count rows)
+          _ (when (seq rows)
+              ((@thread-api/*thread-apis :thread-api/db-sync-import-kvs-rows)
+               repo rows true graph-id remote-tx graph-e2ee?))]
+    {:repo repo
+     :graph-id graph-id
+     :remote-tx remote-tx
+     :graph-e2ee? graph-e2ee?
+     :row-count row-count}))
+
+(def-thread-api :thread-api/db-sync-download-graph-by-id
+  [repo graph-id graph-e2ee?]
+  (p/let [{:keys [rows graph-id remote-tx graph-e2ee?]} (db-sync/download-graph-by-id! repo graph-id graph-e2ee?)
+          row-count (count rows)
+          _ (when (seq rows)
+              ((@thread-api/*thread-apis :thread-api/db-sync-import-kvs-rows)
+               repo rows true graph-id remote-tx graph-e2ee?))]
+    {:repo repo
+     :graph-id graph-id
+     :remote-tx remote-tx
+     :graph-e2ee? graph-e2ee?
+     :row-count row-count}))
 
 (def-thread-api :thread-api/set-infer-worker-proxy
   [infer-worker-proxy]
@@ -987,22 +1025,30 @@
 (defn- <init-service!
   [graph start-opts]
   (let [[prev-graph service] @*service]
-    (some-> prev-graph close-db!)
-    (when graph
-      (if (= graph prev-graph)
-        service
-        (do
-          (log/info :db-worker/init-service {:graph graph
-                                             :prev-graph prev-graph
-                                             :import-type (:import-type start-opts)})
-          (p/let [service (shared-service/<create-service graph
-                                                          (bean/->js fns)
-                                                          #(on-become-master graph start-opts)
-                                                          broadcast-data-types
-                                                          {:import? (:import-type? start-opts)})]
-            (assert (p/promise? (get-in service [:status :ready])))
-            (reset! *service [graph service])
-            service))))))
+    (cond
+      (nil? graph)
+      (do
+        (some-> prev-graph close-db!)
+        nil)
+
+      (and (= graph prev-graph) service)
+      service
+
+      :else
+      (do
+        (when (and prev-graph (not= graph prev-graph))
+          (close-db! prev-graph))
+        (log/info :db-worker/init-service {:graph graph
+                                           :prev-graph prev-graph
+                                           :import-type (:import-type start-opts)})
+        (p/let [service (shared-service/<create-service graph
+                                                        (bean/->js fns)
+                                                        #(on-become-master graph start-opts)
+                                                        broadcast-data-types
+                                                        {:import? (:import-type? start-opts)})]
+          (assert (p/promise? (get-in service [:status :ready])))
+          (reset! *service [graph service])
+          service)))))
 
 (defn- notify-invalid-data
   [{:keys [tx-meta]} errors]
