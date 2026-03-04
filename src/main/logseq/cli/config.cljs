@@ -45,9 +45,16 @@
   [{:keys [config-path]} updates]
   (let [path (or config-path (default-config-path))
         current (or (read-config-file path) {})
-        filtered-current (dissoc current :auth-token :retries)
-        filtered-updates (dissoc (or updates {}) :auth-token :retries)
-        next (merge filtered-current filtered-updates)]
+        filtered-current (dissoc current :retries)
+        filtered-updates (dissoc (or updates {}) :retries)
+        nil-keys (->> filtered-updates
+                      (keep (fn [[k v]]
+                              (when (nil? v)
+                                k))))
+        merged (merge filtered-current filtered-updates)
+        next (if (seq nil-keys)
+               (apply dissoc merged nil-keys)
+               merged)]
     (ensure-config-dir! path)
     (.writeFileSync fs path (pr-str next))
     next))
