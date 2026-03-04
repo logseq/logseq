@@ -106,7 +106,7 @@
 
           & + div {
             display: flex;
-            align-items: center;
+            align-items: start;
             min-height: 24px;
             user-select: none;
 
@@ -240,6 +240,12 @@
     .keyboard-shortcut {
       @apply relative -top-[3px];
     }
+  }
+}
+
+#appearance_settings {
+  &.cp__settings-appearance-modal-inner {
+    @apply w-auto p-5 shadow-none m-0;
   }
 }
 
