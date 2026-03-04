@@ -663,6 +663,10 @@
 ;; When holding ArrowDown/Up, step starts at 1 and ramps up
 ;; so the highlight moves through items progressively faster.
 
+(def ^:private need-accel?
+  "Whether to enable keyboard acceleration."
+  false)
+
 (def ^:private accel-delay-ms
   "Milliseconds to hold before acceleration kicks in."
   200)
@@ -994,12 +998,12 @@
         (state/sidebar-add-block! repo input :search))
       as-keydown? (if meta?
                     (show-more)
-                    (let [step (keydown-accel-step state e)]
+                    (let [step (if need-accel? (keydown-accel-step state e) 1)]
                       (reset! (::focus-source state) :keyboard)
                       (move-highlight state step)))
       as-keyup? (if meta?
                   (show-less)
-                  (let [step (keydown-accel-step state e)]
+                  (let [step (if need-accel? (keydown-accel-step state e) 1)]
                     (reset! (::focus-source state) :keyboard)
                     (move-highlight state (- step))))
       (and enter? (not composing?)) (do
