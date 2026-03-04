@@ -649,7 +649,7 @@
                  (is (string/includes? (:output legacy-page-result) "--update-properties"))
                  (is (= 1 (:exit-code conflict-result)))
                  (is (string/includes? (:output conflict-result) "invalid-options"))
-                 (is (string/includes? (:output conflict-result) "only one of --id or --page"))
+                 (is (string/includes? (style/strip-ansi (:output conflict-result)) "only one of --id or --page"))
                  (is (= "ok" (:status stop-payload)))
                  (done))
                (p/catch (fn [e]
