@@ -235,6 +235,96 @@
                                        {:output-format nil})]
       (is (= "Imported sqlite from /tmp/import.sqlite" result)))))
 
+(deftest test-human-output-sync-status
+  (testing "sync status renders runtime and queue fields"
+    (let [result (format/format-result {:status :ok
+                                        :command :sync-status
+                                        :data {:repo "demo-graph"
+                                               :graph-id "graph-uuid"
+                                               :ws-state :open
+                                               :pending-local 2
+                                               :pending-asset 1
+                                               :pending-server 3
+                                               :local-tx 10
+                                               :remote-tx 13}}
+                                       {:output-format nil})]
+      (is (string/includes? result "Sync status"))
+      (is (string/includes? result "demo-graph"))
+      (is (string/includes? result "graph-uuid"))
+      (is (string/includes? result "pending-local"))
+      (is (string/includes? result "pending-asset"))
+      (is (string/includes? result "pending-server")))))
+
+(deftest test-human-output-sync-remote-graphs
+  (testing "sync remote-graphs renders a table"
+    (let [result (format/format-result {:status :ok
+                                        :command :sync-remote-graphs
+                                        :data {:graphs [{:graph-id "graph-1"
+                                                         :graph-name "Alpha"
+                                                         :role "manager"
+                                                         :graph-e2ee? true}
+                                                        {:graph-id "graph-2"
+                                                         :graph-name "Beta"
+                                                         :role "member"
+                                                         :graph-e2ee? false}]}}
+                                       {:output-format nil})]
+      (is (string/includes? result "GRAPH-ID"))
+      (is (string/includes? result "GRAPH-NAME"))
+      (is (string/includes? result "ROLE"))
+      (is (string/includes? result "Alpha"))
+      (is (string/includes? result "Beta"))
+      (is (string/includes? result "Count: 2")))))
+
+(deftest test-human-output-sync-actions
+  (testing "sync start renders a succinct success line"
+    (let [result (format/format-result {:status :ok
+                                        :command :sync-start
+                                        :context {:repo "demo-graph"}}
+                                       {:output-format nil})]
+      (is (string/includes? result "Sync started"))
+      (is (string/includes? result "demo-graph"))))
+
+  (testing "sync upload renders a succinct success line"
+    (let [result (format/format-result {:status :ok
+                                        :command :sync-upload
+                                        :context {:repo "demo-graph"}
+                                        :data {:graph-id "graph-uuid"}}
+                                       {:output-format nil})]
+      (is (string/includes? result "Sync upload"))
+      (is (string/includes? result "demo-graph"))))
+
+  (testing "sync download renders a succinct success line"
+    (let [result (format/format-result {:status :ok
+                                        :command :sync-download
+                                        :context {:repo "demo-graph"}}
+                                       {:output-format nil})]
+      (is (string/includes? result "Sync download"))
+      (is (string/includes? result "demo-graph")))))
+
+(deftest test-human-output-sync-config-get-token-redaction
+  (testing "sync config get auth-token redacts value in human output"
+    (let [token "super-secret-token-value"
+          result (format/format-result {:status :ok
+                                        :command :sync-config-get
+                                        :data {:key :auth-token
+                                               :value token}}
+                                       {:output-format nil})]
+      (is (string/includes? result "auth-token"))
+      (is (string/includes? result "[REDACTED]"))
+      (is (not (string/includes? result token))))))
+
+(deftest test-human-output-sync-config-get-e2ee-password-redaction
+  (testing "sync config get e2ee-password redacts value in human output"
+    (let [password "super-secret-password"
+          result (format/format-result {:status :ok
+                                        :command :sync-config-get
+                                        :data {:key :e2ee-password
+                                               :value password}}
+                                       {:output-format nil})]
+      (is (string/includes? result "e2ee-password"))
+      (is (string/includes? result "[REDACTED]"))
+      (is (not (string/includes? result password))))))
+
 (deftest test-human-output-graph-info
   (testing "graph info includes key metadata lines"
     (let [result (format/format-result {:status :ok

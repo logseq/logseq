@@ -137,7 +137,8 @@
               :graph (core/repo->graph repo)
               :import-type import-type
               :input input
-              :allow-missing-graph true}}))
+              :allow-missing-graph true
+              :require-missing-graph true}}))
 
 (defn execute-graph-list
   [_action config]
