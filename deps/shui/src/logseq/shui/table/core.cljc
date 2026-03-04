@@ -162,7 +162,6 @@
          (let [^js target-cls (.-classList target)
                ^js table-footer (some-> table (.querySelector ".ls-table-footer"))
                ^js page-el (.closest target ".page-inner")
-               *ticking? (volatile! false)
                *el-top (volatile! (-> target (.getBoundingClientRect) (.-top)))
                head-height (-> (get-head-container) (.-offsetHeight))
                update-target-top! (fn []

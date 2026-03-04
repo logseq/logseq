@@ -96,6 +96,144 @@
     (reset! *ws-state ws-state)
     (broadcast-rtc-state! client)))
 
+(defn- timing-platform-fields
+  []
+  {:mobile? (boolean (:mobile? (worker-state/get-context)))})
+
+(defn- mark-ws-open!
+  [client]
+  (when-let [*timing (:timing client)]
+    (let [now (common-util/time-ms)
+          ws-connect-start-ms (:ws-connect-start-ms @*timing)
+          ws-connect-duration-ms (when (number? ws-connect-start-ms)
+                                   (- now ws-connect-start-ms))]
+      (swap! *timing assoc
+             :ws-open-ms now
+             :first-remote-apply-start-ms nil
+             :first-remote-apply-end-ms nil)
+      (log/info :db-sync/ws-open
+                (merge (timing-platform-fields)
+                       {:repo (:repo client)
+                        :graph-id (:graph-id client)
+                        :ws-connect-start-ms ws-connect-start-ms
+                        :ws-open-ms now
+                        :ws-connect-duration-ms ws-connect-duration-ms})))))
+
+(defn- mark-ws-connect-start!
+  [client]
+  (when-let [*timing (:timing client)]
+    (swap! *timing assoc
+           :ws-connect-start-ms (common-util/time-ms)
+           :ws-open-ms nil
+           :hello-received-ms nil
+           :first-pull-sent-ms nil
+           :first-pull-ok-received-ms nil
+           :first-aes-key-start-ms nil
+           :first-aes-key-ready-ms nil
+           :first-remote-apply-start-ms nil
+           :first-remote-apply-end-ms nil)))
+
+(defn- mark-hello-received!
+  [client local-tx remote-tx]
+  (when-let [*timing (:timing client)]
+    (let [now (common-util/time-ms)
+          {:keys [ws-open-ms hello-received-ms]} @*timing]
+      (when (nil? hello-received-ms)
+        (swap! *timing assoc :hello-received-ms now)
+        (log/info :db-sync/hello-received
+                  (merge (timing-platform-fields)
+                         {:repo (:repo client)
+                          :graph-id (:graph-id client)
+                          :local-tx local-tx
+                          :remote-tx remote-tx
+                          :ws-open-ms ws-open-ms
+                          :hello-received-ms now
+                          :ws-open->hello-received-ms (when (number? ws-open-ms)
+                                                        (- now ws-open-ms))}))))))
+
+(defn- mark-first-pull-sent!
+  [client reason since]
+  (when-let [*timing (:timing client)]
+    (let [now (common-util/time-ms)
+          {:keys [ws-open-ms hello-received-ms first-pull-sent-ms]} @*timing]
+      (when (nil? first-pull-sent-ms)
+        (swap! *timing assoc :first-pull-sent-ms now)
+        (log/info :db-sync/first-pull-sent
+                  (merge (timing-platform-fields)
+                         {:repo (:repo client)
+                          :graph-id (:graph-id client)
+                          :reason reason
+                          :since since
+                          :ws-open-ms ws-open-ms
+                          :hello-received-ms hello-received-ms
+                          :first-pull-sent-ms now
+                          :ws-open->pull-sent-ms (when (number? ws-open-ms)
+                                                   (- now ws-open-ms))
+                          :hello->pull-sent-ms (when (number? hello-received-ms)
+                                                 (- now hello-received-ms))}))))))
+
+(defn- mark-first-pull-ok-received!
+  [client]
+  (when-let [*timing (:timing client)]
+    (let [now (common-util/time-ms)
+          {:keys [ws-open-ms hello-received-ms first-pull-sent-ms first-pull-ok-received-ms]} @*timing]
+      (when (nil? first-pull-ok-received-ms)
+        (swap! *timing assoc :first-pull-ok-received-ms now)
+        (log/info :db-sync/first-pull-ok-received
+                  (merge (timing-platform-fields)
+                         {:repo (:repo client)
+                          :graph-id (:graph-id client)
+                          :ws-open-ms ws-open-ms
+                          :hello-received-ms hello-received-ms
+                          :first-pull-sent-ms first-pull-sent-ms
+                          :first-pull-ok-received-ms now
+                          :ws-open->pull-ok-ms (when (number? ws-open-ms)
+                                                 (- now ws-open-ms))
+                          :hello->pull-ok-ms (when (number? hello-received-ms)
+                                               (- now hello-received-ms))
+                          :pull-sent->pull-ok-ms (when (number? first-pull-sent-ms)
+                                                   (- now first-pull-sent-ms))}))))))
+
+(defn- mark-first-aes-key-ready!
+  [client aes-key-start-ms aes-key-ready-ms graph-e2ee?]
+  (when-let [*timing (:timing client)]
+    (let [{:keys [first-aes-key-ready-ms first-pull-ok-received-ms ws-open-ms]} @*timing]
+      (when (nil? first-aes-key-ready-ms)
+        (swap! *timing assoc
+               :first-aes-key-start-ms aes-key-start-ms
+               :first-aes-key-ready-ms aes-key-ready-ms)
+        (log/info :db-sync/first-aes-key-ready
+                  (merge (timing-platform-fields)
+                         {:repo (:repo client)
+                          :graph-id (:graph-id client)
+                          :graph-e2ee? graph-e2ee?
+                          :ws-open-ms ws-open-ms
+                          :first-pull-ok-received-ms first-pull-ok-received-ms
+                          :first-aes-key-start-ms aes-key-start-ms
+                          :first-aes-key-ready-ms aes-key-ready-ms
+                          :pull-ok->aes-key-ready-ms (when (number? first-pull-ok-received-ms)
+                                                       (- aes-key-ready-ms first-pull-ok-received-ms))
+                          :aes-key-duration-ms (- aes-key-ready-ms aes-key-start-ms)}))))))
+
+(defn- mark-first-remote-apply!
+  [client apply-start-ms]
+  (when-let [*timing (:timing client)]
+    (let [{:keys [ws-open-ms first-remote-apply-end-ms]} @*timing]
+      (when (and (number? ws-open-ms) (nil? first-remote-apply-end-ms))
+        (let [apply-end-ms (common-util/time-ms)]
+          (swap! *timing assoc
+                 :first-remote-apply-start-ms apply-start-ms
+                 :first-remote-apply-end-ms apply-end-ms)
+          (log/info :db-sync/first-remote-apply
+                    (merge (timing-platform-fields)
+                           {:repo (:repo client)
+                            :graph-id (:graph-id client)
+                            :ws-open-ms ws-open-ms
+                            :apply-start-ms apply-start-ms
+                            :apply-end-ms apply-end-ms
+                            :ws-open->first-apply-ms (- apply-end-ms ws-open-ms)
+                            :first-apply-duration-ms (- apply-end-ms apply-start-ms)})))))))
+
 (defn- update-online-users!
   [client users]
   (when-let [*online-users (:online-users client)]
@@ -136,6 +274,28 @@
 
 (defn- auth-token []
   (worker-state/get-id-token))
+
+(defn- id-token-expired?
+  [token]
+  (if-not (string? token)
+    true
+    (try
+      (let [exp-ms (some-> token worker-util/parse-jwt :exp (* 1000))]
+        (or (not (number? exp-ms))
+            (<= exp-ms (common-util/time-ms))))
+      (catch :default _
+        true))))
+
+(defn- <resolve-ws-token
+  []
+  (let [token (auth-token)]
+    (if (id-token-expired? token)
+      (p/let [resp (worker-state/<invoke-main-thread :thread-api/ensure-id&access-token)
+              refreshed-token (:id-token resp)]
+        (when (string? refreshed-token)
+          (worker-state/set-new-state! {:auth/id-token refreshed-token})
+          refreshed-token))
+      (p/resolved token))))
 
 (defn- get-user-uuid []
   (some-> (worker-state/get-id-token)
@@ -339,6 +499,18 @@
        (remove (fn [[_op e]]
                  (contains? rtc-const/ignore-entities-when-init-upload e)))))
 
+(def ^:private non-retractable-block-attrs
+  #{:block/created-at :block/updated-at :block/title})
+
+(defn- drop-non-retractable-attr-datoms
+  [tx-data]
+  (remove (fn [item]
+            (and (vector? item)
+                 (>= (count item) 3)
+                 (= :db/retract (first item))
+                 (contains? non-retractable-block-attrs (nth item 2))))
+          tx-data))
+
 (defn- reverse-tx-data
   [tx-data]
   (->> tx-data
@@ -539,6 +711,10 @@
   (or (and (integer? x) (neg? x))
       (string? x)))
 
+(defn- remappable-remote-temp-id?
+  [x]
+  (and (integer? x) (neg? x)))
+
 (defn- remap-remote-batch-temp-ids
   [batch-index tx-data]
   (let [ops #{:db/add :db/retract :db/retractEntity}
@@ -547,7 +723,7 @@
                                      (when (and (vector? item)
                                                 (>= (count item) 2)
                                                 (contains? ops (first item))
-                                                (remote-temp-id? (second item)))
+                                                (remappable-remote-temp-id? (second item)))
                                        (second item))))
                              distinct)
         temp-id-map (when (seq entity-temp-ids)
@@ -640,49 +816,6 @@
        (sequential? (first tx-data*))
        (sequential? (first (first tx-data*)))))
 
-(defn- drop-anonymous-temp-entity-datoms
-  "Drop malformed temp entities from remote txs.
-   A temp entity must declare one identity attr (:block/uuid or :db/ident)
-   in its :db/add datoms; otherwise it can create anonymous entities that fail validation."
-  [db tx-data]
-  (let [identity-attrs #{:block/uuid :db/ident}
-        temp-id? (fn [x]
-                   (or (string? x)
-                       (and (integer? x) (neg? x))))
-        add-attrs-by-entity
-        (reduce (fn [acc item]
-                  (if (and (vector? item)
-                           (= :db/add (first item))
-                           (>= (count item) 4))
-                    (update acc (second item) (fnil conj #{}) (nth item 2))
-                    acc))
-                {}
-                tx-data)
-        dropped-entities
-        (->> add-attrs-by-entity
-             (keep (fn [[entity attrs]]
-                     (when (and (temp-id? entity)
-                                (empty? (set/intersection identity-attrs attrs)))
-                       entity)))
-             set)]
-    (if (seq dropped-entities)
-      (let [tx-data' (->> tx-data
-                          (remove (fn [item]
-                                    (and (vector? item)
-                                         (>= (count item) 2)
-                                         (contains? dropped-entities (second item)))))
-                          (remove (fn [item]
-                                    (and (vector? item)
-                                         (>= (count item) 4)
-                                         (keyword? (nth item 2))
-                                         (= :db.type/ref (:db/valueType (d/entity db (nth item 2))))
-                                         (contains? dropped-entities (nth item 3))))))]
-        (log/warn :db-sync/drop-anonymous-temp-entities
-                  {:count (count dropped-entities)
-                   :entities dropped-entities})
-        tx-data')
-      tx-data)))
-
 (defn- sanitize-tx-data
   [db tx-data local-deleted-ids]
   (let [sanitized-tx-data (->> tx-data
@@ -690,7 +823,7 @@
                                (remove (fn [item]
                                          (or (= :db/retractEntity (first item))
                                              (and (= :db/retract (first item))
-                                                  (contains? #{:block/created-at :block/updated-at :block/title}
+                                                  (contains? non-retractable-block-attrs
                                                              (nth item 2)))
                                              (contains? local-deleted-ids (get-lookup-id (last item))))))
                                ;; Notice: rebase should generate larger tx-id than reverse tx
@@ -753,7 +886,16 @@
                 :stale-kill-timer (atom nil)
                 :last-ws-message-ts (atom (common-util/time-ms))
                 :online-users (atom [])
-                :ws-state (atom :closed)}]
+                :ws-state (atom :closed)
+                :timing (atom {:ws-connect-start-ms nil
+                               :ws-open-ms nil
+                               :hello-received-ms nil
+                               :first-pull-sent-ms nil
+                               :first-pull-ok-received-ms nil
+                               :first-aes-key-start-ms nil
+                               :first-aes-key-ready-ms nil
+                               :first-remote-apply-start-ms nil
+                               :first-remote-apply-end-ms nil})}]
     (reset! worker-state/*db-sync-client client)
     client))
 
@@ -1130,7 +1272,8 @@
   [local-txs]
   (let [tx-data (->> local-txs
                      reverse
-                     (mapcat :reversed-tx))
+                     (mapcat :reversed-tx)
+                     drop-non-retractable-attr-datoms)
         retract-block-ids (->> (keep (fn [[op e a _v _t]]
                                        (when (and (= op :db/retract) (= :block/uuid a))
                                          e)) tx-data)
@@ -1221,7 +1364,7 @@
     (if-let [conn (worker-state/get-datascript-conn repo)]
       (let [tx-data (->> tx-data*
                          (db-normalize/remove-retract-entity-ref @conn)
-                         (#(drop-anonymous-temp-entity-datoms @conn %)))
+                         drop-non-retractable-attr-datoms)
             local-txs (pending-txs repo)
             reversed-tx-data (get-reverse-tx-data local-txs)
             has-local-changes? (seq reversed-tx-data)
@@ -1303,8 +1446,10 @@
       (case (:type message)
         "hello" (do
                   (require-non-negative remote-tx {:repo repo :type "hello"})
+                  (mark-hello-received! client local-tx remote-tx)
                   (broadcast-rtc-state! client)
                   (when (> remote-tx local-tx)
+                    (mark-first-pull-sent! client :hello local-tx)
                     (send! (:ws client) {:type "pull" :since local-tx}))
                   (enqueue-asset-sync! repo client)
                   (flush-pending! repo client))
@@ -1333,16 +1478,23 @@
                           txs-data (mapv (fn [data]
                                            (parse-transit (:tx data) {:repo repo :type "pull/ok"}))
                                          txs)]
+                      (mark-first-pull-ok-received! client)
                       (when (seq txs-data)
-                        (p/let [aes-key (sync-crypt/<ensure-graph-aes-key repo (:graph-id client))
-                                _ (when (and (sync-crypt/graph-e2ee? repo) (nil? aes-key))
+                        (p/let [graph-e2ee? (sync-crypt/graph-e2ee? repo)
+                                aes-key-start-ms (common-util/time-ms)
+                                aes-key (sync-crypt/<ensure-graph-aes-key repo (:graph-id client))
+                                aes-key-ready-ms (common-util/time-ms)
+                                _ (mark-first-aes-key-ready! client aes-key-start-ms aes-key-ready-ms graph-e2ee?)
+                                _ (when (and graph-e2ee? (nil? aes-key))
                                     (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
                                 tx-batches (if aes-key
                                              (p/all (mapv (fn [tx-data]
                                                             (sync-crypt/<decrypt-tx-data aes-key tx-data))
                                                           txs-data))
-                                             (p/resolved txs-data))]
+                                             (p/resolved txs-data))
+                                apply-start-ms (common-util/time-ms)]
                           (apply-remote-tx! repo client tx-batches)
+                          (mark-first-remote-apply! client apply-start-ms)
                           (client-op/update-local-tx repo remote-tx)
                           (broadcast-rtc-state! client)
                           (flush-pending! repo client)))))
@@ -1350,6 +1502,7 @@
                     (require-non-negative remote-tx {:repo repo :type "changed"})
                     (broadcast-rtc-state! client)
                     (when (< local-tx remote-tx)
+                      (mark-first-pull-sent! client :changed local-tx)
                       (send! (:ws client) {:type "pull" :since local-tx})))
         "tx/reject" (let [reason (:reason message)]
                       (when (nil? reason)
@@ -1359,7 +1512,9 @@
                         (require-non-negative remote-tx {:repo repo :type "tx/reject"}))
                       (case reason
                         "stale"
-                        (send! (:ws client) {:type "pull" :since local-tx})
+                        (do
+                          (mark-first-pull-sent! client :stale local-tx)
+                          (send! (:ws client) {:type "pull" :since local-tx}))
 
                         (fail-fast :db-sync/invalid-field
                                    {:repo repo :type "tx/reject" :reason reason})))
@@ -1379,8 +1534,12 @@
                             (when-let [current @worker-state/*db-sync-client]
                               (when (and (= (:repo current) repo)
                                          (= (:graph-id current) (:graph-id client)))
-                                (let [updated (connect! repo current url)]
-                                  (reset! worker-state/*db-sync-client updated)))))
+                                (-> (p/let [token (<resolve-ws-token)
+                                            updated (connect! repo current url token)]
+                                      (reset! worker-state/*db-sync-client updated))
+                                    (p/catch (fn [error]
+                                               (log/error :db-sync/ws-reconnect-failed {:repo repo :error error})
+                                               (schedule-reconnect! repo current url :connect-failed)))))))
                           delay)]
           (swap! reconnect assoc :timer timeout-id :attempt (inc attempt))
           (log/info :db-sync/ws-reconnect-scheduled
@@ -1446,20 +1605,24 @@
       (catch :default _
         nil))))
 
-(defn- connect! [repo client url]
+(defn- connect! [repo client url token]
   (when (:ws client)
     (stop-client! client))
-  (let [ws (js/WebSocket. (append-token url (auth-token)))
-        updated (assoc client :ws ws)]
-    (attach-ws-handlers! repo updated ws url)
-    (set! (.-onopen ws)
-          (fn [_]
-            (reset-reconnect! updated)
-            (touch-last-ws-message! updated)
-            (set-ws-state! updated :open)
-            (send! ws {:type "hello" :client repo})
-            (enqueue-asset-sync! repo updated)))
-    (close-stale-ws-loop updated ws)))
+  ;; use cache token for faster websocket connection
+  (when-let [token' (or token (auth-token))]
+    (mark-ws-connect-start! client)
+    (let [ws (js/WebSocket. (append-token url token'))
+          updated (assoc client :ws ws)]
+      (attach-ws-handlers! repo updated ws url)
+      (set! (.-onopen ws)
+            (fn [_]
+              (reset-reconnect! updated)
+              (touch-last-ws-message! updated)
+              (set-ws-state! updated :open)
+              (mark-ws-open! updated)
+              (send! ws {:type "hello" :client repo})
+              (enqueue-asset-sync! repo updated)))
+      (close-stale-ws-loop updated ws))))
 
 (defn stop!
   []
@@ -1504,11 +1667,12 @@
         (->
          (p/do!
           (stop!)
-          (let [client (ensure-client-state! repo)
-                url (format-ws-url base graph-id)
-                _ (ensure-client-graph-uuid! repo graph-id)
-                connected (assoc client :graph-id graph-id)
-                connected (connect! repo connected url)]
+          (p/let [client (ensure-client-state! repo)
+                  url (format-ws-url base graph-id)
+                  _ (ensure-client-graph-uuid! repo graph-id)
+                  connected (assoc client :graph-id graph-id)
+                  token (<resolve-ws-token)
+                  connected (connect! repo connected url token)]
             (reset! worker-state/*db-sync-client connected)
             nil))
          (p/finally

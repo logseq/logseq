@@ -72,6 +72,7 @@ deps/publish/worker/.env*
 deps/workers/worker/.wrangler
 deps/workers/worker/dist
 deps/workers/worker/.env*
+deps/workers/worker/.localflare
 
 
 tx-log*
