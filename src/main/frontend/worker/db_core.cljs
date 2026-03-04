@@ -776,9 +776,9 @@
     (worker-export/get-all-page->content @conn options)))
 
 (def-thread-api :thread-api/validate-db
-  [repo]
+  [repo & [opts]]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (worker-db-validate/validate-db conn)))
+    (worker-db-validate/validate-db conn opts)))
 
 ;; Returns an export-edn map for given repo. When there's an unexpected error, a map
 ;; with key :export-edn-error is returned
