@@ -45,6 +45,22 @@
                                        {:output-format nil})]
       (is (= "Error (boom): nope" result)))))
 
+(deftest test-format-graph-validation
+  (testing "graph validation success prints validated"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-validate
+                                        :context {:graph "foo"}
+                                        :data {:result {:errors nil}}}
+                                       {:output-format nil})]
+      (is (= "Validated graph \"foo\"" result))))
+  (testing "graph validation error prints validation details without extra prefix"
+    (let [result (format/format-result {:status :error
+                                        :command :graph-validate
+                                        :error {:code :graph-validation-failed
+                                                :message "Found 1 entity with errors:\n({:entity {:db/id 1}})\n"}}
+                                       {:output-format nil})]
+      (is (= "Found 1 entity with errors:\n({:entity {:db/id 1}})\n" result)))))
+
 (deftest test-human-output-list-page
   (testing "list page renders a table with count"
     (let [result (format/format-result {:status :ok

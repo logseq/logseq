@@ -1,6 +1,7 @@
 (ns logseq.cli.command.graph
   "Graph-related CLI commands."
-  (:require [clojure.string :as string]
+  (:require [cljs.pprint :as pprint]
+            [clojure.string :as string]
             [logseq.cli.command.core :as core]
             [logseq.cli.config :as cli-config]
             [logseq.cli.server :as cli-server]
@@ -140,23 +141,46 @@
     {:status :ok
      :data {:graphs graphs}}))
 
+(defn- format-validation-errors
+  [errors]
+  (str "Graph invalid. Found " (count errors)
+       (if (= 1 (count errors)) " entity" " entities")
+       " with errors:\n"
+       (with-out-str (pprint/pprint errors))))
+
+(defn- graph-validate-result
+  [result]
+  (if (seq (:errors result))
+    {:status :error
+     :error {:code :graph-validation-failed
+             :message (format-validation-errors (:errors result))}
+     :data {:errors (:errors result)}}
+    {:status :ok :data {:result result}}))
+
 (defn execute-invoke
   [action config]
-  (-> (p/let [cfg (if-let [repo (:repo action)]
-                    (cli-server/ensure-server! config repo)
-                    (p/resolved config))
-              result (transport/invoke cfg
-                                       (:method action)
-                                       (:direct-pass? action)
-                                       (:args action))]
-        (when-let [repo (:persist-repo action)]
-          (cli-config/update-config! config {:graph repo}))
-        (if-let [write (:write action)]
-          (let [{:keys [format path]} write]
-            (transport/write-output {:format format :path path :data result})
-            {:status :ok
-             :data {:message (str "wrote " path)}})
-          {:status :ok :data {:result result}}))))
+  (p/let [cfg (if-let [repo (:repo action)]
+                (cli-server/ensure-server! config repo)
+                (p/resolved config))
+          result (transport/invoke cfg
+                                   (:method action)
+                                   (:direct-pass? action)
+                                   (:args action))]
+    (when-let [repo (:persist-repo action)]
+      (cli-config/update-config! config {:graph repo}))
+    (let [write (:write action)]
+      (cond
+        (= :graph-validate (:command action))
+        (graph-validate-result result)
+
+        write
+        (let [{:keys [format path]} write]
+          (transport/write-output {:format format :path path :data result})
+          {:status :ok
+           :data {:message (str "wrote " path)}})
+
+        :else
+        {:status :ok :data {:result result}}))))
 
 (defn execute-graph-switch
   [action config]
