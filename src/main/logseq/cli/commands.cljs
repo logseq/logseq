@@ -362,7 +362,7 @@
           server-repo (command-core/resolve-repo (:graph options))]
       (case command
         (:graph-list :graph-create :graph-switch :graph-remove :graph-validate :graph-info)
-        (graph-command/build-graph-action command graph repo)
+        (graph-command/build-graph-action command graph repo options)
 
         :graph-export
         (let [export-type (graph-command/normalize-import-export-type (:type options))]
