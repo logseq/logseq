@@ -371,34 +371,42 @@
             (:table-view? config)
             (not resizable?))
       asset-container-cp
-      [:div.ls-resize-image.rounded-md
-       {:class (case asset-align
-                 "center" "align-center"
-                 "right"  "align-right"
-                 "align-left")}
-       asset-container-cp
-       (resize-image-handles
-        (fn [k ^js event]
-          (let [dx (.-dx event)
-                ^js target (.-target event)]
+      [:div.ls-resize-inner.w-full.select-none
+       {:on-double-click (fn [^js e]
+                           (let [^js target (.-target e)
+                                 ^js container (.closest target ".ls-resize-inner")]
+                             (when (or container (= target container))
+                               (when-let [block-uuid (or (:block/uuid config)
+                                                         (some-> config :block :block/uuid))]
+                                 (editor-handler/select-block! block-uuid)))))}
+       [:div.ls-resize-image.rounded-md
+        {:class (case asset-align
+                  "center" "align-center"
+                  "right" "align-right"
+                  "align-left")}
+        asset-container-cp
+        (resize-image-handles
+         (fn [k ^js event]
+           (let [dx (.-dx event)
+                 ^js target (.-target event)]
 
-            (case k
-              :start
-              (let [c (.closest target ".ls-resize-image")]
-                (reset! *width (.-offsetWidth c))
-                (reset! *resizing-image? true))
-              :move
-              (let [width' (+ @*width dx)]
-                (when (or (> width' 60)
-                          (not (neg? dx)))
-                  (reset! *width width')))
-              :end
-              (let [width' @*width]
-                (when (and width' @*resizing-image?)
-                  (when-let [block-id (or (:block/uuid config)
-                                          (some-> config :block (:block/uuid)))]
-                    (editor-handler/resize-image! config block-id metadata full-text {:width width'})))
-                (reset! *resizing-image? false))))))])))
+             (case k
+               :start
+               (let [c (.closest target ".ls-resize-image")]
+                 (reset! *width (.-offsetWidth c))
+                 (reset! *resizing-image? true))
+               :move
+               (let [width' (+ @*width dx)]
+                 (when (or (> width' 60)
+                           (not (neg? dx)))
+                   (reset! *width width')))
+               :end
+               (let [width' @*width]
+                 (when (and width' @*resizing-image?)
+                   (when-let [block-id (or (:block/uuid config)
+                                           (some-> config :block (:block/uuid)))]
+                     (editor-handler/resize-image! config block-id metadata full-text {:width width'})))
+                 (reset! *resizing-image? false))))))]])))
 
 (rum/defc audio-cp
   ([src] (audio-cp src nil))
