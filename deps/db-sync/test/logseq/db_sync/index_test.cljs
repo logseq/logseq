@@ -7,6 +7,12 @@
 
 (def ^:private graph-e2ee-migration-sql
   "alter table graphs add column graph_e2ee integer default 1")
+(def ^:private graph-members-graph-id-created-at-index-sql
+  "create index if not exists idx_graph_members_graph_id_created_at on graph_members (graph_id, created_at)")
+(def ^:private graphs-user-id-updated-at-index-sql
+  "create index if not exists idx_graphs_user_id_updated_at on graphs (user_id, updated_at desc)")
+(def ^:private users-email-index-sql
+  "create index if not exists idx_users_email on users (email)")
 
 (deftest index-list-includes-graph-e2ee-flag-test
   (async done
@@ -93,6 +99,29 @@
                  (index/<index-init! :db))
                (p/then (fn [_]
                          (is (some #(string/includes? % graph-e2ee-migration-sql)
+                                   @sql-calls))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest index-init-creates-indexes-test
+  (async done
+         (let [sql-calls (atom [])]
+           (-> (p/with-redefs [common/<d1-all (fn [& _]
+                                                (p/resolved #js {:results #js []}))
+                               common/get-sql-rows (fn [result]
+                                                     (aget result "results"))
+                               common/<d1-run (fn [_db sql & _args]
+                                                (swap! sql-calls conj (string/lower-case sql))
+                                                (p/resolved {:ok true}))]
+                 (index/<index-init! :db))
+               (p/then (fn [_]
+                         (is (some #(string/includes? % graph-members-graph-id-created-at-index-sql)
+                                   @sql-calls))
+                         (is (some #(string/includes? % graphs-user-id-updated-at-index-sql)
+                                   @sql-calls))
+                         (is (some #(string/includes? % users-email-index-sql)
                                    @sql-calls))
                          (done)))
                (p/catch (fn [error]
