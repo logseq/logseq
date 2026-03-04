@@ -112,7 +112,13 @@
                         "created_at INTEGER,"
                         "updated_at INTEGER,"
                         "primary key (graph_id, user_id)"
-                        ");"))))
+                        ");"))
+   (common/<d1-run db
+                   "create index if not exists idx_graph_members_graph_id_created_at on graph_members (graph_id, created_at)")
+   (common/<d1-run db
+                   "create index if not exists idx_graphs_user_id_updated_at on graphs (user_id, updated_at desc)")
+   (common/<d1-run db
+                   "create index if not exists idx_users_email on users (email)")))
 
 (defn <index-list [db user-id]
   (if (string? user-id)
