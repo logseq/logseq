@@ -87,9 +87,9 @@
 
 (deftest cmdk-block-search-options-default-and-nodes
   (testing "default and nodes options keep snippet disabled and include expected base params"
-    (is (= {:limit 100 :dev? false :built-in? true :enable-snippet? false}
+    (is (= {:limit 100 :dev? false :built-in? true :enable-snippet? true}
            (state/cmdk-block-search-options {:dev? false})))
-    (is (= {:limit 100 :dev? true :built-in? true :enable-snippet? false}
+    (is (= {:limit 100 :dev? true :built-in? true :enable-snippet? true}
            (state/cmdk-block-search-options {:filter-group :nodes :dev? true})))))
 
 (deftest cmdk-block-search-options-code
@@ -98,23 +98,23 @@
             :search-limit 300
             :dev? true
             :built-in? true
-            :enable-snippet? false
+            :enable-snippet? true
             :code-only? true}
            (state/cmdk-block-search-options {:filter-group :code :dev? true})))))
 
 (deftest cmdk-block-search-options-current-page-and-move-blocks
   (testing "current-page adds page and move-blocks adds page-only flag"
     (is (= {:limit 100
-            :enable-snippet? false
+            :enable-snippet? true
             :page "00000000-0000-0000-0000-000000000111"}
            (state/cmdk-block-search-options {:filter-group :current-page
-                                                   :dev? false
-                                                   :page-uuid #uuid "00000000-0000-0000-0000-000000000111"})))
+                                             :dev? false
+                                             :page-uuid #uuid "00000000-0000-0000-0000-000000000111"})))
     (is (= {:limit 100
             :dev? true
             :built-in? true
-            :enable-snippet? false
+            :enable-snippet? true
             :page-only? true}
            (state/cmdk-block-search-options {:filter-group :nodes
-                                                   :dev? true
-                                                   :action :move-blocks})))))
+                                             :dev? true
+                                             :action :move-blocks})))))
