@@ -659,26 +659,6 @@
   "Pixel clearance reserved at the top and bottom of the scroll container."
   32)
 
-;; --- Keyboard acceleration ---
-;; When holding ArrowDown/Up, step starts at 1 and ramps up
-;; so the highlight moves through items progressively faster.
-
-(def ^:private need-accel?
-  "Whether to enable keyboard acceleration."
-  false)
-
-(def ^:private accel-delay-ms
-  "Milliseconds to hold before acceleration kicks in."
-  200)
-
-(def ^:private accel-step-interval-ms
-  "Milliseconds between each step increase after delay."
-  150)
-
-(def ^:private accel-max-step
-  "Maximum items to move per keypress during acceleration."
-  5)
-
 ;; --- Synchronous keyboard highlight DOM manipulation ---
 ;; React/Rum re-renders asynchronously (via rAF). When a keydown fires,
 ;; scrollTop is set synchronously but the highlight attribute is only updated in
@@ -959,17 +939,6 @@
       :else
       (notification/show! "No link for this search item." :warning))))
 
-(defn- keydown-accel-step
-  "Returns the number of items to move per keydown, ramping up while the key is
-  held.  Uses `::accel-start-ts` to track hold duration instead of event.repeat,
-  which is not reliably forwarded by the Goog events BrowserEvent wrapper."
-  [state _e]
-  (let [now (js/Date.now)
-        start (or @(::accel-start-ts state)
-                  (reset! (::accel-start-ts state) now))
-        held-ms (- now start)]
-    (scroll/accel-step held-ms accel-delay-ms accel-step-interval-ms accel-max-step)))
-
 (defn- keydown-handler
   [state e]
   (let [meta? (util/meta-key? e)
@@ -998,14 +967,14 @@
         (state/sidebar-add-block! repo input :search))
       as-keydown? (if meta?
                     (show-more)
-                    (let [step (if need-accel? (keydown-accel-step state e) 1)]
+                    (do
                       (reset! (::focus-source state) :keyboard)
-                      (move-highlight state step)))
+                      (move-highlight state 1)))
       as-keyup? (if meta?
                   (show-less)
-                  (let [step (if need-accel? (keydown-accel-step state e) 1)]
+                  (do
                     (reset! (::focus-source state) :keyboard)
-                    (move-highlight state (- step))))
+                    (move-highlight state -1)))
       (and enter? (not composing?)) (do
                                       (handle-action :default state e)
                                       (util/stop-propagation e))

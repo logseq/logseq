@@ -94,31 +94,3 @@
     (is (false? (scroll/should-scroll-on-item-mounted? :keyboard 8 7 8)))
     (is (false? (scroll/should-scroll-on-item-mounted? :keyboard 8 8 9)))
     (is (false? (scroll/should-scroll-on-item-mounted? :keyboard 8 8 nil)))))
-
-(deftest accel-step-basic
-  (testing "returns 1 during grace period"
-    (is (= 1 (scroll/accel-step 0 200 150 5)))
-    (is (= 1 (scroll/accel-step 100 200 150 5)))
-    (is (= 1 (scroll/accel-step 199 200 150 5))))
-  (testing "returns 2 at exactly delay-ms"
-    ;; held=200, delay=200 → excess=0, quot(0,150)=0, inc→1 ... wait
-    ;; Actually at exactly delay-ms: excess=0, quot(0,150)=0, 1+0=1
-    ;; So step is still 1 at exactly delay boundary
-    ;; Step becomes 2 at delay + 1 interval
-    (is (= 1 (scroll/accel-step 200 200 150 5)))
-    (is (= 2 (scroll/accel-step 350 200 150 5))))
-  (testing "ramps up with held duration"
-    ;; delay=200, interval=150
-    ;; 500ms: excess=300, quot(300,150)=2, inc→3
-    (is (= 3 (scroll/accel-step 500 200 150 5)))
-    ;; 800ms: excess=600, quot(600,150)=4, inc→5
-    (is (= 5 (scroll/accel-step 800 200 150 5))))
-  (testing "caps at max-step"
-    (is (= 5 (scroll/accel-step 2000 200 150 5)))
-    (is (= 3 (scroll/accel-step 2000 200 150 3))))
-  (testing "returns 1 for zero held time"
-    (is (= 1 (scroll/accel-step 0 0 100 5))))
-  (testing "always returns positive integer"
-    (doseq [ms [0 50 100 200 300 500 1000 5000]]
-      (let [s (scroll/accel-step ms 200 150 5)]
-        (is (pos-int? s) (str "ms=" ms " step=" s))))))
