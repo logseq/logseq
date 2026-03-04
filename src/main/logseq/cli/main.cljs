@@ -19,6 +19,11 @@
                 "Options:"
                 summary]))
 
+(defn- result->exit-code
+  [result]
+  (or (:exit-code result)
+      (if (= :error (:status result)) 1 0)))
+
 (defn run!
   ([args] (run! args {}))
   ([args _opts]
@@ -69,7 +74,7 @@
                              (let [opts (cond-> cfg
                                           (:output-format result)
                                           (assoc :output-format (:output-format result)))]
-                               {:exit-code 0
+                               {:exit-code (result->exit-code result)
                                 :output (format/format-result result opts)})))
                    (p/catch (fn [error]
                               (let [data (ex-data error)
