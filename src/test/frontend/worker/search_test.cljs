@@ -185,18 +185,18 @@
 (deftest search-blocks-aux-bind-count
   (testing "namespace match SQL keeps bind count aligned"
     (let [sql "select id, page, title, rank from blocks_fts where title match ? or title match ? order by rank limit ?"
-          result (#'search/search-blocks-aux (checking-db) sql "a/b" "a/b" nil 10 false true)]
+          result (#'search/search-blocks-aux (checking-db) sql "a/b" "a/b" nil 10 true)]
       (is (some? result))
       (is (empty? result))))
 
   (testing "namespace non-match SQL without page keeps bind count aligned"
     (let [sql "select id, page, title, rank from blocks_fts where title like ? limit ?"
-          result (#'search/search-blocks-aux (checking-db) sql "a/" "%a/%" nil 10 false)]
+          result (#'search/search-blocks-aux (checking-db) sql "a/" "%a/%" nil 10)]
       (is (some? result))
       (is (empty? result))))
 
   (testing "namespace non-match SQL with page keeps bind count aligned"
     (let [sql "select id, page, title, rank from blocks_fts where page = ? and title like ? limit ?"
-          result (#'search/search-blocks-aux (checking-db) sql "a/" "%a/%" "page-1" 10 false)]
+          result (#'search/search-blocks-aux (checking-db) sql "a/" "%a/%" "page-1" 10)]
       (is (some? result))
       (is (empty? result)))))
