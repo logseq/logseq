@@ -166,6 +166,89 @@
                             (set! js/fetch fetch-prev)
                             (done)))))))
 
+(deftest fetch-graph-aes-key-for-download-uses-platform-kv-clear-test
+  (async done
+         (let [fetch-prev js/fetch
+               graph-id (str (random-uuid))
+               expected-key (str "rtc-encrypted-aes-key###" graph-id)
+               platform-map {:runtime :test}
+               kv-set-calls (atom [])]
+           (set! js/fetch
+                 (fn [url _opts]
+                   (cond
+                     (string/includes? url "/e2ee/user-keys")
+                     (js/Promise.resolve
+                      #js {:ok true
+                           :text (fn []
+                                   (js/Promise.resolve
+                                    "{\"public-key\":\"public-key\",\"encrypted-private-key\":\"encrypted-private-key\"}"))})
+
+                     (string/includes? url (str "/e2ee/graphs/" graph-id "/aes-key"))
+                     (js/Promise.resolve
+                      #js {:ok true
+                           :text (fn []
+                                   (js/Promise.resolve
+                                    "{\"encrypted-aes-key\":\"remote-encrypted\"}"))})
+
+                     :else
+                     (js/Promise.resolve
+                      #js {:ok false
+                           :status 404
+                           :text (fn [] (js/Promise.resolve "{\"message\":\"not-found\"}"))}))))
+           (-> (p/with-redefs [sync-crypt/e2ee-base (fn [] "https://example.com")
+                               worker-state/get-id-token (fn [] "token")
+                               worker-state/<invoke-main-thread (fn [_type _payload]
+                                                                  (p/resolved :exported-private-key))
+                               crypt/<import-private-key (fn [_]
+                                                           (p/resolved :private-key))
+                               crypt/<decrypt-aes-key (fn [_private-key encrypted]
+                                                        (p/resolved (str "aes:" encrypted)))
+                               ldb/read-transit-str (fn [value] value)
+                               platform/current (fn [] platform-map)
+                               platform/kv-set! (fn [platform' k value]
+                                                  (swap! kv-set-calls conj {:platform platform'
+                                                                            :key k
+                                                                            :value value})
+                                                  (p/resolved nil))
+                               idb-keyval/del (fn [_k _store]
+                                                (throw (ex-info "should not use idb-keyval/del" {})))]
+                 (sync-crypt/<fetch-graph-aes-key-for-download graph-id))
+               (p/then (fn [aes-key]
+                         (is (= "aes:remote-encrypted" aes-key))
+                         (is (= [{:platform platform-map :key expected-key :value nil}
+                                 {:platform platform-map :key expected-key :value "remote-encrypted"}]
+                                @kv-set-calls))))
+               (p/catch (fn [e]
+                          (is false (str e))))
+               (p/finally (fn []
+                            (set! js/fetch fetch-prev)
+                            (done)))))))
+
+(deftest decrypt-private-key-falls-back-to-config-password-when-main-thread-unavailable-test
+  (async done
+         (let [old-sync-config @worker-state/*db-sync-config
+               old-state @worker-state/*state]
+           (reset! worker-state/*db-sync-config {:e2ee-password "headless-password"})
+           (swap! worker-state/*state assoc :auth/refresh-token nil)
+           (-> (p/with-redefs [ldb/read-transit-str (fn [_] :encrypted-private-key)
+                               worker-state/<invoke-main-thread (fn [_qkw _payload]
+                                                                  (p/rejected (ex-info "main-thread is not available in db-worker-node" {})))
+                               crypt/<decrypt-private-key (fn [password encrypted-private-key]
+                                                            (is (= "headless-password" password))
+                                                            (is (= :encrypted-private-key encrypted-private-key))
+                                                            (p/resolved :private-key))
+                               crypt/<import-private-key (fn [_]
+                                                           (p/rejected (ex-info "should not import in fallback" {})))]
+                 (#'sync-crypt/<decrypt-private-key "encrypted-private-key-str"))
+               (p/then (fn [private-key]
+                         (is (= :private-key private-key))))
+               (p/catch (fn [e]
+                          (is false (str e))))
+               (p/finally (fn []
+                            (reset! worker-state/*db-sync-config old-sync-config)
+                            (reset! worker-state/*state old-state)
+                            (done)))))))
+
 ;; bb dev:test -v frontend.worker.sync.crypt-test works, however bb dev:lint-and-test failed
 (deftest ^:fix-me decrypt-snapshot-rows-test
   (async done

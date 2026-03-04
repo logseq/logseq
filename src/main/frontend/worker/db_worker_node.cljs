@@ -129,7 +129,9 @@
 (def ^:private non-repo-methods
   #{:thread-api/init
     :thread-api/set-db-sync-config
+    :thread-api/get-db-sync-config
     :thread-api/db-sync-stop
+    :thread-api/db-sync-list-remote-graphs
     :thread-api/db-sync-update-presence
     :thread-api/db-sync-ensure-user-rsa-keys
     :thread-api/list-db

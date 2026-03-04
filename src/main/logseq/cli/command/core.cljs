@@ -99,7 +99,7 @@
   (let [groups [{:title "Graph Inspect and Edit"
                  :commands #{"list" "upsert" "remove" "query" "show"}}
                 {:title "Graph Management"
-                 :commands #{"graph" "server" "doctor"}}]
+                 :commands #{"graph" "server" "doctor" "sync"}}]
         render-group (fn [{:keys [title commands]}]
                        (let [entries (filter #(contains? commands (first (:cmds %))) table)]
                          (string/join "\n" [title (format-commands entries)])))]
