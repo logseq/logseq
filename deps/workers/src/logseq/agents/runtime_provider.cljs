@@ -35,7 +35,7 @@
       (when-not (string/blank? normalized) normalized))))
 
 (def ^:private supported-provider-kinds
-  #{"sprites" "local-dev" "cloudflare" "vercel"})
+  #{"sprites" "local-dev" "local-runner" "cloudflare" "vercel"})
 
 (defn- known-provider-kind [value]
   (let [provider (normalize-provider value)]
@@ -903,6 +903,26 @@
 (defn- local-dev-token [^js env runtime]
   (or (:agent-token runtime)
       (env-str env "SANDBOX_AGENT_TOKEN")))
+
+(defn- local-runner-base-url
+  [task runtime]
+  (or (some-> runtime :base-url strip-trailing-slash)
+      (some-> task :runner :base-url strip-trailing-slash)))
+
+(defn- local-runner-token
+  [task runtime]
+  (or (:agent-token runtime)
+      (get-in task [:runner :agent-token])))
+
+(defn- local-runner-headers
+  [task runtime]
+  (let [access-client-id (or (:access-client-id runtime)
+                             (get-in task [:runner :access-client-id]))
+        access-client-secret (or (:access-client-secret runtime)
+                                 (get-in task [:runner :access-client-secret]))]
+    (cond-> {}
+      (string? access-client-id) (assoc "CF-Access-Client-Id" access-client-id)
+      (string? access-client-secret) (assoc "CF-Access-Client-Secret" access-client-secret))))
 
 (defn- vercel-agent-token [^js env runtime]
   (or (:agent-token runtime)
@@ -2019,6 +2039,106 @@
          (sandbox/<terminate-session base-url agent-token session-id)
          (fn [_] nil))))))
 
+(defrecord LocalRunnerProvider [env]
+  RuntimeProvider
+
+  (<provision-runtime! [_ session-id task]
+    (let [base-url (local-runner-base-url task nil)
+          runner-id (get-in task [:runner :runner-id])
+          agent-token (local-runner-token task nil)
+          headers (local-runner-headers task nil)
+          payload (session-payload task)]
+      (when-not (string? base-url)
+        (throw (ex-info "local runner base url is required"
+                        {:reason :missing-local-runner-base-url
+                         :session-id session-id
+                         :runner-id runner-id})))
+      (p/let [response (sandbox/<create-session base-url
+                                                agent-token
+                                                session-id
+                                                payload
+                                                {:headers headers})]
+        {:provider "local-runner"
+         :runner-id runner-id
+         :base-url base-url
+         :agent-token agent-token
+         :access-client-id (get headers "CF-Access-Client-Id")
+         :access-client-secret (get headers "CF-Access-Client-Secret")
+         :session-id (:session-id response)})))
+
+  (<open-events-stream! [_ runtime]
+    (let [base-url (local-runner-base-url nil runtime)
+          agent-token (local-runner-token nil runtime)
+          headers (local-runner-headers nil runtime)]
+      (when-not (string? base-url)
+        (throw (ex-info "local runner base url is required"
+                        {:reason :missing-local-runner-base-url
+                         :runtime runtime})))
+      (sandbox/<open-events-stream base-url
+                                   agent-token
+                                   (:session-id runtime)
+                                   {:headers headers})))
+
+  (<send-message! [_ runtime message]
+    (let [base-url (local-runner-base-url nil runtime)
+          agent-token (local-runner-token nil runtime)
+          headers (local-runner-headers nil runtime)]
+      (when-not (string? base-url)
+        (throw (ex-info "local runner base url is required"
+                        {:reason :missing-local-runner-base-url
+                         :runtime runtime})))
+      (sandbox/<send-message base-url
+                             agent-token
+                             (:session-id runtime)
+                             message
+                             {:headers headers})))
+
+  (<open-terminal! [_ _runtime _request _opts]
+    (p/rejected
+     (ex-info "local-runner runtime provider does not support browser terminal"
+              {:reason :unsupported-terminal
+               :provider "local-runner"})))
+
+  (<snapshot-runtime! [_ _runtime _opts]
+    (p/rejected
+     (ex-info "local-runner runtime provider does not support snapshots"
+              {:reason :unsupported-snapshot
+               :provider "local-runner"})))
+
+  (<export-workspace-bundle! [_ _runtime _opts]
+    (p/rejected
+     (ex-info "local-runner runtime provider does not support workspace bundle export"
+              {:reason :unsupported-workspace-bundle
+               :provider "local-runner"})))
+
+  (<apply-workspace-bundle! [_ _runtime _opts]
+    (p/rejected
+     (ex-info "local-runner runtime provider does not support workspace bundle restore"
+              {:reason :unsupported-workspace-bundle
+               :provider "local-runner"})))
+
+  (<push-branch! [_ _runtime _opts]
+    (p/rejected
+     (ex-info "local-runner runtime provider does not support managed git push"
+              {:reason :unsupported
+               :provider "local-runner"})))
+
+  (<terminate-runtime! [_ runtime]
+    (let [base-url (local-runner-base-url nil runtime)
+          agent-token (local-runner-token nil runtime)
+          headers (local-runner-headers nil runtime)
+          session-id (:session-id runtime)]
+      (if-not (string? session-id)
+        (p/resolved nil)
+        (if-not (string? base-url)
+          (p/resolved nil)
+          (p/catch
+           (sandbox/<terminate-session base-url
+                                       agent-token
+                                       session-id
+                                       {:headers headers})
+           (fn [_] nil)))))))
+
 (defrecord VercelProvider [env]
   RuntimeProvider
 
@@ -2352,6 +2472,7 @@
   (cond
     (instance? SpritesProvider provider) "sprites"
     (instance? LocalDevProvider provider) "local-dev"
+    (instance? LocalRunnerProvider provider) "local-runner"
     (instance? VercelProvider provider) "vercel"
     (instance? CloudflareProvider provider) "cloudflare"
     :else nil))
@@ -2362,6 +2483,7 @@
               :resolved (known-provider-kind kind)})
   (case (known-provider-kind kind)
     "local-dev" (->LocalDevProvider env)
+    "local-runner" (->LocalRunnerProvider env)
     "vercel" (->VercelProvider env)
     "cloudflare" (->CloudflareProvider env)
     (->SpritesProvider env)))

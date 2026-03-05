@@ -18,7 +18,7 @@ Reduce hosted sandbox cost while keeping session lifecycle, auth, and collaborat
 - Existing `local-dev` runtime behavior and limitations in `README.md`.
 
 ## Scope
-1) Add a production runtime provider for remote local runners (for example `remote-runner`) that supports:
+1) Add a production runtime provider for user local runners (for example `local-runner`) that supports:
 - `<provision-runtime!`
 - `<open-events-stream!`
 - `<send-message!`
@@ -45,9 +45,9 @@ Reduce hosted sandbox cost while keeping session lifecycle, auth, and collaborat
 - Add D1 store module `src/logseq/agents/runner_store.cljs` for CRUD/lease queries.
 - Add migration `worker/migrations/0004_add_agent_runners.sql` with indexes on `user_id`, `status`, and `last_heartbeat_at`.
 
-### WS2: Remote Runner Provider
-- Extend provider kinds in `src/logseq/agents/runtime_provider.cljs` to include `remote-runner`.
-- Implement `RemoteRunnerProvider` using per-runtime `:base-url` and token metadata from registry record.
+### WS2: Local Runner Provider
+- Extend provider kinds in `src/logseq/agents/runtime_provider.cljs` to include `local-runner`.
+- Implement `LocalRunnerProvider` using per-runtime `:base-url` and token metadata from registry record.
 - Persist runtime metadata in session state (`:provider`, `:runner-id`, `:base-url`, `:session-id`).
 - Keep `local-dev` unchanged for local development workflows.
 

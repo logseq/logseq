@@ -10,6 +10,8 @@
                 :node-title "Title"
                 :content "Hello"
                 :attachments ["https://example.com/a.png"]
+                :runtime-provider "local-runner"
+                :runner-id "runner-1"
                 :project {:id "project-1"
                           :title "Demo Project"
                           :repo-url "https://github.com/example/repo"}
@@ -31,7 +33,11 @@
                           :repo-url "https://github.com/example/repo"}
                 :agent {:provider "codex"
                         :api-token "token-123"
-                        :auth-json "{\"tokens\":{\"access_token\":\"abc\"}}"}}
+                        :auth-json "{\"tokens\":{\"access_token\":\"abc\"}}"}
+                :runtime-provider "local-runner"
+                :runner-id "runner-1"
+                :capabilities {:push-enabled false
+                               :pr-enabled true}}
           normalized (request/normalize-session-create body)]
       (is (= {:id "sess-1"
               :source {:node-id "node-1"
@@ -45,7 +51,9 @@
               :agent {:provider "codex"
                       :api-token "token-123"
                       :auth-json "{\"tokens\":{\"access_token\":\"abc\"}}"}
-              :capabilities {:push-enabled true
+              :runtime-provider "local-runner"
+              :runner-id "runner-1"
+              :capabilities {:push-enabled false
                              :pr-enabled true}}
              normalized)))))
 
@@ -73,3 +81,46 @@
     (is (= {} (http/coerce-http-request :sessions/snapshot {}))))
   (testing "rejects invalid sessions/snapshot payload"
     (is (nil? (http/coerce-http-request :sessions/snapshot {:force true})))))
+
+(deftest runners-register-coerce-test
+  (testing "accepts runner register payload"
+    (let [body {:runner-id "runner-1"
+                :base-url "https://runner.example.com"
+                :agent-token "runner-token"
+                :access-client-id "client-id"
+                :access-client-secret "client-secret"
+                :max-sessions 2}
+          coerced (http/coerce-http-request :runners/register body)]
+      (is (= body coerced))))
+  (testing "rejects invalid runner register payload"
+    (is (nil? (http/coerce-http-request :runners/register {:runner-id "runner-1"})))
+    (is (nil? (http/coerce-http-request :runners/register {:runner-id 10
+                                                           :base-url "https://runner.example.com"})))
+    (is (nil? (http/coerce-http-request :runners/register {:runner-id "runner-1"
+                                                           :base-url "https://runner.example.com"
+                                                           :max-sessions "2"})))))
+
+(deftest runners-heartbeat-coerce-test
+  (testing "accepts runner heartbeat payload"
+    (let [body {:active-sessions 1}
+          coerced (http/coerce-http-request :runners/heartbeat body)]
+      (is (= body coerced))))
+  (testing "accepts empty heartbeat payload"
+    (is (= {} (http/coerce-http-request :runners/heartbeat {}))))
+  (testing "rejects invalid heartbeat payload"
+    (is (nil? (http/coerce-http-request :runners/heartbeat {:active-sessions "1"})))))
+
+(deftest normalize-runner-register-test
+  (testing "normalizes register payload with defaults"
+    (let [normalized (request/normalize-runner-register
+                      {:runner-id " runner-1 "
+                       :base-url "https://runner.example.com/"
+                       :agent-token " runner-token "
+                       :max-sessions 0}
+                      "user-1")]
+      (is (= {:runner-id "runner-1"
+              :user-id "user-1"
+              :base-url "https://runner.example.com"
+              :agent-token "runner-token"
+              :max-sessions 1}
+             normalized)))))

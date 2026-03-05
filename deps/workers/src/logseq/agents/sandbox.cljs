@@ -53,6 +53,13 @@
                (assoc :body (js/JSON.stringify (clj->js body))))]
     (platform/request url (clj->js init))))
 
+(defn- add-extra-headers!
+  [^js headers extra-headers]
+  (when (map? extra-headers)
+    (doseq [[k v] extra-headers]
+      (when (and (string? k) (string? v))
+        (.set headers k v)))))
+
 (defn- parse-json-or-default [^js resp fallback]
   (let [content-type (.get (.-headers resp) "content-type")]
     (if (and (string? content-type) (string/includes? content-type "application/json"))
@@ -60,26 +67,30 @@
       (js/Promise.resolve fallback))))
 
 (defn <create-session
-  [base token session-id payload]
-  (let [agent (:agent payload)
-        agent-mode (or (:agent-mode payload) (:agentMode payload))
-        permission-mode (or (:permission-mode payload) (:permissionMode payload))
-        headers (js/Headers.)
-        _ (.set headers "content-type" "application/json")
-        _ (when (string? token) (.set headers "authorization" (str "Bearer " token)))
-        body (cond-> {:agent (normalize-agent-id agent)}
-               (string? agent-mode) (assoc :agentMode agent-mode)
-               (string? permission-mode) (assoc :permissionMode permission-mode))
-        req (json-request (session-url base session-id) "POST" headers body)]
-    (p/let [resp (js/fetch req)
-            status (.-status resp)
-            json (parse-json-or-default resp {})]
-      (if (<= 200 status 299)
-        (assoc json :session-id session-id)
-        (throw (ex-info "sandbox create-session failed"
-                        {:status status
-                         :session-id session-id
-                         :response json}))))))
+  ([base token session-id payload]
+   (<create-session base token session-id payload nil))
+  ([base token session-id payload opts]
+   (let [agent (:agent payload)
+         agent-mode (or (:agent-mode payload) (:agentMode payload))
+         permission-mode (or (:permission-mode payload) (:permissionMode payload))
+         headers (js/Headers.)
+         extra-headers (:headers opts)
+         _ (.set headers "content-type" "application/json")
+         _ (when (string? token) (.set headers "authorization" (str "Bearer " token)))
+         _ (add-extra-headers! headers extra-headers)
+         body (cond-> {:agent (normalize-agent-id agent)}
+                (string? agent-mode) (assoc :agentMode agent-mode)
+                (string? permission-mode) (assoc :permissionMode permission-mode))
+         req (json-request (session-url base session-id) "POST" headers body)]
+     (p/let [resp (js/fetch req)
+             status (.-status resp)
+             json (parse-json-or-default resp {})]
+       (if (<= 200 status 299)
+         (assoc json :session-id session-id)
+         (throw (ex-info "sandbox create-session failed"
+                         {:status status
+                          :session-id session-id
+                          :response json})))))))
 
 (defn <open-message-stream
   [base token session-id message]
@@ -98,48 +109,60 @@
                          :session-id session-id}))))))
 
 (defn <open-events-stream
-  [base token session-id]
-  (let [headers (js/Headers.)
-        _ (.set headers "accept" "text/event-stream")
-        _ (when (string? token) (.set headers "authorization" (str "Bearer " token)))
-        req (json-request (events-sse-url base session-id) "GET" headers nil)]
-    (p/let [resp (js/fetch req)
-            status (.-status resp)]
-      (if (<= 200 status 299)
-        resp
-        (throw (ex-info "sandbox open-events-stream failed"
-                        {:status status
-                         :session-id session-id}))))))
+  ([base token session-id]
+   (<open-events-stream base token session-id nil))
+  ([base token session-id opts]
+   (let [headers (js/Headers.)
+         extra-headers (:headers opts)
+         _ (.set headers "accept" "text/event-stream")
+         _ (when (string? token) (.set headers "authorization" (str "Bearer " token)))
+         _ (add-extra-headers! headers extra-headers)
+         req (json-request (events-sse-url base session-id) "GET" headers nil)]
+     (p/let [resp (js/fetch req)
+             status (.-status resp)]
+       (if (<= 200 status 299)
+         resp
+         (throw (ex-info "sandbox open-events-stream failed"
+                         {:status status
+                          :session-id session-id})))))))
 
 (defn <send-message
-  [base token session-id message]
-  (let [headers (js/Headers.)
-        _ (.set headers "content-type" "application/json")
-        _ (when (string? token) (.set headers "authorization" (str "Bearer " token)))
-        body (cond-> {:message (:message message)}
-               (string? (:kind message)) (assoc :kind (:kind message)))
-        req (json-request (messages-url base session-id) "POST" headers body)]
-    (p/let [resp (js/fetch req)
-            status (.-status resp)]
-      (if (<= 200 status 299)
-        true
-        (throw (ex-info "sandbox send-message failed"
-                        {:status status
-                         :session-id session-id}))))))
+  ([base token session-id message]
+   (<send-message base token session-id message nil))
+  ([base token session-id message opts]
+   (let [headers (js/Headers.)
+         extra-headers (:headers opts)
+         _ (.set headers "content-type" "application/json")
+         _ (when (string? token) (.set headers "authorization" (str "Bearer " token)))
+         _ (add-extra-headers! headers extra-headers)
+         body (cond-> {:message (:message message)}
+                (string? (:kind message)) (assoc :kind (:kind message)))
+         req (json-request (messages-url base session-id) "POST" headers body)]
+     (p/let [resp (js/fetch req)
+             status (.-status resp)]
+       (if (<= 200 status 299)
+         true
+         (throw (ex-info "sandbox send-message failed"
+                         {:status status
+                          :session-id session-id})))))))
 
 (defn <terminate-session
-  [base token session-id]
-  (let [headers (js/Headers.)
-        _ (.set headers "content-type" "application/json")
-        _ (when (string? token) (.set headers "authorization" (str "Bearer " token)))
-        req (json-request (terminate-url base session-id) "POST" headers nil)]
-    (p/let [resp (js/fetch req)
-            status (.-status resp)]
-      (when-not (<= 200 status 299)
-        (throw (ex-info "sandbox terminate-session failed"
-                        {:status status
-                         :session-id session-id})))
-      true)))
+  ([base token session-id]
+   (<terminate-session base token session-id nil))
+  ([base token session-id opts]
+   (let [headers (js/Headers.)
+         extra-headers (:headers opts)
+         _ (.set headers "content-type" "application/json")
+         _ (when (string? token) (.set headers "authorization" (str "Bearer " token)))
+         _ (add-extra-headers! headers extra-headers)
+         req (json-request (terminate-url base session-id) "POST" headers nil)]
+     (p/let [resp (js/fetch req)
+             status (.-status resp)]
+       (when-not (<= 200 status 299)
+         (throw (ex-info "sandbox terminate-session failed"
+                         {:status status
+                          :session-id session-id})))
+       true))))
 
 (defn <exec-command
   [base token command]

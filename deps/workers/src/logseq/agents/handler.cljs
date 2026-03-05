@@ -2,6 +2,7 @@
   (:require [lambdaisland.glogi :as log]
             [logseq.agents.request :as agent-request]
             [logseq.agents.routes :as routes]
+            [logseq.agents.runner-store :as runner-store]
             [logseq.sync.common :as common]
             [logseq.sync.platform.core :as platform]
             [logseq.sync.worker.auth :as auth]
@@ -35,6 +36,23 @@
     (when (string? idempotency-key)
       (.set headers "idempotency-key" idempotency-key))
     headers))
+
+(defn- claims-user-id
+  [claims]
+  (aget claims "sub"))
+
+(defn- runner-response
+  [runner]
+  (select-keys runner
+               [:runner-id
+                :user-id
+                :base-url
+                :status
+                :max-sessions
+                :active-sessions
+                :last-heartbeat-at
+                :created-at
+                :updated-at]))
 
 (defn- forward-request [^js stub url method headers body]
   (let [init (cond-> {:method method :headers headers}
@@ -203,6 +221,81 @@
           (forward-request stub do-url "POST" headers nil))
         (http/error-response "server error" 500)))))
 
+(defn- handle-runners-register [{:keys [env request claims]}]
+  (.then (common/read-json request)
+         (fn [result]
+           (if (nil? result)
+             (http/bad-request "missing body")
+             (let [body (js->clj result :keywordize-keys true)
+                   body (http/coerce-http-request :runners/register body)
+                   user-id (claims-user-id claims)
+                   runner (agent-request/normalize-runner-register body user-id)]
+               (cond
+                 (not (string? user-id))
+                 (http/unauthorized)
+
+                 (nil? body)
+                 (http/bad-request "invalid body")
+
+                 (not (map? runner))
+                 (http/bad-request "invalid body")
+
+                 :else
+                 (p/let [saved (runner-store/<register-runner! env runner)]
+                   (if-not (map? saved)
+                     (http/error-response "failed to register runner" 500)
+                     (http/json-response :runners/register
+                                         {:runner (runner-response saved)})))))))))
+
+(defn- handle-runners-list [{:keys [env claims]}]
+  (let [user-id (claims-user-id claims)]
+    (if-not (string? user-id)
+      (http/unauthorized)
+      (p/let [runners (runner-store/<list-runners-for-user! env user-id)]
+        (http/json-response :runners/list
+                            {:runners (mapv runner-response runners)})))))
+
+(defn- handle-runners-get [{:keys [env claims route]}]
+  (let [user-id (claims-user-id claims)
+        runner-id (get-in route [:path-params :runner-id])]
+    (cond
+      (not (string? user-id))
+      (http/unauthorized)
+
+      (not (string? runner-id))
+      (http/bad-request "invalid runner id")
+
+      :else
+      (p/let [runner (runner-store/<get-runner-for-user! env user-id runner-id)]
+        (if-not (map? runner)
+          (http/not-found)
+          (http/json-response :runners/get
+                              {:runner (runner-response runner)}))))))
+
+(defn- handle-runners-heartbeat [{:keys [env request claims route]}]
+  (let [user-id (claims-user-id claims)
+        runner-id (get-in route [:path-params :runner-id])]
+    (cond
+      (not (string? user-id))
+      (http/unauthorized)
+
+      (not (string? runner-id))
+      (http/bad-request "invalid runner id")
+
+      :else
+      (.then (common/read-json request)
+             (fn [result]
+               (let [raw-body (if (nil? result) {} (js->clj result :keywordize-keys true))
+                     body (http/coerce-http-request :runners/heartbeat raw-body)
+                     heartbeat (agent-request/normalize-runner-heartbeat body)]
+                 (if (nil? body)
+                   (http/bad-request "invalid body")
+                   (p/let [runner (runner-store/<heartbeat-runner! env user-id runner-id heartbeat)]
+                     (if-not (map? runner)
+                       (http/not-found)
+                       (http/json-response :runners/heartbeat
+                                           {:runner (runner-response runner)}))))))))))
+
 (defn handle [{:keys [route] :as ctx}]
   (case (:handler route)
     :sessions/create (handle-create ctx)
@@ -218,6 +311,10 @@
     :sessions/events (handle-events ctx)
     :sessions/branches (handle-branches ctx)
     :sessions/stream (handle-stream ctx)
+    :runners/register (handle-runners-register ctx)
+    :runners/list (handle-runners-list ctx)
+    :runners/get (handle-runners-get ctx)
+    :runners/heartbeat (handle-runners-heartbeat ctx)
     (http/not-found)))
 
 (defn handle-fetch [^js self request]

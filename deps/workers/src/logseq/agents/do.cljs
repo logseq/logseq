@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [lambdaisland.glogi :as log]
             [logseq.agents.checkpoint-store :as checkpoint-store]
+            [logseq.agents.runner-store :as runner-store]
             [logseq.agents.runtime-provider :as runtime-provider]
             [logseq.agents.session :as session]
             [logseq.agents.source-control :as source-control]
@@ -719,6 +720,14 @@
       (string? reason) reason
       :else nil)))
 
+(defn- local-runner-unavailable-error?
+  [error]
+  (let [reason (some-> error ex-data :reason)]
+    (contains? #{:local-runner-unavailable
+                 :local-runner-user-required
+                 :missing-local-runner-base-url}
+               reason)))
+
 (defn- github-error-details
   [error]
   (let [{:keys [status body raw-body response-headers]} (ex-data error)]
@@ -1040,54 +1049,91 @@
           (http/not-found)
           (http/json-response :sessions/pause {:ok true}))))))
 
+(defn- non-empty-str
+  [value]
+  (when (string? value)
+    (let [trimmed (string/trim value)]
+      (when-not (string/blank? trimmed)
+        trimmed))))
+
+(defn- task-runtime-provider
+  [task]
+  (or (some-> (:runtime-provider task) non-empty-str string/lower-case)
+      (some-> (get-in task [:runtime :provider]) non-empty-str string/lower-case)))
+
+(defn- session-requested-by
+  [session]
+  (some-> (get-in session [:audit :requested-by]) non-empty-str))
+
+(defn- <attach-local-runner!
+  [^js env task requested-by]
+  (let [requested-runner-id (some-> (:runner-id task) non-empty-str)]
+    (if-not (string? requested-by)
+      (p/rejected (ex-info "local runner requires authenticated user"
+                           {:reason :local-runner-user-required}))
+      (p/let [runner (runner-store/<select-runner-for-user! env requested-by requested-runner-id)]
+        (if-not (map? runner)
+          (p/rejected (ex-info "local runner unavailable"
+                               {:reason :local-runner-unavailable
+                                :user-id requested-by
+                                :runner-id requested-runner-id}))
+          (assoc task :runner runner))))))
+
 (defn- <provision-runtime! [^js self task session-id]
-  (let [provider (runtime-provider/resolve-provider (.-env self) nil)
-        provider-kind (runtime-provider/provider-id provider)]
-    (p/let [base-task (if (map? task) (dissoc task :sandbox-checkpoint) task)
-            d1-checkpoint (if (map? base-task)
-                            (-> (checkpoint-store/<load-checkpoint-for-task! (.-env self) base-task)
-                                (p/catch (fn [error]
-                                           (log/error :agent/provision-checkpoint-d1-load-failed
-                                                      {:session-id session-id
-                                                       :task-id (:id base-task)
-                                                       :error (str error)})
-                                           nil)))
-                            nil)
-            task (if (and (map? base-task) (map? d1-checkpoint))
-                   (assoc base-task :sandbox-checkpoint d1-checkpoint)
-                   base-task)
-            runtime (runtime-provider/<provision-runtime! provider session-id task)
-            session (<get-session self)]
-      (cond
-        (nil? runtime)
-        (throw (ex-info "runtime provisioning returned nil"
-                        {:session-id session-id
-                         :provider provider-kind}))
+  (p/let [session-before (<get-session self)
+          requested-by (session-requested-by session-before)
+          runtime-request {:provider (task-runtime-provider task)}
+          provider (runtime-provider/resolve-provider (.-env self) runtime-request)
+          provider-kind (runtime-provider/provider-id provider)
+          base-task (if (map? task) (dissoc task :sandbox-checkpoint) task)
+          d1-checkpoint (if (map? base-task)
+                          (-> (checkpoint-store/<load-checkpoint-for-task! (.-env self) base-task)
+                              (p/catch (fn [error]
+                                         (log/error :agent/provision-checkpoint-d1-load-failed
+                                                    {:session-id session-id
+                                                     :task-id (:id base-task)
+                                                     :error (str error)})
+                                         nil)))
+                          nil)
+          task (if (and (map? base-task) (map? d1-checkpoint))
+                 (assoc base-task :sandbox-checkpoint d1-checkpoint)
+                 base-task)
+          task (if (= "local-runner" provider-kind)
+                 (<attach-local-runner! (.-env self) task requested-by)
+                 task)
+          runtime (runtime-provider/<provision-runtime! provider session-id task)
+          session (<get-session self)]
+    (cond
+      (nil? runtime)
+      (throw (ex-info "runtime provisioning returned nil"
+                      {:session-id session-id
+                       :provider provider-kind}))
 
-        (nil? session)
-        nil
+      (nil? session)
+      nil
 
-        :else
-        (p/let [restored-bundle (<restore-workspace-bundle! self session-id task runtime)]
-          (let [base-checkpoint (or (runtime-checkpoint-payload runtime runtime "provisioned")
-                                    (checkpoint-payload-with-reason d1-checkpoint "provisioned"))
-                runtime-checkpoint (merge-checkpoint-bundle base-checkpoint restored-bundle)
-                session (-> session
-                            (assoc :runtime runtime)
-                            (cond-> (map? runtime-checkpoint)
-                              (assoc-in [:task :sandbox-checkpoint] runtime-checkpoint)))
-                [session _ event] (session/append-event session [] {:type "session.provisioned"
-                                                                    :data {:provider (:provider runtime)
-                                                                           :runtime-session-id (:session-id runtime)
-                                                                           :sandbox-id (:sandbox-id runtime)
-                                                                           :sandbox-name (:sandbox-name runtime)
-                                                                           :sprite-name (:sprite-name runtime)}
-                                                                    :ts (common/now-ms)})]
-            (p/let [_ (<append-event-storage! self event)
-                    _ (<put-session! self session)]
-              (when-not (terminal-status? (:status session))
-                (start-runtime-events-stream-background! self (:id session) runtime))
-              runtime)))))))
+      :else
+      (p/let [restored-bundle (<restore-workspace-bundle! self session-id task runtime)]
+        (let [base-checkpoint (or (runtime-checkpoint-payload runtime runtime "provisioned")
+                                  (checkpoint-payload-with-reason d1-checkpoint "provisioned"))
+              runtime-checkpoint (merge-checkpoint-bundle base-checkpoint restored-bundle)
+              session (-> session
+                          (assoc :runtime runtime)
+                          (cond-> (map? runtime-checkpoint)
+                            (assoc-in [:task :sandbox-checkpoint] runtime-checkpoint)))
+              [session _ event] (session/append-event session [] {:type "session.provisioned"
+                                                                  :data {:provider (:provider runtime)
+                                                                         :runtime-session-id (:session-id runtime)
+                                                                         :runner-id (:runner-id runtime)
+                                                                         :sandbox-id (:sandbox-id runtime)
+                                                                         :sandbox-name (:sandbox-name runtime)
+                                                                         :sprite-name (:sprite-name runtime)}
+                                                                  :ts (common/now-ms)})]
+          (p/let [_ (<append-event-storage! self event)
+                  _ (<put-session! self session)]
+            (when-not (terminal-status? (:status session))
+              (start-runtime-events-stream-background! self (:id session) runtime))
+            runtime))))))
 
 (defn- handle-init [^js self request]
   (p/let [existing (<get-session self)]
@@ -1150,15 +1196,22 @@
                                                                      :ts now})]
                                (p/let [_ (<put-session! self session)
                                        _ (<put-events! self events)
-                                       _ (<provision-runtime! self task task-id)
+                                       provision-result (-> (<provision-runtime! self task task-id)
+                                                            (p/then (fn [_] {:ok true}))
+                                                            (p/catch (fn [error]
+                                                                       {:error error})))
                                        updated-session (<get-session self)]
-                                 (http/json-response :sessions/create
-                                                     {:session-id task-id
-                                                      :status (or (:status updated-session)
-                                                                  (:status session))
-                                                      :runtime-provider (session-runtime-provider updated-session)
-                                                      :terminal-enabled (session-terminal-enabled? updated-session)
-                                                      :stream-url (stream-url request task-id)})))))))))))))))
+                                 (if-let [error (:error provision-result)]
+                                   (if (local-runner-unavailable-error? error)
+                                     (session-conflict "local runner unavailable, register or heartbeat your runner and retry")
+                                     (throw error))
+                                   (http/json-response :sessions/create
+                                                       {:session-id task-id
+                                                        :status (or (:status updated-session)
+                                                                    (:status session))
+                                                        :runtime-provider (session-runtime-provider updated-session)
+                                                        :terminal-enabled (session-terminal-enabled? updated-session)
+                                                        :stream-url (stream-url request task-id)}))))))))))))))))
 
 (defn- handle-status [^js self _request]
   (p/let [session (<get-session self)]

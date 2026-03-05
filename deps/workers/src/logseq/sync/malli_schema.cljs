@@ -227,6 +227,8 @@
    [:node-title :string]
    [:content :string]
    [:attachments [:sequential :string]]
+   [:runtime-provider {:optional true} :string]
+   [:runner-id {:optional true} :string]
    [:project [:map
               [:id :string]
               [:title :string]
@@ -276,6 +278,19 @@
 
 (def sessions-snapshot-request-schema
   [:map])
+
+(def runners-register-request-schema
+  [:map
+   [:runner-id :string]
+   [:base-url :string]
+   [:agent-token {:optional true} :string]
+   [:access-client-id {:optional true} :string]
+   [:access-client-secret {:optional true} :string]
+   [:max-sessions {:optional true} :int]])
+
+(def runners-heartbeat-request-schema
+  [:map
+   [:active-sessions {:optional true} :int]])
 
 (def sessions-create-response-schema
   [:map
@@ -329,6 +344,34 @@
    [:snapshot-id {:optional true} [:maybe :string]]
    [:message {:optional true} [:maybe :string]]])
 
+(def runner-response-schema
+  [:map
+   [:runner-id :string]
+   [:user-id :string]
+   [:base-url :string]
+   [:status :string]
+   [:max-sessions :int]
+   [:active-sessions :int]
+   [:last-heartbeat-at :int]
+   [:created-at :int]
+   [:updated-at :int]])
+
+(def runners-register-response-schema
+  [:map
+   [:runner runner-response-schema]])
+
+(def runners-list-response-schema
+  [:map
+   [:runners [:sequential runner-response-schema]]])
+
+(def runners-get-response-schema
+  [:map
+   [:runner runner-response-schema]])
+
+(def runners-heartbeat-response-schema
+  [:map
+   [:runner runner-response-schema]])
+
 (def http-request-schemas
   {:graphs/create graph-create-request-schema
    :graph-members/create graph-member-create-request-schema
@@ -340,7 +383,9 @@
    :sessions/create sessions-create-request-schema
    :sessions/message sessions-message-request-schema
    :sessions/pr sessions-pr-request-schema
-   :sessions/snapshot sessions-snapshot-request-schema})
+   :sessions/snapshot sessions-snapshot-request-schema
+   :runners/register runners-register-request-schema
+   :runners/heartbeat runners-heartbeat-request-schema})
 
 (def http-response-schemas
   {:graphs/list graphs-list-response-schema
@@ -376,6 +421,10 @@
    :sessions/snapshot sessions-snapshot-response-schema
    :sessions/events sessions-events-response-schema
    :sessions/branches sessions-branches-response-schema
+   :runners/register runners-register-response-schema
+   :runners/list runners-list-response-schema
+   :runners/get runners-get-response-schema
+   :runners/heartbeat runners-heartbeat-response-schema
    :error http-error-response-schema})
 
 (def ^:private json-transformer

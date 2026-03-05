@@ -55,6 +55,73 @@
 (defn- <json [^js resp]
   (.then (.json resp) #(js->clj % :keywordize-keys true)))
 
+(deftest init-session-respects-task-runtime-provider-test
+  (testing "session init uses task runtime-provider over env default provider"
+    (async done
+           (let [calls (atom {:create 0
+                              :events 0})
+                 original-fetch js/fetch
+                 env #js {"AGENT_RUNTIME_PROVIDER" "cloudflare"
+                          "SANDBOX_AGENT_URL" "http://sandbox.local"}
+                 self (make-self env)
+                 headers {"content-type" "application/json"
+                          "x-user-id" "user-1"}
+                 init-body {:id "sess-provider-override"
+                            :project {:id "project-1"}
+                            :agent "codex"
+                            :runtime-provider "local-dev"}]
+             (set! js/fetch
+                   (fn [request]
+                     (let [url (.-url request)
+                           method (.-method request)]
+                       (cond
+                         (and (= "POST" method)
+                              (string/includes? url "/v1/sessions/sess-provider-override")
+                              (not (string/includes? url "/messages")))
+                         (do
+                           (swap! calls update :create inc)
+                           (js/Promise.resolve
+                            (js/Response.
+                             (js/JSON.stringify #js {:ok true})
+                             #js {:status 200
+                                  :headers #js {"content-type" "application/json"}})))
+
+                         (and (= "GET" method)
+                              (string/includes? url "/v1/sessions/sess-provider-override/events/sse"))
+                         (do
+                           (swap! calls update :events inc)
+                           (js/Promise.resolve
+                            (js/Response.
+                             "data: {\"type\":\"session.running\"}\n\n"
+                             #js {:status 200
+                                  :headers #js {"content-type" "text/event-stream"}})))
+
+                         :else
+                         (js/Promise.resolve
+                          (js/Response.
+                           (js/JSON.stringify #js {:error "unexpected request"})
+                           #js {:status 500
+                                :headers #js {"content-type" "application/json"}}))))))
+
+             (-> (agent-do/handle-fetch self
+                                        (json-request "http://db-sync.local/__session__/init"
+                                                      "POST"
+                                                      init-body
+                                                      headers))
+                 (.then (fn [resp]
+                          (.then (<json resp)
+                                 (fn [body]
+                                   (set! js/fetch original-fetch)
+                                   (is (= 200 (.-status resp)))
+                                   (is (= "local-dev" (:runtime-provider body)))
+                                   (is (= 1 (:create @calls)))
+                                   (is (>= (:events @calls) 1))
+                                   (done)))))
+                 (.catch (fn [error]
+                           (set! js/fetch original-fetch)
+                           (is false (str "unexpected error: " error))
+                           (done))))))))
+
 (deftest messages-use-single-events-stream-and-dont-duplicate-user-message-test
   (testing "session messages post to /messages while keeping one /events/sse stream and no audit message payload"
     (async done

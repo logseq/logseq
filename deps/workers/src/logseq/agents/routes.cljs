@@ -16,7 +16,13 @@
      ["/events" {:methods {"GET" :sessions/events}}]
      ["/branches" {:methods {"GET" :sessions/branches}}]
      ["/terminal" {:methods {"GET" :sessions/terminal}}]
-     ["/stream" {:methods {"GET" :sessions/stream}}]]]])
+     ["/stream" {:methods {"GET" :sessions/stream}}]]]
+   ["/runners"
+    ["" {:methods {"GET" :runners/list
+                   "POST" :runners/register}}]
+    ["/:runner-id"
+     ["" {:methods {"GET" :runners/get}}]
+     ["/heartbeat" {:methods {"POST" :runners/heartbeat}}]]]])
 
 (def ^:private router
   (r/router route-data))

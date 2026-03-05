@@ -48,3 +48,16 @@
     (let [match (routes/match-route "POST" "/sessions/session-14/snapshot")]
       (is (= :sessions/snapshot (:handler match)))
       (is (= "session-14" (get-in match [:path-params :session-id]))))))
+
+(deftest match-route-runners-test
+  (testing "runner routes"
+    (let [match (routes/match-route "POST" "/runners")]
+      (is (= :runners/register (:handler match))))
+    (let [match (routes/match-route "GET" "/runners")]
+      (is (= :runners/list (:handler match))))
+    (let [match (routes/match-route "GET" "/runners/runner-1")]
+      (is (= :runners/get (:handler match)))
+      (is (= "runner-1" (get-in match [:path-params :runner-id]))))
+    (let [match (routes/match-route "POST" "/runners/runner-2/heartbeat")]
+      (is (= :runners/heartbeat (:handler match)))
+      (is (= "runner-2" (get-in match [:path-params :runner-id]))))))

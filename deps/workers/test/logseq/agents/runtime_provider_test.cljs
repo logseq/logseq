@@ -21,6 +21,7 @@
     (is (= "sprites" (runtime-provider/provider-kind #js {})))
     (is (= "sprites" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "SPRITES"})))
     (is (= "local-dev" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "LOCAL-DEV"})))
+    (is (= "local-runner" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "LOCAL-RUNNER"})))
     (is (= "vercel" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "VERCEL"})))
     (is (= "cloudflare" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "CLOUDFLARE"})))
     (is (= "sprites" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "unknown"})))))
@@ -53,6 +54,8 @@
              (runtime-provider/provider-id (runtime-provider/create-provider env "sprites"))))
       (is (= "local-dev"
              (runtime-provider/provider-id (runtime-provider/create-provider env "local-dev"))))
+      (is (= "local-runner"
+             (runtime-provider/provider-id (runtime-provider/create-provider env "local-runner"))))
       (is (= "vercel"
              (runtime-provider/provider-id (runtime-provider/create-provider env "vercel"))))
       (is (= "cloudflare"
@@ -61,8 +64,48 @@
              (runtime-provider/provider-id (runtime-provider/create-provider env "unknown"))))
       (is (= "local-dev"
              (runtime-provider/provider-id (runtime-provider/resolve-provider env {:provider "local-dev"}))))
+      (is (= "local-runner"
+             (runtime-provider/provider-id (runtime-provider/resolve-provider env {:provider "local-runner"}))))
       (is (= "cloudflare"
              (runtime-provider/provider-id (runtime-provider/resolve-provider env nil)))))))
+
+(deftest local-runner-provider-provision-test
+  (async done
+         (let [env #js {}
+               provider (runtime-provider/create-provider env "local-runner")
+               task {:agent {:provider "codex"}
+                     :runner {:runner-id "runner-1"
+                              :base-url "https://runner.example.com"
+                              :agent-token "runner-token"
+                              :access-client-id "cf-access-id"
+                              :access-client-secret "cf-access-secret"}}
+               original-fetch js/fetch]
+           (set! js/fetch
+                 (fn [request init]
+                   (is (= "https://runner.example.com/v1/sessions/sess-local-1" (fetch-url request)))
+                   (is (= "POST" (fetch-method request init)))
+                   (is (= "Bearer runner-token"
+                          (.get (.-headers request) "authorization")))
+                   (is (= "cf-access-id"
+                          (.get (.-headers request) "CF-Access-Client-Id")))
+                   (is (= "cf-access-secret"
+                          (.get (.-headers request) "CF-Access-Client-Secret")))
+                   (js/Promise.resolve
+                    (js/Response.
+                     (js/JSON.stringify #js {:ok true})
+                     #js {:status 200 :headers #js {"content-type" "application/json"}}))))
+           (-> (runtime-provider/<provision-runtime! provider "sess-local-1" task)
+               (.then (fn [runtime]
+                        (set! js/fetch original-fetch)
+                        (is (= "local-runner" (:provider runtime)))
+                        (is (= "runner-1" (:runner-id runtime)))
+                        (is (= "https://runner.example.com" (:base-url runtime)))
+                        (is (= "sess-local-1" (:session-id runtime)))
+                        (done)))
+               (.catch (fn [error]
+                         (set! js/fetch original-fetch)
+                         (is false (str "unexpected error: " error))
+                         (done)))))))
 
 (deftest cloudflare-name-test
   (testing "cloudflare sandbox names are deterministic and sanitized"

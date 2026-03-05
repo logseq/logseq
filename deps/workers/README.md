@@ -124,6 +124,7 @@ The control plane forwards each task message through sandbox-agent
 Agent runtime is selected by `AGENT_RUNTIME_PROVIDER`:
 - `sprites`: provisions a Sprite and runs `sandbox-agent` inside it.
 - `local-dev`: uses `SANDBOX_AGENT_URL` directly.
+- `local-runner`: selects a registered user runner endpoint from `AGENTS_DB` and runs through that endpoint.
 - `vercel`: provisions/manages Vercel sandboxes via `@vercel/sandbox`, then runs `sandbox-agent` inside the sandbox.
 - `cloudflare`: provisions a sandbox first, then connects to the sandbox-hosted `sandbox-agent`.
 - Agents worker default is `cloudflare` (set in `worker/wrangler.agents.toml`).
@@ -152,7 +153,7 @@ Cloudflare runtime flow:
 | DB_SYNC_STATIC_USER_ID | Static user id for local dev |
 | DB_SYNC_STATIC_EMAIL | Static user email for local dev |
 | DB_SYNC_STATIC_USERNAME | Static username for local dev |
-| AGENT_RUNTIME_PROVIDER | Runtime backend (`sprites`, `local-dev`, `vercel`, `cloudflare`) |
+| AGENT_RUNTIME_PROVIDER | Runtime backend (`sprites`, `local-dev`, `local-runner`, `vercel`, `cloudflare`) |
 | SENTRY_DSN | Sentry DSN |
 | SENTRY_RELEASE | Release identifier for Sentry events and sourcemaps |
 | SENTRY_ENVIRONMENT | Sentry environment name (prod, staging, etc.) |
@@ -191,6 +192,7 @@ Cloudflare runtime flow:
 | VERCEL_SANDBOX_VCPUS | Optional Vercel sandbox vCPU count |
 | VERCEL_HEALTH_RETRIES | Vercel sandbox health check retry count |
 | VERCEL_HEALTH_INTERVAL_MS | Vercel sandbox health check retry interval (ms) |
+| LOCAL_RUNNER_HEARTBEAT_TTL_MS | Max runner heartbeat age before runner is considered unavailable (default `60000`) |
 | GITHUB_APP_ID | GitHub App ID used to mint installation tokens |
 | GITHUB_APP_INSTALLATION_ID | Optional fixed installation ID (if omitted, resolved from repo) |
 | GITHUB_APP_PRIVATE_KEY | GitHub App private key PEM used for JWT signing |
