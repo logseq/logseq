@@ -1,8 +1,7 @@
 (ns logseq.cli.main
   "CLI entrypoint for invoking db-worker-node."
   (:refer-clojure :exclude [run!])
-  (:require [clojure.string :as string]
-            [logseq.cli.commands :as commands]
+  (:require [logseq.cli.commands :as commands]
             [logseq.cli.config :as config]
             [logseq.cli.data-dir :as data-dir]
             [logseq.cli.format :as format]
@@ -10,14 +9,6 @@
             [logseq.cli.version :as version]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
-
-(defn- usage
-  [summary]
-  (string/join "\n"
-               ["logseq <command> [options]"
-                ""
-                "Options:"
-                summary]))
 
 (defn- result->exit-code
   [result]
@@ -31,7 +22,7 @@
      (cond
        (:help? parsed)
        (p/resolved {:exit-code 0
-                    :output (usage (:summary parsed))})
+                    :output (:summary parsed)})
 
        (not (:ok? parsed))
        (p/resolved {:exit-code 1
