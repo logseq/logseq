@@ -222,6 +222,10 @@
       (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
+      (is (= 1 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Cards]] @conn))))
+      (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Code-block]] @conn))))
+      (is (= 1 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Math-block]] @conn))))
+      (is (= 1 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Template]] @conn))))
       (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Quote-block]] @conn))))
       (is (= 7 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Pdf-annotation]] @conn))))
 
@@ -331,11 +335,6 @@
              (mapv :db/id (:block/refs (db-test/find-block-by-content @conn #"ref to"))))
           "block with a block-ref has correct :block/refs")
 
-      (let [b (db-test/find-block-by-content @conn #"MEETING TITLE")]
-        (is (= {}
-               (and b (db-test/readable-properties b)))
-            ":template properties are ignored to not invalidate its property types"))
-
       (is (= 20221126
              (-> (db-test/readable-properties (db-test/find-block-by-content @conn "only deadline"))
                  :logseq.property/deadline
@@ -417,6 +416,26 @@
       (is (= {:block/tags [:logseq.class/Card]}
              (db-test/readable-properties (db-test/find-block-by-content @conn "card 1")))
           "None of the card properties are imported since they are deprecated")
+
+      ;; Cards (flashcard browser)
+      (is (= {:block/tags [:logseq.class/Cards]
+              :logseq.property/query "(tags #Card)"}
+             (db-test/readable-properties (find-block-by-property-value @conn :logseq.property/query "(tags #Card)")))
+          "cards macro block has correct Cards class and query property")
+
+      ;; Math blocks
+      (is (= {:block/tags [:logseq.class/Math-block]
+              :logseq.property.node/display-type :math}
+             (db-test/readable-properties (db-test/find-block-by-content @conn "E=mc^2")))
+          "Math block has correct Math-block class and display-type")
+      (is (= "E=mc^2" (:block/title (db-test/find-block-by-content @conn "E=mc^2")))
+          "Math block title has delimiters stripped")
+
+      ;; Templates
+      (let [b (db-test/find-block-by-content @conn #"MEETING TITLE")]
+        (is (= {:block/tags [:logseq.class/Template]}
+               (and b (db-test/readable-properties b)))
+            "Template block is tagged as Template class"))
 
       ;; Assets
       (is (= {:block/tags [:logseq.class/Asset]
