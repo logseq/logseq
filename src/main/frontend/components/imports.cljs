@@ -182,6 +182,7 @@
   [:div.border.p-6.rounded.bg-gray-01.mt-4
    (let [form-ctx (form-core/use-form
                    {:defaultValues {:graph-name initial-name
+                                    :extract-code-snippets? false
                                     :convert-all-tags? true
                                     :tag-classes ""
                                     :remove-inline-tags? true
@@ -211,6 +212,15 @@
                                               (when error
                                                 (shui/form-description
                                                  [:b.text-red-800 (:message error)])))))
+
+                          (shui/form-field {:name "extract-code-snippets?"}
+                                           (fn [field]
+                                             (shui/form-item
+                                              {:class "pt-3 flex justify-start items-center space-x-3 space-y-0 my-3 pr-3"}
+                                              (shui/form-label "Extract inline code snippets as child blocks")
+                                              (shui/form-control
+                                               (shui/checkbox {:checked (:value field)
+                                                               :on-checked-change (:onChange field)})))))
 
                           (shui/form-field {:name "convert-all-tags?"}
                                            (fn [field]
