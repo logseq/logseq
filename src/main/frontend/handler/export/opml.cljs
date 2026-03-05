@@ -434,11 +434,14 @@
              (uuid? root-block-uuids-or-page-uuid))]}
   (util/profile
     :export-blocks-as-opml
-    (let [content
+    (let [open-blocks-only? (boolean (get-in options [:other-options :open-blocks-only]))
+          content
           (if (uuid? root-block-uuids-or-page-uuid)
            ;; page
-            (common/get-page-content root-block-uuids-or-page-uuid)
-            (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
+            (common/get-page-content root-block-uuids-or-page-uuid
+                                     {:open-blocks-only? open-blocks-only?})
+            (common/root-block-uuids->content repo root-block-uuids-or-page-uuid
+                                              {:open-blocks-only? open-blocks-only?}))
           title (if (uuid? root-block-uuids-or-page-uuid)
                   (:block/title (db/entity [:block/uuid root-block-uuids-or-page-uuid]))
                   "untitled")
