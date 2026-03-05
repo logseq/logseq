@@ -9,7 +9,8 @@
 
 (def ^:private query-spec
   {:query {:desc "Datascript query EDN"}
-   :name {:desc "Query name from cli.edn custom-queries or built-ins"}
+   :name {:desc "Query name from cli.edn custom-queries or built-ins"
+          :complete :queries}
    :inputs {:desc "EDN vector of query inputs"}})
 
 (def ^:private query-list-spec

@@ -14,7 +14,8 @@
 (def ^:private show-spec
   {:id {:desc "Block db/id or EDN vector of ids"}
    :uuid {:desc "Block UUID"}
-   :page {:desc "Page name"}
+   :page {:desc "Page name"
+          :complete :pages}
    :linked-references {:desc "Include linked references (default true)"
                        :coerce :boolean}
    :level {:desc "Limit tree depth (default 10)"
