@@ -48,15 +48,25 @@ Make `frontend.worker.db-worker` and its dependencies run in both browser and No
 ## Refactor Steps (Milestones + Status)
 
 ### Milestone 1: Architecture & Abstractions
-- TODO 1. Inventory db-worker dependencies and classify browser-only APIs.
-- TODO 2. Define a platform adapter interface (storage, kv, broadcast, websocket, crypto, timers, env flags).
-- TODO 3. Extract db-worker core logic into a platform-agnostic module (e.g. `frontend.worker.db-core`).
+- DONE 1. Inventory db-worker dependencies and classify browser-only APIs.
+- DONE 2. Define a platform adapter interface (storage, kv, broadcast, websocket, crypto, timers, env flags).
+- DONE 3. Extract db-worker core logic into a platform-agnostic module (e.g. `frontend.worker.db-core`).
+#### Acceptance Criteria
+- Core worker module has zero direct references to `js/self`, `js/location`, `js/navigator`, `importScripts`, `BroadcastChannel`, or `navigator.locks`.
+- `frontend.worker.platform` exists with required sections and validation; platform adapter passes validation at init time.
+- Browser worker entry initializes via `init!`/`init-core!` with a platform adapter.
+- `bb dev:lint-and-test` passes.
 
 ### Milestone 2: Browser Path Parity
-- TODO 4. Implement `frontend.worker.platform.browser`.
-- TODO 5. Update db-worker entry to inject the platform adapter and call core init.
-- TODO 6. Route OPFS/IDB usage through the platform adapter in worker submodules.
-- TODO 7. Replace direct `js/WebSocket` usage with platform websocket factory.
+- DONE 4. Implement `frontend.worker.platform.browser`.
+- DONE 5. Update db-worker entry to inject the platform adapter and call core init.
+- DONE 6. Route OPFS/IDB usage through the platform adapter in worker submodules.
+- DONE 7. Replace direct `js/WebSocket` usage with platform websocket factory.
+#### Acceptance Criteria
+- Browser platform adapter encapsulates OPFS/IDB storage, kv-store, and WebSocket factory; worker submodules no longer import OPFS/IDB directly.
+- RTC WebSocket creation uses the platform adapter.
+- Browser db-worker entry injects the platform adapter and serves Comlink RPC.
+- `bb dev:lint-and-test` passes.
 
 ### Milestone 3: Node Path & Daemon
 - TODO 8. Implement `frontend.worker.platform.node` in single-client mode (no locks or BroadcastChannel).
@@ -64,10 +74,22 @@ Make `frontend.worker.db-worker` and its dependencies run in both browser and No
 - TODO 10. Add Node build target in `shadow-cljs.edn` for db-worker.
 - TODO 11. Implement Node daemon entrypoint and HTTP server.
 - TODO 12. Add a Node client in frontend to call the daemon (HTTP + SSE/WS events).
+#### Acceptance Criteria
+- Node platform adapter provides storage/kv/broadcast/websocket/crypto/timers and validates via `frontend.worker.platform`.
+- Node build target compiles db-worker core without browser-only APIs.
+- Node daemon starts via CLI and reports readiness; `GET /healthz` and `GET /readyz` return `200 OK`.
+- `POST /v1/invoke` handles `list-db`, `create-or-open-db`, `q`, `transact` in a smoke test.
+- Node client can invoke at least one RPC and receive one event (SSE or WS).
+- `bb dev:lint-and-test` passes.
 
 ### Milestone 4: Validation
 - TODO 13. Add tests: adapter unit tests + daemon integration smoke test.
 - TODO 14. Verify browser worker path still works with Comlink.
+#### Acceptance Criteria
+- Adapter unit tests cover browser and node implementations for storage/kv/broadcast/websocket factories.
+- Daemon integration smoke test starts the node process and exercises `/v1/invoke` with at least one method.
+- Browser worker path verified with Comlink RPCs (smoke test).
+- `bb dev:lint-and-test` passes.
 
 ## Node.js Daemon Requirements
 The db-worker should be runnable as a standalone process for Node.js environments.
