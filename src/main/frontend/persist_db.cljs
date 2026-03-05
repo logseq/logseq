@@ -88,6 +88,13 @@
         (protocol/<unsafe-delete client repo))
       (protocol/<unsafe-delete (get-impl) repo))))
 
+(defn <close-db [repo]
+  (when repo
+    (if (electron-runtime?)
+      (p/let [remote-client (<ensure-remote! repo)]
+        (remote/invoke! (:client remote-client) "thread-api/close-db" false [repo]))
+      (state/<invoke-db-worker :thread-api/close-db repo))))
+
 (defn <export-db
   [repo opts]
   (when repo
