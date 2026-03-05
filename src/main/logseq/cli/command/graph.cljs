@@ -34,6 +34,14 @@
 (def ^:private import-export-types*
   #{"edn" "sqlite"})
 
+(def ^:private graph-info-kv-query
+  '[:find ?ident ?value
+    :where
+    [?e :db/ident ?ident]
+    [(namespace ?ident) ?ns]
+    [(= "logseq.kv" ?ns)]
+    [?e :kv/value ?value]])
+
 (defn import-export-types
   []
   import-export-types*)
@@ -203,13 +211,28 @@
 
 (defn execute-graph-info
   [action config]
-  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              created (transport/invoke cfg :thread-api/pull false [(:repo action) [:kv/value] :logseq.kv/graph-created-at])
-              schema (transport/invoke cfg :thread-api/pull false [(:repo action) [:kv/value] :logseq.kv/schema-version])]
+  (let [ident->kv-key (fn [ident]
+                        (if (keyword? ident)
+                          (if-let [ident-ns (namespace ident)]
+                            (str ident-ns "/" (name ident))
+                            (name ident))
+                          (str ident)))
+        kv-lookup (fn [kv key]
+                    (or (get kv key)
+                        (get kv (str ":" key))))]
+    (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+                rows (transport/invoke cfg :thread-api/q false [(:repo action) [graph-info-kv-query]])
+                kv (reduce (fn [acc [ident value]]
+                             (assoc acc (ident->kv-key ident) value))
+                           {}
+                           (or rows []))
+                created-at (kv-lookup kv "logseq.kv/graph-created-at")
+                schema-version (kv-lookup kv "logseq.kv/schema-version")]
         {:status :ok
          :data {:graph (:graph action)
-                :logseq.kv/graph-created-at (:kv/value created)
-                :logseq.kv/schema-version (:kv/value schema)}})))
+                :logseq.kv/graph-created-at created-at
+                :logseq.kv/schema-version schema-version
+                :kv kv}}))))
 
 (defn execute-graph-export
   [action config]
