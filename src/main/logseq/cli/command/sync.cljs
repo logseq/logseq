@@ -30,6 +30,12 @@
    "auth-token" :auth-token
    "e2ee-password" :e2ee-password})
 
+(def ^:private sync-start-timeout-ms 10000)
+(def ^:private sync-start-poll-interval-ms 100)
+
+(def ^:private sync-start-skipped-states
+  #{:inactive :stopped})
+
 (defn- missing-repo
   [label]
   {:ok? false
@@ -41,6 +47,24 @@
   {:ok? false
    :error {:code :invalid-options
            :message message}})
+
+(defn- ex-message->code
+  [message]
+  (when (and (string? message)
+             (re-matches #"[a-zA-Z0-9._/\-]+" message))
+    (keyword message)))
+
+(defn- exception->error
+  [error extra]
+  (let [data (or (ex-data error) {})
+        code (or (:code data)
+                 (ex-message->code (ex-message error))
+                 :exception)]
+    {:status :error
+     :error (merge {:code code
+                    :message (or (ex-message error) (str error))}
+                   (when (seq data) {:context data})
+                   extra)}))
 
 (defn- parse-config-key
   [raw-key]
@@ -180,6 +204,61 @@
               _ (transport/invoke cfg :thread-api/set-db-sync-config false [sync-config])]
         (transport/invoke cfg method false args)))))
 
+(defn- wait-sync-start-ready
+  [config repo action]
+  (let [timeout-ms (max 0 (or (:wait-timeout-ms action) sync-start-timeout-ms))
+        poll-interval-ms (max 0 (or (:wait-poll-interval-ms action) sync-start-poll-interval-ms))
+        deadline (+ (js/Date.now) timeout-ms)
+        config-skipped-hint "Set sync config keys (ws-url/http-base/auth-token) and retry sync start."
+        graph-id-skipped-hint "Graph-id is missing locally. Run sync download first, then retry sync start."
+        runtime-error-hint "Run sync status to inspect last-error and fix sync runtime error before retrying."
+        timeout-hint "Run sync status to inspect ws-state and ensure sync endpoint/token are valid."]
+    (letfn [(poll! []
+              (p/let [status (invoke-with-repo config repo :thread-api/db-sync-status [repo])
+                      ws-state (:ws-state status)
+                      graph-id (:graph-id status)
+                      last-error (:last-error status)
+                      skipped-hint (if (seq graph-id)
+                                     config-skipped-hint
+                                     graph-id-skipped-hint)]
+                (cond
+                  (and (= :open ws-state) (some? last-error))
+                  {:status :error
+                   :error {:code :sync-start-runtime-error
+                           :message "sync start reached open websocket but runtime sync error is present"
+                           :repo repo
+                           :ws-state ws-state
+                           :status status
+                           :last-error last-error
+                           :hint runtime-error-hint}}
+
+                  (= :open ws-state)
+                  {:status :ok
+                   :data status}
+
+                  (contains? sync-start-skipped-states ws-state)
+                  {:status :error
+                   :error {:code :sync-start-skipped
+                           :message "sync start was skipped"
+                           :repo repo
+                           :ws-state ws-state
+                           :status status
+                           :hint skipped-hint}}
+
+                  (>= (js/Date.now) deadline)
+                  {:status :error
+                   :error {:code :sync-start-timeout
+                           :message "sync start timed out before websocket reached open state"
+                           :repo repo
+                           :ws-state ws-state
+                           :status status
+                           :hint timeout-hint}}
+
+                  :else
+                  (p/let [_ (p/delay poll-interval-ms)]
+                    (poll!)))))]
+      (poll!))))
+
 (defn execute
   [action config]
   (case (:type action)
@@ -191,11 +270,13 @@
        :data result})
 
     :sync-start
-    (p/let [result (invoke-with-repo config (:repo action)
-                                     :thread-api/db-sync-start
-                                     [(:repo action)])]
-      {:status :ok
-       :data {:result result}})
+    (-> (p/let [_ (invoke-with-repo config (:repo action)
+                                    :thread-api/db-sync-start
+                                    [(:repo action)])
+                result (wait-sync-start-ready config (:repo action) action)]
+          result)
+        (p/catch (fn [error]
+                   (exception->error error {:repo (:repo action)}))))
 
     :sync-stop
     (p/let [result (invoke-with-repo config (:repo action)
@@ -214,25 +295,28 @@
                {:result result})})
 
     :sync-download
-    (p/let [remote-graphs (invoke-global config
-                                         :thread-api/db-sync-list-remote-graphs
-                                         [])
-            remote-graph (some (fn [graph]
-                                 (when (= (:graph action) (:graph-name graph))
-                                   graph))
-                               remote-graphs)]
-      (if-not remote-graph
-        {:status :error
-         :error {:code :remote-graph-not-found
-                 :message (str "remote graph not found: " (:graph action))
-                 :graph (:graph action)}}
-        (p/let [result (invoke-with-repo config (:repo action)
-                                         :thread-api/db-sync-download-graph-by-id
-                                         [(:repo action) (:graph-id remote-graph) (:graph-e2ee? remote-graph)])]
-          {:status :ok
-           :data (if (map? result)
-                   result
-                   {:result result})})))
+    (-> (p/let [remote-graphs (invoke-global config
+                                             :thread-api/db-sync-list-remote-graphs
+                                             [])
+                remote-graph (some (fn [graph]
+                                     (when (= (:graph action) (:graph-name graph))
+                                       graph))
+                                   remote-graphs)]
+          (if-not remote-graph
+            {:status :error
+             :error {:code :remote-graph-not-found
+                     :message (str "remote graph not found: " (:graph action))
+                     :graph (:graph action)}}
+            (p/let [result (invoke-with-repo config (:repo action)
+                                             :thread-api/db-sync-download-graph-by-id
+                                             [(:repo action) (:graph-id remote-graph) (:graph-e2ee? remote-graph)])]
+              {:status :ok
+               :data (if (map? result)
+                       result
+                       {:result result})})))
+        (p/catch (fn [error]
+                   (exception->error error {:repo (:repo action)
+                                            :graph (:graph action)}))))
 
     :sync-remote-graphs
     (p/let [graphs (invoke-global config :thread-api/db-sync-list-remote-graphs [])]
