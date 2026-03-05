@@ -29,8 +29,8 @@
       base)))
 
 (defn http-base []
-  (or config/db-sync-http-base
-      (ws->http-base config/db-sync-ws-url)))
+  (or (config/db-sync-http-base)
+      (ws->http-base (config/db-sync-ws-url))))
 
 (defn- ->uint8 [data]
   (cond
