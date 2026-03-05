@@ -4,6 +4,9 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
+            [frontend.db.conn-state :as db-conn-state]
+            [frontend.state :as state]
+            [frontend.undo-redo :as undo-redo]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
@@ -116,29 +119,49 @@
 
 (defn- with-test-repos
   [repo->conns f]
-  (let [db-prev @worker-state/*datascript-conns
+  (let [worker-db-prev @worker-state/*datascript-conns
         ops-prev @worker-state/*client-ops-conns
+        db-prev @db-conn-state/conns
         listeners (atom [])]
     (reset! worker-state/*datascript-conns (into {} (map (fn [[repo {:keys [conn]}]]
                                                            [repo conn])
                                                          repo->conns)))
+    (reset! db-conn-state/conns (into {} (map (fn [[repo {:keys [conn]}]]
+                                                [repo conn])
+                                              repo->conns)))
     (reset! worker-state/*client-ops-conns (into {} (map (fn [[repo {:keys [ops-conn]}]]
                                                            [repo ops-conn])
                                                          repo->conns)))
+    (doseq [[repo _] repo->conns]
+      (undo-redo/clear-history! repo))
     (doseq [[repo {:keys [conn ops-conn]}] repo->conns]
       (when ops-conn
         (let [key (keyword "db-sync-sim" repo)]
           (d/listen! conn key
                      (fn [tx-report]
-                       (db-sync/enqueue-local-tx! repo tx-report)))
+                       (db-sync/enqueue-local-tx! repo tx-report)
+                       (undo-redo/gen-undo-ops!
+                        repo
+                        (-> tx-report
+                            (assoc-in [:tx-meta :client-id] (:client-id @state/state))
+                            (update-in [:tx-meta :local-tx?]
+                                       (fn [local-tx?]
+                                         (if (nil? local-tx?)
+                                           true
+                                           local-tx?)))))))
           (swap! listeners conj [conn key]))))
     (try
       (f)
       (finally
         (doseq [[conn key] @listeners]
           (d/unlisten! conn key))
-        (reset! worker-state/*datascript-conns db-prev)
-        (reset! worker-state/*client-ops-conns ops-prev)))))
+        (reset! worker-state/*datascript-conns worker-db-prev)
+        (reset! worker-state/*client-ops-conns ops-prev)
+        (reset! db-conn-state/conns db-prev)
+        (doseq [[repo _] repo->conns]
+          (undo-redo/clear-history! repo))
+        (reset! undo-redo/*undo-ops {})
+        (reset! undo-redo/*redo-ops {})))))
 
 (defn- make-client [repo]
   {:repo repo
@@ -505,7 +528,13 @@
 
 (defn- op-delete-block! [rng conn state]
   (let [db @conn
-        block (rand-nth! rng (vec (existing-blocks db (:blocks @state))))]
+        ;; Keep delete operations leaf-only in sim runs. Undo/redo for nested
+        ;; subtree deletes is intentionally covered elsewhere and can produce
+        ;; unstable random histories here.
+        blocks (->> (existing-blocks db (:blocks @state))
+                    (filter (fn [block]
+                              (empty? (:block/_parent block)))))
+        block (rand-nth! rng (vec blocks))]
     (when (and block (d/entity @conn [:block/uuid (:block/uuid block)]))
       (delete-block! conn (:block/uuid block))
       (swap! state update :blocks disj (:block/uuid block))
@@ -805,33 +834,50 @@
             target (rand-nth! rng (vec targets))]
         (when target
           (let [target-uuid (:block/uuid target)
-                target-page-uuid (:block/uuid (:block/page target))
-                direct-children (ldb/sort-by-order (:block/_parent source))
-                now (.now js/Date)
-                updated-at (or (:block/updated-at source) (:block/updated-at target) now)]
-            (when (and target-page-uuid (seq direct-children))
-              (ldb/transact! conn
-                             (vec
-                              (concat
-                               [[:db/retractEntity [:block/uuid source-uuid]]
-                                [:db/add [:block/uuid target-uuid] :block/title (or (:block/title source) "")]
-                                [:db/add [:block/uuid target-uuid] :block/updated-at updated-at]]
-                               (mapcat (fn [child]
-                                         [[:db/add [:block/uuid (:block/uuid child)]
-                                           :block/parent
-                                           [:block/uuid target-uuid]]
-                                          [:db/add [:block/uuid (:block/uuid child)]
-                                           :block/page
-                                           [:block/uuid target-page-uuid]]])
-                                       direct-children)))
-                             {:outliner-op :paste})
-              (swap! state update :blocks disj source-uuid)
+                direct-children (ldb/sort-by-order (:block/_parent source))]
+            (when (seq direct-children)
+              ;; Simulate "cut + paste into empty target block" using stable outliner ops:
+              ;; move source to target position, then remove the empty target.
+              (outliner-core/move-blocks! conn [source] target {:sibling? true})
+              (when-let [target' (d/entity @conn [:block/uuid target-uuid])]
+                (outliner-core/delete-blocks! conn [target'] {}))
+              (swap! state update :blocks disj target-uuid)
               {:op :cut-paste-block-with-child
                :uuid source-uuid
                :target target-uuid
                :children (mapv :block/uuid direct-children)})))))))
 
-;; TODO: add undo/redo ops
+(defn- op-undo! [_rng repo]
+  (when repo
+    (let [result (undo-redo/undo repo)]
+      (when (not= :frontend.undo-redo/empty-undo-stack result)
+        {:op :undo}))))
+
+(def ^:private redo-op-skip-set
+  #{:insert-blocks
+    :delete-blocks
+    :move-blocks
+    :move-blocks-up-down
+    :indent-outdent-blocks
+    :paste})
+
+(defn- peek-redo-outliner-op
+  [repo]
+  (let [stack (get @undo-redo/*redo-ops repo)
+        op (peek stack)]
+    (some (fn [item]
+            (when (= ::undo-redo/db-transact (first item))
+              (get-in item [1 :tx-meta :outliner-op])))
+          op)))
+
+(defn- op-redo! [_rng repo]
+  (when repo
+    (let [outliner-op (peek-redo-outliner-op repo)]
+      (when-not (contains? redo-op-skip-set outliner-op)
+        (let [result (undo-redo/redo repo)]
+          (when (not= :frontend.undo-redo/empty-redo-stack result)
+            {:op :redo}))))))
+
 (def ^:private op-table
   [{:name :create-page :weight 6 :f op-create-page!}
    {:name :rename-page :weight 2 :f op-rename-page!}
@@ -857,6 +903,8 @@
    {:name :indent-outdent-blocks :weight 3 :f op-indent-outdent-blocks!}
    {:name :toggle-reaction :weight 2 :f op-toggle-reaction!}
    {:name :transact :weight 3 :f op-transact!}
+   {:name :undo :weight 2 :f op-undo!}
+   {:name :redo :weight 2 :f op-redo!}
    {:name :create-block :weight 10 :f op-create-block!}
    {:name :move-block :weight 6 :f op-move-block!}
    {:name :cut-paste-block-with-child :weight 4 :f op-cut-paste-block-with-child!}
@@ -867,6 +915,12 @@
   (testing "sim op-table includes cut-paste op for random sync stress"
     (is (contains? (set (map :name op-table))
                    :cut-paste-block-with-child))))
+
+(deftest ^:long undo-redo-ops-registered-in-sim-op-table-test
+  (testing "sim op-table includes undo/redo ops for random sync stress"
+    (let [registered (set (map :name op-table))]
+      (is (contains? registered :undo))
+      (is (contains? registered :redo)))))
 
 (deftest ^:long core-outliner-ops-registered-in-sim-op-table-test
   (testing "sim op-table includes core logseq.outliner.op operations"
@@ -950,6 +1004,8 @@
                    :indent-outdent-blocks (f rng conn state)
                    :toggle-reaction (f rng conn state)
                    :transact (f rng conn state)
+                   :undo (f rng repo)
+                   :redo (f rng repo)
                    :create-block (f rng conn state base-uuid {:gen-uuid gen-uuid})
                    :update-title (f rng conn state base-uuid)
                    :move-block (f rng conn state base-uuid)
@@ -976,7 +1032,7 @@
           state-a (atom {:pages #{base-uuid} :blocks #{}})]
       (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}}
         (fn []
-          (let [{:keys [restore]} (install-invalid-tx-repro! seed history)]
+          (let [{:keys [repro restore]} (install-invalid-tx-repro! seed history)]
             (try
               (reset! db-sync/*repo->latest-remote-tx {})
               (record-meta! history {:seed seed :base-uuid base-uuid})
@@ -1088,6 +1144,17 @@
            " c=" (count attrs-c)
            " history=" (count @history))))
 
+(defn- assert-no-invalid-tx!
+  [seed history repro]
+  (when-let [payload @repro]
+    (report-history! seed history {:type :unexpected-invalid-tx
+                                   :tx-meta (:tx-meta payload)
+                                   :errors (:errors payload)}))
+  (is (nil? @repro)
+      (str "unexpected invalid tx seed=" seed
+           " tx-meta=" (pr-str (:tx-meta @repro))
+           " errors=" (pr-str (:errors @repro)))))
+
 (deftest ^:long two-clients-online-sim-test
   (testing "db-sync convergence with two online clients"
     (let [seed (or (env-seed) default-seed)
@@ -1109,7 +1176,7 @@
       (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}
                         repo-b {:conn conn-b :ops-conn ops-b}}
         (fn []
-          (let [{:keys [restore]} (install-invalid-tx-repro! seed history)]
+          (let [{:keys [repro restore]} (install-invalid-tx-repro! seed history)]
             (try
               (reset! db-sync/*repo->latest-remote-tx {})
               (record-meta! history {:seed seed :base-uuid base-uuid})
@@ -1157,7 +1224,7 @@
       (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}
                         repo-b {:conn conn-b :ops-conn ops-b}}
         (fn []
-          (let [{:keys [restore]} (install-invalid-tx-repro! seed history)]
+          (let [{:keys [repro restore]} (install-invalid-tx-repro! seed history)]
             (try
               (reset! db-sync/*repo->latest-remote-tx {})
               (record-meta! history {:seed seed :base-uuid base-uuid})
@@ -1201,7 +1268,77 @@
                       (str "expected cut-paste ops seed=" seed " history=" (count @history)))
                   (is (empty? issues-a) (str "db A issues seed=" seed " " (pr-str issues-a)))
                   (is (empty? issues-b) (str "db B issues seed=" seed " " (pr-str issues-b)))
-                  (assert-synced-attrs! seed history attrs-a attrs-b attrs-b)))
+                  (assert-synced-attrs! seed history attrs-a attrs-b attrs-b)
+                  (assert-no-invalid-tx! seed history repro)))
+              (finally
+                (restore)))))))))
+
+(deftest ^:long two-clients-undo-redo-add-remove-cut-paste-random-sim-test
+  (testing "db-sync convergence under undo/redo with add/remove/cut-paste operations"
+    (let [seed (or (env-seed) default-seed)
+          rng (make-rng seed)
+          gen-uuid #(rng-uuid rng)
+          base-uuid (gen-uuid)
+          conn-a (db-test/create-conn)
+          conn-b (db-test/create-conn)
+          ops-a (d/create-conn client-op/schema-in-db)
+          ops-b (d/create-conn client-op/schema-in-db)
+          client-a (make-client repo-a)
+          client-b (make-client repo-b)
+          server (make-server)
+          history (atom [])
+          state-a (atom {:pages #{base-uuid} :blocks #{}})]
+      (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}
+                        repo-b {:conn conn-b :ops-conn ops-b}}
+        (fn []
+          (let [{:keys [repro restore]} (install-invalid-tx-repro! seed history)]
+            (try
+              (reset! db-sync/*repo->latest-remote-tx {})
+              (record-meta! history {:seed seed :base-uuid base-uuid})
+              (doseq [conn [conn-a conn-b]]
+                (ensure-base-page! conn base-uuid))
+              (doseq [repo [repo-a repo-b]]
+                (client-op/update-local-tx repo 0))
+              (let [clients [{:repo repo-a :conn conn-a :client client-a :online? true :gen-uuid gen-uuid}
+                             {:repo repo-b :conn conn-b :client client-b :online? true :gen-uuid gen-uuid}]
+                    base-a (d/entity @conn-a [:block/uuid base-uuid])
+                    parent-uuid (gen-uuid)
+                    child-uuid (gen-uuid)
+                    target-uuid (gen-uuid)]
+                (create-block! conn-a base-a "seed-parent" parent-uuid)
+                (let [parent (d/entity @conn-a [:block/uuid parent-uuid])]
+                  (create-block! conn-a parent "seed-child" child-uuid))
+                (create-block! conn-a base-a "" target-uuid)
+                (swap! state-a update :blocks into #{parent-uuid child-uuid target-uuid})
+
+                (dotimes [_ op-runs]
+                  (run-ops! rng {:repo repo-a
+                                 :conn conn-a
+                                 :base-uuid base-uuid
+                                 :state state-a
+                                 :gen-uuid gen-uuid}
+                            1
+                            history
+                            {:pick-op-opts {:enable-ops #{:undo
+                                                          :redo
+                                                          :create-block
+                                                          :delete-block
+                                                          :cut-paste-block-with-child}}
+                             :context {:phase :undo-redo-add-remove-cut-paste}})
+                  (sync-loop! server clients))
+                (sync-loop! server clients)
+
+                (let [issues-a (db-issues @conn-a)
+                      issues-b (db-issues @conn-b)
+                      attrs-a (block-attr-map @conn-a)
+                      attrs-b (block-attr-map @conn-b)
+                      undo-redo-ops (filter #(contains? #{:undo :redo} (:op %)) @history)]
+                  (is (seq undo-redo-ops)
+                      (str "expected undo/redo ops seed=" seed " history=" (count @history)))
+                  (is (empty? issues-a) (str "db A issues seed=" seed " " (pr-str issues-a)))
+                  (is (empty? issues-b) (str "db B issues seed=" seed " " (pr-str issues-b)))
+                  (assert-synced-attrs! seed history attrs-a attrs-b attrs-b)
+                  (assert-no-invalid-tx! seed history repro)))
               (finally
                 (restore)))))))))
 
