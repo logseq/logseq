@@ -1,7 +1,6 @@
 (ns frontend.worker.sync
   "Simple db-sync client based on promesa + WebSocket."
   (:require [cljs-bean.core :as bean]
-            [clojure.data :as data]
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
