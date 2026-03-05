@@ -14,11 +14,14 @@
    :offset {:desc "Offset results"
             :coerce :long}
    :sort {:desc "Sort field"}
-   :order {:desc "Sort order (asc, desc). Default: asc"}})
+   :order {:desc "Sort order. Default: asc"
+           :values ["asc" "desc"]}})
 
 (def ^:private list-page-spec
   (merge list-common-spec
-         {:include-journal {:desc "Include journal pages"
+         {:sort {:desc "Sort field"
+                 :values ["title" "created-at" "updated-at"]}
+          :include-journal {:desc "Include journal pages"
                             :coerce :boolean}
           :journal-only {:desc "Only journal pages"
                          :coerce :boolean}
@@ -30,7 +33,9 @@
 
 (def ^:private list-tag-spec
   (merge list-common-spec
-         {:include-built-in {:desc "Include built-in tags"
+         {:sort {:desc "Sort field"
+                 :values ["name" "title"]}
+          :include-built-in {:desc "Include built-in tags"
                              :coerce :boolean}
           :with-properties {:desc "Include tag properties"
                             :coerce :boolean}
@@ -40,7 +45,9 @@
 
 (def ^:private list-property-spec
   (merge list-common-spec
-         {:include-built-in {:desc "Include built-in properties"
+         {:sort {:desc "Sort field"
+                 :values ["name" "title"]}
+          :include-built-in {:desc "Include built-in properties"
                              :coerce :boolean}
           :with-classes {:desc "Include property classes"
                          :coerce :boolean}

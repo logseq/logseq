@@ -3,6 +3,7 @@
   (:require [babashka.cli :as cli]
             [clojure.string :as string]
             [logseq.cli.command.auth :as auth-command]
+            [logseq.cli.command.completions :as completions-command]
             [logseq.cli.command.core :as command-core]
             [logseq.cli.command.doctor :as doctor-command]
             [logseq.cli.command.graph :as graph-command]
@@ -13,6 +14,7 @@
             [logseq.cli.command.show :as show-command]
             [logseq.cli.command.sync :as sync-command]
             [logseq.cli.command.upsert :as upsert-command]
+            [logseq.cli.completion-generator :as completion-gen]
             [logseq.cli.server :as cli-server]
             [promesa.core :as p]))
 
@@ -105,7 +107,8 @@
                show-command/entries
                doctor-command/entries
                sync-command/entries
-               auth-command/entries)))
+               auth-command/entries
+               completions-command/entries)))
 
 ;; Global option parsing lives in logseq.cli.command.core.
 
@@ -422,6 +425,11 @@
         (:login :logout)
         (auth-command/build-action command)
 
+        :completions
+        {:ok? true
+         :action {:type :completions
+                  :shell (or (:shell options) (first args))}}
+
         {:ok? false
          :error {:code :unknown-command
                  :message (str "unknown command: " command)}}))))
@@ -463,6 +471,10 @@
                          :query-list (query-command/execute-query-list action config)
                          :show (show-command/execute-show action config)
                          :doctor (doctor-command/execute-doctor action config)
+                         :completions (p/resolved
+                                       {:status :ok
+                                        :data {:message (completion-gen/generate-completions
+                                                         (:shell action) table)}})
                          :server-list (server-command/execute-list action config)
                          :server-status (server-command/execute-status action config)
                          :server-start (server-command/execute-start action config)
