@@ -1390,6 +1390,59 @@
             :block/tags [:logseq.class/Quote-block]})
     block))
 
+(defn- split-title-by-code-fences
+  "Parses a block title string line-by-line, splitting into non-code text parts
+   and code fence segments. All code fences are extracted regardless of whether
+   they have a language tag; :lang is nil when not specified.
+   Returns {:text-parts [...] :code-segs [{:text ... :lang ...}]}."
+  [title]
+  (let [lines (string/split-lines title)]
+    (loop [remaining lines
+           in-code? false
+           lang nil
+           current []
+           text-parts []
+           code-segs []]
+      (if (empty? remaining)
+        {:text-parts (if (seq current)
+                       (conj text-parts (string/join "\n" current))
+                       text-parts)
+         :code-segs code-segs}
+        (let [line (first remaining)
+              fence-start? (and (not in-code?) (re-matches #"```.*" line))
+              fence-end?   (and in-code? (= line "```"))]
+          (cond
+            fence-start?
+            (recur (rest remaining) true (not-empty (subs line 3)) []
+                   (if (seq current)
+                     (conj text-parts (string/join "\n" current))
+                     text-parts)
+                   code-segs)
+            fence-end?
+            (recur (rest remaining) false nil []
+                   text-parts
+                   (conj code-segs {:text (string/join "\n" current) :lang lang}))
+            :else
+            (recur (rest remaining) in-code? lang (conj current line)
+                   text-parts code-segs)))))))
+
+(defn- build-code-snippet-child-blocks
+  "Builds child block tx maps for extracted code snippets, tagging each as a
+   Code-block with its detected language."
+  [parent-block code-segs]
+  (mapv (fn [{:keys [text lang]}]
+          (cond-> (sqlite-util/block-with-timestamps
+                   {:block/uuid (d/squuid)
+                    :block/title text
+                    :block/parent [:block/uuid (:block/uuid parent-block)]
+                    :block/page (:block/page parent-block)
+                    :block/order (db-order/gen-key)
+                    :block/tags [:logseq.class/Code-block]
+                    :logseq.property.node/display-type :code})
+            lang
+            (assoc :logseq.property.code/lang lang)))
+        code-segs))
+
 (defn- handle-embeds
   "If a block contains page or block embeds, converts block to a :block/link based embed"
   [block page-names-to-uuids {:keys [embeds]} {:keys [log-fn] :or {log-fn prn}}]
@@ -1445,8 +1498,36 @@
                      (dissoc :block/format :block.temp/ast-blocks)
                   ;;  ((fn [x] (prn ::block-out x) x))
                      )]
-    ;; Order matters as previous txs are referenced in block
-    (concat properties-tx deadline-properties-tx asset-blocks-tx [block'])))
+    ;; Code snippet extraction: when enabled, tag standalone code blocks in-place
+    ;; and extract code fences from mixed-content blocks into independent children.
+    (let [extract? (get-in options [:user-options :extract-code-snippets?])
+          {:keys [text-parts code-segs]} (when extract?
+                                           (split-title-by-code-fences (:block/title block')))
+          pure-single-code? (and (= 1 (count code-segs))
+                                 (every? string/blank? text-parts))
+          has-mixed-content? (and (seq code-segs)
+                                  (some #(not (string/blank? %)) text-parts))
+          [final-block code-children-tx]
+          (cond
+            pure-single-code?
+            (let [{:keys [text lang]} (first code-segs)]
+              [(cond-> (assoc block'
+                              :block/title text
+                              :block/tags [:logseq.class/Code-block]
+                              :logseq.property.node/display-type :code)
+                 lang (assoc :logseq.property.code/lang lang))
+               []])
+            has-mixed-content?
+            (let [remaining-title (-> (string/join "\n" text-parts)
+                                      (string/replace #"\n{2,}" "\n")
+                                      string/trim)
+                  updated-block (assoc block' :block/title remaining-title)
+                  code-children (build-code-snippet-child-blocks updated-block code-segs)]
+              [updated-block code-children])
+            :else
+            [block' []])]
+      ;; Order matters as previous txs are referenced in block
+      (concat properties-tx deadline-properties-tx asset-blocks-tx [final-block] code-children-tx))))
 
 (defn- update-page-alias
   [m page-names-to-uuids]

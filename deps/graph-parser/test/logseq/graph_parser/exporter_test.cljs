@@ -216,7 +216,7 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.property/deadline
-      (is (= 33 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 34 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 9 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
       (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
@@ -948,3 +948,105 @@
     (is (= "yyyy-MM-dd"
            (:logseq.property.journal/title-format (d/entity @conn :logseq.class/Journal)))
         "title format set correctly by config")))
+
+(deftest-async export-docs-graph-with-extract-code-snippet
+  (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-file-graph-to-db file-graph-dir conn {:extract-code-snippets? true})
+          journal-page-eid (d/q '[:find ?p . :where [?p :block/journal-day 20260301]] @conn)
+          top-blocks (->> (d/q '[:find [?b ...]
+                                 :in $ ?page
+                                 :where
+                                 [?b :block/page ?page]
+                                 [?b :block/parent ?page]]
+                               @conn journal-page-eid)
+                          (map #(d/entity @conn %))
+                          (sort-by :block/order)
+                          vec)
+          get-direct-children (fn [block]
+                                (->> (d/q '[:find [?c ...]
+                                            :in $ ?parent
+                                            :where [?c :block/parent ?parent]]
+                                          @conn (:db/id block))
+                                     (map #(d/entity @conn %))))]
+
+    (testing "standalone code block with language tag"
+      (let [b (nth top-blocks 0)]
+        (is (= "it's a individual code snippet with language tag" (:block/title b))
+            "Standalone code block title has fences stripped")
+        (is (= 0 (count (get-direct-children b)))
+            "Standalone code block has no children")
+        (is (= #{:logseq.class/Code-block} (set (map :db/ident (:block/tags b))))
+            "Standalone code block is tagged as Code-block")
+        (is (= "markdown" (:logseq.property.code/lang b))
+            "Standalone code block has markdown language property")))
+
+    (testing "standalone code block without language tag"
+      (let [b (nth top-blocks 1)]
+        (is (= "it's a individual code snippet without language tag" (:block/title b))
+            "Standalone code block title has fences stripped")
+        (is (= 0 (count (get-direct-children b)))
+            "Standalone code block has no children")
+        (is (= #{:logseq.class/Code-block} (set (map :db/ident (:block/tags b))))
+            "Standalone code block is tagged as Code-block")
+        (is (= nil (:logseq.property.code/lang b))
+            "Standalone code block has no language property")))
+
+    (testing "text before code snippet"
+      (let [b (nth top-blocks 2)
+            children (get-direct-children b)]
+        (is (= "before code snippet" (:block/title b))
+            "Block title has text only without code")
+        (is (= 1 (count children))
+            "Block has 1 code child")
+        (is (= "echo \"ok\"\nexit" (:block/title (first children)))
+            "Child code block has correct content without fence markers")
+        (is (= #{:logseq.class/Code-block} (set (map :db/ident (:block/tags (first children)))))
+            "Child block is tagged as Code-block")
+        (is (= nil (:logseq.property.code/lang (first children)))
+            "Child block has no language property")))
+
+    (testing "text before and after code snippet"
+      (let [b (nth top-blocks 3)
+            children (get-direct-children b)]
+        (is (= "before code snippet\nafter code snippet" (:block/title b))
+            "Block title has text only without code")
+        (is (= 1 (count children))
+            "Block has 1 code child")
+        (is (= "echo \"ok\"\nexit" (:block/title (first children)))
+            "Child code block has correct content without fence markers")
+        (is (= #{:logseq.class/Code-block} (set (map :db/ident (:block/tags (first children)))))
+            "Child block is tagged as Code-block")
+        (is (= "bash" (:logseq.property.code/lang (first children)))
+            "Child block has bash language property")))
+
+    (testing "code snippet before text"
+      (let [b (nth top-blocks 4)
+            children (get-direct-children b)]
+        (is (= "after code snippet" (:block/title b))
+            "Block title has text only without code")
+        (is (= 1 (count children))
+            "Block has 1 code child")
+        (is (= "echo \"ok\"\nexit" (:block/title (first children)))
+            "Child code block has correct content without fence markers")
+        (is (= #{:logseq.class/Code-block} (set (map :db/ident (:block/tags (first children)))))
+            "Child block is tagged as Code-block")
+        (is (= "bash" (:logseq.property.code/lang (first children)))
+            "Child block has bash language property")))
+
+    (testing "multiple code snippets mixed with text"
+      (let [b (nth top-blocks 5)
+            children (sort-by :block/order (get-direct-children b))]
+        (is (= "before code snippet\nmiddle\nafter code snippet" (:block/title b))
+            "Block title has all text parts without code")
+        (is (= 2 (count children))
+            "Block has 2 code children")
+        (is (= "echo \"ok\"\nexit" (:block/title (first children)))
+            "First child code block has correct content without fence markers")
+        (is (= "echo \"bye\"\nexit" (:block/title (second children)))
+            "Second child code block has correct content without fence markers")
+        (is (every? #(= #{:logseq.class/Code-block} (set (map :db/ident (:block/tags %)))) children)
+            "Both child blocks are tagged as Code-block")
+        (is (every? #(= "bash" (:logseq.property.code/lang %)) children)
+            "Both child blocks have bash language property")))))
