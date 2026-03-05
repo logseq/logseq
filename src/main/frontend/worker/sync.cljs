@@ -8,6 +8,7 @@
             [frontend.common.crypt :as crypt]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.handler.page :as worker-page]
+            [frontend.worker.platform :as platform]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync.client-op :as client-op]
@@ -1781,7 +1782,8 @@
     (stop-client! client))
   ;; use cache token for faster websocket connection
   (when-let [token' (or token (auth-token))]
-    (let [ws (js/WebSocket. (append-token url token'))
+    (let [ws (platform/websocket-connect (platform/current)
+                                         (append-token url token'))
           updated (assoc client :ws ws)]
       (attach-ws-handlers! repo updated ws url)
       (set! (.-onopen ws)
