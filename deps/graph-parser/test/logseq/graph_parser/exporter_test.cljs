@@ -973,7 +973,7 @@
 
     (testing "standalone code block with language tag"
       (let [b (nth top-blocks 0)]
-        (is (= "it's a individual code snippet with language tag" (:block/title b))
+        (is (= "it's an individual code snippet with language tag" (:block/title b))
             "Standalone code block title has fences stripped")
         (is (= 0 (count (get-direct-children b)))
             "Standalone code block has no children")
@@ -984,7 +984,7 @@
 
     (testing "standalone code block without language tag"
       (let [b (nth top-blocks 1)]
-        (is (= "it's a individual code snippet without language tag" (:block/title b))
+        (is (= "it's an individual code snippet without language tag" (:block/title b))
             "Standalone code block title has fences stripped")
         (is (= 0 (count (get-direct-children b)))
             "Standalone code block has no children")
@@ -1075,7 +1075,7 @@
 
     (testing "standalone code block with language tag is still tagged as Code-block"
       (let [b (nth top-blocks 0)]
-        (is (= "it's a individual code snippet with language tag" (:block/title b))
+        (is (= "it's an individual code snippet with language tag" (:block/title b))
             "Standalone code block title has fences stripped")
         (is (= 0 (count (get-direct-children b)))
             "Standalone code block has no children")
@@ -1086,7 +1086,7 @@
 
     (testing "standalone code block without language tag is still tagged as Code-block"
       (let [b (nth top-blocks 1)]
-        (is (= "it's a individual code snippet without language tag" (:block/title b))
+        (is (= "it's an individual code snippet without language tag" (:block/title b))
             "Standalone code block title has fences stripped")
         (is (= 0 (count (get-direct-children b)))
             "Standalone code block has no children")
