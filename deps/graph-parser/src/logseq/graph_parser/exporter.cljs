@@ -693,7 +693,6 @@
                (get-page-uuid page-names-to-uuids ((some-fn ::original-name :block/name) block) {:block block})
                (:block/uuid block))
              properties-text-values))
-    ;; TODO: Add import support for :template. Ignore for now as they cause invalid property types
     (if (contains? props :template)
       {}
       (let [props' (-> (update-built-in-property-values
@@ -782,6 +781,8 @@
            (cond-> block
              true
              (merge block-properties)
+             (:template properties')
+             (update :block/tags (fnil conj []) :logseq.class/Template)
              (seq classes-from-properties)
              ;; Add a map of {:block.temp/new-class TAG} to be processed later
              (update :block/tags
@@ -944,6 +945,7 @@
   use in build-block-tx. This walk is only done once for perf reasons"
   [config ast-blocks]
   (let [results (atom {:simple-queries []
+                       :cards []
                        :asset-links []
                        :embeds []
                        :zotero-imported-files {}
@@ -980,6 +982,10 @@
               parsed-path (common-util/safe-read-string relative-path)]
           (when (string? parsed-path)
             (swap! results update :zotero-linked-files conj parsed-path)))
+         (and (vector? x)
+              (= "Macro" (first x))
+              (= "cards" (:name (second x))))
+         (swap! results update :cards conj x)
          (and (vector? x)
               (= "Macro" (first x))
               (= "query" (:name (second x))))
@@ -1032,7 +1038,20 @@
                 (assoc :block/collapsed? true)))]
         {:block block'
          :pvalues-tx pvalues-tx'})
-      {:block block})))
+      (if-let [cards-macro (first (:cards walked-ast-blocks))]
+        (let [query (-> (:arguments (second cards-macro)) first string/trim)
+              props {:logseq.property/query query}
+              {:keys [block-properties pvalues-tx]}
+              (build-properties-and-values props db page-names-to-uuids
+                                           (select-keys block [:block/properties-text-values :block/name :block/title :block/uuid])
+                                           options)
+              block'
+              (-> (update block :block/tags (fnil conj []) :logseq.class/Cards)
+                  (merge block-properties
+                         {:block/title (string/trim (string/replace-first title #"\{\{cards(.*)\}\}" ""))}))]
+          {:block block'
+           :pvalues-tx pvalues-tx})
+        {:block block}))))
 
 (defn- handle-block-properties
   "Does everything page properties does and updates a couple of block specific attributes"
@@ -1390,6 +1409,23 @@
             :block/tags [:logseq.class/Quote-block]})
     block))
 
+(defn- handle-math
+  "If a block's entire content is a single displayed math formula, convert to #Math-block node.
+  Detects blocks whose title is entirely delimited by $$ markers."
+  [block _opts]
+  (let [title (string/trim (:block/title block))]
+    (if (and (string/starts-with? title "$$")
+             (string/ends-with? title "$$")
+             (> (count title) 4)
+             ;; ensure there's no nested $$ pair (i.e. not two separate inline formulas)
+             (not (string/includes? (subs title 2 (- (count title) 2)) "$$")))
+      (let [math-content (string/trim (subs title 2 (- (count title) 2)))]
+        (merge block
+               {:block/title math-content
+                :logseq.property.node/display-type :math
+                :block/tags [:logseq.class/Math-block]}))
+      block)))
+
 (defn- split-title-by-code-fences
   "Parses a block title string line-by-line, splitting into non-code text parts
    and code fence segments. All code fences are extracted regardless of whether
@@ -1492,6 +1528,7 @@
                      (update-block-tags db (:user-options options) per-file-state (:all-idents import-state))
                      (handle-embeds page-names-to-uuids walked-ast-blocks (select-keys options [:log-fn]))
                      (handle-quotes (select-keys options [:log-fn]))
+                     (handle-math (select-keys options [:log-fn]))
                      (update-block-marker options)
                      (update-block-priority options)
                      add-missing-timestamps
