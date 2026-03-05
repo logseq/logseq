@@ -13,7 +13,8 @@
    :uuid {:desc "Block UUID"}})
 
 (def ^:private remove-page-spec
-  {:name {:desc "Page name"}})
+  {:name {:desc "Page name"
+          :complete :pages}})
 
 (def ^:private remove-entity-spec
   {:id {:desc "Entity db/id"
