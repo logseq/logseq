@@ -341,7 +341,6 @@
             db-dirs (filter (fn [file]
                               (string/starts-with? (.-name file) db-dir-prefix))
                             current-dir-dirs)]
-      (log/info :db-dirs (map #(.-name %) db-dirs) :all-dirs (map #(.-name %) current-dir-dirs))
       (p/all (map (fn [dir]
                     (p/let [graph-name (-> (.-name dir)
                                            (string/replace-first ".logseq-pool-" "")
