@@ -343,18 +343,115 @@
       (is (not (string/includes? result password))))))
 
 (deftest test-human-output-graph-info
-  (testing "graph info includes key metadata lines"
+  (testing "graph info includes key metadata lines and kv section"
     (let [result (format/format-result {:status :ok
                                         :command :graph-info
                                         :data {:graph "demo-graph"
                                                :logseq.kv/graph-created-at 40000
-                                               :logseq.kv/schema-version 2}}
+                                               :logseq.kv/schema-version 2
+                                               :kv {"logseq.kv/db-type" :sqlite
+                                                    "logseq.kv/graph-created-at" 40000
+                                                    "logseq.kv/schema-version" 2}}}
                                        {:output-format nil
                                         :now-ms 100000})]
       (is (= (str "Graph: demo-graph\n"
                   "Created at: 1m ago\n"
-                  "Schema version: 2")
+                  "Schema version: 2\n"
+                  "KV:\n"
+                  "  logseq.kv/db-type: :sqlite\n"
+                  "  logseq.kv/graph-created-at: 40000\n"
+                  "  logseq.kv/schema-version: 2")
              result)))))
+
+(deftest test-human-output-graph-info-kv-ordering
+  (testing "graph info kv section is sorted by ident key"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-info
+                                        :data {:graph "demo-graph"
+                                               :kv {"logseq.kv/schema-version" 2
+                                                    "logseq.kv/db-type" :sqlite
+                                                    "logseq.kv/graph-created-at" 40000}}}
+                                       {:output-format nil
+                                        :now-ms 100000})
+          idx-db-type (.indexOf result "logseq.kv/db-type")
+          idx-created (.indexOf result "logseq.kv/graph-created-at")
+          idx-schema (.indexOf result "logseq.kv/schema-version")]
+      (is (>= idx-db-type 0))
+      (is (< idx-db-type idx-created))
+      (is (< idx-created idx-schema)))))
+
+(deftest test-human-output-graph-info-kv-redaction
+  (testing "graph info redacts sensitive kv values in human output"
+    (let [token "secret-token-value"
+          result (format/format-result {:status :ok
+                                        :command :graph-info
+                                        :data {:graph "demo-graph"
+                                               :kv {"logseq.kv/api-token" token
+                                                    "logseq.kv/db-type" :sqlite}}}
+                                       {:output-format nil})]
+      (is (string/includes? result "logseq.kv/api-token"))
+      (is (string/includes? result "[REDACTED]"))
+      (is (not (string/includes? result token))))))
+
+(deftest test-human-output-graph-info-kv-truncates-long-strings
+  (testing "graph info truncates long string kv values in human output"
+    (let [long-text (apply str (repeat 180 "a"))
+          result (format/format-result {:status :ok
+                                        :command :graph-info
+                                        :data {:graph "demo-graph"
+                                               :kv {"logseq.kv/runtime-metadata" long-text}}}
+                                       {:output-format nil})]
+      (is (string/includes? result "... [truncated]"))
+      (is (not (string/includes? result long-text))))))
+
+(deftest test-machine-output-graph-info-kv-structure
+  (testing "graph info json output includes kv map"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-info
+                                        :data {:graph "demo-graph"
+                                               :kv {"logseq.kv/db-type" :sqlite
+                                                    "logseq.kv/schema-version" 2}}}
+                                       {:output-format :json})
+          parsed (js->clj (js/JSON.parse result) :keywordize-keys true)]
+      (is (= "ok" (:status parsed)))
+      (is (= "demo-graph" (get-in parsed [:data :graph])))
+      (is (= "sqlite" (get-in parsed [:data :kv :logseq.kv/db-type])))
+      (is (= 2 (get-in parsed [:data :kv :logseq.kv/schema-version])))))
+
+  (testing "graph info edn output includes kv map"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-info
+                                        :data {:graph "demo-graph"
+                                               :kv {"logseq.kv/db-type" :sqlite
+                                                    "logseq.kv/schema-version" 2}}}
+                                       {:output-format :edn})
+          parsed (reader/read-string result)]
+      (is (= :ok (:status parsed)))
+      (is (= "demo-graph" (get-in parsed [:data :graph])))
+      (is (= :sqlite (get-in parsed [:data :kv "logseq.kv/db-type"])))
+      (is (= 2 (get-in parsed [:data :kv "logseq.kv/schema-version"]))))))
+
+(deftest test-machine-output-graph-info-kv-redaction
+  (testing "graph info redacts sensitive kv values in json and edn output"
+    (let [token "my-secret-token"
+          json-result (format/format-result {:status :ok
+                                             :command :graph-info
+                                             :data {:graph "demo-graph"
+                                                    :kv {"logseq.kv/api-token" token
+                                                         "logseq.kv/db-type" :sqlite}}}
+                                            {:output-format :json})
+          json-parsed (js->clj (js/JSON.parse json-result) :keywordize-keys true)
+          edn-result (format/format-result {:status :ok
+                                            :command :graph-info
+                                            :data {:graph "demo-graph"
+                                                   :kv {"logseq.kv/api-token" token
+                                                        "logseq.kv/db-type" :sqlite}}}
+                                           {:output-format :edn})
+          edn-parsed (reader/read-string edn-result)]
+      (is (= "[REDACTED]" (get-in json-parsed [:data :kv :logseq.kv/api-token])))
+      (is (= "[REDACTED]" (get-in edn-parsed [:data :kv "logseq.kv/api-token"])))
+      (is (not (string/includes? json-result token)))
+      (is (not (string/includes? edn-result token))))))
 
 (deftest test-human-output-server-status
   (testing "server status includes repo, status, host, port"
