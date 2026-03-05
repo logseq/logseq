@@ -189,7 +189,7 @@
                  true
                  #js ["encrypt" "decrypt"]))
    (p/catch (fn [e]
-              (log/error "decrypt-aes-key" e)
+              (log/error "decrypt-aes-key failed" e)
               (ex-info "decrypt-aes-key" {} e)))))
 
 (defn <encrypt-uint8array
