@@ -6,6 +6,7 @@
             ["path" :as node-path]
             ["ws" :as ws]
             [clojure.string :as string]
+            [cognitect.transit :as transit]
             [frontend.worker.db-worker-node-lock :as db-lock]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -236,6 +237,40 @@
   [url]
   (ws. url))
 
+(def ^:private kv-transit-writer
+  (transit/writer
+   :json
+   {:handlers
+    {js/Uint8Array
+     (transit/write-handler
+      (constantly "uint8array")
+      (fn [value]
+        (js->clj (js/Array.from value))))}}))
+
+(def ^:private kv-transit-reader
+  (transit/reader
+   :json
+   {:handlers
+    {"uint8array"
+     (fn [value]
+       (js/Uint8Array. (clj->js value)))}}))
+
+(defn- parse-kv-state
+  [contents]
+  (try
+    (let [state (transit/read kv-transit-reader contents)]
+      (if (map? state)
+        state
+        {}))
+    (catch :default error
+      (log/warn :db-worker-node-kv-parse-failed
+                {:error error})
+      {})))
+
+(defn- serialize-kv-state
+  [state]
+  (transit/write kv-transit-writer state))
+
 (defn- kv-store
   [data-dir]
   (let [kv-path (node-path/join data-dir "kv-store.json")
@@ -245,8 +280,8 @@
                    (p/resolved @state)
                    (-> (fs/readFile kv-path "utf8")
                        (p/then (fn [contents]
-                                 (let [data (js/JSON.parse contents)]
-                                   (reset! state (js->clj data :keywordize-keys false))
+                                 (let [data (parse-kv-state contents)]
+                                   (reset! state data)
                                    @state)))
                        (p/catch (fn [_]
                                   (reset! state {})
@@ -257,19 +292,21 @@
      :set! (fn [k value]
              (p/let [_ (<load!)
                      _ (swap! state assoc k value)
-                     payload (js/JSON.stringify (clj->js @state))]
+                     payload (serialize-kv-state @state)]
                (fs/writeFile kv-path payload "utf8")))}))
 
 (defn node-platform
-  [{:keys [data-dir event-fn write-guard-fn]}]
+  [{:keys [data-dir event-fn write-guard-fn owner-source]}]
   (let [data-dir (expand-home (or data-dir "~/logseq/graphs"))
+        owner-source (db-lock/normalize-owner-source owner-source)
         kv (kv-store data-dir)]
     (p/do!
      (ensure-dir! data-dir)
      (log/info :db-worker-node-platform {:data-dir data-dir})
      {:env {:publishing? false
             :runtime :node
-            :data-dir data-dir}
+            :data-dir data-dir
+            :owner-source owner-source}
       :storage {:install-opfs-pool (fn [sqlite-module pool-name]
                                      (install-opfs-pool data-dir sqlite-module pool-name))
                 :list-graphs (fn [] (list-graphs data-dir))

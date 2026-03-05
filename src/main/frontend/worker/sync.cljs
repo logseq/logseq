@@ -15,6 +15,7 @@
             [frontend.worker.sync.const :as rtc-const]
             [frontend.worker.sync.crypt :as sync-crypt]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db-sync.cycle :as sync-cycle]
@@ -63,7 +64,8 @@
         counts (or (sync-counts repo) {})
         ws-url (:ws-url @worker-state/*db-sync-config)
         ws-state (or (some-> client :ws-state deref)
-                     (if (seq ws-url) :stopped :inactive))]
+                     (if (seq ws-url) :stopped :inactive))
+        last-error (some-> client :last-sync-error deref)]
     {:repo repo
      :graph-id (or (:graph-id client) (:graph-uuid counts))
      :ws-state ws-state
@@ -71,7 +73,8 @@
      :pending-asset (or (:pending-asset counts) 0)
      :pending-server (or (:pending-server counts) 0)
      :local-tx (:local-tx counts)
-     :remote-tx (:remote-tx counts)}))
+     :remote-tx (:remote-tx counts)
+     :last-error last-error}))
 
 (defn- normalize-online-users
   [users]
@@ -148,9 +151,21 @@
                      :else ws-url)]
           (string/replace base #"/sync/%s$" "")))))
 
+(defn- cli-node-owner?
+  []
+  (try
+    (let [env (:env (platform/current))]
+      (and (= :node (:runtime env))
+           (= :cli (:owner-source env))))
+    (catch :default _
+      false)))
+
 (defn- auth-token []
-  (or (worker-state/get-id-token)
-      (:auth-token @worker-state/*db-sync-config)))
+  (let [configured-token (:auth-token @worker-state/*db-sync-config)]
+    (if (cli-node-owner?)
+      configured-token
+      (or (worker-state/get-id-token)
+          configured-token))))
 
 (defn- id-token-expired?
   [token]
@@ -166,7 +181,8 @@
 (defn- <resolve-ws-token
   []
   (let [token (auth-token)]
-    (if (id-token-expired? token)
+    (if (and (not (cli-node-owner?))
+             (id-token-expired? token))
       (p/let [resp (worker-state/<invoke-main-thread :thread-api/ensure-id&access-token)
               refreshed-token (:id-token resp)]
         (when (string? refreshed-token)
@@ -175,7 +191,7 @@
       (p/resolved token))))
 
 (defn- get-user-uuid []
-  (some-> (worker-state/get-id-token)
+  (some-> (auth-token)
           worker-util/parse-jwt
           :sub))
 
@@ -247,15 +263,34 @@
        (string? (:asset-type value))))
 
 (defn- get-graph-id [repo]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [db @conn
-          graph-uuid (ldb/get-graph-rtc-uuid db)]
-      (when graph-uuid
-        (str graph-uuid)))))
+  (or (when-let [conn (worker-state/get-datascript-conn repo)]
+        (let [db @conn
+              graph-uuid (ldb/get-graph-rtc-uuid db)]
+          (when graph-uuid
+            (str graph-uuid))))
+      (some-> (client-op/get-graph-uuid repo) str)))
 
 (defn- ensure-client-graph-uuid! [repo graph-id]
   (when (seq graph-id)
     (client-op/update-graph-uuid repo graph-id)))
+
+(declare list-remote-graphs!)
+
+(defn- <resolve-start-graph-id
+  [repo]
+  (if-let [graph-id (get-graph-id repo)]
+    (p/resolved graph-id)
+    (let [target-graph-name (some-> repo common-config/strip-leading-db-version-prefix)]
+      (if-not (seq target-graph-name)
+        (p/resolved nil)
+        (p/let [remote-graphs (list-remote-graphs!)
+                remote-graph-id (some (fn [{:keys [graph-name graph-id]}]
+                                        (when (= target-graph-name graph-name)
+                                          graph-id))
+                                      remote-graphs)]
+          (when (seq remote-graph-id)
+            (ensure-client-graph-uuid! repo remote-graph-id)
+            remote-graph-id))))))
 
 (defn- ready-state [ws]
   (.-readyState ws))
@@ -348,6 +383,33 @@
     (if-let [coerced (coerce-ws-client-message message)]
       (.send ws (js/JSON.stringify (clj->js coerced)))
       (log/error :db-sync/ws-request-invalid {:message message}))))
+
+(defn- ex-message->code
+  [message]
+  (when (and (string? message)
+             (re-matches #"[a-zA-Z0-9._/\-]+" message))
+    (keyword message)))
+
+(defn- error->diagnostic
+  [error]
+  (let [data (or (ex-data error) {})
+        code (or (:code data)
+                 (ex-message->code (ex-message error))
+                 :exception)]
+    {:code code
+     :message (or (ex-message error) (str error))
+     :at (common-util/time-ms)
+     :data (when (seq data) data)}))
+
+(defn- set-last-sync-error!
+  [client error]
+  (when-let [*last-error (:last-sync-error client)]
+    (reset! *last-error (error->diagnostic error))))
+
+(defn- clear-last-sync-error!
+  [client]
+  (when-let [*last-error (:last-sync-error client)]
+    (reset! *last-error nil)))
 
 (defn update-presence!
   [editing-block-uuid]
@@ -1162,6 +1224,7 @@
                 :send-queue (atom (p/resolved nil))
                 :asset-queue (atom (p/resolved nil))
                 :inflight (atom [])
+                :last-sync-error (atom nil)
                 :reconnect (atom {:attempt 0 :timer nil})
                 :stale-kill-timer (atom nil)
                 :last-ws-message-ts (atom (common-util/time-ms))
@@ -1758,6 +1821,7 @@
         "tx/batch/ok" (do
                         (require-non-negative remote-tx {:repo repo :type "tx/batch/ok"})
                         (client-op/update-local-tx repo remote-tx)
+                        (clear-last-sync-error! client)
                         (broadcast-rtc-state! client)
                         (remove-pending-txs! repo @(:inflight client))
                         (reset! (:inflight client) [])
@@ -1770,24 +1834,36 @@
                           txs-data (mapv (fn [data]
                                            (parse-transit (:tx data) {:repo repo :type "pull/ok"}))
                                          txs)]
-                      (when (seq txs-data)
-                        (p/let [graph-e2ee? (sync-crypt/graph-e2ee? repo)
-                                aes-key (sync-crypt/<ensure-graph-aes-key repo (:graph-id client))
-                                _ (when (and graph-e2ee? (nil? aes-key))
-                                    (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
-                                tx-batches (if aes-key
-                                             (p/all (mapv (fn [tx-data]
-                                                            (sync-crypt/<decrypt-tx-data aes-key tx-data))
-                                                          txs-data))
-                                             (p/resolved txs-data))]
-                          (try
-                            (apply-remote-tx! repo client tx-batches)
-                            (catch :default e
-                              (log/error ::apply-remote-tx e)
-                              (throw e)))
-                          (client-op/update-local-tx repo remote-tx)
-                          (broadcast-rtc-state! client)
-                          (flush-pending! repo client)))))
+                      (-> (if (seq txs-data)
+                            (p/let [graph-e2ee? (sync-crypt/graph-e2ee? repo)
+                                    aes-key (sync-crypt/<ensure-graph-aes-key repo (:graph-id client))
+                                    _ (when (and graph-e2ee? (nil? aes-key))
+                                        (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
+                                    tx-batches (if aes-key
+                                                 (p/all (mapv (fn [tx-data]
+                                                                (sync-crypt/<decrypt-tx-data aes-key tx-data))
+                                                              txs-data))
+                                                 (p/resolved txs-data))]
+                              (try
+                                (apply-remote-tx! repo client tx-batches)
+                                (catch :default e
+                                  (log/error ::apply-remote-tx e)
+                                  (throw e))))
+                            (p/resolved nil))
+                          (p/then (fn [_]
+                                    (client-op/update-local-tx repo remote-tx)
+                                    (clear-last-sync-error! client)
+                                    (broadcast-rtc-state! client)
+                                    (flush-pending! repo client)))
+                          (p/catch (fn [error]
+                                     (set-last-sync-error! client error)
+                                     (log/error :db-sync/pull-ok-failed
+                                                {:repo repo
+                                                 :local-tx local-tx
+                                                 :remote-tx remote-tx
+                                                 :tx-count (count txs-data)
+                                                 :error error
+                                                 :error-data (ex-data error)}))))))
         "changed" (do
                     (require-non-negative remote-tx {:repo repo :type "changed"})
                     (broadcast-rtc-state! client)
@@ -1906,6 +1982,7 @@
               (reset-reconnect! updated)
               (touch-last-ws-message! updated)
               (set-ws-state! updated :open)
+              (clear-last-sync-error! updated)
               (send! ws {:type "hello" :client repo})
               (enqueue-asset-sync! repo updated)))
       (close-stale-ws-loop updated ws))))
@@ -1928,43 +2005,47 @@
 
 (defn start!
   [repo]
-  (let [base (ws-base-url)
-        graph-id (get-graph-id repo)
-        start-target [repo graph-id]
-        inflight-target @*start-inflight-target
-        current @worker-state/*db-sync-client]
-    (cond
-      (not (and (string? base) (seq base) (seq graph-id)))
+  (let [base (ws-base-url)]
+    (if-not (and (string? base) (seq base))
       (do
-        (log/info :db-sync/start-skipped {:repo repo :graph-id graph-id :base base})
+        (log/info :db-sync/start-skipped {:repo repo :graph-id (get-graph-id repo) :base base})
         (p/resolved nil))
+      (p/let [graph-id (<resolve-start-graph-id repo)]
+        (let [start-target [repo graph-id]
+              inflight-target @*start-inflight-target
+              current @worker-state/*db-sync-client]
+          (cond
+            (not (seq graph-id))
+            (do
+              (log/info :db-sync/start-skipped {:repo repo :graph-id graph-id :base base})
+              (p/resolved nil))
 
-      (= start-target inflight-target)
-      (p/resolved nil)
+            (= start-target inflight-target)
+            (p/resolved nil)
 
-      (active-client-for? current repo graph-id)
-      (do
-        (broadcast-rtc-state! current)
-        (p/resolved nil))
+            (active-client-for? current repo graph-id)
+            (do
+              (broadcast-rtc-state! current)
+              (p/resolved nil))
 
-      :else
-      (do
-        (reset! *start-inflight-target start-target)
-        (->
-         (p/do!
-          (stop!)
-          (p/let [client (ensure-client-state! repo)
-                  url (format-ws-url base graph-id)
-                  _ (ensure-client-graph-uuid! repo graph-id)
-                  connected (assoc client :graph-id graph-id)
-                  token (<resolve-ws-token)
-                  connected (connect! repo connected url token)]
-            (reset! worker-state/*db-sync-client connected)
-            nil))
-         (p/finally
-           (fn []
-             (when (= start-target @*start-inflight-target)
-               (reset! *start-inflight-target nil)))))))))
+            :else
+            (do
+              (reset! *start-inflight-target start-target)
+              (->
+               (p/do!
+                (stop!)
+                (p/let [client (ensure-client-state! repo)
+                        url (format-ws-url base graph-id)
+                        _ (ensure-client-graph-uuid! repo graph-id)
+                        connected (assoc client :graph-id graph-id)
+                        token (<resolve-ws-token)
+                        connected (connect! repo connected url token)]
+                  (reset! worker-state/*db-sync-client connected)
+                  nil))
+               (p/finally
+                 (fn []
+                   (when (= start-target @*start-inflight-target)
+                     (reset! *start-inflight-target nil))))))))))))
 
 (defn enqueue-local-tx!
   [repo {:keys [tx-meta tx-data db-after db-before]}]
@@ -2137,7 +2218,6 @@
              (set-graph-sync-metadata! repo graph-e2ee?)
              (ensure-client-graph-uuid! repo graph-id)
              (p/let [datoms (d/datoms @source-conn :eavt)
-                     _ (prn :debug :datoms-count (count datoms) :time (js/Date.))
                      datoms* (offload-large-titles-in-datoms repo graph-id datoms aes-key)
                      _ (update-progress {:sub-type :upload-progress
                                          :message (if graph-e2ee? "Encrypting data" "Preparing data")})

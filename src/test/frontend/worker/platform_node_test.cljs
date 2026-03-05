@@ -59,6 +59,38 @@
     (is (string/includes? source "\"node:sqlite\""))
     (is (not (string/includes? source "\"better-sqlite3\"")))))
 
+(deftest node-platform-env-owner-source-is-propagated
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "platform-node-owner-source")]
+      (-> (p/let [platform-cli (platform-node/node-platform {:data-dir data-dir
+                                                              :owner-source :cli})
+                  platform-default (platform-node/node-platform {:data-dir data-dir})]
+            (is (= :cli (get-in platform-cli [:env :owner-source])))
+            (is (= :unknown (get-in platform-default [:env :owner-source]))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
+(deftest kv-store-preserves-uint8array-values-across-reloads-test
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "platform-node-kv-store")
+          key "rtc-encrypted-aes-key###graph-1"
+          value (js/Uint8Array. #js [1 2 3 255])]
+      (-> (p/let [platform-a (platform-node/node-platform {:data-dir data-dir})
+                  kv-a (:kv platform-a)
+                  _ ((:set! kv-a) key value)
+                  loaded-a ((:get kv-a) key)
+                  platform-b (platform-node/node-platform {:data-dir data-dir})
+                  kv-b (:kv platform-b)
+                  loaded-b ((:get kv-b) key)]
+            (is (instance? js/Uint8Array loaded-a))
+            (is (= [1 2 3 255] (vec (js->clj loaded-a))))
+            (is (instance? js/Uint8Array loaded-b))
+            (is (= [1 2 3 255] (vec (js->clj loaded-b)))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
+
 (deftest exec-sql-string-creates-schema-and-writes-data
   (async done
     (let [conn* (atom nil)]

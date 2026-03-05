@@ -16,6 +16,70 @@
   (p/let [encrypted (crypt/<encrypt-text aes-key (ldb/write-transit-str value))]
     (ldb/write-transit-str encrypted)))
 
+(deftest cli-node-auth-token-prefers-sync-config-test
+  (let [config-prev @worker-state/*db-sync-config
+        state-prev @worker-state/*state]
+    (reset! worker-state/*db-sync-config {:auth-token "cli-config-token"})
+    (reset! worker-state/*state (assoc state-prev :auth/id-token "state-token"))
+    (try
+      (with-redefs [platform/current (fn [] {:env {:runtime :node
+                                                   :owner-source :cli}})]
+        (is (= "cli-config-token" (#'sync-crypt/auth-token))))
+      (finally
+        (reset! worker-state/*db-sync-config config-prev)
+        (reset! worker-state/*state state-prev)))))
+
+(deftest cli-node-get-user-uuid-reads-from-sync-config-token-test
+  (let [config-prev @worker-state/*db-sync-config
+        state-prev @worker-state/*state]
+    (reset! worker-state/*db-sync-config {:auth-token "cli-config-token"})
+    (reset! worker-state/*state (assoc state-prev :auth/id-token "state-token"))
+    (try
+      (with-redefs [platform/current (fn [] {:env {:runtime :node
+                                                   :owner-source :cli}})
+                    worker-util/parse-jwt (fn [token]
+                                            (cond
+                                              (= token "cli-config-token") {:sub "cli-user-id"}
+                                              (= token "state-token") {:sub "state-user-id"}
+                                              :else {}))]
+        (is (= "cli-user-id" (#'sync-crypt/get-user-uuid))))
+      (finally
+        (reset! worker-state/*db-sync-config config-prev)
+        (reset! worker-state/*state state-prev)))))
+
+(deftest desktop-token-path-keeps-id-token-behavior-test
+  (let [config-prev @worker-state/*db-sync-config
+        state-prev @worker-state/*state]
+    (reset! worker-state/*db-sync-config {:auth-token "cli-config-token"})
+    (reset! worker-state/*state (assoc state-prev :auth/id-token "state-token"))
+    (try
+      (with-redefs [platform/current (fn [] {:env {:runtime :node
+                                                   :owner-source :electron}})
+                    worker-util/parse-jwt (fn [token]
+                                            (cond
+                                              (= token "cli-config-token") {:sub "cli-user-id"}
+                                              (= token "state-token") {:sub "state-user-id"}
+                                              :else {}))]
+        (is (= "state-token" (#'sync-crypt/auth-token)))
+        (is (= "state-user-id" (#'sync-crypt/get-user-uuid))))
+      (finally
+        (reset! worker-state/*db-sync-config config-prev)
+        (reset! worker-state/*state state-prev)))))
+
+(deftest get-item-preserves-uint8array-type-test
+  (async done
+         (let [expected (js/Uint8Array. #js [9 8 7])]
+           (-> (p/with-redefs [platform/current (fn [] {:runtime :test})
+                               platform/kv-get (fn [_platform' _k]
+                                                 (p/resolved expected))]
+                 (#'sync-crypt/<get-item "rtc-encrypted-aes-key###graph-1"))
+               (p/then (fn [result]
+                         (is (instance? js/Uint8Array result))
+                         (is (= [9 8 7] (vec (js->clj result))))))
+               (p/catch (fn [e]
+                          (is false (str e))))
+               (p/finally done)))))
+
 (deftest save-e2ee-password-uses-platform-write-text-when-not-native-test
   (async done
          (let [platform-map {:runtime :test}
@@ -197,6 +261,7 @@
                            :text (fn [] (js/Promise.resolve "{\"message\":\"not-found\"}"))}))))
            (-> (p/with-redefs [sync-crypt/e2ee-base (fn [] "https://example.com")
                                worker-state/get-id-token (fn [] "token")
+                               worker-util/parse-jwt (fn [_] {:sub "user-1"})
                                worker-state/<invoke-main-thread (fn [_type _payload]
                                                                   (p/resolved :exported-private-key))
                                crypt/<import-private-key (fn [_]
@@ -205,6 +270,8 @@
                                                         (p/resolved (str "aes:" encrypted)))
                                ldb/read-transit-str (fn [value] value)
                                platform/current (fn [] platform-map)
+                               platform/kv-get (fn [_platform' _k]
+                                                 (p/resolved nil))
                                platform/kv-set! (fn [platform' k value]
                                                   (swap! kv-set-calls conj {:platform platform'
                                                                             :key k
@@ -217,7 +284,7 @@
                          (is (= "aes:remote-encrypted" aes-key))
                          (is (= [{:platform platform-map :key expected-key :value nil}
                                  {:platform platform-map :key expected-key :value "remote-encrypted"}]
-                                @kv-set-calls))))
+                                (filterv #(= expected-key (:key %)) @kv-set-calls)))))
                (p/catch (fn [e]
                           (is false (str e))))
                (p/finally (fn []
