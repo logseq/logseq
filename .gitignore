@@ -45,6 +45,7 @@ resources/electron.js
 /libs/dist/
 charlie/
 .vscode
+/.claude
 /.preprocessor-cljs
 docker
 android/app/src/main/assets/capacitor.plugin.json

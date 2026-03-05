@@ -174,7 +174,8 @@
       (:help opts)
       (command-core/help-result cmd-summary)
 
-      (and (#{:graph-create :graph-switch :graph-remove :graph-validate} command)
+      ;; Require graphs when writing to graph
+      (and (#{:graph-create :graph-switch :graph-remove :graph-import} command)
            (not (seq graph)))
       (missing-graph-result summary)
 
@@ -256,9 +257,6 @@
 
       (and (= command :graph-import) (not (seq (:input opts))))
       (missing-input-result summary)
-
-      (and (= command :graph-import) (not (seq (:graph opts))))
-      (missing-graph-result summary)
 
       (and (= command :graph-import)
            (not (contains? (graph-command/import-export-types)
