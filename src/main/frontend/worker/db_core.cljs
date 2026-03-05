@@ -658,6 +658,11 @@
           _result (remove-vfs! pool)]
     nil))
 
+(def-thread-api :thread-api/close-db
+  [repo]
+  (close-db! repo)
+  nil)
+
 (defn- import-datoms-to-db!
   [repo graph-id remote-tx datoms]
   (->

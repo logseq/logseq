@@ -85,7 +85,7 @@
 
 (defn import-chosen-graph
   [repo]
-  (p/let [_ (persist-db/<unsafe-delete repo)]
+  (p/let [_ (persist-db/<close-db repo)]
     (notification/show! (str "Graph updated! Switching to graph ...") :success)
     (state/pub-event! [:graph/switch repo])))
 
