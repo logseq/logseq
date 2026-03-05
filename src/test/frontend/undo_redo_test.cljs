@@ -186,6 +186,38 @@
      :parent-uuid parent-uuid
      :child-uuid child-uuid}))
 
+(defn- seed-page-two-parents-child!
+  []
+  (let [conn (db/get-db test-db false)
+        page-uuid (random-uuid)
+        parent-a-uuid (random-uuid)
+        parent-b-uuid (random-uuid)
+        child-uuid (random-uuid)]
+    (d/transact! conn
+                 [{:db/ident :logseq.class/Page}
+                  {:block/uuid page-uuid
+                   :block/name "page"
+                   :block/title "page"
+                   :block/tags #{:logseq.class/Page}}
+                  {:block/uuid parent-a-uuid
+                   :block/title "parent-a"
+                   :block/page [:block/uuid page-uuid]
+                   :block/parent [:block/uuid page-uuid]}
+                  {:block/uuid parent-b-uuid
+                   :block/title "parent-b"
+                   :block/page [:block/uuid page-uuid]
+                   :block/parent [:block/uuid page-uuid]}
+                  {:block/uuid child-uuid
+                   :block/title "child"
+                   :block/page [:block/uuid page-uuid]
+                   :block/parent [:block/uuid parent-a-uuid]}]
+                 {:outliner-op :insert-blocks
+                  :local-tx? false})
+    {:page-uuid page-uuid
+     :parent-a-uuid parent-a-uuid
+     :parent-b-uuid parent-b-uuid
+     :child-uuid child-uuid}))
+
 (deftest undo-records-only-local-txs-test
   (testing "undo history records only local txs"
     (undo-redo/clear-history! test-db)
@@ -338,6 +370,29 @@
                     conn
                     [[:db/add [:block/uuid child-uuid] :block/parent [:block/uuid page-uuid]]])))
         (is (pos? @calls))))))
+
+(deftest redo-skips-when-target-parent-deleted-test
+  (testing "redo skips move-blocks when target parent was deleted remotely"
+    (undo-redo/clear-history! test-db)
+    (let [conn (db/get-db test-db false)
+          {:keys [child-uuid parent-a-uuid parent-b-uuid]} (seed-page-two-parents-child!)]
+      (d/transact! conn
+                   [[:db/add [:block/uuid child-uuid] :block/parent [:block/uuid parent-b-uuid]]]
+                   {:outliner-op :move-blocks
+                    :local-tx? true})
+      (undo-redo/undo test-db)
+      (d/transact! conn
+                   [[:db/retractEntity [:block/uuid parent-b-uuid]]]
+                   {:outliner-op :delete-blocks
+                    :local-tx? false})
+      (let [redo-op (last (get @undo-redo/*redo-ops test-db))
+            data (some #(when (= ::undo-redo/db-transact (first %))
+                          (second %))
+                       redo-op)
+            reversed (undo-redo/get-reversed-datoms conn false data)]
+        (is (nil? reversed))
+        (is (= parent-a-uuid
+               (:block/uuid (:block/parent (d/entity @conn [:block/uuid child-uuid])))))))))
 
 (deftest ^:long undo-redo-test
   (testing "Random mixed operations"
