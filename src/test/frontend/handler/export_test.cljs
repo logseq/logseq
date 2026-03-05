@@ -1,5 +1,5 @@
 (ns frontend.handler.export-test
-  (:require [cljs.test :refer [are async deftest use-fixtures]]
+  (:require [cljs.test :refer [are async deftest is testing use-fixtures]]
             [clojure.string :as string]
             [frontend.handler.export.text :as export-text]
             [frontend.state :as state]
@@ -11,7 +11,10 @@
         uuid-2 #uuid "61506711-5638-4899-ad78-187bdc2eaffc"
         uuid-3 #uuid "61506712-3007-407e-b6d3-d008a8dfa88b"
         uuid-4 #uuid "61506712-b8a7-491d-ad84-b71651c3fdab"
-        uuid-p2 #uuid "97a00e55-48c3-48d8-b9ca-417b16e3a616"]
+        uuid-p2 #uuid "97a00e55-48c3-48d8-b9ca-417b16e3a616"
+        uuid-5 #uuid "708f7836-c1e2-4212-bd26-b53c7e9f1449"
+        uuid-6 #uuid "de7724d5-b045-453d-a643-31b81d310071"
+        uuid-p3 #uuid "de13830f-9691-4074-a0d6-cc8ab9cf9074"]
     [{:page {:block/title "page1"}
       :blocks
       [{:block/title "1"
@@ -36,7 +39,18 @@
         :build/keep-uuid? true
         :block/uuid uuid-p2
         :build/children
-        [{:block/title "{{embed [[page1]]}}"}]}]}]))
+        [{:block/title "{{embed [[page1]]}}"}]}]}
+     {:page {:block/title "page3"
+             :block/uuid uuid-p3}
+      :blocks
+      [{:block/title "collapsed-parent"
+        :build/keep-uuid? true
+        :block/uuid uuid-5
+        :block/collapsed? true
+        :build/children
+        [{:block/title "hidden-child"
+          :build/keep-uuid? true
+          :block/uuid uuid-6}]}]}]))
 
 (use-fixtures :once
   {:before (fn []
@@ -110,6 +124,46 @@
 
 	- 4")
     "97a00e55-48c3-48d8-b9ca-417b16e3a616"))
+
+(deftest export-blocks-as-markdown-open-blocks-only
+  (testing "collapsed descendants are excluded when :open-blocks-only is enabled"
+    (is (= (string/trim "
+- collapsed-parent")
+           (string/trim
+            (export-text/export-blocks-as-markdown
+             (state/get-current-repo)
+             [(uuid "708f7836-c1e2-4212-bd26-b53c7e9f1449")]
+             {:remove-options #{:property}
+              :other-options {:open-blocks-only true}}))))
+    (is (= (string/trim "
+- collapsed-parent
+	- hidden-child")
+           (string/trim
+            (export-text/export-blocks-as-markdown
+             (state/get-current-repo)
+             [(uuid "708f7836-c1e2-4212-bd26-b53c7e9f1449")]
+             {:remove-options #{:property}
+              :other-options {:open-blocks-only false}}))))))
+
+(deftest export-page-as-markdown-open-blocks-only
+  (testing "page export also excludes collapsed descendants when :open-blocks-only is enabled"
+    (is (= (string/trim "
+- collapsed-parent")
+           (string/trim
+            (export-text/export-blocks-as-markdown
+             (state/get-current-repo)
+             [(uuid "de13830f-9691-4074-a0d6-cc8ab9cf9074")]
+             {:remove-options #{:property}
+              :other-options {:open-blocks-only true}}))))
+    (is (= (string/trim "
+- collapsed-parent
+	- hidden-child")
+           (string/trim
+            (export-text/export-blocks-as-markdown
+             (state/get-current-repo)
+             [(uuid "de13830f-9691-4074-a0d6-cc8ab9cf9074")]
+             {:remove-options #{:property}
+              :other-options {:open-blocks-only false}}))))))
 
 (deftest-async export-files-as-markdown
   (p/do!
