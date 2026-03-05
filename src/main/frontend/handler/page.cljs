@@ -17,7 +17,6 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.ui :as ui-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
@@ -258,16 +257,14 @@
                (not config/publishing?))
       (when-let [title (date/today)]
         (state/set-today! title)
-        (let [today-page (util/page-name-sanity-lc title)
-              create-f (fn []
-                         (p/let [result (<create! title {:redirect? false
-                                                         :split-namespace? false
-                                                         :today-journal? true})]
-                           (ui-handler/re-render-root!)
-                           (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})
-                           result))]
-          (when-not (db/get-page today-page)
-            (create-f)))))))
+        (p/let [today-page (util/page-name-sanity-lc title)
+                page (ldb/get-journal-page (db/get-db) (date/today-name))]
+          (when-not page
+            (p/let [result (<create! title {:redirect? false
+                                            :split-namespace? false
+                                            :today-journal? true})]
+              (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})
+              result)))))))
 
 (defn open-today-in-sidebar
   []

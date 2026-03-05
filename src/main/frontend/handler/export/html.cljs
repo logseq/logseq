@@ -421,11 +421,14 @@
   [repo root-block-uuids-or-page-uuid options]
   {:pre [(or (coll? root-block-uuids-or-page-uuid)
              (uuid? root-block-uuids-or-page-uuid))]}
-  (let [content
+  (let [open-blocks-only? (boolean (get-in options [:other-options :open-blocks-only]))
+        content
         (if (uuid? root-block-uuids-or-page-uuid)
           ;; page
-          (common/get-page-content root-block-uuids-or-page-uuid)
-          (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
+          (common/get-page-content root-block-uuids-or-page-uuid
+                                   {:open-blocks-only? open-blocks-only?})
+          (common/root-block-uuids->content repo root-block-uuids-or-page-uuid
+                                            {:open-blocks-only? open-blocks-only?}))
         first-block (and (coll? root-block-uuids-or-page-uuid)
                          (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
         format (get first-block :block/format :markdown)]
