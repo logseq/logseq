@@ -1,6 +1,7 @@
 (ns frontend.worker.db-sync-sim-test
   (:require [cljs.test :refer [deftest is testing]]
             [clojure.data :as data]
+            [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.handler.page :as worker-page]
@@ -11,6 +12,7 @@
             [logseq.db.common.normalize :as db-normalize]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.op :as outliner-op]
             [promesa.core :as p]))
 
 (def ^:private repo-a "db-sync-sim-repo-a")
@@ -387,6 +389,14 @@
         (update-title! conn uuid new-title)
         {:op :update-title :uuid uuid :title new-title}))))
 
+(defn- op-save-block! [rng conn state base-uuid]
+  (when-let [result (op-update-title! rng conn state base-uuid)]
+    (assoc result :op :save-block)))
+
+(defn- op-insert-blocks! [rng conn state base-uuid {:keys [gen-uuid]}]
+  (when-let [result (op-create-block! rng conn state base-uuid {:gen-uuid gen-uuid})]
+    (assoc result :op :insert-blocks)))
+
 (defn- op-move-block! [rng conn state base-uuid]
   (let [db @conn
         block (rand-nth! rng (vec (existing-blocks db (:blocks @state))))
@@ -403,6 +413,36 @@
        :uuid (:block/uuid block)
        :parent (:block/uuid parent)})))
 
+(defn- op-move-blocks! [rng conn state base-uuid]
+  (when-let [result (op-move-block! rng conn state base-uuid)]
+    (assoc result :op :move-blocks)))
+
+(defn- op-move-blocks-up-down! [rng conn state]
+  (let [db @conn
+        block (rand-nth! rng (vec (existing-blocks db (:blocks @state))))
+        up? (zero? (rand-int! rng 2))]
+    (when block
+      (try
+        (outliner-core/move-blocks-up-down! conn [block] up?)
+        {:op :move-blocks-up-down
+         :uuid (:block/uuid block)
+         :up? up?}
+        (catch :default _
+          nil)))))
+
+(defn- op-indent-outdent-blocks! [rng conn state]
+  (let [db @conn
+        block (rand-nth! rng (vec (existing-blocks db (:blocks @state))))
+        indent? (zero? (rand-int! rng 2))]
+    (when block
+      (try
+        (outliner-core/indent-outdent-blocks! conn [block] indent? {})
+        {:op :indent-outdent-blocks
+         :uuid (:block/uuid block)
+         :indent? indent?}
+        (catch :default _
+          nil)))))
+
 (defn- op-delete-block! [rng conn state]
   (let [db @conn
         block (rand-nth! rng (vec (existing-blocks db (:blocks @state))))]
@@ -410,6 +450,51 @@
       (delete-block! conn (:block/uuid block))
       (swap! state update :blocks disj (:block/uuid block))
       {:op :delete-block :uuid (:block/uuid block)})))
+
+(defn- op-delete-blocks! [rng conn state]
+  (when-let [result (op-delete-block! rng conn state)]
+    (assoc result :op :delete-blocks)))
+
+(defn- op-rename-page! [rng conn state base-uuid]
+  (let [db @conn
+        pages (->> (existing-entities db (:pages @state))
+                   (remove #(= (:block/uuid %) base-uuid)))
+        page (rand-nth! rng (vec pages))]
+    (when page
+      (let [page-uuid (:block/uuid page)
+            new-title (str "Renamed-" (rand-int! rng 1000000))]
+        (try
+          (outliner-core/save-block! conn {:block/uuid page-uuid
+                                           :block/title new-title})
+          {:op :rename-page
+           :uuid page-uuid
+           :title new-title}
+          (catch :default _
+            nil))))))
+
+(defn- op-toggle-reaction! [rng conn state]
+  (let [db @conn
+        block (rand-nth! rng (vec (existing-blocks db (:blocks @state))))]
+    (when block
+      (let [block-uuid (:block/uuid block)]
+        (try
+          (outliner-op/apply-ops! conn [[:toggle-reaction [block-uuid "+1" nil]]] {})
+          {:op :toggle-reaction
+           :uuid block-uuid
+           :emoji "+1"}
+          (catch :default _
+            nil))))))
+
+(defn- op-transact! [rng conn state]
+  (let [db @conn
+        block (rand-nth! rng (vec (existing-blocks db (:blocks @state))))]
+    (when block
+      (let [uuid (:block/uuid block)
+            new-title (str "tx-title-" (rand-int! rng 1000000))]
+        (ldb/transact! conn [[:db/add [:block/uuid uuid] :block/title new-title]])
+        {:op :transact
+         :uuid uuid
+         :title new-title}))))
 
 (defn- block-and-descendant-uuids
   [db block]
@@ -465,10 +550,19 @@
                :target target-uuid
                :children (mapv :block/uuid direct-children)})))))))
 
-;; TODO: add tag/property/migrate/undo/redo ops
+;; TODO: add undo/redo ops
 (def ^:private op-table
   [{:name :create-page :weight 6 :f op-create-page!}
+   {:name :rename-page :weight 2 :f op-rename-page!}
    {:name :delete-page :weight 2 :f op-delete-page!}
+   {:name :save-block :weight 4 :f op-save-block!}
+   {:name :insert-blocks :weight 10 :f op-insert-blocks!}
+   {:name :delete-blocks :weight 4 :f op-delete-blocks!}
+   {:name :move-blocks :weight 6 :f op-move-blocks!}
+   {:name :move-blocks-up-down :weight 3 :f op-move-blocks-up-down!}
+   {:name :indent-outdent-blocks :weight 3 :f op-indent-outdent-blocks!}
+   {:name :toggle-reaction :weight 2 :f op-toggle-reaction!}
+   {:name :transact :weight 3 :f op-transact!}
    {:name :create-block :weight 10 :f op-create-block!}
    {:name :move-block :weight 6 :f op-move-block!}
    {:name :cut-paste-block-with-child :weight 4 :f op-cut-paste-block-with-child!}
@@ -479,6 +573,23 @@
   (testing "sim op-table includes cut-paste op for random sync stress"
     (is (contains? (set (map :name op-table))
                    :cut-paste-block-with-child))))
+
+(deftest ^:long core-outliner-ops-registered-in-sim-op-table-test
+  (testing "sim op-table includes core logseq.outliner.op operations"
+    (let [registered (set (map :name op-table))
+          required #{:save-block
+                     :insert-blocks
+                     :delete-blocks
+                     :move-blocks
+                     :move-blocks-up-down
+                     :indent-outdent-blocks
+                     :create-page
+                     :rename-page
+                     :delete-page
+                     :toggle-reaction
+                     :transact}]
+      (is (empty? (set/difference required registered))
+          (str "missing ops: " (set/difference required registered))))))
 
 (defn- pick-op [rng {:keys [disable-ops enable-ops]}]
   (let [op-table' (cond->> op-table
@@ -509,7 +620,16 @@
           ;; _ (prn :debug :client (:repo client) :name name)
           result (case name
                    :create-page (f rng conn state {:gen-uuid gen-uuid})
+                   :rename-page (f rng conn state base-uuid)
                    :delete-page (f rng conn base-uuid state)
+                   :save-block (f rng conn state base-uuid)
+                   :insert-blocks (f rng conn state base-uuid {:gen-uuid gen-uuid})
+                   :delete-blocks (f rng conn state)
+                   :move-blocks (f rng conn state base-uuid)
+                   :move-blocks-up-down (f rng conn state)
+                   :indent-outdent-blocks (f rng conn state)
+                   :toggle-reaction (f rng conn state)
+                   :transact (f rng conn state)
                    :create-block (f rng conn state base-uuid {:gen-uuid gen-uuid})
                    :update-title (f rng conn state base-uuid)
                    :move-block (f rng conn state base-uuid)
@@ -713,8 +833,7 @@
           client-b (make-client repo-b)
           server (make-server)
           history (atom [])
-          state-a (atom {:pages #{base-uuid} :blocks #{}})
-          state-b (atom {:pages #{base-uuid} :blocks #{}})]
+          state-a (atom {:pages #{base-uuid} :blocks #{}})]
       (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}
                         repo-b {:conn conn-b :ops-conn ops-b}}
         (fn []
