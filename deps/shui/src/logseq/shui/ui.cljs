@@ -7,7 +7,7 @@
             [logseq.shui.popup.core :as popup-core]
             [logseq.shui.select.core :as select-core]
             [logseq.shui.select.multi :as select-multi]
-            [logseq.shui.shortcut.v1 :as shui.shortcut.v1]
+            [logseq.shui.shortcut :as shui.shortcut]
             [logseq.shui.table.core :as table-core]
             [logseq.shui.toaster.core :as toaster-core]
             [logseq.shui.util :as util]))
@@ -21,7 +21,8 @@
 (def link base-core/link)
 (def trigger-as base-core/trigger-as)
 (def trigger-child-wrap base-core/trigger-child-wrap)
-(def ^:todo shortcut shui.shortcut.v1/root)
+(def shortcut shui.shortcut/root)
+(def shortcut-press! shui.shortcut/shortcut-press!)
 (def ^:export tabler-icon icon-v2/root)
 
 (def alert (util/lsui-wrap "Alert"))
