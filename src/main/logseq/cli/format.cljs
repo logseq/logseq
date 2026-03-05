@@ -79,8 +79,9 @@
 
 (defn- format-counted-table
   [headers rows]
-  (str (render-table headers rows)
-       "\n"
+  (str (if headers
+         (str (render-table headers rows) "\n")
+         (str (string/join "\n" (map (comp string/trimr first) rows)) "\n"))
        "Count: "
        (count rows)))
 
@@ -215,10 +216,19 @@
      (mapv #(format-list-property-row % include-ident? now-ms) items))))
 
 (defn- format-graph-list
-  [graphs]
-  (format-counted-table
-   ["GRAPH"]
-   (mapv (fn [graph] [graph]) (or graphs []))))
+  [graphs current-graph]
+  (let [graphs (or graphs [])
+        has-current? (and (seq current-graph)
+                          (some #(= % current-graph) graphs))]
+    (format-counted-table
+     nil
+     (mapv (fn [graph]
+             [(if has-current?
+                (if (= graph current-graph)
+                  (str "* " graph)
+                  (str "  " graph))
+                graph)])
+           graphs))))
 
 (defn- format-server-list
   [servers]
@@ -478,12 +488,12 @@
     (string/join "\n" (into [header] check-lines))))
 
 (defn- ->human
-  [{:keys [status data error command context]} {:keys [now-ms]}]
+  [{:keys [status data error command context]} {:keys [now-ms graph]}]
   (let [now-ms (or now-ms (js/Date.now))]
     (case status
       :ok
       (case command
-        :graph-list (format-graph-list (:graphs data))
+        :graph-list (format-graph-list (:graphs data) graph)
         :graph-info (format-graph-info data now-ms)
         (:graph-create :graph-switch :graph-remove :graph-validate)
         (format-graph-action command context)

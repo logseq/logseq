@@ -61,6 +61,29 @@
                                        {:output-format nil})]
       (is (= "Found 1 entity with errors:\n({:entity {:db/id 1}})\n" result)))))
 
+(deftest test-human-output-graph-list
+  (testing "graph list without current graph shows plain list"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-list
+                                        :data {:graphs ["alpha" "beta"]}}
+                                       {:output-format nil})]
+      (is (= (str "alpha\n"
+                  "beta\n"
+                  "Count: 2")
+             result))))
+
+  (testing "graph list with current graph marks it with * and indents others"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-list
+                                        :data {:graphs ["alpha" "beta" "gamma"]}}
+                                       {:output-format nil
+                                        :graph "beta"})]
+      (is (= (str "  alpha\n"
+                  "* beta\n"
+                  "  gamma\n"
+                  "Count: 3")
+             result)))))
+
 (deftest test-human-output-list-page
   (testing "list page renders a table with count"
     (let [result (format/format-result {:status :ok
