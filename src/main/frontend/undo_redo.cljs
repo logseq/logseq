@@ -56,7 +56,6 @@
 
 (defn clear-history!
   [repo]
-  (prn :debug :clear-undo-history repo)
   (swap! *undo-ops assoc repo [])
   (swap! *redo-ops assoc repo []))
 
@@ -204,50 +203,137 @@
                     not-exists-in-current-db
                     (not removed-before-parent))))))))
 
+(defn- tx-added-attrs
+  [tx-data]
+  (reduce (fn [acc [op e a v]]
+            (if (= :db/add op)
+              (update acc e assoc a v)
+              acc))
+          {}
+          tx-data))
+
+(defn- entity-exists-or-added?
+  [conn added-attrs id]
+  (or (contains? added-attrs id)
+      (some? (d/entity @conn id))))
+
+(defn- assert-reversed-tx-safe!
+  [conn reversed-tx-data]
+  (let [added-attrs (tx-added-attrs reversed-tx-data)
+        ops-by-entity (group-by second reversed-tx-data)]
+    (doseq [[e ops] ops-by-entity]
+      (let [retract-entity? (some #(= :db/retractEntity (first %)) ops)
+            retract-parent? (some #(and (= :db/retract (first %))
+                                        (= :block/parent (nth % 2)))
+                                  ops)
+            add-parent? (some #(and (= :db/add (first %))
+                                    (= :block/parent (nth % 2)))
+                              ops)
+            retract-page? (some #(and (= :db/retract (first %))
+                                      (= :block/page (nth % 2)))
+                                ops)
+            add-page? (some #(and (= :db/add (first %))
+                                  (= :block/page (nth % 2)))
+                            ops)]
+        ;; Moving blocks must not leave entities without parent/page refs.
+        (when (and (not retract-entity?)
+                   retract-parent?
+                   (not add-parent?))
+          (throw (ex-info "Reversed tx retracts parent without replacement"
+                          {:error :block-moved-or-target-deleted
+                           :entity-id e
+                           :ops ops})))
+        (when (and (not retract-entity?)
+                   retract-page?
+                   (not add-page?))
+          (throw (ex-info "Reversed tx retracts page without replacement"
+                          {:error :block-moved-or-target-deleted
+                           :entity-id e
+                           :ops ops})))))
+    (doseq [[e attrs] added-attrs]
+      (let [existing (d/entity @conn e)
+            new-entity? (nil? existing)
+            page? (or (:block/name attrs) (:block/name existing))
+            parent (:block/parent attrs)
+            page (:block/page attrs)]
+        ;; Redoing a block creation must restore parent/page refs.
+        (when (and new-entity?
+                   (not page?)
+                   (not (contains? attrs :block/uuid)))
+          (throw (ex-info "Missing block identity in reversed tx"
+                          {:error :block-moved-or-target-deleted
+                           :entity-id e
+                           :attrs attrs})))
+
+        (when (and new-entity?
+                   (contains? attrs :block/uuid)
+                   (not page?)
+                   (nil? parent))
+          (throw (ex-info "Missing block parent in reversed tx"
+                          {:error :block-parent-missing
+                           :entity-id e
+                           :attrs attrs})))
+
+        (when (and parent
+                   (not (entity-exists-or-added? conn added-attrs parent)))
+          (throw (ex-info "Parent deleted in reversed tx"
+                          {:error :block-moved-or-target-deleted
+                           :entity-id e
+                           :parent-id parent
+                           :attrs attrs})))
+
+        (when (and page
+                   (not (entity-exists-or-added? conn added-attrs page)))
+          (throw (ex-info "Page deleted in reversed tx"
+                          {:error :block-moved-or-target-deleted
+                           :entity-id e
+                           :page-id page
+                           :attrs attrs})))))))
+
 (defn get-reversed-datoms
-  [conn undo? {:keys [tx-data added-ids retracted-ids] :as op} tx-meta]
+  [conn undo? {:keys [tx-data added-ids retracted-ids] :as op}]
   (try
     (let [redo? (not undo?)
           e->datoms (->> (if redo? tx-data (reverse tx-data))
                          (group-by :e))
           schema (:schema @conn)
-          moved-blocks (get-moved-blocks e->datoms)]
-      (->>
-       (mapcat
-        (fn [[e datoms]]
-          (let [entity (d/entity @conn e)]
-            (cond
-              ;; new children blocks have been added
-              (and
-               (not (:local-tx? tx-meta))
-               (or (and (contains? retracted-ids e) redo?
-                        (other-children-exist? entity retracted-ids)) ; redo delete-blocks
-                   (and (contains? added-ids e) undo?                 ; undo insert-blocks
-                        (other-children-exist? entity added-ids))))
-              (throw (ex-info "Children still exists"
-                              (merge op {:error :block-children-exists
-                                         :undo? undo?})))
+          moved-blocks (get-moved-blocks e->datoms)
+          reversed-tx-data (->> (mapcat
+                                 (fn [[e datoms]]
+                                   (let [entity (d/entity @conn e)]
+                                     (cond
+                                         ;; New children may have been added after the original op.
+                                       (or (and (contains? retracted-ids e) redo?
+                                                (other-children-exist? entity retracted-ids)) ; redo delete-blocks
+                                           (and (contains? added-ids e) undo?
+                                                (other-children-exist? entity added-ids))) ; undo insert-blocks
+                                       (throw (ex-info "Children still exists"
+                                                       (merge op {:error :block-children-exists
+                                                                  :undo? undo?})))
 
-              ;; block has been moved or target got deleted by another client
-              (block-moved-and-target-deleted? conn e->datoms e moved-blocks tx-data)
-              (throw (ex-info "This block has been moved or its target has been deleted"
-                              (merge op {:error :block-moved-or-target-deleted
-                                         :undo? undo?})))
+                                         ;; Block has moved or target got deleted.
+                                       (block-moved-and-target-deleted? conn e->datoms e moved-blocks tx-data)
+                                       (throw (ex-info "This block has been moved or its target has been deleted"
+                                                       (merge op {:error :block-moved-or-target-deleted
+                                                                  :undo? undo?})))
 
-              ;; The entity should be deleted instead of retracting its attributes
-              (and entity
-                   (or (and (contains? retracted-ids e) redo?) ; redo delete-blocks
-                       (and (contains? added-ids e) undo?)))   ; undo insert-blocks
-              [[:db/retractEntity e]]
+                                         ;; Delete entity instead of retracting attrs one-by-one.
+                                       (and entity
+                                            (or (and (contains? retracted-ids e) redo?) ; redo delete-blocks
+                                                (and (contains? added-ids e) undo?)))   ; undo insert-blocks
+                                       [[:db/retractEntity e]]
 
-              :else
-              (reverse-datoms conn datoms schema added-ids retracted-ids undo? redo?))))
-        e->datoms)
-       (remove nil?)))
+                                       :else
+                                       (reverse-datoms conn datoms schema added-ids retracted-ids undo? redo?))))
+                                 e->datoms)
+                                (remove nil?))]
+      (assert-reversed-tx-safe! conn reversed-tx-data)
+      reversed-tx-data)
     (catch :default e
       (prn :debug :undo-redo :error (:error (ex-data e)))
       (when-not (contains? #{:block-moved-or-target-deleted
-                             :block-children-exists}
+                             :block-children-exists
+                             :block-parent-missing}
                            (:error (ex-data e)))
         (throw e)))))
 
@@ -267,7 +353,7 @@
         (let [{:keys [tx-data tx-meta] :as data} (some #(when (= ::db-transact (first %))
                                                           (second %)) op)]
           (when (seq tx-data)
-            (let [reversed-tx-data (cond-> (get-reversed-datoms conn undo? data tx-meta)
+            (let [reversed-tx-data (cond-> (get-reversed-datoms conn undo? data)
                                      undo?
                                      reverse)
                   tx-meta' (-> tx-meta

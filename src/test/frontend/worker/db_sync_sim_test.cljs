@@ -87,6 +87,8 @@
     {:repro repro
      :restore (fn [] (reset! ldb/*transact-invalid-callback prev))}))
 
+(declare op-runs assert-synced-attrs! assert-no-invalid-tx!)
+
 (deftest ^:long rng-uuid-deterministic-test
   (testing "rng-uuid produces stable sequences for the same seed"
     (let [rng-a (make-rng 42)
@@ -249,6 +251,7 @@
   (let [txs (mapcat :tx pending)]
     (->> txs
          (db-normalize/remove-retract-entity-ref @conn)
+         (#'db-sync/drop-missing-block-ref-datoms @conn)
          distinct
          vec)))
 
@@ -281,7 +284,7 @@
 
 (defn- sync-loop! [server clients]
   (loop [i 0]
-    (when (< i 8)
+    (when (< i 32)
       (let [progress? (atom false)]
         (doseq [client clients]
           (when (sync-client! server client)
@@ -290,15 +293,63 @@
           (recur (inc i))))))
   (let [conns (keep (fn [c] (when (:online? c) (:conn c))) clients)]
     (when (seq conns)
-      (let [block-counts (map #(count (d/datoms (deref %) :avet :block/uuid)) conns)]
+      (let [online-clients (filter :online? clients)
+            client-block-uuids (mapv (fn [c]
+                                       (let [uuids (->> (d/datoms (deref (:conn c)) :avet :block/uuid)
+                                                        (map :v)
+                                                        set)]
+                                         {:repo (:repo c)
+                                          :uuids uuids
+                                          :datoms-count (count uuids)}))
+                                     online-clients)
+            server-uuids (->> (d/datoms @(get @server :conn) :avet :block/uuid)
+                              (map :v)
+                              set)
+            client-sync-states (mapv (fn [c]
+                                       {:repo (:repo c)
+                                        :pending-count (count (#'db-sync/pending-txs (:repo c)))
+                                        :local-tx (client-op/get-local-tx (:repo c))
+                                        :server-t (:t @server)})
+                                     online-clients)
+            base-uuids (:uuids (first client-block-uuids))
+            block-counts (map :datoms-count client-block-uuids)
+            block-uuid-diffs (mapv (fn [{:keys [repo uuids]}]
+                                     {:repo repo
+                                      :missing-count (count (set/difference base-uuids uuids))
+                                      :extra-count (count (set/difference uuids base-uuids))
+                                      :missing-sample (->> (set/difference base-uuids uuids)
+                                                           (take 5)
+                                                           vec)
+                                      :extra-sample (->> (set/difference uuids base-uuids)
+                                                         (take 5)
+                                                         vec)})
+                                   client-block-uuids)]
         (when-not (= (count (distinct block-counts)) 1)
           (throw (ex-info "blocks count not equal after sync"
                           {:block-counts block-counts
-                           :clients (keep (fn [c]
-                                            (when (:online? c)
-                                              {:repo (:repo c)
-                                               :datoms-count (count (d/datoms (deref (:conn c)) :avet :block/uuid))}))
-                                          clients)})))))))
+                           :clients (mapv #(select-keys % [:repo :datoms-count]) client-block-uuids)
+                           :sync-states client-sync-states
+                           :server {:datoms-count (count server-uuids)
+                                    :missing-from-a (->> (set/difference base-uuids server-uuids)
+                                                         (take 5)
+                                                         vec)
+                                    :extra-vs-a (->> (set/difference server-uuids base-uuids)
+                                                     (take 5)
+                                                     vec)}
+                           :block-uuid-diffs block-uuid-diffs})))))))
+
+(defn- sync-until-idle!
+  [server clients max-rounds]
+  (loop [i 0]
+    (if (< i max-rounds)
+      (let [progress? (atom false)]
+        (doseq [client clients]
+          (when (sync-client! server client)
+            (reset! progress? true)))
+        (if @progress?
+          (recur (inc i))
+          i))
+      i)))
 
 (deftest ^:long sync-loop-all-offline-no-error-test
   (testing "sync-loop tolerates all clients offline"
@@ -528,13 +579,7 @@
 
 (defn- op-delete-block! [rng conn state]
   (let [db @conn
-        ;; Keep delete operations leaf-only in sim runs. Undo/redo for nested
-        ;; subtree deletes is intentionally covered elsewhere and can produce
-        ;; unstable random histories here.
-        blocks (->> (existing-blocks db (:blocks @state))
-                    (filter (fn [block]
-                              (empty? (:block/_parent block)))))
-        block (rand-nth! rng (vec blocks))]
+        block (rand-nth! rng (vec (existing-blocks db (:blocks @state))))]
     (when (and block (d/entity @conn [:block/uuid (:block/uuid block)]))
       (delete-block! conn (:block/uuid block))
       (swap! state update :blocks disj (:block/uuid block))
@@ -836,11 +881,13 @@
           (let [target-uuid (:block/uuid target)
                 direct-children (ldb/sort-by-order (:block/_parent source))]
             (when (seq direct-children)
-              ;; Simulate "cut + paste into empty target block" using stable outliner ops:
-              ;; move source to target position, then remove the empty target.
-              (outliner-core/move-blocks! conn [source] target {:sibling? true})
-              (when-let [target' (d/entity @conn [:block/uuid target-uuid])]
-                (outliner-core/delete-blocks! conn [target'] {}))
+              ;; Simulate "cut + paste into empty target block" in a single outliner
+              ;; transaction to avoid intermediate sync states.
+              (outliner-op/apply-ops!
+               conn
+               [[:move-blocks [[(:db/id source)] (:db/id target) {:sibling? true}]]
+                [:delete-blocks [[(:db/id target)] {}]]]
+               {})
               (swap! state update :blocks disj target-uuid)
               {:op :cut-paste-block-with-child
                :uuid source-uuid
@@ -853,30 +900,11 @@
       (when (not= :frontend.undo-redo/empty-undo-stack result)
         {:op :undo}))))
 
-(def ^:private redo-op-skip-set
-  #{:insert-blocks
-    :delete-blocks
-    :move-blocks
-    :move-blocks-up-down
-    :indent-outdent-blocks
-    :paste})
-
-(defn- peek-redo-outliner-op
-  [repo]
-  (let [stack (get @undo-redo/*redo-ops repo)
-        op (peek stack)]
-    (some (fn [item]
-            (when (= ::undo-redo/db-transact (first item))
-              (get-in item [1 :tx-meta :outliner-op])))
-          op)))
-
 (defn- op-redo! [_rng repo]
   (when repo
-    (let [outliner-op (peek-redo-outliner-op repo)]
-      (when-not (contains? redo-op-skip-set outliner-op)
-        (let [result (undo-redo/redo repo)]
-          (when (not= :frontend.undo-redo/empty-redo-stack result)
-            {:op :redo}))))))
+    (let [result (undo-redo/redo repo)]
+      (when (not= :frontend.undo-redo/empty-redo-stack result)
+        {:op :redo}))))
 
 (def ^:private op-table
   [{:name :create-page :weight 6 :f op-create-page!}
@@ -903,8 +931,8 @@
    {:name :indent-outdent-blocks :weight 3 :f op-indent-outdent-blocks!}
    {:name :toggle-reaction :weight 2 :f op-toggle-reaction!}
    {:name :transact :weight 3 :f op-transact!}
-   {:name :undo :weight 2 :f op-undo!}
-   {:name :redo :weight 2 :f op-redo!}
+   {:name :undo :weight 10 :f op-undo!}
+   {:name :redo :weight 10 :f op-redo!}
    {:name :create-block :weight 10 :f op-create-block!}
    {:name :move-block :weight 6 :f op-move-block!}
    {:name :cut-paste-block-with-child :weight 4 :f op-cut-paste-block-with-child!}
@@ -1032,7 +1060,7 @@
           state-a (atom {:pages #{base-uuid} :blocks #{}})]
       (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}}
         (fn []
-          (let [{:keys [repro restore]} (install-invalid-tx-repro! seed history)]
+          (let [{:keys [_repro restore]} (install-invalid-tx-repro! seed history)]
             (try
               (reset! db-sync/*repo->latest-remote-tx {})
               (record-meta! history {:seed seed :base-uuid base-uuid})
@@ -1046,7 +1074,8 @@
                     (run-ops! rng (assoc client :base-uuid base-uuid :state state-a)
                               1
                               history
-                              {:context {:phase :phase-a}})
+                              {:pick-op-opts {:disable-ops #{:undo :redo}}
+                               :context {:phase :phase-a}})
                     (sync-loop! server clients)))
 
                 ;; Phase B: offline
@@ -1056,7 +1085,8 @@
                     (run-ops! rng {:repo repo-a :conn conn-a :base-uuid base-uuid :state state-a :gen-uuid gen-uuid}
                               1
                               history
-                              {:context {:phase :phase-b-offline}})
+                              {:pick-op-opts {:disable-ops #{:undo :redo}}
+                               :context {:phase :phase-b-offline}})
                     (sync-loop! server clients-a)))
 
                 ;; Phase C: reconnect
@@ -1075,6 +1105,134 @@
                 (let [attrs-a (block-attr-map @conn-a)]
                   (is (seq attrs-a)
                       (str "db empty seed=" seed " history=" (count @history)))))
+              (finally
+                (restore)))))))))
+
+(deftest ^:long ^:large-vars/cleanup-todo two-clients-offline-concurrent-undo-redo-merge-sim-test
+  (testing "client B keeps anchor blocks/titles after reconnect while client A does heavy undo/redo"
+    (let [seed (or (env-seed) default-seed)
+          rng (make-rng seed)
+          gen-uuid #(rng-uuid rng)
+          base-uuid (gen-uuid)
+          conn-a (db-test/create-conn)
+          conn-b (db-test/create-conn)
+          ops-a (d/create-conn client-op/schema-in-db)
+          ops-b (d/create-conn client-op/schema-in-db)
+          client-a (make-client repo-a)
+          client-b (make-client repo-b)
+          server (make-server)
+          history (atom [])
+          state-a (atom {:pages #{base-uuid} :blocks #{}})
+          state-b (atom {:pages #{base-uuid} :blocks #{}})]
+      (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}
+                        repo-b {:conn conn-b :ops-conn ops-b}}
+        (fn []
+          (let [{:keys [repro restore]} (install-invalid-tx-repro! seed history)]
+            (try
+              (reset! db-sync/*repo->latest-remote-tx {})
+              (record-meta! history {:seed seed :base-uuid base-uuid})
+              (doseq [conn [conn-a conn-b]]
+                (ensure-base-page! conn base-uuid))
+              (doseq [repo [repo-a repo-b]]
+                (client-op/update-local-tx repo 0))
+
+              ;; Seed stable anchors (non-empty titles) that A won't touch.
+              (let [base-a (d/entity @conn-a [:block/uuid base-uuid])
+                    anchor-uuids (vec
+                                  (for [i (range 10)]
+                                    (let [u (gen-uuid)]
+                                      (create-block! conn-a base-a (str "anchor-" i) u)
+                                      u)))
+                    clients-online [{:repo repo-a :conn conn-a :client client-a :online? true :gen-uuid gen-uuid}
+                                    {:repo repo-b :conn conn-b :client client-b :online? true :gen-uuid gen-uuid}]
+                    clients-a-only [{:repo repo-a :conn conn-a :client client-a :online? true :gen-uuid gen-uuid}
+                                    {:repo repo-b :conn conn-b :client client-b :online? false :gen-uuid gen-uuid}]]
+                (sync-loop! server clients-online)
+
+                ;; A online: heavy add/remove/cut-paste + undo/redo while B offline.
+                (let [a-parent (gen-uuid)
+                      a-child (gen-uuid)
+                      a-target (gen-uuid)
+                      base-a (d/entity @conn-a [:block/uuid base-uuid])]
+                  (create-block! conn-a base-a "a-parent" a-parent)
+                  (create-block! conn-a (d/entity @conn-a [:block/uuid a-parent]) "a-child" a-child)
+                  (create-block! conn-a base-a "" a-target)
+                  (swap! state-a update :blocks into #{a-parent a-child a-target}))
+
+                ;; B local workspace (separate from anchors).
+                (let [b-parent (gen-uuid)
+                      b-child (gen-uuid)
+                      b-target (gen-uuid)
+                      base-b (d/entity @conn-b [:block/uuid base-uuid])]
+                  (create-block! conn-b base-b "b-parent" b-parent)
+                  (create-block! conn-b (d/entity @conn-b [:block/uuid b-parent]) "b-child" b-child)
+                  (create-block! conn-b base-b "" b-target)
+                  (swap! state-b update :blocks into #{b-parent b-child b-target}))
+
+                (dotimes [_ op-runs]
+                  (run-ops! rng {:repo repo-a
+                                 :conn conn-a
+                                 :base-uuid base-uuid
+                                 :state state-a
+                                 :gen-uuid gen-uuid}
+                            1
+                            history
+                            {:pick-op-opts {:enable-ops #{:undo
+                                                          :redo
+                                                          :create-block
+                                                          :delete-block
+                                                          :cut-paste-block-with-child}}
+                             :context {:phase :a-online-b-offline}})
+                  (sync-loop! server clients-a-only))
+
+                ;; B offline: local edits to anchors + local block ops.
+                (dotimes [i op-runs]
+                  (when-let [anchor-uuid (rand-nth! rng anchor-uuids)]
+                    (when-let [ent (d/entity @conn-b [:block/uuid anchor-uuid])]
+                      (let [new-title (str "b-local-" i)]
+                        (update-title! conn-b anchor-uuid new-title)
+                        (swap! history conj {:type :op
+                                             :op :update-title
+                                             :repo repo-b
+                                             :uuid anchor-uuid
+                                             :title new-title
+                                             :step i
+                                             :anchor-existed? (some? ent)
+                                             :context {:phase :b-offline-local-anchor-edit}}))))
+                  (run-ops! rng {:repo repo-b
+                                 :conn conn-b
+                                 :base-uuid base-uuid
+                                 :state state-b
+                                 :gen-uuid gen-uuid}
+                            1
+                            history
+                            {:pick-op-opts {:enable-ops #{:undo
+                                                          :redo
+                                                          :create-block
+                                                          :delete-block
+                                                          :cut-paste-block-with-child}}
+                             :context {:phase :b-offline-local-ops}}))
+
+                ;; Reconnect and merge (large backlogs need many rounds).
+                (let [rounds (sync-until-idle! server clients-online 300)]
+                  (is (< rounds 300)
+                      (str "sync did not become idle seed=" seed " rounds=" rounds)))
+
+                (let [issues-a (db-issues @conn-a)
+                      issues-b (db-issues @conn-b)
+                      attrs-a (block-attr-map @conn-a)
+                      attrs-b (block-attr-map @conn-b)]
+                  (is (empty? issues-a) (str "db A issues seed=" seed " " (pr-str issues-a)))
+                  (is (empty? issues-b) (str "db B issues seed=" seed " " (pr-str issues-b)))
+                  (assert-synced-attrs! seed history attrs-a attrs-b attrs-b)
+                  (doseq [anchor-uuid anchor-uuids]
+                    (let [ent-a (d/entity @conn-a [:block/uuid anchor-uuid])
+                          ent-b (d/entity @conn-b [:block/uuid anchor-uuid])]
+                      (is (some? ent-a) (str "anchor missing in A seed=" seed " uuid=" anchor-uuid))
+                      (is (some? ent-b) (str "anchor missing in B seed=" seed " uuid=" anchor-uuid))
+                      (is (not (string/blank? (or (:block/title ent-a) ""))) (str "anchor title blank in A seed=" seed " uuid=" anchor-uuid))
+                      (is (not (string/blank? (or (:block/title ent-b) ""))) (str "anchor title blank in B seed=" seed " uuid=" anchor-uuid))))
+                  (assert-no-invalid-tx! seed history repro)))
               (finally
                 (restore)))))))))
 
@@ -1176,7 +1334,7 @@
       (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}
                         repo-b {:conn conn-b :ops-conn ops-b}}
         (fn []
-          (let [{:keys [repro restore]} (install-invalid-tx-repro! seed history)]
+          (let [{:keys [_repro restore]} (install-invalid-tx-repro! seed history)]
             (try
               (reset! db-sync/*repo->latest-remote-tx {})
               (record-meta! history {:seed seed :base-uuid base-uuid})
@@ -1188,7 +1346,8 @@
                              {:repo repo-b :conn conn-b :client client-b :online? true :gen-uuid gen-uuid}]]
                 (prn :debug :phase-a)
                 (run-random-ops! rng server clients repo->state base-uuid history
-                                 {:context {:phase :phase-a}}
+                                 {:pick-op-opts {:disable-ops #{:undo :redo}}
+                                  :context {:phase :phase-a}}
                                  op-runs)
                 (prn :debug :final-sync)
                 (sync-loop! server clients)
@@ -1382,71 +1541,80 @@
                              {:repo repo-b :conn conn-b :client client-b :online? true :gen-uuid gen-uuid}
                              {:repo repo-c :conn conn-c :client client-c :online? true :gen-uuid gen-uuid}]
                     ;; run-ops-opts {:pick-op-opts {:disable-ops #{:move-block}}}
-                    run-ops-opts {}]
-                (prn :debug :phase-a)
+                    run-ops-opts {:pick-op-opts {:disable-ops #{:undo :redo}}}]
+                (letfn [(sync-or-report! [phase]
+                          (try
+                            (sync-loop! server clients)
+                            (catch :default e
+                              (report-history! seed history
+                                               (merge {:type :sync-loop-error
+                                                       :phase phase}
+                                                      (ex-data e)))
+                              (throw e))))]
+                  (prn :debug :phase-a)
                 ;; Phase A: all online
-                (run-random-ops! rng server clients repo->state base-uuid history
-                                 (assoc run-ops-opts :context {:phase :phase-a})
-                                 op-runs)
+                  (run-random-ops! rng server clients repo->state base-uuid history
+                                   (assoc run-ops-opts :context {:phase :phase-a})
+                                   op-runs)
 
                 ;; Phase B: C offline, A/B online
-                (prn :debug :phase-b-c-offline)
-                (let [clients-phase-b [{:repo repo-a :conn conn-a :client client-a :online? true}
-                                       {:repo repo-b :conn conn-b :client client-b :online? true}
-                                       {:repo repo-c :conn conn-c :client client-c :online? false}]]
-                  (run-random-ops! rng server
-                                   (subvec (vec (mapv #(assoc % :gen-uuid gen-uuid) clients-phase-b)) 0 2)
-                                   repo->state
-                                   base-uuid
-                                   history
-                                   (assoc run-ops-opts :context {:phase :phase-b-ab-online})
-                                   op-runs)
-                  (run-local-ops! rng conn-c base-uuid state-c history
-                                  (assoc run-ops-opts :context {:phase :phase-b-c-offline})
-                                  op-runs
-                                  gen-uuid))
+                  (prn :debug :phase-b-c-offline)
+                  (let [clients-phase-b [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                         {:repo repo-b :conn conn-b :client client-b :online? true}
+                                         {:repo repo-c :conn conn-c :client client-c :online? false}]]
+                    (run-random-ops! rng server
+                                     (subvec (vec (mapv #(assoc % :gen-uuid gen-uuid) clients-phase-b)) 0 2)
+                                     repo->state
+                                     base-uuid
+                                     history
+                                     (assoc run-ops-opts :context {:phase :phase-b-ab-online})
+                                     op-runs)
+                    (run-local-ops! rng conn-c base-uuid state-c history
+                                    (assoc run-ops-opts :context {:phase :phase-b-c-offline})
+                                    op-runs
+                                    gen-uuid))
 
                 ;; Phase C: reconnect C
-                (prn :debug :phase-c-reconnect)
-                (sync-loop! server clients)
+                  (prn :debug :phase-c-reconnect)
+                  (sync-or-report! :phase-c-reconnect)
 
                 ;; Phase D: A offline, B/C online
-                (prn :debug :phase-d-a-offline)
-                (let [clients-phase-d [{:repo repo-a :conn conn-a :client client-a :online? false}
-                                       {:repo repo-b :conn conn-b :client client-b :online? true}
-                                       {:repo repo-c :conn conn-c :client client-c :online? true}]]
-                  (run-random-ops! rng server
-                                   (subvec (vec (mapv #(assoc % :gen-uuid gen-uuid) clients-phase-d)) 1 3)
-                                   repo->state
-                                   base-uuid
-                                   history
-                                   (assoc run-ops-opts :context {:phase :phase-d-bc-online})
-                                   op-runs)
-                  (run-local-ops! rng conn-a base-uuid state-a history
-                                  (assoc run-ops-opts :context {:phase :phase-d-a-offline})
-                                  op-runs
-                                  gen-uuid))
+                  (prn :debug :phase-d-a-offline)
+                  (let [clients-phase-d [{:repo repo-a :conn conn-a :client client-a :online? false}
+                                         {:repo repo-b :conn conn-b :client client-b :online? true}
+                                         {:repo repo-c :conn conn-c :client client-c :online? true}]]
+                    (run-random-ops! rng server
+                                     (subvec (vec (mapv #(assoc % :gen-uuid gen-uuid) clients-phase-d)) 1 3)
+                                     repo->state
+                                     base-uuid
+                                     history
+                                     (assoc run-ops-opts :context {:phase :phase-d-bc-online})
+                                     op-runs)
+                    (run-local-ops! rng conn-a base-uuid state-a history
+                                    (assoc run-ops-opts :context {:phase :phase-d-a-offline})
+                                    op-runs
+                                    gen-uuid))
 
                 ;; Final sync
-                (prn :debug :final-sync)
-                (sync-loop! server clients)
+                  (prn :debug :final-sync)
+                  (sync-or-report! :final-sync)
 
-                (let [issues-a (db-issues @conn-a)
-                      issues-b (db-issues @conn-b)
-                      issues-c (db-issues @conn-c)]
-                  (when (seq issues-a)
-                    (report-history! seed history {:type :db-issues :repo repo-a :issues issues-a}))
-                  (when (seq issues-b)
-                    (report-history! seed history {:type :db-issues :repo repo-b :issues issues-b}))
-                  (when (seq issues-c)
-                    (report-history! seed history {:type :db-issues :repo repo-c :issues issues-c}))
-                  (is (empty? issues-a) (str "db A issues seed=" seed " " (pr-str issues-a)))
-                  (is (empty? issues-b) (str "db B issues seed=" seed " " (pr-str issues-b)))
-                  (is (empty? issues-c) (str "db C issues seed=" seed " " (pr-str issues-c))))
+                  (let [issues-a (db-issues @conn-a)
+                        issues-b (db-issues @conn-b)
+                        issues-c (db-issues @conn-c)]
+                    (when (seq issues-a)
+                      (report-history! seed history {:type :db-issues :repo repo-a :issues issues-a}))
+                    (when (seq issues-b)
+                      (report-history! seed history {:type :db-issues :repo repo-b :issues issues-b}))
+                    (when (seq issues-c)
+                      (report-history! seed history {:type :db-issues :repo repo-c :issues issues-c}))
+                    (is (empty? issues-a) (str "db A issues seed=" seed " " (pr-str issues-a)))
+                    (is (empty? issues-b) (str "db B issues seed=" seed " " (pr-str issues-b)))
+                    (is (empty? issues-c) (str "db C issues seed=" seed " " (pr-str issues-c))))
 
-                (let [attrs-a (block-attr-map @conn-a)
-                      attrs-b (block-attr-map @conn-b)
-                      attrs-c (block-attr-map @conn-c)]
-                  (assert-synced-attrs! seed history attrs-a attrs-b attrs-c)))
+                  (let [attrs-a (block-attr-map @conn-a)
+                        attrs-b (block-attr-map @conn-b)
+                        attrs-c (block-attr-map @conn-c)]
+                    (assert-synced-attrs! seed history attrs-a attrs-b attrs-c))))
               (finally
                 (restore)))))))))
