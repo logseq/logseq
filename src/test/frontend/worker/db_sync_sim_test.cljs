@@ -1,6 +1,7 @@
 (ns frontend.worker.db-sync-sim-test
   (:require [cljs.test :refer [deftest is testing]]
             [clojure.data :as data]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.state :as worker-state]
@@ -410,29 +411,97 @@
       (swap! state update :blocks disj (:block/uuid block))
       {:op :delete-block :uuid (:block/uuid block)})))
 
+(defn- block-and-descendant-uuids
+  [db block]
+  (->> (cons (:db/id block) (ldb/get-block-full-children-ids db (:db/id block)))
+       (keep (fn [id]
+               (:block/uuid (d/entity db id))))
+       set))
+
+(defn- op-cut-paste-block-with-child! [rng conn state _base-uuid]
+  (let [db @conn
+        sources (->> (existing-blocks db (:blocks @state))
+                     (filter (fn [block]
+                               (seq (ldb/sort-by-order (:block/_parent block))))))
+        source (rand-nth! rng (vec sources))]
+    (when source
+      (let [source-uuid (:block/uuid source)
+            source-page-uuid (:block/uuid (:block/page source))
+            source-descendants (block-and-descendant-uuids db source)
+            targets (->> (existing-blocks db (:blocks @state))
+                         (remove (fn [target]
+                                   (contains? source-descendants (:block/uuid target))))
+                         (filter (fn [target]
+                                   (and (= source-page-uuid
+                                           (:block/uuid (:block/page target)))
+                                        (string/blank? (or (:block/title target) ""))
+                                        (empty? (:block/_parent target))))))
+            target (rand-nth! rng (vec targets))]
+        (when target
+          (let [target-uuid (:block/uuid target)
+                target-page-uuid (:block/uuid (:block/page target))
+                direct-children (ldb/sort-by-order (:block/_parent source))
+                now (.now js/Date)
+                updated-at (or (:block/updated-at source) (:block/updated-at target) now)]
+            (when (and target-page-uuid (seq direct-children))
+              (ldb/transact! conn
+                             (vec
+                              (concat
+                               [[:db/retractEntity [:block/uuid source-uuid]]
+                                [:db/add [:block/uuid target-uuid] :block/title (or (:block/title source) "")]
+                                [:db/add [:block/uuid target-uuid] :block/updated-at updated-at]]
+                               (mapcat (fn [child]
+                                         [[:db/add [:block/uuid (:block/uuid child)]
+                                           :block/parent
+                                           [:block/uuid target-uuid]]
+                                          [:db/add [:block/uuid (:block/uuid child)]
+                                           :block/page
+                                           [:block/uuid target-page-uuid]]])
+                                       direct-children)))
+                             {:outliner-op :paste})
+              (swap! state update :blocks disj source-uuid)
+              {:op :cut-paste-block-with-child
+               :uuid source-uuid
+               :target target-uuid
+               :children (mapv :block/uuid direct-children)})))))))
+
 ;; TODO: add tag/property/migrate/undo/redo ops
 (def ^:private op-table
   [{:name :create-page :weight 6 :f op-create-page!}
    {:name :delete-page :weight 2 :f op-delete-page!}
    {:name :create-block :weight 10 :f op-create-block!}
    {:name :move-block :weight 6 :f op-move-block!}
+   {:name :cut-paste-block-with-child :weight 4 :f op-cut-paste-block-with-child!}
    {:name :delete-block :weight 4 :f op-delete-block!}
    {:name :update-title :weight 8 :f op-update-title!}])
 
-(defn- pick-op [rng {:keys [disable-ops]}]
-  (let [op-table' (if (seq disable-ops)
-                    (remove (fn [item] (contains? disable-ops (:name item))) op-table)
-                    op-table)
-        total (reduce + (map :weight op-table'))
-        target (rand-int! rng total)]
-    (loop [remaining target
-           [op & rest-ops] op-table']
-      (if (nil? op)
-        (first op-table')
-        (let [weight (:weight op)]
-          (if (< remaining weight)
-            op
-            (recur (- remaining weight) rest-ops)))))))
+(deftest ^:long cut-paste-op-registered-in-sim-op-table-test
+  (testing "sim op-table includes cut-paste op for random sync stress"
+    (is (contains? (set (map :name op-table))
+                   :cut-paste-block-with-child))))
+
+(defn- pick-op [rng {:keys [disable-ops enable-ops]}]
+  (let [op-table' (cond->> op-table
+                    (seq enable-ops)
+                    (filter (fn [item] (contains? enable-ops (:name item))))
+
+                    (seq disable-ops)
+                    (remove (fn [item] (contains? disable-ops (:name item)))))
+        op-table' (vec op-table')]
+    (when (empty? op-table')
+      (throw (ex-info "No available sim ops after filtering"
+                      {:enable-ops enable-ops
+                       :disable-ops disable-ops})))
+    (let [total (reduce + (map :weight op-table'))
+          target (rand-int! rng total)]
+      (loop [remaining target
+             [op & rest-ops] op-table']
+        (if (nil? op)
+          (first op-table')
+          (let [weight (:weight op)]
+            (if (< remaining weight)
+              op
+              (recur (- remaining weight) rest-ops))))))))
 
 (defn- run-ops! [rng {:keys [repo conn base-uuid state gen-uuid]} steps history & {:keys [pick-op-opts context]}]
   (dotimes [step steps]
@@ -444,6 +513,7 @@
                    :create-block (f rng conn state base-uuid {:gen-uuid gen-uuid})
                    :update-title (f rng conn state base-uuid)
                    :move-block (f rng conn state base-uuid)
+                   :cut-paste-block-with-child (f rng conn state base-uuid)
                    :delete-block (f rng conn state)
                    (f rng conn))]
       (when result
@@ -625,6 +695,73 @@
                   (is (empty? issues-b) (str "db B issues seed=" seed " " (pr-str issues-b))))
                 (let [attrs-a (block-attr-map @conn-a)
                       attrs-b (block-attr-map @conn-b)]
+                  (assert-synced-attrs! seed history attrs-a attrs-b attrs-b)))
+              (finally
+                (restore)))))))))
+
+(deftest ^:long two-clients-cut-paste-random-sim-test
+  (testing "db-sync convergence under random cut-paste with child operations"
+    (let [seed (or (env-seed) default-seed)
+          rng (make-rng seed)
+          gen-uuid #(rng-uuid rng)
+          base-uuid (gen-uuid)
+          conn-a (db-test/create-conn)
+          conn-b (db-test/create-conn)
+          ops-a (d/create-conn client-op/schema-in-db)
+          ops-b (d/create-conn client-op/schema-in-db)
+          client-a (make-client repo-a)
+          client-b (make-client repo-b)
+          server (make-server)
+          history (atom [])
+          state-a (atom {:pages #{base-uuid} :blocks #{}})
+          state-b (atom {:pages #{base-uuid} :blocks #{}})]
+      (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}
+                        repo-b {:conn conn-b :ops-conn ops-b}}
+        (fn []
+          (let [{:keys [restore]} (install-invalid-tx-repro! seed history)]
+            (try
+              (reset! db-sync/*repo->latest-remote-tx {})
+              (record-meta! history {:seed seed :base-uuid base-uuid})
+              (doseq [conn [conn-a conn-b]]
+                (ensure-base-page! conn base-uuid))
+              (doseq [repo [repo-a repo-b]]
+                (client-op/update-local-tx repo 0))
+              (let [clients [{:repo repo-a :conn conn-a :client client-a :online? true :gen-uuid gen-uuid}
+                             {:repo repo-b :conn conn-b :client client-b :online? true :gen-uuid gen-uuid}]
+                    base-a (d/entity @conn-a [:block/uuid base-uuid])
+                    parent-uuid (gen-uuid)
+                    child-uuid (gen-uuid)
+                    target-uuid (gen-uuid)]
+                (create-block! conn-a base-a "seed-parent" parent-uuid)
+                (let [parent (d/entity @conn-a [:block/uuid parent-uuid])]
+                  (create-block! conn-a parent "seed-child" child-uuid))
+                (create-block! conn-a base-a "" target-uuid)
+                (swap! state-a update :blocks into #{parent-uuid child-uuid target-uuid})
+
+                (dotimes [_ op-runs]
+                  (run-ops! rng {:repo repo-a
+                                 :conn conn-a
+                                 :base-uuid base-uuid
+                                 :state state-a
+                                 :gen-uuid gen-uuid}
+                            1
+                            history
+                            {:pick-op-opts {:enable-ops #{:cut-paste-block-with-child
+                                                          :create-block
+                                                          :move-block}}
+                             :context {:phase :cut-paste-random}})
+                  (sync-loop! server clients))
+                (sync-loop! server clients)
+
+                (let [issues-a (db-issues @conn-a)
+                      issues-b (db-issues @conn-b)
+                      attrs-a (block-attr-map @conn-a)
+                      attrs-b (block-attr-map @conn-b)
+                      cut-paste-ops (filter #(= :cut-paste-block-with-child (:op %)) @history)]
+                  (is (seq cut-paste-ops)
+                      (str "expected cut-paste ops seed=" seed " history=" (count @history)))
+                  (is (empty? issues-a) (str "db A issues seed=" seed " " (pr-str issues-a)))
+                  (is (empty? issues-b) (str "db B issues seed=" seed " " (pr-str issues-b)))
                   (assert-synced-attrs! seed history attrs-a attrs-b attrs-b)))
               (finally
                 (restore)))))))))
