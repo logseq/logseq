@@ -1498,14 +1498,14 @@
                      (dissoc :block/format :block.temp/ast-blocks)
                   ;;  ((fn [x] (prn ::block-out x) x))
                      )]
-    ;; Code snippet extraction: when enabled, tag standalone code blocks in-place
-    ;; and extract code fences from mixed-content blocks into independent children.
-    (let [extract? (get-in options [:user-options :extract-code-snippets?])
-          {:keys [text-parts code-segs]} (when extract?
-                                           (split-title-by-code-fences (:block/title block')))
+    ;; Always detect standalone code blocks and tag them in-place.
+    ;; Extracting code fences from mixed-content blocks into children requires extract-code-snippets?.
+    (let [{:keys [text-parts code-segs]} (split-title-by-code-fences (:block/title block'))
           pure-single-code? (and (= 1 (count code-segs))
                                  (every? string/blank? text-parts))
-          has-mixed-content? (and (seq code-segs)
+          extract? (get-in options [:user-options :extract-code-snippets?])
+          has-mixed-content? (and extract?
+                                  (seq code-segs)
                                   (some #(not (string/blank? %)) text-parts))
           [final-block code-children-tx]
           (cond
