@@ -696,6 +696,17 @@
     ;;   (prn :debug :sanitized-tx-data sanitized-tx-data))
     sanitized-tx-data))
 
+(defn- created-block-uuids
+  [tx-data]
+  (->> tx-data
+       (keep (fn [item]
+               (when (and (vector? item)
+                          (= :db/add (first item))
+                          (>= (count item) 4)
+                          (= :block/uuid (nth item 2)))
+                 (nth item 3))))
+       set))
+
 (defn- flush-pending!
   [repo client]
   (let [inflight @(:inflight client)
@@ -1224,11 +1235,16 @@
             *remote-deleted-ids (atom #{})
             *rebase-tx-data (atom [])
             db @conn
-            remote-deleted-blocks (->> tx-data
-                                       (keep (fn [item]
-                                               (when (= :db/retractEntity (first item))
-                                                 (d/entity db (second item))))))
-            remote-deleted-block-ids (set (map :block/uuid remote-deleted-blocks))
+            recreated-block-ids (created-block-uuids tx-data)
+            raw-remote-deleted-blocks (->> tx-data
+                                           (keep (fn [item]
+                                                   (when (= :db/retractEntity (first item))
+                                                     (d/entity db (second item))))))
+            raw-remote-deleted-block-ids (set (keep :block/uuid raw-remote-deleted-blocks))
+            remote-deleted-block-ids (set/difference raw-remote-deleted-block-ids recreated-block-ids)
+            remote-deleted-blocks (remove (fn [block]
+                                            (contains? recreated-block-ids (:block/uuid block)))
+                                          raw-remote-deleted-blocks)
             safe-remote-tx-data (->> tx-data
                                      (remove (fn [item]
                                                (or (= :db/retractEntity (first item))

@@ -385,6 +385,40 @@
           (let [child' (d/entity @conn [:block/uuid child-uuid])]
             (is (nil? child'))))))))
 
+(deftest ^:long cut-paste-parent-with-child-keeps-child-parent-after-sync-test
+  (testing "remote tx can retract and recreate target uuid; child should point to recreated parent"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "parent"
+                             :build/children [{:block/title "child"}]}
+                            {:block/title "target"}]}]})
+          parent (db-test/find-block-by-content @conn "parent")
+          child (db-test/find-block-by-content @conn "child")
+          target (db-test/find-block-by-content @conn "target")
+          page-uuid (:block/uuid (:block/page parent))
+          parent-uuid (:block/uuid parent)
+          child-uuid (:block/uuid child)
+          target-uuid (:block/uuid target)
+          target-order (:block/order target)]
+      (with-datascript-conns conn nil
+        (fn []
+          (#'db-sync/apply-remote-tx!
+           test-repo
+           nil
+           [[:db/retractEntity [:block/uuid parent-uuid]]
+            [:db/retractEntity [:block/uuid target-uuid]]
+            [:db/add -1 :block/uuid target-uuid]
+            [:db/add -1 :block/title "parent"]
+            [:db/add -1 :block/parent [:block/uuid page-uuid]]
+            [:db/add -1 :block/page [:block/uuid page-uuid]]
+            [:db/add -1 :block/order target-order]
+            [:db/add [:block/uuid child-uuid] :block/parent [:block/uuid target-uuid]]])
+          (let [parent' (d/entity @conn [:block/uuid target-uuid])
+                child' (d/entity @conn [:block/uuid child-uuid])]
+            (is (= "parent" (:block/title parent')))
+            (is (= (:db/id parent') (:db/id (:block/parent child'))))))))))
+
 (deftest ^:long fix-duplicate-orders-after-rebase-test
   (testing "duplicate order updates are fixed after remote rebase"
     (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
