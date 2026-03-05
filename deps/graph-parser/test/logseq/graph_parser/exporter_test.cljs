@@ -1050,3 +1050,61 @@
             "Both child blocks are tagged as Code-block")
         (is (every? #(= "bash" (:logseq.property.code/lang %)) children)
             "Both child blocks have bash language property")))))
+
+(deftest-async export-docs-graph-without-extract-code-snippet
+  (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-file-graph-to-db file-graph-dir conn {})
+          journal-page-eid (d/q '[:find ?p . :where [?p :block/journal-day 20260301]] @conn)
+          top-blocks (->> (d/q '[:find [?b ...]
+                                 :in $ ?page
+                                 :where
+                                 [?b :block/page ?page]
+                                 [?b :block/parent ?page]]
+                               @conn journal-page-eid)
+                          (map #(d/entity @conn %))
+                          (sort-by :block/order)
+                          vec)
+          get-direct-children (fn [block]
+                                (->> (d/q '[:find [?c ...]
+                                            :in $ ?parent
+                                            :where [?c :block/parent ?parent]]
+                                          @conn (:db/id block))
+                                     (map #(d/entity @conn %))))]
+
+    (testing "standalone code block with language tag is still tagged as Code-block"
+      (let [b (nth top-blocks 0)]
+        (is (= "it's a individual code snippet with language tag" (:block/title b))
+            "Standalone code block title has fences stripped")
+        (is (= 0 (count (get-direct-children b)))
+            "Standalone code block has no children")
+        (is (= #{:logseq.class/Code-block} (set (map :db/ident (:block/tags b))))
+            "Standalone code block is tagged as Code-block")
+        (is (= "markdown" (:logseq.property.code/lang b))
+            "Standalone code block has markdown language property")))
+
+    (testing "standalone code block without language tag is still tagged as Code-block"
+      (let [b (nth top-blocks 1)]
+        (is (= "it's a individual code snippet without language tag" (:block/title b))
+            "Standalone code block title has fences stripped")
+        (is (= 0 (count (get-direct-children b)))
+            "Standalone code block has no children")
+        (is (= #{:logseq.class/Code-block} (set (map :db/ident (:block/tags b))))
+            "Standalone code block is tagged as Code-block")
+        (is (= nil (:logseq.property.code/lang b))
+            "Standalone code block has no language property")))
+
+    (testing "mixed-content block is NOT extracted into children when extract-code-snippets? is false"
+      (let [b (nth top-blocks 2)]
+        (is (= 0 (count (get-direct-children b)))
+            "Block with text before code has no children extracted")
+        (is (string/includes? (:block/title b) "```")
+            "Block title retains raw code fence markup")))
+
+    (testing "another mixed-content block is NOT extracted when extract-code-snippets? is false"
+      (let [b (nth top-blocks 3)]
+        (is (= 0 (count (get-direct-children b)))
+            "Block with text surrounding code has no children extracted")
+        (is (string/includes? (:block/title b) "```")
+            "Block title retains raw code fence markup")))))
