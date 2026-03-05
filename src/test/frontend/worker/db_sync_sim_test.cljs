@@ -340,6 +340,47 @@
                   :block/page (when page (:block/uuid page))}])))
        (into {})))
 
+(def ^:private sim-default-property-title "Sim Default Property")
+
+(defn- find-property-by-title
+  [db title]
+  (some->> (d/q '[:find [?e ...]
+                  :in $ ?title
+                  :where
+                  [?e :block/title ?title]
+                  [?e :block/tags :logseq.class/Property]]
+                db title)
+           first
+           (d/entity db)))
+
+(defn- ensure-property!
+  [conn title schema]
+  (or (find-property-by-title @conn title)
+      (do
+        (outliner-op/apply-ops!
+         conn
+         [[:upsert-property [nil schema {:property-name title}]]]
+         {})
+        (find-property-by-title @conn title))))
+
+(defn- user-classes
+  [db]
+  (->> (d/q '[:find [?e ...]
+              :where
+              [?e :block/tags :logseq.class/Tag]
+              [?e :block/uuid]]
+            db)
+       (map (fn [e] (d/entity db e)))
+       (remove ldb/built-in?)))
+
+(defn- ensure-class!
+  [rng conn]
+  (or (rand-nth! rng (vec (user-classes @conn)))
+      (let [title (str "Class-" (rand-int! rng 1000000))
+            class-uuid (rng-uuid rng)]
+        (worker-page/create! conn title :uuid class-uuid :class? true)
+        (d/entity @conn [:block/uuid class-uuid]))))
+
 (defn- op-create-page! [rng conn state {:keys [gen-uuid]}]
   (let [uuid ((or gen-uuid random-uuid))
         title (str "Page-" (rand-int! rng 1000000))]
@@ -377,6 +418,12 @@
             (create-block! conn parent "" uuid)
             (swap! state update :blocks conj uuid)
             {:op :create-block :uuid uuid :parent parent-uuid}))))))
+
+(defn- ensure-random-block!
+  [rng conn state base-uuid gen-uuid]
+  (or (rand-nth! rng (vec (existing-blocks @conn (:blocks @state))))
+      (when-let [result (op-create-block! rng conn state base-uuid {:gen-uuid gen-uuid})]
+        (d/entity @conn [:block/uuid (:uuid result)]))))
 
 (defn- op-update-title! [rng conn state _base-uuid]
   (let [db @conn
@@ -432,8 +479,21 @@
 
 (defn- op-indent-outdent-blocks! [rng conn state]
   (let [db @conn
-        block (rand-nth! rng (vec (existing-blocks db (:blocks @state))))
-        indent? (zero? (rand-int! rng 2))]
+        blocks (vec (existing-blocks db (:blocks @state)))
+        indent? (zero? (rand-int! rng 2))
+        candidates (if indent?
+                     ;; Indent requires a left sibling.
+                     (filter (fn [b]
+                               (some? (ldb/get-left-sibling b)))
+                             blocks)
+                     ;; Outdent through outliner-core uses sibling move to parent.
+                     ;; Parent without parent triggers "not-allowed-move-block-page".
+                     ;; Avoid picking top-level page children for this op.
+                     (filter (fn [b]
+                               (let [parent (:block/parent b)]
+                                 (and parent (:block/parent parent))))
+                             blocks))
+        block (rand-nth! rng (vec candidates))]
     (when block
       (try
         (outliner-core/indent-outdent-blocks! conn [block] indent? {})
@@ -496,6 +556,227 @@
          :uuid uuid
          :title new-title}))))
 
+(defn- op-upsert-property! [_rng conn]
+  (let [title sim-default-property-title
+        schema {:logseq.property/type :default}
+        existing (find-property-by-title @conn title)]
+    (outliner-op/apply-ops!
+     conn
+     [[:upsert-property [(or (:db/ident existing) nil)
+                         schema
+                         {:property-name title}]]]
+     {})
+    (when-let [property (find-property-by-title @conn title)]
+      {:op :upsert-property
+       :property (:db/ident property)})))
+
+(defn- op-set-block-property! [rng conn state base-uuid gen-uuid]
+  (when-let [block (ensure-random-block! rng conn state base-uuid gen-uuid)]
+    (when-let [property (ensure-property! conn sim-default-property-title {:logseq.property/type :default})]
+      (let [value (str "prop-value-" (rand-int! rng 1000000))]
+        (try
+          (outliner-op/apply-ops!
+           conn
+           [[:set-block-property [(:db/id block) (:db/ident property) value]]]
+           {})
+          {:op :set-block-property
+           :uuid (:block/uuid block)
+           :property (:db/ident property)
+           :value value}
+          (catch :default _
+            nil))))))
+
+(defn- op-remove-block-property! [rng conn state base-uuid gen-uuid]
+  (when-let [block (ensure-random-block! rng conn state base-uuid gen-uuid)]
+    (when-let [property (ensure-property! conn sim-default-property-title {:logseq.property/type :default})]
+      (try
+        (outliner-op/apply-ops!
+         conn
+         [[:set-block-property [(:db/id block) (:db/ident property) (str "remove-prop-" (rand-int! rng 1000000))]]
+          [:remove-block-property [(:db/id block) (:db/ident property)]]]
+         {})
+        {:op :remove-block-property
+         :uuid (:block/uuid block)
+         :property (:db/ident property)}
+        (catch :default _
+          nil)))))
+
+(defn- op-create-property-text-block! [rng conn]
+  (when-let [property (ensure-property! conn sim-default-property-title {:logseq.property/type :default})]
+    (let [value (str "value-block-" (rand-int! rng 1000000))]
+      (try
+        (let [value-uuid (outliner-op/apply-ops!
+                          conn
+                          [[:create-property-text-block [nil (:db/id property) value {}]]]
+                          {})]
+          {:op :create-property-text-block
+           :property (:db/ident property)
+           :value-uuid value-uuid})
+        (catch :default _
+          nil)))))
+
+(defn- op-batch-set-property! [rng conn state base-uuid gen-uuid]
+  (when-let [property (ensure-property! conn sim-default-property-title {:logseq.property/type :default})]
+    (let [blocks (->> (repeatedly 2 #(ensure-random-block! rng conn state base-uuid gen-uuid))
+                      (remove nil?)
+                      distinct
+                      vec)]
+      (when (seq blocks)
+        (let [block-ids (mapv :db/id blocks)
+              value (str "batch-prop-" (rand-int! rng 1000000))]
+          (try
+            (outliner-op/apply-ops!
+             conn
+             [[:batch-set-property [block-ids (:db/ident property) value {}]]]
+             {})
+            {:op :batch-set-property
+             :blocks (mapv :block/uuid blocks)
+             :property (:db/ident property)}
+            (catch :default _
+              nil)))))))
+
+(defn- op-batch-remove-property! [rng conn state base-uuid gen-uuid]
+  (when-let [property (ensure-property! conn sim-default-property-title {:logseq.property/type :default})]
+    (let [blocks (->> (repeatedly 2 #(ensure-random-block! rng conn state base-uuid gen-uuid))
+                      (remove nil?)
+                      distinct
+                      vec)]
+      (when (seq blocks)
+        (let [block-ids (mapv :db/id blocks)]
+          (try
+            (outliner-op/apply-ops!
+             conn
+             [[:batch-set-property [block-ids (:db/ident property) (str "to-remove-" (rand-int! rng 1000000)) {}]]
+              [:batch-remove-property [block-ids (:db/ident property)]]]
+             {})
+            {:op :batch-remove-property
+             :blocks (mapv :block/uuid blocks)
+             :property (:db/ident property)}
+            (catch :default _
+              nil)))))))
+
+(defn- op-class-add-property! [rng conn]
+  (when-let [class (ensure-class! rng conn)]
+    (when-let [property (ensure-property! conn sim-default-property-title {:logseq.property/type :default})]
+      (try
+        (outliner-op/apply-ops!
+         conn
+         [[:class-add-property [(:db/id class) (:db/ident property)]]]
+         {})
+        {:op :class-add-property
+         :class (:block/uuid class)
+         :property (:db/ident property)}
+        (catch :default _
+          nil)))))
+
+(defn- op-class-remove-property! [rng conn]
+  (when-let [class (ensure-class! rng conn)]
+    (when-let [property (ensure-property! conn sim-default-property-title {:logseq.property/type :default})]
+      (try
+        (outliner-op/apply-ops!
+         conn
+         [[:class-add-property [(:db/id class) (:db/ident property)]]
+          [:class-remove-property [(:db/id class) (:db/ident property)]]]
+         {})
+        {:op :class-remove-property
+         :class (:block/uuid class)
+         :property (:db/ident property)}
+        (catch :default _
+          nil)))))
+
+(defn- op-upsert-closed-value! [rng conn]
+  (when-let [property (ensure-property! conn sim-default-property-title {:logseq.property/type :default})]
+    (let [value (str "choice-" (rand-int! rng 1000000))]
+      (try
+        (outliner-op/apply-ops!
+         conn
+         [[:upsert-closed-value [(:db/id property) {:value value}]]]
+         {})
+        {:op :upsert-closed-value
+         :property (:db/ident property)
+         :value value}
+        (catch :default _
+          nil)))))
+
+(defn- op-delete-closed-value! [rng conn]
+  (when-let [property (ensure-property! conn sim-default-property-title {:logseq.property/type :default})]
+    (let [value (str "delete-choice-" (rand-int! rng 1000000))]
+      (try
+        (outliner-op/apply-ops!
+         conn
+         [[:upsert-closed-value [(:db/id property) {:value value}]]]
+         {})
+        (when-let [value-block (first (:block/_closed-value-property (d/entity @conn (:db/id property))))]
+          (outliner-op/apply-ops!
+           conn
+           [[:delete-closed-value [(:db/id property) (:db/id value-block)]]]
+           {})
+          {:op :delete-closed-value
+           :property (:db/ident property)
+           :value-id (:db/id value-block)})
+        (catch :default _
+          nil)))))
+
+(defn- op-add-existing-values-to-closed-values! [rng conn]
+  (when-let [property (ensure-property! conn sim-default-property-title {:logseq.property/type :default})]
+    (try
+      (let [value-a (str "existing-a-" (rand-int! rng 1000000))
+            value-b (str "existing-b-" (rand-int! rng 1000000))
+            uuid-a (outliner-op/apply-ops!
+                    conn
+                    [[:create-property-text-block [nil (:db/id property) value-a {}]]]
+                    {})
+            uuid-b (outliner-op/apply-ops!
+                    conn
+                    [[:create-property-text-block [nil (:db/id property) value-b {}]]]
+                    {})
+            uuids (vec (remove nil? [uuid-a uuid-b]))]
+        (when (seq uuids)
+          (outliner-op/apply-ops!
+           conn
+           [[:add-existing-values-to-closed-values [(:db/id property) uuids]]]
+           {})
+          {:op :add-existing-values-to-closed-values
+           :property (:db/ident property)
+           :uuids uuids}))
+      (catch :default _
+        nil))))
+
+(defn- op-delete-property-value! [rng conn state base-uuid gen-uuid]
+  (when-let [class (ensure-class! rng conn)]
+    (when-let [block (ensure-random-block! rng conn state base-uuid gen-uuid)]
+      (try
+        (outliner-op/apply-ops!
+         conn
+         [[:set-block-property [(:db/id block) :block/tags (:db/id class)]]
+          [:delete-property-value [(:db/id block) :block/tags (:db/id class)]]]
+         {})
+        {:op :delete-property-value
+         :uuid (:block/uuid block)
+         :class (:block/uuid class)}
+        (catch :default _
+          nil)))))
+
+(defn- op-batch-delete-property-value! [rng conn state base-uuid gen-uuid]
+  (when-let [class (ensure-class! rng conn)]
+    (let [blocks (->> (repeatedly 2 #(ensure-random-block! rng conn state base-uuid gen-uuid))
+                      (remove nil?)
+                      distinct
+                      vec)]
+      (when (seq blocks)
+        (let [block-ids (mapv :db/id blocks)]
+          (try
+            (outliner-op/apply-ops!
+             conn
+             [[:batch-set-property [block-ids :block/tags (:db/id class) {}]]
+              [:batch-delete-property-value [block-ids :block/tags (:db/id class)]]]
+             {})
+            {:op :batch-delete-property-value
+             :blocks (mapv :block/uuid blocks)
+             :class (:block/uuid class)}
+            (catch :default _
+              nil)))))))
+
 (defn- block-and-descendant-uuids
   [db block]
   (->> (cons (:db/id block) (ldb/get-block-full-children-ids db (:db/id block)))
@@ -556,6 +837,19 @@
    {:name :rename-page :weight 2 :f op-rename-page!}
    {:name :delete-page :weight 2 :f op-delete-page!}
    {:name :save-block :weight 4 :f op-save-block!}
+   {:name :upsert-property :weight 2 :f op-upsert-property!}
+   {:name :set-block-property :weight 3 :f op-set-block-property!}
+   {:name :remove-block-property :weight 2 :f op-remove-block-property!}
+   {:name :delete-property-value :weight 1 :f op-delete-property-value!}
+   {:name :create-property-text-block :weight 2 :f op-create-property-text-block!}
+   {:name :batch-set-property :weight 2 :f op-batch-set-property!}
+   {:name :batch-remove-property :weight 2 :f op-batch-remove-property!}
+   {:name :batch-delete-property-value :weight 1 :f op-batch-delete-property-value!}
+   {:name :class-add-property :weight 1 :f op-class-add-property!}
+   {:name :class-remove-property :weight 1 :f op-class-remove-property!}
+   {:name :upsert-closed-value :weight 1 :f op-upsert-closed-value!}
+   {:name :delete-closed-value :weight 1 :f op-delete-closed-value!}
+   {:name :add-existing-values-to-closed-values :weight 1 :f op-add-existing-values-to-closed-values!}
    {:name :insert-blocks :weight 10 :f op-insert-blocks!}
    {:name :delete-blocks :weight 4 :f op-delete-blocks!}
    {:name :move-blocks :weight 6 :f op-move-blocks!}
@@ -583,6 +877,19 @@
                      :move-blocks
                      :move-blocks-up-down
                      :indent-outdent-blocks
+                     :upsert-property
+                     :set-block-property
+                     :remove-block-property
+                     :delete-property-value
+                     :create-property-text-block
+                     :batch-set-property
+                     :batch-remove-property
+                     :batch-delete-property-value
+                     :class-add-property
+                     :class-remove-property
+                     :upsert-closed-value
+                     :delete-closed-value
+                     :add-existing-values-to-closed-values
                      :create-page
                      :rename-page
                      :delete-page
@@ -623,6 +930,19 @@
                    :rename-page (f rng conn state base-uuid)
                    :delete-page (f rng conn base-uuid state)
                    :save-block (f rng conn state base-uuid)
+                   :upsert-property (f rng conn)
+                   :set-block-property (f rng conn state base-uuid gen-uuid)
+                   :remove-block-property (f rng conn state base-uuid gen-uuid)
+                   :delete-property-value (f rng conn state base-uuid gen-uuid)
+                   :create-property-text-block (f rng conn)
+                   :batch-set-property (f rng conn state base-uuid gen-uuid)
+                   :batch-remove-property (f rng conn state base-uuid gen-uuid)
+                   :batch-delete-property-value (f rng conn state base-uuid gen-uuid)
+                   :class-add-property (f rng conn)
+                   :class-remove-property (f rng conn)
+                   :upsert-closed-value (f rng conn)
+                   :delete-closed-value (f rng conn)
+                   :add-existing-values-to-closed-values (f rng conn)
                    :insert-blocks (f rng conn state base-uuid {:gen-uuid gen-uuid})
                    :delete-blocks (f rng conn state)
                    :move-blocks (f rng conn state base-uuid)
@@ -732,7 +1052,7 @@
           (sync-loop! server [{:repo repo-a :conn conn-a :client client-a :online? true}])
           (is (= "test" (:block/title (d/entity @conn-a [:block/uuid block-uuid])))))))))
 
-(defonce op-runs 50)
+(defonce op-runs 200)
 
 (defn- run-random-ops!
   [rng server clients repo->state base-uuid history run-ops-opts steps]
