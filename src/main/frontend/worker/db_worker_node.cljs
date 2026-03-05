@@ -369,7 +369,8 @@
                                          (db-lock/assert-lock-owner! path lock)))
                       platform (platform-node/node-platform {:data-dir data-dir
                                                              :event-fn handle-event!
-                                                             :write-guard-fn write-guard-fn})
+                                                             :write-guard-fn write-guard-fn
+                                                             :owner-source owner-source})
                       proxy (db-core/init-core! platform)
                       _ (<init-worker! proxy)
                       {:keys [path lock]} (db-lock/ensure-lock! {:data-dir data-dir

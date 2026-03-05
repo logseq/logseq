@@ -283,17 +283,23 @@
 (def ^:private redacted-token "[REDACTED]")
 
 (defn- format-sync-status
-  [{:keys [repo graph-id ws-state pending-local pending-asset pending-server local-tx remote-tx]}]
-  (string/join "\n"
-               [(str "Sync status")
-                (str "repo: " (or repo "-"))
-                (str "graph-id: " (or graph-id "-"))
-                (str "ws-state: " (or ws-state :unknown))
-                (str "pending-local: " (or pending-local 0))
-                (str "pending-asset: " (or pending-asset 0))
-                (str "pending-server: " (or pending-server 0))
-                (str "local-tx: " (or local-tx "-"))
-                (str "remote-tx: " (or remote-tx "-"))]))
+  [{:keys [repo graph-id ws-state pending-local pending-asset pending-server local-tx remote-tx last-error]}]
+  (let [last-error-line (when (map? last-error)
+                          (str "last-error: "
+                               (or (:code last-error) :error)
+                               (when-let [message (:message last-error)]
+                                 (str " (" message ")"))))]
+    (string/join "\n"
+                 (cond-> [(str "Sync status")
+                          (str "repo: " (or repo "-"))
+                          (str "graph-id: " (or graph-id "-"))
+                          (str "ws-state: " (or ws-state :unknown))
+                          (str "pending-local: " (or pending-local 0))
+                          (str "pending-asset: " (or pending-asset 0))
+                          (str "pending-server: " (or pending-server 0))
+                          (str "local-tx: " (or local-tx "-"))
+                          (str "remote-tx: " (or remote-tx "-"))]
+                   last-error-line (conj last-error-line)))))
 
 (defn- format-sync-remote-graphs
   [graphs]

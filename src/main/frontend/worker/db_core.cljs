@@ -434,9 +434,27 @@
   [repo]
   (db-sync/upload-graph! repo))
 
+(defn- validate-sync-download-result!
+  [repo {:keys [rows graph-id remote-tx] :as result}]
+  (when-not (sequential? rows)
+    (db-sync/fail-fast :db-sync/invalid-field {:repo repo
+                                               :field :rows
+                                               :value rows}))
+  (when-not (and (string? graph-id) (seq graph-id))
+    (db-sync/fail-fast :db-sync/invalid-field {:repo repo
+                                               :field :graph-id
+                                               :value graph-id}))
+  (when-not (integer? remote-tx)
+    (db-sync/fail-fast :db-sync/invalid-field {:repo repo
+                                               :field :remote-tx
+                                               :value remote-tx}))
+  result)
+
 (def-thread-api :thread-api/db-sync-download-graph
   [repo]
-  (p/let [{:keys [rows graph-id remote-tx graph-e2ee?]} (db-sync/download-graph! repo)
+  (p/let [download-result (db-sync/download-graph! repo)
+          {:keys [rows graph-id remote-tx graph-e2ee?]}
+          (validate-sync-download-result! repo download-result)
           row-count (count rows)
           _ (when (seq rows)
               ((@thread-api/*thread-apis :thread-api/db-sync-import-kvs-rows)
@@ -449,7 +467,9 @@
 
 (def-thread-api :thread-api/db-sync-download-graph-by-id
   [repo graph-id graph-e2ee?]
-  (p/let [{:keys [rows graph-id remote-tx graph-e2ee?]} (db-sync/download-graph-by-id! repo graph-id graph-e2ee?)
+  (p/let [download-result (db-sync/download-graph-by-id! repo graph-id graph-e2ee?)
+          {:keys [rows graph-id remote-tx graph-e2ee?]}
+          (validate-sync-download-result! repo download-result)
           row-count (count rows)
           _ (when (seq rows)
               ((@thread-api/*thread-apis :thread-api/db-sync-import-kvs-rows)
@@ -656,6 +676,7 @@
                                  :graph-uuid graph-id
                                  :message "Graph is ready!"})
     ((@thread-api/*thread-apis :thread-api/export-db) repo)
+    (client-op/update-graph-uuid repo graph-id)
     (client-op/update-local-tx repo remote-tx)
     (shared-service/broadcast-to-clients! :add-repo {:repo repo}))
    (p/catch (fn [error]

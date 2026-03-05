@@ -49,24 +49,135 @@
     (let [orig-ensure-server! cli-server/ensure-server!
           orig-invoke transport/invoke
           ensure-calls (atom [])
-          invoke-calls (atom [])]
+          invoke-calls (atom [])
+          status-calls (atom 0)]
       (set! cli-server/ensure-server! (fn [config repo]
                                         (swap! ensure-calls conj [config repo])
                                         (p/resolved (assoc config :base-url "http://example"))))
       (set! transport/invoke (fn [_ method direct-pass? args]
                                (swap! invoke-calls conj [method direct-pass? args])
-                               (p/resolved {:ok true})))
-      (-> (p/let [_ (sync-command/execute {:type :sync-start
-                                           :repo "logseq_db_demo"}
-                                          {:data-dir "/tmp"})]
-            (is (= [[{:data-dir "/tmp"} "logseq_db_demo"]]
-                   @ensure-calls))
-            (is (= [[:thread-api/set-db-sync-config false [{:ws-url nil
-                                                            :http-base nil
-                                                            :auth-token nil
-                                                            :e2ee-password nil}]]
-                    [:thread-api/db-sync-start false ["logseq_db_demo"]]]
-                   @invoke-calls)))
+                               (case method
+                                 :thread-api/db-sync-status
+                                 (let [idx (swap! status-calls inc)]
+                                   (p/resolved {:repo "logseq_db_demo"
+                                                :ws-state (if (= idx 1) :connecting :open)
+                                                :pending-local 0
+                                                :pending-asset 0
+                                                :pending-server 0}))
+                                 (p/resolved {:ok true}))))
+      (-> (p/let [result (sync-command/execute {:type :sync-start
+                                                :repo "logseq_db_demo"}
+                                               {:data-dir "/tmp"})
+                  invoked-methods (map first @invoke-calls)]
+            (is (= :ok (:status result)))
+            (is (= :open (get-in result [:data :ws-state])))
+            (is (<= 1 (count @ensure-calls)))
+            (is (every? (fn [[_ repo]] (= "logseq_db_demo" repo)) @ensure-calls))
+            (is (= 1 (count (filter #(= :thread-api/db-sync-start %) invoked-methods))))
+            (is (<= 2 (count (filter #(= :thread-api/db-sync-status %) invoked-methods)))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (set! cli-server/ensure-server! orig-ensure-server!)
+                       (set! transport/invoke orig-invoke)
+                       (done)))))))
+
+(deftest test-execute-sync-start-timeout
+  (async done
+    (let [orig-ensure-server! cli-server/ensure-server!
+          orig-invoke transport/invoke
+          invoke-calls (atom [])]
+      (set! cli-server/ensure-server! (fn [config _repo]
+                                        (p/resolved (assoc config :base-url "http://example"))))
+      (set! transport/invoke (fn [_ method direct-pass? args]
+                               (swap! invoke-calls conj [method direct-pass? args])
+                               (case method
+                                 :thread-api/db-sync-status
+                                 (p/resolved {:repo "logseq_db_demo"
+                                              :ws-state :connecting
+                                              :pending-local 0
+                                              :pending-asset 0
+                                              :pending-server 0})
+                                 (p/resolved {:ok true}))))
+      (-> (p/let [result (sync-command/execute {:type :sync-start
+                                                :repo "logseq_db_demo"
+                                                :wait-timeout-ms 20
+                                                :wait-poll-interval-ms 0}
+                                               {:data-dir "/tmp"})]
+            (is (= :error (:status result)))
+            (is (= :sync-start-timeout (get-in result [:error :code])))
+            (is (= "logseq_db_demo" (get-in result [:error :repo])))
+            (is (= :connecting (get-in result [:error :ws-state]))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (set! cli-server/ensure-server! orig-ensure-server!)
+                       (set! transport/invoke orig-invoke)
+                       (done)))))))
+
+(deftest test-execute-sync-start-missing-ws-url-is-error
+  (async done
+    (let [orig-ensure-server! cli-server/ensure-server!
+          orig-invoke transport/invoke]
+      (set! cli-server/ensure-server! (fn [config _repo]
+                                        (p/resolved (assoc config :base-url "http://example"))))
+      (set! transport/invoke (fn [_ method _direct-pass? _args]
+                               (case method
+                                 :thread-api/db-sync-status
+                                 (p/resolved {:repo "logseq_db_demo"
+                                              :ws-state :inactive
+                                              :pending-local 0
+                                              :pending-asset 0
+                                              :pending-server 0})
+                                 (p/resolved {:ok true}))))
+      (-> (p/let [result (sync-command/execute {:type :sync-start
+                                                :repo "logseq_db_demo"
+                                                :wait-timeout-ms 20
+                                                :wait-poll-interval-ms 0}
+                                               {:data-dir "/tmp"})]
+            (is (= :error (:status result)))
+            (is (= :sync-start-skipped (get-in result [:error :code])))
+            (is (= :inactive (get-in result [:error :ws-state]))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (set! cli-server/ensure-server! orig-ensure-server!)
+                       (set! transport/invoke orig-invoke)
+                       (done)))))))
+
+(deftest test-execute-sync-start-runtime-error-after-open
+  (async done
+    (let [orig-ensure-server! cli-server/ensure-server!
+          orig-invoke transport/invoke
+          status-calls (atom 0)]
+      (set! cli-server/ensure-server! (fn [config _repo]
+                                        (p/resolved (assoc config :base-url "http://example"))))
+      (set! transport/invoke (fn [_ method _direct-pass? _args]
+                               (case method
+                                 :thread-api/db-sync-status
+                                 (let [idx (swap! status-calls inc)]
+                                   (p/resolved (if (= idx 1)
+                                                 {:repo "logseq_db_demo"
+                                                  :ws-state :connecting
+                                                  :pending-local 0
+                                                  :pending-asset 0
+                                                  :pending-server 0}
+                                                 {:repo "logseq_db_demo"
+                                                  :ws-state :open
+                                                  :pending-local 1
+                                                  :pending-asset 0
+                                                  :pending-server 2
+                                                  :last-error {:code :decrypt-aes-key
+                                                               :message "decrypt-aes-key"}})))
+                                 (p/resolved {:ok true}))))
+      (-> (p/let [result (sync-command/execute {:type :sync-start
+                                                :repo "logseq_db_demo"
+                                                :wait-timeout-ms 200
+                                                :wait-poll-interval-ms 0}
+                                               {:data-dir "/tmp"})]
+            (is (= :error (:status result)))
+            (is (= :sync-start-runtime-error (get-in result [:error :code])))
+            (is (= :decrypt-aes-key (get-in result [:error :last-error :code]))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn []
@@ -258,6 +369,37 @@
                                                             :e2ee-password nil}]]
                     [:thread-api/db-sync-list-remote-graphs false []]]
                    @invoke-calls)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (set! cli-server/ensure-server! orig-ensure-server!)
+                       (set! transport/invoke orig-invoke)
+                       (done)))))))
+
+(deftest test-execute-sync-download-propagates-worker-error-code
+  (async done
+    (let [orig-ensure-server! cli-server/ensure-server!
+          orig-invoke transport/invoke]
+      (set! cli-server/ensure-server! (fn [config _repo]
+                                        (p/resolved (assoc config :base-url "http://example"))))
+      (set! transport/invoke (fn [_ method _direct-pass? _args]
+                               (case method
+                                 :thread-api/db-sync-list-remote-graphs
+                                 (p/resolved [{:graph-id "remote-graph-id"
+                                               :graph-name "demo"
+                                               :graph-e2ee? true}])
+                                 :thread-api/db-sync-download-graph-by-id
+                                 (p/rejected (ex-info "db-sync/incomplete-snapshot-frame"
+                                                      {:code :db-sync/incomplete-snapshot-frame
+                                                       :graph-id "remote-graph-id"}))
+                                 (p/resolved nil))))
+      (-> (p/let [result (sync-command/execute {:type :sync-download
+                                                :repo "logseq_db_demo"
+                                                :graph "demo"}
+                                               {:base-url "http://example"
+                                                :data-dir "/tmp"})]
+            (is (= :error (:status result)))
+            (is (= :db-sync/incomplete-snapshot-frame (get-in result [:error :code]))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn []

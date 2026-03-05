@@ -401,6 +401,34 @@
                               (-> (stop!) (p/finally (fn [] (done))))
                               (done))))))))
 
+(deftest db-worker-node-sync-start-and-status-invoke-path
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-sync-start")
+               repo (str "logseq_db_sync_start_" (subs (str (random-uuid)) 0 8))]
+           (-> (p/let [{:keys [host port stop!]}
+                       (db-worker-node/start-daemon! {:data-dir data-dir
+                                                      :repo repo})
+                       _ (reset! daemon {:host host :port port :stop! stop!})
+                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
+                       _ (invoke host port "thread-api/set-db-sync-config"
+                                 [{:ws-url nil
+                                   :http-base "https://example.com"
+                                   :auth-token "token-value"}])
+                       start-result (invoke host port "thread-api/db-sync-start" [repo])
+                       status-result (invoke host port "thread-api/db-sync-status" [repo])]
+                 (is (nil? start-result))
+                 (is (= repo (:repo status-result)))
+                 (is (= :inactive (:ws-state status-result)))
+                 (is (contains? status-result :pending-local))
+                 (is (contains? status-result :pending-server)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
+
 (deftest db-worker-node-daemon-smoke-test
   (async done
          (let [daemon (atom nil)

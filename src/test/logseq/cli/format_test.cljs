@@ -253,7 +253,24 @@
       (is (string/includes? result "graph-uuid"))
       (is (string/includes? result "pending-local"))
       (is (string/includes? result "pending-asset"))
-      (is (string/includes? result "pending-server")))))
+      (is (string/includes? result "pending-server"))))
+
+  (testing "sync status renders last error diagnostic when present"
+    (let [result (format/format-result {:status :ok
+                                        :command :sync-status
+                                        :data {:repo "demo-graph"
+                                               :graph-id "graph-uuid"
+                                               :ws-state :open
+                                               :pending-local 2
+                                               :pending-asset 1
+                                               :pending-server 3
+                                               :local-tx 10
+                                               :remote-tx 13
+                                               :last-error {:code :decrypt-aes-key
+                                                            :message "decrypt-aes-key"}}}
+                                       {:output-format nil})]
+      (is (string/includes? result "last-error"))
+      (is (string/includes? result "decrypt-aes-key")))))
 
 (deftest test-human-output-sync-remote-graphs
   (testing "sync remote-graphs renders a table"
