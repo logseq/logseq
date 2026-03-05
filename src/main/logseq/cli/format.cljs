@@ -253,14 +253,32 @@
             (or doc "-")])
          (or queries []))))
 
+(declare kv-key->string
+         graph-info-human-max-string-length
+         graph-info-truncated-suffix)
+
 (defn- format-graph-info
-  [{:keys [graph logseq.kv/graph-created-at logseq.kv/schema-version]} now-ms]
-  (string/join "\n"
-               [(str "Graph: " (or graph "-"))
-                (str "Created at: " (if (some? graph-created-at)
-                                      (human-ago graph-created-at now-ms)
-                                      "-"))
-                (str "Schema version: " (or schema-version "-"))]))
+  [{:keys [graph kv logseq.kv/graph-created-at logseq.kv/schema-version]} now-ms]
+  (let [summary-lines [(str "Graph: " (or graph "-"))
+                       (str "Created at: " (if (some? graph-created-at)
+                                             (human-ago graph-created-at now-ms)
+                                             "-"))
+                       (str "Schema version: " (or schema-version "-"))]
+        truncate-value (fn [value]
+                         (if (and (string? value)
+                                  (> (count value) graph-info-human-max-string-length))
+                           (str (subs value 0 graph-info-human-max-string-length)
+                                graph-info-truncated-suffix)
+                           value))
+        kv-lines (if (seq kv)
+                   (into ["KV:"]
+                         (->> kv
+                              (sort-by (comp kv-key->string key))
+                              (map (fn [[kv-key kv-value]]
+                                     (str "  " (kv-key->string kv-key) ": "
+                                          (pr-str (truncate-value kv-value)))))))
+                   ["KV:" "  (empty)"])]
+    (string/join "\n" (into summary-lines kv-lines))))
 
 (defn- format-server-status
   [{:keys [repo status host port]}]
@@ -281,6 +299,44 @@
                    (and host port) (conj (str "Host: " host "  Port: " port))))))
 
 (def ^:private redacted-token "[REDACTED]")
+(def ^:private graph-info-sensitive-kv-pattern #"(?i)(token|secret|password)")
+(def ^:private graph-info-human-max-string-length 120)
+(def ^:private graph-info-truncated-suffix "... [truncated]")
+
+(defn- kv-key->string
+  [kv-key]
+  (if (keyword? kv-key)
+    (if-let [kv-ns (namespace kv-key)]
+      (str kv-ns "/" (name kv-key))
+      (name kv-key))
+    (str kv-key)))
+
+(defn- sensitive-graph-kv-key?
+  [kv-key]
+  (boolean (re-find graph-info-sensitive-kv-pattern (kv-key->string kv-key))))
+
+(defn- redact-graph-kv
+  [kv]
+  (into {}
+        (map (fn [[kv-key kv-value]]
+               [kv-key
+                (if (sensitive-graph-kv-key? kv-key)
+                  redacted-token
+                  kv-value)]))
+        (or kv {})))
+
+(defn- sanitize-graph-info-data
+  [data]
+  (if (map? data)
+    (update data :kv redact-graph-kv)
+    data))
+
+(defn- sanitize-result
+  [result]
+  (if (and (= :ok (:status result))
+           (= :graph-info (:command result)))
+    (update result :data sanitize-graph-info-data)
+    result))
 
 (defn- format-sync-status
   [{:keys [repo graph-id ws-state pending-local pending-asset pending-server local-tx remote-tx last-error]}]
@@ -495,7 +551,9 @@
 
 (defn format-result
   [result {:keys [output-format] :as opts}]
-  (let [result (normalize-graph-result result)
+  (let [result (-> result
+                   normalize-graph-result
+                   sanitize-result)
         format (cond
                  (= output-format :edn) :edn
                  (= output-format :json) :json
