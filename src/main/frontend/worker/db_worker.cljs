@@ -967,9 +967,10 @@
     (shared-service/broadcast-to-clients! :notification
                                           [["Invalid data writing to db!"] :error])
     (worker-util/post-message :capture-error
-                              {:error (ex-info "Invalid data writing to db" {})
+                              {:error (ex-info "Invalid data writing to db" tx-meta)
                                :payload {}
-                               :extra {:errors (str errors)}})))
+                               :extra {:errors (str errors)
+                                       :tx-meta tx-meta}})))
 
 (defn init
   "web worker entry"
