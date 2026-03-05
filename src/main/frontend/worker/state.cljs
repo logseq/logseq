@@ -1,6 +1,7 @@
 (ns frontend.worker.state
   "State hub for worker"
-  (:require [logseq.common.util :as common-util]))
+  (:require [frontend.worker.platform :as platform]
+            [logseq.common.util :as common-util]))
 
 (defonce *main-thread (atom nil))
 (defonce *infer-worker (atom nil))
@@ -106,9 +107,28 @@
   []
   (:auth/id-token @*state))
 
+(defn- node-runtime?
+  []
+  (try
+    (= :node (get-in (platform/current) [:env :runtime]))
+    (catch :default _
+      false)))
+
+(defn- node-online?
+  []
+  (try
+    (let [online? (some-> js/globalThis .-navigator .-onLine)]
+      (if (boolean? online?)
+        online?
+        true))
+    (catch :default _
+      true)))
+
 (defn online?
   []
-  @(:thread-atom/online-event @*state))
+  (if (node-runtime?)
+    (node-online?)
+    @(:thread-atom/online-event @*state)))
 
 (comment
   (defn mobile?
