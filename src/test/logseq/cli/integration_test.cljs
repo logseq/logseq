@@ -188,6 +188,81 @@
   [payload]
   (first (get-in payload [:data :result])))
 
+(deftest test-cli-sync-download-and-start-readiness-with-mocked-sync
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-sync-cli")
+               download-repo "sync-download-graph"
+               start-repo "sync-start-graph"
+               orig-ensure-server! cli-server/ensure-server!
+               orig-invoke transport/invoke
+               invoke-calls (atom [])
+               status-calls (atom 0)]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       create-result (run-cli ["graph" "create" "--graph" start-repo] data-dir cfg-path)
+                       create-payload (parse-json-output-safe create-result "graph create")
+                       _ (is (= 0 (:exit-code create-result)))
+                       _ (is (= "ok" (:status create-payload)))
+                       _ (set! cli-server/ensure-server!
+                               (fn [config _repo]
+                                 (p/resolved (assoc config :base-url "http://example"))))
+                       _ (set! transport/invoke
+                               (fn [_ method _direct-pass? args]
+                                 (swap! invoke-calls conj [method args])
+                                 (case method
+                                   :thread-api/set-db-sync-config
+                                   (p/resolved nil)
+
+                                   :thread-api/db-sync-list-remote-graphs
+                                   (p/resolved [{:graph-id "remote-graph-id"
+                                                 :graph-name download-repo
+                                                 :graph-e2ee? true}])
+
+                                   :thread-api/db-sync-download-graph-by-id
+                                   (p/resolved {:repo "logseq_db_sync_integration_graph"
+                                                :graph-id "remote-graph-id"
+                                                :remote-tx 22
+                                                :graph-e2ee? true
+                                                :row-count 3})
+
+                                   :thread-api/db-sync-start
+                                   (p/resolved nil)
+
+                                   :thread-api/db-sync-status
+                                   (let [idx (swap! status-calls inc)]
+                                     (p/resolved {:repo "logseq_db_sync_integration_graph"
+                                                  :ws-state (if (= idx 1) :connecting :open)
+                                                  :pending-local 0
+                                                  :pending-asset 0
+                                                  :pending-server 0}))
+
+                                   :thread-api/q
+                                   (p/resolved 3)
+
+                                   (p/resolved nil))))
+                       download-result (run-cli ["--graph" download-repo "sync" "download"] data-dir cfg-path)
+                       download-payload (parse-json-output-safe download-result "sync download")
+                       start-result (run-cli ["--graph" start-repo "sync" "start"] data-dir cfg-path)
+                       start-payload (parse-json-output-safe start-result "sync start")]
+                 (is (some #(= :thread-api/db-sync-download-graph-by-id (first %)) @invoke-calls))
+                 (is (some #(= :thread-api/db-sync-status (first %)) @invoke-calls))
+                 (is (= 0 (:exit-code download-result)))
+                 (is (= "ok" (:status download-payload)))
+                 (is (= "remote-graph-id" (get-in download-payload [:data :graph-id])))
+                 (is (= 22 (get-in download-payload [:data :remote-tx])))
+                 (is (= 0 (:exit-code start-result)))
+                 (is (= "ok" (:status start-payload))
+                     (pr-str start-payload))
+                 (is (contains? #{"open" :open}
+                                (get-in start-payload [:data :ws-state])))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))
+               (p/finally (fn []
+                            (set! cli-server/ensure-server! orig-ensure-server!)
+                            (set! transport/invoke orig-invoke)))))))
+
 (deftest ^:long test-cli-graph-list
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker")]

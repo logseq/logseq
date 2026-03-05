@@ -59,8 +59,16 @@
     password))
 
 (defn- auth-token []
-  (or (worker-state/get-id-token)
-      (:auth-token @worker-state/*db-sync-config)))
+  (let [cli-node-owner? (try
+                          (let [env (:env (platform/current))]
+                            (and (= :node (:runtime env))
+                                 (= :cli (:owner-source env))))
+                          (catch :default _ false))
+        configured-token (:auth-token @worker-state/*db-sync-config)]
+    (if cli-node-owner?
+      configured-token
+      (or (worker-state/get-id-token)
+          configured-token))))
 
 (defn- auth-headers []
   (let [token (auth-token)]
@@ -144,13 +152,15 @@
     (true? (ldb/get-graph-rtc-e2ee? @conn))))
 
 (defn- get-user-uuid []
-  (some-> (worker-state/get-id-token) worker-util/parse-jwt :sub))
+  (some-> (auth-token) worker-util/parse-jwt :sub))
 
 (defn- <get-item
   [k]
   (assert k)
   (p/let [r (platform/kv-get (platform/current) k)]
-    (some-> r (js->clj :keywordize-keys true))))
+    (cond
+      (instance? js/ArrayBuffer r) (js/Uint8Array. r)
+      :else r)))
 
 (defn- <set-item!
   [k value]
@@ -290,16 +300,16 @@
           (let [sync-config @worker-state/*db-sync-config
                 configured-password (:e2ee-password sync-config)
                 refresh-token (:auth/refresh-token @worker-state/*state)
-                auth-token (:auth-token sync-config)
+                configured-auth-token (:auth-token sync-config)
                 candidates (cond-> []
                              (seq configured-password) (conj {:source :config
                                                               :value configured-password})
                              (seq refresh-token) (conj {:source :saved-password
                                                         :value refresh-token})
-                             (and (seq auth-token)
-                                  (not= auth-token refresh-token))
+                             (and (seq configured-auth-token)
+                                  (not= configured-auth-token refresh-token))
                              (conj {:source :saved-password
-                                    :value auth-token}))]
+                                    :value configured-auth-token}))]
             (letfn [(<candidate-password
                       [{:keys [source value]}]
                       (case source
