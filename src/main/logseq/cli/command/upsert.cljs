@@ -16,12 +16,17 @@
    :target-id {:desc "Target block db/id"
                :coerce :long}
    :target-uuid {:desc "Target block UUID"}
-   :target-page {:desc "Target page name"}
-   :pos {:desc "Position (first-child, last-child, sibling). Default: create=last-child, update=first-child"}
+   :target-page {:desc "Target page name"
+                 :complete :pages}
+   :pos {:desc "Position. Default: create=last-child, update=first-child"
+         :values ["first-child" "last-child" "sibling"]}
    :content {:desc "Block content for create mode"}
    :blocks {:desc "EDN vector of blocks for create mode"}
-   :blocks-file {:desc "EDN file of blocks for create mode"}
-   :status {:desc "Task status (todo, doing, done, etc.)"}
+   :blocks-file {:desc "EDN file of blocks for create mode"
+                 :complete :file}
+   :status {:desc "Task status"
+            :values ["todo" "doing" "done" "now" "later" "wait" "waiting"
+                     "backlog" "canceled" "cancelled" "in-review" "in-progress"]}
    :update-tags {:desc "Tags to add/update (EDN vector)"}
    :update-properties {:desc "Properties to add/update (EDN map)"}
    :remove-tags {:desc "Tags to remove (EDN vector)"}
@@ -30,7 +35,8 @@
 (def ^:private upsert-page-spec
   {:id {:desc "Target page db/id (forces update mode)"
         :coerce :long}
-   :page {:desc "Page name"}
+   :page {:desc "Page name"
+          :complete :pages}
    :update-tags {:desc "Tags to add/update (EDN vector)"}
    :update-properties {:desc "Properties to add/update (EDN map)"}
    :remove-tags {:desc "Tags to remove (EDN vector)"}
@@ -45,8 +51,10 @@
   {:id {:desc "Target property db/id (forces update mode)"
         :coerce :long}
    :name {:desc "Property name"}
-   :type {:desc "Property type (default, number, date, datetime, checkbox, url, node, json, string)"}
-   :cardinality {:desc "Property cardinality (one, many)"}
+   :type {:desc "Property type"
+          :values ["default" "number" "date" "datetime" "checkbox" "url" "node" "json" "string"]}
+   :cardinality {:desc "Property cardinality"
+                 :values ["one" "many"]}
    :hide {:desc "Hide property"
           :coerce :boolean}
    :public {:desc "Set property public visibility"

@@ -9,12 +9,16 @@
             [promesa.core :as p]))
 
 (def ^:private graph-export-spec
-  {:type {:desc "Export type (edn, sqlite)"}
-   :file {:desc "Export file path"}})
+  {:type {:desc "Export type"
+          :values ["edn" "sqlite"]}
+   :file {:desc "Export file path"
+          :complete :file}})
 
 (def ^:private graph-import-spec
-  {:type {:desc "Import type (edn, sqlite)"}
-   :input {:desc "Input path"}})
+  {:type {:desc "Import type"
+          :values ["edn" "sqlite"]}
+   :input {:desc "Input path"
+           :complete :file}})
 
 (def ^:private graph-validate-spec
   {:fix {:desc "Attempt to fix validation errors"

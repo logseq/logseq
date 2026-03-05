@@ -12,14 +12,18 @@
    :version {:desc "Show version"
              :coerce :boolean}
    :config {:desc "Path to cli.edn (default ~/logseq/cli.edn)"
-            :alias :c}
+            :alias :c
+            :complete :file}
    :graph {:desc "Graph name"
-           :alias :g}
-   :data-dir {:desc (str "Path to db-worker data dir (default " common-config/default-graphs-dir ")")}
+           :alias :g
+           :complete :graphs}
+   :data-dir {:desc (str "Path to db-worker data dir (default " common-config/default-graphs-dir ")")
+              :complete :dir}
    :timeout-ms {:desc "Request timeout in ms (default 10000)"
                 :coerce :long}
-   :output {:desc "Output format (human, json, edn). Default: human"
-            :alias :o}
+   :output {:desc "Output format. Default: human"
+            :alias :o
+            :values ["human" "json" "edn"]}
    :verbose {:desc "Enable verbose debug logging to stderr"
              :alias :v
              :coerce :boolean}})
@@ -101,7 +105,9 @@
                 {:title "Graph Management"
                  :commands #{"graph" "server" "doctor" "sync"}}
                 {:title "Authentication"
-                 :commands #{"login" "logout"}}]
+                 :commands #{"login" "logout"}}
+                {:title "Utilities"
+                 :commands #{"completions"}}]
         render-group (fn [{:keys [title commands]}]
                        (let [entries (filter #(contains? commands (first (:cmds %))) table)]
                          (string/join "\n" [title (format-commands entries)])))]
