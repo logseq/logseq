@@ -1,6 +1,12 @@
 (ns frontend.worker.sync.crypt-test
   (:require [cljs.test :refer [deftest is async]]
+            ["/frontend/idbkv" :as idb-keyval]
+            [clojure.string :as string]
             [frontend.common.crypt :as crypt]
+            [frontend.common.file.opfs :as opfs]
+            [frontend.worker-common.util :as worker-util]
+            [frontend.worker.platform :as platform]
+            [frontend.worker.state :as worker-state]
             [frontend.worker.sync.crypt :as sync-crypt]
             [logseq.db :as ldb]
             [promesa.core :as p]))
@@ -9,6 +15,154 @@
   [aes-key value]
   (p/let [encrypted (crypt/<encrypt-text aes-key (ldb/write-transit-str value))]
     (ldb/write-transit-str encrypted)))
+
+(deftest save-e2ee-password-uses-platform-write-text-when-not-native-test
+  (async done
+         (let [platform-map {:runtime :test}
+               write-calls (atom [])]
+           (-> (p/with-redefs [sync-crypt/native-worker? (fn [] false)
+                               crypt/<encrypt-text-by-text-password (fn [_refresh-token _password]
+                                                                      {:cipher "payload"})
+                               platform/current (fn [] platform-map)
+                               platform/write-text! (fn [platform' path text]
+                                                      (swap! write-calls conj {:platform platform'
+                                                                               :path path
+                                                                               :text text})
+                                                      nil)
+                               opfs/<write-text! (fn [_path _text]
+                                                   nil)]
+                 (#'sync-crypt/<save-e2ee-password "refresh-token" "password"))
+               (p/then (fn [_]
+                         (is (= 1 (count @write-calls)))
+                         (is (= platform-map (:platform (first @write-calls))))
+                         (is (= "e2ee-password" (:path (first @write-calls))))))
+               (p/catch (fn [e]
+                          (is false (str e))))
+               (p/finally done)))))
+
+(deftest read-e2ee-password-uses-platform-read-text-when-not-native-test
+  (async done
+         (let [platform-map {:runtime :test}
+               read-calls (atom [])]
+           (-> (p/with-redefs [sync-crypt/native-worker? (fn [] false)
+                               platform/current (fn [] platform-map)
+                               platform/read-text! (fn [platform' path]
+                                                     (swap! read-calls conj {:platform platform'
+                                                                             :path path})
+                                                     (ldb/write-transit-str {:cipher "payload"}))
+                               opfs/<read-text! (fn [_path]
+                                                  (ldb/write-transit-str {:cipher "payload"}))
+                               crypt/<decrypt-text-by-text-password (fn [_refresh-token _data]
+                                                                      "decrypted-password")]
+                 (#'sync-crypt/<read-e2ee-password "refresh-token"))
+               (p/then (fn [password]
+                         (is (= "decrypted-password" password))
+                         (is (= 1 (count @read-calls)))
+                         (is (= platform-map (:platform (first @read-calls))))
+                         (is (= "e2ee-password" (:path (first @read-calls))))))
+               (p/catch (fn [e]
+                          (is false (str e))))
+               (p/finally done)))))
+
+(deftest save-e2ee-password-native-fallback-uses-platform-write-text-test
+  (async done
+         (let [platform-map {:runtime :test}
+               write-calls (atom [])]
+           (-> (p/with-redefs [sync-crypt/native-worker? (fn [] true)
+                               sync-crypt/<native-save-password-text! (fn [_text]
+                                                                        (p/rejected (ex-info "native write failed" {})))
+                               crypt/<encrypt-text-by-text-password (fn [_refresh-token _password]
+                                                                      {:cipher "payload"})
+                               platform/current (fn [] platform-map)
+                               platform/write-text! (fn [platform' path text]
+                                                      (swap! write-calls conj {:platform platform'
+                                                                               :path path
+                                                                               :text text})
+                                                      nil)
+                               opfs/<write-text! (fn [_path _text]
+                                                   nil)]
+                 (#'sync-crypt/<save-e2ee-password "refresh-token" "password"))
+               (p/then (fn [_]
+                         (is (= 1 (count @write-calls)))
+                         (is (= platform-map (:platform (first @write-calls))))
+                         (is (= "e2ee-password" (:path (first @write-calls))))))
+               (p/catch (fn [e]
+                          (is false (str e))))
+               (p/finally done)))))
+
+(deftest ensure-graph-aes-key-uses-platform-kv-adapters-test
+  (async done
+         (let [fetch-prev js/fetch
+               graph-id (str (random-uuid))
+               expected-key (str "rtc-encrypted-aes-key###" graph-id)
+               platform-map {:runtime :test}
+               current-calls (atom 0)
+               kv-get-calls (atom [])
+               kv-set-calls (atom [])]
+           (set! js/fetch
+                 (fn [url _opts]
+                   (cond
+                     (string/includes? url "/e2ee/user-keys")
+                     (js/Promise.resolve
+                      #js {:ok true
+                           :text (fn []
+                                   (js/Promise.resolve
+                                    "{\"public-key\":\"public-key\",\"encrypted-private-key\":\"encrypted-private-key\"}"))})
+
+                     (string/includes? url (str "/e2ee/graphs/" graph-id "/aes-key"))
+                     (js/Promise.resolve
+                      #js {:ok true
+                           :text (fn []
+                                   (js/Promise.resolve
+                                    "{\"encrypted-aes-key\":\"remote-encrypted\"}"))})
+
+                     :else
+                     (js/Promise.resolve
+                      #js {:ok false
+                           :status 404
+                           :text (fn [] (js/Promise.resolve "{\"message\":\"not-found\"}"))}))))
+           (-> (p/with-redefs [sync-crypt/graph-e2ee? (fn [_repo] true)
+                               sync-crypt/e2ee-base (fn [] "https://example.com")
+                               worker-state/get-id-token (fn [] "token")
+                               worker-util/parse-jwt (fn [_] {:sub "user-1"})
+                               worker-state/<invoke-main-thread (fn [_type _payload]
+                                                                  (p/resolved :exported-private-key))
+                               crypt/<import-private-key (fn [_]
+                                                           (p/resolved :private-key))
+                               crypt/<import-public-key (fn [_]
+                                                          (p/resolved :public-key))
+                               crypt/<decrypt-aes-key (fn [_private-key encrypted]
+                                                        (p/resolved (str "aes:" encrypted)))
+                               ldb/read-transit-str (fn [value] value)
+                               platform/current (fn []
+                                                  (swap! current-calls inc)
+                                                  platform-map)
+                               platform/kv-get (fn [platform' k]
+                                                 (swap! kv-get-calls conj {:platform platform' :key k})
+                                                 (p/resolved nil))
+                               platform/kv-set! (fn [platform' k value]
+                                                  (swap! kv-set-calls conj {:platform platform' :key k :value value})
+                                                  (p/resolved nil))
+                               idb-keyval/get (fn [_k _store]
+                                                (p/resolved nil))
+                               idb-keyval/set (fn [_k _v _store]
+                                                (p/resolved nil))]
+                 (sync-crypt/<ensure-graph-aes-key "repo-1" graph-id))
+               (p/then (fn [aes-key]
+                         (is (= "aes:remote-encrypted" aes-key))
+                         (is (= [{:platform platform-map
+                                  :key expected-key}]
+                                @kv-get-calls))
+                         (is (= [{:platform platform-map
+                                  :key expected-key
+                                  :value "remote-encrypted"}]
+                                @kv-set-calls))
+                         (is (pos? @current-calls))))
+               (p/catch (fn [e]
+                          (is false (str e))))
+               (p/finally (fn []
+                            (set! js/fetch fetch-prev)
+                            (done)))))))
 
 ;; bb dev:test -v frontend.worker.sync.crypt-test works, however bb dev:lint-and-test failed
 (deftest ^:fix-me decrypt-snapshot-rows-test

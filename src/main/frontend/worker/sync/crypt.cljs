@@ -3,9 +3,9 @@
   (:require ["/frontend/idbkv" :as idb-keyval]
             [clojure.string :as string]
             [frontend.common.crypt :as crypt]
-            [frontend.common.file.opfs :as opfs]
             [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.worker-common.util :as worker-util]
+            [frontend.worker.platform :as platform]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync.const :as sync-const]
             [lambdaisland.glogi :as log]
@@ -48,14 +48,14 @@
             nil)
           (p/catch (fn [e]
                      (log/error :native-save-e2ee-password {:error e})
-                     (opfs/<write-text! e2ee-password-file text))))
-      (opfs/<write-text! e2ee-password-file text))))
+                     (platform/write-text! (platform/current) e2ee-password-file text))))
+      (platform/write-text! (platform/current) e2ee-password-file text))))
 
 (defn- <read-e2ee-password
   [refresh-token]
   (p/let [text (if (native-worker?)
                  (<native-read-password-text)
-                 (opfs/<read-text! e2ee-password-file))
+                 (platform/read-text! (platform/current) e2ee-password-file))
           data (ldb/read-transit-str text)
           password (crypt/<decrypt-text-by-text-password refresh-token data)]
     password))
@@ -149,14 +149,14 @@
 
 (defn- <get-item
   [k]
-  (assert (and k @e2ee-store))
-  (p/let [r (idb-keyval/get k @e2ee-store)]
+  (assert k)
+  (p/let [r (platform/kv-get (platform/current) k)]
     (some-> r (js->clj :keywordize-keys true))))
 
 (defn- <set-item!
   [k value]
-  (assert (and k @e2ee-store))
-  (idb-keyval/set k value @e2ee-store))
+  (assert k)
+  (platform/kv-set! (platform/current) k value))
 
 (defn- <clear-item!
   [k]

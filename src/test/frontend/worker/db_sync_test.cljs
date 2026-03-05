@@ -3,6 +3,7 @@
             [datascript.core :as d]
             [frontend.common.crypt :as crypt]
             [frontend.worker-common.util :as worker-util]
+            [frontend.worker.platform :as platform]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
@@ -283,6 +284,32 @@
                      (p/finally (fn []
                                   (reset! db-sync/*repo->latest-remote-tx latest-prev)
                                   (done))))))))))
+
+(deftest connect-uses-platform-websocket-adapter-test
+  (let [ws-ctor-prev js/WebSocket
+        platform-map {:runtime :test}
+        ws-calls (atom [])
+        attach-calls (atom [])]
+    (set! js/WebSocket (js* "(function(_url){ this.readyState = 1; })"))
+    (try
+      (with-redefs [worker-state/get-id-token (fn [] "token-123")
+                    platform/current (fn [] platform-map)
+                    platform/websocket-connect (fn [platform' url]
+                                                 (swap! ws-calls conj {:platform platform' :url url})
+                                                 (js-obj))
+                    db-sync/attach-ws-handlers! (fn [repo _client ws url]
+                                                  (swap! attach-calls conj {:repo repo :ws ws :url url}))]
+        (let [connected (#'db-sync/connect! test-repo {:repo test-repo} "wss://example.com/sync/graph-1")
+              ws (:ws connected)]
+          (is (= [{:platform platform-map
+                   :url "wss://example.com/sync/graph-1?token=token-123"}]
+                 @ws-calls))
+          (is (= [{:repo test-repo
+                   :ws ws
+                   :url "wss://example.com/sync/graph-1"}]
+                 @attach-calls))))
+      (finally
+        (set! js/WebSocket ws-ctor-prev)))))
 
 (deftest reaction-add-enqueues-pending-sync-tx-test
   (testing "adding a reaction should enqueue tx for db-sync"
