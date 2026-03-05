@@ -119,6 +119,48 @@ The control plane forwards each task message through sandbox-agent
 `/v1/sessions/{id}/messages/stream` and relays runtime events to
 `/sessions/{id}/stream`.
 
+### Local Runner Daemon (register + heartbeat)
+
+For `AGENT_RUNTIME_PROVIDER=local-runner`, run a local daemon that:
+- ensures local `sandbox-agent` is reachable,
+- exposes it via tunnel (or uses a provided public URL),
+- registers `/runners` endpoint metadata,
+- and sends periodic heartbeats.
+
+```bash
+cd deps/workers
+BASE_URL=http://127.0.0.1:8787 \
+TOKEN=dev-token \
+RUNNER_ID=my-home-pc \
+./scripts/start-local-runner-daemon.sh
+```
+
+Required vars:
+- `BASE_URL`: agents API base (where `/runners` and `/sessions` live)
+- `TOKEN`: bearer token for agents API auth
+
+Common optional vars:
+- `RUNNER_ID` (default host name)
+- `RUNNER_MAX_SESSIONS` (default `1`)
+- `HEARTBEAT_INTERVAL_SEC` (default `20`)
+- `RUNNER_BASE_URL` (set this to skip auto tunnel)
+- `SANDBOX_AGENT_URL` (default `http://127.0.0.1:2468`)
+- `SANDBOX_AGENT_TOKEN` (if local sandbox-agent uses token auth)
+- `ACCESS_CLIENT_ID` / `ACCESS_CLIENT_SECRET` (if runner URL is protected by Cloudflare Access)
+- `AUTO_START_SANDBOX_AGENT=0|1` (default `1`)
+- `AUTO_START_CLOUDFLARED=0|1` (default `1`)
+
+Create session pinned to local runner:
+
+```json
+{
+  "session-id": "sess-1",
+  "runtime-provider": "local-runner",
+  "runner-id": "my-home-pc",
+  "...": "existing session fields"
+}
+```
+
 ### Runtime Provider
 
 Agent runtime is selected by `AGENT_RUNTIME_PROVIDER`:
