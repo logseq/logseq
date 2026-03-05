@@ -1,6 +1,7 @@
 (ns frontend.worker.sync
   "Simple db-sync client based on promesa + WebSocket."
   (:require [cljs-bean.core :as bean]
+            [clojure.data :as data]
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -92,144 +93,6 @@
   (when-let [*ws-state (:ws-state client)]
     (reset! *ws-state ws-state)
     (broadcast-rtc-state! client)))
-
-(defn- timing-platform-fields
-  []
-  {:mobile? (boolean (:mobile? (worker-state/get-context)))})
-
-(defn- mark-ws-open!
-  [client]
-  (when-let [*timing (:timing client)]
-    (let [now (common-util/time-ms)
-          ws-connect-start-ms (:ws-connect-start-ms @*timing)
-          ws-connect-duration-ms (when (number? ws-connect-start-ms)
-                                   (- now ws-connect-start-ms))]
-      (swap! *timing assoc
-             :ws-open-ms now
-             :first-remote-apply-start-ms nil
-             :first-remote-apply-end-ms nil)
-      (log/info :db-sync/ws-open
-                (merge (timing-platform-fields)
-                       {:repo (:repo client)
-                        :graph-id (:graph-id client)
-                        :ws-connect-start-ms ws-connect-start-ms
-                        :ws-open-ms now
-                        :ws-connect-duration-ms ws-connect-duration-ms})))))
-
-(defn- mark-ws-connect-start!
-  [client]
-  (when-let [*timing (:timing client)]
-    (swap! *timing assoc
-           :ws-connect-start-ms (common-util/time-ms)
-           :ws-open-ms nil
-           :hello-received-ms nil
-           :first-pull-sent-ms nil
-           :first-pull-ok-received-ms nil
-           :first-aes-key-start-ms nil
-           :first-aes-key-ready-ms nil
-           :first-remote-apply-start-ms nil
-           :first-remote-apply-end-ms nil)))
-
-(defn- mark-hello-received!
-  [client local-tx remote-tx]
-  (when-let [*timing (:timing client)]
-    (let [now (common-util/time-ms)
-          {:keys [ws-open-ms hello-received-ms]} @*timing]
-      (when (nil? hello-received-ms)
-        (swap! *timing assoc :hello-received-ms now)
-        (log/info :db-sync/hello-received
-                  (merge (timing-platform-fields)
-                         {:repo (:repo client)
-                          :graph-id (:graph-id client)
-                          :local-tx local-tx
-                          :remote-tx remote-tx
-                          :ws-open-ms ws-open-ms
-                          :hello-received-ms now
-                          :ws-open->hello-received-ms (when (number? ws-open-ms)
-                                                        (- now ws-open-ms))}))))))
-
-(defn- mark-first-pull-sent!
-  [client reason since]
-  (when-let [*timing (:timing client)]
-    (let [now (common-util/time-ms)
-          {:keys [ws-open-ms hello-received-ms first-pull-sent-ms]} @*timing]
-      (when (nil? first-pull-sent-ms)
-        (swap! *timing assoc :first-pull-sent-ms now)
-        (log/info :db-sync/first-pull-sent
-                  (merge (timing-platform-fields)
-                         {:repo (:repo client)
-                          :graph-id (:graph-id client)
-                          :reason reason
-                          :since since
-                          :ws-open-ms ws-open-ms
-                          :hello-received-ms hello-received-ms
-                          :first-pull-sent-ms now
-                          :ws-open->pull-sent-ms (when (number? ws-open-ms)
-                                                   (- now ws-open-ms))
-                          :hello->pull-sent-ms (when (number? hello-received-ms)
-                                                 (- now hello-received-ms))}))))))
-
-(defn- mark-first-pull-ok-received!
-  [client]
-  (when-let [*timing (:timing client)]
-    (let [now (common-util/time-ms)
-          {:keys [ws-open-ms hello-received-ms first-pull-sent-ms first-pull-ok-received-ms]} @*timing]
-      (when (nil? first-pull-ok-received-ms)
-        (swap! *timing assoc :first-pull-ok-received-ms now)
-        (log/info :db-sync/first-pull-ok-received
-                  (merge (timing-platform-fields)
-                         {:repo (:repo client)
-                          :graph-id (:graph-id client)
-                          :ws-open-ms ws-open-ms
-                          :hello-received-ms hello-received-ms
-                          :first-pull-sent-ms first-pull-sent-ms
-                          :first-pull-ok-received-ms now
-                          :ws-open->pull-ok-ms (when (number? ws-open-ms)
-                                                 (- now ws-open-ms))
-                          :hello->pull-ok-ms (when (number? hello-received-ms)
-                                               (- now hello-received-ms))
-                          :pull-sent->pull-ok-ms (when (number? first-pull-sent-ms)
-                                                   (- now first-pull-sent-ms))}))))))
-
-(defn- mark-first-aes-key-ready!
-  [client aes-key-start-ms aes-key-ready-ms graph-e2ee?]
-  (when-let [*timing (:timing client)]
-    (let [{:keys [first-aes-key-ready-ms first-pull-ok-received-ms ws-open-ms]} @*timing]
-      (when (nil? first-aes-key-ready-ms)
-        (swap! *timing assoc
-               :first-aes-key-start-ms aes-key-start-ms
-               :first-aes-key-ready-ms aes-key-ready-ms)
-        (log/info :db-sync/first-aes-key-ready
-                  (merge (timing-platform-fields)
-                         {:repo (:repo client)
-                          :graph-id (:graph-id client)
-                          :graph-e2ee? graph-e2ee?
-                          :ws-open-ms ws-open-ms
-                          :first-pull-ok-received-ms first-pull-ok-received-ms
-                          :first-aes-key-start-ms aes-key-start-ms
-                          :first-aes-key-ready-ms aes-key-ready-ms
-                          :pull-ok->aes-key-ready-ms (when (number? first-pull-ok-received-ms)
-                                                       (- aes-key-ready-ms first-pull-ok-received-ms))
-                          :aes-key-duration-ms (- aes-key-ready-ms aes-key-start-ms)}))))))
-
-(defn- mark-first-remote-apply!
-  [client apply-start-ms]
-  (when-let [*timing (:timing client)]
-    (let [{:keys [ws-open-ms first-remote-apply-end-ms]} @*timing]
-      (when (and (number? ws-open-ms) (nil? first-remote-apply-end-ms))
-        (let [apply-end-ms (common-util/time-ms)]
-          (swap! *timing assoc
-                 :first-remote-apply-start-ms apply-start-ms
-                 :first-remote-apply-end-ms apply-end-ms)
-          (log/info :db-sync/first-remote-apply
-                    (merge (timing-platform-fields)
-                           {:repo (:repo client)
-                            :graph-id (:graph-id client)
-                            :ws-open-ms ws-open-ms
-                            :apply-start-ms apply-start-ms
-                            :apply-end-ms apply-end-ms
-                            :ws-open->first-apply-ms (- apply-end-ms ws-open-ms)
-                            :first-apply-duration-ms (- apply-end-ms apply-start-ms)})))))))
 
 (defn- update-online-users!
   [client users]
@@ -883,16 +746,7 @@
                 :stale-kill-timer (atom nil)
                 :last-ws-message-ts (atom (common-util/time-ms))
                 :online-users (atom [])
-                :ws-state (atom :closed)
-                :timing (atom {:ws-connect-start-ms nil
-                               :ws-open-ms nil
-                               :hello-received-ms nil
-                               :first-pull-sent-ms nil
-                               :first-pull-ok-received-ms nil
-                               :first-aes-key-start-ms nil
-                               :first-aes-key-ready-ms nil
-                               :first-remote-apply-start-ms nil
-                               :first-remote-apply-end-ms nil})}]
+                :ws-state (atom :closed)}]
     (reset! worker-state/*db-sync-client client)
     client))
 
@@ -1443,10 +1297,8 @@
       (case (:type message)
         "hello" (do
                   (require-non-negative remote-tx {:repo repo :type "hello"})
-                  (mark-hello-received! client local-tx remote-tx)
                   (broadcast-rtc-state! client)
                   (when (> remote-tx local-tx)
-                    (mark-first-pull-sent! client :hello local-tx)
                     (send! (:ws client) {:type "pull" :since local-tx}))
                   (enqueue-asset-sync! repo client)
                   (flush-pending! repo client))
@@ -1475,23 +1327,21 @@
                           txs-data (mapv (fn [data]
                                            (parse-transit (:tx data) {:repo repo :type "pull/ok"}))
                                          txs)]
-                      (mark-first-pull-ok-received! client)
                       (when (seq txs-data)
                         (p/let [graph-e2ee? (sync-crypt/graph-e2ee? repo)
-                                aes-key-start-ms (common-util/time-ms)
                                 aes-key (sync-crypt/<ensure-graph-aes-key repo (:graph-id client))
-                                aes-key-ready-ms (common-util/time-ms)
-                                _ (mark-first-aes-key-ready! client aes-key-start-ms aes-key-ready-ms graph-e2ee?)
                                 _ (when (and graph-e2ee? (nil? aes-key))
                                     (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
                                 tx-batches (if aes-key
                                              (p/all (mapv (fn [tx-data]
                                                             (sync-crypt/<decrypt-tx-data aes-key tx-data))
                                                           txs-data))
-                                             (p/resolved txs-data))
-                                apply-start-ms (common-util/time-ms)]
-                          (apply-remote-tx! repo client tx-batches)
-                          (mark-first-remote-apply! client apply-start-ms)
+                                             (p/resolved txs-data))]
+                          (try
+                            (apply-remote-tx! repo client tx-batches)
+                            (catch :default e
+                              (log/error ::apply-remote-tx e)
+                              (throw e)))
                           (client-op/update-local-tx repo remote-tx)
                           (broadcast-rtc-state! client)
                           (flush-pending! repo client)))))
@@ -1499,7 +1349,6 @@
                     (require-non-negative remote-tx {:repo repo :type "changed"})
                     (broadcast-rtc-state! client)
                     (when (< local-tx remote-tx)
-                      (mark-first-pull-sent! client :changed local-tx)
                       (send! (:ws client) {:type "pull" :since local-tx})))
         "tx/reject" (let [reason (:reason message)]
                       (when (nil? reason)
@@ -1509,9 +1358,7 @@
                         (require-non-negative remote-tx {:repo repo :type "tx/reject"}))
                       (case reason
                         "stale"
-                        (do
-                          (mark-first-pull-sent! client :stale local-tx)
-                          (send! (:ws client) {:type "pull" :since local-tx}))
+                        (send! (:ws client) {:type "pull" :since local-tx})
 
                         (fail-fast :db-sync/invalid-field
                                    {:repo repo :type "tx/reject" :reason reason})))
@@ -1607,7 +1454,6 @@
     (stop-client! client))
   ;; use cache token for faster websocket connection
   (when-let [token' (or token (auth-token))]
-    (mark-ws-connect-start! client)
     (let [ws (js/WebSocket. (append-token url token'))
           updated (assoc client :ws ws)]
       (attach-ws-handlers! repo updated ws url)
@@ -1616,7 +1462,6 @@
               (reset-reconnect! updated)
               (touch-last-ws-message! updated)
               (set-ws-state! updated :open)
-              (mark-ws-open! updated)
               (send! ws {:type "hello" :client repo})
               (enqueue-asset-sync! repo updated)))
       (close-stale-ws-loop updated ws))))
