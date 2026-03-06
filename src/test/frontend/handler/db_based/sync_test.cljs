@@ -188,7 +188,7 @@
                framed-bytes (encode-framed-rows rows)
                original-fetch js/fetch
                stream-url "http://base/sync/graph-1/snapshot/stream"]
-           (-> (p/let [gzip-bytes (<gzip-bytes framed-bytes)]
+               (-> (p/let [gzip-bytes (<gzip-bytes framed-bytes)]
                  (set! js/fetch
                        (fn [url opts]
                          (let [method (or (aget opts "method") "GET")]
@@ -226,15 +226,24 @@
                        (db-sync/<rtc-download-graph! "demo-graph" "graph-1" false))
                      (p/finally (fn [] (set! js/fetch original-fetch)))))
                (p/then (fn [_]
-                         (is (= 1 (count @import-calls)))
-                         (let [[op graph imported-rows reset? graph-uuid remote-tx graph-e2ee?] (first @import-calls)]
-                           (is (= :thread-api/db-sync-import-kvs-rows op))
+                         (is (= 3 (count @import-calls)))
+                         (let [[prepare-op graph reset? graph-uuid graph-e2ee?] (first @import-calls)
+                               [chunk-op imported-rows chunk-idx total-chunks chunk-graph-uuid] (second @import-calls)
+                               [finalize-op finalize-graph finalize-graph-uuid remote-tx] (nth @import-calls 2)]
+                           (is (= :thread-api/db-sync-import-prepare prepare-op))
                            (is (string/ends-with? graph "demo-graph"))
-                           (is (= rows imported-rows))
                            (is (= true reset?))
                            (is (= "graph-1" graph-uuid))
-                           (is (= 42 remote-tx))
-                           (is (= false graph-e2ee?)))
+                           (is (= false graph-e2ee?))
+                           (is (= :thread-api/db-sync-import-rows-chunk chunk-op))
+                           (is (= rows imported-rows))
+                           (is (= 0 chunk-idx))
+                           (is (= 1 total-chunks))
+                           (is (= "graph-1" chunk-graph-uuid))
+                           (is (= :thread-api/db-sync-import-finalize finalize-op))
+                           (is (string/ends-with? finalize-graph "demo-graph"))
+                           (is (= "graph-1" finalize-graph-uuid))
+                           (is (= 42 remote-tx)))
                          (is (= [[stream-url "GET"]]
                                 @fetch-calls))
                          (done)))

@@ -61,6 +61,8 @@
 
 (.importScripts js/self "worker.js")
 
+(declare <build-blocks-fts!)
+
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
 (defonce *datascript-conns worker-state/*datascript-conns)
@@ -263,20 +265,26 @@
       (let [conn (common-sqlite/get-storage-conn storage db-schema/schema)
             _ (db-fix/check-and-fix-schema! conn)
             _ (when datoms
-                (let [eid->datoms (group-by :e datoms)
-                      {properties true non-properties false} (group-by
-                                                              (fn [[_eid datoms]]
-                                                                (boolean
-                                                                 (some (fn [datom] (and (= (:a datom) :db/ident)
-                                                                                        (db-property/property? (:v datom))))
-                                                                       datoms)))
-                                                              eid->datoms)
-                      datoms (concat (mapcat second properties)
-                                     (mapcat second non-properties))
-                      data (map (fn [datom]
-                                  [:db/add (:e datom) (:a datom) (:v datom)])
-                                datoms)]
-                  (d/transact! conn data {:initial-db? true})))
+                (let [property-eids (into #{}
+                                          (comp (filter (fn [datom]
+                                                          (and (= (:a datom) :db/ident)
+                                                               (db-property/property? (:v datom)))))
+                                                (map :e))
+                                          datoms)
+                      to-tx (fn [d] [:db/add (:e d) (:a d) (:v d)])
+                      batch-size 20000
+                      prop-batches (->> datoms
+                                        (filter #(contains? property-eids (:e %)))
+                                        (map to-tx)
+                                        (partition-all batch-size))
+                      _ (doseq [batch prop-batches]
+                          (d/transact! conn (vec batch) {:initial-db? true}))
+                      non-prop-batches (->> datoms
+                                            (remove #(contains? property-eids (:e %)))
+                                            (map to-tx)
+                                            (partition-all batch-size))]
+                  (doseq [batch non-prop-batches]
+                    (d/transact! conn (vec batch) {:initial-db? true}))))
             client-ops-conn (when-not @*publishing? (common-sqlite/get-storage-conn
                                                      client-ops-storage
                                                      client-op/schema-in-db))
@@ -300,7 +308,16 @@
           (when initial-tx-report
             (db-sync/handle-local-tx! repo initial-tx-report))
 
-          (db-listener/listen-db-changes! repo (get @*datascript-conns repo)))))))
+          (db-listener/listen-db-changes! repo (get @*datascript-conns repo))
+
+          ;; Build search index if not yet completed (async, batched, yields between batches)
+          (when (and search-db (not @*publishing?))
+            (try
+              (let [build-done (aget (aget (.exec search-db #js {:sql "PRAGMA user_version" :rowMode "array"}) 0) 0)]
+                (when (zero? build-done)
+                  (<build-blocks-fts! search-db conn)))
+              (catch :default e
+                (js/console.error "Search index build error:" e)))))))))
 
 (defn- iter->vec [iter']
   (when iter'
@@ -614,49 +631,107 @@
                                   {:sub-type :download-completed
                                    :graph-uuid graph-id
                                    :message "Graph is ready!"})
-       ((@thread-api/*thread-apis :thread-api/export-db) repo)
+       (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
+         (.exec db "PRAGMA wal_checkpoint(2)"))
        (client-op/update-local-tx repo remote-tx)
        (shared-service/broadcast-to-clients! :add-repo {:repo repo}))
       (p/catch (fn [error]
                  (js/console.error error)))))
 
+;; Chunked import state - held between prepare/chunk/finalize calls
+(defonce ^:private *import-state (atom nil))
+
+(def-thread-api :thread-api/db-sync-import-prepare
+  [repo reset? graph-id graph-e2ee?]
+  (let [graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))]
+    (-> (p/let [_ (when reset? (close-db! repo))
+                aes-key (when graph-e2ee?
+                          (sync-crypt/<fetch-graph-aes-key-for-download graph-id))
+                _ (when (and graph-e2ee? (nil? aes-key))
+                    (db-sync/fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
+                pool (<get-opfs-pool repo)
+                ^js db (new (.-OpfsSAHPoolDb pool) repo-path)
+                _ (common-sqlite/create-kvs-table! db)
+                _ (enable-sqlite-wal-mode! db)
+                _ (when reset? (.exec db "DELETE FROM kvs"))]
+          (reset! *import-state {:db db :aes-key aes-key :graph-e2ee? graph-e2ee?})
+          true)
+        (p/catch (fn [error]
+                   (throw error))))))
+
+(def-thread-api :thread-api/db-sync-import-rows-chunk
+  [rows chunk-idx total-chunks graph-id]
+  (-> (p/let [{:keys [db aes-key graph-e2ee?]} @*import-state
+              batches (partition-all 100 rows)]
+        (p/doseq [batch batches]
+          (p/let [rows-batch (if graph-e2ee?
+                               (sync-crypt/<decrypt-snapshot-rows-batch aes-key batch)
+                               batch)]
+            (upsert-addr-content! db (rows->sqlite-binds rows-batch))))
+        (rtc-log-and-state/rtc-log :rtc.log/download
+                                   {:sub-type :download-progress
+                                    :graph-uuid graph-id
+                                    :message (str "Importing data " (inc chunk-idx) "/" total-chunks)})
+        true)
+      (p/catch (fn [error]
+                 (when-let [{:keys [db]} @*import-state]
+                   (try (.close db) (catch :default _)))
+                 (reset! *import-state nil)
+                 (throw error)))))
+
+(def-thread-api :thread-api/db-sync-import-finalize
+  [repo graph-id remote-tx]
+  (-> (p/let [{:keys [db]} @*import-state
+              _ (.exec db "PRAGMA wal_checkpoint(2)")
+              _ (.close db)
+              _ (reset! *import-state nil)]
+        (import-datoms-to-db! repo graph-id remote-tx nil))
+      (p/catch (fn [error]
+                 (when-let [{:keys [db]} @*import-state]
+                   (try (.close db) (catch :default _)))
+                 (reset! *import-state nil)
+                 (throw error)))))
+
+;; Keep original API for backward compat (non-mobile use)
 (def-thread-api :thread-api/db-sync-import-kvs-rows
   [repo rows reset? graph-id remote-tx graph-e2ee?]
   (let [graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))]
-    (p/let [_ (when reset? (close-db! repo))
-            aes-key (when graph-e2ee?
-                      (sync-crypt/<fetch-graph-aes-key-for-download graph-id))
-            _ (when (and graph-e2ee? (nil? aes-key))
-                (db-sync/fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
-            db (ensure-db-sync-import-db! repo reset?)
-            batches (medley/indexed (partition-all 100 rows))]
-      (rtc-log-and-state/rtc-log :rtc.log/download
-                                 {:sub-type :download-progress
-                                  :graph-uuid graph-id
-                                  :message (if graph-e2ee?
-                                             "Start decrypting data"
-                                             "Start importing data")})
-      ;; sequential batches: low memory
-      (p/doseq [[i batch] batches]
-        (p/let [rows-batch (if graph-e2ee?
-                             (sync-crypt/<decrypt-snapshot-rows-batch aes-key batch)
-                             batch)]
-          (upsert-addr-content! db (rows->sqlite-binds rows-batch))
+    (-> (p/let [_ (when reset? (close-db! repo))
+                aes-key (when graph-e2ee?
+                          (sync-crypt/<fetch-graph-aes-key-for-download graph-id))
+                _ (when (and graph-e2ee? (nil? aes-key))
+                    (db-sync/fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
+                db (ensure-db-sync-import-db! repo reset?)
+                batches (medley/indexed (partition-all 100 rows))]
           (rtc-log-and-state/rtc-log :rtc.log/download
                                      {:sub-type :download-progress
                                       :graph-uuid graph-id
-                                      :message (str (if graph-e2ee?
-                                                      "Decrypting data"
-                                                      "Importing data")
-                                                    " "
-                                                    (inc i)
-                                                    "/"
-                                                    (count batches))})))
-      (let [storage (new-sqlite-storage db)
-            conn (common-sqlite/get-storage-conn storage db-schema/schema)
-            datoms (vec (d/datoms @conn :eavt))]
-        (.close db)
-        (import-datoms-to-db! repo graph-id remote-tx datoms)))))
+                                      :message (if graph-e2ee?
+                                                 "Start decrypting data"
+                                                 "Start importing data")})
+          ;; sequential batches: low memory
+          (p/doseq [[i batch] batches]
+            (p/let [rows-batch (if graph-e2ee?
+                                 (sync-crypt/<decrypt-snapshot-rows-batch aes-key batch)
+                                 batch)]
+              (upsert-addr-content! db (rows->sqlite-binds rows-batch))
+              (rtc-log-and-state/rtc-log :rtc.log/download
+                                         {:sub-type :download-progress
+                                          :graph-uuid graph-id
+                                          :message (str (if graph-e2ee?
+                                                          "Decrypting data"
+                                                          "Importing data")
+                                                        " "
+                                                        (inc i)
+                                                        "/"
+                                                        (count batches))})))
+          (let [storage (new-sqlite-storage db)
+                conn (common-sqlite/get-storage-conn storage db-schema/schema)
+                datoms (vec (d/datoms @conn :eavt))]
+            (.close db)
+            (import-datoms-to-db! repo graph-id remote-tx datoms)))
+        (p/catch (fn [error]
+                   (throw error))))))
 
 (def-thread-api :thread-api/release-access-handles
   [repo]
@@ -708,6 +783,40 @@
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (search/build-blocks-indice repo @conn)))
+
+(defn- <build-blocks-fts!
+  "Build FTS index in batches with yielding. Sets user_version=1 on completion."
+  [search-db conn]
+  (search/truncate-table! search-db)
+  (let [db @conn
+        uuids (mapv :v (d/datoms db :avet :block/uuid))
+        total-count (count uuids)
+        batch-size 1000]
+    (p/loop [i 0]
+      (if (< i total-count)
+        (let [end (min (+ i batch-size) total-count)
+              batch-uuids (subvec uuids i end)
+              indexed (->> batch-uuids
+                           (keep #(d/entity db [:block/uuid %]))
+                           (remove search/hidden-entity?)
+                           (keep search/block->index))]
+          (when (seq indexed)
+            (search/upsert-blocks! search-db (bean/->js indexed)))
+          (p/let [_ (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))]
+            (p/recur end)))
+        (.exec search-db "PRAGMA user_version = 1")))))
+
+(def-thread-api :thread-api/search-build-blocks-indice-in-worker
+  [repo & [force?]]
+  (p/let [search-db (get-search-db repo)]
+    (when search-db
+      (let [build-done (aget (aget (.exec search-db #js {:sql "PRAGMA user_version" :rowMode "array"}) 0) 0)]
+        (if (and (pos? build-done) (not force?))
+          build-done
+          (when-let [conn (worker-state/get-datascript-conn repo)]
+            (when force?
+              (search/build-fuzzy-search-indice repo @conn))
+            (<build-blocks-fts! search-db conn)))))))
 
 (def-thread-api :thread-api/search-build-pages-indice
   [_repo]
