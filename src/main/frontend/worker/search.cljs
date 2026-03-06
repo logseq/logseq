@@ -402,7 +402,7 @@ DROP TRIGGER IF EXISTS blocks_au;
       (seq (fuzzy/search-normalize match true))
       (seq (fuzzy/search-normalize q true))))))
 
-(defn- hidden-entity?
+(defn hidden-entity?
   [entity]
   (or (ldb/hidden? entity)
       (let [page (:block/page entity)]
@@ -653,7 +653,8 @@ DROP TRIGGER IF EXISTS blocks_au;
 (defn truncate-table!
   [db]
   (drop-tables-and-triggers! db)
-  (create-tables-and-triggers! db))
+  (create-tables-and-triggers! db)
+  (.exec db "PRAGMA user_version = 0"))
 
 (defn get-all-blocks
   [db]

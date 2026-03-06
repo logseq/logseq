@@ -373,8 +373,20 @@
                                :graph-uuid graph-uuid
                                :message "Graph snapshot downloaded"}])
                    (when (seq rows)
-                     (state/<invoke-db-worker :thread-api/db-sync-import-kvs-rows
-                                              graph rows true graph-uuid remote-tx graph-e2ee?))
+                     (let [chunk-size 5000
+                           chunks (partition-all chunk-size rows)
+                           total-chunks (count chunks)]
+                       (p/do!
+                        (state/<invoke-db-worker :thread-api/db-sync-import-prepare
+                                                 graph true graph-uuid graph-e2ee?)
+                        (p/loop [remaining chunks
+                                 idx 0]
+                          (when (seq remaining)
+                            (p/let [_ (state/<invoke-db-worker :thread-api/db-sync-import-rows-chunk
+                                                                (vec (first remaining)) idx total-chunks graph-uuid)]
+                              (p/recur (rest remaining) (inc idx)))))
+                        (state/<invoke-db-worker :thread-api/db-sync-import-finalize
+                                                 graph graph-uuid remote-tx))))
                    (count rows))))
            (p/rejected (ex-info "db-sync missing graph info"
                                 {:type :db-sync/invalid-graph
