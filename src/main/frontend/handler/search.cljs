@@ -106,6 +106,18 @@
    (when (and clear-search-mode? (not= (state/get-search-mode) :graph))
      (state/set-search-mode! :global))))
 
+(defn rebuild-embeddings!
+  [repo]
+  (when (ldb/get-key-value (db/get-db) :logseq.kv/graph-text-embedding-model-name)
+    (c.m/run-task
+      ::rebuild-embeddings
+      (m/sp
+        (c.m/<?
+         (state/<invoke-db-worker :thread-api/vec-search-cancel-indexing repo))
+        (c.m/<?
+         (state/<invoke-db-worker :thread-api/vec-search-embedding-graph repo {:reset-embedding? true})))
+      :succ (constantly nil))))
+
 (defn rebuild-indices!
   ([]
    (rebuild-indices! false))
@@ -114,15 +126,7 @@
    (when-let [repo (state/get-current-repo)]
      (p/do!
       (search/rebuild-indices!)
-      (when (ldb/get-key-value (db/get-db) :logseq.kv/graph-text-embedding-model-name)
-        (c.m/run-task
-          ::rebuild-embeddings
-          (m/sp
-            (c.m/<?
-             (state/<invoke-db-worker :thread-api/vec-search-cancel-indexing repo))
-            (c.m/<?
-             (state/<invoke-db-worker :thread-api/vec-search-embedding-graph repo {:reset-embedding? true})))
-          :succ (constantly nil)))
+      (rebuild-embeddings! repo)
       (when notice?
         (notification/show!
          "Search indices rebuilt successfully!"
