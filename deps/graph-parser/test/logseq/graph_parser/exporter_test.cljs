@@ -412,7 +412,7 @@
              (:block/title (db-test/find-block-by-content @conn #"tasks with todo")))
           "Advanced query has custom title migrated")
 
-      ;; Cards
+      ;; Card
       (is (= {:block/tags [:logseq.class/Card]}
              (db-test/readable-properties (db-test/find-block-by-content @conn "card 1")))
           "None of the card properties are imported since they are deprecated")
@@ -1033,11 +1033,11 @@
               :code-segs []}
              (split-fn ""))))))
 
-(deftest-async export-docs-graph-with-extract-code-snippet
+(deftest-async export-files-with-extract-code-snippet
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          files (mapv #(node-path/join file-graph-dir %) ["journals/2026_03_01.md"])
           conn (db-test/create-conn)
-          _ (db-pipeline/add-listener conn)
-          _ (import-file-graph-to-db file-graph-dir conn {:extract-code-snippets? true})
+          _ (import-files-to-db files conn {:extract-code-snippets? true})
           journal-page-eid (d/q '[:find ?p . :where [?p :block/journal-day 20260301]] @conn)
           top-blocks (->> (d/q '[:find [?b ...]
                                  :in $ ?page
@@ -1135,11 +1135,11 @@
         (is (every? #(= "bash" (:logseq.property.code/lang %)) children)
             "Both child blocks have bash language property")))))
 
-(deftest-async export-docs-graph-without-extract-code-snippet
+(deftest-async export-files-without-extract-code-snippet
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          files (mapv #(node-path/join file-graph-dir %) ["journals/2026_03_01.md"])
           conn (db-test/create-conn)
-          _ (db-pipeline/add-listener conn)
-          _ (import-file-graph-to-db file-graph-dir conn {})
+          _ (import-files-to-db files conn {:extract-code-snippets? false})
           journal-page-eid (d/q '[:find ?p . :where [?p :block/journal-day 20260301]] @conn)
           top-blocks (->> (d/q '[:find [?b ...]
                                  :in $ ?page

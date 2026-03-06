@@ -995,7 +995,8 @@
     @results))
 
 (defn- handle-queries
-  "If a block contains a simple or advanced queries, converts block to a #Query node"
+  "If a block contains a simple or advanced queries, converts block to a #Query node. If a block
+   contains a cards query converts to a #Cards node"
   [{:block/keys [title] :as block} db page-names-to-uuids walked-ast-blocks options]
   (if-let [query (some-> (first (:simple-queries walked-ast-blocks))
                          (ast->text (select-keys options [:log-fn]))
@@ -1039,21 +1040,18 @@
         {:block block'
          :pvalues-tx pvalues-tx'})
       (if-let [cards-macro (first (:cards walked-ast-blocks))]
-        (if-let [raw-query (some-> cards-macro second :arguments first)]
-          (let [query (string/trim raw-query)]
-            (if (string/blank? query)
-              {:block block}
-              (let [props {:logseq.property/query query}
-                    {:keys [block-properties pvalues-tx]}
-                    (build-properties-and-values props db page-names-to-uuids
-                                                 (select-keys block [:block/properties-text-values :block/name :block/title :block/uuid])
-                                                 options)
-                    block'
-                    (-> (update block :block/tags (fnil conj []) :logseq.class/Cards)
-                        (merge block-properties
-                               {:block/title (string/trim (string/replace-first title #"\{\{cards(.*)\}\}" ""))}))]
-                {:block block'
-                 :pvalues-tx pvalues-tx})))
+        (if-let [query (some-> cards-macro second :arguments first string/trim not-empty)]
+          (let [props {:logseq.property/query query}
+                {:keys [block-properties pvalues-tx]}
+                (build-properties-and-values props db page-names-to-uuids
+                                             (select-keys block [:block/properties-text-values :block/name :block/title :block/uuid])
+                                             options)
+                block'
+                (-> (update block :block/tags (fnil conj []) :logseq.class/Cards)
+                    (merge block-properties
+                           {:block/title (string/trim (string/replace-first title #"\{\{cards(.*)\}\}" ""))}))]
+            {:block block'
+             :pvalues-tx pvalues-tx})
           {:block block})
         {:block block}))))
 
@@ -1414,9 +1412,9 @@
     block))
 
 (defn- handle-math
-  "If a block's entire content is a single displayed math formula, convert to #Math-block node.
+  "If a block's entire content is a single displayed math formula, convert to #Math node.
   Detects blocks whose title is entirely delimited by $$ markers."
-  [block _opts]
+  [block]
   (let [title (string/trim (:block/title block))]
     (if (and (string/starts-with? title "$$")
              (string/ends-with? title "$$")
@@ -1519,6 +1517,44 @@
           (nil? idx) false
           :else (recur (+ idx (count substr)) (inc cnt)))))))
 
+(defn- handle-code-blocks
+  "Returns a vector of block and optional block children tx. If a block
+  contains code fence(s) i.e. ```, converts block to a #Code node.  If user
+  enables :extract-code-snippets? option, multiple code fences are extracted out
+  of text and put into children blocks in the order they appear"
+  [block' options]
+  (let [title (:block/title block')
+        has-fence? (and (string? title) (at-least-two? title "```"))
+        extract? (get-in options [:user-options :extract-code-snippets?])
+        [final-block code-children-tx]
+        (if has-fence?
+          (let [{:keys [text-parts code-segs]} (split-title-by-code-fences title)
+                pure-single-code? (and (= 1 (count code-segs))
+                                       (every? string/blank? text-parts))
+                has-mixed-content? (and extract?
+                                        (seq code-segs)
+                                        (some #(not (string/blank? %)) text-parts))]
+            (cond
+              pure-single-code?
+              (let [{:keys [text lang]} (first code-segs)]
+                [(cond-> (assoc block'
+                                :block/title text
+                                :block/tags [:logseq.class/Code-block]
+                                :logseq.property.node/display-type :code)
+                   lang (assoc :logseq.property.code/lang lang))
+                 []])
+              has-mixed-content?
+              (let [remaining-title (-> (string/join "\n" text-parts)
+                                        (string/replace #"\n{2,}" "\n")
+                                        string/trim)
+                    updated-block (assoc block' :block/title remaining-title)
+                    code-children (build-code-snippet-child-blocks updated-block code-segs)]
+                [updated-block code-children])
+              :else
+              [block' []]))
+          [block' []])]
+    [final-block code-children-tx]))
+
 (defn- <build-block-tx
   [db block* pre-blocks {:keys [page-names-to-uuids] :as per-file-state}
    {:keys [import-state journal-created-ats user-config] :as options}]
@@ -1544,45 +1580,14 @@
                      (update-block-tags db (:user-options options) per-file-state (:all-idents import-state))
                      (handle-embeds page-names-to-uuids walked-ast-blocks (select-keys options [:log-fn]))
                      (handle-quotes (select-keys options [:log-fn]))
-                     (handle-math (select-keys options [:log-fn]))
+                     (handle-math)
                      (update-block-marker options)
                      (update-block-priority options)
                      add-missing-timestamps
                      (dissoc :block/format :block.temp/ast-blocks)
                   ;;  ((fn [x] (prn ::block-out x) x))
                      )]
-    ;; Always detect standalone code blocks and tag them in-place.
-    ;; Extracting code fences from mixed-content blocks into children requires extract-code-snippets?.
-    (let [title (:block/title block')
-          has-fence? (and (string? title) (at-least-two? title "```"))
-          extract? (get-in options [:user-options :extract-code-snippets?])
-          [final-block code-children-tx]
-          (if has-fence?
-            (let [{:keys [text-parts code-segs]} (split-title-by-code-fences title)
-                  pure-single-code? (and (= 1 (count code-segs))
-                                         (every? string/blank? text-parts))
-                  has-mixed-content? (and extract?
-                                          (seq code-segs)
-                                          (some #(not (string/blank? %)) text-parts))]
-              (cond
-                pure-single-code?
-                (let [{:keys [text lang]} (first code-segs)]
-                  [(cond-> (assoc block'
-                                  :block/title text
-                                  :block/tags [:logseq.class/Code-block]
-                                  :logseq.property.node/display-type :code)
-                     lang (assoc :logseq.property.code/lang lang))
-                   []])
-                has-mixed-content?
-                (let [remaining-title (-> (string/join "\n" text-parts)
-                                          (string/replace #"\n{2,}" "\n")
-                                          string/trim)
-                      updated-block (assoc block' :block/title remaining-title)
-                      code-children (build-code-snippet-child-blocks updated-block code-segs)]
-                  [updated-block code-children])
-                :else
-                [block' []]))
-            [block' []])]
+    (let [[final-block code-children-tx] (handle-code-blocks block' options)]
       ;; Order matters as previous txs are referenced in block
       (concat properties-tx deadline-properties-tx asset-blocks-tx [final-block] code-children-tx))))
 
@@ -2050,7 +2055,7 @@
 * :extract-options - Options map to pass to extract/extract
 * :user-options - User provided options maps that alter how a file is converted to db graph. Current options
    are: :tag-classes (set), :property-classes (set), :property-parent-classes (set), :convert-all-tags? (boolean)
-   and :remove-inline-tags? (boolean)
+   :remove-inline-tags? (boolean), :extract-code-snippets? (boolean)
 * :import-state - useful import state to maintain across files e.g. property schemas or ignored properties
 * :macros - map of macros for use with macro expansion
 * :notify-user - Displays warnings to user without failing the import. Fn receives a map with :msg
