@@ -41,6 +41,7 @@
             [frontend.modules.shortcut.core :as st]
             [frontend.persist-db :as persist-db]
             [frontend.quick-capture :as quick-capture]
+            [frontend.search.plugin :as search-plugin]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]
@@ -78,9 +79,14 @@
    (when (:rtc-download? opts)
      (repo-handler/refresh-repos!)
      (p/do!
-      (p/delay 5000)
-      ;; TODO: search should be lazy computed
-      (search-handler/rebuild-indices!)))))
+     (p/delay 5000)
+      (p/let [repo (state/get-current-repo)
+              _ (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo)]
+        (search-handler/rebuild-embeddings! repo)
+        (when state/lsp-enabled?
+          (doseq [service (state/get-all-plugin-services-with-type :search)]
+            (search-plugin/call-service! service "search:rebuildPagesIndice" {})
+            (search-plugin/call-service! service "search:rebuildBlocksIndice" {}))))))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
   (let [switch-promise
