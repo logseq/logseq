@@ -968,6 +968,71 @@
            (:logseq.property.journal/title-format (d/entity @conn :logseq.class/Journal)))
         "title format set correctly by config")))
 
+(deftest split-title-by-code-fences
+  (let [split-fn #'gp-exporter/split-title-by-code-fences]
+    (testing "standalone code fence with language"
+      (is (= {:text-parts []
+              :code-segs [{:text "it's an individual code snippet with language tag"
+                           :lang "markdown"}]}
+             (split-fn "```markdown\nit's an individual code snippet with language tag\n```"))))
+
+    (testing "standalone code fence without language"
+      (is (= {:text-parts []
+              :code-segs [{:text "it's an individual code snippet without language tag"
+                           :lang nil}]}
+             (split-fn "```\nit's an individual code snippet without language tag\n```"))))
+
+    (testing "one code fence with leading text"
+      (is (= {:text-parts ["before code snippet"]
+              :code-segs [{:text "echo \"ok\"\nexit"
+                           :lang nil}]}
+             (split-fn "before code snippet\n```\necho \"ok\"\nexit\n```"))))
+
+    (testing "one code fence with leading and trailing text"
+      (is (= {:text-parts ["before code snippet" "after code snippet"]
+              :code-segs [{:text "echo \"ok\"\nexit"
+                           :lang "bash"}]}
+             (split-fn "before code snippet\n```bash\necho \"ok\"\nexit\n```\nafter code snippet"))))
+
+    (testing "one code fence followed by trailing text"
+      (is (= {:text-parts ["after code snippet"]
+              :code-segs [{:text "echo \"ok\"\nexit"
+                           :lang "bash"}]}
+             (split-fn "```bash\necho \"ok\"\nexit\n```\nafter code snippet"))))
+
+    (testing "multiple code fences mixed with text"
+      (is (= {:text-parts ["before code snippet" "middle" "after code snippet"]
+              :code-segs [{:text "echo \"ok\"\nexit"
+                           :lang "bash"}
+                          {:text "echo \"bye\"\nexit"
+                           :lang "bash"}]}
+             (split-fn "before code snippet\n```bash\necho \"ok\"\nexit\n```\nmiddle\n```bash\necho \"bye\"\nexit\n```\nafter code snippet"))))
+
+    (testing "edge: one code fence followed by opening fence without closing fence"
+      (is (= {:text-parts ["echo \"missing end fence\""] ;; no "```bash" ahead, it's fine as is; let's leave it
+              :code-segs [{:text "echo \"ok\"\nexit"
+                           :lang "bash"}]}
+             (split-fn "```bash\necho \"ok\"\nexit\n```\n```bash\necho \"missing end fence\""))))
+
+    (testing "edge: pure multiple code fences with no extra text"
+      (let [{:keys [text-parts code-segs]} (split-fn "```markdown\n1st code snippet with language tag\n```\n```\n2nd code snippet without language tag\n```")]
+        (is (and (empty? text-parts) (> (count code-segs) 1)) "not pure single code and no mixed content")))
+
+    (testing "edge: opening fence without closing fence"
+      (let [title "```bash\necho \"missing end fence\""
+            {:keys [text-parts code-segs]} (split-fn title)]
+        (is (and (= (count text-parts) 1) (not= (first text-parts) title) (empty? code-segs)) "not pure single code and no mixed content")))
+
+    (testing "edge: plain text without any code fence"
+      (is (= {:text-parts ["plain text only"]
+              :code-segs []}
+             (split-fn "plain text only"))))
+
+    (testing "edge: empty title"
+      (is (= {:text-parts [""]
+              :code-segs []}
+             (split-fn ""))))))
+
 (deftest-async export-docs-graph-with-extract-code-snippet
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           conn (db-test/create-conn)

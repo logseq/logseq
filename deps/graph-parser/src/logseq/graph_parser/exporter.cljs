@@ -1508,6 +1508,17 @@
         block))
     block))
 
+(defn- at-least-two?
+  [s substr]
+  (if (empty? substr)
+    false
+    (loop [start 0 cnt 0]
+      (let [idx (string/index-of s substr start)]
+        (cond
+          (>= cnt 2) true
+          (nil? idx) false
+          :else (recur (+ idx (count substr)) (inc cnt)))))))
+
 (defn- <build-block-tx
   [db block* pre-blocks {:keys [page-names-to-uuids] :as per-file-state}
    {:keys [import-state journal-created-ats user-config] :as options}]
@@ -1542,31 +1553,35 @@
                      )]
     ;; Always detect standalone code blocks and tag them in-place.
     ;; Extracting code fences from mixed-content blocks into children requires extract-code-snippets?.
-    (let [{:keys [text-parts code-segs]} (split-title-by-code-fences (:block/title block'))
-          pure-single-code? (and (= 1 (count code-segs))
-                                 (every? string/blank? text-parts))
+    (let [title (:block/title block')
+          has-fence? (and (string? title) (at-least-two? title "```"))
           extract? (get-in options [:user-options :extract-code-snippets?])
-          has-mixed-content? (and extract?
-                                  (seq code-segs)
-                                  (some #(not (string/blank? %)) text-parts))
           [final-block code-children-tx]
-          (cond
-            pure-single-code?
-            (let [{:keys [text lang]} (first code-segs)]
-              [(cond-> (assoc block'
-                              :block/title text
-                              :block/tags [:logseq.class/Code-block]
-                              :logseq.property.node/display-type :code)
-                 lang (assoc :logseq.property.code/lang lang))
-               []])
-            has-mixed-content?
-            (let [remaining-title (-> (string/join "\n" text-parts)
-                                      (string/replace #"\n{2,}" "\n")
-                                      string/trim)
-                  updated-block (assoc block' :block/title remaining-title)
-                  code-children (build-code-snippet-child-blocks updated-block code-segs)]
-              [updated-block code-children])
-            :else
+          (if has-fence?
+            (let [{:keys [text-parts code-segs]} (split-title-by-code-fences title)
+                  pure-single-code? (and (= 1 (count code-segs))
+                                         (every? string/blank? text-parts))
+                  has-mixed-content? (and extract?
+                                          (seq code-segs)
+                                          (some #(not (string/blank? %)) text-parts))]
+              (cond
+                pure-single-code?
+                (let [{:keys [text lang]} (first code-segs)]
+                  [(cond-> (assoc block'
+                                  :block/title text
+                                  :block/tags [:logseq.class/Code-block]
+                                  :logseq.property.node/display-type :code)
+                     lang (assoc :logseq.property.code/lang lang))
+                   []])
+                has-mixed-content?
+                (let [remaining-title (-> (string/join "\n" text-parts)
+                                          (string/replace #"\n{2,}" "\n")
+                                          string/trim)
+                      updated-block (assoc block' :block/title remaining-title)
+                      code-children (build-code-snippet-child-blocks updated-block code-segs)]
+                  [updated-block code-children])
+                :else
+                [block' []]))
             [block' []])]
       ;; Order matters as previous txs are referenced in block
       (concat properties-tx deadline-properties-tx asset-blocks-tx [final-block] code-children-tx))))
