@@ -1580,6 +1580,12 @@
   (zipmap (vals autopair-map)
           (keys autopair-map)))
 
+(def autopair-openers
+  (set (keys autopair-map)))
+
+(def autopair-closers
+  (set (keys reversed-autopair-map)))
+
 (def autopair-when-selected
   #{"*" "^" "_" "=" "+" "/"})
 
@@ -1587,6 +1593,24 @@
   (assoc autopair-map
          "$" "$"
          ":" ":"))
+
+(defn- run-autopair-search-actions!
+  [input prefix selected]
+  (cond
+    (= prefix page-ref/left-brackets)
+    (do
+      (commands/handle-step [:editor/search-page])
+      (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)
+                                      :selected selected}))
+
+    (= prefix block-ref/left-parens)
+    (do
+      (commands/handle-step [:editor/search-block :reference])
+      (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)
+                                      :selected selected}))
+
+    :else
+    nil))
 
 (defn- autopair
   [input-id prefix _format _option]
@@ -1602,18 +1626,349 @@
                                                                  (when (>= prefix-pos 0)
                                                                    [(subs new-value prefix-pos (+ prefix-pos 2))
                                                                     (+ prefix-pos 2)]))})]
-        (cond
-          (= prefix page-ref/left-brackets)
-          (do
-            (commands/handle-step [:editor/search-page])
-            (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)
-                                            :selected selected}))
+        (run-autopair-search-actions! input prefix selected)))))
 
-          (= prefix block-ref/left-parens)
-          (do
-            (commands/handle-step [:editor/search-block :reference])
-            (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)
-                                            :selected selected})))))))
+(defonce ime-snapshots
+  (atom {}))
+
+(defonce ime-skip-next-keyup-fallbacks
+  (atom {}))
+
+(defonce ime-keyup-during-composition-keys
+  (atom {}))
+
+(def ime-snapshot-prop
+  "__logseqImeSnapshot")
+
+(def ime-process-keyup-marker
+  :ime/process-keyup)
+
+(defn- mark-ime-skip-next-keyup-fallback!
+  [input-id key]
+  (when (and input-id
+             (or (contains? keycode/left-square-brackets-keys key)
+                 (contains? keycode/left-paren-keys key)))
+    (swap! ime-skip-next-keyup-fallbacks
+           update
+           input-id
+           (fnil conj #{})
+           key)))
+
+(defn- consume-ime-skip-next-keyup-fallback?
+  [input-id key]
+  (let [skip? (contains? (get @ime-skip-next-keyup-fallbacks input-id #{}) key)]
+    (when skip?
+      (swap! ime-skip-next-keyup-fallbacks
+             (fn [m]
+               (let [ks (disj (get m input-id #{}) key)]
+                 (if (empty? ks)
+                   (dissoc m input-id)
+                   (assoc m input-id ks))))))
+    skip?))
+
+(defn- mark-ime-keyup-during-composition!
+  [input-id key]
+  (let [marker-key (cond
+                     (or (contains? keycode/left-square-brackets-keys key)
+                         (contains? keycode/left-paren-keys key))
+                     key
+
+                     (= key "Process")
+                     ime-process-keyup-marker
+
+                     :else
+                     nil)]
+    (when (and input-id marker-key)
+      (swap! ime-keyup-during-composition-keys
+             update
+             input-id
+             (fnil conj #{})
+             marker-key))))
+
+(defn- consume-ime-keyup-during-composition?
+  [input-id key]
+  (let [keys (get @ime-keyup-during-composition-keys input-id #{})
+        seen-keys (cond-> #{}
+                    (contains? keys key)
+                    (conj key)
+                    (contains? keys ime-process-keyup-marker)
+                    (conj ime-process-keyup-marker))
+        seen? (seq seen-keys)]
+    (when seen?
+      (swap! ime-keyup-during-composition-keys
+             (fn [m]
+               (let [ks (apply disj (get m input-id #{}) seen-keys)]
+                 (if (empty? ks)
+                   (dissoc m input-id)
+                   (assoc m input-id ks))))))
+    (boolean seen?)))
+
+(defn- clear-ime-keyup-during-composition!
+  [input-id]
+  (swap! ime-keyup-during-composition-keys dissoc input-id))
+
+(defn- infer-ime-keyup-key
+  [raw-key key-code committed-char]
+  (let [committed-key (some-> committed-char str)]
+    (cond
+      ;; Some IMEs expose keyup as key=nil/Process + keyCode=229.
+      ;; If a committed opener is visible at caret, recover it for skip-token consumption.
+      (and (= key-code 229)
+           (or (nil? raw-key)
+               (= raw-key "Process"))
+           (or (contains? keycode/left-square-brackets-keys committed-key)
+               (contains? keycode/left-paren-keys committed-key)))
+      committed-key
+
+      (and (nil? raw-key)
+           (= key-code 229))
+      "Process"
+
+      :else
+      raw-key)))
+
+(defn- capture-ime-snapshot!
+  [input-id input]
+  ;; Capture the pre-commit input state for IME autopair.
+  ;; Scenario:
+  ;; 1) User starts typing with IME.
+  ;; 2) Selection may collapse before compositionend.
+  ;; 3) We still need original value/selection to restore wrapping behavior.
+  (let [value (or (gobj/get input "value") "")
+        selection-start (util/get-selection-start input)
+        selection-end (util/get-selection-end input)
+        selected (when (and (number? selection-start)
+                            (number? selection-end)
+                            (not= selection-start selection-end))
+                   (subs value selection-start selection-end))
+        snapshot {:value value
+                  :pos (cursor/pos input)
+                  :selection-start selection-start
+                  :selection-end selection-end
+                  :selected selected}]
+    (gobj/set input ime-snapshot-prop (clj->js snapshot))
+    (swap! ime-snapshots assoc input-id snapshot)))
+
+(defn- consume-ime-snapshot!
+  [input-id input]
+  ;; Consume one-shot snapshot captured before IME commit.
+  (let [snapshot (or (get @ime-snapshots input-id)
+                     (some-> (gobj/get input ime-snapshot-prop)
+                             (js->clj :keywordize-keys true)))]
+    (swap! ime-snapshots dissoc input-id)
+    (gobj/remove input ime-snapshot-prop)
+    snapshot))
+
+(defn- refresh-ime-snapshot-on-keydown!
+  [input-id input]
+  ;; Keep snapshot in sync while keydown is still in IME mode.
+  (if (state/get-editor-action)
+    (do
+      (swap! ime-snapshots dissoc input-id)
+      (gobj/remove input ime-snapshot-prop))
+    (capture-ime-snapshot! input-id input)))
+
+(defn- get-ime-before-commit-context
+  [input key]
+  ;; Some IMEs may materialize opener before/after compositionend.
+  ;; Normalize view so '(' policy uses comparable context.
+  (let [value (gobj/get input "value")
+        pos (cursor/pos input)
+        prev-pos (dec pos)]
+    (if (and (>= prev-pos 0)
+             (= (util/nth-safe value prev-pos) key))
+      {:value (str (subs value 0 prev-pos)
+                   (subs value pos))
+       :pos prev-pos}
+      {:value value
+       :pos pos})))
+
+(defn- autopair-left-paren-at?
+  [value pos]
+  ;; Match the same '(' guard used by non-IME keydown autopair.
+  (or (text-util/surround-by? value pos :start "")
+      (text-util/surround-by? value pos "\n" "")
+      (text-util/surround-by? value pos " " "")
+      (text-util/surround-by? value pos "]" "")
+      (text-util/surround-by? value pos "(" "")))
+
+(defn- autopair-allowed?
+  [input key selected]
+  ;; Share opener eligibility with non-IME path:
+  ;; opener key, selection policy, and '(' position guard.
+  (let [selected? (not (string/blank? selected))]
+    (and (contains? autopair-openers key)
+         (or (not (contains? autopair-when-selected key))
+             selected?)
+         (if (= key "(")
+           (let [{:keys [value pos]} (get-ime-before-commit-context input key)]
+             (autopair-left-paren-at? value pos))
+           true))))
+
+(defn- get-autopair-trigger-prefix
+  [value prefix-pos]
+  ;; Compute the two-char opener token around caret to trigger search actions.
+  (when (and (string? value)
+             (>= prefix-pos 0)
+             (<= (+ prefix-pos 2) (count value)))
+    (subs value prefix-pos (+ prefix-pos 2))))
+
+(defn- should-autopair-move-forward-at?
+  [value pos key]
+  ;; Keep close-char forward behavior aligned with keydown:
+  ;; if closer already exists at caret, move forward instead of inserting.
+  (let [curr (util/nth-safe value pos)
+        prev (util/nth-safe value (dec pos))]
+    (and (> pos 0)
+         (= curr key)
+         (contains? autopair-closers key)
+         (or (not= key "`")
+             (not= prev "`")))))
+
+(defn- get-ime-composition-input-char
+  [^js e input]
+  ;; Prefer compositionend `data`; fallback to char before caret if unavailable.
+  (let [data (gobj/get e "data")]
+    (if (and (string? data) (= 1 (count data)))
+      data
+      (let [value (gobj/get input "value")
+            pos (cursor/pos input)
+            prev (util/nth-safe value (dec pos))]
+        (when prev
+          (str prev))))))
+
+(defn- ime-opener-committed?
+  [value pos key ime-snapshot]
+  ;; Detect whether IME has already committed current input char before compositionend logic.
+  (let [prev (util/nth-safe value (dec pos))]
+    (and (= prev key)
+         (if (map? ime-snapshot)
+           (let [start-value (or (:value ime-snapshot) "")
+                 start-pos (or (:pos ime-snapshot) 0)]
+             (or (> (count value) (count start-value))
+                 (> pos start-pos)))
+           true))))
+
+(defn- ime-handle-existing-closer!
+  [input-id input key ime-snapshot]
+  ;; IME parity with keydown closer behavior:
+  ;; when closer already exists at caret, move forward instead of inserting another one.
+  (when (string/blank? (util/get-selected-text))
+    (let [pos (cursor/pos input)
+          value (gobj/get input "value")
+          key-committed? (ime-opener-committed? value pos key ime-snapshot)
+          snapshot-value (or (:value ime-snapshot) value)
+          snapshot-pos (or (:pos ime-snapshot) pos)
+          move-forward? (or (should-autopair-move-forward-at? snapshot-value snapshot-pos key)
+                            (should-autopair-move-forward-at? value pos key))]
+      (when move-forward?
+        (if (and key-committed?
+                 (> pos 0)
+                 (= (util/nth-safe value (dec pos)) key))
+          (let [value' (str (subs value 0 (dec pos))
+                            (subs value pos))]
+            (state/set-block-content-and-last-pos! input-id value' pos)
+            (cursor/move-cursor-to input pos))
+          (cursor/move-cursor-forward input))
+        true))))
+
+(defn- ime-composition-autopair!
+  [^js e input-id]
+  ;; IME autopair flow:
+  ;; 1) Capture pre-commit snapshot at compositionstart.
+  ;; 2) At compositionend, branch by "had selection at start?".
+  ;; 3) For caret path, preserve keydown parity (forward vs insert).
+  (when-let [input (gdom/getElement input-id)]
+    (let [event-type (gobj/get e "type")
+          key (get-ime-composition-input-char e input)]
+      (cond
+        (= event-type "compositionstart")
+        (do
+          (clear-ime-keyup-during-composition! input-id)
+          (capture-ime-snapshot! input-id input)
+          false)
+
+        (= event-type "compositionend")
+        (let [selected (util/get-selected-text)
+              close-char (get autopair-map key)
+              ime-snapshot (consume-ime-snapshot! input-id input)
+              snapshot-selected (or (:selected ime-snapshot) "")
+              selected* (if (string/blank? selected) snapshot-selected selected)
+              keyup-already-seen? (consume-ime-keyup-during-composition? input-id key)
+              selected-from-snapshot? (and (not (string/blank? snapshot-selected))
+                                           (number? (:selection-start ime-snapshot))
+                                           (number? (:selection-end ime-snapshot)))
+              opener-handled?
+              (when (and (contains? autopair-openers key)
+                         close-char
+                         (or selected-from-snapshot?
+                             (autopair-allowed? input key selected*)))
+                (if selected-from-snapshot?
+                  (let [value (or (:value ime-snapshot) "")
+                        start (:selection-start ime-snapshot)
+                        end (:selection-end ime-snapshot)
+                        before (subs value 0 start)
+                        after (subs value end)
+                        new-value (str before key snapshot-selected close-char after)
+                        new-pos (inc start)
+                        selected-end (+ new-pos (count snapshot-selected))
+                        prefix (get-autopair-trigger-prefix new-value (dec start))]
+                    (state/set-block-content-and-last-pos! input-id new-value new-pos)
+                    (cursor/move-cursor-to input new-pos)
+                    (.setSelectionRange input new-pos selected-end)
+                    (run-autopair-search-actions! input prefix selected*))
+                  (when (string/blank? (util/get-selected-text))
+                    (if (ime-handle-existing-closer! input-id input key ime-snapshot)
+                      nil
+                      (let [pos (cursor/pos input)
+                            value (gobj/get input "value")
+                            key-committed? (ime-opener-committed? value pos key ime-snapshot)]
+                        (commands/simple-insert! input-id
+                                                 (if key-committed?
+                                                   close-char
+                                                   (str key close-char))
+                                                 {:backward-pos 1})
+                        (let [value (gobj/get input "value")
+                              pos (cursor/pos input)
+                              prefix (get-autopair-trigger-prefix value (- pos 2))]
+                          (run-autopair-search-actions! input prefix selected*))))))
+                true)
+              closer-handled?
+              (when (and (contains? autopair-closers key)
+                         (not opener-handled?))
+                (ime-handle-existing-closer! input-id input key ime-snapshot))
+              handled? (or opener-handled? closer-handled?)
+              ;; Keep dedup for ASCII autopair chars even when opener handling is skipped
+              ;; (e.g. first IME "(" after text), but don't suppress full-width fallback.
+              skip-keyup-fallback? (or handled?
+                                      (contains? autopair-openers key)
+                                      (contains? autopair-closers key))
+              _ (when (and skip-keyup-fallback?
+                           (not keyup-already-seen?))
+                  (mark-ime-skip-next-keyup-fallback! input-id key))]
+          (clear-ime-keyup-during-composition! input-id)
+          (boolean handled?))
+
+        :else
+        false))))
+
+(defn- ime-process-key?
+  [key]
+  (= key "Process"))
+
+(defn- ime-process-keycode?
+  [key-code]
+  (= key-code 229))
+
+(defn- ime-composing-keydown?
+  [e key key-code]
+  ;; For native keydown listeners, prefer `isComposing` first.
+  ;; Keep Process/229 fallbacks for IMEs that don't expose it consistently.
+  (or (state/editor-in-composition?)
+      (util/native-event-is-composing? e)
+      (util/goog-event-is-composing? e true)
+      (ime-process-key? key)
+      (ime-process-keycode? key-code)))
 
 (defn surround-by?
   [input before end]
@@ -2849,7 +3204,7 @@
 (defn ^:large-vars/cleanup-todo keydown-not-matched-handler
   "NOTE: Keydown cannot be used on Android platform"
   [format]
-  (fn [e _key-code]
+  (fn [e key-code]
     (let [input-id (state/get-edit-input-id)
           input (state/get-input)
           key (gobj/get e "key")
@@ -2860,15 +3215,19 @@
           hashtag? (or (surround-by? input "#" " ")
                        (surround-by? input "#" :end)
                        (= key "#"))]
+      (when (ime-process-key? key)
+        (refresh-ime-snapshot-on-keydown! input-id input))
       (cond
         (and (contains? #{"ArrowLeft" "ArrowRight"} key)
              (contains? #{:property-search :property-value-search} (state/get-editor-action)))
         (state/clear-editor-action!)
 
-        (and (util/goog-event-is-composing? e true) ;; #3218
+        (and (ime-composing-keydown? e key key-code)
              (not hashtag?) ;; #3283 @Rime
              (not (state/get-editor-show-page-search-hashtag?))) ;; #3283 @MacOS pinyin
-        nil
+        (do
+          (refresh-ime-snapshot-on-keydown! input-id input)
+          nil)
 
         (or ctrlKey metaKey)
         nil
@@ -2887,7 +3246,7 @@
                   (= "#" (util/nth-safe value (dec pos)))))
         (state/clear-editor-action!)
 
-        (and (contains? (set/difference (set (keys reversed-autopair-map))
+        (and (contains? (set/difference autopair-closers
                                         #{"`"})
                         key)
              (= (get-current-input-char input) key))
@@ -2912,8 +3271,7 @@
 
         ;; If you type `xyz`, the last backtick should close the first and not add another autopair
         ;; If you type several backticks in a row, each one should autopair to accommodate multiline code (```)
-        (-> (keys autopair-map)
-            set
+        (-> autopair-openers
             (disj "(")
             (contains? key)
             (or (autopair-left-paren? input key)))
@@ -2957,6 +3315,10 @@
 (defn- default-case-for-keyup-handler
   [input current-pos k code is-processed? c]
   (let [last-key-code (state/get-last-key-code)
+        skip-ime-fallbacks? (consume-ime-skip-next-keyup-fallback?
+                             (state/get-edit-input-id)
+                             k)
+        ime-composing? (state/editor-in-composition?)
         blank-selected? (string/blank? (util/get-selected-text))
         non-enter-processed? (and is-processed? ;; #3251
                                   (not= code keycode/enter-code))  ;; #3459
@@ -2970,6 +3332,13 @@
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
       (when (and (not editor-action) (not non-enter-processed?))
         (cond
+         ;; IME composition can report keyup before compositionend in some engines.
+         ;; Skip keyup fallbacks while composition is active to avoid duplicate pairing.
+          ime-composing?
+          (do
+            (mark-ime-keyup-during-composition! (state/get-edit-input-id) k)
+            nil)
+
          ;; When you type text inside square brackets
           (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp" "Escape"} k))
                (wrapped-by? input page-ref/left-brackets page-ref/right-brackets))
@@ -2986,7 +3355,8 @@
             (state/set-editor-action-data! {:pos pos}))
 
          ;; Handle non-ascii square brackets
-          (and (input-page-ref? k current-pos blank-selected? last-key-code)
+          (and (not skip-ime-fallbacks?)
+               (input-page-ref? k current-pos blank-selected? last-key-code)
                (not (wrapped-by? input page-ref/left-brackets page-ref/right-brackets)))
           (do
             (commands/handle-step [:editor/input page-ref/left-and-right-brackets {:backward-truncate-number 2
@@ -2994,8 +3364,9 @@
             (commands/handle-step [:editor/search-page])
             (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
 
-         ;; Handle non-ascii parentheses
-          (and blank-selected?
+          ;; Handle non-ascii parentheses
+          (and (not skip-ime-fallbacks?)
+               blank-selected?
                (contains? keycode/left-paren-keys k)
                (= (:key last-key-code) k)
                (> current-pos 0)
@@ -3022,35 +3393,44 @@
 (defn keyup-handler
   [_state input input-id]
   (fn [e key-code]
-    (when-not (util/goog-event-is-composing? e)
-      (let [current-pos (cursor/pos input)
-            value (gobj/get input "value")
-            c (util/nth-safe value (dec current-pos))
-            [key-code k code is-processed?]
-            (if (and c
-                     (mobile-util/native-android?)
-                     (or (= key-code 229)
-                         (= key-code 0)))
-              [(.charCodeAt value (dec current-pos))
-               c
-               (cond
-                 (= c " ")
-                 "Space"
+    (let [goog-composing? (util/goog-event-is-composing? e)
+          raw-key (gobj/get e "key")
+          key (infer-ime-keyup-key raw-key key-code nil)]
+      ;; Some engines emit keyup before compositionend but keep `isComposing=true`.
+      ;; Record it before the composing guard returns.
+      (when (and goog-composing?
+                 (state/editor-in-composition?))
+        (mark-ime-keyup-during-composition! (state/get-edit-input-id) key))
+      (when-not goog-composing?
+        (let [current-pos (cursor/pos input)
+              value (gobj/get input "value")
+              c (util/nth-safe value (dec current-pos))
+              key (infer-ime-keyup-key raw-key key-code c)
+              [key-code k code is-processed?]
+              (if (and c
+                       (mobile-util/native-android?)
+                       (or (= key-code 229)
+                           (= key-code 0)))
+                [(.charCodeAt value (dec current-pos))
+                 c
+                 (cond
+                   (= c " ")
+                   "Space"
 
-                 (parse-long c)
-                 (str "Digit" c)
+                   (parse-long c)
+                   (str "Digit" c)
 
-                 :else
-                 (str "Key" (string/upper-case c)))
-               false]
-              [key-code
-               (gobj/get e "key")
-               (if (mobile-util/native-android?)
-                 (gobj/get e "key")
-                 (gobj/getValueByKeys e "event_" "code"))
-                ;; #3440
-               (util/goog-event-is-composing? e true)])]
-        (cond
+                   :else
+                   (str "Key" (string/upper-case c)))
+                 false]
+                [key-code
+                 key
+                 (if (mobile-util/native-android?)
+                   key
+                   (gobj/getValueByKeys e "event_" "code"))
+                 ;; #3440
+                 (util/goog-event-is-composing? e true)])]
+          (cond
           ;; When you type something after /
           (and (= :commands (state/get-editor-action)) (not= k commands/command-trigger))
           (if (= commands/command-trigger (second (re-find #"(\S+)\s+$" value)))
@@ -3092,13 +3472,13 @@
           :else
           (default-case-for-keyup-handler input current-pos k code is-processed? c))
 
-        (close-autocomplete-if-outside input)
+          (close-autocomplete-if-outside input)
 
-        (when-not (or (= k "Shift") is-processed?)
-          (state/set-last-key-code! {:key-code key-code
-                                     :code code
-                                     :key k
-                                     :shift? (.-shiftKey e)}))))))
+          (when-not (or (= k "Shift") is-processed?)
+            (state/set-last-key-code! {:key-code key-code
+                                       :code code
+                                       :key k
+                                       :shift? (.-shiftKey e)})))))))
 
 (defn editor-on-click!
   [id]
@@ -3110,7 +3490,8 @@
 (defn editor-on-change!
   [block id search-timeout]
   (fn [e]
-    (if (= :block-search (state/sub :editor/action))
+    (let [editor-action (state/get-editor-action)]
+      (if (= :block-search editor-action)
       (let [timeout 300]
         (when @search-timeout
           (js/clearTimeout @search-timeout))
@@ -3120,7 +3501,9 @@
                  timeout)))
       (let [input (gdom/getElement id)]
         (edit-box-on-change! e block id)
-        (util/scroll-editor-cursor input)))))
+        (when-not editor-action
+          (ime-composition-autopair! e id))
+        (util/scroll-editor-cursor input))))))
 
 (defn- cut-blocks-and-clear-selections!
   [copy?]
