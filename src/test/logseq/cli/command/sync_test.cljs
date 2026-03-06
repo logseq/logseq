@@ -261,6 +261,8 @@
                                  (p/resolved [{:graph-id "remote-graph-id"
                                                :graph-name "demo"
                                                :graph-e2ee? true}])
+                                 :thread-api/q
+                                 (p/resolved 0)
                                  :thread-api/db-sync-download-graph-by-id
                                  (p/resolved {:ok true})
                                  (p/resolved nil))))
@@ -270,20 +272,28 @@
                                           {:base-url "http://example"
                                            :data-dir "/tmp"})]
             (is (= [[{:base-url "http://example"
+                      :create-empty-db? true
                       :data-dir "/tmp"}
                      "logseq_db_demo"]]
                    @ensure-calls))
-            (is (= [[:thread-api/set-db-sync-config false [{:ws-url nil
-                                                            :http-base nil
-                                                            :auth-token nil
-                                                            :e2ee-password nil}]]
-                    [:thread-api/db-sync-list-remote-graphs false []]
-                    [:thread-api/set-db-sync-config false [{:ws-url nil
-                                                            :http-base nil
-                                                            :auth-token nil
-                                                            :e2ee-password nil}]]
-                    [:thread-api/db-sync-download-graph-by-id false ["logseq_db_demo" "remote-graph-id" true]]]
-                   @invoke-calls)))
+            (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
+                                                           :http-base nil
+                                                           :auth-token nil
+                                                           :e2ee-password nil}]]
+                   (nth @invoke-calls 0)))
+            (is (= [:thread-api/db-sync-list-remote-graphs false []]
+                   (nth @invoke-calls 1)))
+            (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
+                                                           :http-base nil
+                                                           :auth-token nil
+                                                           :e2ee-password nil}]]
+                   (nth @invoke-calls 2)))
+            (let [[method direct-pass? args] (nth @invoke-calls 3)]
+              (is (= :thread-api/q method))
+              (is (= false direct-pass?))
+              (is (= "logseq_db_demo" (first args))))
+            (is (= [:thread-api/db-sync-download-graph-by-id false ["logseq_db_demo" "remote-graph-id" true]]
+                   (nth @invoke-calls 4))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn []
@@ -307,6 +317,8 @@
                                  (p/resolved [{:graph-id "remote-graph-id"
                                                :graph-name "demo"
                                                :graph-e2ee? false}])
+                                 :thread-api/q
+                                 (p/resolved 0)
                                  :thread-api/db-sync-download-graph-by-id
                                  (p/resolved {:ok true})
                                  (p/resolved nil))))
@@ -316,23 +328,32 @@
                                           {:graph "demo"
                                            :data-dir "/tmp"})]
             (is (= [[{:graph "demo"
+                      :create-empty-db? true
                       :data-dir "/tmp"}
                      "logseq_db_demo"]
                     [{:graph "demo"
+                      :create-empty-db? true
                       :data-dir "/tmp"}
                      "logseq_db_demo"]]
                    @ensure-calls))
-            (is (= [[:thread-api/set-db-sync-config false [{:ws-url nil
-                                                            :http-base nil
-                                                            :auth-token nil
-                                                            :e2ee-password nil}]]
-                    [:thread-api/db-sync-list-remote-graphs false []]
-                    [:thread-api/set-db-sync-config false [{:ws-url nil
-                                                            :http-base nil
-                                                            :auth-token nil
-                                                            :e2ee-password nil}]]
-                    [:thread-api/db-sync-download-graph-by-id false ["logseq_db_demo" "remote-graph-id" false]]]
-                   @invoke-calls)))
+            (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
+                                                           :http-base nil
+                                                           :auth-token nil
+                                                           :e2ee-password nil}]]
+                   (nth @invoke-calls 0)))
+            (is (= [:thread-api/db-sync-list-remote-graphs false []]
+                   (nth @invoke-calls 1)))
+            (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
+                                                           :http-base nil
+                                                           :auth-token nil
+                                                           :e2ee-password nil}]]
+                   (nth @invoke-calls 2)))
+            (let [[method direct-pass? args] (nth @invoke-calls 3)]
+              (is (= :thread-api/q method))
+              (is (= false direct-pass?))
+              (is (= "logseq_db_demo" (first args))))
+            (is (= [:thread-api/db-sync-download-graph-by-id false ["logseq_db_demo" "remote-graph-id" false]]
+                   (nth @invoke-calls 4))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn []
@@ -388,6 +409,8 @@
                                  (p/resolved [{:graph-id "remote-graph-id"
                                                :graph-name "demo"
                                                :graph-e2ee? true}])
+                                 :thread-api/q
+                                 (p/resolved 0)
                                  :thread-api/db-sync-download-graph-by-id
                                  (p/rejected (ex-info "db-sync/incomplete-snapshot-frame"
                                                       {:code :db-sync/incomplete-snapshot-frame
@@ -400,6 +423,45 @@
                                                 :data-dir "/tmp"})]
             (is (= :error (:status result)))
             (is (= :db-sync/incomplete-snapshot-frame (get-in result [:error :code]))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (set! cli-server/ensure-server! orig-ensure-server!)
+                       (set! transport/invoke orig-invoke)
+                       (done)))))))
+
+(deftest test-execute-sync-download-fails-fast-when-db-is-not-empty
+  (async done
+    (let [orig-ensure-server! cli-server/ensure-server!
+          orig-invoke transport/invoke
+          invoke-calls (atom [])]
+      (set! cli-server/ensure-server! (fn [config repo]
+                                        (p/resolved (assoc config
+                                                           :repo repo
+                                                           :base-url "http://example"))))
+      (set! transport/invoke (fn [_ method direct-pass? args]
+                               (swap! invoke-calls conj [method direct-pass? args])
+                               (case method
+                                 :thread-api/db-sync-list-remote-graphs
+                                 (p/resolved [{:graph-id "remote-graph-id"
+                                               :graph-name "demo"
+                                               :graph-e2ee? true}])
+                                 :thread-api/q
+                                 (p/resolved 2)
+                                 :thread-api/db-sync-download-graph-by-id
+                                 (p/resolved {:ok true})
+                                 (p/resolved nil))))
+      (-> (p/let [result (sync-command/execute {:type :sync-download
+                                                :repo "logseq_db_demo"
+                                                :graph "demo"}
+                                               {:data-dir "/tmp"})]
+            (is (= :error (:status result)))
+            (is (= :graph-db-not-empty (get-in result [:error :code])))
+            (is (= "logseq_db_demo" (get-in result [:error :repo])))
+            (is (= 2 (get-in result [:error :context :non-empty-entity-count])))
+            (is (not-any? (fn [[method _ _]]
+                            (= :thread-api/db-sync-download-graph-by-id method))
+                          @invoke-calls)))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn []

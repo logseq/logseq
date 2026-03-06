@@ -30,6 +30,45 @@
       (finally
         (set! (.-spawn child-process) original-spawn)))))
 
+(deftest spawn-server-appends-create-empty-db-flag-when-enabled
+  (let [captured (atom nil)
+        original-spawn (.-spawn child-process)]
+    (set! (.-spawn child-process)
+          (fn [cmd args opts]
+            (reset! captured {:cmd cmd
+                              :args (vec (js->clj args))
+                              :opts (js->clj opts :keywordize-keys true)})
+            (js-obj "unref" (fn [] nil))))
+    (try
+      (daemon/spawn-server! {:script "/tmp/db-worker-node.js"
+                             :repo "logseq_db_spawn_helper_test"
+                             :data-dir "/tmp/logseq-db-worker"
+                             :create-empty-db? true})
+      (is (some #{"--create-empty-db"} (:args @captured)))
+      (finally
+        (set! (.-spawn child-process) original-spawn)))))
+
+(deftest spawn-server-omits-create-empty-db-flag-by-default
+  (let [captured (atom [])
+        original-spawn (.-spawn child-process)
+        capture! (fn [_cmd args _opts]
+                   (swap! captured conj (vec (js->clj args)))
+                   (js-obj "unref" (fn [] nil)))]
+    (set! (.-spawn child-process) capture!)
+    (try
+      (daemon/spawn-server! {:script "/tmp/db-worker-node.js"
+                             :repo "logseq_db_spawn_helper_test"
+                             :data-dir "/tmp/logseq-db-worker"})
+      (daemon/spawn-server! {:script "/tmp/db-worker-node.js"
+                             :repo "logseq_db_spawn_helper_test"
+                             :data-dir "/tmp/logseq-db-worker"
+                             :create-empty-db? false})
+      (is (every? (fn [args]
+                    (not-any? #{"--create-empty-db"} args))
+                  @captured))
+      (finally
+        (set! (.-spawn child-process) original-spawn)))))
+
 (deftest cleanup-stale-lock-removes-invalid-lock
   (async done
     (let [data-dir (node-helper/create-tmp-dir "db-worker-daemon-helper")
