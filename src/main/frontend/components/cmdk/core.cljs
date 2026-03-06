@@ -1134,7 +1134,6 @@
                     :combo
                     :auto)]
         (shui/shortcut shortcut {:style style
-                                 :interactive? false
                                  :aria-hidden? true})))]))
 
 (rum/defc hints

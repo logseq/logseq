@@ -288,13 +288,14 @@
       [:p.mb-4.text-md [:b action-name]]
 
       [:div.shortcuts-keys-wrap
-       [:span.keyboard-shortcut.flex.flex-wrap.mr-2.space-x-2
+       [:span.flex.flex-wrap.mr-2.gap-2
         (for [x current-binding
               :when (string? x)]
-          [:code.tracking-wider
-           (-> x (string/trim) (string/lower-case) (shortcut-utils/decorate-binding))
-           [:a.x {:on-click (fn [] (set-current-binding!
-                                    (->> current-binding (remove #(= x %)) (into []))))}
+          [:span.shortcut-binding-item.relative.select-none
+           {:key x}
+           (shui/shortcut x {:glow? false})
+           [:a.shortcut-delete-x {:on-click (fn [] (set-current-binding!
+                                                    (->> current-binding (remove #(= x %)) (into []))))}
             (ui/icon "x" {:size 12})]])]
 
        ;; add shortcut
@@ -327,8 +328,10 @@
         [:a.flex.items-center.space-x-1.text-sm.fade-link
          {:on-click #(set-current-binding! binding)}
          (t :keymap/restore-to-default)
-         (for [it (some->> binding (map #(some->> % (dh/mod-key) (shortcut-utils/decorate-binding))))]
-           [:span.keyboard-shortcut.ml-1 [:code it]])]
+         (for [b binding
+               :when (string? b)]
+           [:span.ml-1 {:key b}
+            (shui/shortcut b {:glow? false})])]
         [:div])
 
       [:div.flex.flex-row.items-center.gap-2
@@ -481,4 +484,4 @@
                                   :white-space "nowrap"}}
                          (shui/shortcut
                           (string/join " | " (map #(dh/binding-for-display id %) binding))
-                          {:interactive? true})])]]))))])])]]))
+                          {:raw-binding binding})])]]))))])])]]))
