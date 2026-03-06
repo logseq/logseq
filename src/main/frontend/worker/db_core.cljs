@@ -332,6 +332,7 @@
             client-ops-conn (when-not @*publishing? (common-sqlite/get-storage-conn
                                                      client-ops-storage
                                                      client-op/schema-in-db))
+            empty-startup? (and (some? datoms) (empty? datoms))
             initial-data-exists? (when (nil? datoms)
                                    (and (d/entity @conn :logseq.class/Root)
                                         (= "db" (:kv/value (d/entity @conn :logseq.kv/db-type)))))]
@@ -347,7 +348,8 @@
 
         (gc-sqlite-dbs! db client-ops-db conn {})
 
-        (db-migrate/migrate conn)
+        (when-not empty-startup?
+          (db-migrate/migrate conn))
 
         (db-listener/listen-db-changes! repo (get @*datascript-conns repo))))))
 

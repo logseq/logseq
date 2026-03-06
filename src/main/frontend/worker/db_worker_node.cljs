@@ -46,14 +46,15 @@
          opts {}]
     (if (empty? args)
       opts
-      (let [[flag value & remaining] args]
+      (let [flag (first args)]
         (case flag
-          "--data-dir" (recur remaining (assoc opts :data-dir value))
-          "--repo" (recur remaining (assoc opts :repo value))
-          "--owner-source" (recur remaining (assoc opts :owner-source value))
-          "--log-level" (recur remaining (assoc opts :log-level value))
-          "--help" (recur remaining (assoc opts :help? true))
-          (recur remaining opts))))))
+          "--data-dir" (recur (subvec args 2) (assoc opts :data-dir (second args)))
+          "--repo" (recur (subvec args 2) (assoc opts :repo (second args)))
+          "--owner-source" (recur (subvec args 2) (assoc opts :owner-source (second args)))
+          "--log-level" (recur (subvec args 2) (assoc opts :log-level (second args)))
+          "--create-empty-db" (recur (subvec args 1) (assoc opts :create-empty-db? true))
+          "--help" (recur (subvec args 1) (assoc opts :help? true))
+          (recur (subvec args 1) opts))))))
 
 (defn- normalize-owner-source
   [owner-source]
@@ -283,8 +284,15 @@
   (println (str (style/bold "db-worker-node") " " (style/bold "options") ":"))
   (println (str "  " (style/bold "--data-dir") " <path>    (default ~/logseq/graphs)"))
   (println (str "  " (style/bold "--repo") " <name>        (required)"))
+  (println (str "  " (style/bold "--create-empty-db") "  (start with empty initial datoms)"))
   (println (str "  " (style/bold "--log-level") " <level>  (default info)"))
   (println "  logs: <data-dir>/<graph-dir>/db-worker-node-YYYYMMDD.log (retains 7)"))
+
+(defn- startup-db-opts
+  [{:keys [create-empty-db?]}]
+  (if create-empty-db?
+    {:datoms []}
+    {}))
 
 (defn- pad2
   [value]
@@ -350,7 +358,7 @@
     file-path))
 
 (defn start-daemon!
-  [{:keys [data-dir repo log-level owner-source]}]
+  [{:keys [data-dir repo log-level owner-source] :as opts}]
   (let [host "127.0.0.1"
         port 0
         owner-source (normalize-owner-source owner-source)]
@@ -381,7 +389,7 @@
                       _ (reset! *lock-info {:path path :lock lock})
                       _ (let [method-kw :thread-api/create-or-open-db
                               method-str (normalize-method-str method-kw)]
-                          (<invoke! proxy method-str method-kw false [repo {}]))]
+                          (<invoke! proxy method-str method-kw false [repo (startup-db-opts opts)]))]
                 (let [stop!* (atom nil)
                       server (make-server proxy {:bound-repo repo
                                                  :stop-fn (fn []
@@ -440,6 +448,7 @@
     (-> (p/let [{:keys [stop!] :as daemon}
                 (start-daemon! {:data-dir data-dir
                                 :repo repo
+                                :create-empty-db? (:create-empty-db? opts)
                                 :owner-source owner-source
                                 :log-level (:log-level opts)})]
           (log/info :db-worker-node-ready {:host (:host daemon) :port (:port daemon)})

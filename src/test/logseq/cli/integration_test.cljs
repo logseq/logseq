@@ -237,7 +237,7 @@
                                                   :pending-server 0}))
 
                                    :thread-api/q
-                                   (p/resolved 3)
+                                   (p/resolved 0)
 
                                    (p/resolved nil))))
                        download-result (run-cli ["--graph" download-repo "sync" "download"] data-dir cfg-path)
@@ -245,6 +245,7 @@
                        start-result (run-cli ["--graph" start-repo "sync" "start"] data-dir cfg-path)
                        start-payload (parse-json-output-safe start-result "sync start")]
                  (is (some #(= :thread-api/db-sync-download-graph-by-id (first %)) @invoke-calls))
+                 (is (some #(= :thread-api/q (first %)) @invoke-calls))
                  (is (some #(= :thread-api/db-sync-status (first %)) @invoke-calls))
                  (is (= 0 (:exit-code download-result)))
                  (is (= "ok" (:status download-payload)))
