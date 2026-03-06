@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [logseq.cli.command.add :as add-command]
             [logseq.cli.command.show :as show-command]
+            [logseq.cli.command.sync :as sync-command]
             [logseq.cli.commands :as commands]
             [logseq.cli.server :as cli-server]
             [logseq.cli.style :as style]
@@ -2510,6 +2511,33 @@
                (p/finally (fn []
                             (set! cli-server/list-graphs orig-list-graphs)
                             (set! cli-server/ensure-server! orig-ensure-server!)
+                            (done)))))))
+
+(deftest test-execute-sync-download-runs-command-when-graph-is-missing
+  (async done
+         (let [orig-list-graphs cli-server/list-graphs
+               orig-execute sync-command/execute
+               captured (atom nil)]
+           (set! cli-server/list-graphs (fn [_] []))
+           (set! sync-command/execute
+                 (fn [action config]
+                   (reset! captured [action config])
+                   (p/resolved {:status :ok
+                                :data {:repo (:repo action)}})))
+           (-> (p/let [result (commands/execute {:type :sync-download
+                                                 :repo "logseq_db_demo"
+                                                 :graph "demo"
+                                                 :allow-missing-graph true
+                                                 :require-missing-graph true}
+                                                {:data-dir "/tmp"})]
+                 (is (= :ok (:status result)))
+                 (is (= "logseq_db_demo" (get-in result [:data :repo])))
+                 (is (= :sync-download (get-in @captured [0 :type]))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! cli-server/list-graphs orig-list-graphs)
+                            (set! sync-command/execute orig-execute)
                             (done)))))))
 
 (deftest test-execute-graph-export

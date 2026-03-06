@@ -259,3 +259,51 @@
                        (set! daemon/wait-for-lock original-wait-lock)
                        (set! daemon/find-orphan-processes original-find-orphans)
                        (done)))))))
+
+(deftest ensure-server-forwards-create-empty-db-flag-when-spawning-daemon
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "cli-server-create-empty")
+          repo (str "logseq_db_create_empty_" (subs (str (random-uuid)) 0 8))
+          captured (atom nil)
+          lock {:repo repo
+                :pid (.-pid js/process)
+                :host "127.0.0.1"
+                :port 9301}
+          read-lock-calls (atom 0)
+          original-read-lock daemon/read-lock
+          original-cleanup-stale daemon/cleanup-stale-lock!
+          original-cleanup-orphans daemon/cleanup-orphan-processes!
+          original-spawn daemon/spawn-server!
+          original-wait-lock daemon/wait-for-lock
+          original-wait-ready daemon/wait-for-ready]
+      (set! daemon/read-lock
+            (fn [_]
+              (if (= 1 (swap! read-lock-calls inc))
+                nil
+                lock)))
+      (set! daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil)))
+      (set! daemon/cleanup-orphan-processes! (fn [_] {:orphans [] :killed-pids []}))
+      (set! daemon/spawn-server!
+            (fn [opts]
+              (reset! captured opts)
+              nil))
+      (set! daemon/wait-for-lock (fn [_] (p/resolved true)))
+      (set! daemon/wait-for-ready (fn [_] (p/resolved true)))
+      (-> (cli-server/ensure-server! {:data-dir data-dir
+                                      :create-empty-db? true}
+                                     repo)
+          (p/then (fn [_]
+                    (is (= repo (:repo @captured)))
+                    (is (= (cli-server/resolve-data-dir {:data-dir data-dir})
+                           (:data-dir @captured)))
+                    (is (= true (:create-empty-db? @captured)))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (set! daemon/read-lock original-read-lock)
+                       (set! daemon/cleanup-stale-lock! original-cleanup-stale)
+                       (set! daemon/cleanup-orphan-processes! original-cleanup-orphans)
+                       (set! daemon/spawn-server! original-spawn)
+                       (set! daemon/wait-for-lock original-wait-lock)
+                       (set! daemon/wait-for-ready original-wait-ready)
+                       (done)))))))

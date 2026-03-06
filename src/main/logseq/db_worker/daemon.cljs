@@ -254,9 +254,10 @@
              :interval-ms 250}))
 
 (defn spawn-server!
-  [{:keys [script repo data-dir owner-source]}]
+  [{:keys [script repo data-dir owner-source create-empty-db?]}]
   (let [owner-source (normalize-owner-source owner-source)
-        args #js [script "--repo" repo "--data-dir" data-dir "--owner-source" (name owner-source)]
+        args (clj->js (cond-> [script "--repo" repo "--data-dir" data-dir "--owner-source" (name owner-source)]
+                        create-empty-db? (conj "--create-empty-db")))
         env (js/Object.assign #js {} (.-env js/process) #js {:ELECTRON_RUN_AS_NODE "1"})]
     (if-not script
       (do

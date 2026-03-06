@@ -130,11 +130,12 @@
   (daemon/ready? lock))
 
 (defn- spawn-server!
-  [{:keys [repo data-dir owner-source]}]
+  [{:keys [repo data-dir owner-source create-empty-db?]}]
   (daemon/spawn-server! {:script (db-worker-script-path)
                          :repo repo
                          :data-dir data-dir
-                         :owner-source owner-source}))
+                         :owner-source owner-source
+                         :create-empty-db? create-empty-db?}))
 
 (defn- rewrite-lock-owner-source!
   [path lock owner-source]
@@ -155,7 +156,8 @@
                                                    :data-dir data-dir})
                 (spawn-server! {:repo repo
                                 :data-dir data-dir
-                                :owner-source requester-owner})
+                                :owner-source requester-owner
+                                :create-empty-db? (:create-empty-db? config)})
                 (-> (wait-for-lock path)
                     (p/catch (fn [e]
                                (if (= :timeout (:code (ex-data e)))

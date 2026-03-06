@@ -36,6 +36,16 @@
 (def ^:private sync-start-skipped-states
   #{:inactive :stopped})
 
+(def ^:private sync-download-non-empty-query
+  '[:find (count ?e) .
+    :where
+    (or [?e :block/name]
+        [?e :block/page _]
+        [?e :block/parent _])
+    (not [?e :logseq.property/built-in? true])
+    (not [?e :db/ident])
+    (not [?e :file/path])])
+
 (defn- missing-repo
   [label]
   {:ok? false
@@ -169,30 +179,31 @@
          :action {:type :sync-config-unset
                   :config-key (:key key-result)}}))
 
-    {:ok? false
+      {:ok? false
      :error {:code :unknown-command
              :message (str "unknown sync command: " command)}}))
 
+(defn- sync-config
+  [config]
+  {:ws-url (:ws-url config)
+   :http-base (:http-base config)
+   :auth-token (:auth-token config)
+   :e2ee-password (:e2ee-password config)})
+
 (defn- invoke-with-repo
   [config repo method args]
-  (let [sync-config {:ws-url (:ws-url config)
-                     :http-base (:http-base config)
-                     :auth-token (:auth-token config)
-                     :e2ee-password (:e2ee-password config)}]
+  (let [sync-cfg (sync-config config)]
     (p/let [cfg (cli-server/ensure-server! config repo)
-            _ (transport/invoke cfg :thread-api/set-db-sync-config false [sync-config])
+            _ (transport/invoke cfg :thread-api/set-db-sync-config false [sync-cfg])
           result (transport/invoke cfg method false args)]
       result)))
 
 (defn- invoke-global
   [config method args]
   (let [base-url (:base-url config)
-        sync-config {:ws-url (:ws-url config)
-                     :http-base (:http-base config)
-                     :auth-token (:auth-token config)
-                     :e2ee-password (:e2ee-password config)}]
+        sync-cfg (sync-config config)]
     (if (seq base-url)
-      (p/let [_ (transport/invoke config :thread-api/set-db-sync-config false [sync-config])]
+      (p/let [_ (transport/invoke config :thread-api/set-db-sync-config false [sync-cfg])]
         (transport/invoke config method false args))
       (p/let [repo (or (core/resolve-repo (:graph config))
                        (p/let [graphs (cli-server/list-graphs config)]
@@ -201,8 +212,23 @@
                     (cli-server/ensure-server! config repo)
                     (p/rejected (ex-info "graph name is required"
                                          {:code :missing-graph})))
-              _ (transport/invoke cfg :thread-api/set-db-sync-config false [sync-config])]
+              _ (transport/invoke cfg :thread-api/set-db-sync-config false [sync-cfg])]
         (transport/invoke cfg method false args)))))
+
+(defn- download-config
+  [config]
+  (assoc config :create-empty-db? true))
+
+(defn- ensure-empty-download-db!
+  [cfg repo]
+  (p/let [non-empty-entity-count (transport/invoke cfg :thread-api/q false [repo [sync-download-non-empty-query]])]
+    (when (and (number? non-empty-entity-count)
+               (pos? non-empty-entity-count))
+      (throw (ex-info "graph db is not empty"
+                      {:code :graph-db-not-empty
+                       :repo repo
+                       :non-empty-entity-count non-empty-entity-count})))
+    nil))
 
 (defn- wait-sync-start-ready
   [config repo action]
@@ -295,7 +321,8 @@
                {:result result})})
 
     :sync-download
-    (-> (p/let [remote-graphs (invoke-global config
+    (let [config' (download-config config)]
+      (-> (p/let [remote-graphs (invoke-global config'
                                              :thread-api/db-sync-list-remote-graphs
                                              [])
                 remote-graph (some (fn [graph]
@@ -307,8 +334,10 @@
              :error {:code :remote-graph-not-found
                      :message (str "remote graph not found: " (:graph action))
                      :graph (:graph action)}}
-            (p/let [result (invoke-with-repo config (:repo action)
-                                             :thread-api/db-sync-download-graph-by-id
+            (p/let [cfg (cli-server/ensure-server! config' (:repo action))
+                    _ (transport/invoke cfg :thread-api/set-db-sync-config false [(sync-config config')])
+                    _ (ensure-empty-download-db! cfg (:repo action))
+                    result (transport/invoke cfg :thread-api/db-sync-download-graph-by-id false
                                              [(:repo action) (:graph-id remote-graph) (:graph-e2ee? remote-graph)])]
               {:status :ok
                :data (if (map? result)
@@ -316,7 +345,7 @@
                        {:result result})})))
         (p/catch (fn [error]
                    (exception->error error {:repo (:repo action)
-                                            :graph (:graph action)}))))
+                                            :graph (:graph action)})))))
 
     :sync-remote-graphs
     (p/let [graphs (invoke-global config :thread-api/db-sync-list-remote-graphs [])]

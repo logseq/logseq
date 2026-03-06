@@ -107,6 +107,8 @@ Sync download behavior:
 - `sync download` requires `--graph <name>`.
 - If a local graph with the same name already exists, the CLI returns `graph-exists`.
 - If no remote graph with that name exists, the CLI returns `remote-graph-not-found`.
+- `sync download` starts `db-worker-node` in create-empty mode so local startup does not write `db-initial-data` before snapshot import.
+- If the target graph DB is not empty at download time, the CLI returns `graph-db-not-empty` and aborts before import.
 - For e2ee remote graphs in headless CLI mode, set `e2ee-password` via `sync config set` (or in `--config`) before download.
 
 Sync config persistence:
