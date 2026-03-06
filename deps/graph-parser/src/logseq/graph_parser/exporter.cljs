@@ -1039,18 +1039,22 @@
         {:block block'
          :pvalues-tx pvalues-tx'})
       (if-let [cards-macro (first (:cards walked-ast-blocks))]
-        (let [query (-> (:arguments (second cards-macro)) first string/trim)
-              props {:logseq.property/query query}
-              {:keys [block-properties pvalues-tx]}
-              (build-properties-and-values props db page-names-to-uuids
-                                           (select-keys block [:block/properties-text-values :block/name :block/title :block/uuid])
-                                           options)
-              block'
-              (-> (update block :block/tags (fnil conj []) :logseq.class/Cards)
-                  (merge block-properties
-                         {:block/title (string/trim (string/replace-first title #"\{\{cards(.*)\}\}" ""))}))]
-          {:block block'
-           :pvalues-tx pvalues-tx})
+        (if-let [raw-query (some-> cards-macro second :arguments first)]
+          (let [query (string/trim raw-query)]
+            (if (string/blank? query)
+              {:block block}
+              (let [props {:logseq.property/query query}
+                    {:keys [block-properties pvalues-tx]}
+                    (build-properties-and-values props db page-names-to-uuids
+                                                 (select-keys block [:block/properties-text-values :block/name :block/title :block/uuid])
+                                                 options)
+                    block'
+                    (-> (update block :block/tags (fnil conj []) :logseq.class/Cards)
+                        (merge block-properties
+                               {:block/title (string/trim (string/replace-first title #"\{\{cards(.*)\}\}" ""))))]]
+                {:block block'
+                 :pvalues-tx pvalues-tx})))
+          {:block block})
         {:block block}))))
 
 (defn- handle-block-properties
