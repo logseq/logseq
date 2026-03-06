@@ -203,7 +203,7 @@
 
 (rum/defc combo-keys
   "Renders combo keys (simultaneous key combinations) with separator."
-  [keys binding {:keys [interactive? aria-label aria-hidden? glow?]}]
+  [keys binding {:keys [aria-label aria-hidden? glow?]}]
   (let [key-elements (map print-shortcut-key keys)
         normalized-binding (normalize-binding binding)
         container-class (str "shui-shortcut-combo" (when glow? " shui-shortcut-glow"))
@@ -223,14 +223,12 @@
           [:span.shui-shortcut-separator {:key (str "sep-" index)}])
         [:kbd.shui-shortcut-key
          {:key (str "combo-key-" index)
-          :aria-hidden (if aria-label "true" "false")
-          :tab-index (if interactive? 0 -1)
-          :role (when interactive? "button")}
+          :aria-hidden (if aria-label "true" "false")}
          key-text]))]))
 
 (rum/defc separate-keys
   "Renders separate keys (sequential key presses) with 4px gap."
-  [keys binding {:keys [interactive? aria-label aria-hidden? glow?]}]
+  [keys binding {:keys [aria-label aria-hidden? glow?]}]
   (let [key-elements (map print-shortcut-key keys)
         normalized-binding (normalize-binding binding)
         container-class (str "shui-shortcut-separate" (when glow? " shui-shortcut-glow"))
@@ -248,9 +246,7 @@
      (for [[index key-text] (map-indexed vector key-elements)]
        [:kbd.shui-shortcut-key
         {:key (str "separate-key-" index)
-         :aria-hidden (if aria-label "true" "false")
-         :tab-index (if interactive? 0 -1)
-         :role (when interactive? "button")}
+         :aria-hidden (if aria-label "true" "false")}
         key-text])]))
 
 (rum/defc compact-keys
@@ -280,15 +276,13 @@
    
    Props:
    - :style - :combo, :separate, :compact, or :auto (default: :auto)
-   - :interactive? - if true, keys are focusable (default: false)
    - :aria-label - accessibility label for container
    - :aria-hidden? - if true, hides from screen readers (default: false for decorative hints)
    - :glow? - if true, adds inner glow effect to combo/separate keys (default: true)
    - :raw-binding - raw binding format for data-shortcut-binding (for animation matching).
                     If not provided, will normalize from shortcut prop."
-  [shortcut & {:keys [style interactive? aria-label aria-hidden? glow? raw-binding]
+  [shortcut & {:keys [style aria-label aria-hidden? glow? raw-binding]
                :or {style :auto
-                    interactive? false
                     aria-hidden? false
                     glow? true}}]
   (when (and shortcut (seq shortcut))
@@ -299,8 +293,7 @@
                           [shortcut]  ; single shortcut string
                           shortcut))  ; multiple shortcuts
                       (parse-shortcuts shortcut))
-          opts {:interactive? interactive?
-                :aria-label aria-label
+          opts {:aria-label aria-label
                 :aria-hidden? aria-hidden?
                 :glow? glow?}]
       (for [[index binding] (map-indexed vector shortcuts)]

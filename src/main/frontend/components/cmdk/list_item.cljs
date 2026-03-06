@@ -130,5 +130,4 @@
                :style {:opacity (if highlighted 1 0.9)
                        :min-height "20px"
                        :flex-wrap "nowrap"}}
-         (shui/shortcut shortcut {:interactive? false
-                                  :aria-hidden? true})])]]))
+         (shui/shortcut shortcut {:aria-hidden? true})])]]))
