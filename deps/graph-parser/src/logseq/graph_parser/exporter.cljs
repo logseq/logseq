@@ -953,9 +953,9 @@
     (walk/prewalk
      (fn [x]
        (cond
-        (and (vector? x)
-             (= "Link" (first x))
-             (let [path-or-map (second (:url (second x)))]
+         (and (vector? x)
+              (= "Link" (first x))
+              (let [path-or-map (second (:url (second x)))]
                 (cond
                   (string? path-or-map)
                   (or (common-config/local-relative-asset? path-or-map)
@@ -969,19 +969,19 @@
               (= "Macro" (first x))
               (= "embed" (:name (second x))))
          (swap! results update :embeds conj x)
-        (and (vector? x)
-             (= "Macro" (first x))
-             (= "zotero-imported-file" (:name (second x))))
-        (let [[item-key filename] (:arguments (second x))]
-          (when (and item-key filename)
-            (swap! results update :zotero-imported-files assoc item-key (common-util/safe-read-string filename))))
-        (and (vector? x)
-             (= "Macro" (first x))
-             (= "zotero-linked-file" (:name (second x))))
-        (let [[relative-path] (:arguments (second x))
-              parsed-path (common-util/safe-read-string relative-path)]
-          (when (string? parsed-path)
-            (swap! results update :zotero-linked-files conj parsed-path)))
+         (and (vector? x)
+              (= "Macro" (first x))
+              (= "zotero-imported-file" (:name (second x))))
+         (let [[item-key filename] (:arguments (second x))]
+           (when (and item-key filename)
+             (swap! results update :zotero-imported-files assoc item-key (common-util/safe-read-string filename))))
+         (and (vector? x)
+              (= "Macro" (first x))
+              (= "zotero-linked-file" (:name (second x))))
+         (let [[relative-path] (:arguments (second x))
+               parsed-path (common-util/safe-read-string relative-path)]
+           (when (string? parsed-path)
+             (swap! results update :zotero-linked-files conj parsed-path)))
          (and (vector? x)
               (= "Macro" (first x))
               (= "cards" (:name (second x))))
@@ -1051,7 +1051,7 @@
                     block'
                     (-> (update block :block/tags (fnil conj []) :logseq.class/Cards)
                         (merge block-properties
-                               {:block/title (string/trim (string/replace-first title #"\{\{cards(.*)\}\}" ""))))]]
+                               {:block/title (string/trim (string/replace-first title #"\{\{cards(.*)\}\}" ""))}))]
                 {:block block'
                  :pvalues-tx pvalues-tx})))
           {:block block})
@@ -1449,11 +1449,12 @@
                        text-parts)
          :code-segs code-segs}
         (let [line (first remaining)
-              fence-start? (and (not in-code?) (re-matches #"```.*" line))
-              fence-end?   (and in-code? (= line "```"))]
+              trimmed-line (string/trim line)
+              fence-start? (and (not in-code?) (re-matches #"```.*" trimmed-line))
+              fence-end?   (and in-code? (= trimmed-line "```"))]
           (cond
             fence-start?
-            (recur (rest remaining) true (not-empty (subs line 3)) []
+            (recur (rest remaining) true (not-empty (subs trimmed-line 3)) []
                    (if (seq current)
                      (conj text-parts (string/join "\n" current))
                      text-parts)
