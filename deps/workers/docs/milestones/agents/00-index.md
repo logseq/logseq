@@ -27,3 +27,4 @@ Milestones are tracked as separate files in this folder:
 - `21-m21-store-snapshots-metadata-in-d1.md`
 - `22-m22-persist-workspace-git-bundles.md`
 - `23-m23-local-runner-via-tunnel.md`
+- `24-m24-e2b-sandbox-runtime-default.md`

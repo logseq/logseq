@@ -39,7 +39,7 @@ Local split note:
   `wrangler dev -c wrangler.toml -c wrangler.agents.toml --port 8787`
   and `/sessions*` will be forwarded via `AGENTS_SERVICE`.
 - If you run workers separately, call sessions on the agents port.
-- `worker/wrangler.agents.toml` sets `AGENT_RUNTIME_PROVIDER=cloudflare` by default.
+- `worker/wrangler.agents.toml` sets `AGENT_RUNTIME_PROVIDER=e2b` by default.
 - On localhost, `/sessions*` forwarding retries during agents startup (up to ~30s) to avoid transient `503`.
 
 Production routing note:
@@ -164,12 +164,20 @@ Create session pinned to local runner:
 ### Runtime Provider
 
 Agent runtime is selected by `AGENT_RUNTIME_PROVIDER`:
+- `e2b`: provisions/manages E2B sandboxes via the `e2b` SDK, then runs `sandbox-agent` inside the sandbox.
 - `sprites`: provisions a Sprite and runs `sandbox-agent` inside it.
 - `local-dev`: uses `SANDBOX_AGENT_URL` directly.
 - `local-runner`: selects a registered user runner endpoint from `AGENTS_DB` and runs through that endpoint.
 - `vercel`: provisions/manages Vercel sandboxes via `@vercel/sandbox`, then runs `sandbox-agent` inside the sandbox.
 - `cloudflare`: provisions a sandbox first, then connects to the sandbox-hosted `sandbox-agent`.
-- Agents worker default is `cloudflare` (set in `worker/wrangler.agents.toml`).
+- Agents worker default is `e2b` (set in `worker/wrangler.agents.toml`).
+
+E2B runtime flow:
+- create or restore sandbox from template/snapshot
+- bootstrap `sandbox-agent` in sandbox
+- create runtime session via `sandbox-agent` HTTP API
+- stream events/messages through sandbox host URL
+- support runtime snapshot persistence and browser terminal open
 
 For `cloudflare`, bind and export `Sandbox` in the agents worker and configure the container image in
 `worker/wrangler.agents.toml` (`[[containers]] class_name = "Sandbox"`).
@@ -195,7 +203,7 @@ Cloudflare runtime flow:
 | DB_SYNC_STATIC_USER_ID | Static user id for local dev |
 | DB_SYNC_STATIC_EMAIL | Static user email for local dev |
 | DB_SYNC_STATIC_USERNAME | Static username for local dev |
-| AGENT_RUNTIME_PROVIDER | Runtime backend (`sprites`, `local-dev`, `local-runner`, `vercel`, `cloudflare`) |
+| AGENT_RUNTIME_PROVIDER | Runtime backend (`e2b`, `sprites`, `local-dev`, `local-runner`, `vercel`, `cloudflare`) |
 | SENTRY_DSN | Sentry DSN |
 | SENTRY_RELEASE | Release identifier for Sentry events and sourcemaps |
 | SENTRY_ENVIRONMENT | Sentry environment name (prod, staging, etc.) |
@@ -205,6 +213,14 @@ Cloudflare runtime flow:
 | COGNITO_JWKS_URL | Cognito JWKS URL |
 | SANDBOX_AGENT_URL | sandbox-agent base URL for agent sessions |
 | SANDBOX_AGENT_TOKEN | Optional bearer token for sandbox-agent |
+| E2B_API_KEY | E2B API key for runtime provisioning |
+| E2B_DOMAIN | Optional E2B API domain override |
+| E2B_TEMPLATE | Optional E2B template name/id used for new sandboxes |
+| E2B_REPO_CLONE_COMMAND | Optional repo clone command template for E2B runtime |
+| E2B_SANDBOX_AGENT_PORT | sandbox-agent port inside E2B sandbox (default `2468`) |
+| E2B_SANDBOX_TIMEOUT_MS | E2B sandbox timeout in milliseconds (default `1800000`) |
+| E2B_HEALTH_RETRIES | E2B sandbox health check retry count |
+| E2B_HEALTH_INTERVAL_MS | E2B sandbox health check retry interval (ms) |
 | SPRITE_TOKEN | Sprites API token (default runtime auth) |
 | SPRITES_TOKEN | Alias for `SPRITE_TOKEN` |
 | SPRITES_API_URL | Sprites API base URL override |

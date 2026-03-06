@@ -1,10 +1,12 @@
 (ns logseq.agents.runtime-provider
   (:require ["@cloudflare/sandbox" :as cf-sandbox]
             ["@vercel/sandbox" :as vercel-sandbox]
+            ["e2b" :as e2b]
             [clojure.string :as string]
             [lambdaisland.glogi :as log]
             [logseq.agents.sandbox :as sandbox]
             [logseq.agents.source-control :as source-control]
+            [logseq.sync.platform.core :as platform]
             [promesa.core :as p]))
 
 ;; -----------------------
@@ -35,7 +37,7 @@
       (when-not (string/blank? normalized) normalized))))
 
 (def ^:private supported-provider-kinds
-  #{"sprites" "local-dev" "local-runner" "cloudflare" "vercel"})
+  #{"e2b" "sprites" "local-dev" "local-runner" "cloudflare" "vercel"})
 
 (defn- known-provider-kind [value]
   (let [provider (normalize-provider value)]
@@ -44,7 +46,7 @@
 
 (defn provider-kind [^js env]
   (or (known-provider-kind (env-str env "AGENT_RUNTIME_PROVIDER"))
-      "sprites"))
+      "e2b"))
 
 (defn runtime-provider-kind [^js env runtime]
   (or (known-provider-kind (:provider runtime))
@@ -130,6 +132,10 @@
   nil)
 
 (defn clear-vercel-snapshot-cache!
+  []
+  nil)
+
+(defn clear-e2b-snapshot-cache!
   []
   nil)
 
@@ -553,6 +559,7 @@
          repo-dir (get-repo-dir session-id task provider)
          base-dir (repo-base-dir provider)
          override-key (case provider
+                        "e2b" "E2B_REPO_CLONE_COMMAND"
                         "cloudflare" "CLOUDFLARE_REPO_CLONE_COMMAND"
                         "vercel" "VERCEL_REPO_CLONE_COMMAND"
                         "SPRITES_REPO_CLONE_COMMAND")
@@ -923,6 +930,381 @@
     (cond-> {}
       (string? access-client-id) (assoc "CF-Access-Client-Id" access-client-id)
       (string? access-client-secret) (assoc "CF-Access-Client-Secret" access-client-secret))))
+
+(defn- e2b-api-key
+  [^js env]
+  (env-str env "E2B_API_KEY"))
+
+(defn- e2b-domain
+  [^js env]
+  (env-str env "E2B_DOMAIN"))
+
+(defn- e2b-template
+  [^js env task runtime]
+  (or (:template runtime)
+      (some-> (get-in task [:runtime :template]) str string/trim not-empty)
+      (env-str env "E2B_TEMPLATE")))
+
+(defn- e2b-agent-token
+  [^js env runtime]
+  (or (:agent-token runtime)
+      (env-str env "SANDBOX_AGENT_TOKEN")))
+
+(defn- e2b-agent-port
+  [^js env runtime]
+  (or (:sandbox-port runtime)
+      (parse-int (env-str env "E2B_SANDBOX_AGENT_PORT") 2468)))
+
+(defn- e2b-health-retries
+  [^js env]
+  (parse-int (env-str env "E2B_HEALTH_RETRIES") 30))
+
+(defn- e2b-health-interval-ms
+  [^js env]
+  (parse-int (env-str env "E2B_HEALTH_INTERVAL_MS") 300))
+
+(defn- e2b-sandbox-timeout-ms
+  [^js env]
+  (parse-int (env-str env "E2B_SANDBOX_TIMEOUT_MS") (* 30 60 1000)))
+
+(defn- e2b-api-opts
+  [^js env]
+  (let [api-key (e2b-api-key env)
+        domain (e2b-domain env)]
+    (when-not (string? api-key)
+      (throw (ex-info "missing E2B_API_KEY for e2b runtime provider"
+                      {:reason :missing-e2b-api-key})))
+    (cond-> {:apiKey api-key}
+      (string? domain) (assoc :domain domain))))
+
+(defn e2b-sandbox-class
+  []
+  (let [sandbox-class (aget e2b "Sandbox")]
+    (when-not sandbox-class
+      (throw (ex-info "missing e2b Sandbox export"
+                      {:reason :missing-e2b-sdk})))
+    sandbox-class))
+
+(defn- e2b-sandbox-id
+  [sandbox]
+  (or (aget sandbox "sandboxId")
+      (aget sandbox "id")))
+
+(defn- e2b-sandbox-host
+  [sandbox port]
+  (let [get-host (js-method sandbox "getHost")]
+    (when-not (fn? get-host)
+      (throw (ex-info "e2b sandbox missing getHost method"
+                      {:reason :missing-e2b-get-host})))
+    (.call get-host sandbox port)))
+
+(defn <e2b-create-sandbox!
+  [^js env template opts]
+  (let [sandbox-class (e2b-sandbox-class)
+        create (js-method sandbox-class "create")
+        params (clj->js (merge (e2b-api-opts env) opts))]
+    (when-not (fn? create)
+      (throw (ex-info "e2b sdk missing Sandbox.create"
+                      {:reason :missing-e2b-create})))
+    (if (string? template)
+      (->promise (.call create sandbox-class template params))
+      (->promise (.call create sandbox-class params)))))
+
+(defn <e2b-connect-sandbox!
+  [^js env sandbox-id]
+  (let [sandbox-class (e2b-sandbox-class)
+        connect (js-method sandbox-class "connect")
+        opts (clj->js (e2b-api-opts env))]
+    (when-not (string? sandbox-id)
+      (throw (ex-info "missing sandbox-id on runtime"
+                      {:reason :missing-sandbox-id})))
+    (when-not (fn? connect)
+      (throw (ex-info "e2b sdk missing Sandbox.connect"
+                      {:reason :missing-e2b-connect})))
+    (->promise (.call connect sandbox-class sandbox-id opts))))
+
+(defn <e2b-kill-sandbox!
+  [^js env sandbox-id]
+  (let [sandbox-class (e2b-sandbox-class)
+        kill (js-method sandbox-class "kill")
+        opts (clj->js (e2b-api-opts env))]
+    (if (and (string? sandbox-id) (fn? kill))
+      (->promise (.call kill sandbox-class sandbox-id opts))
+      (p/resolved nil))))
+
+(defn <e2b-run-shell!
+  [sandbox command & [opts]]
+  (let [commands (when sandbox (aget sandbox "commands"))
+        run-command (js-method commands "run")
+        params (cond-> {}
+                 (string? (:cwd opts)) (assoc :cwd (:cwd opts))
+                 (map? (:env opts)) (assoc :envs (:env opts))
+                 (number? (:timeout-ms opts)) (assoc :timeoutMs (:timeout-ms opts))
+                 (true? (:background opts)) (assoc :background true)
+                 (fn? (:on-stdout opts)) (assoc :onStdout (:on-stdout opts))
+                 (fn? (:on-stderr opts)) (assoc :onStderr (:on-stderr opts)))]
+    (when-not (fn? run-command)
+      (throw (ex-info "e2b sandbox missing commands.run"
+                      {:reason :missing-e2b-run-command})))
+    (if (true? (:background opts))
+      (->promise (.call run-command commands command (clj->js params)))
+      (p/let [result (->promise (.call run-command commands command (clj->js params)))
+              stdout (or (aget result "stdout") "")
+              stderr (or (aget result "stderr") "")
+              exit-code (or (aget result "exitCode")
+                            (aget result "exit_code"))]
+        (when (and (number? exit-code) (not (zero? exit-code)))
+          (throw (ex-info "e2b sandbox command failed"
+                          {:reason :e2b-command-failed
+                           :command command
+                           :exit-code exit-code
+                           :stdout stdout
+                           :stderr stderr})))
+        {:stdout stdout
+         :stderr stderr
+         :exit-code exit-code}))))
+
+(defn- e2b-health-command
+  [port agent-token]
+  (str "if curl -fsS "
+       (curl-auth-arg agent-token)
+       " "
+       cloudflare-local-host
+       ":"
+       port
+       "/v1/health >/dev/null; then echo __HEALTH_OK__; else echo __HEALTH_FAIL__; fi"))
+
+(defn- <e2b-health-once!
+  [sandbox port agent-token]
+  (-> (<e2b-run-shell! sandbox (e2b-health-command port agent-token))
+      (p/then (fn [{:keys [stdout stderr]}]
+                (let [output (str stdout "\n" stderr)]
+                  (string/includes? output "__HEALTH_OK__"))))
+      (p/catch (fn [_] false))))
+
+(defn- <e2b-health!
+  [^js env sandbox port agent-token]
+  (let [retries (e2b-health-retries env)
+        interval-ms (e2b-health-interval-ms env)]
+    (letfn [(step [left]
+              (if (<= left 0)
+                (throw (ex-info "sandbox-agent health check timed out in e2b sandbox"
+                                {:port port}))
+                (p/let [healthy? (<e2b-health-once! sandbox port agent-token)]
+                  (if healthy?
+                    true
+                    (p/let [_ (p/delay interval-ms)]
+                      (step (dec left)))))))]
+      (step retries))))
+
+(declare normalize-agent-env-map cloudflare-env-pass-through)
+
+(defn- <e2b-agent-env-vars!
+  [^js env task]
+  (let [base (reduce (fn [acc k]
+                       (if-let [v (env-str env k)]
+                         (assoc acc k v)
+                         acc))
+                     {}
+                     cloudflare-env-pass-through)
+        task-env (normalize-agent-env-map (get-in task [:agent :env]))
+        agent-id (:agent (session-payload task))
+        api-token (some-> (get-in task [:agent :api-token]) str string/trim not-empty)]
+    (p/let [github-token (<github-installation-token-for-task! env task)]
+      (cond-> (merge base task-env)
+        (and (string? api-token) (= "codex" agent-id)) (assoc "OPENAI_API_KEY" api-token)
+        (and (string? api-token) (= "claude" agent-id)) (assoc "ANTHROPIC_API_KEY" api-token)
+        (string? github-token) (assoc-github-installation-token github-token)))))
+
+(defn- e2b-create-opts
+  [^js env session-id env-vars]
+  (let [timeout-ms (e2b-sandbox-timeout-ms env)
+        metadata (cond-> {"session-id" (or session-id "")
+                          "runtime-provider" "e2b"}
+                   (string? session-id) (assoc "runtime-session-id" session-id))]
+    (cond-> {:timeoutMs timeout-ms
+             :lifecycle {:onTimeout "pause"
+                         :autoResume true}}
+      (seq env-vars) (assoc :envs env-vars)
+      (string? session-id) (assoc :metadata metadata))))
+
+(defn- e2b-server-command
+  [^js env task session-id port agent-token env-vars]
+  (let [auth-json (get-in task [:agent :auth-json])
+        write-auth (or (auth-json-write-command auth-json) "")
+        repo-cd (or (repo-cd-command session-id task "e2b") "")
+        token-exports (shell-export-command env-vars)
+        github-auth-setup (github-auth-setup-command (get env-vars "GITHUB_TOKEN"))]
+    (str (sandbox-agent-install-command env)
+         token-exports
+         github-auth-setup
+         write-auth
+         (when (string? repo-cd) (str repo-cd "; "))
+         "nohup sandbox-agent server "
+         (if (string? agent-token)
+           (str "--token '" (escape-shell-single agent-token) "'")
+           "--no-token")
+         " --host 0.0.0.0 --port " port
+         " --no-telemetry >/tmp/sandbox-agent.log 2>&1 &")))
+
+(defn- <e2b-clone-repo!
+  [^js env sandbox session-id task]
+  (when-let [cmd (repo-clone-command env session-id task "e2b")]
+    (<e2b-run-shell! sandbox cmd)))
+
+(defn- <e2b-run-project-init-setup!
+  [sandbox session-id task]
+  (when-let [cmd (project-init-setup-command session-id task "e2b")]
+    (<e2b-run-shell! sandbox cmd)))
+
+(defn- <e2b-ensure-running!
+  [^js env sandbox session-id task port agent-token env-vars]
+  (p/let [healthy? (<e2b-health-once! sandbox port agent-token)]
+    (if healthy?
+      true
+      (p/let [bootstrap-cmd (e2b-server-command env task session-id port agent-token env-vars)
+              _ (<e2b-run-shell! sandbox bootstrap-cmd)
+              _ (<e2b-health! env sandbox port agent-token)]
+        true))))
+
+(defn <e2b-create-snapshot!
+  [sandbox]
+  (let [create-snapshot (js-method sandbox "createSnapshot")]
+    (when-not (fn? create-snapshot)
+      (throw (ex-info "e2b runtime does not support snapshots"
+                      {:reason :unsupported-snapshot
+                       :provider "e2b"})))
+    (p/let [snapshot (->promise (.call create-snapshot sandbox))
+            snapshot-id (or (aget snapshot "snapshotId")
+                            (aget snapshot "snapshotID"))]
+      (if (string? snapshot-id)
+        {:snapshot-id snapshot-id}
+        (throw (ex-info "e2b snapshot create returned invalid id"
+                        {:reason :invalid-snapshot-id
+                         :snapshot snapshot}))))))
+
+(defn- <e2b-create-sandbox-from-checkpoint!
+  [^js env checkpoint create-opts]
+  (let [snapshot-id (:snapshot-id checkpoint)]
+    (if-not (string? snapshot-id)
+      (p/resolved nil)
+      (-> (<e2b-create-sandbox! env snapshot-id create-opts)
+          (p/then (fn [sandbox]
+                    (log/debug :agent/e2b-snapshot-restored
+                               {:snapshot-id snapshot-id
+                                :source "task-checkpoint"})
+                    {:sandbox sandbox
+                     :snapshot-id snapshot-id
+                     :restored? true}))
+          (p/catch (fn [error]
+                     (log/error :agent/e2b-snapshot-restore-failed
+                                {:snapshot-id snapshot-id
+                                 :source "task-checkpoint"
+                                 :error (str error)})
+                     nil))))))
+
+(defn- <e2b-create-sandbox-for-restore!
+  [^js env template checkpoint create-opts]
+  (p/let [checkpoint-restore (<e2b-create-sandbox-from-checkpoint! env checkpoint create-opts)]
+    (if (map? checkpoint-restore)
+      checkpoint-restore
+      (p/let [sandbox (<e2b-create-sandbox! env template create-opts)]
+        {:sandbox sandbox
+         :snapshot-id nil
+         :restored? false}))))
+
+(defn- <e2b-runtime-base-url!
+  [^js env runtime]
+  (let [cached (:base-url runtime)
+        port (e2b-agent-port env runtime)
+        sandbox-id (:sandbox-id runtime)]
+    (if (string? cached)
+      (p/resolved cached)
+      (p/let [sandbox (<e2b-connect-sandbox! env sandbox-id)]
+        (e2b-sandbox-host sandbox port)))))
+
+(defn- <e2b-export-workspace-bundle!
+  [^js env runtime opts]
+  (let [sandbox-id (:sandbox-id runtime)
+        task (:task opts)
+        session-id (:session-id runtime)
+        repo-dir (or (:backup-dir runtime)
+                     (get-repo-dir session-id task "e2b"))
+        base-branch (or (some-> (get-in task [:project :base-branch]) source-control/sanitize-branch-name)
+                        "main")
+        head-branch (some-> (:head-branch opts) source-control/sanitize-branch-name)]
+    (when-not (string? sandbox-id)
+      (throw (ex-info "missing sandbox-id on runtime"
+                      {:reason :missing-sandbox-id
+                       :runtime runtime})))
+    (when-not (string? repo-dir)
+      (throw (ex-info "missing repo dir for workspace bundle export"
+                      {:reason :missing-repo-dir
+                       :session-id session-id})))
+    (p/let [sandbox (<e2b-connect-sandbox! env sandbox-id)
+            result (<e2b-run-shell! sandbox (export-workspace-bundle-command repo-dir base-branch head-branch))]
+      (or (parse-exported-workspace-bundle (:stdout result))
+          (throw (ex-info "invalid workspace bundle export output"
+                          {:reason :invalid-bundle-export-output
+                           :provider "e2b"}))))))
+
+(defn- <e2b-apply-workspace-bundle!
+  [^js env runtime opts]
+  (let [sandbox-id (:sandbox-id runtime)
+        task (:task opts)
+        session-id (:session-id runtime)
+        repo-dir (or (:backup-dir runtime)
+                     (get-repo-dir session-id task "e2b"))
+        head-sha (some-> (:head-sha opts) str string/trim not-empty)
+        bundle-base64 (some-> (:bundle-base64 opts) str string/trim not-empty)
+        head-branch (some-> (:head-branch opts) source-control/sanitize-branch-name)]
+    (when-not (string? sandbox-id)
+      (throw (ex-info "missing sandbox-id on runtime"
+                      {:reason :missing-sandbox-id
+                       :runtime runtime})))
+    (when-not (string? repo-dir)
+      (throw (ex-info "missing repo dir for workspace bundle apply"
+                      {:reason :missing-repo-dir
+                       :session-id session-id})))
+    (when-not (string? head-sha)
+      (throw (ex-info "missing bundle head sha"
+                      {:reason :missing-bundle-head-sha
+                       :provider "e2b"})))
+    (when-not (string? bundle-base64)
+      (throw (ex-info "missing bundle payload"
+                      {:reason :missing-bundle-payload
+                       :provider "e2b"})))
+    (p/let [sandbox (<e2b-connect-sandbox! env sandbox-id)
+            command (apply-workspace-bundle-command repo-dir
+                                                    {:head-sha head-sha
+                                                     :head-branch head-branch
+                                                     :bundle-base64 bundle-base64})
+            _ (<e2b-run-shell! sandbox command)]
+      true)))
+
+(defn- <e2b-open-terminal!
+  [^js env runtime request]
+  (let [session-id (:session-id runtime)]
+    (when-not (string? session-id)
+      (throw (ex-info "missing runtime session-id on runtime"
+                      {:runtime runtime})))
+    (let [agent-token (e2b-agent-token env runtime)]
+      (p/let [base-url (<e2b-runtime-base-url! env runtime)
+              req-url (platform/request-url request)
+              terminal-url (str (sandbox/session-url base-url session-id) "/terminal" (.-search req-url))
+              headers (js/Headers. (.-headers request))
+              _ (when (string? agent-token)
+                  (.set headers "authorization" (str "Bearer " agent-token)))
+              req (js/Request. terminal-url
+                               #js {:method (.-method request)
+                                    :headers headers})
+              resp (js/fetch req)
+              status (.-status resp)]
+        (if (or (= status 101) (<= 200 status 299))
+          resp
+          (throw (ex-info "e2b open-terminal failed"
+                          {:status status
+                           :session-id session-id})))))))
 
 (defn- vercel-agent-token [^js env runtime]
   (or (:agent-token runtime)
@@ -2139,6 +2521,154 @@
                                        {:headers headers})
            (fn [_] nil)))))))
 
+(defrecord E2BProvider [env]
+  RuntimeProvider
+
+  (<provision-runtime! [_ session-id task]
+    (let [agent-token (e2b-agent-token env nil)
+          port (e2b-agent-port env nil)
+          payload (session-payload task)
+          repo-dir (get-repo-dir session-id task "e2b")
+          checkpoint (task-sandbox-checkpoint task)
+          backup-key (or (:backup-key checkpoint)
+                         (repo-backup-key task))
+          template (e2b-template env task nil)]
+      (p/let [env-vars (<e2b-agent-env-vars! env task)
+              create-opts (e2b-create-opts env session-id env-vars)
+              {:keys [sandbox snapshot-id restored?]} (<e2b-create-sandbox-for-restore! env
+                                                                                        template
+                                                                                        checkpoint
+                                                                                        create-opts)
+              _ (<e2b-ensure-running! env sandbox session-id task port agent-token env-vars)
+              _ (when-not restored?
+                  (p/catch
+                   (<e2b-clone-repo! env sandbox session-id task)
+                   (fn [error]
+                     (log/error :agent/e2b-repo-clone-failed
+                                {:session-id session-id
+                                 :error (str error)})
+                     nil)))
+              _ (p/catch
+                 (<e2b-run-project-init-setup! sandbox session-id task)
+                 (fn [error]
+                   (log/error :agent/e2b-project-init-setup-failed
+                              {:session-id session-id
+                               :error (str error)})
+                   nil))
+              base-url (e2b-sandbox-host sandbox port)
+              response (sandbox/<create-session base-url agent-token session-id payload)
+              sandbox-id (e2b-sandbox-id sandbox)]
+        (when-not (string? sandbox-id)
+          (throw (ex-info "e2b sandbox missing sandboxId"
+                          {:reason :missing-sandbox-id})))
+        {:provider "e2b"
+         :sandbox-id sandbox-id
+         :sandbox-name sandbox-id
+         :sandbox-port port
+         :base-url base-url
+         :agent-token agent-token
+         :session-id (:session-id response)
+         :backup-key backup-key
+         :backup-dir repo-dir
+         :template template
+         :snapshot-id snapshot-id})))
+
+  (<open-events-stream! [_ runtime]
+    (let [agent-token (e2b-agent-token env runtime)]
+      (p/let [base-url (<e2b-runtime-base-url! env runtime)]
+        (sandbox/<open-events-stream base-url agent-token (:session-id runtime)))))
+
+  (<send-message! [_ runtime message]
+    (let [agent-token (e2b-agent-token env runtime)]
+      (p/let [base-url (<e2b-runtime-base-url! env runtime)]
+        (sandbox/<send-message base-url agent-token (:session-id runtime) message))))
+
+  (<open-terminal! [_ runtime request _opts]
+    (<e2b-open-terminal! env runtime request))
+
+  (<snapshot-runtime! [_ runtime opts]
+    (let [session-id (:session-id runtime)
+          sandbox-id (:sandbox-id runtime)
+          backup-dir (or (:backup-dir runtime)
+                         (get-repo-dir session-id (:task opts) "e2b"))
+          task (:task opts)
+          backup-key (repo-backup-key task)]
+      (when-not (string? sandbox-id)
+        (throw (ex-info "missing sandbox-id on runtime"
+                        {:reason :missing-sandbox-id
+                         :runtime runtime})))
+      (p/let [sandbox (<e2b-connect-sandbox! env sandbox-id)
+              result (<e2b-create-snapshot! sandbox)]
+        (cond-> result
+          (string? backup-key) (assoc :backup-key backup-key)
+          (string? backup-dir) (assoc :backup-dir backup-dir)
+          :always (assoc :provider "e2b")))))
+
+  (<export-workspace-bundle! [_ runtime opts]
+    (<e2b-export-workspace-bundle! env runtime opts))
+
+  (<apply-workspace-bundle! [_ runtime opts]
+    (<e2b-apply-workspace-bundle! env runtime opts))
+
+  (<push-branch! [_ runtime opts]
+    (let [sandbox-id (:sandbox-id runtime)
+          session-id (:session-id opts)
+          repo-url (:repo-url opts)
+          head-branch (:head-branch opts)
+          force? (true? (:force opts))
+          repo-dir (or (:backup-dir runtime)
+                       (get-repo-dir session-id (:task opts) "e2b"))
+          remote-url (or (source-control/push-remote-url repo-url (:push-token opts))
+                         repo-url)]
+      (when-not (string? sandbox-id)
+        (throw (ex-info "missing sandbox-id on runtime" {:runtime runtime})))
+      (when-not (string? repo-dir)
+        (throw (ex-info "missing repo dir for push"
+                        {:reason :missing-repo-dir
+                         :session-id session-id})))
+      (when-not (string? remote-url)
+        (throw (ex-info "missing remote url for push"
+                        {:reason :missing-remote-url
+                         :repo-url repo-url})))
+      (when-not (string? head-branch)
+        (throw (ex-info "missing head branch for push"
+                        {:reason :missing-branch})))
+      (let [script (push-command {:repo-dir repo-dir
+                                  :remote-url remote-url
+                                  :head-branch head-branch
+                                  :commit-message (:commit-message opts)
+                                  :force force?})
+            env-vars (assoc-github-installation-token {}
+                                                      (some-> (:push-token opts) str string/trim not-empty))
+            run-opts (when (seq env-vars)
+                       {:env env-vars})]
+        (-> (p/let [sandbox (<e2b-connect-sandbox! env sandbox-id)
+                    _ (<e2b-run-shell! sandbox script run-opts)]
+              {:head-branch head-branch
+               :repo-url repo-url
+               :force force?
+               :remote "origin"})
+            (p/catch (fn [error]
+                       (p/rejected
+                        (if-let [data (ex-data error)]
+                          (ex-info (ex-message error)
+                                   (assoc data
+                                          :provider "e2b"
+                                          :reason (or (:reason data)
+                                                      (classify-push-error error))))
+                          (ex-info "git push failed"
+                                   {:provider "e2b"
+                                    :reason (classify-push-error error)
+                                    :error (str error)})))))))))
+
+  (<terminate-runtime! [_ runtime]
+    (let [sandbox-id (:sandbox-id runtime)]
+      (if-not (string? sandbox-id)
+        (p/resolved nil)
+        (p/catch
+         (<e2b-kill-sandbox! env sandbox-id)
+         (fn [_] nil))))))
+
 (defrecord VercelProvider [env]
   RuntimeProvider
 
@@ -2470,6 +3000,7 @@
 
 (defn provider-id [provider]
   (cond
+    (instance? E2BProvider provider) "e2b"
     (instance? SpritesProvider provider) "sprites"
     (instance? LocalDevProvider provider) "local-dev"
     (instance? LocalRunnerProvider provider) "local-runner"
@@ -2482,11 +3013,12 @@
              {:requested kind
               :resolved (known-provider-kind kind)})
   (case (known-provider-kind kind)
+    "e2b" (->E2BProvider env)
     "local-dev" (->LocalDevProvider env)
     "local-runner" (->LocalRunnerProvider env)
     "vercel" (->VercelProvider env)
     "cloudflare" (->CloudflareProvider env)
-    (->SpritesProvider env)))
+    (->E2BProvider env)))
 
 (defn resolve-provider
   [^js env runtime]
@@ -2495,4 +3027,5 @@
 (defn runtime-terminal-supported?
   [runtime]
   (let [provider (known-provider-kind (:provider runtime))]
-    (= "cloudflare" provider)))
+    (or (= "cloudflare" provider)
+        (= "e2b" provider))))

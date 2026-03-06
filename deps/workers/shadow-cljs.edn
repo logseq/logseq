@@ -43,4 +43,9 @@
                               :output-to "worker/dist/worker-split-test.js"
                               :ns-regexp "logseq\\.(sync\\.worker-test|agents\\.dispatch-test)$"
                               :devtools {:enabled false}
-                              :main logseq.sync.worker-split-test-runner/main}}}
+                              :main logseq.sync.worker-split-test-runner/main}
+  :agents-e2b-runtime-provider-test {:target :node-test
+                                     :output-to "worker/dist/agents-e2b-runtime-provider-test.js"
+                                     :ns-regexp "logseq\\.agents\\.e2b-runtime-provider-test$"
+                                     :devtools {:enabled false}
+                                     :main logseq.agents.e2b-runtime-provider-test-runner/main}}}

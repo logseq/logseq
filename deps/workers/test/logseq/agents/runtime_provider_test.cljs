@@ -18,13 +18,14 @@
 
 (deftest provider-kind-test
   (testing "normalizes configured runtime provider"
-    (is (= "sprites" (runtime-provider/provider-kind #js {})))
+    (is (= "e2b" (runtime-provider/provider-kind #js {})))
+    (is (= "e2b" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "E2B"})))
     (is (= "sprites" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "SPRITES"})))
     (is (= "local-dev" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "LOCAL-DEV"})))
     (is (= "local-runner" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "LOCAL-RUNNER"})))
     (is (= "vercel" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "VERCEL"})))
     (is (= "cloudflare" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "CLOUDFLARE"})))
-    (is (= "sprites" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "unknown"})))))
+    (is (= "e2b" (runtime-provider/provider-kind #js {"AGENT_RUNTIME_PROVIDER" "unknown"})))))
 
 (deftest fill-template-test
   (testing "fills sandbox id placeholders"
@@ -38,6 +39,8 @@
     (let [env #js {"AGENT_RUNTIME_PROVIDER" "cloudflare"}]
       (is (= "local-dev"
              (runtime-provider/runtime-provider-kind env {:provider "local-dev"})))
+      (is (= "e2b"
+             (runtime-provider/runtime-provider-kind env {:provider "e2b"})))
       (is (= "sprites"
              (runtime-provider/runtime-provider-kind env {:provider "sprites"})))
       (is (= "vercel"
@@ -49,7 +52,9 @@
 
 (deftest provider-dispatch-test
   (testing "create-provider and resolve-provider dispatch supported providers"
-    (let [env #js {"AGENT_RUNTIME_PROVIDER" "cloudflare"}]
+    (let [env #js {"AGENT_RUNTIME_PROVIDER" "e2b"}]
+      (is (= "e2b"
+             (runtime-provider/provider-id (runtime-provider/create-provider env "e2b"))))
       (is (= "sprites"
              (runtime-provider/provider-id (runtime-provider/create-provider env "sprites"))))
       (is (= "local-dev"
@@ -60,14 +65,23 @@
              (runtime-provider/provider-id (runtime-provider/create-provider env "vercel"))))
       (is (= "cloudflare"
              (runtime-provider/provider-id (runtime-provider/create-provider env "cloudflare"))))
-      (is (= "sprites"
+      (is (= "e2b"
              (runtime-provider/provider-id (runtime-provider/create-provider env "unknown"))))
+      (is (= "e2b"
+             (runtime-provider/provider-id (runtime-provider/resolve-provider env {:provider "e2b"}))))
       (is (= "local-dev"
              (runtime-provider/provider-id (runtime-provider/resolve-provider env {:provider "local-dev"}))))
       (is (= "local-runner"
              (runtime-provider/provider-id (runtime-provider/resolve-provider env {:provider "local-runner"}))))
-      (is (= "cloudflare"
+      (is (= "e2b"
              (runtime-provider/provider-id (runtime-provider/resolve-provider env nil)))))))
+
+(deftest runtime-terminal-supported-test
+  (testing "cloudflare and e2b runtimes support browser terminal"
+    (is (true? (runtime-provider/runtime-terminal-supported? {:provider "cloudflare"})))
+    (is (true? (runtime-provider/runtime-terminal-supported? {:provider "e2b"})))
+    (is (false? (runtime-provider/runtime-terminal-supported? {:provider "vercel"})))
+    (is (false? (runtime-provider/runtime-terminal-supported? {:provider "sprites"})))))
 
 (deftest local-runner-provider-provision-test
   (async done

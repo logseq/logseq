@@ -24,6 +24,14 @@
      :agent-runtime-provider (env-value env "AGENT_RUNTIME_PROVIDER")
      :sandbox-agent-url (env-value env "SANDBOX_AGENT_URL")
      :sandbox-agent-token (env-value env "SANDBOX_AGENT_TOKEN")
+     :e2b-api-key (env-value env "E2B_API_KEY")
+     :e2b-domain (env-value env "E2B_DOMAIN")
+     :e2b-template (env-value env "E2B_TEMPLATE")
+     :e2b-repo-clone-command (env-value env "E2B_REPO_CLONE_COMMAND")
+     :e2b-sandbox-agent-port (env-value env "E2B_SANDBOX_AGENT_PORT")
+     :e2b-sandbox-timeout-ms (env-value env "E2B_SANDBOX_TIMEOUT_MS")
+     :e2b-health-retries (env-value env "E2B_HEALTH_RETRIES")
+     :e2b-health-interval-ms (env-value env "E2B_HEALTH_INTERVAL_MS")
      :sprite-token (env-value env "SPRITE_TOKEN")
      :sprites-token (env-value env "SPRITES_TOKEN")
      :sprites-api-url (env-value env "SPRITES_API_URL")
@@ -72,6 +80,9 @@
   [:port :base-url :data-dir :storage-driver :assets-driver
    :auth-driver :auth-token :static-user-id :static-email :static-username
    :agent-runtime-provider :sandbox-agent-url :sandbox-agent-token
+   :e2b-api-key :e2b-domain :e2b-template :e2b-repo-clone-command
+   :e2b-sandbox-agent-port :e2b-sandbox-timeout-ms
+   :e2b-health-retries :e2b-health-interval-ms
    :sprite-token :sprites-token :sprites-api-url :sprites-timeout-ms
    :sprites-name-prefix :sprites-ram-mb :sprites-cpus :sprites-region
    :sprites-storage-gb :sprites-bootstrap-command :sprites-repo-clone-command
