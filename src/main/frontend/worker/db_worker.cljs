@@ -63,6 +63,11 @@
 
 (declare <build-blocks-fts!)
 
+(def search-db-version
+  "Current search index version, stored in PRAGMA user_version.
+  Bump to force a rebuild when the index format changes."
+  1)
+
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
 (defonce *datascript-conns worker-state/*datascript-conns)
@@ -313,8 +318,8 @@
           ;; Build search index if not yet completed (async, batched, yields between batches)
           (when (and search-db (not @*publishing?))
             (try
-              (let [build-done (aget (aget (.exec search-db #js {:sql "PRAGMA user_version" :rowMode "array"}) 0) 0)]
-                (when (zero? build-done)
+              (let [version (aget (aget (.exec search-db #js {:sql "PRAGMA user_version" :rowMode "array"}) 0) 0)]
+                (when (not= version search-db-version)
                   (<build-blocks-fts! search-db conn)))
               (catch :default e
                 (js/console.error "Search index build error:" e)))))))))
@@ -785,7 +790,7 @@
     (search/build-blocks-indice repo @conn)))
 
 (defn- <build-blocks-fts!
-  "Build FTS index in batches with yielding. Sets user_version=1 on completion."
+  "Build FTS index in batches with yielding. Sets user_version to search-db-version on completion."
   [search-db conn]
   (search/truncate-table! search-db)
   (let [db @conn
@@ -804,15 +809,15 @@
             (search/upsert-blocks! search-db (bean/->js indexed)))
           (p/let [_ (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))]
             (p/recur end)))
-        (.exec search-db "PRAGMA user_version = 1")))))
+        (.exec search-db (str "PRAGMA user_version = " search-db-version))))))
 
 (def-thread-api :thread-api/search-build-blocks-indice-in-worker
   [repo & [force?]]
   (p/let [search-db (get-search-db repo)]
     (when search-db
-      (let [build-done (aget (aget (.exec search-db #js {:sql "PRAGMA user_version" :rowMode "array"}) 0) 0)]
-        (if (and (pos? build-done) (not force?))
-          build-done
+      (let [version (aget (aget (.exec search-db #js {:sql "PRAGMA user_version" :rowMode "array"}) 0) 0)]
+        (if (and (= version search-db-version) (not force?))
+          version
           (when-let [conn (worker-state/get-datascript-conn repo)]
             (when force?
               (search/build-fuzzy-search-indice repo @conn))
