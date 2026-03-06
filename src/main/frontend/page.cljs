@@ -64,7 +64,7 @@
               [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "2")]
               [:div [:span.highlighted.font-bold "Relaunch"] [:span.toned-down " the app"]]
               [:div.text-xs.toned-down "Quit the app and then reopen it."]]
-             [:div (shui/shortcut ["cmd" (if (util/electron?) "q" "r")] {:interactive? false})]]
+             [:div (shui/shortcut ["cmd" (if (util/electron?) "q" "r")])]]
             [:div.flex.flex-row.justify-between.align-items.mb-4.items-center.separator-top.py-4
              [:div.flex.flex-col.items-start.mr-2
               [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "3")]
