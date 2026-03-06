@@ -125,6 +125,12 @@
         options' (merge default-export-options
                         {:user-options (merge {:convert-all-tags? false} (dissoc options :assets :verbose))
                         ;; asset file options
+                         :<get-file-stat (fn [path]
+                                           (let [abs-path (if (node-path/isAbsolute path)
+                                                            path
+                                                            (node-path/resolve file-graph-dir path))]
+                                             ;; inline require to allow cljs tests to run
+                                             (.stat (js/require "fs/promises") abs-path)))
                          :<read-and-copy-asset (fn [file *assets buffer-handler]
                                                  (<read-and-copy-asset file *assets buffer-handler assets))}
                         (select-keys options [:verbose]))]
@@ -210,17 +216,17 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.property/deadline
-      (is (= 31 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 33 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
-      (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
-      (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
+      (is (= 9 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
+      (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
       (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Quote-block]] @conn))))
-      (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Pdf-annotation]] @conn))))
+      (is (= 7 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Pdf-annotation]] @conn))))
 
       ;; Properties and tags aren't included in this count as they aren't a Page
-      (is (= 10
+      (is (= 13
              (->> (d/q '[:find [?b ...]
                          :where
                          [?b :block/title]
@@ -231,16 +237,16 @@
                   #_(map #(select-keys % [:block/title :block/tags]))
                   count))
           "Correct number of pages with block content")
-      (is (= 14 (->> @conn
+      (is (= 16 (->> @conn
                      (d/q '[:find [?ident ...]
                             :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                      count))
           "Correct number of user classes")
-      (is (= 4 (count (d/datoms @conn :avet :block/tags :logseq.class/Whiteboard))))
       (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
       (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
       (is (= 1 (count @(:ignored-files import-state))) "Ignore .edn for now")
-      (is (= 5 (count @assets))))
+      ;; 2 zotero pdf are external files so not counted here
+      (is (= 7 (count @assets))))
 
     (testing "logseq files"
       (is (= ".foo {}\n"
@@ -258,7 +264,7 @@
               set))))
 
     (testing "user properties"
-      (is (= 20
+      (is (= 21
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident]) ...]
                          :where [?b :block/tags :logseq.class/Property]])
@@ -420,6 +426,28 @@
               :logseq.property.asset/resize-metadata {:height 288, :width 252}}
              (db-test/readable-properties (db-test/find-block-by-content @conn "greg-popovich-thumbs-up_1704749687791_0")))
           "Asset has correct properties")
+      (is (= {:block/tags [:logseq.class/Asset]
+              :logseq.property.asset/type "pdf"
+              :logseq.property.asset/external-url "zotero://select/library/items/QDM8H6EH"
+              :logseq.property.asset/external-file-name "zotero-link://it/Understanding EXPLAIN.pdf"}
+             (select-keys
+              (db-test/readable-properties (db-test/find-block-by-content @conn "Understanding EXPLAIN"))
+              [:block/tags
+               :logseq.property.asset/type
+               :logseq.property.asset/external-url
+               :logseq.property.asset/external-file-name]))
+          "Zotero linked pdf asset has correct external path info")
+      (is (= {:block/tags [:logseq.class/Asset]
+              :logseq.property.asset/type "pdf"
+              :logseq.property.asset/external-url "zotero://select/library/items/RX5JS7SY"
+              :logseq.property.asset/external-file-name "zotero-path://RX5JS7SY/zlib.pdf"}
+             (select-keys
+              (db-test/readable-properties (db-test/find-block-by-content @conn "zlib"))
+              [:block/tags
+               :logseq.property.asset/type
+               :logseq.property.asset/external-url
+               :logseq.property.asset/external-file-name]))
+          "Zotero imported pdf asset has correct external path info")
       (is (= (d/entity @conn :logseq.class/Asset)
              (:block/page (db-test/find-block-by-content @conn "greg-popovich-thumbs-up_1704749687791_0")))
           "Imported into Asset page")
@@ -448,6 +476,90 @@
                           db-test/readable-properties)
                      :logseq.property.pdf/hl-value :logseq.property/ls-type))
           "Pdf area highlight has correct properties")
+      (is (= {:block/tags [:logseq.class/Pdf-annotation]
+              :logseq.property/asset "Understanding EXPLAIN"
+              :logseq.property.pdf/hl-color :logseq.property/color.yellow
+              :logseq.property.pdf/hl-page 6}
+             (select-keys
+              (db-test/readable-properties (db-test/find-block-by-content @conn #"EXPLAIN is a really nice command"))
+              [:block/tags
+               :logseq.property/asset
+               :logseq.property.pdf/hl-color
+               :logseq.property.pdf/hl-page]))
+          "Zotero linked pdf text highlight links to correct asset")
+      (is (= {:block/tags [:logseq.class/Pdf-annotation]
+              :logseq.property/asset "zlib"
+              :logseq.property.pdf/hl-color :logseq.property/color.red
+              :logseq.property.pdf/hl-page 1}
+             (select-keys
+              (db-test/readable-properties (db-test/find-block-by-content @conn #"The zlib library is a general purpose data compression library"))
+              [:block/tags
+               :logseq.property/asset
+               :logseq.property.pdf/hl-color
+               :logseq.property.pdf/hl-page]))
+          "Zotero imported pdf text highlight links to correct asset")
+      (let [area-hl (d/q '[:find (pull ?b [:block/title
+                                           {:block/tags [:db/ident]}
+                                           {:logseq.property/asset [:block/title]}
+                                           {:logseq.property.pdf/hl-image [:block/title]}
+                                           {:logseq.property.pdf/hl-color [:db/ident]}
+                                           :logseq.property.pdf/hl-type
+                                           :logseq.property.pdf/hl-page]) .
+                           :where
+                           [?asset :block/title "Understanding EXPLAIN"]
+                           [?asset :block/tags :logseq.class/Asset]
+                           [?b :block/title "[:span]"]
+                           [?b :logseq.property/asset ?asset]]
+                         @conn)]
+        (is (= {:logseq.property.pdf/hl-color :logseq.property/color.green
+                :logseq.property.pdf/hl-page 8
+                :block/tags [:logseq.class/Pdf-annotation]
+                :logseq.property/asset "Understanding EXPLAIN"
+                :logseq.property.pdf/hl-image "pdf area highlight"
+                :logseq.property.pdf/hl-type :area}
+               (-> area-hl
+                   (update :block/tags #(mapv :db/ident %))
+                   (update :logseq.property/asset #(:block/title %))
+                   (update :logseq.property.pdf/hl-color #(:db/ident %))
+                   (update :logseq.property.pdf/hl-image #(:block/title %))
+                   (select-keys [:block/tags
+                                 :logseq.property/asset
+                                 :logseq.property.pdf/hl-color
+                                 :logseq.property.pdf/hl-page
+                                 :logseq.property.pdf/hl-image
+                                 :logseq.property.pdf/hl-type])))
+            "Zotero linked pdf area highlight links to correct asset"))
+      (let [area-hl (d/q '[:find (pull ?b [:block/title
+                                           {:block/tags [:db/ident]}
+                                           {:logseq.property/asset [:block/title]}
+                                           {:logseq.property.pdf/hl-image [:block/title]}
+                                           {:logseq.property.pdf/hl-color [:db/ident]}
+                                           :logseq.property.pdf/hl-type
+                                           :logseq.property.pdf/hl-page]) .
+                           :where
+                           [?asset :block/title "zlib"]
+                           [?asset :block/tags :logseq.class/Asset]
+                           [?b :block/title "[:span]"]
+                           [?b :logseq.property/asset ?asset]]
+                         @conn)]
+        (is (= {:logseq.property.pdf/hl-color :logseq.property/color.blue
+                :logseq.property.pdf/hl-page 1
+                :block/tags [:logseq.class/Pdf-annotation]
+                :logseq.property/asset "zlib"
+                :logseq.property.pdf/hl-image "pdf area highlight"
+                :logseq.property.pdf/hl-type :area}
+               (-> area-hl
+                   (update :block/tags #(mapv :db/ident %))
+                   (update :logseq.property/asset #(:block/title %))
+                   (update :logseq.property.pdf/hl-color #(:db/ident %))
+                   (update :logseq.property.pdf/hl-image #(:block/title %))
+                   (select-keys [:block/tags
+                                 :logseq.property/asset
+                                 :logseq.property.pdf/hl-color
+                                 :logseq.property.pdf/hl-page
+                                 :logseq.property.pdf/hl-image
+                                 :logseq.property.pdf/hl-type])))
+            "Zotero imported pdf area highlight links to correct asset"))
 
       ;; Quotes
       (is (= {:block/tags [:logseq.class/Quote-block]
@@ -590,8 +702,36 @@
 
     (testing "multiline blocks"
       (is (= "|markdown| table|\n|some|thing|" (:block/title (db-test/find-block-by-content @conn #"markdown.*table"))))
-      (is (= "multiline block\na 2nd\nand a 3rd" (:block/title (db-test/find-block-by-content @conn #"multiline block"))))
-      (is (= "logbook block" (:block/title (db-test/find-block-by-content @conn #"logbook block")))))
+      (is (= "normal multiline block\na 2nd\nand a 3rd" (:block/title (db-test/find-block-by-content @conn #"normal multiline block"))))
+      (is (= "colored multiline block\nlast line" (:block/title (db-test/find-block-by-content @conn #"colored multiline block"))))
+
+      (let [block (db-test/find-block-by-content @conn #"multiline block with prop and deadline")]
+        (is (= "multiline block with prop and deadline\nlast line" (:block/title block)))
+        (is (= 20221126
+               (-> (db-test/readable-properties block)
+                   :logseq.property/deadline
+                   date-time-util/ms->journal-day))
+            "multiline block has correct journal as property value")
+        (is (= "red"
+               (-> (db-test/readable-properties block)
+                   :logseq.property/background-color))
+            "multiline block has correct background color as property value"))
+
+      (let [block (db-test/find-block-by-content @conn #"multiline block with deadline and scheduled in 1 line and sth else")]
+        (is (= "multiline block with deadline and scheduled in 1 line and sth else\nsomething else\nlast line" (:block/title block)))
+        (is (= 20221126
+               (-> (db-test/readable-properties block)
+                   :logseq.property/deadline
+                   date-time-util/ms->journal-day))
+            "multiline block with deadline and scheduled has correct deadline journal as property value")
+        (is (= 20221126
+               (-> (db-test/readable-properties block)
+                   :logseq.property/scheduled
+                   date-time-util/ms->journal-day))
+            "multiline block with deadline and scheduled has correct scheduled journal as property value"))
+
+      (is (= "logbook block" (:block/title (db-test/find-block-by-content @conn #"^logbook block"))))
+      (is (= "multiline logbook block\nlast line" (:block/title (db-test/find-block-by-content @conn #"multiline logbook block")))))
 
     (testing ":block/refs"
       (let [page (db-test/find-page-by-title @conn "chat-gpt")]
@@ -607,13 +747,7 @@
                   :block/refs
                   (map #(:db/ident (d/entity @conn (:db/id %))))
                   set))
-            "Block has correct task tag and property :block/refs")))
-
-    (testing "whiteboards"
-      (let [block-with-props (db-test/find-block-by-content @conn #"block with props")]
-        (is (= {:user.property/prop-num 10}
-               (db-test/readable-properties block-with-props)))
-        (is (= "block with props" (:block/title block-with-props)))))))
+            "Block has correct task tag and property :block/refs")))))
 
 (deftest-async export-basic-graph-with-convert-all-tags-option-disabled
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
@@ -630,7 +764,7 @@
                   count))
         "Correct number of user classes")
 
-    (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
+    (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
     (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
     (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
 
@@ -746,7 +880,8 @@
 
 (deftest-async export-files-with-remove-inline-tags
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_07.md"])
+          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_07.md"
+                                                          "journals/2026_01_27.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:remove-inline-tags? false :convert-all-tags? true})]
 
@@ -754,7 +889,10 @@
         "Created graph has no validation errors")
     (is (string/starts-with? (:block/title (db-test/find-block-by-content @conn #"Inception"))
                              "Inception #Movie")
-        "block with tag preserves inline tag")))
+        "block with tag preserves inline tag")
+    (is (string/includes? (:block/title (db-test/find-block-by-content @conn #"block with multi word tag"))
+                          "#[[another test]]")
+        "block with multi word tag preserves inline tag")))
 
 (deftest-async export-files-with-ignored-properties
   (p/let [file-graph-dir "test/resources/exporter-test-graph"

@@ -4,9 +4,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
-            [frontend.db.utils :as db-utils]
             [frontend.extensions.lightbox :as lightbox]
             [frontend.extensions.pdf.windows :as pdf-windows]
             [frontend.fs :as fs]
@@ -14,7 +12,6 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -22,7 +19,6 @@
             [frontend.util.ref :as ref]
             [logseq.common.config :as common-config]
             [logseq.graph-parser.exporter :as gp-exporter]
-            [logseq.publishing.db :as publish-db]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
@@ -117,9 +113,12 @@
                             '[:find (pull ?e [*])
                               :in $ ?ref-id
                               :where [?e :logseq.property/asset ?ref-id]]
-                            ref-id)]
-    (let [highlights (some->> data (flatten) (map #(:logseq.property.pdf/hl-value %)) (vec))]
-      {:highlights highlights})))
+                            ref-id)
+          block-entity (db/entity ref-id)]
+    (let [highlights (some->> data (flatten) (map #(:logseq.property.pdf/hl-value %)) (vec))
+          extra {:page (:logseq.property.asset/last-visit-page block-entity)}]
+      {:highlights highlights
+       :extra (when (some #(not (nil? (% extra))) [:page]) extra)})))
 
 (defn area-highlight?
   [hl]
@@ -171,7 +170,7 @@
   [highlight]
   (when-let [block (db-model/get-block-by-uuid (:id highlight))]
     (when-let [color (get-in highlight [:properties :color])]
-      (let [k (pu/get-pid :logseq.property.pdf/hl-color)
+      (let [k :logseq.property.pdf/hl-color
             color' (let [colors (:property/closed-values (db/entity :logseq.property.pdf/hl-color))]
                      (some (fn [color-block] (when (= (:block/title color-block) color)
                                                (:db/id color-block))) colors))]
@@ -202,12 +201,31 @@
        (ref/->block-ref (:block/uuid ref-block))
        :owner-window (pdf-windows/resolve-own-window viewer)))))
 
+(defn get-zotero-local-pdf-path
+  [path & {:keys [id]}]
+  (let [zotero-config (get-in (state/sub-config) [:zotero/settings-v2 "default"])
+        zotero-data-directory (:zotero-data-directory zotero-config)
+        zotero-linked-attachment-base-directory (:zotero-linked-attachment-base-directory zotero-config)
+        relative-path (subs path 14)]
+    (cond
+      (string/starts-with? path "zotero-link://")
+      (str "file://" (util/node-path.join zotero-linked-attachment-base-directory relative-path))
+
+      (string/starts-with? path "zotero-path://")
+      (str "file://" (util/node-path.join zotero-data-directory "storage" relative-path))
+
+      :else ;; compatible with commit 33db791
+      (str "file://" (util/node-path.join zotero-data-directory "storage" id path)))))
+
 (defn db-based-open-block-ref!
   [block]
   (let [hl-value (:logseq.property.pdf/hl-value block)
         asset (:logseq.property/asset block)
         external-url (:logseq.property.asset/external-url asset)
-        file-path (or external-url (str "../assets/" (:block/uuid asset) ".pdf"))]
+        file-path (or external-url (str "../assets/" (:block/uuid asset) ".pdf"))
+        file-path (if (string/starts-with? file-path "zotero://")
+                    (get-zotero-local-pdf-path (:logseq.property.asset/external-file-name asset))
+                    file-path)]
     (if asset
       (->
        (p/let [href (assets-handler/<make-asset-url file-path)]
@@ -260,10 +278,7 @@
   (rum/local nil ::src)
   [state block]
   (let [*src (::src state)]
-    (when-let [asset-path' (and block (publish-db/get-area-block-asset-url
-                                       (conn/get-db (state/get-current-repo))
-                                       block
-                                       (db-utils/pull (:db/id (:block/page block)))))]
+    (when-let [asset-path' (and block (assets-handler/get-area-block-asset-url block))]
       (when (nil? @*src)
         (p/let [asset-path (assets-handler/<make-asset-url asset-path')]
           (reset! *src asset-path)))

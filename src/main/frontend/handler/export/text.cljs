@@ -27,24 +27,26 @@
   (util/profile
     :export-blocks-as-markdown
     (try
-      (let [content
+      (let [open-blocks-only? (boolean (get-in options [:other-options :open-blocks-only]))
+            content
             (cond
              ;; page
               (and (= 1 (count root-block-uuids-or-page-uuid))
                    (ldb/page? (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)])))
-              (common/get-page-content (first root-block-uuids-or-page-uuid))
+              (common/get-page-content (first root-block-uuids-or-page-uuid)
+                                       {:open-blocks-only? open-blocks-only?})
               (and (coll? root-block-uuids-or-page-uuid) (every? #(ldb/page? (db/entity [:block/uuid %])) root-block-uuids-or-page-uuid))
               (->> (mapv (fn [id] (:block/title (db/entity [:block/uuid id]))) root-block-uuids-or-page-uuid)
                    (string/join "\n"))
               :else
-              (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
+              (common/root-block-uuids->content repo root-block-uuids-or-page-uuid
+                                                {:open-blocks-only? open-blocks-only?}))
             first-block (and (coll? root-block-uuids-or-page-uuid)
                              (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
             format (get first-block :block/format :markdown)]
         (binding [cli-export-common/*current-db* (conn/get-db repo)
-                  cli-export-common/*current-repo* repo
                   cli-export-common/*content-config* (common/get-content-config)]
-          (cli-export-text/export-helper repo content format options)))
+          (cli-export-text/export-helper content format options)))
       (catch :default e
         (js/console.error e)))))
 
@@ -59,9 +61,8 @@
        (util/profile (print-str :export-files-as-markdown title)
          [(or path title)
           (binding [cli-export-common/*current-db* db
-                    cli-export-common/*current-repo* repo
                     cli-export-common/*content-config* content-config]
-            (cli-export-text/export-helper repo content :markdown options))]))
+            (cli-export-text/export-helper content :markdown options))]))
      files)))
 
 (defn export-repo-as-markdown!

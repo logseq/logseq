@@ -1,4 +1,5 @@
-(ns logseq.publish.model)
+(ns logseq.publish.model
+  "Handles entity/model operations like conversion from datoms")
 
 (defn merge-attr
   [entity attr value]

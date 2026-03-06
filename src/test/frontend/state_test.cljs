@@ -5,10 +5,8 @@
 (deftest merge-configs
   (let [global-config
         {:shortcuts {:ui/toggle-theme "t z"}
-         :hidden []
          :ui/enable-tooltip? true}
-        local-config {:hidden ["foo" "bar"]
-                      :ui/enable-tooltip? false}]
+        local-config {:ui/enable-tooltip? false}]
     (is (= local-config
            (dissoc (state/merge-configs global-config local-config) :shortcuts))
         "Later config overrides all non-map values")

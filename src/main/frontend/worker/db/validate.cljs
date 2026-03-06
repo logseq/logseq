@@ -50,8 +50,6 @@
                            [[:db/retract (:db/id entity) :block/parent]]
                            (:block/format entity)
                            [[:db/retract (:db/id entity) :block/format]]
-                           (:block/warning entity)
-                           [[:db/retract (:db/id entity) :block/warning]]
                            (= :whiteboard-shape (:logseq.property/ls-type entity))
                            [[:db/retractEntity (:db/id entity)]]
                            (and (:block/page entity) (not (:block/parent entity)))

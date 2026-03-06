@@ -15,7 +15,6 @@
                "bb lint:carve"
                "bb lint:large-vars"
                "bb lint:worker-and-frontend-separate"
-               "bb lint:db-and-file-graphs-separate"
                "bb lang:validate-translations"
                "bb lint:ns-docstrings"]]
     (println cmd)
@@ -24,7 +23,7 @@
 (defn kondo-git-changes
   "Run clj-kondo across dirs and only for files that git diff detects as unstaged changes"
   []
-  (let [kondo-dirs ["src" "deps/common" "deps/db" "deps/graph-parser" "deps/outliner" "deps/publish" "deps/publishing" "deps/cli"]
+  (let [kondo-dirs ["src" "deps/common" "deps/db" "deps/graph-parser" "deps/outliner" "deps/publishing" "deps/publish" "deps/cli"]
         dir-regex (re-pattern (str "^(" (string/join "|" kondo-dirs) ")"))
         dir-to-files (->> (shell {:out :string} "git diff --name-only")
                           :out

@@ -34,11 +34,11 @@
     [:li.mb-1 [:code "{{query #tag}}"]]
     [:li.mb-1 [:code "{{query [[page]]}}"]]
     [:li.mb-1 [:code "{{query \"full-text search\"}}"]]
-    [:li.mb-1 [:code "{{query (and [[project]] (task NOW LATER))}}"]]
+    [:li.mb-1 [:code "{{query (and [[project]] (task Todo Doing))}}"]]
     [:li.mb-1 [:code "{{query (or [[page 1]] [[page 2]])}}"]]
-    [:li.mb-1 [:code "{{query (and (between -7d +7d) (task DONE))}}"]]
+    [:li.mb-1 [:code "{{query (and (between -7d +7d) (task Done))}}"]]
     [:li.mb-1 [:code "{{query (property key value)}}"]]
-    [:li.mb-1 [:code "{{query (page-tags #tag)}}"]]]
+    [:li.mb-1 [:code "{{query (tags #tag)}}"]]]
 
    [:p "Check more examples at "
     [:a {:href "https://docs.logseq.com/#/page/queries"

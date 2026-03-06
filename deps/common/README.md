@@ -16,7 +16,7 @@ This library is under the parent namespace `logseq.common`.
 This follows the practices that [the Logseq frontend
 follows](/docs/dev-practices.md). Most of the same linters are used, with
 configurations that are specific to this library. See [this library's CI
-file](/.github/workflows/logseq-common.yml) for linting examples.
+file](/.github/workflows/deps-common.yml) for linting examples.
 
 ### Setup
 

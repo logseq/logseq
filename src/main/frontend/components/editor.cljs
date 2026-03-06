@@ -210,7 +210,7 @@
       (set-matched-pages! result))))
 
 (rum/defc page-search-aux
-  [id format embed? db-tag? q current-pos input pos]
+  [id format embed? db-tag? q input pos]
   (let [q (string/trim q)
         [matched-pages set-matched-pages!] (rum/use-state nil)
         search-f #(search-pages q db-tag? set-matched-pages!)]
@@ -234,7 +234,7 @@
         matched-pages'
         {:on-chosen   (page-on-chosen-handler embed? input id q pos format)
          :on-enter    (fn []
-                        (page-handler/page-not-exists-handler input id q current-pos))
+                        (page-handler/page-not-exists-handler input))
          :item-render (fn [block _chosen?]
                         (node-render block q {:db-tag? db-tag?}))
          :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
@@ -273,7 +273,7 @@
                (when (> (count edit-content) current-pos)
                  (common-util/safe-subs edit-content pos current-pos))
                "")]
-        (page-search-aux id format embed? db-tag? q current-pos input pos)))))
+        (page-search-aux id format embed? db-tag? q input pos)))))
 
 (defn- search-blocks!
   [state result]

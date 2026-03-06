@@ -4,7 +4,6 @@
             [clojure.string :as string]
             [clojure.walk :as w]
             [dommy.core :as dom]
-            [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -46,13 +45,11 @@
             [goog.string :as gstring]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
-            [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.file-based.schema :as file-schema]
             [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.db :as db-db]
             [logseq.db.frontend.property :as db-property]
@@ -64,6 +61,7 @@
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
+            [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -86,12 +84,12 @@
 (defn set-block-own-order-list-type!
   [block type]
   (when-let [uuid (:block/uuid block)]
-    (property-handler/set-block-property! uuid (pu/get-pid :logseq.property/order-list-type) (name type))))
+    (property-handler/set-block-property! uuid :logseq.property/order-list-type (name type))))
 
 (defn remove-block-own-order-list-type!
   [block]
   (when-let [uuid (:block/uuid block)]
-    (property-handler/remove-block-property! uuid (pu/get-pid :logseq.property/order-list-type))))
+    (property-handler/remove-block-property! uuid :logseq.property/order-list-type)))
 
 (defn own-order-number-list?
   [block]
@@ -107,7 +105,7 @@
   (when (seq blocks)
     (let [has-ordered?    (some own-order-number-list? blocks)
           blocks-uuids    (some->> blocks (map :block/uuid) (remove nil?))
-          order-list-prop (pu/get-pid :logseq.property/order-list-type)]
+          order-list-prop :logseq.property/order-list-type]
       (if has-ordered?
         (property-handler/batch-remove-block-property! blocks-uuids order-list-prop)
         (property-handler/batch-set-block-property! blocks-uuids order-list-prop "number")))))
@@ -356,6 +354,10 @@
                                                                            :keep-uuid? true})]
       [result sibling? prev-block])))
 
+;; This used to be a list of file attributes. Unclear if remaining ones should be removed
+(def retract-attributes
+  #{:block/tags :block/alias :block/properties :block/warning})
+
 (defn insert-new-block-aux!
   [config
    {:block/keys [uuid]
@@ -367,7 +369,7 @@
         selection-end (util/get-selection-end input)
         [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
         current-block (assoc block :block/title fst-block-text)
-        current-block (apply dissoc current-block file-schema/retract-attributes)
+        current-block (apply dissoc current-block retract-attributes)
         new-m {:block/uuid (db/new-block-id)
                :block/title snd-block-text}
         next-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
@@ -1232,7 +1234,7 @@
     (when (and (:db/id entity) (not (ldb/built-in? entity)))
       (let [value (string/trim value)]
         ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
-        ;; maybe we shouldn't save the block/file in "will-unmount" event?
+        ;; maybe we shouldn't save in "will-unmount" event?
         (save-block-if-changed! block value opts)))))
 
 (defn save-block!
@@ -1305,18 +1307,12 @@
         (delete-block-aux! asset-block)))))
 
 (defn db-based-write-asset!
-  [repo dir file file-rpath]
+  [repo file-path file]
   (p/let [buffer (.arrayBuffer file)]
-    (if (util/electron?)
-      (ipc/ipc "writeFile" repo (path/path-join dir file-rpath) buffer)
-      ;; web
-      (p/let [buffer (.arrayBuffer file)
-              content (js/Uint8Array. buffer)]
-        ;; actually, writing binary using memory fs
-        (fs/write-plain-text-file! repo dir file-rpath content nil)))))
+    (fs/write-asset-file! repo file-path buffer)))
 
 (defn- new-asset-block
-  [repo ^js file {:keys [repo-dir asset-dir-rpath external-url]}]
+  [repo ^js file {:keys [external-url] :as opts}]
   ;; WARN file name maybe fully qualified path when paste file
   (p/let [[file title] (if (map? file) [(:src file) (:title file)] [file nil])
           [file external-url] (if (string? file) [nil file] [file external-url])
@@ -1336,7 +1332,7 @@
                             false)
         nil)
       ;; new asset block
-      (let [block-id (ldb/new-block-id)
+      (let [block-id (or (:block/uuid opts) (ldb/new-block-id))
             ext (when file-name (db-asset/asset-path->type file-name))
             _ (when (string/blank? ext)
                 (throw (ex-info "File doesn't have a valid ext."
@@ -1349,10 +1345,8 @@
             asset (db/entity :logseq.class/Asset)]
         (p/do!
          (when file
-           (let [file-path (str block-id "." ext)
-                 file-rpath (str asset-dir-rpath "/" file-path)
-                 dir repo-dir]
-             (db-based-write-asset! repo dir file file-rpath)))
+           (let [file-path (str block-id "." ext)]
+             (db-based-write-asset! repo file-path file)))
          {:block/title (or title file-name-without-ext)
           :block/uuid block-id
           :logseq.property.asset/type ext
@@ -1372,13 +1366,18 @@
           today-page (if (nil? today-page-e)
                        (state/pub-event! [:page/create today-page-name])
                        today-page-e)
+          edit-block (or (state/get-edit-block) last-edit-block)
+          empty-target? (if (state/get-edit-block)
+                          (string/blank? (state/get-edit-content))
+                          (string/blank? (:block/title last-edit-block)))
           blocks* (p/all
-                   (for [^js file files]
+                   (for [^js [idx file] (medley/indexed files)]
                      (new-asset-block repo file
                                       {:repo-dir repo-dir
-                                       :asset-dir-rpath asset-dir-rpath})))
+                                       :asset-dir-rpath asset-dir-rpath
+                                       :block/uuid (when (and (zero? idx) empty-target?)
+                                                     (:block/uuid edit-block))})))
           blocks (remove nil? blocks*)
-          edit-block (or (state/get-edit-block) last-edit-block)
           insert-to-current-block-page? (and (:block/uuid edit-block) (not pdf-area?))
           target (cond
                    insert-to-current-block-page?
@@ -1399,7 +1398,10 @@
                                                    :bottom? true
                                                    :sibling? (= edit-block target)
                                                    :replace-empty-target? true}))
-       (map (fn [b] (db/entity [:block/uuid (:block/uuid b)])) blocks)))))
+       (p/let [blocks (map (fn [b] (db/entity [:block/uuid (:block/uuid b)])) blocks)]
+         (when-let [block (some (fn [block] (when (= (:block/uuid block) (:block/uuid edit-block)) block)) blocks)]
+           (edit-block! block :max))
+         blocks)))))
 
 (def insert-command! editor-common-handler/insert-command!)
 
@@ -1642,7 +1644,6 @@
         label (or label "")]
     (case (keyword format)
       :markdown (util/format "[%s](%s)" label link)
-      :org (util/format "[[%s][%s]]" link label)
       nil)))
 
 (defn- get-image-link
@@ -1650,8 +1651,7 @@
   (let [link (or link "")
         label (or label "")]
     (case (keyword format)
-      :markdown (util/format "![%s](%s)" label link)
-      :org (util/format "[[%s]]"))))
+      :markdown (util/format "![%s](%s)" label link))))
 
 (defn handle-command-input-close [id]
   (state/set-editor-show-input! nil)
@@ -1813,7 +1813,7 @@
         (if content-update-fn
           (content-update-fn (:block/title block))
           (:block/title block))]
-    (merge (apply dissoc block (conj (if-not keep-uuid? [:block/_refs] []) :block/pre-block? :block/meta))
+    (merge (apply dissoc block (conj (if-not keep-uuid? [:block/_refs] [])))
            {:block/page {:db/id (:db/id page)}
             :block/title new-content})))
 
@@ -3452,6 +3452,7 @@
           (or (:block/_parent block) (:block.temp/has-children? block))
           (integer? (:block-level config))
           (>= (:block-level config) (state/get-ref-open-blocks-level)))
+     (:default-collapsed? config)
      (and (or (:view? config) (:popup? config))
           (or (ldb/page? block)
               (:table-block-title? config))))))

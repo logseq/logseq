@@ -102,6 +102,12 @@
     (when page
       (sdk-utils/result->js page))))
 
+(defn get_today_page
+  []
+  (p/let [today-name (date/today)
+          page (<get-block today-name {:children? false})]
+    (some-> page (sdk-utils/result->js))))
+
 (defn get_all_pages
   []
   (p/let [result (db-async/<q
@@ -131,8 +137,8 @@
                            :journal? journal
                            :class? class
                            :format format}
-                          (string? customUUID)
-                          (assoc :uuid (uuid customUUID)))))
+                           (string? customUUID)
+                           (assoc :uuid (uuid customUUID)))))
              page' (or page new-page)
              _ (when (seq properties)
                  (api-block/db-based-save-block-properties! new-page properties {:plugin this
@@ -421,8 +427,8 @@
                    block (<get-block id {:children? false})
                    value (bean/->clj value)
                    opts (cond-> opts
-                                (boolean? (:reset opts))
-                                (assoc :reset-property-values (:reset opts)))]
+                          (boolean? (:reset opts))
+                          (assoc :reset-property-values (:reset opts)))]
              (when block
                (db-based-api/upsert-block-property this block key' value opts)))))
 

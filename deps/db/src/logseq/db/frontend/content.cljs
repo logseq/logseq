@@ -4,7 +4,6 @@
             [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
-            [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.frontend.entity-util :as entity-util]))
 
 ;; [[uuid]]
@@ -49,7 +48,7 @@
                  ;; The caller need to handle situations including
                  ;; mutual references and circle references.
                  refs*
-                 (cond->> (filter common-entity-util/page? refs*)
+                 (cond->> (filter entity-util/page? refs*)
                    (and db (false? replace-pages-with-same-name?))
                    (remove (fn [e]
                              (> (count (entity-util/get-pages-by-name db (:block/title e))) 1)))))
@@ -95,7 +94,10 @@
 (defn- replace-page-ref
   [content page-name id]
   (let [[page wrapped-id] (map page-ref/->page-ref [page-name id])]
-    (common-util/replace-ignore-case content page wrapped-id)))
+    (string/replace content
+                    ;; Don't replace #[[]] as that is a tag and is handled separately in replace-tag-ref
+                    (re-pattern (str "(?i)" "(^|[^#])"
+                                     (common-util/escape-regex-chars page))) (str "$1" wrapped-id))))
 
 (defn- replace-page-ref-with-id
   [content page-name id replace-tag?]

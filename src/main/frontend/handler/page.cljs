@@ -17,7 +17,6 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.ui :as ui-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
@@ -27,7 +26,6 @@
             [frontend.util.ref :as ref]
             [frontend.util.url :as url-util]
             [goog.functions :refer [debounce]]
-            [goog.object :as gobj]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
@@ -130,23 +128,10 @@
 
 ;; Editor
 (defn page-not-exists-handler
-  [input id q current-pos]
+  [input]
   (state/clear-editor-action!)
-  (if (state/org-mode-file-link? (state/get-current-repo))
-    (let [page-ref-text (get-page-ref-text q)
-          value (gobj/get input "value")
-          old-page-ref (ref/->page-ref q)
-          new-value (string/replace value
-                                    old-page-ref
-                                    page-ref-text)]
-      (state/set-edit-content! id new-value)
-      (let [new-pos (+ current-pos
-                       (- (count page-ref-text)
-                          (count old-page-ref))
-                       2)]
-        (cursor/move-cursor-to input new-pos)))
-    (let [current-selected (util/get-selected-text)]
-      (cursor/move-cursor-forward input (+ 2 (count current-selected))))))
+  (let [current-selected (util/get-selected-text)]
+    (cursor/move-cursor-forward input (+ 2 (count current-selected)))))
 
 (defn- tag-on-chosen-handler
   [input id pos format current-pos edit-content q]
@@ -272,16 +257,14 @@
                (not config/publishing?))
       (when-let [title (date/today)]
         (state/set-today! title)
-        (let [today-page (util/page-name-sanity-lc title)
-              create-f (fn []
-                         (p/let [result (<create! title {:redirect? false
-                                                         :split-namespace? false
-                                                         :today-journal? true})]
-                           (ui-handler/re-render-root!)
-                           (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})
-                           result))]
-          (when-not (db/get-page today-page)
-            (create-f)))))))
+        (p/let [today-page (util/page-name-sanity-lc title)
+                page (ldb/get-journal-page (db/get-db) (date/today-name))]
+          (when-not page
+            (p/let [result (<create! title {:redirect? false
+                                            :split-namespace? false
+                                            :today-journal? true})]
+              (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})
+              result)))))))
 
 (defn open-today-in-sidebar
   []

@@ -39,9 +39,7 @@
         results (if (:entity options)
                   (map #(when-let [ent (d/entity @conn
                                                  (if (string? %) (edn/read-string %) %))]
-                          (cond-> (into {:db/id (:db/id ent)} ent)
-                            (seq (:block/properties ent))
-                            (update :block/properties (fn [props] (map (fn [m] (into {} m)) props)))))
+                          (into {:db/id (:db/id ent)} ent))
                        (:entity options))
                   ;; assumes no :in are in queries
                   (let [query (into (edn/read-string (first args'')) [:in '$ '%])

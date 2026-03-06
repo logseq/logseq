@@ -6,10 +6,8 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [dommy.core :as dom]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
-            [frontend.fs :as fs]
             [frontend.handler.config :as config-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.notification :as notification]
@@ -40,7 +38,7 @@
 (defn <create!
   ([title]
    (<create! title {}))
-  ([title {:keys [redirect? today-journal?]
+  ([title {:keys [redirect? today-journal? class?]
            :or   {redirect? true}
            :as options}]
    (when (string? title)
@@ -66,24 +64,27 @@
                              :error)
          :else
          (when-not (string/blank? title')
-           (p/let [options' (cond-> (update options :tags concat (:block/tags parsed-result))
-                              (nil? (:split-namespace? options))
-                              (assoc :split-namespace? true))
-                   [_page-name page-uuid] (ui-outliner-tx/transact!
-                                           {:outliner-op :create-page}
-                                           (outliner-op/create-page! title' options'))
-                   page (db/get-page (or page-uuid title'))]
-             (when redirect?
-               (route-handler/redirect-to-page! page-uuid)
-               (when-not today-journal?
-                 (js/setTimeout
-                  (fn []
-                    (when-let [block-add-button (->> (dom/sel ".block-add-button")
-                                                     (filter #(= (str (:db/id page)) (dom/attr % "parentblockid")))
-                                                     first)]
-                      (.click block-add-button)))
-                  200)))
-             page)))))))
+           (p/let [existing-page (when-not class? (db/get-page title'))]
+             (if existing-page
+               existing-page
+               (p/let [options' (cond-> (update options :tags concat (:block/tags parsed-result))
+                                  (nil? (:split-namespace? options))
+                                  (assoc :split-namespace? true))
+                       [_page-name page-uuid] (ui-outliner-tx/transact!
+                                               {:outliner-op :create-page}
+                                               (outliner-op/create-page! title' options'))
+                       page (db/get-page (or page-uuid title'))]
+                 (when redirect?
+                   (route-handler/redirect-to-page! page-uuid)
+                   (when-not today-journal?
+                     (js/setTimeout
+                      (fn []
+                        (when-let [block-add-button (->> (dom/sel ".block-add-button")
+                                                         (filter #(= (str (:db/id page)) (dom/attr % "parentblockid")))
+                                                         first)]
+                          (.click block-add-button)))
+                      200)))
+                 page)))))))))
 
 ;; favorite fns
 ;; ============
@@ -156,24 +157,18 @@
 ;; =========
 
 (defn after-page-deleted!
-  [repo page-name file-path tx-meta]
-  (let [repo-dir (config/get-repo-dir repo)]
+  [page-name tx-meta]
     ;; TODO: move favorite && unfavorite to worker too
-    (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
-      (<db-unfavorite-page! page-block-uuid))
+  (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
+    (<db-unfavorite-page! page-block-uuid))
 
-    (when (and (not= :rename-page (:real-outliner-op tx-meta))
-               (= (some-> (state/get-current-page) common-util/page-name-sanity-lc)
-                  (common-util/page-name-sanity-lc page-name)))
-      (route-handler/redirect-to-home!))
+  (when (and (not= :rename-page (:real-outliner-op tx-meta))
+             (= (some-> (state/get-current-page) common-util/page-name-sanity-lc)
+                (common-util/page-name-sanity-lc page-name)))
+    (route-handler/redirect-to-home!))
 
     ;; TODO: why need this?
-    (ui-handler/re-render-root!)
-
-    (when file-path
-      (-> (p/let [exists? (fs/file-exists? repo-dir file-path)]
-            (when exists? (fs/unlink! repo (config/get-repo-fpath repo file-path) nil)))
-          (p/catch (fn [error] (js/console.error error)))))))
+  (ui-handler/re-render-root!))
 
 (defn after-page-renamed!
   [repo {:keys [page-id old-name new-name]}]
@@ -183,7 +178,7 @@
         page (db/entity repo page-id)]
 
     ;; Redirect to the newly renamed page
-    (when (and redirect? (not (db/whiteboard-page? page)))
+    (when redirect?
       (route-handler/redirect! {:to          :page
                                 :push        false
                                 :path-params {:name (str (:block/uuid page))}}))

@@ -60,7 +60,6 @@ This is overview of this repository's most important directories and files.
 
 - `packages/` contains JavaScript dependencies used by the frontend
   - `packages/ui/` - The frontend's component system based on shadcn
-  - `packags/tldraw/` - Custom fork of tldraw which powers whiteboards
 - `scripts` - Dev scripts
 - `clj-e2e/` - end to end clj frontend tests
 - `android/` -  Android app

@@ -1,6 +1,7 @@
 (ns logseq.graph-parser.text
   "Miscellaneous text util fns for the parser. Used by file and DB graphs"
-  (:require [clojure.set :as set]
+  (:require ["path" :as node-path]
+            [clojure.set :as set]
             [clojure.string :as string]
             [goog.string :as gstring]
             [logseq.common.util :as common-util]
@@ -11,7 +12,23 @@
 
 (def get-file-basename page-ref/get-file-basename)
 
-(def get-page-name page-ref/get-page-name)
+(defn- get-file-rootname
+  "Returns the rootname of a file path. e.g. /a/b/c.md -> c"
+  [path]
+  (when-not (string/blank? path)
+    (.-name (node-path/parse (string/replace path "+" "/")))))
+
+(defn get-page-name
+  "Similar to page-ref/get-page-name but handles format-specific page-refs e.g. org/md"
+  [s]
+  (and (string? s)
+       (or (when-let [[_ label _path] (re-matches page-ref/markdown-page-ref-re s)]
+             (string/trim label))
+           (when-let [[_ path _label] (re-matches #"\[\[(file:.*)\]\[.+?\]\]" s)]
+             (some-> (get-file-rootname path)
+                     (string/replace "." "/")))
+           (-> (re-matches page-ref/page-ref-any-re s)
+               second))))
 
 (def page-ref-un-brackets! page-ref/page-ref-un-brackets!)
 
@@ -75,7 +92,7 @@
       nil)
 
     "Nested_link"
-    (page-ref/get-page-name (:content data))
+    (get-page-name (:content data))
 
     "Tag"
     (if (= "Plain" (ffirst data))

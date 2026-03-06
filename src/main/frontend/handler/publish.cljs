@@ -409,8 +409,12 @@
   [page]
   (let [token (state/get-auth-id-token)
         headers (cond-> {}
-                  token (assoc "authorization" (str "Bearer " token)))]
-    (p/let [graph-uuid (some-> (ldb/get-graph-rtc-uuid (db/get-db)) str)
+                  token (assoc "authorization" (str "Bearer " token)))
+        db (db/get-db (state/get-current-repo))]
+    (p/let [graph-uuid (some->
+                        (or (ldb/get-graph-rtc-uuid db)
+                            (ldb/get-graph-local-uuid db))
+                        str)
             page-uuid (some-> (:block/uuid page) str)]
       (if (and graph-uuid page-uuid)
         (-> (p/let [resp (js/fetch (publish-page-endpoint graph-uuid page-uuid)

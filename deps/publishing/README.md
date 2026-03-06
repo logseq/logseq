@@ -21,7 +21,7 @@ See `script/publishing.cljs` for a CLI example. See the frontend for cljs usage.
 This follows the practices that [the Logseq frontend
 follows](/docs/dev-practices.md). Most of the same linters are used, with
 configurations that are specific to this library. See [this library's CI
-file](/.github/workflows/publishing.yml) for linting examples.
+file](/.github/workflows/deps-publishing.yml) for linting examples.
 
 ### Setup
 

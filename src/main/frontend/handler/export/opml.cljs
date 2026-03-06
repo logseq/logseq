@@ -434,19 +434,21 @@
              (uuid? root-block-uuids-or-page-uuid))]}
   (util/profile
     :export-blocks-as-opml
-    (let [content
+    (let [open-blocks-only? (boolean (get-in options [:other-options :open-blocks-only]))
+          content
           (if (uuid? root-block-uuids-or-page-uuid)
            ;; page
-            (common/get-page-content root-block-uuids-or-page-uuid)
-            (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
+            (common/get-page-content root-block-uuids-or-page-uuid
+                                     {:open-blocks-only? open-blocks-only?})
+            (common/root-block-uuids->content repo root-block-uuids-or-page-uuid
+                                              {:open-blocks-only? open-blocks-only?}))
           title (if (uuid? root-block-uuids-or-page-uuid)
                   (:block/title (db/entity [:block/uuid root-block-uuids-or-page-uuid]))
                   "untitled")
           first-block (and (coll? root-block-uuids-or-page-uuid)
                            (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
           format (get first-block :block/format :markdown)]
-      (binding [cli-export-common/*current-repo* repo
-                cli-export-common/*current-db* (conn/get-db repo)
+      (binding [cli-export-common/*current-db* (conn/get-db repo)
                 cli-export-common/*content-config* (common/get-content-config)]
         (export-helper content format options :title title)))))
 

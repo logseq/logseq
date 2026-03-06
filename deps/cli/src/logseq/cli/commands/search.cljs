@@ -55,7 +55,6 @@
     (cli-util/error "Command missing required option 'graph'"))
   (if (fs/existsSync (cli-util/get-graph-path graph))
     (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
-          _ (cli-util/ensure-db-graph-for-command @conn)
           nodes (->> (d/datoms @conn :aevt :block/title)
                      (filter (fn [datom]
                                (string/includes? (:v datom) search-term)))

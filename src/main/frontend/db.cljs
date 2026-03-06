@@ -14,7 +14,6 @@
 (import-vars
  [frontend.db.conn
   ;; TODO: remove later
-  get-repo-path
   get-repo-name
   get-short-repo-name
   get-db
@@ -24,14 +23,12 @@
   entity pull pull-many]
 
  [frontend.db.model
-  delete-files get-block-and-children get-block-by-uuid sort-by-order
-  get-block-parent get-block-parents parents-collapsed?
-  get-block-immediate-children get-block-page
-  get-file file-exists?  get-files-full
-  get-latest-journals get-page get-case-page get-page-alias-names
+  get-block-and-children get-block-by-uuid sort-by-order
+  get-block-parent get-block-parents
+  get-block-immediate-children get-file
+  get-latest-journals get-page get-case-page
   get-page-format journal-page? page? sub-block
-  page-empty? page-exists? get-alias-source-page
-  has-children? whiteboard-page?])
+  page-exists? get-alias-source-page has-children?])
 
 (defn start-db-conn!
   ([repo]
@@ -54,12 +51,3 @@
        (conn/transact! repo tx-data tx-meta))
      (ui-outliner-tx/transact! tx-meta
                                (outliner-op/transact! tx-data tx-meta)))))
-
-(defn set-file-content!
-  ([repo path content]
-   (set-file-content! repo path content {}))
-  ([repo path content opts]
-   (when (and repo path)
-     (let [tx-data {:file/path path
-                    :file/content content}]
-       (transact! repo [tx-data] opts)))))

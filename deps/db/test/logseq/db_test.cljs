@@ -100,12 +100,108 @@
     (let [conn (db-test/create-conn)]
       (testing "#Task shouldn't be converted to property"
         (is (thrown? js/Error
-                     (with-out-str (ldb/transact! conn [{:db/ident :logseq.class/Task
-                                                         :block/tags :logseq.class/Property}])))))
+                     (with-out-str
+                       (db-test/silence-stderr
+                        (ldb/transact! conn [{:db/ident :logseq.class/Task
+                                              :block/tags :logseq.class/Property}]))))))
       (ldb/transact-with-temp-conn!
        conn
        {}
-       (fn [temp-conn]
+       (fn [temp-conn _*batch-tx-data]
          (ldb/transact! temp-conn [{:db/ident :logseq.class/Task
                                     :block/tags :logseq.class/Property}])
          (ldb/transact! temp-conn [[:db/retract :logseq.class/Task :block/tags :logseq.class/Property]]))))))
+
+(deftest get-bidirectional-properties
+  (testing "disabled by default"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:friend {:logseq.property/type :node
+                                       :build/property-classes [:Person]}}
+                 :classes {:Person {}
+                           :Project {}}
+                 :pages-and-blocks
+                 [{:page {:block/title "Alice"
+                          :build/tags [:Person]
+                          :build/properties {:friend [:build/page {:block/title "Bob"}]}}}
+                  {:page {:block/title "Bob"}}
+                  {:page {:block/title "Charlie"
+                          :build/tags [:Project]
+                          :build/properties {:friend [:build/page {:block/title "Bob"}]}}}]})
+          target (db-test/find-page-by-title @conn "Bob")]
+      (is (empty? (ldb/get-bidirectional-properties @conn (:db/id target))))))
+
+  (testing "enabled per class"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:friend {:logseq.property/type :node
+                                       :build/property-classes [:Person]}}
+                 :classes {:Person {:build/properties {:logseq.property.class/enable-bidirectional? true}}
+                           :Project {}}
+                 :pages-and-blocks
+                 [{:page {:block/title "Alice"
+                          :build/tags [:Person]
+                          :build/properties {:friend [:build/page {:block/title "Bob"}]}}}
+                  {:page {:block/title "Bob"}}
+                  {:page {:block/title "Charlie"
+                          :build/tags [:Project]
+                          :build/properties {:friend [:build/page {:block/title "Bob"}]}}}]})
+          target (db-test/find-page-by-title @conn "Bob")
+          results (ldb/get-bidirectional-properties @conn (:db/id target))]
+      (is (= 1 (count results)))
+      (is (= "People" (:title (first results))))
+      (is (= ["Alice"]
+             (map :block/title (:entities (first results))))))))
+
+(defn- bidirectional-perf-conn
+  [n property-titles]
+  (let [target-page {:page {:block/title "Target"}}
+        properties (into {}
+                         (map (fn [property-title]
+                                [property-title {:logseq.property/type :node
+                                                 :build/property-classes [:Person]}]))
+                         property-titles)
+        person-properties (into {}
+                                (map (fn [property-title]
+                                       [property-title [:build/page {:block/title "Target"}]]))
+                                property-titles)
+        pages (vec (concat [target-page]
+                           (map (fn [i]
+                                  {:page {:block/title (str "Person " i)
+                                          :build/tags [:Person]
+                                          :build/properties person-properties}})
+                                (range n))))]
+    (db-test/create-conn-with-blocks
+     {:properties properties
+      :classes {:Person {:build/properties {:logseq.property.class/enable-bidirectional? true}}}
+      :pages-and-blocks pages})))
+
+(deftest ^:long get-bidirectional-properties-performance-single-property
+  (testing "attribute lookups scale with unique properties, not entities"
+    (let [conn (bidirectional-perf-conn 400 [:friend])
+          target-id (:db/id (db-test/find-page-by-title @conn "Target"))
+          original-entity d/entity
+          attr-lookups (atom 0)
+          results (with-redefs [d/entity (fn [db eid]
+                                           (when (keyword? eid)
+                                             (swap! attr-lookups inc))
+                                           (original-entity db eid))]
+                    (ldb/get-bidirectional-properties @conn target-id))]
+      (is (= 1 (count results)))
+      (is (= 400 (count (:entities (first results)))))
+      (is (<= @attr-lookups 8)
+          (str "expected bounded attr lookups, got " @attr-lookups)))))
+
+(deftest ^:long get-bidirectional-properties-performance-multi-property
+  (testing "attribute lookups stay bounded with multiple matching properties"
+    (let [conn (bidirectional-perf-conn 300 [:friend :colleague])
+          target-id (:db/id (db-test/find-page-by-title @conn "Target"))
+          original-entity d/entity
+          attr-lookups (atom 0)
+          results (with-redefs [d/entity (fn [db eid]
+                                           (when (keyword? eid)
+                                             (swap! attr-lookups inc))
+                                           (original-entity db eid))]
+                    (ldb/get-bidirectional-properties @conn target-id))]
+      (is (= 1 (count results)))
+      (is (= 300 (count (:entities (first results)))))
+      (is (<= @attr-lookups 12)
+          (str "expected bounded attr lookups, got " @attr-lookups)))))

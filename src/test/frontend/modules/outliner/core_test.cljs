@@ -9,8 +9,7 @@
             [frontend.db.model :as db-model]
             [frontend.modules.outliner.tree :as tree]
             [frontend.state :as state]
-            [frontend.test.fixtures :as fixtures]
-            [frontend.test.helper :as test-helper :refer [load-test-files]]
+            [frontend.test.helper :as test-helper]
             [frontend.worker.db-listener :as worker-db-listener]
             [logseq.db :as ldb]
             [logseq.graph-parser.block :as gp-block]
@@ -37,8 +36,8 @@
 
 (use-fixtures :each
   disable-browser-fns
-  fixtures/react-components
-  fixtures/reset-db
+  test-helper/react-components
+  #(test-helper/start-and-destroy-db % {:build-init-data? false})
   listen-db-fixture)
 
 (defn get-block
@@ -429,6 +428,85 @@
       (is (= [22] (get-children 1)))
       (is (= [2 12 16] (get-children 22))))))
 
+(deftest test-paste-multiple-blocks-into-empty-block
+  (testing "
+    Page starts with:
+    - 1
+      - 2
+    - 3
+    - (empty)
+
+    Copy 1,2,3 and paste into the empty block with :replace-empty-target? true
+ "
+    (transact-tree! [[22 [[23]]] [24] [25]])
+    (db/transact! test-db [{:block/uuid 22
+                            :block/title "1"}
+                           {:block/uuid 23
+                            :block/title "2"}
+                           {:block/uuid 24
+                            :block/title "3"}
+                           {:block/uuid 25
+                            :block/title ""}])
+    (let [target-block (get-block 25)
+          copied-blocks (->> (build-blocks [[101 [[102]]] [103]])
+                             (map (fn [block]
+                                    (case (:block/uuid block)
+                                      101 (assoc block :block/title "1")
+                                      102 (assoc block :block/title "2")
+                                      103 (assoc block :block/title "3")
+                                      block))))]
+      (outliner-tx/transact!
+       (transact-opts)
+       (outliner-core/insert-blocks! (db/get-db test-db false)
+                                     copied-blocks
+                                     target-block
+                                     {:sibling? true
+                                      :outliner-op :paste
+                                      :replace-empty-target? true}))
+      (let [top-level (get-children 1)
+            new-top-level (remove #{22 24 25} top-level)
+            replaced (get-block 25)]
+        (is (= 4 (count top-level)))
+        (is (= [22 24] (take 2 top-level)))
+        (is (= 1 (count new-top-level)))
+        (is (= "1" (:block/title replaced)))
+        (is (= [23] (get-children 22)))
+        (let [replaced-children (get-children 25)]
+          (is (= 1 (count replaced-children)))
+          (is (not= 23 (first replaced-children)))
+          (is (= "2" (:block/title (get-block (first replaced-children))))))
+        (is (= "3" (:block/title (get-block (first new-top-level)))))))))
+
+(deftest test-cut-paste-parent-child-into-empty-block
+  (testing "keep-uuid + replace-empty-target remaps child parent to replaced target uuid"
+    (transact-tree! [[25]])
+    (db/transact! test-db [{:block/uuid 25
+                            :block/title ""}])
+    (let [target-block (get-block 25)
+          copied-blocks (->> (build-blocks [[101 [[102]]]])
+                             (map (fn [block]
+                                    (case (:block/uuid block)
+                                      101 (assoc block :block/title "parent")
+                                      102 (-> block
+                                              (assoc :block/title "child")
+                                              ;; Simulate clipboard payload parent lookup format.
+                                              (assoc :block/parent [:block/uuid 101]))
+                                      block))))]
+      (outliner-tx/transact!
+       (transact-opts)
+       (outliner-core/insert-blocks! (db/get-db test-db false)
+                                     copied-blocks
+                                     target-block
+                                     {:sibling? true
+                                      :keep-uuid? true
+                                      :outliner-op :paste
+                                      :replace-empty-target? true}))
+      (is (= "parent" (:block/title (get-block 25))))
+      (is (= [25] (get-children 1)))
+      (let [children (get-children 25)]
+        (is (= 1 (count children)))
+        (is (= "child" (:block/title (get-block (first children)))))))))
+
 (deftest test-batch-transact
   (testing "add 4, 5 after 2 and delete 3"
     (let [tree' [[10 [[2] [3]]]]]
@@ -500,49 +578,6 @@
     (is (=
          '(16 17)
          (map :block/uuid (tree/get-sorted-block-and-children test-db (:db/id (get-block 16))))))))
-
-(defn- save-block!
-  [block]
-  (outliner-tx/transact! (transact-opts)
-                         (outliner-core/save-block! (db/get-db test-db false)
-                                                    block)))
-
-(deftest save-test
-  (load-test-files [{:file/path "pages/page1.md"
-                     :file/content "alias:: foo, bar
-tags:: tag1, tag2
-- block #blarg #bar"}])
-  (testing "save deletes a page's tags"
-    (let [conn (db/get-db test-db false)
-          pre-block (->> (d/q '[:find (pull ?b [*])
-                                :where [?b :block/pre-block? true]]
-                              @conn)
-                         ffirst)
-          _ (save-block! (-> pre-block
-                             (update :block/properties dissoc :tags)
-                             (update :block/properties-text-values dissoc :tags)))
-          updated-page (-> (d/q '[:find (pull ?bp [* {:block/alias [*]}])
-                                  :where [?b :block/pre-block? true]
-                                  [?b :block/page ?bp]]
-                                @conn)
-                           ffirst)]
-      (is (nil? (:block/tags updated-page))
-          "Page's tags are deleted")))
-
-  ;; FIXME:
-  (testing "save deletes orphaned pages when a block's refs change"
-    (let [conn (db/get-db test-db false)
-          pages (set (map first (d/q '[:find ?bn :where [?b :block/name ?bn]] @conn)))
-          _ (assert (set/subset? #{"blarg" "bar"} pages) "Pages from block exist")
-          block-with-refs (ffirst (d/q '[:find (pull ?b [* {:block/refs [*]}])
-                                         :where [?b :block/title "block #blarg #bar"]]
-                                       @conn))
-          _ (save-block! (-> block-with-refs
-                             (assoc :block/title "block"
-                                    :block/refs [])))
-          updated-pages (set (map first (d/q '[:find ?bn :where [?b :block/name ?bn]] @conn)))]
-      (is (not (contains? updated-pages "blarg"))
-          "Deleted, orphaned page no longer exists"))))
 
 ;;; Fuzzy tests
 
@@ -833,13 +868,3 @@ tags:: tag1, tag2
                :block/parent #:db{:id 2333},
                :block/page #:db{:id 2313},
                :block/level 3}]}]})))))
-
-(comment
-  (dotimes [i 5]
-    (do
-      (frontend.test.fixtures/reset-datascript test-db)
-      (cljs.test/run-tests)))
-
-  (do
-    (frontend.test.fixtures/reset-datascript test-db)
-    (cljs.test/test-vars [#'test-paste-first-empty-block])))

@@ -34,8 +34,7 @@
 
 (defn <get-all-properties
   "Returns all public properties as property maps including their
-  :block/title and :db/ident. For file graphs the map only contains
-  :block/title"
+  :block/title and :db/ident"
   [& {:as opts}]
   (when-let [graph (state/get-current-repo)]
     (db-model/get-all-properties graph opts)))
@@ -48,6 +47,12 @@
   (when property-id
     (state/<invoke-db-worker :thread-api/get-property-values (state/get-current-repo)
                              (assoc opts :property-ident property-id))))
+
+(defn <get-bidirectional-properties
+  [target-id]
+  (when target-id
+    (state/<invoke-db-worker :thread-api/get-bidirectional-properties (state/get-current-repo)
+                             {:target-id target-id})))
 
 (defn <get-block
   [graph id-uuid-or-name & {:keys [children? include-collapsed-children? skip-transact? skip-refresh? properties]
@@ -147,16 +152,6 @@
   [graph eid]
   (assert (integer? eid))
   (state/<invoke-db-worker :thread-api/get-block-refs-count graph eid))
-
-(defn <get-all-referenced-blocks-uuid
-  "Get all uuids of blocks with any back link exists."
-  [graph]
-  (<q graph {:transact-db? false}
-      '[:find [?refed-uuid ...]
-        :where
-           ;; ?referee-b is block with ref towards ?refed-b
-        [?refed-b   :block/uuid ?refed-uuid]
-        [?referee-b :block/refs ?refed-b]]))
 
 (defn <get-date-scheduled-or-deadlines
   [journal-title]

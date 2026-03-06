@@ -10,9 +10,7 @@
   {:aliases {clojure.string string
              logseq.db ldb
              logseq.db.common.entity-plus entity-plus
-             logseq.db.common.entity-util common-entity-util
              logseq.db.common.order db-order
-             logseq.db.common.property-util db-property-util
              logseq.db.common.sqlite common-sqlite
              logseq.db.common.view db-view
              logseq.db.frontend.content db-content
@@ -23,9 +21,6 @@
              logseq.db.frontend.property db-property
              logseq.db.frontend.property.build db-property-build
              logseq.db.frontend.property.type db-property-type
-             logseq.db.file-based.rules file-rules
-             logseq.db.file-based.schema file-schema
-             logseq.db.file-based.entity-util file-entity-util
              logseq.db.frontend.rules rules
              logseq.db.frontend.schema db-schema
              logseq.db.frontend.validate db-validate

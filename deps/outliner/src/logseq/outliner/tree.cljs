@@ -2,18 +2,16 @@
   "Provides tree fns and INode protocol"
   (:require [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [logseq.db :as ldb]
-            [logseq.db.common.property-util :as db-property-util]))
+            [logseq.db :as ldb]))
 
 (defprotocol INode
   (-save [this *txs-state conn opts])
   (-del [this *txs-state db]))
 
 (defn- blocks->vec-tree-aux
-  [repo db blocks root]
+  [blocks root]
   (let [root-id (:db/id root)
-        blocks (remove #(db-property-util/shape-block? repo db %) blocks)
-        parent-blocks (group-by #(get-in % [:block/parent :db/id]) blocks) ;; exclude whiteboard shapes
+        parent-blocks (group-by #(get-in % [:block/parent :db/id]) blocks)
         sort-fn (fn [parent]
                   (when-let [children (get parent-blocks parent)]
                     (ldb/sort-by-order children)))
@@ -53,14 +51,14 @@
 ;; TODO: entity can already be used as a tree
 (defn blocks->vec-tree
   "`blocks` need to be in the same page."
-  [repo db blocks root-id & {:as option}]
+  [db blocks root-id & {:as option}]
   (let [blocks (map (fn [b] (if (de/entity? b)
                               (assoc (into {} b) :db/id (:db/id b))
                               b)) blocks)
         [page? root] (get-root-and-page db root-id)]
     (if-not root ; custom query
       blocks
-      (let [result (blocks->vec-tree-aux repo db blocks root)]
+      (let [result (blocks->vec-tree-aux blocks root)]
         (if (and page? (not (:link option)))
           result
           ;; include root block

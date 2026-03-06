@@ -2,18 +2,20 @@
   (:require [cljs-time.coerce :as tc]
             [cljs.pprint :as pp]
             [clojure.string :as string]
-            [dommy.core :as d]
             [frontend.commands :as commands]
             [frontend.components.editor :as editor]
             [frontend.components.export :as export]
+            [frontend.components.icon :as icon-component]
             [frontend.components.page-menu :as page-menu]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.reaction :as reaction-handler]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -34,10 +36,10 @@
   []
   [:<>
    (ui/menu-background-color #(property-handler/batch-set-block-property! (state/get-selection-block-ids)
-                                                                          (pu/get-pid :logseq.property/background-color)
+                                                                          :logseq.property/background-color
                                                                           %)
                              #(property-handler/batch-remove-block-property! (state/get-selection-block-ids)
-                                                                             (pu/get-pid :logseq.property/background-color)))
+                                                                             :logseq.property/background-color))
    (ui/menu-heading #(editor-handler/batch-set-heading! (state/get-selection-block-ids) %)
                     #(editor-handler/batch-set-heading! (state/get-selection-block-ids) true)
                     #(editor-handler/batch-remove-heading! (state/get-selection-block-ids)))
@@ -72,8 +74,7 @@
                         (let [block-uuids (state/get-selection-block-ids)]
                           (shui/popup-hide!)
                           (shui/dialog-open!
-                           #(export/export-blocks block-uuids {:whiteboard? false
-                                                               :export-type :selected-nodes}))))}
+                           #(export/export-blocks block-uuids {:export-type :selected-nodes}))))}
     (t :content/copy-export-as))
 
    (shui/dropdown-menu-item
@@ -86,7 +87,7 @@
    (when (state/enable-flashcards?)
      (shui/dropdown-menu-item
       {:key "Make a Card"
-       :on-click (fsrs/batch-make-cards!)}
+       :on-click #(fsrs/batch-make-cards!)}
       (t :context-menu/make-a-flashcard)))
 
    (shui/dropdown-menu-item
@@ -126,10 +127,10 @@
                       false)]
       [:<>
        (ui/menu-background-color #(property-handler/set-block-property! block-id
-                                                                        (pu/get-pid :logseq.property/background-color)
+                                                                        :logseq.property/background-color
                                                                         %)
                                  #(property-handler/remove-block-property! block-id
-                                                                           (pu/get-pid :logseq.property/background-color)))
+                                                                           :logseq.property/background-color))
 
        (ui/menu-heading heading
                         #(editor-handler/set-heading! block-id %)
@@ -144,6 +145,26 @@
                      (editor-handler/open-block-in-sidebar! block-id))}
         (t :content/open-in-sidebar)
         (shui/dropdown-menu-shortcut "⇧+click"))
+
+       (shui/dropdown-menu-sub
+        (shui/dropdown-menu-sub-trigger
+         "Add reaction")
+        (shui/dropdown-menu-sub-content
+         [:div.p-1
+          (icon-component/icon-search
+           {:on-chosen (fn [_e icon]
+                         (let [emoji-id (:id icon)
+                               emoji? (= :emoji (:type icon))]
+                           (if emoji?
+                             (do
+                               (reaction-handler/toggle-reaction! block-id emoji-id)
+                               (state/hide-custom-context-menu!)
+                               (shui/popup-hide!))
+                             (notification/show! "Please pick an emoji reaction." :warning))))
+            :tabs [[:emoji "Emojis"]]
+            :default-tab :emoji
+            :show-used? true
+            :icon-value nil})]))
 
        (shui/dropdown-menu-separator)
 
@@ -168,8 +189,7 @@
         {:key      "Copy as"
          :on-click (fn [_]
                      (shui/dialog-open!
-                      #(export/export-blocks [block-id] {:whiteboard? false
-                                                         :export-type :block})))}
+                      #(export/export-blocks [block-id] {:export-type :block})))}
         (t :content/copy-export-as))
 
        (when-not property-default-value?
@@ -336,25 +356,8 @@
            [:div.cursor (t :content/click-to-edit)]
            content)]))))
 
-(defn- set-draw-iframe-style!
-  []
-  (let [width (gobj/get js/window "innerWidth")]
-    (when (>= width 1024)
-      (let [draws (d/by-class "draw-iframe")
-            width (- width 200)]
-        (doseq [draw draws]
-          (d/set-style! draw :width (str width "px"))
-          (let [height (max 700 (/ width 2))]
-            (d/set-style! draw :height (str height "px")))
-          (d/set-style! draw :margin-left (str (- (/ (- width 570) 2)) "px")))))))
-
 (rum/defcs content < rum/reactive
-  {:did-mount (fn [state]
-                (set-draw-iframe-style!)
-                state)
-   :did-update (fn [state]
-                 (set-draw-iframe-style!)
-                 state)}
+  {}
   [state id {:keys [format
                     config
                     hiccup

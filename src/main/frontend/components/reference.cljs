@@ -15,7 +15,7 @@
 
 (rum/defc references-aux
   [page-entity config]
-  (let [filters (db-reference/get-filters (db/get-db) page-entity)
+  (let [filters (db-reference/get-filters page-entity)
         reference-filter (fn [{:keys [ref-pages-count]}]
                            (shui/button
                             {:title "Page filter"

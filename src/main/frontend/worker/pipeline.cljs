@@ -35,14 +35,15 @@
           (:undo? tx-meta) (:redo? tx-meta)))))
 
 (defn- rebuild-block-refs
-  [repo {:keys [tx-meta db-after db-before]} blocks]
+  [{:keys [tx-meta db-after db-before]} blocks]
   (when (or (and (:outliner-op tx-meta) (refs-need-recalculated? tx-meta))
             (:rtc-tx? tx-meta)
             (:rtc-op? tx-meta))
     (mapcat (fn [block]
-              (when (d/entity db-after (:db/id block))
-                (let [date-formatter (worker-state/get-date-formatter repo)
-                      refs (->> (outliner-core/rebuild-block-refs repo db-after date-formatter block) set)
+              (when (and (d/entity db-after (:db/id block))
+                         ;; don't compute refs for reactions
+                         (not (:logseq.property.reaction/target (d/entity db-after (:db/id block)))))
+                (let [refs (->> (outliner-core/rebuild-block-refs db-after block) set)
                       old-refs (->> (:block/refs (d/entity db-before (:db/id block)))
                                     (map :db/id)
                                     set)
@@ -107,48 +108,49 @@
 
 (defn- fix-page-tags
   "Add missing attributes and remove #Page when inserting or updating block/title with inline tags"
-  [{:keys [db-after tx-data]}]
-  (let [page-tag (d/entity db-after :logseq.class/Page)
-        tag (d/entity db-after :logseq.class/Tag)]
-    (assert page-tag "Page tag doesn't exist")
-    (mapcat
-     (fn [datom]
-       (when (and (= :block/tags (:a datom))
-                  (:added datom))
-         (let [entity (d/entity db-after (:e datom))
-               v-entity (d/entity db-after (:v datom))]
-           (cond
+  [{:keys [db-after tx-data tx-meta]}]
+  (when-not (:rtc-tx? tx-meta)
+    (let [page-tag (d/entity db-after :logseq.class/Page)
+          tag (d/entity db-after :logseq.class/Tag)]
+      (assert page-tag "Page tag doesn't exist")
+      (mapcat
+       (fn [datom]
+         (when (and (= :block/tags (:a datom))
+                    (:added datom))
+           (let [entity (d/entity db-after (:e datom))
+                 v-entity (d/entity db-after (:v datom))]
+             (cond
              ;; add missing :db/ident and :logseq.property.class/extends for new tag
-             (and (= (:v datom) (:db/id tag))
-                  (not (ldb/inline-tag? (:block/raw-title entity) tag))
-                  (not (:db/ident entity)))
-             (let [eid (:db/id entity)]
-               [[:db/add eid :db/ident (db-class/create-user-class-ident-from-name db-after (:block/title entity))]
-                [:db/add eid :logseq.property.class/extends :logseq.class/Root]
-                [:db/retract eid :block/tags :logseq.class/Page]])
+               (and (= (:v datom) (:db/id tag))
+                    (not (ldb/inline-tag? (:block/raw-title entity) tag))
+                    (not (:db/ident entity)))
+               (let [eid (:db/id entity)]
+                 [[:db/add eid :db/ident (db-class/create-user-class-ident-from-name db-after (:block/title entity))]
+                  [:db/add eid :logseq.property.class/extends :logseq.class/Root]
+                  [:db/retract eid :block/tags :logseq.class/Page]])
 
-             ;; remove #Page from tags/journals/whiteboards, etc.
-             (= (:db/id page-tag) (:v datom))
-             (let [tags (->> entity
-                             :block/tags
-                             (map :db/ident)
-                             (remove #{:logseq.class/Page}))]
-               (when (and (seq tags)
+             ;; remove #Page from tags/journals etc.
+               (= (:db/id page-tag) (:v datom))
+               (let [tags (->> entity
+                               :block/tags
+                               (map :db/ident)
+                               (remove #{:logseq.class/Page}))]
+                 (when (and (seq tags)
                           ;; has other page-classes other than `:logseq.class/Page`
-                          (some db-class/page-classes tags))
-                 [[:db/retract (:e datom) :block/tags :logseq.class/Page]]))
+                            (some db-class/page-classes tags))
+                   [[:db/retract (:e datom) :block/tags :logseq.class/Page]]))
 
              ;; Add other page classes to an existing page
              ;; Caused by invalid tags data from server
              ;; TODO: remove this case
              ;; DEADLINE: 2025-11-30
-             (and (contains? (disj db-class/page-classes :logseq.class/Page) (:db/ident v-entity))
-                  (ldb/internal-page? entity))
-             [[:db/retract (:e datom) :block/tags :logseq.class/Page]]
+               (and (contains? (disj db-class/page-classes :logseq.class/Page) (:db/ident v-entity))
+                    (ldb/internal-page? entity))
+               [[:db/retract (:e datom) :block/tags :logseq.class/Page]]
 
-             :else
-             nil))))
-     tx-data)))
+               :else
+               nil))))
+       tx-data))))
 
 (defn- remove-inline-page-class-from-title
   "Remove inline page tag from title"
@@ -452,54 +454,69 @@
             fix-page-tags-tx-data
             fix-inline-page-tx-data)))
 
-(defn- remove-conflict-datoms
-  [datoms]
-  (->> datoms
-       (group-by (fn [d] (take 4 d))) ; group by '(e a v tx)
-       (keep (fn [[_eavt same-eavt-datoms]]
-               (first (rseq same-eavt-datoms))))
-       ;; sort by :tx, use nth to make this fn works on both vector and datom
-       (sort-by #(nth % 3))))
+(def ^:private journal-protected-update-attrs
+  #{:block/title :block/name})
+
+(defn- ensure-journal-page-protected-attrs-not-updated!
+  [{:keys [db-before tx-data]}]
+  (when-let [violation
+             (some (fn [{:keys [e a v added]}]
+                     (when (and added
+                                (contains? journal-protected-update-attrs a))
+                       (let [before-ent (d/entity db-before e)]
+                         (when (and before-ent
+                                    (ldb/journal? before-ent)
+                                    (not= (get before-ent a) v))
+                           {:type :journal-page-protected-attr-updated
+                            :entity-id e
+                            :attr a
+                            :before (get before-ent a)
+                            :after v
+                            :journal-day (:block/journal-day before-ent)}))))
+                   tx-data)]
+    (throw (ex-info "journal page protected attr updated" violation))))
 
 (defn transact-pipeline
   "Compute extra tx-data and block/refs, should ensure it's a pure function and
   doesn't call `d/transact!` or `ldb/transact!`."
-  [repo {:keys [db-after tx-meta] :as tx-report}]
-  (let [extra-tx-data (compute-extra-tx-data tx-report)
-        tx-report* (if (seq extra-tx-data)
-                     (let [result (d/with db-after extra-tx-data)]
-                       (assoc tx-report
-                              :tx-data (concat (:tx-data tx-report) (:tx-data result))
-                              :db-after (:db-after result)))
-                     tx-report)
-        {:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report*)
-        deleted-blocks (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report*))
-        deleted-block-ids (set (map :db/id deleted-blocks))
-        blocks' (remove (fn [b] (deleted-block-ids (:db/id b))) blocks)
-        block-refs (when (seq blocks')
-                     (rebuild-block-refs repo tx-report* blocks'))
-        tx-id-data (let [db-after (:db-after tx-report*)
-                         updated-blocks (remove (fn [b] (contains? deleted-block-ids (:db/id b)))
-                                                (concat pages blocks))
-                         tx-id (get-in tx-report* [:tempids :db/current-tx])]
-                     (keep (fn [b]
-                             (when-let [db-id (:db/id b)]
-                               (when (:block/uuid (d/entity db-after db-id))
-                                 {:db/id db-id
-                                  :block/tx-id tx-id}))) updated-blocks))
-        block-refs-tx-id-data (concat block-refs tx-id-data)
-        replace-tx-report (when (seq block-refs-tx-id-data)
-                            (d/with (:db-after tx-report*) block-refs-tx-id-data))
-        tx-report' (or replace-tx-report tx-report*)
-        full-tx-data (-> (concat (:tx-data tx-report*)
-                                 (:tx-data replace-tx-report))
-                         remove-conflict-datoms)]
-    (assoc tx-report'
-           :tx-data full-tx-data
-           :tx-meta tx-meta
-           :db-before (:db-before tx-report)
-           :db-after (or (:db-after tx-report')
-                         (:db-after tx-report)))))
+  [{:keys [db-after tx-meta _tx-data] :as tx-report}]
+  (when-not (or (:temp-conn? tx-meta) (:sync-download-graph? tx-meta))
+    (ensure-journal-page-protected-attrs-not-updated! tx-report)
+    (let [extra-tx-data (compute-extra-tx-data tx-report)
+          tx-report* (if (seq extra-tx-data)
+                       (let [result (d/with db-after extra-tx-data)]
+                         (assoc tx-report
+                                :tx-data (concat (:tx-data tx-report) (:tx-data result))
+                                :db-after (:db-after result)))
+                       tx-report)
+          {:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report*)
+          deleted-blocks (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report*))
+          deleted-block-ids (set (map :db/id deleted-blocks))
+          blocks' (remove (fn [b] (deleted-block-ids (:db/id b))) blocks)
+          block-refs (when (seq blocks')
+                       (rebuild-block-refs tx-report* blocks'))
+          tx-id-data (let [db-after (:db-after tx-report*)
+                           updated-blocks (remove (fn [b] (contains? deleted-block-ids (:db/id b)))
+                                                  (concat pages blocks))
+                           tx-id (get-in tx-report* [:tempids :db/current-tx])]
+                       (keep (fn [b]
+                               (when-let [db-id (:db/id b)]
+                                 (when (:block/uuid (d/entity db-after db-id))
+                                   {:db/id db-id
+                                    :block/tx-id tx-id}))) updated-blocks))
+          block-refs-tx-id-data (concat block-refs tx-id-data)
+          replace-tx-report (when (seq block-refs-tx-id-data)
+                              (d/with (:db-after tx-report*) block-refs-tx-id-data))
+          tx-report' (or replace-tx-report tx-report*)
+          full-tx-data (-> (concat (:tx-data tx-report*)
+                                   (:tx-data replace-tx-report))
+                           ldb/remove-conflict-datoms)]
+      (assoc tx-report'
+             :tx-data full-tx-data
+             :tx-meta tx-meta
+             :db-before (:db-before tx-report)
+             :db-after (or (:db-after tx-report')
+                           (:db-after tx-report))))))
 
 (defn- invoke-hooks-default
   [{:keys [tx-meta] :as tx-report} context]
@@ -531,12 +548,9 @@
 
 (defn invoke-hooks
   [conn {:keys [tx-meta] :as tx-report} context]
-  (let [{:keys [from-disk? new-graph? transact-new-graph-refs?]} tx-meta]
+  (let [{:keys [transact-new-graph-refs?]} tx-meta]
     (when-not transact-new-graph-refs?
       (cond
-        (or from-disk? new-graph?)
-        {:tx-report tx-report}
-
         ;; Rebuild refs for a new DB graph using EDN or when EDN data is imported.
         ;; Ref rebuilding happens here because transact-pipeline doesn't rebuild refs
         ;; for these cases

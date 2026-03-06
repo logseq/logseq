@@ -1,12 +1,10 @@
 (ns logseq.db.common.delete-blocks
-  "For file and DB graphs, provides fn to handle any deletion to occur per ldb/transact!"
+  "Provides fn to handle any deletion to occur per ldb/transact!"
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
-            [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.frontend.entity-util :as entity-util]))
 
 (defn- replace-ref-with-deleted-block-title
@@ -47,28 +45,35 @@
          tx))
      refs)))
 
-(defn update-refs-history-and-macros
-  "When a block is deleted, refs are updated, property history are deleted. For file graphs, macros associated
-  with the block are also deleted"
+(defn update-refs-history
+  "When an entity is deleted, related property history, views and reactions
+   are deleted"
   [db txs _opts]
-  (let [retracted-block-ids (->> (keep (fn [tx]
-                                         (when (and (vector? tx)
-                                                    (contains? #{:db.fn/retractEntity :db/retractEntity} (first tx)))
-                                           (second tx))) txs)
-                                 (filter (fn [id]
-                                           (not (common-entity-util/page? (d/entity db id))))))]
-    (when (seq retracted-block-ids)
-      (let [retracted-blocks (map #(d/entity db %) retracted-block-ids)
+  (let [retracted-ids (keep (fn [tx]
+                              (when (and (vector? tx)
+                                         (contains? #{:db.fn/retractEntity :db/retractEntity} (first tx)))
+                                (second tx))) txs)
+        retracted-entities (map #(d/entity db %) retracted-ids)]
+    (when (seq retracted-ids)
+      (let [retracted-blocks (remove entity-util/page? retracted-entities)
+            reaction-entities (->> retracted-entities
+                                   (mapcat :logseq.property.reaction/_target)
+                                   (common-util/distinct-by :db/id))
+            retract-reactions-tx (map (fn [reaction] [:db/retractEntity (:db/id reaction)])
+                                      reaction-entities)
             retracted-tx (build-retracted-tx retracted-blocks)
-            retract-history-tx (mapcat (fn [e]
-                                         (map (fn [history] [:db/retractEntity (:db/id history)])
-                                              (:logseq.property.history/_block e))) retracted-blocks)
-            macros-tx (when-not (entity-plus/db-based-graph? db)
-                        (mapcat (fn [b]
-                                  ;; Only delete if last reference
-                                  (keep #(when (<= (count (:block/_macros (d/entity db (:db/id %))))
-                                                   1)
-                                           (when (:db/id %) (vector :db.fn/retractEntity (:db/id %))))
-                                        (:block/macros b)))
-                                retracted-blocks))]
-        (concat txs retracted-tx retract-history-tx macros-tx)))))
+            history-entities (->> retracted-entities
+                                  (mapcat (fn [e]
+                                            (concat (:logseq.property.history/_block e)
+                                                    (:logseq.property.history/_ref-value e))))
+                                  (common-util/distinct-by :db/id))
+            retract-history-tx (map (fn [history] [:db/retractEntity (:db/id history)])
+                                    history-entities)
+            delete-views (->>
+                          (mapcat
+                           (fn [item]
+                             (let [block (d/entity db (:db/id item))]
+                               (:logseq.property/_view-for block)))
+                           retracted-entities)
+                          (map (fn [b] [:db/retractEntity (:db/id b)])))]
+        (concat retracted-tx delete-views retract-history-tx retract-reactions-tx)))))

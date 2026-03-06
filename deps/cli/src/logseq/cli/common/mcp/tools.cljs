@@ -5,8 +5,8 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
-            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -16,15 +16,9 @@
             [malli.core :as m]
             [malli.error :as me]))
 
-(defn- ensure-db-graph
-  [db]
-  (when-not (ldb/db-based-graph? db)
-    (throw (ex-info "This tool must be called on a DB graph" {}))))
-
 (defn list-properties
   "Main fn for ListProperties tool"
   [db {:keys [expand]}]
-  (ensure-db-graph db)
   (->> (d/datoms db :avet :block/tags :logseq.class/Property)
        (map #(d/entity db (:e %)))
        #_((fn [x] (prn :prop-keys (distinct (mapcat keys x))) x))
@@ -46,7 +40,6 @@
 (defn list-tags
   "Main fn for ListTags tool"
   [db {:keys [expand]}]
-  (ensure-db-graph db)
   (->> (d/datoms db :avet :block/tags :logseq.class/Tag)
        (map #(d/entity db (:e %)))
        (map (fn [e]
@@ -74,8 +67,7 @@
         block-eids (mapv :e datoms)
         block-ents (map #(d/entity db %) block-eids)
         blocks (map #(assoc % :block/title (db-content/recur-replace-uuid-in-block-title %)) block-ents)]
-      ;; Use repo stub since this is a DB only tool
-    (->> (otree/blocks->vec-tree "logseq_db_repo_stub" db blocks page-id)
+    (->> (otree/blocks->vec-tree db blocks page-id)
          (map #(update % :block/uuid str)))))
 
 (defn ^:api remove-hidden-properties
@@ -89,7 +81,6 @@
 (defn get-page-data
   "Get page data for GetPage tool including the page's entity and its blocks"
   [db page-name-or-uuid]
-  (ensure-db-graph db)
   (when-let [page (ldb/get-page db page-name-or-uuid)]
     {:entity (-> (remove-hidden-properties page)
                  (dissoc :block/tags :block/refs)
@@ -103,7 +94,6 @@
 (defn list-pages
   "Main fn for ListPages tool"
   [db {:keys [expand]}]
-  (ensure-db-graph db)
   (->> (d/datoms db :avet :block/name)
        (map #(d/entity db (:e %)))
        (remove entity-util/hidden?)
@@ -369,7 +359,6 @@
   "Given llm generated operations, builds the import EDN, validates it and returns it. It fails
    fast on anything invalid"
   [db operations*]
-  (ensure-db-graph db)
   ;; Only support these operations with appropriate outliner validations
   (when (seq (filter #(and (#{"page" "tag" "property"} (:entityType %)) (= "edit" (:operation %))) operations*))
     (throw (ex-info "Editing a page, tag or property isn't supported yet" {})))

@@ -27,7 +27,6 @@
           :shortcut.category/block-selection
           :shortcut.category/formatting
           :shortcut.category/toggle
-          :shortcut.category/whiteboard
           :shortcut.category/plugins
           :shortcut.category/others))
 

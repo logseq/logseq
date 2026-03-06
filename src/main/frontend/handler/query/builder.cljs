@@ -144,20 +144,17 @@
     (and (vector? f) (= :tags (keyword (first f))))
     [(symbol :tags) (->page-ref (second f))]
 
-    (and (vector? f) (= :page-tags (keyword (first f))))
-    [(symbol :page-tags) (->page-ref (second f))]
-
     (and (vector? f) (= :between (keyword (first f))))
     (into [(symbol :between)] (map ->page-ref (rest f)))
 
     ;; property key value
-    (and (vector? f) (= 3 (count f)) (contains? #{:page-property :property :private-property} (keyword (first f))))
+    (and (vector? f) (= 3 (count f)) (contains? #{:property :private-property} (keyword (first f))))
     (let [l (if (page-ref/page-ref? (str (last f)))
               (symbol (last f))
               (last f))]
       (into [(symbol (first f))] [(second f) l]))
 
-    (and (vector? f) (contains? #{:page :tags :namespace} (keyword (first f))))
+    (and (vector? f) (contains? #{:page :tags} (keyword (first f))))
     (into [(symbol (first f))] (map ->page-ref (rest f)))
 
     :else f))

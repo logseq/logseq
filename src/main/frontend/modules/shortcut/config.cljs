@@ -78,18 +78,6 @@
    :cards/toggle-answers                    {:binding "s"
                                              :fn      srs/toggle-answers}
 
-   :cards/next-card                         {:binding "n"
-                                             :fn      srs/next-card}
-
-   :cards/forgotten                         {:binding "f"
-                                             :fn      srs/forgotten}
-
-   :cards/remembered                        {:binding "r"
-                                             :fn      srs/remembered}
-
-   :cards/recall                            {:binding "t"
-                                             :fn      srs/recall}
-
    :cards/again                             {:binding "1"
                                              :fn      srs/card-again}
 
@@ -292,6 +280,11 @@
                                              :selection? true
                                              :fn      (fn []
                                                         (state/pub-event! [:editor/new-property {:property-key "Icon"}]))}
+
+   :editor/add-reaction                     {:binding "p r"
+                                             :selection? true
+                                             :fn      (fn []
+                                                        (state/pub-event! [:editor/new-reaction {}]))}
 
    :editor/toggle-display-hidden-properties {:binding "p a"
                                              :fn      ui-handler/toggle-show-empty-hidden-properties!}
@@ -698,6 +691,7 @@
           :editor/add-property-status
           :editor/add-property-priority
           :editor/add-property-icon
+          :editor/add-reaction
           :editor/toggle-display-hidden-properties
           :ui/toggle-wide-mode
           :ui/select-theme-color
@@ -829,6 +823,7 @@
      :editor/add-property-status
      :editor/add-property-priority
      :editor/add-property-icon
+     :editor/add-reaction
      :editor/toggle-display-hidden-properties]
 
     :shortcut.category/toggle

@@ -1,10 +1,9 @@
 (ns logseq.graph-parser.extract-test
   (:require [cljs.test :refer [deftest is are]]
             [datascript.core :as d]
-            [logseq.db.file-based.schema :as file-schema]
             [logseq.graph-parser.extract :as extract]))
 
-;; This is a copy of frontend.util.fs/multiplatform-reserved-chars for reserved chars testing
+;; This is a copy of frontend.components.repo/multiplatform-reserved-chars for reserved chars testing
 (def multiplatform-reserved-chars ":\\*\\?\"<>|\\#\\\\")
 
 ;; Stuffs should be parsable (don't crash) when users dump some random files
@@ -42,10 +41,15 @@
   (is (= "asldk lakls" (#'extract/path->file-body "file://data/app/asldk lakls.as")))
   (is (= "中文asldk lakls" (#'extract/path->file-body "file://中文data/app/中文asldk lakls.as"))))
 
+;; Bare minimum schema to test extract
+(def file-schema
+  {:block/uuid {:db/unique :db.unique/identity}
+   :block/name {:db/unique :db.unique/identity}})
+
 (defn- extract [file content & [options]]
   (extract/extract file
                    content
-                   (merge {:block-pattern "-" :db (d/empty-db file-schema/schema)
+                   (merge {:block-pattern "-" :db (d/empty-db file-schema)
                            :verbose false}
                           options)))
 
@@ -125,25 +129,3 @@
     - line2
       - line3
      - line4"))))
-
-(def foo-edn
-  "Example exported whiteboard page as an edn exportable."
-  '{:blocks
-    ({:block/title "foo content a",
-      :block/format :markdown},
-     {:block/title "foo content b",
-      :block/format :markdown}),
-    :pages
-    ({:block/format :markdown,
-      :block/title "Foo"
-      :block/uuid #uuid "a846e3b4-c41d-4251-80e1-be6978c36d8c"
-      :block/properties {:title "my whiteboard foo"}})})
-
-(deftest test-extract-whiteboard-edn
-  (let [{:keys [pages blocks]} (extract/extract-whiteboard-edn "/whiteboards/foo.edn" (pr-str foo-edn) {})
-        page (first pages)]
-    (is (= (get-in page [:block/file :file/path]) "/whiteboards/foo.edn"))
-    (is (= (:block/name page) "foo"))
-    (is (= (:block/type page) "whiteboard"))
-    (is (= (:block/title page) "Foo"))
-    (is (every? #(= (:block/parent %) [:block/uuid #uuid "a846e3b4-c41d-4251-80e1-be6978c36d8c"]) blocks))))

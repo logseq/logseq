@@ -1,4 +1,4 @@
-.property-value-inner:not([data-type="default"]):not([data-type="url"]):not([data-type="number"]):not([data-type="date"]):not([data-type="datetime"]) {
+.property-value-inner:not([data-type="default"]):not([data-type="url"]):not([data-type="number"]):not([data-type="string"]):not([data-type="date"]):not([data-type="datetime"]) {
   @apply cursor-pointer;
   &:hover, .as-scalar-value-wrap:hover {
     @apply bg-gray-02 rounded transition-[background-color] duration-300;
@@ -37,6 +37,11 @@
 }
 
 .ls-number {
+  @apply cursor-text;
+  min-height: 20px;
+}
+
+.ls-string {
   @apply cursor-text;
   min-height: 20px;
 }

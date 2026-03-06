@@ -3,12 +3,15 @@
   platforms by delegating to implementations of the fs protocol"
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [electron.ipc :as ipc]
+            [frontend.config :as config]
             [frontend.fs.memory-fs :as memory-fs]
             [frontend.fs.node :as node]
             [frontend.fs.protocol :as protocol]
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [promesa.core :as p]))
@@ -97,6 +100,31 @@
                   ;; Disable this temporarily
                   ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
                   ))))))
+
+(defn write-file!
+  "A node only version of write-plain-text-file! to avoid using the fs-protocol
+   which has file graph assumptions"
+  [path content]
+  (when (util/electron?)
+    (let [file-fpath (common-util/path-normalize path)]
+      ;; repo is nil because we don't want a backup file written
+      (-> (ipc/ipc "writeFile" nil file-fpath content)
+          (p/catch (fn [error]
+                     (state/pub-event! [:capture-error {:error error
+                                                        :payload {:type :write-file/failed
+                                                                  :user-agent (when js/navigator js/navigator.userAgent)
+                                                                  :content-length (count content)}}])))))))
+
+(defn write-asset-file!
+  [repo file-name data]
+  (let [repo-dir (config/get-repo-dir repo)]
+    (if (util/electron?)
+      (let [assets-dir (path/path-join repo-dir common-config/local-assets-dir)
+            file-path (path/path-join assets-dir file-name)]
+        (write-file! file-path data))
+      (let [file-path (path/path-join common-config/local-assets-dir file-name)]
+        (write-plain-text-file! repo repo-dir file-path data {:skip-transact? true
+                                                              :skip-compare? true})))))
 
 ;; read-file should return string on all platforms
 (defn read-file

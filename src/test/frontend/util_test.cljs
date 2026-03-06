@@ -1,11 +1,6 @@
 (ns frontend.util-test
   (:require [cljs.test :refer [deftest is testing]]
-            [frontend.util :as util]
-            [frontend.config :as config]))
-
-(deftest test-find-first
-  (testing "find-first"
-    (is (= 1 (util/find-first identity [1])))))
+            [frontend.util :as util]))
 
 (deftest test-delete-emoji-current-pos
   (testing "safe current position from end for emoji"
@@ -39,24 +34,6 @@
     (is (= 1 (util/get-line-pos "abc\n😀d\ne" 6)))
     (is (= 2 (util/get-line-pos "ab\nc😀d\ne" 6)))))
 
-(deftest test-get-text-range
-  (testing "get-text-range"
-    (is (= "" (util/get-text-range "abcdefg" 0 true)))
-    (is (= "" (util/get-text-range "abcdefg" 0 false)))
-    (is (= "abcdefg" (util/get-text-range "abcdefg" 10 true)))
-    (is (= "abcdefg" (util/get-text-range "abcdefg" 10 false)))
-    (is (= "abc" (util/get-text-range "abcdefg" 3 true)))
-    (is (= "abc" (util/get-text-range "abcdefg" 3 false)))
-    (is (= "abc" (util/get-text-range "abcdefg\nhijklmn" 3 true)))
-    (is (= "abcdefg\nhij" (util/get-text-range "abcdefg\nhijklmn" 3 false)))
-    (is (= "abcdefg\nhijklmn" (util/get-text-range "abcdefg\nhijklmn" 10 false)))
-    (is (= "abcdefg\nhijklmn\nopq" (util/get-text-range "abcdefg\nhijklmn\nopqrst" 3 false)))
-    (is (= "a😀b" (util/get-text-range "a😀bcdefg" 3 true)))
-    (is (= "a😀b" (util/get-text-range "a😀bcdefg" 3 false)))
-    (is (= "a😀b" (util/get-text-range "a😀bcdefg\nhijklmn" 3 true)))
-    (is (= "a😀bcdefg\nhij" (util/get-text-range "a😀bcdefg\nhijklmn" 3 false)))
-    (is (= "a😀bcdefg\nh😀i" (util/get-text-range "a😀bcdefg\nh😀ijklmn" 3 false)))))
-
 (deftest test-memoize-last
   (testing "memoize-last add test"
     (let [actual-ops (atom 0)
@@ -76,16 +53,3 @@
       (is (= @actual-ops 4))
       (is (= (m+ 3 5) 8))
       (is (= @actual-ops 4)))))
-
-(deftest test-media-format-from-input
-  (testing "predicate file type from ext (html5 supported)"
-    (is (= (config/ext-of-audio? "file.mp3") true))
-    (is (= (config/ext-of-audio? "fIle.mP3") true))
-    (is (= (config/ext-of-audio? "https://x.com/file.mp3") true))
-    (is (= (config/ext-of-audio? "file.wma") false))
-    (is (= (config/ext-of-audio? "file.wma" false) true))
-    (is (= (config/ext-of-video? "file.mp4") true))
-    (is (= (config/ext-of-video? "file.mp3") false))
-    (is (= (config/ext-of-image? "file.svg") true))
-    (is (= (config/ext-of-image? "a.file.png") true))
-    (is (= (config/ext-of-image? "file.tiff") false))))

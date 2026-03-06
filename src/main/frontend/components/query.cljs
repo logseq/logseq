@@ -20,6 +20,19 @@
     (when (seq queries)
       (boolean (some #(= % title) (map :title queries))))))
 
+(defn- grouped-by-page-result?
+  [result group-by-page?]
+  (let [first-group (first result)
+        first-page (first first-group)
+        first-block (first (second first-group))]
+    (boolean
+     (and group-by-page?
+          (seq result)
+          (coll? first-group)
+          (or (:block/name first-page)
+              (:db/id first-page))
+          (:block/uuid first-block)))))
+
 (rum/defcs custom-query-inner < rum/static
   [state {:keys [dsl-query?] :as config} {:keys [query breadcrumb-show?]}
    {:keys [query-error-atom
@@ -30,12 +43,7 @@
   (let [{:keys [->hiccup]} config
         *query-error query-error-atom
         only-blocks? (:block/uuid (first result))
-        blocks-grouped-by-page? (and group-by-page?
-                                     (seq result)
-                                     (coll? (first result))
-                                     (:block/name (ffirst result))
-                                     (:block/uuid (first (second (first result))))
-                                     true)]
+        blocks-grouped-by-page? (grouped-by-page-result? result group-by-page?)]
     (if @*query-error
       (do
         (log/error :exception @*query-error)
@@ -111,8 +119,8 @@
         (str result-count (if (> result-count 1) " results" " result"))])]))
 
 (defn- calculate-collapsed?
-  [current-block current-block-uuid {:keys [collapsed?]}]
-  (let [temp-collapsed? (state/sub-block-collapsed current-block-uuid)
+  [current-block current-block-uuid {:keys [collapsed? container-id]}]
+  (let [temp-collapsed? (state/sub-block-collapsed current-block-uuid container-id)
         collapsed?' (if (some? temp-collapsed?)
                       temp-collapsed?
                       (or collapsed?
@@ -185,7 +193,9 @@
                                 (:block/uuid config))
          current-block (db/entity [:block/uuid current-block-uuid])
         ;; Get query result
-         collapsed?' (calculate-collapsed? current-block current-block-uuid {:collapsed? false})
+         collapsed?' (calculate-collapsed? current-block current-block-uuid
+                                           {:collapsed? false
+                                            :container-id (:container-id config)})
          built-in-collapsed? (and collapsed? built-in-query?)
          config' (assoc config
                         :current-block current-block

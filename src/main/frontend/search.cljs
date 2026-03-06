@@ -9,7 +9,6 @@
             [frontend.search.protocol :as protocol]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.common.config :as common-config]
             [promesa.core :as p]))
 
 (def fuzzy-search fuzzy/fuzzy-search)
@@ -32,7 +31,7 @@
    (when-let [repo (state/get-current-repo)]
      (let [q (fuzzy/clean-str q)]
        (when-not (string/blank? q)
-         (p/let [mldoc-exts (set (map name common-config/mldoc-support-formats))
+         (p/let [mldoc-exts #{"markdown" "md"}
                  result (db-async/<get-files repo)
                  files (->> result
                             (map first)

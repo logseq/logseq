@@ -257,7 +257,7 @@
           (when-let [^js dt (and id (.-dataTransfer e))]
             (reset! block/*dragging? true)
             (pdf-assets/ensure-ref-block! (state/get-current-pdf) hl nil)
-            (.setData dt "text/plain" (str "((" id "))"))))]
+            (.setData dt "text/plain" (str "[[" id "]]"))))]
 
     [:div.extensions__pdf-hls-text-region
      {:id              (str "hl_" id)
@@ -291,7 +291,7 @@
 
         dragstart-handle! (fn [^js e]
                             (when-let [^js dt (and id (.-dataTransfer e))]
-                              (.setData dt "text/plain" (str "((" id "))"))))
+                              (.setData dt "text/plain" (str "[[" id "]]"))))
         update-hl!        (fn [hl] (some-> (rum/deref *ops-ref) (:upd-hl!) (apply [hl])))]
 
     (hooks/use-effect!

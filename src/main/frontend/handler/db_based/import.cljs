@@ -1,9 +1,12 @@
 (ns frontend.handler.db-based.import
   "Handles DB graph imports"
-  (:require [clojure.edn :as edn]
+  (:require ["jszip" :as JSZip]
+            [clojure.edn :as edn]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.fs :as fs]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
@@ -12,11 +15,85 @@
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.common.config :as common-config]
+            [logseq.common.path :as path]
             [logseq.db :as ldb]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
+
+(defn- zip-entries
+  [^js zip]
+  (->> (js/Object.keys (.-files zip))
+       (array-seq)
+       (map (fn [name]
+              (let [entry (aget (.-files zip) name)]
+                {:name name
+                 :entry entry
+                 :dir? (true? (.-dir entry))})))
+       vec))
+
+(defn- sqlite-entry
+  [entries]
+  (let [candidates (filter (fn [{:keys [name dir?]}]
+                             (let [name (-> name
+                                            (string/replace #"\+" "/")
+                                            string/lower-case)]
+                               (and (not dir?)
+                                    (string/ends-with? name "db.sqlite"))))
+                           entries)]
+    (first (sort-by (comp count :name) candidates))))
+
+(defn- asset-entry?
+  [name]
+  (let [name (-> name
+                 (string/replace #"\+" "/")
+                 string/lower-case)]
+    (or (string/starts-with? name "assets/")
+        (string/includes? name "/assets/"))))
+
+(defn- asset-file-name
+  [name]
+  (let [name (-> name
+                 (string/replace #"\+" "/"))
+        name (if-let [idx (string/last-index-of name "/assets/")]
+               (subs name (+ idx (count "/assets/")))
+               (string/replace-first name #"^assets/" ""))]
+    (last (string/split name #"/"))))
+
+(defn- <copy-zip-assets!
+  [repo entries {:keys [progress-fn total]}]
+  (let [assets (->> entries
+                    (filter (fn [{:keys [name dir?]}]
+                              (and (not dir?)
+                                   (asset-entry? name))))
+                    vec)]
+    (if (empty? assets)
+      (p/resolved {:copied 0 :failed []})
+      (p/let [repo-dir (config/get-repo-dir repo)
+              assets-dir (path/path-join repo-dir common-config/local-assets-dir)
+              _ (fs/mkdir-if-not-exists assets-dir)]
+        (p/loop [remaining assets
+                 count 0
+                 failed []]
+          (if (empty? remaining)
+            {:copied count :failed failed}
+            (let [{:keys [name entry]} (first remaining)
+                  file-name (asset-file-name name)]
+              (if (string/blank? file-name)
+                (p/recur (subvec remaining 1) count failed)
+                (p/let [data (.async entry "uint8array")
+                        write-result (p/catch (fs/write-asset-file! repo file-name data)
+                                              (fn [e]
+                                                (js/console.error e)
+                                                ::write-failed))]
+                  (if (= ::write-failed write-result)
+                    (p/recur (subvec remaining 1) count (conj failed file-name))
+                    (let [next-count (inc count)]
+                      (when progress-fn
+                        (progress-fn next-count total))
+                      (p/recur (subvec remaining 1) next-count failed))))))))))))
 
 (defn import-from-sqlite-db!
   [buffer bare-graph-name finished-ok-handler]
@@ -36,6 +113,63 @@
         (notification/show!
          (str (.-message e))
          :error))))))
+
+(defn import-from-sqlite-zip!
+  [^js file bare-graph-name finished-ok-handler]
+  (-> (p/let [zip-buffer (.arrayBuffer file)
+              ^js zip (.loadAsync JSZip zip-buffer)
+              entries (zip-entries zip)
+              entry (sqlite-entry entries)
+              asset-total (count (filter (fn [{:keys [name dir?]}]
+                                           (and (not dir?)
+                                                (asset-entry? name)))
+                                         entries))
+              _ (when (pos? asset-total)
+                  (state/set-state! :graph/importing :sqlite-zip)
+                  (state/set-state! :graph/importing-state {:total asset-total
+                                                            :current-idx 0
+                                                            :current-page "Assets"}))]
+        (if-not entry
+          (notification/show! "Zip missing db.sqlite. Please check the archive structure." :error)
+          (do
+            (shui/dialog-close!)
+            (p/let [sqlite-buffer (.async ^js (:entry entry) "arraybuffer")]
+              (import-from-sqlite-db!
+               sqlite-buffer
+               bare-graph-name
+               (fn []
+                 (p/let [repo (state/get-current-repo)
+                         {:keys [copied failed]}
+                         (<copy-zip-assets!
+                          repo
+                          entries
+                          {:total asset-total
+                           :progress-fn (fn [current total]
+                                          (when (pos? total)
+                                            (state/set-state! :graph/importing-state {:total total
+                                                                                      :current-idx current
+                                                                                      :current-page "Assets"})))})]
+                   (when (pos? copied)
+                     (notification/show! (str "Imported " copied " assets.") :success))
+                   (when (seq failed)
+                     (notification/show!
+                      (str "Skipped " (count failed) " assets. See console for details.")
+                      :warning false)
+                     (js/console.warn "Zip import skipped assets:" (clj->js failed)))
+                   (when (and (pos? asset-total)
+                              (not= asset-total (+ copied (count failed))))
+                     (notification/show!
+                      (str "Imported " copied " of " asset-total " assets. See console for details.")
+                      :warning false))
+                   (state/set-state! :graph/importing nil)
+                   (state/set-state! :graph/importing-state nil)
+                   (finished-ok-handler))))))))
+      (p/catch
+       (fn [e]
+         (js/console.error e)
+         (state/set-state! :graph/importing nil)
+         (state/set-state! :graph/importing-state nil)
+         (notification/show! (str "Zip import failed: " (.-message e)) :error)))))
 
 (defn import-from-debug-transit!
   [bare-graph-name raw finished-ok-handler]

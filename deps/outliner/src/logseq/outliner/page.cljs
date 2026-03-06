@@ -5,6 +5,7 @@
             [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
@@ -54,7 +55,7 @@
       (let [blocks (:block/_page page)
             truncate-blocks-tx-data (mapv
                                      (fn [block]
-                                       [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
+                                       [:db/retractEntity [:block/uuid (:block/uuid block)]])
                                      blocks)]
         ;; TODO: maybe we should add $$$favorites to built-in pages?
         (if (or (ldb/built-in? page) (ldb/hidden? page))
@@ -67,9 +68,12 @@
                                         (map (fn [d] [:db/retract (:e d) (:a d)]) datoms))
                                       (map (fn [d] [:db/retractEntity (:e d)])
                                            (d/datoms @conn :avet :logseq.property.history/property (:db/ident page)))))
-                delete-page-tx (concat (db-refs->page page)
-                                       delete-property-tx
-                                       [[:db.fn/retractEntity (:db/id page)]])
+                today-page? (when-let [day (:block/journal-day page)]
+                              (= (date-time-util/ms->journal-day (js/Date.)) day))
+                delete-page-tx (when-not today-page?
+                                 (concat (db-refs->page page)
+                                         delete-property-tx
+                                         [[:db/retractEntity (:db/id page)]]))
                 restore-class-parent-tx (->> (filter ldb/class? (:logseq.property.class/_extends page))
                                              (map (fn [p]
                                                     {:db/id (:db/id p)
@@ -86,11 +90,9 @@
                              (assoc :real-outliner-op :rename-page)))
             true))))))
 
-(defn- build-page-tx [db properties page {:keys [whiteboard? class? tags class-ident-namespace]}]
+(defn- build-page-tx [db properties page {:keys [class? tags class-ident-namespace]}]
   (when (:block/uuid page)
-    (let [type-tag (cond class? :logseq.class/Tag
-                         whiteboard? :logseq.class/Whiteboard
-                         :else :logseq.class/Page)
+    (let [type-tag (if class? :logseq.class/Tag :logseq.class/Page)
           tags' (if (:block/journal-day page) tags (conj tags type-tag))
           page' (update page :block/tags
                         (fnil into [])
@@ -237,7 +239,7 @@
   "Pure function without side effects"
   [db title*
    {uuid' :uuid
-    :keys [tags properties persist-op? whiteboard?
+    :keys [tags properties persist-op?
            class? today-journal? split-namespace? class-ident-namespace]
     :or   {properties               nil
            persist-op?              true}
@@ -251,8 +253,6 @@
         title (sanitize-title title*)
         types (cond class?
                     #{:logseq.class/Tag}
-                    whiteboard?
-                    #{:logseq.class/Whiteboard}
                     today-journal?
                     #{:logseq.class/Journal}
                     (seq tags)
@@ -260,14 +260,23 @@
                     :else
                     #{:logseq.class/Page})
         existing-names-page (ldb/page-exists? db title types)
+        journal-page-uuid (some-> (gp-block/page-name->map title db false date-formatter
+                                                           {:class? class?
+                                                            :skip-existing-page-check? true})
+                                  :block/uuid)
+        existing-page-by-journal-uuid (when (uuid? journal-page-uuid)
+                                        (d/entity db [:block/uuid journal-page-uuid]))
         existing-page-id (some->> existing-names-page
                                   (filter #(try (when-let [e (and class-ident-namespace? (d/entity db %))]
                                                   (let [ns' (namespace (:db/ident e))]
                                                     (= (str ns') class-ident-namespace)))
                                                 (catch :default _ false)))
                                   (first))
-        existing-page (some->> existing-page-id (d/entity db))]
-    (if (and existing-page (not (:block/parent existing-page)))
+        existing-page (or (some->> existing-page-id (d/entity db))
+                          existing-page-by-journal-uuid)]
+    (if (and existing-page
+             (or (:block/journal-day existing-page)
+                 (not (:block/parent existing-page))))
       (let [tx-meta {:persist-op? persist-op?
                      :outliner-op :save-block}]
         (if (and class?
@@ -306,7 +315,7 @@
               (outliner-validate/validate-page-title-characters (str (:block/title parent)) {:node parent})))
 
           (let [page-uuid (:block/uuid page)
-                page-txs (build-page-tx db properties page (select-keys options [:whiteboard? :class? :tags :class-ident-namespace]))
+                page-txs (build-page-tx db properties page (select-keys options [:class? :tags :class-ident-namespace]))
                 txs (concat
                      ;; transact doesn't support entities
                      (remove de/entity? parents')

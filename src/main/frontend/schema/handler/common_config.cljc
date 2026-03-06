@@ -6,18 +6,11 @@
   (mu/optional-keys
    [:map
     [:meta/version :int]
-    ;; Loose since it looks like capitalization and string are possible
-    [:preferred-format [:or :keyword :string]]
-    [:hidden [:vector :string]]
-    [:default-templates [:map
-                         [:journals {:optional true} :string]]]
-    [:journal/page-title-format :string]
     [:ui/enable-tooltip? :boolean]
     [:ui/show-brackets? :boolean]
     [:feature/enable-search-remove-accents? :boolean]
     [:feature/enable-journals? :boolean]
     [:feature/enable-flashcards? :boolean]
-    [:feature/enable-whiteboards? :boolean]
     [:feature/disable-scheduled-and-deadline-query? :boolean]
     [:scheduled/future-days :int]
     [:start-of-week [:enum 0 1 2 3 4 5 6]]
@@ -29,9 +22,6 @@
     [:default-home [:map
                     [:page {:optional true} :string]
                     [:sidebar {:optional true} [:or :string [:vector :string]]]]]
-    [:pages-directory :string]
-    [:journal-directory :string]
-    [:org-mode/insert-file-link? :boolean]
     [:shortcuts [:map-of
                  :keyword
                  [:or :string false? [:vector :string]]]]
@@ -61,16 +51,6 @@
     [:ref/default-open-blocks-level :int]
     [:graph/settings [:map-of :keyword [:or :boolean :int :nil]]]
     [:graph/forcesettings [:map-of :keyword :int]]
-    [:favorites [:vector :string]]
-    ;; There isn't a :float yet
-    [:srs/learning-fraction float?]
-    [:srs/initial-interval :int]
-    [:block-hidden-properties [:set :keyword]]
-    [:property-pages/enabled? :boolean]
-    [:property-pages/excludelist [:set :keyword]]
-    [:property/separated-by-commas [:set :keyword]]
-    [:ignored-page-references-keywords [:set :keyword]]
-    [:logbook/settings :map]
     [:mobile/photo [:map
                     [:allow-editing? {:optional true} :boolean]
                     [:quality {:optional true} :int]]]
@@ -85,5 +65,4 @@
     [:quick-capture-options (mu/optional-keys [:map
                                                [:insert-today? :boolean]
                                                [:redirect-page? :boolean]
-                                               [:default-page :string]])]
-    [:journal/file-name-format :string]]))
+                                               [:default-page :string]])]]))

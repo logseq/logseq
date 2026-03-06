@@ -3,6 +3,7 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
@@ -125,7 +126,9 @@
    #{:logseq.property/created-from-property :logseq.property/value
      :logseq.property.history/scalar-value :logseq.property.history/block
      :logseq.property.history/property :logseq.property.history/ref-value
-     :logseq.property.class/extends}))
+     :logseq.property.class/extends
+     :logseq.property.reaction/emoji-id
+     :logseq.property.reaction/target}))
 
 (defn- property-entity->map
   "Provide the minimal number of property attributes to validate the property
@@ -408,6 +411,7 @@
    [:block/link {:optional true} :int]
    [:logseq.property/created-from-property {:optional true} :int]])
 
+;; TODO: Remove deprecated
 (def whiteboard-block
   "A (shape) block for whiteboard"
   (vec
@@ -428,6 +432,18 @@
      [:logseq.property/created-from-property :int]]
     (remove #(#{:block/title :logseq.property/created-from-property} (first %)) block-attrs)
     page-or-block-attrs)))
+
+(def reaction-entity
+  "A reaction entity referencing a target node"
+  (vec
+   [:map {:error/path ["reaction-entity"]}
+    [:block/uuid :uuid]
+    [:logseq.property.reaction/emoji-id :string]
+    [:logseq.property.reaction/target :int]
+    [:block/properties {:optional true} block-properties]
+    [:block/created-at :int]
+    [:block/tx-id {:optional true} :int]
+    [:block/refs {:optional true} [:set :int]]]))
 
 (def property-history-block*
   [:map
@@ -526,17 +542,28 @@
    [:block/created-at {:optional true} :int]
    [:block/updated-at {:optional true} :int]])
 
+(defn- whiteboard?
+  [entity]
+  (when (or (map? entity) (de/entity? entity))
+    (some (fn [t]
+            (or (keyword-identical? (:db/ident t) :logseq.class/Whiteboard)
+                (keyword-identical? t :logseq.class/Whiteboard)))
+          (:block/tags entity))))
+
 (defn entity-dispatch-key [db ent]
   (let [d (if (:block/uuid ent) (d/entity db [:block/uuid (:block/uuid ent)]) ent)
         ;; order matters as some block types are a subset of others e.g. :whiteboard
         dispatch-key (cond
+                       (:logseq.property.reaction/target d)
+                       :reaction-entity
                        (entity-util/property? d)
                        :property
                        (entity-util/class? d)
                        :class
                        (entity-util/hidden? d)
                        :hidden
-                       (entity-util/whiteboard? d)
+                       ;; TODO: Remove deprecated
+                       (whiteboard? d)
                        :normal-page
                        (entity-util/page? d)
                        :normal-page
@@ -565,6 +592,7 @@
     :class class-page
     :hidden hidden-page
     :normal-page normal-page
+    :reaction-entity reaction-entity
     :property-history-block property-history-block
     :closed-value-block closed-value-block
     :property-value-block property-value-block

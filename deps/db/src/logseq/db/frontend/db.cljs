@@ -29,7 +29,7 @@
         (or (entity-util/class? page) (entity-util/internal-page? page))
         false
         ;; Default to true for closed value and future internal types.
-        ;; Other types like whiteboard are not considered because they aren't built-in
+        ;; Other types are not considered because they aren't built-in
         :else
         true))
 

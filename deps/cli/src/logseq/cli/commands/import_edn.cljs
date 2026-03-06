@@ -26,7 +26,6 @@
   (if (fs/existsSync (cli-util/get-graph-path graph))
     (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
           _ (db-pipeline/add-listener conn)
-          _ (cli-util/ensure-db-graph-for-command @conn)
           {:keys [init-tx block-props-tx misc-tx]}
           (sqlite-export/build-import import-map @conn {})
           txs (vec (concat init-tx block-props-tx misc-tx))]

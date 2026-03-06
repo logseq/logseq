@@ -32,6 +32,7 @@
       :properties {:logseq.property.class/extends :logseq.class/Page
                    :logseq.property.journal/title-format "MMM do, yyyy"}}
 
+     ;; TODO: Remove deprecated
      :logseq.class/Whiteboard
      {:title "Whiteboard"
       :properties {:logseq.property.class/extends :logseq.class/Page}}
@@ -111,8 +112,7 @@
     :logseq.class/Asset})
 
 (def private-tags
-  "Built-in classes that are private and should not be used by a user directly.
-  These used to be in block/type"
+  "Built-in classes that are private and should not be used by a user directly."
   (set/union (disj internal-tags :logseq.class/Root)
              #{:logseq.class/Journal :logseq.class/Whiteboard
                :logseq.class/Pdf-annotation}))

@@ -3,11 +3,11 @@
   #?(:cljs (:require-macros [frontend.worker-common.util]))
   #?(:cljs (:refer-clojure :exclude [format]))
   #?(:cljs (:require [clojure.string :as string]
-                     [goog.crypt :as crypt]
+                     [goog.crypt.base64 :as base64]
                      [goog.crypt.Hmac]
                      [goog.crypt.Sha256]
-                     [logseq.db.common.sqlite :as common-sqlite]
-                     [frontend.common.file.util :as wfu])))
+                     [logseq.db :as ldb]
+                     [logseq.db.common.sqlite :as common-sqlite])))
 
 ;; Copied from https://github.com/tonsky/datascript-todo
 #?(:clj
@@ -26,7 +26,10 @@
 
 #?(:cljs
    (do
-     (def post-message wfu/post-message)
+     (defn post-message
+       [type data & {:keys [port]}]
+       (when-let [worker (or port js/self)]
+         (.postMessage worker (ldb/write-transit-str [type data]))))
 
      (defn get-pool-name
        [graph-name]
@@ -43,7 +46,7 @@
        (some-> jwt
                (string/split ".")
                second
-               (#(.decodeString ^js crypt/base64 % true))
+               (#(base64/decodeString % true))
                js/JSON.parse
                (js->clj :keywordize-keys true)
                (update :cognito:username decode-username)))))

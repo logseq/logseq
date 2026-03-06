@@ -196,8 +196,9 @@
 
 (deftest save-block!
   (testing "Saving blocks with and without properties"
-    (test-helper/load-test-files [{:file/path "foo.md"
-                                   :file/content "# foo"}])
+    (test-helper/load-test-files [{:page {:block/title "foo"}
+                                   :blocks [{:block/title "foo"
+                                             :build/properties {:logseq.property/heading 1}}]}])
     (let [repo test-helper/test-db
           page-uuid (:block/uuid (db/get-page "foo"))
           block-uuid (:block/uuid (model/get-block-by-page-name-and-block-route-name repo (str page-uuid) "foo"))]

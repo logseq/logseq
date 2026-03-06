@@ -20,8 +20,8 @@
             [frontend.handler.code :as code-handler]
             [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.db-based.property :as db-property-handler]
-            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
+            [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.export :as export]
             [frontend.handler.graph :as graph-handler]
@@ -45,6 +45,7 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [lambdaisland.glogi :as log]
+            [logseq.api.plugin :as plugin-api]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
@@ -52,11 +53,6 @@
 ;; TODO: should we move all events here?
 
 (defmulti handle first)
-
-(defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
-  (search-handler/rebuild-indices!)
-  (plugin-handler/hook-plugin-app :graph-after-indexed {:repo repo :empty-graph? empty-graph?})
-  (route-handler/redirect-to-home!))
 
 (defmethod handle :init/commands [_]
   (page-handler/init-commands!))
@@ -68,8 +64,7 @@
   (page-handler/init-commands!)
   ;; load config
   (repo-config-handler/restore-repo-config! graph)
-  (when-not (= :draw (state/get-current-route))
-    (route-handler/redirect-to-home!))
+  (route-handler/redirect-to-home!)
   (graph-handler/settle-metadata-to-local! {:last-seen-at (js/Date.now)}))
 
 ;; Parameters for the `persist-db` function, to show the notification messages
@@ -81,8 +76,11 @@
    (graph-switch graph)
    (state/set-state! :sync-graph/init? false)
    (when (:rtc-download? opts)
-     (and (search-handler/rebuild-indices!) true)
-     (repo-handler/refresh-repos!))))
+     (repo-handler/refresh-repos!)
+     (p/do!
+      (p/delay 5000)
+      ;; TODO: search should be lazy computed
+      (search-handler/rebuild-indices!)))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
   (let [switch-promise
@@ -99,25 +97,18 @@
 (defmethod handle :graph/open-new-window [[_ev target-repo]]
   (ui-handler/open-new-window-or-tab! target-repo))
 
-(defmethod handle :graph/migrated [[_ _repo]]
-  (js/alert "Graph migrated."))
-
 (defmethod handle :page/create [[_ page-name opts]]
   (if (= page-name (date/today))
     (page-handler/create-today-journal!)
     (page-handler/<create! page-name opts)))
 
-(defmethod handle :page/deleted [[_ repo page-name file-path tx-meta]]
+(defmethod handle :page/deleted [[_ page-name tx-meta]]
   (when-not (util/mobile?)
-    (page-common-handler/after-page-deleted! repo page-name file-path tx-meta)))
+    (page-common-handler/after-page-deleted! page-name tx-meta)))
 
 (defmethod handle :page/renamed [[_ repo data]]
   (when-not (util/mobile?)
     (page-common-handler/after-page-renamed! repo data)))
-
-(defmethod handle :page/create-today-journal [[_ _repo]]
-  (p/let [_ (page-handler/create-today-journal!)]
-    (ui-handler/re-render-root!)))
 
 (defmethod handle :graph/sync-context []
   (let [context {:dev? config/dev?
@@ -126,12 +117,8 @@
                  :validate-db-options (:dev/validate-db-options (state/get-config))
                  :importing? (:graph/importing @state/state)
                  :date-formatter (state/get-date-formatter)
-                 :journal-file-name-format (or (state/get-journal-file-name-format)
-                                               date/default-journal-filename-formatter)
                  :export-bullet-indentation (state/get-export-bullet-indentation)
-                 :preferred-format (state/get-preferred-format)
-                 :journals-directory (config/get-journals-directory)
-                 :pages-directory (config/get-pages-directory)}]
+                 :preferred-format (state/get-preferred-format)}]
     (state/<invoke-db-worker :thread-api/set-context context)))
 
 ;; Hook on a graph is ready to be shown to the user.
@@ -218,14 +205,6 @@
   (when-not (mobile-util/native-platform?)
     (state/pub-event! [:graph/ready graph])))
 
-(defmethod handle :whiteboard-link [[_ shapes]]
-  (route-handler/go-to-search! :whiteboard/link)
-  (state/set-state! :whiteboard/linked-shapes shapes))
-
-(defmethod handle :whiteboard-go-to-link [[_ link]]
-  (route-handler/redirect! {:to :page
-                            :path-params {:name link}}))
-
 (defmethod handle :graph/save-db-to-disk [[_ _opts]]
   (persist-db/export-current-graph! {:succ-notification? true :force-save? true}))
 
@@ -236,8 +215,18 @@
   (when (and command (not (string/blank? content)))
     (shell-handler/run-cli-command-wrapper! command content)))
 
-(defmethod handle :editor/quick-capture [[_ args]]
+(defmethod handle :editor/quick-capture [[_ ^js args]]
   (quick-capture/quick-capture args))
+
+(defmethod handle :editor/invoke-command [[_ ^js args]]
+  (when-let [{:keys [action payload]} (bean/->clj args)]
+    ;; parse "plugin.vibe-clipper.models.onReceiveClipperData"
+    (let [keys' (string/split action #"\.")
+          [type id group] keys'
+          action (last keys')]
+      (case (keyword type)
+        :plugin (plugin-api/invoke_external_plugin_cmd id group action [payload])
+        (log/warn :unknown-invoke-command-type action)))))
 
 (defmethod handle :modal/keymap [[_]]
   (state/open-settings! :keymap))
@@ -322,6 +311,9 @@
 (defmethod handle :rtc/sync-state [[_ state]]
   (state/update-state! :rtc/state (fn [old] (merge old state))))
 
+(defmethod handle :rtc/presence-update [[_ {:keys [editing-block-uuid]}]]
+  (rtc-handler/<rtc-update-presence! editing-block-uuid))
+
 (defmethod handle :rtc/log [[_ data]]
   (state/set-state! :rtc/log data))
 
@@ -330,7 +322,7 @@
    (notification/show! "This graph has been removed from Logseq Sync." :warning false)
    (rtc-handler/<get-remote-graphs)))
 
-(defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid graph-schema-version]]
+(defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid graph-schema-version graph-e2ee?]]
   (assert (= (:major (db-schema/parse-schema-version db-schema/version))
              (:major (db-schema/parse-schema-version graph-schema-version)))
           {:app db-schema/version
@@ -345,7 +337,7 @@
           [:div (str "Downloading " graph-name " ...")]
           (indicator/downloading-logs)])
        {:id :download-rtc-graph}))
-    (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-schema-version 60000)
+    (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-e2ee?)
     (rtc-handler/<get-remote-graphs)
     (when (util/mobile?)
       (shui/popup-hide! :download-rtc-graph)))

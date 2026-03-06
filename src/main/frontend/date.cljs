@@ -69,6 +69,10 @@
   []
   (journal-name))
 
+(defn today-name
+  []
+  (tf/unparse mmm-do-yyyy-formatter (t/today)))
+
 (defn tomorrow
   []
   (journal-name (t/plus (start-of-day (tl/local-now)) (t/days 1))))
@@ -86,14 +90,6 @@
      (bean/->js {:hour "2-digit"
                  :minute "2-digit"
                  :hourCycle "h23"}))))
-
-(defn normalize-date
-  [s]
-  (common-date/normalize-date s (state/get-date-formatter)))
-
-(defn normalize-journal-title
-  [title]
-  (common-date/normalize-journal-title title (state/get-date-formatter)))
 
 (defn valid-journal-title?
   [title]
@@ -116,8 +112,6 @@
 (defn journal-title->long
   [journal-title]
   (journal-title-> journal-title #(tc/to-long %)))
-
-(def default-journal-filename-formatter common-date/default-journal-filename-formatter)
 
 (defn int->local-time-2
   [n]

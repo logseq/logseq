@@ -1,4 +1,5 @@
 (ns logseq.publish.index
+  "Builds indices from payloads for features like tagged nodes"
   (:require [clojure.string :as string]
             [logseq.publish.model :as publish-model]))
 

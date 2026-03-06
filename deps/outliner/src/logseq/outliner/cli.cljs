@@ -5,7 +5,6 @@
             ["path" :as node-path]
             [borkdude.rewrite-edn :as rewrite]
             [clojure.string :as string]
-            [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.sqlite.build :as sqlite-build]
@@ -43,8 +42,6 @@
         (cond-> (or (some-> (find-on-classpath classpath "templates/config.edn") fs/readFileSync str)
                     (do (println "Setting graph's config to empty since no templates/config.edn was found.")
                         "{}"))
-          true
-          (common-config/create-config-for-db-graph)
           additional-config
           (pretty-print-merge additional-config))
         git-sha (get-git-sha)]

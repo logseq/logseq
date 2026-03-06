@@ -169,6 +169,11 @@
   ([repo content format]
    (->edn content (get-default-config repo format))))
 
+(defn ->db-edn
+  "Wrapper around ->edn for DB graphs"
+  [content format]
+  (->edn "logseq_db_repo_stub" content format))
+
 (defn inline->edn
   [text config]
   (try
@@ -189,18 +194,7 @@
           (not (contains? #{"Page_ref" "Block_ref"} ref-type))
 
           (and (contains? #{"Page_ref"} ref-type)
-               (or
-                ;; 2. excalidraw link
-                (common-config/draw? ref-value)
-
-                ;; 3. local asset link
-                (boolean (common-config/local-relative-asset? ref-value))))))))
-
-(defn link?
-  [format link]
-  (when (string? link)
-    (some-> (first (inline->edn link (default-config format)))
-            ast-link?)))
+               (boolean (common-config/local-relative-asset? ref-value)))))))
 
 (defn mldoc-link?
   "Check whether s is a link (including page/block refs)."
@@ -212,27 +206,9 @@
        (or (contains? #{"Nested_link"} (first result'))
            (contains? #{"Page_ref" "Block_ref" "Complex"} (first (:url (second result')))))))))
 
-(defn properties?
-  [ast]
-  (contains? #{"Properties" "Property_Drawer"} (ffirst ast)))
-
 (defn block-with-title?
   [type]
   (contains? #{"Paragraph"
                "Raw_Html"
                "Hiccup"
                "Heading"} type))
-
-(defn- has-title?
-  [repo content format]
-  (let [ast (->edn repo content format)]
-    (block-with-title? (ffirst (map first ast)))))
-
-(defn get-title&body
-  "parses content and returns [title body]
-   returns nil if no title"
-  [repo content format]
-  (let [lines (string/split-lines content)]
-    (if (has-title? repo content format)
-      [(first lines) (string/join "\n" (rest lines))]
-      [nil (string/join "\n" lines)])))

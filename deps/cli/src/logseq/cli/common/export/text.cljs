@@ -451,7 +451,7 @@
 ;;; block-ast, inline-ast -> simple-ast (ends)
 
 (defn ^:large-vars/cleanup-todo export-helper
-  [repo content format options]
+  [content format options]
   (let [remove-options (set (:remove-options options))
         other-options (:other-options options)]
     (binding [*state* (merge *state*
@@ -463,7 +463,7 @@
                                :remove-properties? (contains? remove-options :property)
                                :keep-only-level<=N (:keep-only-level<=N other-options)
                                :newline-after-block (:newline-after-block other-options)}})]
-      (let [ast (gp-mldoc/->edn repo content format)
+      (let [ast (gp-mldoc/->db-edn content format)
             ast (mapv cli-export-common/remove-block-ast-pos ast)
             ast (removev cli-export-common/Properties-block-ast? ast)
             ast* (cli-export-common/replace-block&page-reference&embed ast)

@@ -65,7 +65,7 @@
   [page-entity references]
   (let [[filter-search set-filter-search!] (hooks/use-state "")
         [filtered-references set-filtered-references!] (hooks/use-state references)
-        filters (db-reference/get-filters (db/get-db) page-entity)
+        filters (db-reference/get-filters page-entity)
         {:keys [included excluded]} filters]
     (hooks/use-effect!
      (fn []
