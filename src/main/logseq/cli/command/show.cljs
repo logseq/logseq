@@ -52,11 +52,9 @@
 
 (defn- resolve-stdin-id
   [options]
-  (let [id-present? (or (contains? options :id) (some? (:id options)))
-        stdin (cond
+  (let [stdin (cond
                 (contains? options :stdin) (:stdin options)
                 (:id-from-stdin? options) (read-stdin)
-                (and id-present? (stdin-available?)) (read-stdin)
                 :else nil)
         normalized (normalize-stdin-id stdin)]
     (if (string/blank? normalized)

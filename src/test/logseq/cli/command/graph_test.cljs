@@ -19,64 +19,50 @@
 
 (deftest test-execute-graph-info-queries-kv-rows-with-thread-api-q
   (async done
-         (let [orig-ensure-server! cli-server/ensure-server!
-               orig-invoke transport/invoke
-               invoke-calls* (atom [])
+         (let [invoke-calls* (atom [])
                action {:repo "demo-repo"
                        :graph "demo-graph"}]
-           (set! cli-server/ensure-server!
-                 (fn [_ _]
-                   (p/resolved {:base-url "http://example"})))
-           (set! transport/invoke
-                 (fn [_ method _ args]
-                   (swap! invoke-calls* conj [method args])
-                   (p/resolved [[:logseq.kv/schema-version 7]
-                                [:logseq.kv/graph-created-at 40000]
-                                [:logseq.kv/db-type :sqlite]])))
-           (-> (p/let [result (graph-command/execute-graph-info action {})]
-                 (is (= :ok (:status result)))
-                 (is (= 1 (count @invoke-calls*)))
-                 (let [[method [repo query-args]] (first @invoke-calls*)]
-                   (is (= :thread-api/q method))
-                   (is (= "demo-repo" repo))
-                   (is (= 1 (count query-args)))
-                   (is (string/includes? (pr-str (first query-args)) "logseq.kv"))))
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _]
+                                                           (p/resolved {:base-url "http://example"}))
+                               transport/invoke (fn [_ method _ args]
+                                                  (swap! invoke-calls* conj [method args])
+                                                  (p/resolved [[:logseq.kv/schema-version 7]
+                                                               [:logseq.kv/graph-created-at 40000]
+                                                               [:logseq.kv/db-type :sqlite]]))]
+                 (p/let [result (graph-command/execute-graph-info action {})]
+                   (is (= :ok (:status result)))
+                   (is (= 1 (count @invoke-calls*)))
+                   (let [[method [repo query-args]] (first @invoke-calls*)]
+                     (is (= :thread-api/q method))
+                     (is (= "demo-repo" repo))
+                     (is (= 1 (count query-args)))
+                     (is (string/includes? (pr-str (first query-args)) "logseq.kv")))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+               (p/finally done)))))
 
 (deftest test-execute-graph-info-preserves-summary-fields-and-builds-kv-map
   (async done
-         (let [orig-ensure-server! cli-server/ensure-server!
-               orig-invoke transport/invoke
-               action {:repo "demo-repo"
+         (let [action {:repo "demo-repo"
                        :graph "demo-graph"}]
-           (set! cli-server/ensure-server!
-                 (fn [_ _]
-                   (p/resolved {:base-url "http://example"})))
-           (set! transport/invoke
-                 (fn [_ method _ _]
-                   (case method
-                     :thread-api/q
-                     (p/resolved [[:logseq.kv/db-type :sqlite]
-                                  [:logseq.kv/graph-created-at 40000]
-                                  [:logseq.kv/schema-version 7]])
-                     (throw (ex-info "unexpected invoke method" {:method method})))))
-           (-> (p/let [result (graph-command/execute-graph-info action {})]
-                 (is (= :ok (:status result)))
-                 (is (= "demo-graph" (get-in result [:data :graph])))
-                 (is (= 40000 (get-in result [:data :logseq.kv/graph-created-at])))
-                 (is (= 7 (get-in result [:data :logseq.kv/schema-version])))
-                 (is (= {"logseq.kv/db-type" :sqlite
-                         "logseq.kv/graph-created-at" 40000
-                         "logseq.kv/schema-version" 7}
-                        (get-in result [:data :kv]))))
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _]
+                                                           (p/resolved {:base-url "http://example"}))
+                               transport/invoke (fn [_ method _ _]
+                                                  (case method
+                                                    :thread-api/q
+                                                    (p/resolved [[:logseq.kv/db-type :sqlite]
+                                                                 [:logseq.kv/graph-created-at 40000]
+                                                                 [:logseq.kv/schema-version 7]])
+                                                    (throw (ex-info "unexpected invoke method" {:method method}))))]
+                 (p/let [result (graph-command/execute-graph-info action {})]
+                   (is (= :ok (:status result)))
+                   (is (= "demo-graph" (get-in result [:data :graph])))
+                   (is (= 40000 (get-in result [:data :logseq.kv/graph-created-at])))
+                   (is (= 7 (get-in result [:data :logseq.kv/schema-version])))
+                   (is (= {"logseq.kv/db-type" :sqlite
+                           "logseq.kv/graph-created-at" 40000
+                           "logseq.kv/schema-version" 7}
+                          (get-in result [:data :kv])))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+               (p/finally done)))))
