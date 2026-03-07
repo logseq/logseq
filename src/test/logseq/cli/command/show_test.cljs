@@ -1,5 +1,6 @@
 (ns logseq.cli.command.show-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require ["fs" :as fs]
+            [cljs.test :refer [deftest is testing]]
             [clojure.string :as string]
             [logseq.cli.command.show :as show-command]))
 
@@ -23,13 +24,37 @@
       (is (= [1 2 3] (get-in result [:action :ids])))
       (is (true? (get-in result [:action :multi-id?])))))
 
-  (testing "stdin overrides explicit id when present"
+  (testing "explicit stdin still overrides id when provided in options"
     (let [result (show-command/build-action {:id "99"
                                              :stdin "[1 2]"}
                                             "logseq_db_demo")]
       (is (true? (:ok? result)))
       (is (= [1 2] (get-in result [:action :ids])))
       (is (true? (get-in result [:action :multi-id?])))))
+
+  (testing "pipe stdin does not override explicit id unless stdin mode is requested"
+    (let [orig-fstat-sync (.-fstatSync fs)
+          orig-read-file-sync (.-readFileSync fs)
+          read-count* (atom 0)]
+      (set! (.-fstatSync fs)
+            (fn [_]
+              #js {:isFIFO (fn [] true)
+                   :isFile (fn [] false)}))
+      (set! (.-readFileSync fs)
+            (fn [fd]
+              (when (= fd 0)
+                (swap! read-count* inc)
+                "[1 2]")))
+      (try
+        (let [result (show-command/build-action {:id "99"}
+                                                "logseq_db_demo")]
+          (is (true? (:ok? result)))
+          (is (= 99 (get-in result [:action :id])))
+          (is (= [99] (get-in result [:action :ids])))
+          (is (zero? @read-count*)))
+        (finally
+          (set! (.-fstatSync fs) orig-fstat-sync)
+          (set! (.-readFileSync fs) orig-read-file-sync)))))
 
   (testing "blank stdin falls back to explicit id"
     (let [result (show-command/build-action {:id "99"

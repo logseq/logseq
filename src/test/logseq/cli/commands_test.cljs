@@ -696,101 +696,86 @@
 
 (deftest test-show-selectors-include-db-ident
   (async done
-         (let [selectors (atom [])
-               orig-ensure-server! cli-server/ensure-server!
-               orig-invoke transport/invoke]
-           (set! cli-server/ensure-server! (fn [config _] config))
-           (set! transport/invoke (fn [_ method _ args]
-                                    (case method
-                                      :thread-api/pull (let [[_ selector _] args]
-                                                         (swap! selectors conj selector)
-                                                         (p/resolved {:db/id 1
-                                                                      :block/page {:db/id 2}}))
-                                      :thread-api/q (let [[_ [query _]] args
-                                                          pull-form (second query)
-                                                          selector (when (and (seq? pull-form)
-                                                                              (= 'pull (first pull-form)))
-                                                                     (nth pull-form 2))]
-                                                      (when selector
-                                                        (swap! selectors conj selector))
-                                                      (p/resolved []))
-                                      :thread-api/get-block-refs (p/resolved [{:db/id 10}])
-                                      (p/resolved nil))))
-           (-> (p/let [_ (show-command/execute-show {:type :show
-                                                     :repo "demo"
-                                                     :id 1}
-                                                    {:output-format :json})]
-                 (is (some #(some #{:db/ident} %) @selectors))
-                 (is (some #(and (some #{:db/ident} %)
-                                 (some (fn [entry]
-                                         (and (map? entry)
-                                              (contains? entry :block/page)))
-                                       %))
-                           @selectors)))
+         (let [selectors (atom [])]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                               transport/invoke (fn [_ method _ args]
+                                                  (case method
+                                                    :thread-api/pull (let [[_ selector _] args]
+                                                                       (swap! selectors conj selector)
+                                                                       (p/resolved {:db/id 1
+                                                                                    :block/page {:db/id 2}}))
+                                                    :thread-api/q (let [[_ [query _]] args
+                                                                        pull-form (second query)
+                                                                        selector (when (and (seq? pull-form)
+                                                                                            (= 'pull (first pull-form)))
+                                                                                   (nth pull-form 2))]
+                                                                    (when selector
+                                                                      (swap! selectors conj selector))
+                                                                    (p/resolved []))
+                                                    :thread-api/get-block-refs (p/resolved [{:db/id 10}])
+                                                    (p/resolved nil)))]
+                 (p/let [_ (show-command/execute-show {:type :show
+                                                       :repo "demo"
+                                                       :id 1}
+                                                      {:output-format :json})]
+                   (is (some #(some #{:db/ident} %) @selectors))
+                   (is (some #(and (some #{:db/ident} %)
+                                   (some (fn [entry]
+                                           (and (map? entry)
+                                                (contains? entry :block/page)))
+                                         %))
+                             @selectors))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+               (p/finally done)))))
 
 (deftest test-show-linked-references-disabled
   (async done
-         (let [method-calls (atom [])
-               orig-ensure-server! cli-server/ensure-server!
-               orig-invoke transport/invoke]
-           (set! cli-server/ensure-server! (fn [config _] config))
-           (set! transport/invoke (fn [_ method _ _]
-                                    (swap! method-calls conj method)
-                                    (case method
-                                      :thread-api/pull (p/resolved {:db/id 1
-                                                                    :block/page {:db/id 2}})
-                                      :thread-api/q (p/resolved [])
-                                      :thread-api/get-block-refs (p/resolved [{:db/id 10}])
-                                      (p/resolved nil))))
-           (-> (p/let [result (show-command/execute-show {:type :show
-                                                          :repo "demo"
-                                                          :id 1
-                                                          :linked-references? false}
-                                                         {:output-format :json})]
-                 (is (= :ok (:status result)))
-                 (is (not (contains? (:data result) :linked-references)))
-                 (is (not (some #{:thread-api/get-block-refs} @method-calls))))
+         (let [method-calls (atom [])]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                               transport/invoke (fn [_ method _ _]
+                                                  (swap! method-calls conj method)
+                                                  (case method
+                                                    :thread-api/pull (p/resolved {:db/id 1
+                                                                                  :block/page {:db/id 2}})
+                                                    :thread-api/q (p/resolved [])
+                                                    :thread-api/get-block-refs (p/resolved [{:db/id 10}])
+                                                    (p/resolved nil)))]
+                 (p/let [result (show-command/execute-show {:type :show
+                                                            :repo "demo"
+                                                            :id 1
+                                                            :linked-references? false}
+                                                           {:output-format :json})]
+                   (is (= :ok (:status result)))
+                   (is (not (contains? (:data result) :linked-references)))
+                   (is (not (some #{:thread-api/get-block-refs} @method-calls)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+               (p/finally done)))))
 
 (deftest test-show-linked-references-enabled
   (async done
-         (let [method-calls (atom [])
-               orig-ensure-server! cli-server/ensure-server!
-               orig-invoke transport/invoke]
-           (set! cli-server/ensure-server! (fn [config _] config))
-           (set! transport/invoke (fn [_ method _ _]
-                                    (swap! method-calls conj method)
-                                    (case method
-                                      :thread-api/pull (p/resolved {:db/id 1
-                                                                    :block/page {:db/id 2}})
-                                      :thread-api/q (p/resolved [])
-                                      :thread-api/get-block-refs (p/resolved [{:db/id 10}])
-                                      (p/resolved nil))))
-           (-> (p/let [result (show-command/execute-show {:type :show
-                                                          :repo "demo"
-                                                          :id 1
-                                                          :linked-references? true}
-                                                         {:output-format :json})]
-                 (is (= :ok (:status result)))
-                 (is (contains? (:data result) :linked-references))
-                 (is (some #{:thread-api/get-block-refs} @method-calls)))
+         (let [method-calls (atom [])]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                               transport/invoke (fn [_ method _ _]
+                                                  (swap! method-calls conj method)
+                                                  (case method
+                                                    :thread-api/pull (p/resolved {:db/id 1
+                                                                                  :block/page {:db/id 2}})
+                                                    :thread-api/q (p/resolved [])
+                                                    :thread-api/get-block-refs (p/resolved [{:db/id 10}])
+                                                    (p/resolved nil)))]
+                 (p/let [result (show-command/execute-show {:type :show
+                                                            :repo "demo"
+                                                            :id 1
+                                                            :linked-references? true}
+                                                           {:output-format :json})]
+                   (is (= :ok (:status result)))
+                   (is (contains? (:data result) :linked-references))
+                   (is (some #{:thread-api/get-block-refs} @method-calls))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+               (p/finally done)))))
 
 (deftest test-tree->text-uuid-ref-recursion-limit
   (testing "show tree text limits uuid ref replacement depth"
@@ -1671,435 +1656,345 @@
   (async done
          (let [ops* (atom nil)
                created?* (atom false)
-               orig-list-graphs cli-server/list-graphs
-               orig-ensure-server! cli-server/ensure-server!
-               orig-invoke transport/invoke
                action {:type :upsert-tag
                        :repo "demo"
                        :name "Quote"}]
-           (set! cli-server/list-graphs (fn [_] ["demo"]))
-           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
-           (set! transport/invoke (fn [_ method _ args]
-                                    (case method
-                                      :thread-api/pull (let [[_ _ lookup] args]
-                                                         (if (= lookup [:block/name "quote"])
-                                                           (if @created?*
-                                                             {:db/id 4242
-                                                              :block/name "quote"
-                                                              :block/title "Quote"
-                                                              :block/tags [{:db/ident :logseq.class/Tag}]}
-                                                             {})
-                                                           {}))
-                                      :thread-api/apply-outliner-ops (let [[_ ops _] args]
-                                                                       (reset! created?* true)
-                                                                       (reset! ops* ops)
-                                                                       {:result :ok})
-                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
-           (-> (p/let [result (commands/execute action {})]
-                 (is (= :ok (:status result)))
-                 (is (= [4242] (get-in result [:data :result])))
-                 (is (= [[:create-page ["Quote" {:class? true}]]]
-                        @ops*)))
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               transport/invoke (fn [_ method _ args]
+                                                  (case method
+                                                    :thread-api/pull (let [[_ _ lookup] args]
+                                                                       (if (= lookup [:block/name "quote"])
+                                                                         (if @created?*
+                                                                           {:db/id 4242
+                                                                            :block/name "quote"
+                                                                            :block/title "Quote"
+                                                                            :block/tags [{:db/ident :logseq.class/Tag}]}
+                                                                           {})
+                                                                         {}))
+                                                    :thread-api/apply-outliner-ops (let [[_ ops _] args]
+                                                                                     (reset! created?* true)
+                                                                                     (reset! ops* ops)
+                                                                                     {:result :ok})
+                                                    (throw (ex-info "unexpected invoke" {:method method :args args}))))]
+                 (p/let [result (commands/execute action {})]
+                   (is (= :ok (:status result)))
+                   (is (= [4242] (get-in result [:data :result])))
+                   (is (= [[:create-page ["Quote" {:class? true}]]]
+                          @ops*))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+               (p/finally done)))))
 
 (deftest test-execute-upsert-tag-rejects-existing-non-tag-page
   (async done
          (let [action {:type :upsert-tag
                        :repo "demo"
-                       :name "Home"}
-               orig-list-graphs cli-server/list-graphs
-               orig-ensure-server! cli-server/ensure-server!
-               orig-invoke transport/invoke]
-           (set! cli-server/list-graphs (fn [_] ["demo"]))
-           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
-           (set! transport/invoke (fn [_ method _ args]
-                                    (case method
-                                      :thread-api/pull (let [[_ _ lookup] args]
-                                                         (if (= lookup [:block/name "home"])
-                                                           {:db/id 99
-                                                            :block/name "home"
-                                                            :block/title "Home"
-                                                            :block/tags [{:db/ident :logseq.class/Page}]}
-                                                           {}))
-                                      :thread-api/apply-outliner-ops
-                                      (throw (ex-info "should not create tag" {:args args}))
-                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
-           (-> (p/let [result (commands/execute action {})]
-                 (is (= :error (:status result)))
-                 (is (= :tag-name-conflict (get-in result [:error :code]))))
+                       :name "Home"}]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               transport/invoke (fn [_ method _ args]
+                                                  (case method
+                                                    :thread-api/pull (let [[_ _ lookup] args]
+                                                                       (if (= lookup [:block/name "home"])
+                                                                         {:db/id 99
+                                                                          :block/name "home"
+                                                                          :block/title "Home"
+                                                                          :block/tags [{:db/ident :logseq.class/Page}]}
+                                                                         {}))
+                                                    :thread-api/apply-outliner-ops
+                                                    (throw (ex-info "should not create tag" {:args args}))
+                                                    (throw (ex-info "unexpected invoke" {:method method :args args}))))]
+                 (p/let [result (commands/execute action {})]
+                   (is (= :error (:status result)))
+                   (is (= :tag-name-conflict (get-in result [:error :code])))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+               (p/finally done)))))
 
 (deftest test-execute-upsert-tag-idempotent-when-tag-exists
   (async done
          (let [apply-calls* (atom 0)
-               orig-list-graphs cli-server/list-graphs
-               orig-ensure-server! cli-server/ensure-server!
-               orig-invoke transport/invoke
                action {:type :upsert-tag
                        :repo "demo"
                        :name "Quote"}]
-           (set! cli-server/list-graphs (fn [_] ["demo"]))
-           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
-           (set! transport/invoke (fn [_ method _ args]
-                                    (case method
-                                      :thread-api/pull (let [[_ _ lookup] args]
-                                                         (if (= lookup [:block/name "quote"])
-                                                           {:db/id 4242
-                                                            :block/name "quote"
-                                                            :block/title "Quote"
-                                                            :block/tags [{:db/ident :logseq.class/Tag}]}
-                                                           {}))
-                                      :thread-api/apply-outliner-ops (do
-                                                                       (swap! apply-calls* inc)
-                                                                       {:result :ok})
-                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
-           (-> (p/let [result (commands/execute action {})]
-                 (is (= :ok (:status result)))
-                 (is (= [4242] (get-in result [:data :result])))
-                 (is (= 0 @apply-calls*)))
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               transport/invoke (fn [_ method _ args]
+                                                  (case method
+                                                    :thread-api/pull (let [[_ _ lookup] args]
+                                                                       (if (= lookup [:block/name "quote"])
+                                                                         {:db/id 4242
+                                                                          :block/name "quote"
+                                                                          :block/title "Quote"
+                                                                          :block/tags [{:db/ident :logseq.class/Tag}]}
+                                                                         {}))
+                                                    :thread-api/apply-outliner-ops (do
+                                                                                     (swap! apply-calls* inc)
+                                                                                     {:result :ok})
+                                                    (throw (ex-info "unexpected invoke" {:method method :args args}))))]
+                 (p/let [result (commands/execute action {})]
+                   (is (= :ok (:status result)))
+                   (is (= [4242] (get-in result [:data :result])))
+                   (is (= 0 @apply-calls*))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+               (p/finally done)))))
 
 (deftest test-execute-upsert-property-emits-upsert-op
   (async done
          (let [ops* (atom nil)
                created?* (atom false)
-               orig-list-graphs cli-server/list-graphs
-               orig-ensure-server! cli-server/ensure-server!
-               orig-invoke transport/invoke
                action {:type :upsert-property
                        :repo "demo"
                        :name "owner"
                        :schema {:logseq.property/type :node
                                 :db/cardinality :db.cardinality/many}}]
-           (set! cli-server/list-graphs (fn [_] ["demo"]))
-           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
-           (set! transport/invoke (fn [_ method _ args]
-                                    (case method
-                                      :thread-api/pull (if @created?*
-                                                         {:db/id 654
-                                                          :db/ident :user.property/owner
-                                                          :block/name "owner"
-                                                          :block/title "owner"
-                                                          :logseq.property/type :node}
-                                                         {})
-                                      :thread-api/apply-outliner-ops (let [[_ ops _] args]
-                                                                       (reset! created?* true)
-                                                                       (reset! ops* ops)
-                                                                       {:result :ok})
-                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
-           (-> (p/let [result (commands/execute action {})]
-                 (is (= :ok (:status result)))
-                 (is (= [[:upsert-property [nil
-                                            {:logseq.property/type :node
-                                             :db/cardinality :db.cardinality/many}
-                                            {:property-name "owner"}]]]
-                        @ops*)))
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               transport/invoke (fn [_ method _ args]
+                                                  (case method
+                                                    :thread-api/pull (if @created?*
+                                                                       {:db/id 654
+                                                                        :db/ident :user.property/owner
+                                                                        :block/name "owner"
+                                                                        :block/title "owner"
+                                                                        :logseq.property/type :node}
+                                                                       {})
+                                                    :thread-api/apply-outliner-ops (let [[_ ops _] args]
+                                                                                     (reset! created?* true)
+                                                                                     (reset! ops* ops)
+                                                                                     {:result :ok})
+                                                    (throw (ex-info "unexpected invoke" {:method method :args args}))))]
+                 (p/let [result (commands/execute action {})]
+                   (is (= :ok (:status result)))
+                   (is (= [[:upsert-property [nil
+                                              {:logseq.property/type :node
+                                               :db/cardinality :db.cardinality/many}
+                                              {:property-name "owner"}]]]
+                          @ops*))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+               (p/finally done)))))
 
 (deftest test-execute-upsert-tag-by-id-no-op
   (async done
          (let [apply-calls* (atom 0)
-               orig-list-graphs cli-server/list-graphs
-               orig-ensure-server! cli-server/ensure-server!
-               orig-invoke transport/invoke
                action {:type :upsert-tag
                        :mode :update
                        :repo "demo"
                        :id 4242}]
-           (set! cli-server/list-graphs (fn [_] ["demo"]))
-           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
-           (set! transport/invoke (fn [_ method _ args]
-                                    (case method
-                                      :thread-api/pull (let [[_ _ lookup] args]
-                                                         (if (= lookup 4242)
-                                                           {:db/id 4242
-                                                            :block/name "quote"
-                                                            :block/title "Quote"
-                                                            :block/tags [{:db/ident :logseq.class/Tag}]}
-                                                           {}))
-                                      :thread-api/apply-outliner-ops (do
-                                                                       (swap! apply-calls* inc)
-                                                                       {:result :ok})
-                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
-           (-> (p/let [result (commands/execute action {})]
-                 (is (= :ok (:status result)))
-                 (is (= [4242] (get-in result [:data :result])))
-                 (is (= 0 @apply-calls*)))
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               transport/invoke (fn [_ method _ args]
+                                                  (case method
+                                                    :thread-api/pull (let [[_ _ lookup] args]
+                                                                       (if (= lookup 4242)
+                                                                         {:db/id 4242
+                                                                          :block/name "quote"
+                                                                          :block/title "Quote"
+                                                                          :block/tags [{:db/ident :logseq.class/Tag}]}
+                                                                         {}))
+                                                    :thread-api/apply-outliner-ops (do
+                                                                                     (swap! apply-calls* inc)
+                                                                                     {:result :ok})
+                                                    (throw (ex-info "unexpected invoke" {:method method :args args}))))]
+                 (p/let [result (commands/execute action {})]
+                   (is (= :ok (:status result)))
+                   (is (= [4242] (get-in result [:data :result])))
+                   (is (= 0 @apply-calls*))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+               (p/finally done)))))
 
 (deftest test-execute-upsert-tag-by-id-with-name-emits-rename-op
   (async done
          (let [ops* (atom nil)
                apply-calls* (atom 0)
-               orig-list-graphs cli-server/list-graphs
-               orig-ensure-server! cli-server/ensure-server!
-               orig-invoke transport/invoke
                action {:type :upsert-tag
                        :mode :update
                        :repo "demo"
                        :id 4242
                        :name "Project Renamed"}
                tag-uuid (uuid "00000000-0000-0000-0000-000000004242")]
-           (set! cli-server/list-graphs (fn [_] ["demo"]))
-           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
-           (set! transport/invoke (fn [_ method _ args]
-                                    (case method
-                                      :thread-api/pull (let [[_ _ lookup] args]
-                                                         (cond
-                                                           (= lookup 4242)
-                                                           {:db/id 4242
-                                                            :block/uuid tag-uuid
-                                                            :block/name "project"
-                                                            :block/title "Project"
-                                                            :block/tags [{:db/ident :logseq.class/Tag}]}
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               transport/invoke (fn [_ method _ args]
+                                                  (case method
+                                                    :thread-api/pull (let [[_ _ lookup] args]
+                                                                       (cond
+                                                                         (= lookup 4242)
+                                                                         {:db/id 4242
+                                                                          :block/uuid tag-uuid
+                                                                          :block/name "project"
+                                                                          :block/title "Project"
+                                                                          :block/tags [{:db/ident :logseq.class/Tag}]}
 
-                                                           (= lookup [:block/name "project renamed"])
-                                                           {}
+                                                                         (= lookup [:block/name "project renamed"])
+                                                                         {}
 
-                                                           :else
-                                                           {}))
-                                      :thread-api/apply-outliner-ops (let [[_ ops _] args]
-                                                                       (swap! apply-calls* inc)
-                                                                       (reset! ops* ops)
-                                                                       {:result :ok})
-                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
-           (-> (p/let [result (commands/execute action {})]
-                 (is (= :ok (:status result)))
-                 (is (= [4242] (get-in result [:data :result])))
-                 (is (= 1 @apply-calls*))
-                 (is (= [[:rename-page [tag-uuid "Project Renamed"]]]
-                        @ops*)))
+                                                                         :else
+                                                                         {}))
+                                                    :thread-api/apply-outliner-ops (let [[_ ops _] args]
+                                                                                     (swap! apply-calls* inc)
+                                                                                     (reset! ops* ops)
+                                                                                     {:result :ok})
+                                                    (throw (ex-info "unexpected invoke" {:method method :args args}))))]
+                 (p/let [result (commands/execute action {})]
+                   (is (= :ok (:status result)))
+                   (is (= [4242] (get-in result [:data :result])))
+                   (is (= 1 @apply-calls*))
+                   (is (= [[:rename-page [tag-uuid "Project Renamed"]]]
+                          @ops*))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+               (p/finally done)))))
 
 (deftest test-execute-upsert-tag-by-id-with-name-no-op-when-normalized-name-matches
   (async done
          (let [apply-calls* (atom 0)
-               orig-list-graphs cli-server/list-graphs
-               orig-ensure-server! cli-server/ensure-server!
-               orig-invoke transport/invoke
                action {:type :upsert-tag
                        :mode :update
                        :repo "demo"
                        :id 4242
                        :name "  #QUOTE "}]
-           (set! cli-server/list-graphs (fn [_] ["demo"]))
-           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
-           (set! transport/invoke (fn [_ method _ args]
-                                    (case method
-                                      :thread-api/pull (let [[_ _ lookup] args]
-                                                         (if (= lookup 4242)
-                                                           {:db/id 4242
-                                                            :block/uuid (uuid "00000000-0000-0000-0000-000000004242")
-                                                            :block/name "quote"
-                                                            :block/title "Quote"
-                                                            :block/tags [{:db/ident :logseq.class/Tag}]}
-                                                           {}))
-                                      :thread-api/apply-outliner-ops (do
-                                                                       (swap! apply-calls* inc)
-                                                                       {:result :ok})
-                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
-           (-> (p/let [result (commands/execute action {})]
-                 (is (= :ok (:status result)))
-                 (is (= [4242] (get-in result [:data :result])))
-                 (is (= 0 @apply-calls*)))
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               transport/invoke (fn [_ method _ args]
+                                                  (case method
+                                                    :thread-api/pull (let [[_ _ lookup] args]
+                                                                       (if (= lookup 4242)
+                                                                         {:db/id 4242
+                                                                          :block/uuid (uuid "00000000-0000-0000-0000-000000004242")
+                                                                          :block/name "quote"
+                                                                          :block/title "Quote"
+                                                                          :block/tags [{:db/ident :logseq.class/Tag}]}
+                                                                         {}))
+                                                    :thread-api/apply-outliner-ops (do
+                                                                                     (swap! apply-calls* inc)
+                                                                                     {:result :ok})
+                                                    (throw (ex-info "unexpected invoke" {:method method :args args}))))]
+                 (p/let [result (commands/execute action {})]
+                   (is (= :ok (:status result)))
+                   (is (= [4242] (get-in result [:data :result])))
+                   (is (= 0 @apply-calls*))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+               (p/finally done)))))
 
 (deftest test-execute-upsert-tag-by-id-with-name-rejects-existing-non-tag-page
   (async done
          (let [apply-calls* (atom 0)
-               orig-list-graphs cli-server/list-graphs
-               orig-ensure-server! cli-server/ensure-server!
-               orig-invoke transport/invoke
                action {:type :upsert-tag
                        :mode :update
                        :repo "demo"
                        :id 4242
                        :name "Project Renamed"}]
-           (set! cli-server/list-graphs (fn [_] ["demo"]))
-           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
-           (set! transport/invoke (fn [_ method _ args]
-                                    (case method
-                                      :thread-api/pull (let [[_ _ lookup] args]
-                                                         (cond
-                                                           (= lookup 4242)
-                                                           {:db/id 4242
-                                                            :block/uuid (uuid "00000000-0000-0000-0000-000000004242")
-                                                            :block/name "project"
-                                                            :block/title "Project"
-                                                            :block/tags [{:db/ident :logseq.class/Tag}]}
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               transport/invoke (fn [_ method _ args]
+                                                  (case method
+                                                    :thread-api/pull (let [[_ _ lookup] args]
+                                                                       (cond
+                                                                         (= lookup 4242)
+                                                                         {:db/id 4242
+                                                                          :block/uuid (uuid "00000000-0000-0000-0000-000000004242")
+                                                                          :block/name "project"
+                                                                          :block/title "Project"
+                                                                          :block/tags [{:db/ident :logseq.class/Tag}]}
 
-                                                           (= lookup [:block/name "project renamed"])
-                                                           {:db/id 5000
-                                                            :block/name "project renamed"
-                                                            :block/title "Project Renamed"
-                                                            :block/tags [{:db/ident :logseq.class/Page}]}
+                                                                         (= lookup [:block/name "project renamed"])
+                                                                         {:db/id 5000
+                                                                          :block/name "project renamed"
+                                                                          :block/title "Project Renamed"
+                                                                          :block/tags [{:db/ident :logseq.class/Page}]}
 
-                                                           :else
-                                                           {}))
-                                      :thread-api/apply-outliner-ops (do
-                                                                       (swap! apply-calls* inc)
-                                                                       {:result :ok})
-                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
-           (-> (p/let [result (commands/execute action {})]
-                 (is (= :error (:status result)))
-                 (is (= :tag-name-conflict (get-in result [:error :code])))
-                 (is (= 0 @apply-calls*)))
+                                                                         :else
+                                                                         {}))
+                                                    :thread-api/apply-outliner-ops (do
+                                                                                     (swap! apply-calls* inc)
+                                                                                     {:result :ok})
+                                                    (throw (ex-info "unexpected invoke" {:method method :args args}))))]
+                 (p/let [result (commands/execute action {})]
+                   (is (= :error (:status result)))
+                   (is (= :tag-name-conflict (get-in result [:error :code])))
+                   (is (= 0 @apply-calls*))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+               (p/finally done)))))
 
 (deftest test-execute-upsert-tag-by-id-with-name-rejects-existing-tag
   (async done
          (let [apply-calls* (atom 0)
-               orig-list-graphs cli-server/list-graphs
-               orig-ensure-server! cli-server/ensure-server!
-               orig-invoke transport/invoke
                action {:type :upsert-tag
                        :mode :update
                        :repo "demo"
                        :id 4242
                        :name "Project Renamed"}]
-           (set! cli-server/list-graphs (fn [_] ["demo"]))
-           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
-           (set! transport/invoke (fn [_ method _ args]
-                                    (case method
-                                      :thread-api/pull (let [[_ _ lookup] args]
-                                                         (cond
-                                                           (= lookup 4242)
-                                                           {:db/id 4242
-                                                            :block/uuid (uuid "00000000-0000-0000-0000-000000004242")
-                                                            :block/name "project"
-                                                            :block/title "Project"
-                                                            :block/tags [{:db/ident :logseq.class/Tag}]}
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               transport/invoke (fn [_ method _ args]
+                                                  (case method
+                                                    :thread-api/pull (let [[_ _ lookup] args]
+                                                                       (cond
+                                                                         (= lookup 4242)
+                                                                         {:db/id 4242
+                                                                          :block/uuid (uuid "00000000-0000-0000-0000-000000004242")
+                                                                          :block/name "project"
+                                                                          :block/title "Project"
+                                                                          :block/tags [{:db/ident :logseq.class/Tag}]}
 
-                                                           (= lookup [:block/name "project renamed"])
-                                                           {:db/id 9001
-                                                            :block/uuid (uuid "00000000-0000-0000-0000-000000009001")
-                                                            :block/name "project renamed"
-                                                            :block/title "Project Renamed"
-                                                            :block/tags [{:db/ident :logseq.class/Tag}]}
+                                                                         (= lookup [:block/name "project renamed"])
+                                                                         {:db/id 9001
+                                                                          :block/uuid (uuid "00000000-0000-0000-0000-000000009001")
+                                                                          :block/name "project renamed"
+                                                                          :block/title "Project Renamed"
+                                                                          :block/tags [{:db/ident :logseq.class/Tag}]}
 
-                                                           :else
-                                                           {}))
-                                      :thread-api/apply-outliner-ops (do
-                                                                       (swap! apply-calls* inc)
-                                                                       {:result :ok})
-                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
-           (-> (p/let [result (commands/execute action {})]
-                 (is (= :error (:status result)))
-                 (is (= :tag-rename-conflict (get-in result [:error :code])))
-                 (is (= 0 @apply-calls*)))
+                                                                         :else
+                                                                         {}))
+                                                    :thread-api/apply-outliner-ops (do
+                                                                                     (swap! apply-calls* inc)
+                                                                                     {:result :ok})
+                                                    (throw (ex-info "unexpected invoke" {:method method :args args}))))]
+                 (p/let [result (commands/execute action {})]
+                   (is (= :error (:status result)))
+                   (is (= :tag-rename-conflict (get-in result [:error :code])))
+                   (is (= 0 @apply-calls*))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+               (p/finally done)))))
 
 (deftest test-execute-upsert-id-mode-validates-target-entity
   (async done
-         (let [orig-list-graphs cli-server/list-graphs
-               orig-ensure-server! cli-server/ensure-server!
-               orig-invoke transport/invoke]
-           (set! cli-server/list-graphs (fn [_] ["demo"]))
-           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
-           (set! transport/invoke (fn [_ method _ args]
-                                    (case method
-                                      :thread-api/pull (let [[_ _ lookup] args]
-                                                         (case lookup
-                                                           100 {}
-                                                           101 {:db/id 101
-                                                                :block/uuid (uuid "00000000-0000-0000-0000-000000000101")}
-                                                           200 {}
-                                                           201 {:db/id 201
-                                                                :block/name "not-a-tag"
-                                                                :block/title "Not a tag"
-                                                                :block/tags [{:db/ident :logseq.class/Page}]}
-                                                           300 {}
-                                                           301 {:db/id 301
-                                                                :block/name "not-a-property"
-                                                                :block/title "Not a property"}
-                                                           {}))
-                                      :thread-api/apply-outliner-ops
-                                      (throw (ex-info "should not mutate on invalid id update mode" {:args args}))
-                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
-           (-> (p/let [page-missing (commands/execute {:type :upsert-page
-                                                       :mode :update
-                                                       :repo "demo"
-                                                       :id 100}
-                                                      {})
-                       page-mismatch (commands/execute {:type :upsert-page
-                                                        :mode :update
-                                                        :repo "demo"
-                                                        :id 101}
-                                                       {})
-                       tag-missing (commands/execute {:type :upsert-tag
-                                                      :mode :update
-                                                      :repo "demo"
-                                                      :id 200}
-                                                     {})
-                       tag-mismatch (commands/execute {:type :upsert-tag
-                                                       :mode :update
-                                                       :repo "demo"
-                                                       :id 201}
-                                                      {})
-                       property-missing (commands/execute {:type :upsert-property
-                                                           :mode :update
-                                                           :repo "demo"
-                                                           :id 300}
-                                                          {})
-                       property-mismatch (commands/execute {:type :upsert-property
-                                                            :mode :update
-                                                            :repo "demo"
-                                                            :id 301}
-                                                           {})]
+         (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                             cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                             transport/invoke (fn [_ method _ args]
+                                                (case method
+                                                  :thread-api/pull (let [[_ _ lookup] args]
+                                                                     (case lookup
+                                                                       100 {}
+                                                                       101 {:db/id 101
+                                                                            :block/uuid (uuid "00000000-0000-0000-0000-000000000101")}
+                                                                       200 {}
+                                                                       201 {:db/id 201
+                                                                            :block/name "not-a-tag"
+                                                                            :block/title "Not a tag"
+                                                                            :block/tags [{:db/ident :logseq.class/Page}]}
+                                                                       300 {}
+                                                                       301 {:db/id 301
+                                                                            :block/name "not-a-property"
+                                                                            :block/title "Not a property"}
+                                                                       {}))
+                                                  :thread-api/apply-outliner-ops
+                                                  (throw (ex-info "should not mutate on invalid id update mode" {:args args}))
+                                                  (throw (ex-info "unexpected invoke" {:method method :args args}))))]
+               (p/let [page-missing (commands/execute {:type :upsert-page :mode :update :repo "demo" :id 100} {})
+                       page-mismatch (commands/execute {:type :upsert-page :mode :update :repo "demo" :id 101} {})
+                       tag-missing (commands/execute {:type :upsert-tag :mode :update :repo "demo" :id 200} {})
+                       tag-mismatch (commands/execute {:type :upsert-tag :mode :update :repo "demo" :id 201} {})
+                       property-missing (commands/execute {:type :upsert-property :mode :update :repo "demo" :id 300} {})
+                       property-mismatch (commands/execute {:type :upsert-property :mode :update :repo "demo" :id 301} {})]
                  (is (= :error (:status page-missing)))
                  (is (= :upsert-id-not-found (get-in page-missing [:error :code])))
                  (is (= :error (:status page-mismatch)))
@@ -2111,572 +2006,337 @@
                  (is (= :error (:status property-missing)))
                  (is (= :upsert-id-not-found (get-in property-missing [:error :code])))
                  (is (= :error (:status property-mismatch)))
-                 (is (= :upsert-id-type-mismatch (get-in property-mismatch [:error :code]))))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+                 (is (= :upsert-id-type-mismatch (get-in property-mismatch [:error :code])))))
+             (p/catch (fn [e] (is false (str "unexpected error: " e))))
+             (p/finally done))))
 
 (deftest test-execute-upsert-block-create-applies-extra-tag-property-ops
   (async done
          (let [ops* (atom nil)
-               orig-list-graphs cli-server/list-graphs
-               orig-ensure-server! cli-server/ensure-server!
-               orig-execute-add-block add-command/execute-add-block
-               orig-resolve-tags add-command/resolve-tags
-               orig-resolve-properties add-command/resolve-properties
-               orig-resolve-property-identifiers add-command/resolve-property-identifiers
-               orig-invoke transport/invoke
-               action {:type :upsert-block
-                       :mode :create
-                       :repo "demo"
+               action {:type :upsert-block :mode :create :repo "demo"
                        :update-tags [:tag/new]
                        :remove-tags [:tag/old]
                        :update-properties {:logseq.property/deadline "2026-01-25T12:00:00Z"}
                        :remove-properties [:logseq.property/publishing-public?]}]
-           (set! cli-server/list-graphs (fn [_] ["demo"]))
-           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
-           (set! add-command/execute-add-block (fn [_ _]
-                                                 (p/resolved {:status :ok
-                                                              :data {:result [11 12]}})))
-           (set! add-command/resolve-tags (fn [_ _ tags]
-                                            (p/resolved (cond
-                                                          (= tags [:tag/new]) [{:db/id 101}]
-                                                          (= tags [:tag/old]) [{:db/id 202}]
-                                                          :else nil))))
-           (set! add-command/resolve-properties (fn [_ _ properties & _] (p/resolved properties)))
-           (set! add-command/resolve-property-identifiers (fn [_ _ properties & _] (p/resolved properties)))
-           (set! transport/invoke (fn [_ method _ args]
-                                    (case method
-                                      :thread-api/pull (let [[_ _ lookup] args]
-                                                         (if (and (vector? lookup)
-                                                                  (= :db/ident (first lookup)))
-                                                           {:db/id 99}
-                                                           {}))
-                                      :thread-api/apply-outliner-ops (let [[_ ops _] args]
-                                                                       (reset! ops* ops)
-                                                                       {:result :ok})
-                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
-           (-> (p/let [result (commands/execute action {})]
-                 (is (= :ok (:status result)))
-                 (is (= [11 12] (get-in result [:data :result])))
-                 (is (= [[:batch-delete-property-value [[11 12] :block/tags 202]]
-                         [:batch-remove-property [[11 12] :logseq.property/publishing-public?]]
-                         [:batch-set-property [[11 12] :block/tags 101 {}]]
-                         [:batch-set-property [[11 12] :logseq.property/deadline "2026-01-25T12:00:00Z" {}]]]
-                        @ops*)))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! add-command/execute-add-block orig-execute-add-block)
-                            (set! add-command/resolve-tags orig-resolve-tags)
-                            (set! add-command/resolve-properties orig-resolve-properties)
-                            (set! add-command/resolve-property-identifiers orig-resolve-property-identifiers)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               add-command/execute-add-block (fn [_ _] (p/resolved {:status :ok :data {:result [11 12]}}))
+                               add-command/resolve-tags (fn [_ _ tags]
+                                                          (p/resolved (cond (= tags [:tag/new]) [{:db/id 101}]
+                                                                            (= tags [:tag/old]) [{:db/id 202}]
+                                                                            :else nil)))
+                               add-command/resolve-properties (fn [_ _ properties & _] (p/resolved properties))
+                               add-command/resolve-property-identifiers (fn [_ _ properties & _] (p/resolved properties))
+                               transport/invoke (fn [_ method _ args]
+                                                  (case method
+                                                    :thread-api/pull (let [[_ _ lookup] args]
+                                                                       (if (and (vector? lookup) (= :db/ident (first lookup)))
+                                                                         {:db/id 99}
+                                                                         {}))
+                                                    :thread-api/apply-outliner-ops (let [[_ ops _] args]
+                                                                                     (reset! ops* ops)
+                                                                                     {:result :ok})
+                                                    (throw (ex-info "unexpected invoke" {:method method :args args}))))]
+                 (p/let [result (commands/execute action {})]
+                   (is (= :ok (:status result)))
+                   (is (= [11 12] (get-in result [:data :result])))
+                   (is (= [[:batch-delete-property-value [[11 12] :block/tags 202]]
+                           [:batch-remove-property [[11 12] :logseq.property/publishing-public?]]
+                           [:batch-set-property [[11 12] :block/tags 101 {}]]
+                           [:batch-set-property [[11 12] :logseq.property/deadline "2026-01-25T12:00:00Z" {}]]]
+                          @ops*))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
 (deftest test-execute-upsert-page-applies-ops-on-existing-page
   (async done
          (let [ops* (atom nil)
-               orig-list-graphs cli-server/list-graphs
-               orig-ensure-server! cli-server/ensure-server!
-               orig-resolve-tags add-command/resolve-tags
-               orig-resolve-properties add-command/resolve-properties
-               orig-resolve-property-identifiers add-command/resolve-property-identifiers
-               orig-invoke transport/invoke
-               action {:type :upsert-page
-                       :repo "demo"
-                       :page "Home"
+               action {:type :upsert-page :repo "demo" :page "Home"
                        :update-tags [:tag/next]
                        :remove-tags [:tag/old]
                        :update-properties {:logseq.property/publishing-public? true}
                        :remove-properties [:logseq.property/deadline]}]
-           (set! cli-server/list-graphs (fn [_] ["demo"]))
-           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
-           (set! add-command/resolve-tags (fn [_ _ tags]
-                                            (p/resolved (cond
-                                                          (= tags [:tag/next]) [{:db/id 303}]
-                                                          (= tags [:tag/old]) [{:db/id 202}]
-                                                          :else nil))))
-           (set! add-command/resolve-properties (fn [_ _ properties & _] (p/resolved properties)))
-           (set! add-command/resolve-property-identifiers (fn [_ _ properties & _] (p/resolved properties)))
-           (set! transport/invoke (fn [_ method _ args]
-                                    (case method
-                                      :thread-api/pull (let [[_ _ lookup] args]
-                                                         (cond
-                                                           (= lookup [:block/name "home"])
-                                                           {:db/id 50
-                                                            :block/uuid (uuid "00000000-0000-0000-0000-000000000050")}
-
-                                                           (and (vector? lookup) (= :db/ident (first lookup)))
-                                                           {:db/id 888}
-
-                                                           :else {}))
-                                      :thread-api/apply-outliner-ops (let [[_ ops _] args]
-                                                                       (reset! ops* ops)
-                                                                       {:result :ok})
-                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
-           (-> (p/let [result (commands/execute action {})
-                       ops @ops*]
-                 (is (= :ok (:status result)))
-                 (is (= [50] (get-in result [:data :result])))
-                 (is (= 4 (count ops)))
-                 (is (some #(= [:batch-delete-property-value [[50] :block/tags 202]] %) ops))
-                 (is (some #(= [:batch-remove-property [[50] :logseq.property/deadline]] %) ops))
-                 (is (some #(= [:batch-set-property [[50] :block/tags 303 {}]] %) ops))
-                 (is (some #(= [:batch-set-property [[50] :logseq.property/publishing-public? true {}]] %) ops)))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! add-command/resolve-tags orig-resolve-tags)
-                            (set! add-command/resolve-properties orig-resolve-properties)
-                            (set! add-command/resolve-property-identifiers orig-resolve-property-identifiers)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               add-command/resolve-tags (fn [_ _ tags]
+                                                          (p/resolved (cond (= tags [:tag/next]) [{:db/id 303}]
+                                                                            (= tags [:tag/old]) [{:db/id 202}]
+                                                                            :else nil)))
+                               add-command/resolve-properties (fn [_ _ properties & _] (p/resolved properties))
+                               add-command/resolve-property-identifiers (fn [_ _ properties & _] (p/resolved properties))
+                               transport/invoke (fn [_ method _ args]
+                                                  (case method
+                                                    :thread-api/pull (let [[_ _ lookup] args]
+                                                                       (cond
+                                                                         (= lookup [:block/name "home"])
+                                                                         {:db/id 50 :block/uuid (uuid "00000000-0000-0000-0000-000000000050")}
+                                                                         (and (vector? lookup) (= :db/ident (first lookup)))
+                                                                         {:db/id 888}
+                                                                         :else {}))
+                                                    :thread-api/apply-outliner-ops (let [[_ ops _] args]
+                                                                                     (reset! ops* ops)
+                                                                                     {:result :ok})
+                                                    (throw (ex-info "unexpected invoke" {:method method :args args}))))]
+                 (p/let [result (commands/execute action {})
+                         ops @ops*]
+                   (is (= :ok (:status result)))
+                   (is (= [50] (get-in result [:data :result])))
+                   (is (= 4 (count ops)))
+                   (is (some #(= [:batch-delete-property-value [[50] :block/tags 202]] %) ops))
+                   (is (some #(= [:batch-remove-property [[50] :logseq.property/deadline]] %) ops))
+                   (is (some #(= [:batch-set-property [[50] :block/tags 303 {}]] %) ops))
+                   (is (some #(= [:batch-set-property [[50] :logseq.property/publishing-public? true {}]] %) ops))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
 (deftest test-execute-upsert-page-errors-when-property-does-not-exist
   (async done
-         (let [orig-list-graphs cli-server/list-graphs
-               orig-ensure-server! cli-server/ensure-server!
-               orig-resolve-tags add-command/resolve-tags
-               orig-resolve-properties add-command/resolve-properties
-               orig-resolve-property-identifiers add-command/resolve-property-identifiers
-               orig-invoke transport/invoke
-               action {:type :upsert-page
-                       :repo "demo"
-                       :page "Home"
+         (let [action {:type :upsert-page :repo "demo" :page "Home"
                        :update-properties {:logseq.property/deadline "2026-01-25T12:00:00Z"}}]
-           (set! cli-server/list-graphs (fn [_] ["demo"]))
-           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
-           (set! add-command/resolve-tags (fn [_ _ _] (p/resolved nil)))
-           (set! add-command/resolve-properties (fn [_ _ properties & _] (p/resolved properties)))
-           (set! add-command/resolve-property-identifiers (fn [_ _ properties & _] (p/resolved properties)))
-           (set! transport/invoke (fn [_ method _ args]
-                                    (case method
-                                      :thread-api/pull (let [[_ _ lookup] args]
-                                                         (cond
-                                                           (= lookup [:block/name "home"])
-                                                           {:db/id 50}
-
-                                                           (and (vector? lookup) (= :db/ident (first lookup)))
-                                                           {}
-
-                                                           :else {}))
-                                      :thread-api/apply-outliner-ops
-                                      (throw (ex-info "should not apply ops when property lookup fails"
-                                                      {:args args}))
-                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))
-           (-> (p/let [result (commands/execute action {})]
-                 (is (= :error (:status result)))
-                 (is (= :property-not-found (get-in result [:error :code]))))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! add-command/resolve-tags orig-resolve-tags)
-                            (set! add-command/resolve-properties orig-resolve-properties)
-                            (set! add-command/resolve-property-identifiers orig-resolve-property-identifiers)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               add-command/resolve-tags (fn [_ _ _] (p/resolved nil))
+                               add-command/resolve-properties (fn [_ _ properties & _] (p/resolved properties))
+                               add-command/resolve-property-identifiers (fn [_ _ properties & _] (p/resolved properties))
+                               transport/invoke (fn [_ method _ args]
+                                                  (case method
+                                                    :thread-api/pull (let [[_ _ lookup] args]
+                                                                       (cond
+                                                                         (= lookup [:block/name "home"]) {:db/id 50}
+                                                                         (and (vector? lookup) (= :db/ident (first lookup))) {}
+                                                                         :else {}))
+                                                    :thread-api/apply-outliner-ops
+                                                    (throw (ex-info "should not apply ops when property lookup fails" {:args args}))
+                                                    (throw (ex-info "unexpected invoke" {:method method :args args}))))]
+                 (p/let [result (commands/execute action {})]
+                   (is (= :error (:status result)))
+                   (is (= :property-not-found (get-in result [:error :code])))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
 (deftest test-execute-remove-tag-property
   (async done
-         (let [ops* (atom [])
-               orig-list-graphs cli-server/list-graphs
-               orig-ensure-server! cli-server/ensure-server!
-               orig-invoke transport/invoke]
-           (set! cli-server/list-graphs (fn [_] ["demo"]))
-           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
-           (set! transport/invoke
-                 (fn [_ method _ args]
-                   (case method
-                     :thread-api/api-list-tags [{:db/id 1 :block/title "Quote"}]
-                     :thread-api/api-list-properties [{:db/id 2 :block/title "owner"}]
-                     :thread-api/pull (let [[_ selector lookup] args]
-                                        (cond
-                                          (= lookup 1)
-                                          {:db/id 1
-                                           :block/title "Quote"
-                                           :block/uuid (uuid "00000000-0000-0000-0000-000000000011")
-                                           :block/tags [{:db/ident :logseq.class/Tag}]
-                                           :logseq.property/public? true}
-
-                                          (= lookup 2)
-                                          {:db/id 2
-                                           :db/ident :user.property/owner
-                                           :block/title "owner"
-                                           :block/uuid (uuid "00000000-0000-0000-0000-000000000022")
-                                           :logseq.property/type :node
-                                           :logseq.property/public? true}
-
-                                          (= lookup [:block/name "quote"])
-                                          {:db/id 1
-                                           :block/title "Quote"
-                                           :block/uuid (uuid "00000000-0000-0000-0000-000000000011")
-                                           :block/tags [{:db/ident :logseq.class/Tag}]
-                                           :logseq.property/public? true}
-
-                                          (= lookup [:block/name "owner"])
-                                          {:db/id 2
-                                           :db/ident :user.property/owner
-                                           :block/title "owner"
-                                           :block/uuid (uuid "00000000-0000-0000-0000-000000000022")
-                                           :logseq.property/type :node
-                                           :logseq.property/public? true}
-
-                                          :else
-                                          (throw (ex-info "unexpected pull lookup"
-                                                          {:lookup lookup :selector selector}))))
-                     :thread-api/apply-outliner-ops (let [[_ ops _] args]
-                                                      (swap! ops* conj ops)
-                                                      {:result :ok})
-                     (throw (ex-info "unexpected invoke" {:method method :args args})))))
-           (-> (p/let [tag-result (commands/execute {:type :remove-tag
-                                                     :repo "demo"
-                                                     :name "Quote"}
-                                                    {})
-                       property-result (commands/execute {:type :remove-property
-                                                          :repo "demo"
-                                                          :id 2}
-                                                         {})]
-                 (is (= :ok (:status tag-result)))
-                 (is (= :ok (:status property-result)))
-                 (is (= [[:delete-page [(uuid "00000000-0000-0000-0000-000000000011")]]]
-                        (first @ops*)))
-                 (is (= [[:delete-page [(uuid "00000000-0000-0000-0000-000000000022")]]]
-                        (second @ops*))))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+         (let [ops* (atom [])]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               transport/invoke (fn [_ method _ args]
+                                                  (case method
+                                                    :thread-api/api-list-tags [{:db/id 1 :block/title "Quote"}]
+                                                    :thread-api/api-list-properties [{:db/id 2 :block/title "owner"}]
+                                                    :thread-api/pull (let [[_ selector lookup] args]
+                                                                       (cond
+                                                                         (= lookup 1) {:db/id 1 :block/title "Quote" :block/uuid (uuid "00000000-0000-0000-0000-000000000011") :block/tags [{:db/ident :logseq.class/Tag}] :logseq.property/public? true}
+                                                                         (= lookup 2) {:db/id 2 :db/ident :user.property/owner :block/title "owner" :block/uuid (uuid "00000000-0000-0000-0000-000000000022") :logseq.property/type :node :logseq.property/public? true}
+                                                                         (= lookup [:block/name "quote"]) {:db/id 1 :block/title "Quote" :block/uuid (uuid "00000000-0000-0000-0000-000000000011") :block/tags [{:db/ident :logseq.class/Tag}] :logseq.property/public? true}
+                                                                         (= lookup [:block/name "owner"]) {:db/id 2 :db/ident :user.property/owner :block/title "owner" :block/uuid (uuid "00000000-0000-0000-0000-000000000022") :logseq.property/type :node :logseq.property/public? true}
+                                                                         :else (throw (ex-info "unexpected pull lookup" {:lookup lookup :selector selector}))))
+                                                    :thread-api/apply-outliner-ops (let [[_ ops _] args]
+                                                                                     (swap! ops* conj ops)
+                                                                                     {:result :ok})
+                                                    (throw (ex-info "unexpected invoke" {:method method :args args}))))]
+                 (p/let [tag-result (commands/execute {:type :remove-tag :repo "demo" :name "Quote"} {})
+                         property-result (commands/execute {:type :remove-property :repo "demo" :id 2} {})]
+                   (is (= :ok (:status tag-result)))
+                   (is (= :ok (:status property-result)))
+                   (is (= [[:delete-page [(uuid "00000000-0000-0000-0000-000000000011")]]]
+                          (first @ops*)))
+                   (is (= [[:delete-page [(uuid "00000000-0000-0000-0000-000000000022")]]]
+                          (second @ops*)))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
 (deftest test-execute-remove-tag-ambiguous-name
   (async done
-         (let [orig-list-graphs cli-server/list-graphs
-               orig-ensure-server! cli-server/ensure-server!
-               orig-invoke transport/invoke]
-           (set! cli-server/list-graphs (fn [_] ["demo"]))
-           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
-           (set! transport/invoke
-                 (fn [_ method _ _]
-                   (case method
-                     :thread-api/api-list-tags [{:db/id 1 :block/title "Quote"}
-                                                {:db/id 2 :block/title "QUOTE"}]
-                     (throw (ex-info "unexpected invoke" {:method method})))))
-           (-> (p/let [result (commands/execute {:type :remove-tag
-                                                 :repo "demo"
-                                                 :name "Quote"}
-                                                {})]
+         (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                             cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                             transport/invoke (fn [_ method _ _]
+                                                (case method
+                                                  :thread-api/api-list-tags [{:db/id 1 :block/title "Quote"}
+                                                                             {:db/id 2 :block/title "QUOTE"}]
+                                                  (throw (ex-info "unexpected invoke" {:method method}))))]
+               (p/let [result (commands/execute {:type :remove-tag :repo "demo" :name "Quote"} {})]
                  (is (= :error (:status result)))
                  (is (= :ambiguous-tag-name (get-in result [:error :code])))
-                 (is (= 2 (count (get-in result [:error :candidates])))))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+                 (is (= 2 (count (get-in result [:error :candidates]))))))
+             (p/catch (fn [e] (is false (str "unexpected error: " e))))
+             (p/finally done))))
 
 (deftest test-execute-update-builds-batch-ops
   (async done
          (let [ops* (atom nil)
                calls* (atom [])
-               orig-list-graphs cli-server/list-graphs
-               orig-ensure-server! cli-server/ensure-server!
-               orig-resolve-tags add-command/resolve-tags
-               orig-resolve-properties add-command/resolve-properties
-               orig-resolve-property-identifiers add-command/resolve-property-identifiers
-               orig-invoke transport/invoke
-               action {:type :upsert-block
-                       :mode :update
-                       :repo "demo"
-                       :id 1
-                       :target-id 2
-                       :pos "last-child"
+               action {:type :upsert-block :mode :update :repo "demo" :id 1 :target-id 2 :pos "last-child"
                        :update-tags [:tag/new]
                        :remove-tags [:tag/old]
                        :update-properties {:logseq.property/deadline "2026-01-25T12:00:00Z"}
                        :remove-properties [:logseq.property/publishing-public?]}]
-           (set! cli-server/list-graphs (fn [_] ["demo"]))
-           (set! cli-server/ensure-server! (fn [_ _] {:base-url "http://example"}))
-           (set! add-command/resolve-tags (fn [_ _ tags]
-                                            (p/resolved (cond
-                                                          (= tags [:tag/new]) [{:db/id 101}]
-                                                          (= tags [:tag/old]) [{:db/id 202}]
-                                                          :else nil))))
-           (set! add-command/resolve-properties (fn [_ _ properties & _] (p/resolved properties)))
-           (set! add-command/resolve-property-identifiers (fn [_ _ properties & _] (p/resolved properties)))
-           (set! transport/invoke (fn [_ method _ args]
-                                    (swap! calls* conj {:method method :args args})
-                                    (case method
-                                      :thread-api/pull (let [[_ _ lookup] args]
-                                                         (cond
-                                                           (= lookup 1)
-                                                           {:db/id 1
-                                                            :block/name nil
-                                                            :block/uuid (uuid "00000000-0000-0000-0000-000000000001")}
-                                                           (= lookup 2)
-                                                           {:db/id 2
-                                                            :block/name nil
-                                                            :block/uuid (uuid "00000000-0000-0000-0000-000000000002")}
-                                                           :else {}))
-                                      :thread-api/apply-outliner-ops (let [[_ ops _] args]
-                                                                       (reset! ops* ops)
-                                                                       {:result :ok})
-                                      (throw (ex-info "unexpected invoke" {:method method :calls @calls*})))))
-           (-> (p/let [result (commands/execute action {})]
-                 (is (= :ok (:status result)))
-                 (is (= [[:move-blocks [[1] 2 {:sibling? false :bottom? true}]]
-                         [:batch-delete-property-value [[1] :block/tags 202]]
-                         [:batch-remove-property [[1] :logseq.property/publishing-public?]]
-                         [:batch-set-property [[1] :block/tags 101 {}]]
-                         [:batch-set-property [[1] :logseq.property/deadline "2026-01-25T12:00:00Z" {}]]]
-                        @ops*)))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e " calls: " @calls*))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! add-command/resolve-tags orig-resolve-tags)
-                            (set! add-command/resolve-properties orig-resolve-properties)
-                            (set! add-command/resolve-property-identifiers orig-resolve-property-identifiers)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               add-command/resolve-tags (fn [_ _ tags]
+                                                          (p/resolved (cond (= tags [:tag/new]) [{:db/id 101}]
+                                                                            (= tags [:tag/old]) [{:db/id 202}]
+                                                                            :else nil)))
+                               add-command/resolve-properties (fn [_ _ properties & _] (p/resolved properties))
+                               add-command/resolve-property-identifiers (fn [_ _ properties & _] (p/resolved properties))
+                               transport/invoke (fn [_ method _ args]
+                                                  (swap! calls* conj {:method method :args args})
+                                                  (case method
+                                                    :thread-api/pull (let [[_ _ lookup] args]
+                                                                       (cond
+                                                                         (= lookup 1) {:db/id 1 :block/name nil :block/uuid (uuid "00000000-0000-0000-0000-000000000001")}
+                                                                         (= lookup 2) {:db/id 2 :block/name nil :block/uuid (uuid "00000000-0000-0000-0000-000000000002")}
+                                                                         :else {}))
+                                                    :thread-api/apply-outliner-ops (let [[_ ops _] args]
+                                                                                     (reset! ops* ops)
+                                                                                     {:result :ok})
+                                                    (throw (ex-info "unexpected invoke" {:method method :calls @calls*}))))]
+                 (p/let [result (commands/execute action {})]
+                   (is (= :ok (:status result)))
+                   (is (= [[:move-blocks [[1] 2 {:sibling? false :bottom? true}]]
+                           [:batch-delete-property-value [[1] :block/tags 202]]
+                           [:batch-remove-property [[1] :logseq.property/publishing-public?]]
+                           [:batch-set-property [[1] :block/tags 101 {}]]
+                           [:batch-set-property [[1] :logseq.property/deadline "2026-01-25T12:00:00Z" {}]]]
+                          @ops*))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e " calls: " @calls*))))
+               (p/finally done)))))
 
 (deftest test-execute-requires-existing-graph
   (async done
-         (with-redefs [cli-server/list-graphs (fn [_] [])
-                       cli-server/ensure-server! (fn [_ _]
-                                                   (throw (ex-info "should not start server" {})))]
-           (-> (p/let [result (commands/execute {:type :list-page
-                                                 :repo "logseq_db_missing"}
-                                                {})]
+         (-> (p/with-redefs [cli-server/list-graphs (fn [_] [])
+                             cli-server/ensure-server! (fn [_ _]
+                                                         (throw (ex-info "should not start server" {})))]
+               (p/let [result (commands/execute {:type :list-page :repo "logseq_db_missing"} {})]
                  (is (= :error (:status result)))
                  (is (= :graph-not-exists (get-in result [:error :code])))
-                 (is (= "graph not exists" (get-in result [:error :message])))
-                 (done))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))
-                          (done)))))))
+                 (is (= "graph not exists" (get-in result [:error :message])))))
+             (p/catch (fn [e] (is false (str "unexpected error: " e))))
+             (p/finally done))))
 
 (deftest test-execute-graph-import-rejects-existing-graph
   (async done
-         (let [orig-list-graphs cli-server/list-graphs
-               orig-ensure-server! cli-server/ensure-server!]
-           (set! cli-server/list-graphs (fn [_] ["demo"]))
-           (set! cli-server/ensure-server! (fn [_ _]
-                                             (throw (ex-info "should not start server" {}))))
-           (-> (p/let [result (commands/execute {:type :graph-import
-                                                 :repo "logseq_db_demo"
-                                                 :allow-missing-graph true}
-                                                {})]
+         (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                             cli-server/ensure-server! (fn [_ _]
+                                                         (throw (ex-info "should not start server" {})))]
+               (p/let [result (commands/execute {:type :graph-import :repo "logseq_db_demo" :allow-missing-graph true} {})]
                  (is (= :error (:status result)))
-                 (is (= :graph-exists (get-in result [:error :code]))))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (done)))))))
+                 (is (= :graph-exists (get-in result [:error :code])))))
+             (p/catch (fn [e] (is false (str "unexpected error: " e))))
+             (p/finally done))))
 
 (deftest test-execute-sync-download-rejects-existing-graph
   (async done
-         (let [orig-list-graphs cli-server/list-graphs
-               orig-ensure-server! cli-server/ensure-server!]
-           (set! cli-server/list-graphs (fn [_] ["demo"]))
-           (set! cli-server/ensure-server! (fn [_ _]
-                                             (throw (ex-info "should not start server" {}))))
-           (-> (p/let [result (commands/execute {:type :sync-download
+         (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                             cli-server/ensure-server! (fn [_ _]
+                                                         (throw (ex-info "should not start server" {})))]
+               (p/let [result (commands/execute {:type :sync-download
                                                  :repo "logseq_db_demo"
                                                  :graph "demo"
                                                  :allow-missing-graph true
                                                  :require-missing-graph true}
                                                 {})]
                  (is (= :error (:status result)))
-                 (is (= :graph-exists (get-in result [:error :code]))))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (done)))))))
+                 (is (= :graph-exists (get-in result [:error :code])))))
+             (p/catch (fn [e] (is false (str "unexpected error: " e))))
+             (p/finally done))))
 
 (deftest test-execute-sync-download-runs-command-when-graph-is-missing
   (async done
-         (let [orig-list-graphs cli-server/list-graphs
-               orig-execute sync-command/execute
-               captured (atom nil)]
-           (set! cli-server/list-graphs (fn [_] []))
-           (set! sync-command/execute
-                 (fn [action config]
-                   (reset! captured [action config])
-                   (p/resolved {:status :ok
-                                :data {:repo (:repo action)}})))
-           (-> (p/let [result (commands/execute {:type :sync-download
-                                                 :repo "logseq_db_demo"
-                                                 :graph "demo"
-                                                 :allow-missing-graph true
-                                                 :require-missing-graph true}
-                                                {:data-dir "/tmp"})]
-                 (is (= :ok (:status result)))
-                 (is (= "logseq_db_demo" (get-in result [:data :repo])))
-                 (is (= :sync-download (get-in @captured [0 :type]))))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (set! sync-command/execute orig-execute)
-                            (done)))))))
+         (let [captured (atom nil)]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] [])
+                               sync-command/execute (fn [action config]
+                                                      (reset! captured [action config])
+                                                      (p/resolved {:status :ok
+                                                                   :data {:repo (:repo action)}}))]
+                 (p/let [result (commands/execute {:type :sync-download
+                                                   :repo "logseq_db_demo"
+                                                   :graph "demo"
+                                                   :allow-missing-graph true
+                                                   :require-missing-graph true}
+                                                  {:data-dir "/tmp"})]
+                   (is (= :ok (:status result)))
+                   (is (= "logseq_db_demo" (get-in result [:data :repo])))
+                   (is (= :sync-download (get-in @captured [0 :type])))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
 (deftest test-execute-graph-export
   (async done
          (let [invoke-calls (atom [])
-               write-calls (atom [])
-               orig-list-graphs cli-server/list-graphs
-               orig-ensure-server! cli-server/ensure-server!
-               orig-invoke transport/invoke
-               orig-write-output transport/write-output]
-           (set! cli-server/list-graphs (fn [_] ["demo"]))
-           (set! cli-server/ensure-server! (fn [config _]
-                                             (assoc config :base-url "http://127.0.0.1:9999")))
-           (set! transport/invoke (fn [_ method direct-pass? args]
-                                    (swap! invoke-calls conj [method direct-pass? args])
-                                    (if (= method :thread-api/export-db-base64)
-                                      "c3FsaXRl"
-                                      {:exported true})))
-           (set! transport/write-output (fn [opts]
-                                          (swap! write-calls conj opts)))
-           (-> (p/let [edn-result (commands/execute {:type :graph-export
-                                                     :repo "logseq_db_demo"
-                                                     :graph "demo"
-                                                     :export-type "edn"
-                                                     :file "/tmp/export.edn"
-                                                     :allow-missing-graph true}
-                                                    {})
-                       sqlite-result (commands/execute {:type :graph-export
-                                                        :repo "logseq_db_demo"
-                                                        :graph "demo"
-                                                        :export-type "sqlite"
-                                                        :file "/tmp/export.sqlite"
-                                                        :allow-missing-graph true}
-                                                       {})]
-                 (is (= :ok (:status edn-result)))
-                 (is (= :ok (:status sqlite-result)))
-                 (is (= "edn" (get-in edn-result [:context :export-type])))
-                 (is (= "/tmp/export.edn" (get-in edn-result [:context :file])))
-                 (is (= "sqlite" (get-in sqlite-result [:context :export-type])))
-                 (is (= "/tmp/export.sqlite" (get-in sqlite-result [:context :file])))
-                 (is (= [[:thread-api/export-edn false ["logseq_db_demo" {:export-type :graph}]]
-                         [:thread-api/export-db-base64 true ["logseq_db_demo"]]]
-                        @invoke-calls))
-                 (is (= 2 (count @write-calls)))
-                 (let [[edn-write sqlite-write] @write-calls]
-                   (is (= {:format :edn :path "/tmp/export.edn" :data {:exported true}}
-                          edn-write))
-                   (is (= :sqlite (:format sqlite-write)))
-                   (is (= "/tmp/export.sqlite" (:path sqlite-write)))
-                   (is (= "sqlite" (.toString (:data sqlite-write) "utf8")))))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/invoke orig-invoke)
-                            (set! transport/write-output orig-write-output)
-                            (done)))))))
+               write-calls (atom [])]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [config _]
+                                                           (assoc config :base-url "http://127.0.0.1:9999"))
+                               transport/invoke (fn [_ method direct-pass? args]
+                                                  (swap! invoke-calls conj [method direct-pass? args])
+                                                  (if (= method :thread-api/export-db-base64)
+                                                    "c3FsaXRl"
+                                                    {:exported true}))
+                               transport/write-output (fn [opts]
+                                                        (swap! write-calls conj opts))]
+                 (p/let [edn-result (commands/execute {:type :graph-export :repo "logseq_db_demo" :graph "demo" :export-type "edn" :file "/tmp/export.edn" :allow-missing-graph true} {})
+                         sqlite-result (commands/execute {:type :graph-export :repo "logseq_db_demo" :graph "demo" :export-type "sqlite" :file "/tmp/export.sqlite" :allow-missing-graph true} {})]
+                   (is (= :ok (:status edn-result)))
+                   (is (= :ok (:status sqlite-result)))
+                   (is (= "edn" (get-in edn-result [:context :export-type])))
+                   (is (= "/tmp/export.edn" (get-in edn-result [:context :file])))
+                   (is (= "sqlite" (get-in sqlite-result [:context :export-type])))
+                   (is (= "/tmp/export.sqlite" (get-in sqlite-result [:context :file])))
+                   (is (= [[:thread-api/export-edn false ["logseq_db_demo" {:export-type :graph}]]
+                           [:thread-api/export-db-base64 true ["logseq_db_demo"]]]
+                          @invoke-calls))
+                   (is (= 2 (count @write-calls)))
+                   (let [[edn-write sqlite-write] @write-calls]
+                     (is (= {:format :edn :path "/tmp/export.edn" :data {:exported true}} edn-write))
+                     (is (= :sqlite (:format sqlite-write)))
+                     (is (= "/tmp/export.sqlite" (:path sqlite-write)))
+                     (is (= "sqlite" (.toString (:data sqlite-write) "utf8"))))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
 (deftest test-execute-graph-import
   (async done
          (let [invoke-calls (atom [])
                read-calls (atom [])
                stop-calls (atom [])
-               restart-calls (atom [])
-               orig-list-graphs cli-server/list-graphs
-               orig-stop-server! cli-server/stop-server!
-               orig-restart-server! cli-server/restart-server!
-               orig-ensure-server! cli-server/ensure-server!
-               orig-read-input transport/read-input
-               orig-invoke transport/invoke]
-           (set! cli-server/list-graphs (fn [_] []))
-           (set! cli-server/stop-server! (fn [_ repo]
-                                           (swap! stop-calls conj repo)
-                                           (p/resolved {:ok? true})))
-           (set! cli-server/restart-server! (fn [_ repo]
-                                              (swap! restart-calls conj repo)
-                                              (p/resolved {:ok? true})))
-           (set! cli-server/ensure-server! (fn [config _]
-                                             (assoc config :base-url "http://127.0.0.1:9999")))
-           (set! transport/read-input (fn [{:keys [format path]}]
-                                        (swap! read-calls conj [format path])
-                                        (if (= format :edn)
-                                          {:page "Import Page"}
-                                          (js/Buffer.from "sqlite" "utf8"))))
-           (set! transport/invoke (fn [_ method _ args]
-                                    (swap! invoke-calls conj [method args])
-                                    {:ok true}))
-           (-> (p/let [edn-result (commands/execute {:type :graph-import
-                                                     :repo "logseq_db_demo"
-                                                     :graph "demo"
-                                                     :import-type "edn"
-                                                     :input "/tmp/import.edn"
-                                                     :allow-missing-graph true}
-                                                    {})
-                       sqlite-result (commands/execute {:type :graph-import
-                                                        :repo "logseq_db_demo"
-                                                        :graph "demo"
-                                                        :import-type "sqlite"
-                                                        :input "/tmp/import.sqlite"
-                                                        :allow-missing-graph true}
-                                                       {})]
-                 (is (= :ok (:status edn-result)))
-                 (is (= :ok (:status sqlite-result)))
-                 (is (= "edn" (get-in edn-result [:context :import-type])))
-                 (is (= "/tmp/import.edn" (get-in edn-result [:context :input])))
-                 (is (= "sqlite" (get-in sqlite-result [:context :import-type])))
-                 (is (= "/tmp/import.sqlite" (get-in sqlite-result [:context :input])))
-                 (is (= [[:edn "/tmp/import.edn"]
-                         [:sqlite "/tmp/import.sqlite"]]
-                        @read-calls))
-                 (is (= [[:thread-api/import-edn ["logseq_db_demo" {:page "Import Page"}]]
-                         [:thread-api/import-db-base64 ["logseq_db_demo" "c3FsaXRl"]]]
-                        @invoke-calls))
-                 (is (= ["logseq_db_demo" "logseq_db_demo"] @stop-calls))
-                 (is (= ["logseq_db_demo" "logseq_db_demo"] @restart-calls)))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (set! cli-server/stop-server! orig-stop-server!)
-                            (set! cli-server/restart-server! orig-restart-server!)
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/read-input orig-read-input)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+               restart-calls (atom [])]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] [])
+                               cli-server/stop-server! (fn [_ repo] (swap! stop-calls conj repo) (p/resolved {:ok? true}))
+                               cli-server/restart-server! (fn [_ repo] (swap! restart-calls conj repo) (p/resolved {:ok? true}))
+                               cli-server/ensure-server! (fn [config _] (assoc config :base-url "http://127.0.0.1:9999"))
+                               transport/read-input (fn [{:keys [format path]}]
+                                                      (swap! read-calls conj [format path])
+                                                      (if (= format :edn)
+                                                        {:page "Import Page"}
+                                                        (js/Buffer.from "sqlite" "utf8")))
+                               transport/invoke (fn [_ method _ args]
+                                                  (swap! invoke-calls conj [method args])
+                                                  {:ok true})]
+                 (p/let [edn-result (commands/execute {:type :graph-import :repo "logseq_db_demo" :graph "demo" :import-type "edn" :input "/tmp/import.edn" :allow-missing-graph true} {})
+                         sqlite-result (commands/execute {:type :graph-import :repo "logseq_db_demo" :graph "demo" :import-type "sqlite" :input "/tmp/import.sqlite" :allow-missing-graph true} {})]
+                   (is (= :ok (:status edn-result)))
+                   (is (= :ok (:status sqlite-result)))
+                   (is (= "edn" (get-in edn-result [:context :import-type])))
+                   (is (= "/tmp/import.edn" (get-in edn-result [:context :input])))
+                   (is (= "sqlite" (get-in sqlite-result [:context :import-type])))
+                   (is (= "/tmp/import.sqlite" (get-in sqlite-result [:context :input])))
+                   (is (= [[:edn "/tmp/import.edn"] [:sqlite "/tmp/import.sqlite"]] @read-calls))
+                   (is (= [[:thread-api/import-edn ["logseq_db_demo" {:page "Import Page"}]]
+                           [:thread-api/import-db-base64 ["logseq_db_demo" "c3FsaXRl"]]]
+                          @invoke-calls))
+                   (is (= ["logseq_db_demo" "logseq_db_demo"] @stop-calls))
+                   (is (= ["logseq_db_demo" "logseq_db_demo"] @restart-calls))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
 (deftest test-execute-graph-list-strips-db-prefix
   (async done
-         (let [orig-list-graphs cli-server/list-graphs]
-           (set! cli-server/list-graphs (fn [_] ["logseq_db_demo"
-                                                 "logseq_db_logseq_db_other"
-                                                 "my_logseq_db_notes"]))
-           (-> (p/let [result (commands/execute {:type :graph-list} {})]
+         (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["logseq_db_demo"
+                                                             "logseq_db_logseq_db_other"
+                                                             "my_logseq_db_notes"])]
+               (p/let [result (commands/execute {:type :graph-list} {})]
                  (is (= :ok (:status result)))
                  (is (= ["demo" "logseq_db_other" "my_logseq_db_notes"]
-                        (get-in result [:data :graphs]))))
-               (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/list-graphs orig-list-graphs)
-                            (done)))))))
+                        (get-in result [:data :graphs])))))
+             (p/catch (fn [e] (is false (str "unexpected error: " e))))
+             (p/finally done))))

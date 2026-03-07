@@ -13,6 +13,7 @@
             [logseq.cli.main :as cli-main]
             [logseq.cli.server :as cli-server]
             [logseq.cli.style :as style]
+            [logseq.cli.test-helper :as test-helper]
             [logseq.cli.transport :as transport]
             [logseq.common.util :as common-util]
             [logseq.db.frontend.property :as db-property]
@@ -86,16 +87,12 @@
                         e))))))
 
 (defn- capture-stderr!
-  []
-  (let [stderr (.-stderr js/process)
-        original-write (.-write stderr)
-        buffer (atom "")]
-    (set! (.-write stderr)
-          (fn [chunk]
-            (swap! buffer str chunk)
-            true))
-    {:buffer buffer
-     :restore! (fn [] (set! (.-write stderr) original-write))}))
+  [f]
+  (test-helper/with-stderr-write-capture
+    (fn [buffer]
+      (p/let [result (f)]
+        {:buffer buffer
+         :result result}))))
 
 (defn- node-title
   [node]
@@ -193,8 +190,6 @@
          (let [data-dir (node-helper/create-tmp-dir "db-worker-sync-cli")
                download-repo "sync-download-graph"
                start-repo "sync-start-graph"
-               orig-ensure-server! cli-server/ensure-server!
-               orig-invoke transport/invoke
                invoke-calls (atom [])
                status-calls (atom 0)]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -203,46 +198,46 @@
                        create-payload (parse-json-output-safe create-result "graph create")
                        _ (is (= 0 (:exit-code create-result)))
                        _ (is (= "ok" (:status create-payload)))
-                       _ (set! cli-server/ensure-server!
-                               (fn [config _repo]
-                                 (p/resolved (assoc config :base-url "http://example"))))
-                       _ (set! transport/invoke
-                               (fn [_ method _direct-pass? args]
-                                 (swap! invoke-calls conj [method args])
-                                 (case method
-                                   :thread-api/set-db-sync-config
-                                   (p/resolved nil)
+                       [download-result start-result]
+                       (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                                   (p/resolved (assoc config :base-url "http://example")))
+                                       transport/invoke (fn [_ method _direct-pass? args]
+                                                          (swap! invoke-calls conj [method args])
+                                                          (case method
+                                                            :thread-api/set-db-sync-config
+                                                            (p/resolved nil)
 
-                                   :thread-api/db-sync-list-remote-graphs
-                                   (p/resolved [{:graph-id "remote-graph-id"
-                                                 :graph-name download-repo
-                                                 :graph-e2ee? true}])
+                                                            :thread-api/db-sync-list-remote-graphs
+                                                            (p/resolved [{:graph-id "remote-graph-id"
+                                                                          :graph-name download-repo
+                                                                          :graph-e2ee? true}])
 
-                                   :thread-api/db-sync-download-graph-by-id
-                                   (p/resolved {:repo "logseq_db_sync_integration_graph"
-                                                :graph-id "remote-graph-id"
-                                                :remote-tx 22
-                                                :graph-e2ee? true
-                                                :row-count 3})
+                                                            :thread-api/db-sync-download-graph-by-id
+                                                            (p/resolved {:repo "logseq_db_sync_integration_graph"
+                                                                         :graph-id "remote-graph-id"
+                                                                         :remote-tx 22
+                                                                         :graph-e2ee? true
+                                                                         :row-count 3})
 
-                                   :thread-api/db-sync-start
-                                   (p/resolved nil)
+                                                            :thread-api/db-sync-start
+                                                            (p/resolved nil)
 
-                                   :thread-api/db-sync-status
-                                   (let [idx (swap! status-calls inc)]
-                                     (p/resolved {:repo "logseq_db_sync_integration_graph"
-                                                  :ws-state (if (= idx 1) :connecting :open)
-                                                  :pending-local 0
-                                                  :pending-asset 0
-                                                  :pending-server 0}))
+                                                            :thread-api/db-sync-status
+                                                            (let [idx (swap! status-calls inc)]
+                                                              (p/resolved {:repo "logseq_db_sync_integration_graph"
+                                                                           :ws-state (if (= idx 1) :connecting :open)
+                                                                           :pending-local 0
+                                                                           :pending-asset 0
+                                                                           :pending-server 0}))
 
-                                   :thread-api/q
-                                   (p/resolved 0)
+                                                            :thread-api/q
+                                                            (p/resolved 0)
 
-                                   (p/resolved nil))))
-                       download-result (run-cli ["--graph" download-repo "sync" "download"] data-dir cfg-path)
+                                                            (p/resolved nil)))]
+                         (p/let [download-result (run-cli ["--graph" download-repo "sync" "download"] data-dir cfg-path)
+                                 start-result (run-cli ["--graph" start-repo "sync" "start"] data-dir cfg-path)]
+                           [download-result start-result]))
                        download-payload (parse-json-output-safe download-result "sync download")
-                       start-result (run-cli ["--graph" start-repo "sync" "start"] data-dir cfg-path)
                        start-payload (parse-json-output-safe start-result "sync start")]
                  (is (some #(= :thread-api/db-sync-download-graph-by-id (first %)) @invoke-calls))
                  (is (some #(= :thread-api/q (first %)) @invoke-calls))
@@ -259,17 +254,12 @@
                  (done))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))
-                          (done)))
-               (p/finally (fn []
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/invoke orig-invoke)))))))
+                          (done)))))))
 
 (deftest test-cli-sync-upload-with-mocked-worker-bootstrap
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-sync-upload-cli")
                upload-repo "sync-upload-graph"
-               orig-ensure-server! cli-server/ensure-server!
-               orig-invoke transport/invoke
                invoke-calls (atom [])]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
@@ -277,21 +267,20 @@
                        create-payload (parse-json-output-safe create-result "graph create")
                        _ (is (= 0 (:exit-code create-result)))
                        _ (is (= "ok" (:status create-payload)))
-                       _ (set! cli-server/ensure-server!
-                               (fn [config _repo]
-                                 (p/resolved (assoc config :base-url "http://example"))))
-                       _ (set! transport/invoke
-                               (fn [_ method _direct-pass? args]
-                                 (swap! invoke-calls conj [method args])
-                                 (case method
-                                   :thread-api/set-db-sync-config
-                                   (p/resolved nil)
+                       upload-result (p/with-redefs
+                                      [cli-server/ensure-server! (fn [config _repo]
+                                                                   (p/resolved (assoc config :base-url "http://example")))
+                                       transport/invoke (fn [_ method _direct-pass? args]
+                                                          (swap! invoke-calls conj [method args])
+                                                          (case method
+                                                            :thread-api/set-db-sync-config
+                                                            (p/resolved nil)
 
-                                   :thread-api/db-sync-upload-graph
-                                   (p/resolved {:graph-id "created-graph-id"})
+                                                            :thread-api/db-sync-upload-graph
+                                                            (p/resolved {:graph-id "created-graph-id"})
 
-                                   (p/resolved nil))))
-                       upload-result (run-cli ["--graph" upload-repo "sync" "upload"] data-dir cfg-path)
+                                                            (p/resolved nil)))]
+                                       (run-cli ["--graph" upload-repo "sync" "upload"] data-dir cfg-path))
                        upload-payload (parse-json-output-safe upload-result "sync upload")]
                  (is (= 0 (:exit-code upload-result)))
                  (is (= "ok" (:status upload-payload)))
@@ -301,22 +290,16 @@
                                                            :auth-token nil
                                                            :e2ee-password nil}]]
                          [:thread-api/db-sync-upload-graph ["logseq_db_sync-upload-graph"]]]
-                        @invoke-calls))
-                 (done))
+                        @invoke-calls)))
                (p/catch (fn [e]
-                          (is false (str "unexpected error: " e))
-                          (done)))
-               (p/finally (fn []
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/invoke orig-invoke)))))))
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
 (deftest test-cli-sync-upload-followed-by-graph-info-shows-graph-uuid-test
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-sync-upload-info-cli")
                upload-repo "sync-upload-graph-info"
                uploaded-graph-id "0f64b4a9-6f31-4f35-a83c-6b16f9ddf1ff"
-               orig-ensure-server! cli-server/ensure-server!
-               orig-invoke transport/invoke
                invoke-calls (atom [])]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
@@ -324,27 +307,27 @@
                        create-payload (parse-json-output-safe create-result "graph create")
                        _ (is (= 0 (:exit-code create-result)))
                        _ (is (= "ok" (:status create-payload)))
-                       _ (set! cli-server/ensure-server!
-                               (fn [config _repo]
-                                 (p/resolved (assoc config :base-url "http://example"))))
-                       _ (set! transport/invoke
-                               (fn [_ method _direct-pass? args]
-                                 (swap! invoke-calls conj [method args])
-                                 (case method
-                                   :thread-api/set-db-sync-config
-                                   (p/resolved nil)
+                       [upload-result info-result]
+                       (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                                   (p/resolved (assoc config :base-url "http://example")))
+                                       transport/invoke (fn [_ method _direct-pass? args]
+                                                          (swap! invoke-calls conj [method args])
+                                                          (case method
+                                                            :thread-api/set-db-sync-config
+                                                            (p/resolved nil)
 
-                                   :thread-api/db-sync-upload-graph
-                                   (p/resolved {:graph-id uploaded-graph-id})
+                                                            :thread-api/db-sync-upload-graph
+                                                            (p/resolved {:graph-id uploaded-graph-id})
 
-                                   :thread-api/q
-                                   (p/resolved [[:logseq.kv/graph-uuid uploaded-graph-id]
-                                                [:logseq.kv/schema-version "65"]])
+                                                            :thread-api/q
+                                                            (p/resolved [[:logseq.kv/graph-uuid uploaded-graph-id]
+                                                                         [:logseq.kv/schema-version "65"]])
 
-                                   (p/resolved nil))))
-                       upload-result (run-cli ["--graph" upload-repo "sync" "upload"] data-dir cfg-path)
+                                                            (p/resolved nil)))]
+                         (p/let [upload-result (run-cli ["--graph" upload-repo "sync" "upload"] data-dir cfg-path)
+                                 info-result (run-cli ["--graph" upload-repo "graph" "info"] data-dir cfg-path)]
+                           [upload-result info-result]))
                        upload-payload (parse-json-output-safe upload-result "sync upload")
-                       info-result (run-cli ["--graph" upload-repo "graph" "info"] data-dir cfg-path)
                        info-payload (parse-json-output-safe info-result "graph info after upload")
                        q-call (some (fn [[method args]]
                                       (when (= :thread-api/q method)
@@ -360,10 +343,7 @@
                  (is (= "logseq_db_sync-upload-graph-info" (first q-call))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! cli-server/ensure-server! orig-ensure-server!)
-                            (set! transport/invoke orig-invoke)
-                            (done)))))))
+               (p/finally done)))))
 
 (deftest ^:long test-cli-graph-list
   (async done
@@ -1151,9 +1131,9 @@
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
                        _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        _ (run-cli ["graph" "create" "--graph" repo] data-dir cfg-path)
-                       {:keys [buffer restore!]} (capture-stderr!)
-                       result (-> (run-cli ["--verbose" "--graph" repo "graph" "info"] data-dir cfg-path)
-                                  (p/finally (fn [] (restore!))))
+                       {:keys [buffer result]} (capture-stderr!
+                                                (fn []
+                                                  (run-cli ["--verbose" "--graph" repo "graph" "info"] data-dir cfg-path)))
                        payload (parse-json-output-safe result "verbose graph info")
                        stderr-text @buffer
                        _ (run-cli ["server" "stop" "--graph" repo] data-dir cfg-path)]
@@ -1212,10 +1192,10 @@
          (let [data-dir (node-helper/create-tmp-dir "db-worker-upsert-block-custom-property")]
            (-> (p/let [{:keys [cfg-path repo]} (setup-tags-graph data-dir)
                        upsert-property-result (run-cli ["--graph" repo
-                                                       "upsert" "property"
-                                                       "--name" "owner"
-                                                       "--type" "default"]
-                                                      data-dir cfg-path)
+                                                        "upsert" "property"
+                                                        "--name" "owner"
+                                                        "--type" "default"]
+                                                       data-dir cfg-path)
                        upsert-property-payload (parse-json-output upsert-property-result)
                        add-block-result (run-cli ["--graph" repo
                                                   "upsert" "block"
