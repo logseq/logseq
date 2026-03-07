@@ -109,9 +109,11 @@ Sync upload behavior:
 - If the local graph already has sync metadata, upload reuses the stored remote `graph-id`.
 - If the local graph does not have a stored remote `graph-id`, upload first lists visible remote graphs and reuses an exact same-name match when one exists.
 - If no same-name remote graph exists, upload creates a new remote graph and persists the returned remote metadata locally before snapshot transfer.
+- Successful upload persists graph identity metadata locally in both client-op state and graph KV (`logseq.kv/graph-uuid`, `logseq.kv/graph-remote?`, and `logseq.kv/graph-rtc-e2ee?`) so CLI and web upload/bootstrap flows stay aligned.
 - Fresh uploads default to encrypted remote graph creation unless local sync metadata explicitly marks the graph as non-e2ee. In headless CLI mode, set `e2ee-password` via `sync config set` (or in `--config`) before uploading encrypted graphs.
 - `sync upload` returns a real error instead of false success when auth, remote graph bootstrap, or snapshot upload fails.
 - Common upload failures include missing/invalid `auth-token`, missing `http-base`, remote graph creation failure, snapshot upload failure, and local DB/worker startup failure.
+- Troubleshooting: after a successful upload, run `graph info --graph <name> --output json` and confirm `data.kv.logseq.kv/graph-uuid` is present. If it is missing, rerun `sync upload` for the same graph to trigger identity backfill.
 
 Sync download behavior:
 - `sync download` requires `--graph <name>`.

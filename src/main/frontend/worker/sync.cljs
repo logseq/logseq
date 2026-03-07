@@ -207,7 +207,6 @@
 (def ^:private max-asset-size (* 100 1024 1024))
 (def ^:private upload-kvs-batch-size 500)
 (def ^:private snapshot-content-type "application/transit+json")
-(def ^:private snapshot-content-encoding "gzip")
 (def ^:private snapshot-text-encoder (js/TextEncoder.))
 (def ^:private reconnect-base-delay-ms 1000)
 (def ^:private reconnect-max-delay-ms 30000)
@@ -2138,32 +2137,37 @@
     (.set out data 4)
     out))
 
-(defn- maybe-compress-stream [stream]
-  (if (exists? js/CompressionStream)
-    (.pipeThrough stream (js/CompressionStream. "gzip"))
-    stream))
-
-(defn- <buffer-stream
-  [stream]
-  (p/let [resp (js/Response. stream)
-          buf (.arrayBuffer resp)]
-    buf))
-
 (defn- <snapshot-upload-body
   [rows]
   (let [frame (frame-bytes (encode-snapshot-rows rows))]
     (p/resolved {:body frame :encoding nil})))
 
+(defn- graph-id->uuid
+  [repo graph-id]
+  (when-not (seq graph-id)
+    (fail-fast :db-sync/missing-field {:repo repo :field :graph-id}))
+  (try
+    (uuid graph-id)
+    (catch :default e
+      (fail-fast :db-sync/invalid-field {:repo repo
+                                         :field :graph-id
+                                         :value graph-id
+                                         :error e}))))
+
 (defn- set-graph-sync-metadata!
-  [repo graph-e2ee?]
+  [repo graph-id graph-e2ee?]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (ldb/transact! conn [(ldb/kv :logseq.kv/graph-remote? true)
+    (ldb/transact! conn [(ldb/kv :logseq.kv/graph-uuid (graph-id->uuid repo graph-id))
+                         (ldb/kv :logseq.kv/graph-remote? true)
                          (ldb/kv :logseq.kv/graph-rtc-e2ee? (true? graph-e2ee?))])))
 
 (defn- persist-upload-graph-identity!
   [repo graph-id graph-e2ee?]
-  (let [graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)]
-    (set-graph-sync-metadata! repo graph-e2ee?)
+  (let [graph-id (some-> graph-id str)
+        graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)]
+    (when-not (seq graph-id)
+      (fail-fast :db-sync/missing-field {:repo repo :field :graph-id}))
+    (set-graph-sync-metadata! repo graph-id graph-e2ee?)
     (ensure-client-graph-uuid! repo graph-id)
     {:graph-id graph-id
      :graph-e2ee? graph-e2ee?}))
@@ -2225,8 +2229,8 @@
 (defn- <ensure-upload-graph-identity!
   [repo]
   (if-let [graph-id (get-graph-id repo)]
-    (p/resolved {:graph-id graph-id
-                 :graph-e2ee? (normalize-graph-e2ee? (sync-crypt/graph-e2ee? repo))})
+    (p/resolved (persist-upload-graph-identity! repo graph-id
+                                                (normalize-graph-e2ee? (sync-crypt/graph-e2ee? repo))))
     (let [target-graph-name (some-> repo common-config/strip-leading-db-version-prefix)
           local-graph-e2ee? (normalize-graph-e2ee? (sync-crypt/graph-e2ee? repo))]
       (if-not (seq target-graph-name)
