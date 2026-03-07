@@ -488,10 +488,9 @@
 
 (defn <rtc-upload-graph!
   [repo graph-e2ee?]
-  (p/let [graph-id (<rtc-create-graph! repo graph-e2ee?)]
-    (when (nil? graph-id)
-      (throw (ex-info "graph id doesn't exist when uploading to server" {:repo repo})))
+  (let [graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)]
     (p/do!
+     (ldb/transact! repo [(sqlite-util/kv :logseq.kv/graph-rtc-e2ee? graph-e2ee?)])
      (state/<invoke-db-worker :thread-api/db-sync-upload-graph repo)
      (<get-remote-graphs)
      (<rtc-start! repo))))
