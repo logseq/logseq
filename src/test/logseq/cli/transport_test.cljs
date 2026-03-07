@@ -1,5 +1,6 @@
 (ns logseq.cli.transport-test
   (:require [cljs.test :refer [deftest is async testing]]
+            [logseq.cli.test-helper :as test-helper]
             [logseq.cli.transport :as transport]
             [promesa.core :as p]))
 
@@ -34,25 +35,25 @@
          (let [url-module (js/require "url")
                original-parse (.-parse url-module)
                parse-calls (atom 0)]
-           (set! (.-parse url-module)
+           (-> (test-helper/with-js-property-override
+                 url-module
+                 "parse"
                  (fn [& args]
                    (swap! parse-calls inc)
-                   (.apply original-parse url-module (to-array args))))
-           (-> (p/let [{:keys [url stop!]} (start-server
-                                            (fn [_req ^js res]
-                                              (.writeHead res 200 #js {"Content-Type" "text/plain"})
-                                              (.end res "ok")))]
-                 (p/let [response (transport/request {:method "GET"
-                                                      :url (str url "/status")
-                                                      :timeout-ms 1000})]
-                   (is (= 200 (:status response)))
-                   (is (= 0 @parse-calls))
-                   (p/let [_ (stop!)] true)))
-               (p/then (fn [_]
-                         (set! (.-parse url-module) original-parse)
-                         (done)))
+                   (.apply original-parse url-module (to-array args)))
+                 (fn []
+                   (p/let [{:keys [url stop!]} (start-server
+                                                (fn [_req ^js res]
+                                                  (.writeHead res 200 #js {"Content-Type" "text/plain"})
+                                                  (.end res "ok")))]
+                     (p/let [response (transport/request {:method "GET"
+                                                          :url (str url "/status")
+                                                          :timeout-ms 1000})]
+                       (is (= 200 (:status response)))
+                       (is (= 0 @parse-calls))
+                       (p/let [_ (stop!)] true)))))
+               (p/then (fn [_] (done)))
                (p/catch (fn [e]
-                          (set! (.-parse url-module) original-parse)
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
