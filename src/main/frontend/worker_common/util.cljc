@@ -28,7 +28,7 @@
    (do
      (defn post-message
        [type data & {:keys [port]}]
-       (when-let [worker (or port js/self)]
+       (when-let [worker (or port (when (exists? js/self) js/self))]
          (.postMessage worker (ldb/write-transit-str [type data]))))
 
      (defn encode-graph-dir-name

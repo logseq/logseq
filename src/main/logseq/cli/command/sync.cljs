@@ -285,6 +285,46 @@
                     (poll!)))))]
       (poll!))))
 
+(defn- execute-sync-upload
+  [action config]
+  (-> (p/let [result (invoke-with-repo config (:repo action)
+                                       :thread-api/db-sync-upload-graph
+                                       [(:repo action)])]
+        {:status :ok
+         :data (if (map? result)
+                 result
+                 {:result result})})
+      (p/catch (fn [error]
+                 (exception->error error {:repo (:repo action)})))))
+
+(defn- execute-sync-download
+  [action config]
+  (let [config' (download-config config)]
+    (-> (p/let [remote-graphs (invoke-global config'
+                                             :thread-api/db-sync-list-remote-graphs
+                                             [])
+                remote-graph (some (fn [graph]
+                                     (when (= (:graph action) (:graph-name graph))
+                                       graph))
+                                   remote-graphs)]
+          (if-not remote-graph
+            {:status :error
+             :error {:code :remote-graph-not-found
+                     :message (str "remote graph not found: " (:graph action))
+                     :graph (:graph action)}}
+            (p/let [cfg (cli-server/ensure-server! config' (:repo action))
+                    _ (transport/invoke cfg :thread-api/set-db-sync-config false [(sync-config config')])
+                    _ (ensure-empty-download-db! cfg (:repo action))
+                    result (transport/invoke cfg :thread-api/db-sync-download-graph-by-id false
+                                             [(:repo action) (:graph-id remote-graph) (:graph-e2ee? remote-graph)])]
+              {:status :ok
+               :data (if (map? result)
+                       result
+                       {:result result})})))
+        (p/catch (fn [error]
+                   (exception->error error {:repo (:repo action)
+                                            :graph (:graph action)}))))))
+
 (defn execute
   [action config]
   (case (:type action)
@@ -312,40 +352,10 @@
        :data {:result result}})
 
     :sync-upload
-    (p/let [result (invoke-with-repo config (:repo action)
-                                     :thread-api/db-sync-upload-graph
-                                     [(:repo action)])]
-      {:status :ok
-       :data (if (map? result)
-               result
-               {:result result})})
+    (execute-sync-upload action config)
 
     :sync-download
-    (let [config' (download-config config)]
-      (-> (p/let [remote-graphs (invoke-global config'
-                                             :thread-api/db-sync-list-remote-graphs
-                                             [])
-                remote-graph (some (fn [graph]
-                                     (when (= (:graph action) (:graph-name graph))
-                                       graph))
-                                   remote-graphs)]
-          (if-not remote-graph
-            {:status :error
-             :error {:code :remote-graph-not-found
-                     :message (str "remote graph not found: " (:graph action))
-                     :graph (:graph action)}}
-            (p/let [cfg (cli-server/ensure-server! config' (:repo action))
-                    _ (transport/invoke cfg :thread-api/set-db-sync-config false [(sync-config config')])
-                    _ (ensure-empty-download-db! cfg (:repo action))
-                    result (transport/invoke cfg :thread-api/db-sync-download-graph-by-id false
-                                             [(:repo action) (:graph-id remote-graph) (:graph-e2ee? remote-graph)])]
-              {:status :ok
-               :data (if (map? result)
-                       result
-                       {:result result})})))
-        (p/catch (fn [error]
-                   (exception->error error {:repo (:repo action)
-                                            :graph (:graph action)})))))
+    (execute-sync-download action config)
 
     :sync-remote-graphs
     (p/let [graphs (invoke-global config :thread-api/db-sync-list-remote-graphs [])]
