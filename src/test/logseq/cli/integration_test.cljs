@@ -264,6 +264,52 @@
                             (set! cli-server/ensure-server! orig-ensure-server!)
                             (set! transport/invoke orig-invoke)))))))
 
+(deftest test-cli-sync-upload-with-mocked-worker-bootstrap
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-sync-upload-cli")
+               upload-repo "sync-upload-graph"
+               orig-ensure-server! cli-server/ensure-server!
+               orig-invoke transport/invoke
+               invoke-calls (atom [])]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       create-result (run-cli ["graph" "create" "--graph" upload-repo] data-dir cfg-path)
+                       create-payload (parse-json-output-safe create-result "graph create")
+                       _ (is (= 0 (:exit-code create-result)))
+                       _ (is (= "ok" (:status create-payload)))
+                       _ (set! cli-server/ensure-server!
+                               (fn [config _repo]
+                                 (p/resolved (assoc config :base-url "http://example"))))
+                       _ (set! transport/invoke
+                               (fn [_ method _direct-pass? args]
+                                 (swap! invoke-calls conj [method args])
+                                 (case method
+                                   :thread-api/set-db-sync-config
+                                   (p/resolved nil)
+
+                                   :thread-api/db-sync-upload-graph
+                                   (p/resolved {:graph-id "created-graph-id"})
+
+                                   (p/resolved nil))))
+                       upload-result (run-cli ["--graph" upload-repo "sync" "upload"] data-dir cfg-path)
+                       upload-payload (parse-json-output-safe upload-result "sync upload")]
+                 (is (= 0 (:exit-code upload-result)))
+                 (is (= "ok" (:status upload-payload)))
+                 (is (= "created-graph-id" (get-in upload-payload [:data :graph-id])))
+                 (is (= [[:thread-api/set-db-sync-config [{:ws-url nil
+                                                           :http-base nil
+                                                           :auth-token nil
+                                                           :e2ee-password nil}]]
+                         [:thread-api/db-sync-upload-graph ["logseq_db_sync-upload-graph"]]]
+                        @invoke-calls))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))
+               (p/finally (fn []
+                            (set! cli-server/ensure-server! orig-ensure-server!)
+                            (set! transport/invoke orig-invoke)))))))
+
 (deftest ^:long test-cli-graph-list
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker")]
