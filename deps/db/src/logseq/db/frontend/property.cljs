@@ -567,8 +567,8 @@
                                              :schema {:type :map
                                                       :hide? true
                                                       :public? false}}
-     :logseq.property.asset/align {:title "Image alignment"
-                                   :schema {:type :string
+     :logseq.property.asset/align {:title "Asset alignment"
+                                   :schema {:type :keyword
                                             :hide? true
                                             :public? false}
                                    :queryable? false}

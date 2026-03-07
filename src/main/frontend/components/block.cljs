@@ -202,13 +202,24 @@
             (on-dimensions (.-naturalWidth img) (.-naturalHeight img))))
     (set! (.-src img) url)))
 
+(defn- normalize-asset-align
+  [asset-align]
+  (cond
+    (keyword? asset-align) asset-align
+    (string? asset-align) (case asset-align
+                            "left" :left
+                            "center" :center
+                            "right" :right
+                            nil)
+    :else nil))
+
 (defonce *resizing-image? (atom false))
 
 (rum/defc ^:large-vars/cleanup-todo asset-container
   [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text]}]
   (let [asset-width (:logseq.property.asset/width asset-block)
         asset-height (:logseq.property.asset/height asset-block)
-        asset-align (:logseq.property.asset/align asset-block)]
+        asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))]
     (hooks/use-effect!
      (fn []
        (when (:block/uuid asset-block)
@@ -302,25 +313,25 @@
                     (ui/icon "layout-align-left") (t :asset/align)])
                   (shui/dropdown-menu-sub-content
                    (shui/dropdown-menu-item
-                    {:on-click #(handle-set-align! "left")}
+                    {:on-click #(handle-set-align! :left)}
                     [:span.flex.items-center.gap-2
                      (ui/icon "layout-align-left")
                      (t :asset/align-left)
-                     (when (or (nil? asset-align) (= asset-align "left"))
+                     (when (or (nil? asset-align) (= asset-align :left))
                        (ui/icon "check"))])
                    (shui/dropdown-menu-item
-                    {:on-click #(handle-set-align! "center")}
+                    {:on-click #(handle-set-align! :center)}
                     [:span.flex.items-center.gap-2
                      (ui/icon "layout-align-center")
                      (t :asset/align-center)
-                     (when (= asset-align "center")
+                     (when (= asset-align :center)
                        (ui/icon "check"))])
                    (shui/dropdown-menu-item
-                    {:on-click #(handle-set-align! "right")}
+                    {:on-click #(handle-set-align! :right)}
                     [:span.flex.items-center.gap-2
                      (ui/icon "layout-align-right")
                      (t :asset/align-right)
-                     (when (= asset-align "right")
+                     (when (= asset-align :right)
                        (ui/icon "check"))])))
 
                  (shui/dropdown-menu-item
@@ -354,7 +365,7 @@
   (let [breadcrumb? (:breadcrumb? config)
         positioned? (:property-position config)
         asset-block (:asset-block config)
-        asset-align (:logseq.property.asset/align asset-block)
+        asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))
         width (:width metadata)
         *width (get state ::size)
         width (or @*width width)
@@ -381,8 +392,8 @@
                                  (editor-handler/select-block! block-uuid)))))}
        [:div.ls-resize-image.rounded-md
         {:class (case asset-align
-                  "center" "align-center"
-                  "right" "align-right"
+                  :center "align-center"
+                  :right "align-right"
                   "align-left")}
         asset-container-cp
         (resize-image-handles

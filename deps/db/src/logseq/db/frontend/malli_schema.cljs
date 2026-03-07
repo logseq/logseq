@@ -511,7 +511,7 @@
      [:logseq.property.asset/size :int]
      [:logseq.property.asset/width {:optional true} :int]
      [:logseq.property.asset/height {:optional true} :int]
-     [:logseq.property.asset/align {:optional true} :string]]
+     [:logseq.property.asset/align {:optional true} :keyword]]
     block-attrs
     page-or-block-attrs)))
 
