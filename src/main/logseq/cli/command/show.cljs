@@ -29,13 +29,6 @@
   []
   (.toString (fs/readFileSync 0) "utf8"))
 
-(defn- stdin-available?
-  []
-  (try
-    (let [stat (fs/fstatSync 0)]
-      (or (.isFIFO stat) (.isFile stat)))
-    (catch :default _ false)))
-
 (defn- normalize-stdin-id
   [value]
   (let [text (string/trim (or value ""))]
