@@ -137,8 +137,25 @@
   (when-let [orig @*orig-print-fn]
     (set-print-fn! orig)))
 
-(use-fixtures :each {:before quiet-debug-output-before
-                     :after quiet-debug-output-after})
+(defn- reset-daemon-state!
+  []
+  (reset! @#'db-worker-node/*ready? false)
+  (reset! @#'db-worker-node/*sse-clients #{})
+  (reset! @#'db-worker-node/*lock-info nil)
+  (reset! @#'db-worker-node/*file-handler nil))
+
+(defn- normalize-db-worker-state-before
+  []
+  (quiet-debug-output-before)
+  (reset-daemon-state!))
+
+(defn- normalize-db-worker-state-after
+  []
+  (reset-daemon-state!)
+  (quiet-debug-output-after))
+
+(use-fixtures :each {:before normalize-db-worker-state-before
+                     :after normalize-db-worker-state-after})
 
 (deftest db-worker-node-data-dir-permission-error
   (async done
@@ -303,24 +320,20 @@
 (deftest db-worker-node-handle-event-encodes-sse-json-payload
   (let [handle-event! #'db-worker-node/handle-event!
         *sse-clients @#'db-worker-node/*sse-clients
-        old-clients @*sse-clients
         writes (atom [])
         fake-res #js {:write (fn [message]
                                (swap! writes conj message))}]
-    (try
-      (reset! *sse-clients #{fake-res})
-      (handle-event! "sync-db-changes" {:repo "graph-a"})
-      (is (= 1 (count @writes)))
-      (let [raw-message (first @writes)
-            event-json (-> raw-message
-                           (string/replace-first #"^data: " "")
-                           (string/replace #"\n\n$" ""))
-            parsed (js->clj (js/JSON.parse event-json) :keywordize-keys true)]
-        (is (= "sync-db-changes" (:type parsed)))
-        (is (= {:repo "graph-a"}
-               (ldb/read-transit-str (:payload parsed)))))
-      (finally
-        (reset! *sse-clients old-clients)))))
+    (reset! *sse-clients #{fake-res})
+    (handle-event! "sync-db-changes" {:repo "graph-a"})
+    (is (= 1 (count @writes)))
+    (let [raw-message (first @writes)
+          event-json (-> raw-message
+                         (string/replace-first #"^data: " "")
+                         (string/replace #"\n\n$" ""))
+          parsed (js->clj (js/JSON.parse event-json) :keywordize-keys true)]
+      (is (= "sync-db-changes" (:type parsed)))
+      (is (= {:repo "graph-a"}
+             (ldb/read-transit-str (:payload parsed)))))))
 
 (deftest db-worker-node-help-omits-auth-token
   (let [show-help! #'db-worker-node/show-help!
@@ -344,97 +357,75 @@
          (let [data-dir (node-helper/create-tmp-dir "db-worker-create-empty-start")
                repo (str "logseq_db_create_empty_start_" (subs (str (random-uuid)) 0 8))
                lock-file-path (lock-path data-dir repo)
-               invoke-calls (atom [])
-               original-platform platform-node/node-platform
-               original-init-core db-core/init-core!
-               original-ensure-lock db-lock/ensure-lock!
-               original-update-lock db-lock/update-lock!]
-           (set! platform-node/node-platform (fn [_opts] #js {}))
-           (set! db-core/init-core!
-                 (fn [_platform]
-                   #js {:remoteInvoke (fn [method direct-pass? args]
-                                        (swap! invoke-calls conj
-                                               [method
-                                                direct-pass?
-                                                (if direct-pass?
-                                                  (vec (js->clj args))
-                                                  (ldb/read-transit-str args))])
-                                        (p/resolved nil))}))
-           (set! db-lock/ensure-lock!
-                 (fn [_]
-                   (p/resolved {:path lock-file-path
-                                :lock {:repo repo
-                                       :pid (.-pid js/process)
-                                       :host "127.0.0.1"
-                                       :port 0
-                                       :lock-id "create-empty-lock"}})))
-           (set! db-lock/update-lock! (fn [_path lock] lock))
-           (-> (p/let [{:keys [stop!]} (db-worker-node/start-daemon! {:data-dir data-dir
-                                                                      :repo repo
-                                                                      :create-empty-db? true
-                                                                      :log-level "error"})
-                       _ (is (= ["thread-api/init" true []]
-                                (first @invoke-calls)))
-                       _ (is (= ["thread-api/create-or-open-db" false [repo {:datoms []}]]
-                                (second @invoke-calls)))
-                       _ (stop!)]
-                 true)
+               invoke-calls (atom [])]
+           (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
+                               db-core/init-core! (fn [_platform]
+                                                    #js {:remoteInvoke (fn [method direct-pass? args]
+                                                                         (swap! invoke-calls conj
+                                                                                [method
+                                                                                 direct-pass?
+                                                                                 (if direct-pass?
+                                                                                   (vec (js->clj args))
+                                                                                   (ldb/read-transit-str args))])
+                                                                         (p/resolved nil))})
+                               db-lock/ensure-lock! (fn [_]
+                                                      (p/resolved {:path lock-file-path
+                                                                   :lock {:repo repo
+                                                                          :pid (.-pid js/process)
+                                                                          :host "127.0.0.1"
+                                                                          :port 0
+                                                                          :lock-id "create-empty-lock"}}))
+                               db-lock/update-lock! (fn [_path lock] lock)]
+                 (p/let [{:keys [stop!]} (db-worker-node/start-daemon! {:data-dir data-dir
+                                                                        :repo repo
+                                                                        :create-empty-db? true
+                                                                        :log-level "error"})
+                         _ (is (= ["thread-api/init" true []]
+                                  (first @invoke-calls)))
+                         _ (is (= ["thread-api/create-or-open-db" false [repo {:datoms []}]]
+                                  (second @invoke-calls)))
+                         _ (stop!)]
+                   true))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! platform-node/node-platform original-platform)
-                            (set! db-core/init-core! original-init-core)
-                            (set! db-lock/ensure-lock! original-ensure-lock)
-                            (set! db-lock/update-lock! original-update-lock)
-                            (done)))))))
+               (p/finally done)))))
 
 (deftest db-worker-node-start-daemon-uses-default-startup-opts-without-create-empty
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-default-start")
                repo (str "logseq_db_default_start_" (subs (str (random-uuid)) 0 8))
                lock-file-path (lock-path data-dir repo)
-               invoke-calls (atom [])
-               original-platform platform-node/node-platform
-               original-init-core db-core/init-core!
-               original-ensure-lock db-lock/ensure-lock!
-               original-update-lock db-lock/update-lock!]
-           (set! platform-node/node-platform (fn [_opts] #js {}))
-           (set! db-core/init-core!
-                 (fn [_platform]
-                   #js {:remoteInvoke (fn [method direct-pass? args]
-                                        (swap! invoke-calls conj
-                                               [method
-                                                direct-pass?
-                                                (if direct-pass?
-                                                  (vec (js->clj args))
-                                                  (ldb/read-transit-str args))])
-                                        (p/resolved nil))}))
-           (set! db-lock/ensure-lock!
-                 (fn [_]
-                   (p/resolved {:path lock-file-path
-                                :lock {:repo repo
-                                       :pid (.-pid js/process)
-                                       :host "127.0.0.1"
-                                       :port 0
-                                       :lock-id "default-lock"}})))
-           (set! db-lock/update-lock! (fn [_path lock] lock))
-           (-> (p/let [{:keys [stop!]} (db-worker-node/start-daemon! {:data-dir data-dir
-                                                                      :repo repo
-                                                                      :log-level "error"})
-                       _ (is (= ["thread-api/init" true []]
-                                (first @invoke-calls)))
-                       _ (is (= ["thread-api/create-or-open-db" false [repo {}]]
-                                (second @invoke-calls)))
-                       _ (stop!)]
-                 true)
+               invoke-calls (atom [])]
+           (-> (p/with-redefs [platform-node/node-platform (fn [_opts] #js {})
+                               db-core/init-core! (fn [_platform]
+                                                    #js {:remoteInvoke (fn [method direct-pass? args]
+                                                                         (swap! invoke-calls conj
+                                                                                [method
+                                                                                 direct-pass?
+                                                                                 (if direct-pass?
+                                                                                   (vec (js->clj args))
+                                                                                   (ldb/read-transit-str args))])
+                                                                         (p/resolved nil))})
+                               db-lock/ensure-lock! (fn [_]
+                                                      (p/resolved {:path lock-file-path
+                                                                   :lock {:repo repo
+                                                                          :pid (.-pid js/process)
+                                                                          :host "127.0.0.1"
+                                                                          :port 0
+                                                                          :lock-id "default-lock"}}))
+                               db-lock/update-lock! (fn [_path lock] lock)]
+                 (p/let [{:keys [stop!]} (db-worker-node/start-daemon! {:data-dir data-dir
+                                                                        :repo repo
+                                                                        :log-level "error"})
+                         _ (is (= ["thread-api/init" true []]
+                                  (first @invoke-calls)))
+                         _ (is (= ["thread-api/create-or-open-db" false [repo {}]]
+                                  (second @invoke-calls)))
+                         _ (stop!)]
+                   true))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
-               (p/finally (fn []
-                            (set! platform-node/node-platform original-platform)
-                            (set! db-core/init-core! original-init-core)
-                            (set! db-lock/ensure-lock! original-ensure-lock)
-                            (set! db-lock/update-lock! original-update-lock)
-                            (done)))))))
+               (p/finally done)))))
 
 (deftest db-worker-node-repo-error-handles-keyword-methods
   (let [repo-error #'db-worker-node/repo-error
