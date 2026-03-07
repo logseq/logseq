@@ -297,35 +297,26 @@
                                         :t 18
                                         :txs [{:t 18 :tx tx-payload}]}))
                  local-tx (atom 16)
-                 orig-get-local-tx client-op/get-local-tx
-                 orig-update-local-tx client-op/update-local-tx
-                 orig-graph-e2ee? sync-crypt/graph-e2ee?
-                 orig-ensure-graph-aes-key sync-crypt/<ensure-graph-aes-key
                  client {:repo test-repo
                          :graph-id "graph-1"
                          :inflight (atom [])
                          :last-sync-error (atom nil)
                          :online-users (atom [])
                          :ws-state (atom :open)}]
-             (set! client-op/get-local-tx (fn [_repo] @local-tx))
-             (set! client-op/update-local-tx (fn [_repo tx] (reset! local-tx tx)))
-             (set! sync-crypt/graph-e2ee? (fn [_repo] true))
-             (set! sync-crypt/<ensure-graph-aes-key (fn [_repo _graph-id]
-                                                      (p/resolved nil)))
-             (-> (p/let [_ (#'db-sync/handle-message! test-repo client raw-message)
-                         error-state @(:last-sync-error client)]
-                   (is (= 16 @local-tx))
-                   (is (= :missing-field (:code error-state)))
-                   (is (= "missing-field" (:message error-state)))
-                   (is (= :aes-key (get-in error-state [:data :field]))))
+             (-> (p/with-redefs [client-op/get-local-tx (fn [_repo] @local-tx)
+                                 client-op/update-local-tx (fn [_repo tx] (reset! local-tx tx))
+                                 sync-crypt/graph-e2ee? (fn [_repo] true)
+                                 sync-crypt/<ensure-graph-aes-key (fn [_repo _graph-id]
+                                                                    (p/resolved nil))]
+                   (p/let [_ (#'db-sync/handle-message! test-repo client raw-message)
+                           error-state @(:last-sync-error client)]
+                     (is (= 16 @local-tx))
+                     (is (= :missing-field (:code error-state)))
+                     (is (= "missing-field" (:message error-state)))
+                     (is (= :aes-key (get-in error-state [:data :field])))))
                  (p/catch (fn [e]
                             (is false (str "unexpected error: " e))))
-                 (p/finally (fn []
-                              (set! client-op/get-local-tx orig-get-local-tx)
-                              (set! client-op/update-local-tx orig-update-local-tx)
-                              (set! sync-crypt/graph-e2ee? orig-graph-e2ee?)
-                              (set! sync-crypt/<ensure-graph-aes-key orig-ensure-graph-aes-key)
-                              (done))))))))
+                 (p/finally done))))))
 
 (deftest pull-ok-out-of-order-stale-response-is-ignored-test
   (testing "late stale pull/ok should not overwrite a newer already-applied tx"
@@ -351,11 +342,13 @@
              (reset! db-sync/*repo->latest-remote-tx {})
              (with-datascript-conns conn client-ops-conn
                (fn []
-                 (-> (p/let [_ (#'db-sync/handle-message! test-repo client raw-new)
-                             _ (#'db-sync/handle-message! test-repo client raw-stale)
-                             parent' (d/entity @conn parent-id)]
-                       (is (= "remote-new-title" (:block/title parent')))
-                       (is (= 2 (client-op/get-local-tx test-repo))))
+                 (-> (p/with-redefs [sync-crypt/graph-e2ee? (fn [_repo] false)]
+                       (p/let [_ (client-op/update-local-tx test-repo 0)
+                               _ (#'db-sync/handle-message! test-repo client raw-new)
+                               _ (#'db-sync/handle-message! test-repo client raw-stale)
+                               parent' (d/entity @conn parent-id)]
+                         (is (= "remote-new-title" (:block/title parent')))
+                         (is (= 2 (client-op/get-local-tx test-repo)))))
                      (p/finally (fn []
                                   (reset! db-sync/*repo->latest-remote-tx latest-prev)
                                   (done))))))))))
@@ -1320,10 +1313,12 @@
 (deftest ensure-upload-graph-identity-creates-remote-graph-when-local-graph-id-missing-test
   (testing "first upload bootstrap creates and persists a remote graph when local metadata is missing"
     (async done
-           (let [client-ops-conn (d/create-conn client-op/schema-in-db)
+           (let [conn (d/create-conn {})
+                 client-ops-conn (d/create-conn client-op/schema-in-db)
                  self-prev (js* "globalThis.self")
                  fetch-prev js/fetch
                  config-prev @worker-state/*db-sync-config
+                 created-graph-id "c52bf9d4-3a95-4f17-9c8c-7f86eef5f75d"
                  fetch-calls (atom [])]
              (aset js/globalThis "self" #js {:postMessage (fn [_] nil)})
              (reset! worker-state/*db-sync-config {:http-base "https://example.com"
@@ -1339,19 +1334,21 @@
 
                          (and (= "https://example.com/graphs" url)
                               (= "POST" method))
-                         (json-response 200 {:graph-id "created-graph-id"
+                         (json-response 200 {:graph-id created-graph-id
                                              :graph-e2ee? false})
 
                          :else
                          (js/Promise.reject (js/Error. (str "unexpected fetch url: " method " " url)))))))
-             (with-worker-conns {} {test-repo client-ops-conn}
+             (with-worker-conns {test-repo conn} {test-repo client-ops-conn}
                (fn []
                  (with-redefs [db-sync/coerce-http-request (fn [_schema-key body] body)]
                    (-> (p/let [result (#'db-sync/<ensure-upload-graph-identity! test-repo)]
-                         (is (= {:graph-id "created-graph-id"
+                         (is (= {:graph-id created-graph-id
                                  :graph-e2ee? false}
                                 result))
-                         (is (= "created-graph-id" (client-op/get-graph-uuid test-repo)))
+                         (is (= created-graph-id (client-op/get-graph-uuid test-repo)))
+                         (is (= created-graph-id
+                                (some-> (ldb/get-graph-rtc-uuid @conn) str)))
                          (is (= [{:url "https://example.com/graphs" :method "GET"}
                                  {:url "https://example.com/graphs" :method "POST"}]
                                 @fetch-calls)))
@@ -1366,10 +1363,12 @@
 (deftest ensure-upload-graph-identity-reuses-existing-remote-graph-when-local-graph-id-missing-test
   (testing "first upload bootstrap reuses a same-name remote graph instead of creating a duplicate"
     (async done
-           (let [client-ops-conn (d/create-conn client-op/schema-in-db)
+           (let [conn (d/create-conn {})
+                 client-ops-conn (d/create-conn client-op/schema-in-db)
                  self-prev (js* "globalThis.self")
                  fetch-prev js/fetch
                  config-prev @worker-state/*db-sync-config
+                 remote-graph-id "56cfcfc5-035a-4c6a-a5ba-70fe9cc27530"
                  fetch-calls (atom [])]
              (aset js/globalThis "self" #js {:postMessage (fn [_] nil)})
              (reset! worker-state/*db-sync-config {:http-base "https://example.com"
@@ -1382,20 +1381,22 @@
                          (and (= "https://example.com/graphs" url)
                               (= "GET" method))
                          (json-response 200 {:graphs [{:graph-name test-repo
-                                                       :graph-id "remote-graph-id"
+                                                       :graph-id remote-graph-id
                                                        :graph-e2ee? false
                                                        :created-at 1
                                                        :updated-at 1}]})
 
                          :else
                          (js/Promise.reject (js/Error. (str "unexpected fetch url: " method " " url)))))))
-             (with-worker-conns {} {test-repo client-ops-conn}
+             (with-worker-conns {test-repo conn} {test-repo client-ops-conn}
                (fn []
                  (-> (p/let [result (#'db-sync/<ensure-upload-graph-identity! test-repo)]
-                       (is (= {:graph-id "remote-graph-id"
+                       (is (= {:graph-id remote-graph-id
                                :graph-e2ee? false}
                               result))
-                       (is (= "remote-graph-id" (client-op/get-graph-uuid test-repo)))
+                       (is (= remote-graph-id (client-op/get-graph-uuid test-repo)))
+                       (is (= remote-graph-id
+                              (some-> (ldb/get-graph-rtc-uuid @conn) str)))
                        (is (= [{:url "https://example.com/graphs" :method "GET"}]
                               @fetch-calls)))
                      (p/catch (fn [e]
@@ -1489,6 +1490,37 @@
                                     (set! js/fetch fetch-prev)
                                     (reset! worker-state/*db-sync-config config-prev)
                                     (done)))))))))))
+
+(deftest ensure-upload-graph-identity-backfills-graph-kv-from-client-op-fallback-test
+  (testing "upload identity fallback backfills graph kv and stays idempotent"
+    (async done
+           (let [conn (d/create-conn {})
+                 client-ops-conn (d/create-conn client-op/schema-in-db)
+                 fallback-graph-id "6f3b0d47-4a62-4da7-8e56-7e5dbfbe3f47"
+                 list-calls (atom 0)]
+             (with-worker-conns {test-repo conn} {test-repo client-ops-conn}
+               (fn []
+                 (with-redefs [sync-crypt/graph-e2ee? (fn [_repo] nil)
+                               db-sync/get-graph-id (fn [_repo] fallback-graph-id)
+                               db-sync/list-remote-graphs! (fn []
+                                                             (swap! list-calls inc)
+                                                             (p/resolved []))]
+                   (is (nil? (client-op/get-graph-uuid test-repo)))
+                   (is (nil? (ldb/get-graph-rtc-uuid @conn)))
+                   (let [first-result-p (#'db-sync/<ensure-upload-graph-identity! test-repo)
+                         second-result-p (#'db-sync/<ensure-upload-graph-identity! test-repo)]
+                     (-> (p/let [first-result first-result-p
+                                 second-result second-result-p]
+                           (is (= fallback-graph-id (:graph-id first-result)))
+                           (is (= fallback-graph-id (:graph-id second-result)))
+                           (is (= (:graph-e2ee? first-result)
+                                  (:graph-e2ee? second-result)))
+                           (is (= fallback-graph-id
+                                  (some-> (ldb/get-graph-rtc-uuid @conn) str)))
+                           (is (= 0 @list-calls)))
+                         (p/catch (fn [e]
+                                    (is false (str "unexpected error: " e))))
+                         (p/finally done))))))))))
 
 (deftest ^:long rehydrate-large-title-test
   (testing "rehydrate fills empty title from object storage"
