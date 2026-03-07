@@ -153,6 +153,40 @@
                           (is false (str e))
                           (done)))))))
 
+(deftest rtc-upload-graph-persists-local-e2ee-choice-and-defers-bootstrap-to-worker-test
+  (async done
+         (let [tx-called (atom nil)
+               worker-calls (atom [])
+               get-remote-graphs-calls (atom 0)
+               rtc-start-calls (atom 0)]
+           (-> (p/with-redefs [ldb/transact! (fn [repo tx-data]
+                                               (reset! tx-called {:repo repo :tx-data tx-data})
+                                               nil)
+                               state/<invoke-db-worker (fn [& args]
+                                                         (swap! worker-calls conj args)
+                                                         (p/resolved {:graph-id "graph-1"}))
+                               db-sync/<get-remote-graphs (fn []
+                                                            (swap! get-remote-graphs-calls inc)
+                                                            (p/resolved []))
+                               db-sync/<rtc-start! (fn [_repo]
+                                                     (swap! rtc-start-calls inc)
+                                                     (p/resolved nil))]
+                 (db-sync/<rtc-upload-graph! "logseq_db_demo" false))
+               (p/then (fn [_]
+                         (is (= "logseq_db_demo" (:repo @tx-called)))
+                         (is (= :logseq.kv/graph-rtc-e2ee?
+                                (get-in @tx-called [:tx-data 0 :db/ident])))
+                         (is (= false
+                                (get-in @tx-called [:tx-data 0 :kv/value])))
+                         (is (= [[:thread-api/db-sync-upload-graph "logseq_db_demo"]]
+                                @worker-calls))
+                         (is (= 1 @get-remote-graphs-calls))
+                         (is (= 1 @rtc-start-calls))
+                         (done)))
+               (p/catch (fn [e]
+                          (is false (str e))
+                          (done)))))))
+
 (deftest get-remote-graphs-canonicalizes-prefixed-graph-names
   (async done
     (let [set-state-calls (atom [])]

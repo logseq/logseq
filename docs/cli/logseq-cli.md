@@ -103,6 +103,16 @@ Sync commands:
 - `sync config get [--graph <name>] ws-url|http-base|auth-token|e2ee-password` - get db-sync runtime config key
 - `sync config unset [--graph <name>] ws-url|http-base|auth-token|e2ee-password` - remove db-sync runtime config key
 
+Sync upload behavior:
+- `sync upload` requires `--graph <name>`.
+- The CLI starts or reuses that graph's `db-worker-node`, applies the current sync config, and uploads the local snapshot only after the worker has resolved a usable remote graph id.
+- If the local graph already has sync metadata, upload reuses the stored remote `graph-id`.
+- If the local graph does not have a stored remote `graph-id`, upload first lists visible remote graphs and reuses an exact same-name match when one exists.
+- If no same-name remote graph exists, upload creates a new remote graph and persists the returned remote metadata locally before snapshot transfer.
+- Fresh uploads default to encrypted remote graph creation unless local sync metadata explicitly marks the graph as non-e2ee. In headless CLI mode, set `e2ee-password` via `sync config set` (or in `--config`) before uploading encrypted graphs.
+- `sync upload` returns a real error instead of false success when auth, remote graph bootstrap, or snapshot upload fails.
+- Common upload failures include missing/invalid `auth-token`, missing `http-base`, remote graph creation failure, snapshot upload failure, and local DB/worker startup failure.
+
 Sync download behavior:
 - `sync download` requires `--graph <name>`.
 - If a local graph with the same name already exists, the CLI returns `graph-exists`.

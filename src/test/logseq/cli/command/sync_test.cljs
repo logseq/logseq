@@ -245,6 +245,38 @@
                        (set! transport/invoke orig-invoke)
                        (done)))))))
 
+(deftest test-execute-sync-upload-propagates-worker-error
+  (async done
+    (let [orig-ensure-server! cli-server/ensure-server!
+          orig-invoke transport/invoke]
+      (set! cli-server/ensure-server! (fn [config _repo]
+                                        (p/resolved (assoc config :base-url "http://example"))))
+      (set! transport/invoke (fn [_ method _direct-pass? _args]
+                               (case method
+                                 :thread-api/set-db-sync-config
+                                 (p/resolved nil)
+
+                                 :thread-api/db-sync-upload-graph
+                                 (p/rejected (ex-info "snapshot upload failed"
+                                                      {:code :snapshot-upload-failed
+                                                       :status 500
+                                                       :graph-id "graph-1"}))
+
+                                 (p/resolved nil))))
+      (-> (p/let [result (sync-command/execute {:type :sync-upload
+                                                :repo "logseq_db_demo"}
+                                               {:data-dir "/tmp"})]
+            (is (= :error (:status result)))
+            (is (= :snapshot-upload-failed (get-in result [:error :code])))
+            (is (= 500 (get-in result [:error :context :status])))
+            (is (= "graph-1" (get-in result [:error :context :graph-id]))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (set! cli-server/ensure-server! orig-ensure-server!)
+                       (set! transport/invoke orig-invoke)
+                       (done)))))))
+
 (deftest test-execute-sync-download
   (async done
     (let [orig-ensure-server! cli-server/ensure-server!
