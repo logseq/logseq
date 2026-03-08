@@ -52,8 +52,9 @@
                    ("page-up") ""
                    ("page-down") ""
                    ("esc" "escape") "Esc"
-                   ("backspace") "Backspace"
+                   ("backspace") "⌫"
                    ("delete") "Delete"
+                   ("caps-lock" "capslock") "⇪"
                    (nil) ""
                    (name key)))
         ;; If result is a single letter (a-z), uppercase it
@@ -310,7 +311,13 @@
                      (first binding)  ; combo: nested collection like [["shift" "cmd"]]
 
                      (coll? binding)
-                     (let [flattened (mapcat #(if (coll? %) % [%]) binding)]
+                     (let [flattened (mapcat (fn [item]
+                                               (cond
+                                                 (coll? item) item
+                                                 (and (string? item) (string/includes? item "+"))
+                                                 (string/split item #"\+")  ; split combo strings like "meta+caps-lock"
+                                                 :else [item]))
+                                             binding)]
                        (if (every? string? flattened)
                          flattened  ; separate: flat collection like ["cmd" "k"] or ["⇧" "g"]
                          (map str flattened)))  ; convert any non-strings to strings
