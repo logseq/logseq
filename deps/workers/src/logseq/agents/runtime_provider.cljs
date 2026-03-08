@@ -418,9 +418,10 @@
   [^js env]
   (parse-int (env-str env "E2B_HEALTH_INTERVAL_MS") 300))
 
+;; default to 1 hour
 (defn- e2b-sandbox-timeout-ms
   [^js env]
-  (parse-int (env-str env "E2B_SANDBOX_TIMEOUT_MS") (* 5 60 1000)))
+  (parse-int (env-str env "E2B_SANDBOX_TIMEOUT_MS") (* 60 60 1000)))
 
 (defn- e2b-api-opts
   [^js env]
@@ -655,8 +656,8 @@
                           "runtime-provider" "e2b"}
                    (string? session-id) (assoc "runtime-session-id" session-id))]
     (cond-> {:timeoutMs timeout-ms
-             :lifecycle {:onTimeout "pause"
-                         :autoResume true}}
+             :autoPause true
+             :autoResume true}
       (seq env-vars) (assoc :envs env-vars)
       (string? session-id) (assoc :metadata metadata))))
 
@@ -786,33 +787,6 @@
         (throw (ex-info "e2b snapshot create returned invalid id"
                         {:reason :invalid-snapshot-id
                          :snapshot snapshot}))))))
-
-(defn- <e2b-create-sandbox-from-checkpoint!
-  [^js env checkpoint create-opts]
-  (let [snapshot-id (:snapshot-id checkpoint)]
-    (if-not (string? snapshot-id)
-      (p/resolved nil)
-      (-> (<e2b-create-sandbox! env snapshot-id create-opts)
-          (p/then (fn [sandbox]
-                    (log/debug :agent/e2b-snapshot-restored
-                               {:snapshot-id snapshot-id
-                                :source "task-checkpoint"})
-                    {:sandbox sandbox
-                     :snapshot-id snapshot-id
-                     :restored? true}))
-          (p/catch (fn [error]
-                     (log/error :agent/e2b-snapshot-restore-failed
-                                {:snapshot-id snapshot-id
-                                 :source "task-checkpoint"
-                                 :error (str error)})
-                     nil))))))
-
-(defn- <e2b-create-sandbox-for-restore!
-  [^js env checkpoint create-opts create-fn]
-  (p/let [checkpoint-restore (<e2b-create-sandbox-from-checkpoint! env checkpoint create-opts)]
-    (if (map? checkpoint-restore)
-      checkpoint-restore
-      (create-fn))))
 
 (defn- <e2b-runtime-base-url!
   [^js env runtime]
@@ -1016,34 +990,23 @@
   (<provision-runtime! [_ session-id task]
     (let [agent-token (e2b-agent-token env nil)
           port (e2b-agent-port env nil)
-          payload (session-payload task)
-          repo-dir (get-repo-dir session-id task "e2b")
-          checkpoint (task-sandbox-checkpoint task)
-          backup-key (or (:backup-key checkpoint)
-                         (repo-backup-key task))]
+          payload (session-payload task)]
       (p/let [env-vars (<e2b-agent-env-vars! env task)
               create-opts (e2b-create-opts env session-id env-vars)
-              {:keys [sandbox snapshot-id restored? template]} (<e2b-create-sandbox-for-restore! env
-                                                                                                 checkpoint
-                                                                                                 create-opts
-                                                                                                 (fn []
-                                                                                                   (p/let [{:keys [sandbox template]} (<e2b-create-sandbox-with-template-recovery! env
-                                                                                                                                                                                   task
-                                                                                                                                                                                   create-opts)]
-                                                                                                     {:sandbox sandbox
-                                                                                                      :snapshot-id nil
-                                                                                                      :restored? false
-                                                                                                      :template template})))
+              {:keys [sandbox template]}
+              (p/let [{:keys [sandbox template]} (<e2b-create-sandbox-with-template-recovery! env task create-opts)]
+                {:sandbox sandbox
+                 :template template})
               _ (<e2b-ensure-running! env sandbox session-id task port agent-token env-vars)
-              ;; _ (when-not restored?
-              ;;     (p/catch
-              ;;      (<e2b-clone-repo! env sandbox session-id task)
-              ;;      (fn [error]
-              ;;        (log/error :agent/e2b-repo-clone-failed
-              ;;                   {:session-id session-id
-              ;;                    :error (str error)
-              ;;                    :error-data (ex-data error)})
-              ;;        nil)))
+              _ (when-not template
+                  (p/catch
+                   (<e2b-clone-repo! env sandbox session-id task)
+                   (fn [error]
+                     (log/error :agent/e2b-repo-clone-failed
+                                {:session-id session-id
+                                 :error (str error)
+                                 :error-data (ex-data error)})
+                     nil)))
               base-url (e2b-sandbox-host sandbox port)
               response (sandbox/<create-session base-url agent-token session-id payload)
               sandbox-id (e2b-sandbox-id sandbox)]
@@ -1057,10 +1020,7 @@
          :base-url base-url
          :agent-token agent-token
          :session-id (:session-id response)
-         :backup-key backup-key
-         :backup-dir repo-dir
-         :template template
-         :snapshot-id snapshot-id})))
+         :template template})))
 
   (<open-events-stream! [_ runtime]
     (let [agent-token (e2b-agent-token env runtime)]

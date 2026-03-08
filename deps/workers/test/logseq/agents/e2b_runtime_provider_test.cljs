@@ -43,6 +43,7 @@
                  (fn [& args]
                    (let [opts (js->clj (last args) :keywordize-keys true)]
                      (is (= "e2b-key" (:apiKey opts)))
+                     (is (true? (:autoPause opts)))
                      (is (= "pause" (get-in opts [:lifecycle :onTimeout])))
                      (js/Promise.resolve
                       #js {:sandboxId "e2b-sbx-1"
@@ -395,6 +396,7 @@
                                 :template nil}
                                (select-keys (second @calls) [:type :argc :template])))
                         (is (= "e2b-key" (get-in (first @calls) [:opts :apiKey])))
+                        (is (true? (get-in (first @calls) [:opts :autoPause])))
                         (is (= "pause" (get-in (first @calls) [:opts :lifecycle :onTimeout])))
                         (is (= "sess-e2b-fallback-template"
                                (get-in (first @calls) [:opts :metadata :session-id])))
