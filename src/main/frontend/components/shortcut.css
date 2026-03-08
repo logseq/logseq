@@ -79,6 +79,24 @@
       li {
         @apply text-[15px] px-1;
 
+        &.shortcut-row {
+          @apply rounded-md cursor-pointer select-none py-1 px-2 -mx-1;
+          transition: background-color 100ms ease, color 100ms ease;
+
+          &:hover {
+            background-color: var(--rx-gray-04, rgba(255, 255, 255, 0.06));
+          }
+
+          &:active {
+            @apply opacity-80;
+          }
+
+          /* Active row (popover open) — stronger than hover so it stays visible */
+          &.active {
+            background-color: var(--rx-gray-05, rgba(255, 255, 255, 0.1));
+          }
+        }
+
         &.th {
           @apply rounded mb-2 sticky top-0 cursor-pointer
           select-none active:opacity-80 px-2 py-1 z-[1];
@@ -92,56 +110,210 @@
 
         .action-wrap {
           @apply flex space-x-2 items-center flex-nowrap
-          select-none active:opacity-70;
+          select-none;
 
           &.disabled {
             @apply opacity-60 cursor-default;
           }
         }
       }
+
+      /* CSS-only hover dimming: dim all rows except hovered */
+      &:hover li.shortcut-row:not(:hover):not(.active) {
+        color: var(--rx-gray-11);
+      }
+
+      /* When popover is open: dim non-active rows, but restore on hover */
+      &:has(.active) li.shortcut-row:not(.active) {
+        color: var(--rx-gray-11);
+
+        &:hover {
+          color: var(--rx-gray-12);
+        }
+      }
     }
   }
 
-  &-record-dialog-inner {
-    @apply py-[28px] m-[-30px] px-[20px];
+}
 
-    h1 {
-      @apply relative top-[-8px];
+/* === V3 SHORTCUT POPOVER === */
+.shortcut-popover {
+  @apply flex flex-col;
+  width: 340px;
+
+  &:focus, &:focus-within { outline: none; }
+
+  > [data-orientation] {
+    @apply mt-0;
+  }
+}
+
+.shortcut-popover-title {
+  @apply px-4 font-medium text-xs select-none;
+  padding-top: 16px;
+  padding-bottom: 2px;
+  color: var(--rx-gray-11, var(--ls-secondary-text-color));
+}
+
+/* Input field — borderless, content sits directly on popover surface */
+.shortcut-input-field {
+  @apply px-4 pt-2 pb-3 flex flex-wrap items-center;
+  column-gap: 12px;
+  row-gap: 6px;
+  min-height: 40px;
+}
+
+.shortcut-input-placeholder {
+  @apply text-sm select-none;
+  color: var(--lx-gray-11, var(--rx-gray-11));
+  opacity: 0.75;
+  background: linear-gradient(
+    90deg,
+    currentColor 0%,
+    currentColor 40%,
+    var(--lx-gray-12, var(--rx-gray-12)) 50%,
+    currentColor 60%,
+    currentColor 100%
+  );
+  background-size: 250% 100%;
+  background-position: 100% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shortcut-shimmer 4s ease-in-out infinite;
+  animation-delay: 1s;
+}
+
+/* Each binding grouped in a subtle container */
+.shortcut-input-binding {
+  @apply inline-flex items-center flex-wrap rounded-md p-1;
+  background-color: var(--rx-gray-04-alpha, rgba(0, 0, 0, 0.07));
+  max-width: 100%;
+
+  .shortcut-binding-remove {
+    @apply flex items-center ml-1 cursor-pointer select-none;
+    color: var(--rx-gray-10);
+
+    &:hover {
+      color: var(--rx-gray-12);
     }
+  }
+}
 
-    &:active, &:focus, &:focus-within {
-      outline: burlywood hidden medium;
+/* Allow long separate-key sequences to wrap inside the binding */
+.shortcut-input-binding .shui-shortcut-separate {
+  flex-wrap: wrap;
+  white-space: normal;
+}
+
+/* Uncommitted binding: dashed key borders */
+.shortcut-input-binding--pending .shui-shortcut-key {
+  border-style: dashed;
+}
+
+/* Conflict state: tint the binding container red, keys stay normal */
+.shortcut-input-field.conflict .shortcut-input-binding--pending {
+  background-color: var(--rx-red-06-alpha, rgb(239 68 68 / 0.2));
+
+  .shortcut-binding-remove {
+    color: var(--rx-red-11);
+
+    &:hover {
+      color: var(--rx-red-12);
     }
+  }
+}
 
-    .shortcuts-keys-wrap {
-      @apply flex items-center my-4 flex-wrap;
+/* Keep combo overflow hidden in conflict */
+.shortcut-input-field.conflict .shortcut-input-binding--pending .shui-shortcut-combo {
+  overflow: hidden;
+}
 
-      .shortcut-record-control {
-        @apply flex space-x-1 items-center select-none
-        rounded border-[2px] py-[2px] px-[2px];
-      }
+/* Feedback banner */
+.shortcut-feedback {
+  @apply flex items-center justify-between gap-2 px-4 py-2 text-xs;
+  animation: shortcut-fade-in 200ms ease-out;
 
-      .shortcut-binding-item {
-        a.shortcut-delete-x {
-          @apply hidden absolute right-[-8px] top-[-6px] h-[16px] w-[16px]
-          rounded-full bg-red-700 text-white leading-none items-center
-          justify-center cursor-pointer opacity-90 hover:opacity-100;
-        }
+  &--error {
+    color: var(--rx-red-11, #dc2626);
+    background-color: var(--rx-red-03-alpha, rgb(239 68 68 / 0.08));
+  }
+  &--success { color: var(--rx-green-11, #16a34a); }
+  &--warning {
+    color: var(--rx-amber-11, #b45309);
+    background-color: var(--rx-amber-03-alpha, hsla(44, 100%, 50%, 0.1));
+  }
+  &--muted { color: var(--rx-gray-09, var(--ls-secondary-text-color)); }
+}
 
-        &:hover a.shortcut-delete-x {
-          @apply flex;
-        }
-      }
-    }
+.shortcut-feedback-name {
+  @apply font-medium;
+  color: var(--rx-red-12, #991b1b);
 
-    &.keypressed {
-      .shortcut-record-control {
-        @apply pt-0
-      }
-    }
+  .shortcut-feedback--success & {
+    color: var(--rx-green-12, #166534);
+  }
 
-    .action-btns {
-    }
+  .shortcut-feedback--warning & {
+    color: var(--rx-amber-12, #451a03);
+  }
+}
+
+.shortcut-feedback-action {
+  @apply cursor-pointer font-medium whitespace-nowrap;
+  color: var(--rx-red-11, #dc2626);
+  &:hover { text-decoration: underline; }
+}
+
+/* Toolbar */
+.shortcut-toolbar {
+  @apply flex items-center justify-between px-4 py-1.5 text-xs select-none;
+  color: var(--rx-gray-08, rgba(0, 0, 0, 0.4));
+  margin-top: auto;
+}
+
+.shortcut-toolbar-action {
+  @apply cursor-pointer flex items-center gap-1;
+  &:hover { color: var(--rx-gray-12, var(--ls-primary-text-color)); }
+}
+
+.shortcut-toolbar-hint {
+  @apply ml-3;
+  color: var(--lx-gray-11, var(--rx-gray-11));
+}
+
+/* Animations */
+@keyframes shortcut-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shortcut-auto-fade {
+  0% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0.3; }
+}
+
+@keyframes shortcut-shimmer {
+  0%, 30% { background-position: 100% 0; }
+  70%, 100% { background-position: -50% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes shortcut-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes shortcut-auto-fade {
+    from { opacity: 1; }
+    to { opacity: 0.3; }
+  }
+
+  .shortcut-input-placeholder {
+    animation: none;
+    -webkit-text-fill-color: unset;
+    background: none;
   }
 }
 

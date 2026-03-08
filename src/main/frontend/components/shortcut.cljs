@@ -2,7 +2,6 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.context.i18n :refer [t]]
-            [frontend.handler.notification :as notification]
             [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as dh]
@@ -12,7 +11,6 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.events :as events]
-            [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -33,7 +31,6 @@
 (defonce *refresh-sentry (atom 0))
 (defn refresh-shortcuts-list! [] (reset! *refresh-sentry (inc @*refresh-sentry)))
 (defonce *global-listener-setup? (atom false))
-(defonce *customize-modal-life-sentry (atom 0))
 
 (defn- to-vector [v]
   (when-not (nil? v)
@@ -159,21 +156,44 @@
        [:span.px-1 (dh/get-shortcut-desc (assoc binding-map :id id))]
        (when plugin? [:code plugin-id])])))
 
+(defonce *active-shortcut-id (atom nil))
+
 (defn- open-customize-shortcut-dialog!
-  [id]
+  [^js anchor-el id]
   (when-let [{:keys [binding user-binding] :as m} (dh/shortcut-item id)]
     (let [binding (to-vector binding)
           user-binding (and user-binding (to-vector user-binding))
-          modal-id (str :customize-shortcut id)
-          label (shortcut-desc-label id m)
+          popup-id (keyword (str "customize-shortcut-" (name id)))
+          label (dh/get-shortcut-desc (assoc m :id id))
+          close-fn! #(do (reset! *active-shortcut-id nil)
+                         (shui/popup-hide! popup-id))
           args [id label binding user-binding
                 {:saved-cb (fn [] (-> (p/delay 500) (p/then refresh-shortcuts-list!)))
-                 :modal-id modal-id}]]
-      (shui/dialog-open!
-       (fn [] (apply customize-shortcut-dialog-inner args))
-       {:id      modal-id
-        :class "w-auto md:max-w-2xl"
-        :payload args}))))
+                 :close-fn close-fn!}]]
+      ;; Close any previously open shortcut popover
+      (when-let [prev-id @*active-shortcut-id]
+        (let [prev-popup-id (keyword (str "customize-shortcut-" (name prev-id)))]
+          (shui/popup-hide! prev-popup-id)))
+      (reset! *active-shortcut-id id)
+      (shui/popup-show!
+       anchor-el
+       (fn [_] (apply customize-shortcut-dialog-inner args))
+       {:id popup-id
+        :force-popover? true
+        :align "start"
+        :on-after-hide #(reset! *active-shortcut-id nil)
+        :content-props
+        {:class "p-0 w-auto"
+         :collision-padding 12
+         :onOpenAutoFocus #(.preventDefault %)
+         :onCloseAutoFocus #(.preventDefault %)
+         :onEscapeKeyDown (fn [_] false)
+         :onPointerDownOutside
+         (fn [^js e]
+           (when-let [target (some-> e .-detail .-originalEvent .-target)]
+             (when (.closest target ".shortcut-row.active")
+               (.preventDefault e)
+               false)))}}))))
 
 (rum/defc shortcut-conflicts-display
   [_k conflicts-map]
@@ -194,7 +214,7 @@
            [:li
             {:key (str id')}
             [:a.select-none.hover:underline
-             {:on-click #(open-customize-shortcut-dialog! id')
+             {:on-click (fn [^js e] (open-customize-shortcut-dialog! e id'))
               :title (str handler-id)}
              [:code.inline-block.mr-1.text-xs
               (shortcut-utils/decorate-binding k)]
@@ -203,51 +223,196 @@
               (ui/icon "external-link" {:size 18})]
              [:code [:small (str id')]]]]))]])])
 
+(defn- execute-undo!
+  "Restore previous bindings for all affected actions."
+  [snapshot]
+  (doseq [{:keys [action-id previous-binding]} (:entries snapshot)]
+    (shortcut/persist-user-shortcut! action-id previous-binding))
+  (js/setTimeout #(do (shortcut/refresh!) (refresh-shortcuts-list!)) 50))
+
+(defn- show-undo-toast!
+  [description snapshot set-current-binding! self-id]
+  (shui/toast!
+   {:description description
+    :action (fn [{:keys [dismiss!]}]
+              [:button.font-medium.underline.cursor-pointer
+               {:on-click (fn []
+                            (execute-undo! snapshot)
+                            ;; Update local state if dialog is still open
+                            (when-let [own (some #(when (= (:action-id %) self-id) %) (:entries snapshot))]
+                              (set-current-binding! (:previous-binding own)))
+                            (dismiss!))}
+               "Undo"])
+    :duration 6000}
+   :default))
+
+(defn- conflict-action-names
+  "Extract human-readable action names from a key-conflicts map."
+  [key-conflicts]
+  (->> (for [[_g ks] key-conflicts
+             v (vals ks)
+             :let [conflicts-ids-map (second v)]
+             [id' _handler] conflicts-ids-map
+             :let [m (dh/shortcut-item id')]
+             :when m]
+         (dh/get-shortcut-desc m))
+       (distinct)
+       (string/join ", ")))
+
 (rum/defc ^:large-vars/cleanup-todo customize-shortcut-dialog-inner
   "user-binding: empty vector is for the unset state, nil is for the default binding"
-  [k action-name binding user-binding {:keys [saved-cb modal-id]}]
+  [k action-name binding user-binding {:keys [saved-cb close-fn]}]
   (let [*ref-el (rum/use-ref nil)
-        [modal-life _] (r/use-atom *customize-modal-life-sentry)
         [keystroke set-keystroke!] (rum/use-state "")
         [current-binding set-current-binding!] (rum/use-state (or user-binding binding))
         [key-conflicts set-key-conflicts!] (rum/use-state nil)
+        [rec-state set-rec-state!] (rum/use-state :idle)
+        [accepted-info set-accepted-info!] (rum/use-state nil)
+        *auto-accept-timer (rum/use-ref nil)
+        *fade-timer (rum/use-ref nil)
+        ;; Refs to avoid stale closures in mount-only key handler effect
+        *rec-state-ref (rum/use-ref rec-state)
+        *keystroke-ref (rum/use-ref keystroke)
+        *current-binding-ref (rum/use-ref current-binding)
+        *key-conflicts-ref (rum/use-ref key-conflicts)
 
         handler-id (hooks/use-memo #(dh/get-group k) [])
-        dirty? (not= (or user-binding binding) current-binding)
-        keypressed? (not= "" keystroke)
-        save-keystroke-fn!
+        has-bindings? (boolean (seq (filter string? current-binding)))
+
+        persist-binding!
+        (fn [new-binding]
+          (let [binding' (if (= binding new-binding) nil new-binding)]
+            (shortcut/persist-user-shortcut! k binding')
+            (js/setTimeout #(do (shortcut/refresh!) (saved-cb)) 50)))
+
+        cancel-fn!
         (fn []
-          ;; parse current binding conflicts
-          (if-let [current-conflicts (seq (dh/parse-conflicts-from-binding current-binding keystroke))]
-            (notification/show!
-             (str "Shortcut conflicts from existing binding: "
-                  (pr-str (some->> current-conflicts (map #(shortcut-utils/decorate-binding %)))))
-             :error true :shortcut-conflicts/warning 5000)
+          (set-keystroke! "")
+          (set-key-conflicts! nil)
+          (set-rec-state! :idle))
 
-            ;; get conflicts from the existed bindings map
-            (let [conflicts-map (dh/get-conflicts-by-keys keystroke handler-id)]
-              (if-not (seq conflicts-map)
-                (do (set-current-binding! (conj current-binding keystroke))
-                    (set-keystroke! "")
-                    (set-key-conflicts! nil))
+        reset-fn!
+        (fn []
+          (let [undo-entries [{:action-id k :previous-binding current-binding}]]
+            (set-current-binding! binding)
+            (shortcut/persist-user-shortcut! k nil)
+            (js/setTimeout #(do (shortcut/refresh!) (saved-cb)) 50)
+            (show-undo-toast! "Reset to default"
+                              {:entries undo-entries}
+                              set-current-binding! k)))
 
-                ;; show conflicts
-                (set-key-conflicts! conflicts-map)))))]
+        override-fn!
+        (fn []
+          (let [conflicts (rum/deref *key-conflicts-ref)
+                ks (rum/deref *keystroke-ref)
+                cur-binding (rum/deref *current-binding-ref)]
+            (when (and (seq conflicts) (not (string/blank? ks)))
+              ;; Build undo snapshot BEFORE mutations
+              (let [undo-entries
+                    (into [{:action-id k :previous-binding cur-binding}]
+                          (for [[_g kss] conflicts
+                                v (vals kss)
+                                :let [conflicts-ids-map (second v)]
+                                [conflicting-id _handler] conflicts-ids-map]
+                            {:action-id conflicting-id
+                             :previous-binding (dh/shortcut-binding conflicting-id)}))
+                    accepted-key ks
+                    new-binding (conj cur-binding accepted-key)]
 
-    ;; TODO: back interaction for the shui dialog
+                ;; Remove binding from all conflicting actions + persist
+                (doseq [[_g kss] conflicts
+                        v (vals kss)
+                        :let [conflicts-ids-map (second v)]
+                        [conflicting-id _handler] conflicts-ids-map]
+                  (let [their-binding (dh/shortcut-binding conflicting-id)
+                        filtered (vec (remove #(= % accepted-key) their-binding))]
+                    (shortcut/persist-user-shortcut! conflicting-id
+                                                     (if (empty? filtered) [] filtered))))
+
+                ;; Add to current binding + persist
+                (set-current-binding! new-binding)
+                (persist-binding! new-binding)
+
+                ;; Undo toast
+                (show-undo-toast!
+                 (str "Reassigned from " (conflict-action-names conflicts))
+                 {:entries undo-entries}
+                 set-current-binding! k)
+
+                ;; Transition to :accepted with reassign info
+                (set-accepted-info! {:key accepted-key :from (conflict-action-names conflicts)})
+                (set-keystroke! "")
+                (set-key-conflicts! nil)
+                (set-rec-state! :accepted)))))]
+
+    ;; Keep refs in sync for stale-closure safety
+    (rum/set-ref! *rec-state-ref rec-state)
+    (rum/set-ref! *keystroke-ref keystroke)
+    (rum/set-ref! *current-binding-ref current-binding)
+    (rum/set-ref! *key-conflicts-ref key-conflicts)
+
+    ;; Auto-evaluate keystroke after 400ms debounce
     (hooks/use-effect!
      (fn []
-       (let [mid (shui-dialog/get-first-modal-id)
-             mid' (shui-dialog/get-last-modal-id)
-             el (rum/deref *ref-el)]
-         (when (or (and (not mid') (= mid modal-id))
-                   (= mid' modal-id))
-           (some-> el (.focus))
-           (js/setTimeout
-            #(some-> (.querySelector el ".shortcut-record-control a.submit")
-                     (.click)) 200))))
-     [modal-life])
+       (when-not (string/blank? keystroke)
+         (let [timer (js/setTimeout
+                      (fn []
+                        (let [cur-binding (rum/deref *current-binding-ref)]
+                          ;; Check same-action conflicts first
+                          (if-let [_current-conflicts
+                                   (seq (dh/parse-conflicts-from-binding cur-binding keystroke))]
+                            (do
+                              (set-rec-state! :conflict-same)
+                              (set-keystroke! ""))
+                            ;; Check cross-action conflicts
+                            (let [conflicts-map (dh/get-conflicts-by-keys keystroke handler-id {:exclude-ids #{k}})]
+                              (if-not (seq conflicts-map)
+                                ;; No same-context conflicts — check cross-context
+                                (let [cross-conflicts (dh/get-cross-context-conflicts keystroke handler-id {:exclude-ids #{k}})
+                                      accepted-key keystroke
+                                      new-binding (conj cur-binding accepted-key)]
+                                  ;; Always auto-save (cross-context conflicts are non-blocking)
+                                  (set-current-binding! new-binding)
+                                  (set-keystroke! "")
+                                  (set-key-conflicts! nil)
+                                  (persist-binding! new-binding)
+                                  (if (seq cross-conflicts)
+                                    ;; Amber warning — saved but informational
+                                    (set-accepted-info! {:key accepted-key
+                                                         :from nil
+                                                         :cross-context? true
+                                                         :cross-action-name (conflict-action-names cross-conflicts)
+                                                         :cross-context-label (dh/conflict-context-label cross-conflicts)})
+                                    ;; Clean accept — no conflicts anywhere
+                                    (set-accepted-info! {:key accepted-key :from nil}))
+                                  (set-rec-state! :accepted))
+                                ;; Same-context conflicts — blocking red state
+                                (do
+                                  (set-key-conflicts! conflicts-map)
+                                  (set-rec-state! :conflict-cross)))))))
+                      400)]
+           (rum/set-ref! *auto-accept-timer timer)))
+       #(when-let [timer (rum/deref *auto-accept-timer)]
+          (js/clearTimeout timer)))
+     [keystroke])
 
+    ;; Auto-fade for transient states: conflict-same, esc-hint, accepted
+    (hooks/use-effect!
+     (fn []
+       (when (#{:conflict-same :esc-hint :accepted} rec-state)
+         (let [ms (case rec-state
+                    :esc-hint 2000
+                    :accepted (if (:cross-context? accepted-info) 6000 3000)
+                    3000)
+               timer (js/setTimeout
+                      #(set-rec-state! :idle)
+                      ms)]
+           (rum/set-ref! *fade-timer timer)))
+       #(when-let [timer (rum/deref *fade-timer)]
+          (js/clearTimeout timer)))
+     [rec-state])
+
+    ;; Key handler (mount-only, uses refs for current state)
     (hooks/use-effect!
      (fn []
        (let [^js el (rum/deref *ref-el)
@@ -261,94 +426,201 @@
                  (shortcut/listen-all!)
                  (reset! *global-listener-setup? false)))]
 
-          ;; setup
          (events/listen key-handler "key"
                         (fn [^js e]
                           (.preventDefault e)
-                          (set-key-conflicts! nil)
-                          (set-keystroke! #(util/trim-safe (str % (shortcut/keyname e))))))
+                          (let [state (rum/deref *rec-state-ref)
+                                key-code (.-keyCode e)
+                                is-esc? (= key-code 27)
+                                is-backspace? (= key-code 8)
+                                is-cmd-enter? (and (= key-code 13)
+                                                   (or (.-metaKey e) (.-ctrlKey e)))]
+                            (cond
+                              ;; Esc: never recordable, always cancel/dismiss
+                              is-esc?
+                              (do
+                                ;; Always stop propagation so Esc doesn't close the Settings dialog
+                                (.stopPropagation e)
+                                (case state
+                                  :idle           (close-fn)
+                                  :accepted       (close-fn)
+                                  :esc-hint       (close-fn)
+                                  :recording      (do (set-keystroke! "")
+                                                      (set-key-conflicts! nil)
+                                                      (set-rec-state! :esc-hint))
+                                  :conflict-cross (close-fn)
+                                  :conflict-same  (close-fn)
+                                  nil))
 
-          ;; active
+                              ;; Backspace in conflict: remove pending keystroke
+                              (and is-backspace? (#{:conflict-cross :conflict-same} state))
+                              (cancel-fn!)
+
+                              ;; Backspace in idle/accepted: remove last committed binding
+                              (and is-backspace?
+                                   (#{:idle :accepted} state)
+                                   (string/blank? (rum/deref *keystroke-ref)))
+                              (let [cur-binding (rum/deref *current-binding-ref)]
+                                (when (seq (filter string? cur-binding))
+                                  (let [new-binding (vec (butlast cur-binding))
+                                        undo-entries [{:action-id k :previous-binding cur-binding}]]
+                                    (set-current-binding! new-binding)
+                                    (persist-binding! new-binding)
+                                    (set-rec-state! :idle)
+                                    (show-undo-toast! "Shortcut removed"
+                                                      {:entries undo-entries}
+                                                      set-current-binding! k))))
+
+                              ;; Conflict-cross + Cmd+Enter => override
+                              (and is-cmd-enter? (= state :conflict-cross))
+                              (override-fn!)
+
+                              ;; Conflict-cross + other keys => ignore (dead-end)
+                              (= state :conflict-cross)
+                              nil
+
+                              ;; Conflict-same / esc-hint + key => start new recording
+                              (#{:conflict-same :esc-hint} state)
+                              (when-let [kn (shortcut/keyname e)]
+                                (set-rec-state! :recording)
+                                (set-keystroke! (util/trim-safe kn)))
+
+                              ;; Idle / accepted + key => start recording
+                              (#{:idle :accepted} state)
+                              (when-let [kn (shortcut/keyname e)]
+                                (set-rec-state! :recording)
+                                (set-keystroke! (util/trim-safe kn)))
+
+                              ;; Recording + key => accumulate
+                              (= state :recording)
+                              (when-let [kn (shortcut/keyname e)]
+                                (set-key-conflicts! nil)
+                                (set-keystroke! #(util/trim-safe (str % kn))))))))
+
          (js/setTimeout #(.focus el) 128)
 
-          ;; teardown
-         #(do (some-> teardown-global! (apply nil))
-              (.dispose key-handler)
-              (swap! *customize-modal-life-sentry inc))))
+         #(do (when-let [timer (rum/deref *auto-accept-timer)]
+                (js/clearTimeout timer))
+              (when-let [timer (rum/deref *fade-timer)]
+                (js/clearTimeout timer))
+              (some-> teardown-global! (apply nil))
+              (.dispose key-handler))))
      [])
 
-    [:div.cp__shortcut-page-x-record-dialog-inner
-     {:class     (util/classnames [{:keypressed keypressed? :dirty dirty?}])
-      :tab-index -1
+    ;; === V3 LAYOUT ===
+    [:div.shortcut-popover
+     {:tab-index -1
       :ref       *ref-el}
-     [:div.sm:w-lsm
-      [:h1.text-2xl.pb-2
-       (t :keymap/customize-for-label)]
 
-      [:p.mb-4.text-md [:b action-name]]
+     ;; TITLE
+     [:div.shortcut-popover-title action-name]
 
-      [:div.shortcuts-keys-wrap
-       [:span.flex.flex-wrap.mr-2.gap-2
-        (for [x current-binding
-              :when (string? x)]
-          [:span.shortcut-binding-item.relative.select-none
-           {:key x}
-           (shui/shortcut x {:glow? false})
-           [:a.shortcut-delete-x {:on-click (fn [] (set-current-binding!
-                                                    (->> current-binding (remove #(= x %)) (into []))))}
-            (ui/icon "x" {:size 12})]])]
+     ;; INPUT FIELD
+     [:div.shortcut-input-field
+      {:class (when (#{:conflict-cross :conflict-same} rec-state) "conflict")}
+      ;; Existing bindings — each wrapped in a grouping container
+      (for [[idx x] (map-indexed vector current-binding)
+            :when (string? x)]
+        [:div.shortcut-input-binding {:key x}
+         (shui/shortcut x)
+         (when (#{:idle :accepted :esc-hint} rec-state)
+           [:a.shortcut-binding-remove
+            {:on-click (fn [^js e]
+                         (.stopPropagation e)
+                         (let [new-binding (vec (concat (subvec current-binding 0 idx)
+                                                        (subvec current-binding (inc idx))))
+                               undo-entries [{:action-id k :previous-binding current-binding}]]
+                           (set-current-binding! new-binding)
+                           (persist-binding! new-binding)
+                           (set-rec-state! :idle)
+                           (show-undo-toast! "Shortcut removed"
+                                             {:entries undo-entries}
+                                             set-current-binding! k)))}
+            (ui/icon "x" {:size 12})])])
+      ;; Recording in progress — dashed keys (uncommitted)
+      (when (and (#{:recording :conflict-cross :conflict-same} rec-state)
+                 (not (string/blank? keystroke)))
+        [:div.shortcut-input-binding.shortcut-input-binding--pending
+         (shui/shortcut keystroke)
+         (when (#{:conflict-cross :conflict-same} rec-state)
+           [:a.shortcut-binding-remove
+            {:on-click (fn [^js e]
+                         (.stopPropagation e)
+                         (cancel-fn!))}
+            (ui/icon "x" {:size 12})])])
+      ;; Placeholder
+      (when (#{:idle :recording :accepted} rec-state)
+        [:span.shortcut-input-placeholder "Press a shortcut\u2026"])]
 
-       ;; add shortcut
-       [:div.shortcut-record-control
-        ;; keypressed state
-        (if keypressed?
-          [:<>
-           (when-not (string/blank? keystroke)
-             (ui/render-keyboard-shortcut [keystroke]))
+     ;; FEEDBACK BANNER (conditional)
+     (case rec-state
+       :conflict-cross
+       [:div.shortcut-feedback.shortcut-feedback--error
+        [:span "Used by "
+         [:span.shortcut-feedback-name (str "\u201c" (conflict-action-names key-conflicts) "\u201d")]]
+        (ui/tooltip
+         (shui/button {:variant :destructive
+                       :size :xs
+                       :on-click override-fn!}
+                      "Reassign")
+         "Remove from the other action and assign here")]
 
-           [:a.flex.items-center.active:opacity-90.submit
-            {:on-click save-keystroke-fn!}
-            (ui/icon "check" {:size 14})]
-           [:a.flex.items-center.text-red-600.hover:text-red-700.active:opacity-90.cancel
-            {:on-click (fn []
-                         (set-keystroke! "")
-                         (set-key-conflicts! nil))}
-            (ui/icon "x" {:size 14})]]
+       :conflict-same
+       [:div.shortcut-feedback.shortcut-feedback--error
+        [:span "Already bound to this action"]]
 
-          [:code.flex.items-center
-           [:small.pr-1 (t :keymap/keystroke-record-setup-label)] (ui/icon "keyboard" {:size 14})])]]]
+       :accepted
+       (cond
+         (:cross-context? accepted-info)
+         [:div.shortcut-feedback.shortcut-feedback--warning
+          [:span "Also used for "
+           [:span.shortcut-feedback-name
+            (str "\u201c" (:cross-action-name accepted-info) "\u201d")]
+           (when-let [ctx (:cross-context-label accepted-info)]
+             (str " in " ctx))]]
 
-     ;; conflicts results
-     (when (seq key-conflicts)
-       (shortcut-conflicts-display k key-conflicts))
+         (:from accepted-info)
+         [:div.shortcut-feedback.shortcut-feedback--success
+          [:span "Reassigned from "
+           [:span.shortcut-feedback-name (str "\u201c" (:from accepted-info) "\u201d")]]]
 
-     [:div.action-btns.text-right.mt-6.flex.justify-between.items-center
-      ;; restore default
-      (if (and (not= current-binding binding) (seq binding))
-        [:a.flex.items-center.space-x-1.text-sm.fade-link
-         {:on-click #(set-current-binding! binding)}
-         (t :keymap/restore-to-default)
-         (for [b binding
-               :when (string? b)]
-           [:span.ml-1 {:key b}
-            (shui/shortcut b {:glow? false})])]
-        [:div])
+         :else
+         [:div.shortcut-feedback.shortcut-feedback--success
+          [:span "Shortcut added"]])
 
-      [:div.flex.flex-row.items-center.gap-2
-       (ui/button
-        (t :save)
-        :disabled (not dirty?)
-        :on-click (fn []
-                     ;; TODO: check conflicts for the single same leader key
-                    (let [binding' (if (nil? current-binding) [] current-binding)
-                          conflicts (dh/get-conflicts-by-keys binding' handler-id {:exclude-ids #{k}})]
-                      (if (seq conflicts)
-                        (set-key-conflicts! conflicts)
-                        (let [binding' (if (= binding binding') nil binding')]
-                          (shortcut/persist-user-shortcut! k binding')
-                           ;(notification/show! "Saved!" :success)
-                          (shui/dialog-close!)
-                          (saved-cb))))))]]]))
+       :esc-hint
+       [:div.shortcut-feedback.shortcut-feedback--muted
+        [:span "Esc is reserved"]]
+
+       nil)
+
+     ;; SEPARATOR + TOOLBAR
+     (shui/separator)
+     [:div.shortcut-toolbar
+      [:div.shortcut-toolbar-left
+       ;; Reset (only when changed from default)
+       (when (and (#{:idle :accepted} rec-state)
+                  (not= current-binding binding))
+         [:a.shortcut-toolbar-action
+          {:on-click reset-fn!}
+          (ui/icon "rotate" {:size 12})
+          [:span "Reset"]])]
+      [:div.shortcut-toolbar-right
+       ;; Reassign hint (conflict-cross only)
+       (when (= :conflict-cross rec-state)
+         [:span.shortcut-toolbar-hint
+          "Reassign "
+          (shui/shortcut (if util/mac? "meta+enter" "ctrl+enter") {:style :compact})])
+       ;; Remove hint (idle/accepted with bindings, or conflict states)
+       (when (or (and (#{:idle :accepted} rec-state) has-bindings?)
+                 (#{:conflict-cross :conflict-same} rec-state))
+         [:span.shortcut-toolbar-hint
+          "Remove "
+          (shui/shortcut "backspace" {:style :compact})])
+       ;; Close/Cancel hint
+       [:span.shortcut-toolbar-hint
+        (if (= :recording rec-state) "Cancel " "Close ")
+        (shui/shortcut "escape" {:style :compact})]]]]))
 
 (defn build-categories-map
   []
@@ -357,7 +629,8 @@
 
 (rum/defc ^:large-vars/cleanup-todo shortcut-keymap-x
   []
-  (let [_ (r/use-atom shortcut-config/*category)
+  (let [[active-id] (r/use-atom *active-shortcut-id)
+        _ (r/use-atom shortcut-config/*category)
         _ (r/use-atom *refresh-sentry)
         [ready?, set-ready!] (rum/use-state false)
         [filters, set-filters!] (rum/use-state #{})
@@ -390,6 +663,14 @@
     (hooks/use-effect!
      (fn []
        (js/setTimeout #(set-ready! true) 100))
+     [])
+
+    ;; Clean up any open shortcut popovers when this component unmounts
+    (hooks/use-effect!
+     (fn []
+       (fn []
+         (reset! *active-shortcut-id nil)
+         (shui/popup-hide-all!)))
      [])
 
     [:div.cp__shortcut-page-x
@@ -455,14 +736,21 @@
                                                   (and (sequential? s) (sequential? keystroke')
                                                        (apply = (map first [s keystroke']))))) binding')))))
 
-                    [:li.flex.items-center.justify-between.text-sm
-                     {:key (str id)}
+                    [:li.shortcut-row.flex.items-center.justify-between.text-sm
+                     {:key (str id)
+                      :class (when (= active-id id) "active")
+                      :on-click (when (and id (not disabled?))
+                                  (fn [^js e]
+                                    (if (= active-id id)
+                                      (let [popup-id (keyword (str "customize-shortcut-" (name id)))]
+                                        (reset! *active-shortcut-id nil)
+                                        (shui/popup-hide! popup-id))
+                                      (let [anchor-el (-> (.-currentTarget e) (.querySelector ".action-wrap"))]
+                                        (open-customize-shortcut-dialog! anchor-el id)))))}
                      [:span.label-wrap label]
 
-                     [:a.action-wrap
-                      {:class    (util/classnames [{:disabled disabled?}])
-                       :on-click (when (and id (not disabled?))
-                                   #(open-customize-shortcut-dialog! id))}
+                     [:span.action-wrap
+                      {:class (util/classnames [{:disabled disabled?}])}
 
                       (cond
                         (or unset? user-binding (false? user-binding))
