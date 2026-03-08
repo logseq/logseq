@@ -160,6 +160,10 @@
        (when (and (string? session-id) (string? base-dir))
          (str base-dir "/" (sanitize-name session-id)))))))
 
+(defn e2b-runtime-repo-dir
+  [runtime task]
+  (get-repo-dir (:session-id runtime) task "e2b"))
+
 (defn- repo-cd-command
   ([session-id]
    (repo-cd-command session-id nil nil))
@@ -485,35 +489,13 @@
       (->promise (.call create sandbox-class template params))
       (->promise (.call create sandbox-class params)))))
 
-(defn- e2b-template-not-found-error?
-  [error]
-  (let [message (or (some-> error (aget "message"))
-                    (some-> error str))]
-    (boolean (and (string? message)
-                  (string/includes? message "404:")
-                  (string/includes? message "template")
-                  (string/includes? message "not found")))))
-
-(defn- <e2b-create-sandbox-with-template-recovery!
+(defn- <e2b-create-sandbox-with-template!
   [^js env task create-opts]
   (p/let [template (<e2b-resolve-template! env task nil)]
     (-> (<e2b-create-sandbox! env template create-opts)
         (p/then (fn [sandbox]
                   {:sandbox sandbox
-                   :template template}))
-        (p/catch
-         (fn [error]
-           (if-not (and (string? template)
-                        (e2b-template-not-found-error? error))
-             (throw error)
-             (if (project-docker-file task)
-               (p/let [rebuilt-template (<e2b-build-template! env task (project-docker-file task) {:force? true})
-                       sandbox (<e2b-create-sandbox! env rebuilt-template create-opts)]
-                 {:sandbox sandbox
-                  :template rebuilt-template})
-               (p/let [sandbox (<e2b-create-sandbox! env nil create-opts)]
-                 {:sandbox sandbox
-                  :template nil}))))))))
+                   :template template})))))
 
 (defn <e2b-connect-sandbox!
   [^js env sandbox-id]
@@ -657,7 +639,10 @@
                    (string? session-id) (assoc "runtime-session-id" session-id))]
     (cond-> {:timeoutMs timeout-ms
              :autoPause true
-             :autoResume true}
+             :autoResume true
+             ;; TODO: is there onPause
+             ;; :lifecycle {:onTimeout "pause"}
+             }
       (seq env-vars) (assoc :envs env-vars)
       (string? session-id) (assoc :metadata metadata))))
 
@@ -793,17 +778,17 @@
   (let [cached (:base-url runtime)
         port (e2b-agent-port env runtime)
         sandbox-id (:sandbox-id runtime)]
-    (if (string? cached)
-      (p/resolved (sandbox/normalize-base-url cached))
+    (if (string? sandbox-id)
       (p/let [sandbox (<e2b-connect-sandbox! env sandbox-id)]
-        (e2b-sandbox-host sandbox port)))))
+        (e2b-sandbox-host sandbox port))
+      (p/resolved (sandbox/normalize-base-url cached)))))
 
 (defn- <e2b-open-terminal!
   [^js env runtime request {:keys [cols rows]}]
   (let [sandbox-id (:sandbox-id runtime)
         session-id (:session-id runtime)
-        cwd (or (:backup-dir runtime)
-                (get-repo-dir session-id nil "e2b"))]
+        cwd "/home/user/workspace"]
+    (prn :debug :cwd cwd)
     (when-not (string? sandbox-id)
       (throw (ex-info "missing sandbox-id on runtime" {:runtime runtime})))
     (when-not (string? session-id)
@@ -994,7 +979,7 @@
       (p/let [env-vars (<e2b-agent-env-vars! env task)
               create-opts (e2b-create-opts env session-id env-vars)
               {:keys [sandbox template]}
-              (p/let [{:keys [sandbox template]} (<e2b-create-sandbox-with-template-recovery! env task create-opts)]
+              (p/let [{:keys [sandbox template]} (<e2b-create-sandbox-with-template! env task create-opts)]
                 {:sandbox sandbox
                  :template template})
               _ (<e2b-ensure-running! env sandbox session-id task port agent-token env-vars)
@@ -1017,6 +1002,7 @@
          :sandbox-id sandbox-id
          :sandbox-name sandbox-id
          :sandbox-port port
+         :backup-dir (e2b-runtime-repo-dir {:session-id session-id} task)
          :base-url base-url
          :agent-token agent-token
          :session-id (:session-id response)
@@ -1038,8 +1024,7 @@
   (<snapshot-runtime! [_ runtime opts]
     (let [session-id (:session-id runtime)
           sandbox-id (:sandbox-id runtime)
-          backup-dir (or (:backup-dir runtime)
-                         (get-repo-dir session-id (:task opts) "e2b"))
+          backup-dir (e2b-runtime-repo-dir runtime (:task opts))
           task (:task opts)
           backup-key (repo-backup-key task)]
       (when-not (string? sandbox-id)
@@ -1059,8 +1044,7 @@
           repo-url (:repo-url opts)
           head-branch (:head-branch opts)
           force? (true? (:force opts))
-          repo-dir (or (:backup-dir runtime)
-                       (get-repo-dir session-id (:task opts) "e2b"))
+          repo-dir (e2b-runtime-repo-dir runtime (:task opts))
           remote-url (or (source-control/push-remote-url repo-url (:push-token opts))
                          repo-url)]
       (when-not (string? sandbox-id)

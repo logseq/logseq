@@ -134,3 +134,17 @@
 
   (testing "returns nil when auth json missing"
     (is (nil? (runtime-provider/auth-json-write-command nil)))))
+
+(deftest e2b-runtime-repo-dir-test
+  (testing "prefers persisted runtime backup dir"
+    (is (= "/home/user/workspace/agent-test"
+           (runtime-provider/e2b-runtime-repo-dir
+            {:backup-dir "/home/user/workspace/agent-test"
+             :session-id "sess-1"}
+            nil))))
+
+  (testing "falls back to task repo dir for e2b runtimes"
+    (is (= "/home/user/workspace/agent-test"
+           (runtime-provider/e2b-runtime-repo-dir
+            {:session-id "sess-1"}
+            {:project {:repo-url "https://github.com/logseq/agent-test"}})))))

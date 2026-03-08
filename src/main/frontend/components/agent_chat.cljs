@@ -643,7 +643,6 @@
         session-created? (or session-started?
                              (agent-handler/task-session-created? block))
         terminal-enabled? (agent-handler/session-terminal-enabled? session)
-        snapshot-enabled? (agent-handler/session-snapshot-enabled? session)
         session-chat-messages (->> session-messages
                                    (map message->chat-message)
                                    (remove nil?))
@@ -658,7 +657,6 @@
         [loading-branches? set-loading-branches?!] (rum/use-state false)
         [starting-session? set-starting-session?!] (rum/use-state false)
         [publish-mode set-publish-mode!] (rum/use-state nil)
-        [snapshot-busy? set-snapshot-busy?!] (rum/use-state false)
         [terminal-visible? set-terminal-visible!] (rum/use-state false)
         [terminal-status set-terminal-status!] (rum/use-state :idle)
         [terminal-error set-terminal-error!] (rum/use-state nil)
@@ -683,11 +681,7 @@
                                     session-started?
                                     (not (string? selected-start-branch))
                                     (not (agent-handler/task-ready? block)))
-        publish-disabled? (or input-disabled? busy? publish-busy? snapshot-busy?)
-        snapshot-disabled? (or input-disabled?
-                               busy?
-                               publish-busy?
-                               snapshot-busy?)
+        publish-disabled? (or input-disabled? busy? publish-busy?)
         can-send? (and (not input-disabled?)
                        (not (string/blank? trimmed-draft))
                        (not busy?))
@@ -736,12 +730,6 @@
                        (-> (agent-handler/<publish-session! block opts)
                            (p/catch (fn [_] nil))
                            (p/finally (fn [] (set-publish-mode! nil)))))))
-        snapshot! (fn []
-                    (when (and base session-id (not snapshot-disabled?))
-                      (set-snapshot-busy?! true)
-                      (-> (agent-handler/<snapshot-session! block)
-                          (p/catch (fn [_] nil))
-                          (p/finally (fn [] (set-snapshot-busy?! false))))))
         open-terminal! (fn []
                          (when (and terminal-enabled? (not terminal-open-disabled?))
                            (set-terminal-visible! true)
@@ -1021,17 +1009,6 @@
                 :class "h-7 px-2 text-xs"
                 :on-click (fn [_] (close-terminal!))}
                "Disconnect"))])
-         (when (and (not pr-created?) snapshot-enabled?)
-           (shui/button
-            {:size :sm
-             :variant :outline
-             :class "h-7 px-2 text-xs"
-             :disabled snapshot-disabled?
-             :on-click (fn [_]
-                         (snapshot!))}
-            (if snapshot-busy?
-              "Snapshotting..."
-              "Snapshot")))
          (shui/button
           {:size :sm
            :variant :outline

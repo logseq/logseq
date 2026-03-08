@@ -1212,6 +1212,7 @@
                   push-result (push-branch-fn provider
                                               runtime
                                               (cond-> {:session-id (:id current-session)
+                                                       :task (:task current-session)
                                                        :repo-url repo-url
                                                        :head-branch head-branch
                                                        :force force?
