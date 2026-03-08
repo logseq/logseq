@@ -2509,20 +2509,16 @@
          (not= (nth value pos) sym)
          true)))
 
-(defn ^:large-vars/cleanup-todo keydown-not-matched-handler
-  "NOTE: Keydown cannot be used on Android platform"
-  [format]
-  (fn [e _key-code]
-    (let [input-id (state/get-edit-input-id)
-          input (state/get-input)
-          key (gobj/get e "key")
-          value (gobj/get input "value")
-          ctrlKey (gobj/get e "ctrlKey")
-          metaKey (gobj/get e "metaKey")
-          pos (cursor/pos input)
-          hashtag? (or (surround-by? input "#" " ")
-                       (surround-by? input "#" :end)
-                       (= key "#"))]
+(defn- keydown-not-matched-handler*
+  [format e input-id input]
+  (let [key (gobj/get e "key")
+        value (gobj/get input "value")
+        ctrlKey (gobj/get e "ctrlKey")
+        metaKey (gobj/get e "metaKey")
+        pos (cursor/pos input)
+        hashtag? (or (surround-by? input "#" " ")
+                     (surround-by? input "#" :end)
+                     (= key "#"))]
       (when (or (not @(:editor/start-pos @state/state))
                 (and key (string/starts-with? key "Arrow")))
         (state/set-state! :editor/start-pos pos))
@@ -2611,7 +2607,16 @@
         (commands/simple-insert! input-id "^^" {:backward-pos 2})
 
         :else
-        nil))))
+        nil)))
+
+(defn ^:large-vars/cleanup-todo keydown-not-matched-handler
+  "NOTE: Keydown cannot be used on Android platform"
+  [format]
+  (fn [e _key-code]
+    (let [input-id (state/get-edit-input-id)
+          input (state/get-input)]
+      (when (and input (= input (.-target e)))
+        (keydown-not-matched-handler* format e input-id input)))))
 
 (defn- input-page-ref?
   [k current-pos blank-selected? last-key-code]
@@ -2678,7 +2683,8 @@
 (defn keyup-handler
   [_state input]
   (fn [e key-code]
-    (when-not (util/goog-event-is-composing? e)
+    (when (and (not (util/goog-event-is-composing? e))
+               input (= input (.-target e)))
       (let [current-pos (cursor/pos input)
             value (gobj/get input "value")
             c (util/nth-safe value (dec current-pos))
