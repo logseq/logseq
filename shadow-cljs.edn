@@ -42,8 +42,7 @@
                           frontend.modules.instrumentation.posthog/POSTHOG-TOKEN #shadow/env "LOGSEQ_POSTHOG_TOKEN"
                           frontend.config/ENABLE-PLUGINS #shadow/env ["ENABLE_PLUGINS" :as :bool :default true]
                           ;; Set to switch file sync server to dev, set this to false in `yarn watch`
-                          frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
-                          frontend.config/ENABLE-RTC-SYNC-PRODUCTION #shadow/env ["ENABLE_RTC_SYNC_PRODUCTION" :as :bool :default true]
+                          logseq.common.cognito-config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
 
                           frontend.config/ENABLE-DB-SYNC-LOCAL #shadow/env ["ENABLE_DB_SYNC_LOCAL" :as :bool :default false]
                           frontend.config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]} ;; set by git-revision-hook
@@ -101,6 +100,7 @@
                :output-to "static/logseq-cli.js"
                :main logseq.cli.main/main
                :build-hooks [(shadow.hooks/logseq-cli-metadata-hook "--long --always --dirty")]
+               :closure-defines {logseq.common.cognito-config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]}
                :compiler-options {:infer-externs :auto
                                   :source-map true
                                   :externs ["datascript/externs.js"
@@ -167,8 +167,7 @@
             frontend.modules.instrumentation.posthog/POSTHOG-TOKEN #shadow/env "LOGSEQ_POSTHOG_TOKEN"
             ;; frontend.config/ENABLE-PLUGINS #shadow/env ["ENABLE_PLUGINS" :as :bool :default true]
             ;; Set to switch file sync server to dev, set this to false in `yarn watch`
-            frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
-            frontend.config/ENABLE-RTC-SYNC-PRODUCTION #shadow/env ["ENABLE_RTC_SYNC_PRODUCTION" :as :bool :default true]
+            logseq.common.cognito-config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
 
             frontend.config/ENABLE-DB-SYNC-LOCAL #shadow/env ["ENABLE_DB_SYNC_LOCAL" :as :bool :default false]
             frontend.config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]}

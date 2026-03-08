@@ -59,6 +59,7 @@
       (is (not (string/includes? plain-summary "--retries")))
       (is (string/includes? plain-summary "Graph Inspect and Edit"))
       (is (string/includes? plain-summary "Graph Management"))
+      (is (string/includes? plain-summary "Authentication"))
       (is (string/includes? plain-summary "list"))
       (is (string/includes? plain-summary "upsert"))
       (is (string/includes? plain-summary "remove"))
@@ -68,6 +69,8 @@
       (is (string/includes? plain-summary "graph"))
       (is (string/includes? plain-summary "server"))
       (is (string/includes? plain-summary "sync"))
+      (is (string/includes? plain-summary "login"))
+      (is (string/includes? plain-summary "logout"))
       (is (string/includes? plain-summary "Path to db-worker data dir (default ~/logseq/graphs)"))
       (is (contains-bold? summary "list page"))
       (is (contains-bold? summary "list tag"))
@@ -90,6 +93,8 @@
       (is (contains-bold? summary "server start"))
       (is (contains-bold? summary "sync status"))
       (is (contains-bold? summary "sync start"))
+      (is (contains-bold? summary "login"))
+      (is (contains-bold? summary "logout"))
       (is (contains-bold? summary "--help"))
       (is (contains-bold? summary "--graph"))
       (is (re-find #"\u001b\[[0-9;]*mCommands\u001b\[[0-9;]*m:" summary))
@@ -208,6 +213,27 @@
           lines (command-lines summary)]
       (is (seq lines))
       (is (every? #(not (string/includes? % "[options]")) lines)))))
+
+(deftest test-parse-args-help-auth-commands
+  (testing "login command shows help"
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["login" "--help"]))
+          summary (:summary result)
+          plain-summary (strip-ansi summary)]
+      (is (true? (:help? result)))
+      (is (string/includes? plain-summary "Usage: logseq login"))
+      (is (string/includes? plain-summary "Global options:"))
+      (is (string/includes? plain-summary "Command options:"))))
+
+  (testing "logout command shows help"
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["logout" "--help"]))
+          summary (:summary result)
+          plain-summary (strip-ansi summary)]
+      (is (true? (:help? result)))
+      (is (string/includes? plain-summary "Usage: logseq logout"))
+      (is (string/includes? plain-summary "Global options:"))
+      (is (string/includes? plain-summary "Command options:")))))
 
 (deftest test-parse-args-help-sync-group
   (testing "sync group shows subcommands"
