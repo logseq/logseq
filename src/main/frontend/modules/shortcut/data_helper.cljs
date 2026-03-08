@@ -225,6 +225,71 @@
           (remove #(empty? (vals (second %1))))
           (into {})))))
 
+(def handler-display-labels
+  {:shortcut.handler/block-editing-only      "editing mode"
+   :shortcut.handler/editor-global           "editor"
+   :shortcut.handler/global-prevent-default  "global"
+   :shortcut.handler/global-non-editing-only "navigation"
+   :shortcut.handler/misc                    "global"
+   :shortcut.handler/pdf                     "PDF viewer"
+   :shortcut.handler/auto-complete           "autocomplete"
+   :shortcut.handler/cards                   "flashcards"
+   :shortcut.handler/date-picker             "date picker"})
+
+(defn get-cross-context-conflicts
+  "Like get-conflicts-by-keys but returns conflicts from OTHER handler contexts only.
+   Used for non-blocking amber warnings when a key is shared across contexts."
+  [ks handler-id {:keys [exclude-ids]}]
+  (let [global-handlers #{:shortcut.handler/editor-global
+                          :shortcut.handler/global-non-editing-only
+                          :shortcut.handler/global-prevent-default
+                          :shortcut.handler/misc}
+        ks-bindings (get-bindings-keys-map)
+        caller-handlers (should-be-included-to-global-handler handler-id)
+        caller-is-global? (seq (set/intersection global-handlers caller-handlers))]
+    (->> (if (string? ks) [ks] ks)
+         (map (fn [k]
+                (when-let [k' (shortcut-utils/undecorate-binding k)]
+                  (let [k-parsed (bean/->clj (shortcut-utils/safe-parse-string-binding k'))
+
+                        same-leading-key?
+                        (fn [[k' _]]
+                          (when (sequential? k-parsed)
+                            (or (= k-parsed k')
+                                (and (> (count k') (count k-parsed))
+                                     (= (first k-parsed) (first k'))))))
+
+                        cross-context-ref
+                        (fn [[k o]]
+                          (when-let [{:keys [key refs]} o]
+                            [k [key (reduce-kv
+                                     (fn [r id handler-id']
+                                       (if (and (not (contains? exclude-ids id))
+                                                (not (contains? caller-handlers handler-id'))
+                                                (not (and caller-is-global?
+                                                          (contains? global-handlers handler-id'))))
+                                         (assoc r id handler-id')
+                                         r))
+                                     {} refs)]]))]
+
+                    [k' (->> ks-bindings
+                             (filterv same-leading-key?)
+                             (mapv cross-context-ref)
+                             (remove #(empty? (second (second %))))
+                             (into {}))]))))
+         (remove #(empty? (vals (second %))))
+         (into {}))))
+
+(defn conflict-context-label
+  "Get the human-readable context label for the first conflict in a conflicts map."
+  [conflicts-map]
+  (->> (for [[_ ks] conflicts-map
+             v (vals ks)
+             :let [refs (second v)]
+             [_ handler-id'] refs]
+         (get handler-display-labels handler-id'))
+       (first)))
+
 (defn parse-conflicts-from-binding
   [from-binding target]
   (when-let [from-binding (and (string? target)

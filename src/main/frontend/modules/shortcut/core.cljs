@@ -276,12 +276,15 @@
       meta (str "meta+")
       shift (str "shift+"))))
 
-(defn keyname [e]
-  (let [name (get key-names (str (.-keyCode e)))]
-    (case name
-      nil nil
-      ("ctrl" "shift" "alt" "esc") nil
-      (str " " (name-with-meta e)))))
+(defn keyname
+  ([e] (keyname e nil))
+  ([e opts]
+   (let [name (get key-names (str (.-keyCode e)))]
+     (cond
+       (nil? name) nil
+       (#{"ctrl" "shift" "alt" "meta"} name) nil
+       (and (= name "esc") (not (:record-esc? opts))) nil
+       :else (str " " (name-with-meta e))))))
 
 (defn persist-user-shortcut!
   [id binding]
