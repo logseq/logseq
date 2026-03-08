@@ -5,6 +5,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.crypt.Md5]
+            [logseq.common.cognito-config :as cognito-config]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -19,33 +20,27 @@
 (goog-define REVISION "unknown")
 (defonce revision REVISION)
 
-(goog-define ENABLE-FILE-SYNC-PRODUCTION false)
-
 ;; this is a feature flag to enable the account tab
 ;; when it launches (when pro plan launches) it should be removed
 (def ENABLE-SETTINGS-ACCOUNT-TAB false)
 
-(if ENABLE-FILE-SYNC-PRODUCTION
-  (do (def LOGIN-URL
-        "https://logseq-prod.auth.us-east-1.amazoncognito.com/login?client_id=3c7np6bjtb4r1k1bi9i049ops5&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
-      (def API-DOMAIN "api.logseq.com")
+(def LOGIN-URL cognito-config/LOGIN-URL)
+(def COGNITO-CLIENT-ID cognito-config/COGNITO-CLIENT-ID)
+(def OAUTH-DOMAIN cognito-config/OAUTH-DOMAIN)
+
+(if cognito-config/ENABLE-FILE-SYNC-PRODUCTION
+  (do (def API-DOMAIN "api.logseq.com")
       (def COGNITO-IDP "https://cognito-idp.us-east-1.amazonaws.com/")
-      (def COGNITO-CLIENT-ID "69cs1lgme7p8kbgld8n5kseii6")
       (def REGION "us-east-1")
       (def USER-POOL-ID "us-east-1_dtagLnju8")
       (def IDENTITY-POOL-ID "us-east-1:d6d3b034-1631-402b-b838-b44513e93ee0")
-      (def OAUTH-DOMAIN "logseq-prod.auth.us-east-1.amazoncognito.com")
       (def PUBLISH-API-BASE "https://logseq.io"))
 
-  (do (def LOGIN-URL
-        "https://logseq-test2.auth.us-east-2.amazoncognito.com/login?client_id=3ji1a0059hspovjq5fhed3uil8&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback")
-      (def API-DOMAIN "api-dev.logseq.com")
+  (do (def API-DOMAIN "api-dev.logseq.com")
       (def COGNITO-IDP "https://cognito-idp.us-east-2.amazonaws.com/")
-      (def COGNITO-CLIENT-ID "1qi1uijg8b6ra70nejvbptis0q")
       (def REGION "us-east-2")
       (def USER-POOL-ID "us-east-2_kAqZcxIeM")
       (def IDENTITY-POOL-ID "us-east-2:cc7d2ad3-84d0-4faf-98fe-628f6b52c0a5")
-      (def OAUTH-DOMAIN "logseq-test2.auth.us-east-2.amazoncognito.com")
       (def PUBLISH-API-BASE "https://logseq-publish-staging.logseq.workers.dev")))
 
 ;; Enable for local development

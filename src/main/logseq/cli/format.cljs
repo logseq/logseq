@@ -341,11 +341,23 @@
     (update data :kv redact-graph-kv)
     data))
 
+(defn- sanitize-auth-data
+  [data]
+  (if (map? data)
+    (apply dissoc data [:id-token :access-token :refresh-token])
+    data))
+
 (defn- sanitize-result
   [result]
-  (if (and (= :ok (:status result))
-           (= :graph-info (:command result)))
+  (cond
+    (and (= :ok (:status result))
+         (= :graph-info (:command result)))
     (update result :data sanitize-graph-info-data)
+
+    (= :login (:command result))
+    (update result :data sanitize-auth-data)
+
+    :else
     result))
 
 (defn- format-sync-status
@@ -405,6 +417,28 @@
 (defn- format-sync-config-unset
   [{:keys [key]}]
   (str "sync config unset: " (name key)))
+
+(defn- format-login
+  [{:keys [auth-path email sub]}]
+  (string/join "\n"
+               (cond-> ["Login successful"
+                        (str "Auth file: " (or auth-path "-"))]
+                 (seq email) (conj (str "Email: " email))
+                 (seq sub) (conj (str "User: " sub)))))
+
+(defn- format-logout
+  [{:keys [auth-path deleted? opened? logout-completed?]}]
+  (string/join "\n"
+               (cond-> [(str (if deleted?
+                               "Logged out"
+                               "Already logged out")
+                             ": "
+                             (or auth-path "-"))]
+                 logout-completed? (conj "Cognito logout: completed")
+                 (and (not logout-completed?) (true? opened?))
+                 (conj "Cognito logout: browser opened, completion not confirmed")
+                 (false? opened?)
+                 (conj "Cognito logout: could not open browser"))))
 
 (defn- format-upsert-block
   [{:keys [repo source target update-tags update-properties remove-tags remove-properties]} result]
@@ -508,6 +542,8 @@
         :sync-config-get (format-sync-config-get data)
         :sync-config-set (format-sync-config-set data)
         :sync-config-unset (format-sync-config-unset data)
+        :login (format-login data)
+        :logout (format-logout data)
         :list-page (format-list-page (:items data) now-ms)
         :list-tag (format-list-tag (:items data) now-ms)
         :list-property (format-list-property (:items data) now-ms)

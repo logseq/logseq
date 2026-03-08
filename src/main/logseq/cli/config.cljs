@@ -28,11 +28,19 @@
   []
   (node-path/join (.homedir os) "logseq" "cli.edn"))
 
+(def ^:private removed-config-keys
+  #{:auth-token :retries})
+
+(defn- sanitize-file-config
+  [config]
+  (apply dissoc (or config {}) removed-config-keys))
+
 (defn- read-config-file
   [config-path]
   (when (and (some? config-path) (fs/existsSync config-path))
     (let [contents (.toString (fs/readFileSync config-path) "utf8")]
-      (reader/read-string contents))))
+      (-> (reader/read-string contents)
+          sanitize-file-config))))
 
 (defn- ensure-config-dir!
   [config-path]
@@ -45,8 +53,8 @@
   [{:keys [config-path]} updates]
   (let [path (or config-path (default-config-path))
         current (or (read-config-file path) {})
-        filtered-current (dissoc current :retries)
-        filtered-updates (dissoc (or updates {}) :retries)
+        filtered-current (sanitize-file-config current)
+        filtered-updates (sanitize-file-config updates)
         nil-keys (->> filtered-updates
                       (keep (fn [[k v]]
                               (when (nil? v)
@@ -72,6 +80,12 @@
       (seq (gobj/get env "LOGSEQ_CLI_TIMEOUT_MS"))
       (assoc :timeout-ms (parse-int (gobj/get env "LOGSEQ_CLI_TIMEOUT_MS")))
 
+      (seq (gobj/get env "LOGSEQ_CLI_LOGIN_TIMEOUT_MS"))
+      (assoc :login-timeout-ms (parse-int (gobj/get env "LOGSEQ_CLI_LOGIN_TIMEOUT_MS")))
+
+      (seq (gobj/get env "LOGSEQ_CLI_LOGOUT_TIMEOUT_MS"))
+      (assoc :logout-timeout-ms (parse-int (gobj/get env "LOGSEQ_CLI_LOGOUT_TIMEOUT_MS")))
+
       (seq (gobj/get env "LOGSEQ_CLI_OUTPUT"))
       (assoc :output-format (parse-output-format (gobj/get env "LOGSEQ_CLI_OUTPUT")))
 
@@ -81,6 +95,8 @@
 (defn resolve-config
   [opts]
   (let [defaults {:timeout-ms 10000
+                  :login-timeout-ms 300000
+                  :logout-timeout-ms 120000
                   :output-format nil
                   :data-dir "~/logseq/graphs"
                   :config-path (default-config-path)}
