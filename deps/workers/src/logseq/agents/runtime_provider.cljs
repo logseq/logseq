@@ -398,7 +398,7 @@
 (defn- e2b-template-name
   [task]
   (when-let [graph-id (task-graph-id task)]
-    (sanitize-name (str "logseq-" graph-id "-" (task-repo-name task)))))
+    (sanitize-name (str graph-id "-" (task-repo-name task)))))
 
 (defn- e2b-agent-token
   [^js env runtime]
@@ -470,6 +470,8 @@
                       {:reason :missing-e2b-get-host})))
     (sandbox/normalize-base-url (.call get-host sandbox port))))
 
+(declare <e2b-build-template! <e2b-resolve-template!)
+
 (defn <e2b-create-sandbox!
   [^js env template opts]
   (let [sandbox-class (e2b-sandbox-class)
@@ -481,6 +483,36 @@
     (if (string? template)
       (->promise (.call create sandbox-class template params))
       (->promise (.call create sandbox-class params)))))
+
+(defn- e2b-template-not-found-error?
+  [error]
+  (let [message (or (some-> error (aget "message"))
+                    (some-> error str))]
+    (boolean (and (string? message)
+                  (string/includes? message "404:")
+                  (string/includes? message "template")
+                  (string/includes? message "not found")))))
+
+(defn- <e2b-create-sandbox-with-template-recovery!
+  [^js env task create-opts]
+  (p/let [template (<e2b-resolve-template! env task nil)]
+    (-> (<e2b-create-sandbox! env template create-opts)
+        (p/then (fn [sandbox]
+                  {:sandbox sandbox
+                   :template template}))
+        (p/catch
+         (fn [error]
+           (if-not (and (string? template)
+                        (e2b-template-not-found-error? error))
+             (throw error)
+             (if (project-docker-file task)
+               (p/let [rebuilt-template (<e2b-build-template! env task (project-docker-file task) {:force? true})
+                       sandbox (<e2b-create-sandbox! env rebuilt-template create-opts)]
+                 {:sandbox sandbox
+                  :template rebuilt-template})
+               (p/let [sandbox (<e2b-create-sandbox! env nil create-opts)]
+                 {:sandbox sandbox
+                  :template nil}))))))))
 
 (defn <e2b-connect-sandbox!
   [^js env sandbox-id]
@@ -632,35 +664,72 @@
   []
   (aget e2b "Template"))
 
-(defn- e2b-template-missing-error?
-  [error]
-  (let [message (some-> error str)]
-    (boolean (and (string? message)
-                  (string/starts-with? message "Error: 404:")))))
-
-(defn- <e2b-existing-template!
+(defn- <e2b-template-exists!
   [^js env template-name]
   (let [template-fn (e2b-template-fn)
-        get-tags (js-method template-fn "getTags")]
+        exists (js-method template-fn "exists")]
     (when-not (fn? template-fn)
       (throw (ex-info "e2b sdk missing Template"
                       {:reason :missing-e2b-template-sdk})))
-    (when-not (fn? get-tags)
-      (throw (ex-info "e2b sdk missing Template.getTags"
-                      {:reason :missing-e2b-template-get-tags})))
-    (-> (->promise (.call get-tags template-fn template-name (clj->js (e2b-api-opts env))))
-        (p/then (fn [_tags] template-name))
-        (p/catch (fn [error]
-                   (if (e2b-template-missing-error? error)
-                     nil
-                     (throw error)))))))
+    (when-not (fn? exists)
+      (throw (ex-info "e2b sdk missing Template.exists"
+                      {:reason :missing-e2b-template-exists})))
+    (-> (->promise (.call exists template-fn template-name (clj->js (e2b-api-opts env))))
+        (p/then true?))))
+
+(defn- <e2b-build-template!
+  [^js env task docker-file & [{:keys [force?]}]]
+  (let [template-fn (e2b-template-fn)
+        build (js-method template-fn "build")
+        wait-for-timeout (aget e2b "waitForTimeout")
+        default-build-logger (aget e2b "defaultBuildLogger")
+        template-name (e2b-template-name task)]
+    (when-not (fn? template-fn)
+      (throw (ex-info "e2b sdk missing Template"
+                      {:reason :missing-e2b-template-sdk})))
+    (when-not (fn? build)
+      (throw (ex-info "e2b sdk missing Template.build"
+                      {:reason :missing-e2b-template-build})))
+    (when-not (string? template-name)
+      (throw (ex-info "missing graph-scoped e2b template name"
+                      {:reason :missing-e2b-template-name})))
+    (p/let [template-exists? (if force?
+                               (p/resolved false)
+                               (<e2b-template-exists! env template-name))]
+      (if template-exists?
+        template-name
+        (p/let [template-builder-fn (some-> (template-fn) (js-method "fromDockerfile"))
+                template-builder (when (fn? template-builder-fn)
+                                   (.call template-builder-fn (template-fn) docker-file))
+                set-start-cmd (js-method template-builder "setStartCmd")
+                template-builder (if (and (some? template-builder)
+                                          (fn? set-start-cmd)
+                                          (fn? wait-for-timeout))
+                                   (.call set-start-cmd
+                                          template-builder
+                                          "bash -lc 'while true; do sleep 3600; done'"
+                                          (.call wait-for-timeout nil 5000))
+                                   template-builder)
+                build-opts (cond-> (merge (e2b-api-opts env)
+                                          {:cpuCount 1
+                                           :memoryMB 2048
+                                           :skipCache false})
+                             (fn? default-build-logger)
+                             (assoc :onBuildLogs (.call default-build-logger nil)))]
+          (when-not (some? template-builder)
+            (throw (ex-info "e2b sdk missing Template().fromDockerfile"
+                            {:reason :missing-e2b-from-dockerfile})))
+          (p/let [_build-info (->promise (.call build
+                                                template-fn
+                                                template-builder
+                                                template-name
+                                                (clj->js build-opts)))]
+            template-name))))))
 
 (defn- <e2b-resolve-template!
   [^js env task runtime]
   (if (project-docker-file task)
-    (if-let [template-name (e2b-template-name task)]
-      (<e2b-existing-template! env template-name)
-      (p/resolved nil))
+    (<e2b-build-template! env task (project-docker-file task))
     (p/resolved (e2b-template env task runtime))))
 
 (defn- e2b-server-command
@@ -958,22 +1027,23 @@
                                                                                                  checkpoint
                                                                                                  create-opts
                                                                                                  (fn []
-                                                                                                   (p/let [template (<e2b-resolve-template! env task nil)
-                                                                                                           sandbox (<e2b-create-sandbox! env template create-opts)]
+                                                                                                   (p/let [{:keys [sandbox template]} (<e2b-create-sandbox-with-template-recovery! env
+                                                                                                                                                                                   task
+                                                                                                                                                                                   create-opts)]
                                                                                                      {:sandbox sandbox
                                                                                                       :snapshot-id nil
                                                                                                       :restored? false
                                                                                                       :template template})))
               _ (<e2b-ensure-running! env sandbox session-id task port agent-token env-vars)
-              _ (when-not restored?
-                  (p/catch
-                   (<e2b-clone-repo! env sandbox session-id task)
-                   (fn [error]
-                     (log/error :agent/e2b-repo-clone-failed
-                                {:session-id session-id
-                                 :error (str error)
-                                 :error-data (ex-data error)})
-                     nil)))
+              ;; _ (when-not restored?
+              ;;     (p/catch
+              ;;      (<e2b-clone-repo! env sandbox session-id task)
+              ;;      (fn [error]
+              ;;        (log/error :agent/e2b-repo-clone-failed
+              ;;                   {:session-id session-id
+              ;;                    :error (str error)
+              ;;                    :error-data (ex-data error)})
+              ;;        nil)))
               base-url (e2b-sandbox-host sandbox port)
               response (sandbox/<create-session base-url agent-token session-id payload)
               sandbox-id (e2b-sandbox-id sandbox)]

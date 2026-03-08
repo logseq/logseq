@@ -141,7 +141,7 @@
                          (is false (str "unexpected error: " error))
                          (done)))))))
 
-(deftest e2b-provider-provision-uses-existing-template-from-project-docker-file-test
+(deftest e2b-provider-provision-builds-template-from-project-docker-file-test
   (async done
          (let [calls (atom [])
                env #js {"E2B_API_KEY" "e2b-key"
@@ -154,21 +154,54 @@
                                :docker-file "FROM node:20\nRUN corepack enable"}}
                e2b-ns (js/require "e2b")
                original-template (aget e2b-ns "Template")
+               original-wait-for-timeout (aget e2b-ns "waitForTimeout")
+               original-default-build-logger (aget e2b-ns "defaultBuildLogger")
                sandbox-class (runtime-provider/e2b-sandbox-class)
                original-create (aget sandbox-class "create")
                original-fetch js/fetch
                restore! (fn []
                           (aset e2b-ns "Template" original-template)
+                          (aset e2b-ns "waitForTimeout" original-wait-for-timeout)
+                          (aset e2b-ns "defaultBuildLogger" original-default-build-logger)
                           (aset sandbox-class "create" original-create)
                           (set! js/fetch original-fetch))
-               template-fn (fn [] #js {})]
-           (aset template-fn "getTags"
+               template-builder #js {}
+               template-fn (fn []
+                             template-builder)]
+           (aset template-builder "fromDockerfile"
+                 (fn [docker-file]
+                   (swap! calls conj {:type :from-dockerfile
+                                      :docker-file docker-file})
+                   template-builder))
+           (aset template-builder "setStartCmd"
+                 (fn [command ready-cmd]
+                   (swap! calls conj {:type :set-start-cmd
+                                      :command command
+                                      :ready-cmd ready-cmd})
+                   template-builder))
+           (aset template-fn "exists"
                  (fn [name opts]
-                   (swap! calls conj {:type :get-tags
+                   (swap! calls conj {:type :exists
                                       :name name
                                       :opts (js->clj opts :keywordize-keys true)})
-                   (js/Promise.resolve #js [])))
+                   (js/Promise.resolve false)))
+           (aset template-fn "build"
+                 (fn [builder name opts]
+                   (swap! calls conj {:type :build
+                                      :builder (= builder template-builder)
+                                      :name name
+                                      :opts (js->clj opts :keywordize-keys true)})
+                   (js/Promise.resolve #js {:templateId "tpl-from-docker"})))
            (aset e2b-ns "Template" template-fn)
+           (aset e2b-ns "waitForTimeout"
+                 (fn [timeout-ms]
+                   (swap! calls conj {:type :wait-for-timeout
+                                      :timeout-ms timeout-ms})
+                   #js {:timeoutMs timeout-ms}))
+           (aset e2b-ns "defaultBuildLogger"
+                 (fn []
+                   (swap! calls conj {:type :default-build-logger})
+                   (fn [_entry] nil)))
            (aset sandbox-class "create"
                  (fn [& args]
                    (let [template (first args)
@@ -201,7 +234,22 @@
                         (restore!)
                         (is (= "e2b" (:provider runtime)))
                         (is (= "logseq-graph-123-agent-test" (:template runtime)))
-                        (is (some #(and (= :get-tags (:type %))
+                        (is (some #(= {:type :from-dockerfile
+                                       :docker-file "FROM node:20\nRUN corepack enable"} %)
+                                  @calls))
+                        (is (some #(and (= :set-start-cmd (:type %))
+                                        (= "bash -lc 'while true; do sleep 3600; done'" (:command %)))
+                                  @calls))
+                        (is (some #(= {:type :wait-for-timeout
+                                       :timeout-ms 5000} %)
+                                  @calls))
+                        (is (some #(= {:type :default-build-logger} %)
+                                  @calls))
+                        (is (some #(and (= :exists (:type %))
+                                        (= "logseq-graph-123-agent-test" (:name %)))
+                                  @calls))
+                        (is (some #(and (= :build (:type %))
+                                        (:builder %)
                                         (= "logseq-graph-123-agent-test" (:name %))
                                         (= "e2b-key" (get-in % [:opts :apiKey])))
                                   @calls))
@@ -214,12 +262,11 @@
                          (is false (str "unexpected error: " error))
                          (done)))))))
 
-(deftest e2b-provider-provision-falls-back-to-default-sandbox-when-template-missing-test
+(deftest e2b-provider-provision-reuses-existing-template-before-building-test
   (async done
          (let [calls (atom [])
                env #js {"E2B_API_KEY" "e2b-key"
-                        "SANDBOX_AGENT_TOKEN" "agent-token"
-                        "E2B_TEMPLATE" "fallback-template"}
+                        "SANDBOX_AGENT_TOKEN" "agent-token"}
                provider (runtime-provider/create-provider env "e2b")
                task {:agent {:provider "codex"}
                      :project {:repo-url "https://github.com/logseq/agent-test"
@@ -235,29 +282,34 @@
                           (aset sandbox-class "create" original-create)
                           (set! js/fetch original-fetch))
                template-fn (fn [] #js {})]
-           (aset template-fn "getTags"
-                 (fn [_name _opts]
-                   (js/Promise.reject (js/Error. "404: Not Found"))))
+           (aset template-fn "exists"
+                 (fn [name _opts]
+                   (swap! calls conj {:type :exists
+                                      :name name})
+                   (js/Promise.resolve true)))
+           (aset template-fn "build"
+                 (fn [& _args]
+                   (swap! calls conj {:type :build})
+                   (js/Promise.resolve #js {:templateId "tpl-should-not-build"})))
            (aset e2b-ns "Template" template-fn)
            (aset sandbox-class "create"
                  (fn [& args]
-                   (swap! calls conj {:type :create
-                                      :argc (count args)
-                                      :first-arg (first args)
-                                      :last-arg (js->clj (last args) :keywordize-keys true)})
-                   (js/Promise.resolve
-                    #js {:sandboxId "e2b-sbx-docker-default"
-                         :getHost (fn [_port]
-                                    "https://e2b-agent.local")
-                         :commands
-                         #js {:run (fn [cmd _opts]
-                                     (if (string/includes? cmd "/v1/health")
-                                       (js/Promise.resolve #js {:stdout "__HEALTH_OK__"
-                                                                :stderr ""
-                                                                :exitCode 0})
-                                       (js/Promise.resolve #js {:stdout ""
-                                                                :stderr ""
-                                                                :exitCode 0})))}})))
+                   (let [template (first args)]
+                     (swap! calls conj {:type :create
+                                        :template template})
+                     (js/Promise.resolve
+                      #js {:sandboxId "e2b-sbx-existing-template"
+                           :getHost (fn [_port]
+                                      "https://e2b-agent.local")
+                           :commands
+                           #js {:run (fn [cmd _opts]
+                                       (if (string/includes? cmd "/v1/health")
+                                         (js/Promise.resolve #js {:stdout "__HEALTH_OK__"
+                                                                  :stderr ""
+                                                                  :exitCode 0})
+                                         (js/Promise.resolve #js {:stdout ""
+                                                                  :stderr ""
+                                                                  :exitCode 0})))}}))))
            (set! js/fetch
                  (fn [_request]
                    (js/Promise.resolve
@@ -265,16 +317,186 @@
                      (js/JSON.stringify #js {:ok true})
                      #js {:status 200
                           :headers #js {"content-type" "application/json"}}))))
-           (-> (runtime-provider/<provision-runtime! provider "sess-e2b-docker-default" task)
+           (-> (runtime-provider/<provision-runtime! provider "sess-e2b-existing-template" task)
                (.then (fn [runtime]
                         (restore!)
-                        (is (= "e2b" (:provider runtime)))
-                        (is (nil? (:template runtime)))
-                        (is (some #(and (= :create (:type %))
-                                        (= 1 (:argc %))
-                                        (map? (:first-arg %))
-                                        (= "e2b-key" (get-in % [:first-arg :apiKey])))
+                        (is (= "logseq-graph-123-agent-test" (:template runtime)))
+                        (is (some #(= {:type :exists
+                                       :name "logseq-graph-123-agent-test"} %)
                                   @calls))
+                        (is (nil? (some #(when (= :build (:type %)) %) @calls)))
+                        (is (some #(and (= :create (:type %))
+                                        (= "logseq-graph-123-agent-test" (:template %)))
+                                  @calls))
+                        (done)))
+               (.catch (fn [error]
+                         (restore!)
+                         (is false (str "unexpected error: " error))
+                         (done)))))))
+
+(deftest e2b-provider-provision-falls-back-when-configured-template-is-missing-test
+  (async done
+         (let [calls (atom [])
+               env #js {"E2B_API_KEY" "e2b-key"
+                        "SANDBOX_AGENT_TOKEN" "agent-token"
+                        "E2B_TEMPLATE" "78fq0upgdyots2idb7fv"}
+               provider (runtime-provider/create-provider env "e2b")
+               task {:agent {:provider "codex"}
+                     :project {:repo-url "https://github.com/logseq/agent-test"}}
+               sandbox-class (runtime-provider/e2b-sandbox-class)
+               original-create (aget sandbox-class "create")
+               original-fetch js/fetch
+               restore! (fn []
+                          (aset sandbox-class "create" original-create)
+                          (set! js/fetch original-fetch))]
+           (aset sandbox-class "create"
+                 (fn [& args]
+                   (swap! calls conj {:type :create
+                                      :argc (count args)
+                                      :template (when (= 2 (count args))
+                                                  (first args))
+                                      :opts (js->clj (last args) :keywordize-keys true)})
+                   (if (= 2 (count args))
+                     (js/Promise.reject
+                      #js {:name "SandboxError"
+                           :message "404: template '78fq0upgdyots2idb7fv' not found"})
+                     (js/Promise.resolve
+                      #js {:sandboxId "e2b-sbx-fallback-template"
+                           :getHost (fn [_port]
+                                      "https://e2b-agent.local")
+                           :commands
+                           #js {:run (fn [cmd _opts]
+                                       (if (string/includes? cmd "/v1/health")
+                                         (js/Promise.resolve #js {:stdout "__HEALTH_OK__"
+                                                                  :stderr ""
+                                                                  :exitCode 0})
+                                         (js/Promise.resolve #js {:stdout ""
+                                                                  :stderr ""
+                                                                  :exitCode 0})))}}))))
+           (set! js/fetch
+                 (fn [_request]
+                   (js/Promise.resolve
+                    (js/Response.
+                     (js/JSON.stringify #js {:ok true})
+                     #js {:status 200
+                          :headers #js {"content-type" "application/json"}}))))
+           (-> (runtime-provider/<provision-runtime! provider "sess-e2b-fallback-template" task)
+               (.then (fn [runtime]
+                        (restore!)
+                        (is (= "e2b-sbx-fallback-template" (:sandbox-id runtime)))
+                        (is (nil? (:template runtime)))
+                        (is (= 2 (count @calls)))
+                        (is (= {:type :create
+                                :argc 2
+                                :template "78fq0upgdyots2idb7fv"}
+                               (select-keys (first @calls) [:type :argc :template])))
+                        (is (= {:type :create
+                                :argc 1
+                                :template nil}
+                               (select-keys (second @calls) [:type :argc :template])))
+                        (is (= "e2b-key" (get-in (first @calls) [:opts :apiKey])))
+                        (is (= "pause" (get-in (first @calls) [:opts :lifecycle :onTimeout])))
+                        (is (= "sess-e2b-fallback-template"
+                               (get-in (first @calls) [:opts :metadata :session-id])))
+                        (done)))
+               (.catch (fn [error]
+                         (restore!)
+                         (is false (str "unexpected error: " error))
+                         (done)))))))
+
+(deftest e2b-provider-provision-rebuilds-docker-template-when-create-reports-missing-template-test
+  (async done
+         (let [calls (atom [])
+               env #js {"E2B_API_KEY" "e2b-key"
+                        "SANDBOX_AGENT_TOKEN" "agent-token"}
+               provider (runtime-provider/create-provider env "e2b")
+               task {:agent {:provider "codex"}
+                     :project {:repo-url "https://github.com/logseq/logseq"
+                               :graph-id "d86730bc-f157-4f91-808a-5b23532c51fc"
+                               :docker-file "FROM node:20\nRUN corepack enable"}}
+               e2b-ns (js/require "e2b")
+               original-template (aget e2b-ns "Template")
+               original-wait-for-timeout (aget e2b-ns "waitForTimeout")
+               original-default-build-logger (aget e2b-ns "defaultBuildLogger")
+               sandbox-class (runtime-provider/e2b-sandbox-class)
+               original-create (aget sandbox-class "create")
+               original-fetch js/fetch
+               restore! (fn []
+                          (aset e2b-ns "Template" original-template)
+                          (aset e2b-ns "waitForTimeout" original-wait-for-timeout)
+                          (aset e2b-ns "defaultBuildLogger" original-default-build-logger)
+                          (aset sandbox-class "create" original-create)
+                          (set! js/fetch original-fetch))
+               template-builder #js {}
+               template-fn (fn [] template-builder)]
+           (aset template-builder "fromDockerfile"
+                 (fn [docker-file]
+                   (swap! calls conj {:type :from-dockerfile
+                                      :docker-file docker-file})
+                   template-builder))
+           (aset template-builder "setStartCmd"
+                 (fn [command _ready-cmd]
+                   (swap! calls conj {:type :set-start-cmd
+                                      :command command})
+                   template-builder))
+           (aset template-fn "exists"
+                 (fn [name _opts]
+                   (swap! calls conj {:type :exists
+                                      :name name})
+                   (js/Promise.resolve true)))
+           (aset template-fn "build"
+                 (fn [_builder name _opts]
+                   (swap! calls conj {:type :build
+                                      :name name})
+                   (js/Promise.resolve #js {:templateId "tpl-rebuilt"})))
+           (aset e2b-ns "Template" template-fn)
+           (aset e2b-ns "waitForTimeout" (fn [_timeout-ms] #js {}))
+           (aset e2b-ns "defaultBuildLogger" (fn [] (fn [_entry] nil)))
+           (aset sandbox-class "create"
+                 (fn [& args]
+                   (let [template (first args)]
+                     (swap! calls conj {:type :create
+                                        :argc (count args)
+                                        :template (when (= 2 (count args)) template)})
+                     (if (= 1 (count (filter #(and (= :create (:type %))
+                                                   (= "d86730bc-f157-4f91-808a-5b23532c51fc-logseq" (:template %)))
+                                             @calls)))
+                       (js/Promise.reject
+                        #js {:name "SandboxError"
+                             :message "404: template '78fq0upgdyots2idb7fv' not found"})
+                       (js/Promise.resolve
+                        #js {:sandboxId "e2b-sbx-rebuilt-template"
+                             :getHost (fn [_port]
+                                        "https://e2b-agent.local")
+                             :commands
+                             #js {:run (fn [cmd _opts]
+                                         (if (string/includes? cmd "/v1/health")
+                                           (js/Promise.resolve #js {:stdout "__HEALTH_OK__"
+                                                                    :stderr ""
+                                                                    :exitCode 0})
+                                           (js/Promise.resolve #js {:stdout ""
+                                                                    :stderr ""
+                                                                    :exitCode 0})))}})))))
+           (set! js/fetch
+                 (fn [_request]
+                   (js/Promise.resolve
+                    (js/Response.
+                     (js/JSON.stringify #js {:ok true})
+                     #js {:status 200
+                          :headers #js {"content-type" "application/json"}}))))
+           (-> (runtime-provider/<provision-runtime! provider "sess-e2b-rebuild-template" task)
+               (.then (fn [runtime]
+                        (restore!)
+                        (is (= "d86730bc-f157-4f91-808a-5b23532c51fc-logseq" (:template runtime)))
+                        (is (= 1 (count (filter #(= {:type :exists
+                                                     :name "d86730bc-f157-4f91-808a-5b23532c51fc-logseq"} %)
+                                                @calls))))
+                        (is (= 1 (count (filter #(= {:type :build
+                                                     :name "d86730bc-f157-4f91-808a-5b23532c51fc-logseq"} %)
+                                                @calls))))
+                        (is (= 2 (count (filter #(and (= :create (:type %))
+                                                      (= "d86730bc-f157-4f91-808a-5b23532c51fc-logseq" (:template %)))
+                                                @calls))))
                         (done)))
                (.catch (fn [error]
                          (restore!)

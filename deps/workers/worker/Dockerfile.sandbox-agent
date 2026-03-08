@@ -1,60 +1,52 @@
-FROM docker.io/cloudflare/sandbox:0.7.6
+FROM node:lts-trixie
 
-ENV DEBIAN_FRONTEND=noninteractive
-
-# System deps + Java 21
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN DEBIAN_FRONTEND=noninteractive apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    git \
+    gnupg \
     openjdk-21-jdk \
+    rclone \
+    ripgrep \
+    fd-find \
+    jq \
+    tmux \
+    vim \
+  && ln -sf /usr/bin/fdfind /usr/local/bin/fd \
+  && mkdir -p /etc/apt/keyrings \
+  && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+  && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+  && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    > /etc/apt/sources.list.d/github-cli.list \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends gh \
   && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js 22
-# The base image has Node 20, we need to replace it with Node 22
-# Using direct binary download for reliability
-ENV NODE_VERSION=22.20.0
-RUN ARCH="$(dpkg --print-architecture)" \
-    && case "${ARCH}" in \
-         amd64) NODE_ARCH="x64" ;; \
-         arm64) NODE_ARCH="arm64" ;; \
-         *) echo "Unsupported architecture: ${ARCH}" >&2; exit 1 ;; \
-       esac \
-    && apt-get update && apt-get install -y xz-utils ca-certificates rclone tmux vim \
-    && curl -fsSLk https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz -o /tmp/node.tar.xz \
-    && tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 \
-    && rm /tmp/node.tar.xz \
-    && node --version \
-    && npm --version
-
-# GitHub CLI
-RUN mkdir -p /etc/apt/keyrings \
-    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-      -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
-    && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-      > /etc/apt/sources.list.d/github-cli.list \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends gh \
-    && gh --version \
-    && rm -rf /var/lib/apt/lists/*
-
-# Prefer corepack over "npm i -g yarn"
 RUN corepack enable
-# Optionally pin yarn (pick a version you want)
-# RUN corepack prepare yarn@4.6.0 --activate
 
-# Clojure
-RUN curl -fsSL -o /tmp/linux-install.sh \
-      https://github.com/clojure/brew-install/releases/latest/download/linux-install.sh \
-  && chmod +x /tmp/linux-install.sh \
-  && /tmp/linux-install.sh \
-  && rm -f /tmp/linux-install.sh
+RUN curl -fsSL \
+    https://github.com/clojure/brew-install/releases/latest/download/linux-install.sh \
+    -o /tmp/clojure-install.sh \
+  && chmod +x /tmp/clojure-install.sh \
+  && /tmp/clojure-install.sh \
+  && rm -f /tmp/clojure-install.sh
 
-# Babashka (actually run installer)
 RUN curl -fsSL https://raw.githubusercontent.com/babashka/babashka/master/install | bash
 
-WORKDIR /workspace
-
-# sandbox-agent + codex agent
 RUN curl -fsSL https://releases.rivet.dev/sandbox-agent/0.1.5/install.sh | sh \
-  && sandbox-agent install-agent codex
+  && /usr/local/bin/sandbox-agent install-agent codex
+
+WORKDIR /home/user/workspace
+
+RUN git clone https://github.com/logseq/logseq
+
+WORKDIR /home/user/workspace/logseq
+
+RUN yarn install
+RUN clojure -M:test compile test
 
 EXPOSE 2468
+
+CMD ["/bin/bash"]
