@@ -63,3 +63,13 @@
     (testing "logseq property namespace"
       (is (db-property/logseq-property? :logseq.property.reaction/emoji-id))
       (is (db-property/logseq-property? :logseq.property.reaction/target)))))
+
+(deftest project-docker-file-built-in-property
+  (let [props db-property/built-in-properties]
+    (is (contains? props :logseq.property/project.docker-file))
+    (is (= "Project Dockerfile"
+           (get-in props [:logseq.property/project.docker-file :title])))
+    (is (= :default
+           (get-in props [:logseq.property/project.docker-file :schema :type])))
+    (is (= true
+           (get-in props [:logseq.property/project.docker-file :schema :public?])))))

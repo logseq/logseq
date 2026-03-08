@@ -132,6 +132,30 @@
     checkpoint
     (merge checkpoint (checkpoint-bundle-fields bundle))))
 
+(def ^:private checkpoint-bundle-ks
+  [:bundle-id
+   :bundle-seq
+   :bundle-object-key
+   :bundle-byte-size
+   :bundle-checksum
+   :bundle-head-sha
+   :bundle-base-sha
+   :bundle-head-branch])
+
+(defn- strip-checkpoint-bundle
+  [checkpoint]
+  (if (map? checkpoint)
+    (apply dissoc checkpoint checkpoint-bundle-ks)
+    checkpoint))
+
+(defn- runtime-provider-id
+  [runtime]
+  (some-> (:provider runtime) str string/lower-case))
+
+(defn- workspace-bundle-required?
+  [runtime]
+  (not= "e2b" (runtime-provider-id runtime)))
+
 (defn- runtime-checkpoint-payload
   [runtime result reason]
   (let [snapshot-id (runtime-snapshot-id result)
@@ -423,10 +447,12 @@
                                               (string? reason) (assoc :reason reason))
                                       :ts (common/now-ms)})]
         (if (map? checkpoint)
-          (p/let [checkpoint (<checkpoint-workspace-bundle! self current-session checkpoint (cond-> {:by by
-                                                                                                     :reason reason}
-                                                                                              (string? head-branch)
-                                                                                              (assoc :head-branch head-branch)))
+          (p/let [checkpoint (if (workspace-bundle-required? (:runtime current-session))
+                               (<checkpoint-workspace-bundle! self current-session checkpoint (cond-> {:by by
+                                                                                                       :reason reason}
+                                                                                                (string? head-branch)
+                                                                                                (assoc :head-branch head-branch)))
+                               (p/resolved (strip-checkpoint-bundle checkpoint)))
                   _ (<persist-session-checkpoint! self (:id current-session) checkpoint)
                   _ (<append-event! self {:type "sandbox.checkpoint.succeeded"
                                           :data (checkpoint-event-data checkpoint
@@ -1113,9 +1139,12 @@
       nil
 
       :else
-      (p/let [restored-bundle (<restore-workspace-bundle! self session-id task runtime)]
+      (p/let [restored-bundle (if (workspace-bundle-required? runtime)
+                                (<restore-workspace-bundle! self session-id task runtime)
+                                (p/resolved nil))]
         (let [base-checkpoint (or (runtime-checkpoint-payload runtime runtime "provisioned")
-                                  (checkpoint-payload-with-reason d1-checkpoint "provisioned"))
+                                  (some-> (checkpoint-payload-with-reason d1-checkpoint "provisioned")
+                                          strip-checkpoint-bundle))
               runtime-checkpoint (merge-checkpoint-bundle base-checkpoint restored-bundle)
               session (-> session
                           (assoc :runtime runtime)

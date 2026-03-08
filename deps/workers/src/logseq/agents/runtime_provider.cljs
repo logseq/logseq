@@ -949,6 +949,19 @@
       (some-> (get-in task [:runtime :template]) str string/trim not-empty)
       (env-str env "E2B_TEMPLATE")))
 
+(defn- task-graph-id
+  [task]
+  (some-> (get-in task [:project :graph-id]) str string/trim not-empty))
+
+(defn- project-docker-file
+  [task]
+  (some-> (get-in task [:project :docker-file]) str string/trim not-empty))
+
+(defn- e2b-template-name
+  [task]
+  (when-let [graph-id (task-graph-id task)]
+    (sanitize-name (str "logseq-" graph-id "-" (task-repo-name task)))))
+
 (defn- e2b-agent-token
   [^js env runtime]
   (or (:agent-token runtime)
@@ -1163,6 +1176,41 @@
       (seq env-vars) (assoc :envs env-vars)
       (string? session-id) (assoc :metadata metadata))))
 
+(defn- e2b-template-fn
+  []
+  (aget e2b "Template"))
+
+(defn- e2b-template-missing-error?
+  [error]
+  (let [message (some-> error str)]
+    (boolean (and (string? message)
+                  (string/starts-with? message "Error: 404:")))))
+
+(defn- <e2b-existing-template!
+  [^js env template-name]
+  (let [template-fn (e2b-template-fn)
+        get-tags (js-method template-fn "getTags")]
+    (when-not (fn? template-fn)
+      (throw (ex-info "e2b sdk missing Template"
+                      {:reason :missing-e2b-template-sdk})))
+    (when-not (fn? get-tags)
+      (throw (ex-info "e2b sdk missing Template.getTags"
+                      {:reason :missing-e2b-template-get-tags})))
+    (-> (->promise (.call get-tags template-fn template-name (clj->js (e2b-api-opts env))))
+        (p/then (fn [_tags] template-name))
+        (p/catch (fn [error]
+                   (if (e2b-template-missing-error? error)
+                     nil
+                     (throw error)))))))
+
+(defn- <e2b-resolve-template!
+  [^js env task runtime]
+  (if (project-docker-file task)
+    (if-let [template-name (e2b-template-name task)]
+      (<e2b-existing-template! env template-name)
+      (p/resolved nil))
+    (p/resolved (e2b-template env task runtime))))
+
 (defn- e2b-server-command
   [^js env task session-id port agent-token env-vars]
   (let [auth-json (get-in task [:agent :auth-json])
@@ -1239,14 +1287,11 @@
                      nil))))))
 
 (defn- <e2b-create-sandbox-for-restore!
-  [^js env template checkpoint create-opts]
+  [^js env checkpoint create-opts create-fn]
   (p/let [checkpoint-restore (<e2b-create-sandbox-from-checkpoint! env checkpoint create-opts)]
     (if (map? checkpoint-restore)
       checkpoint-restore
-      (p/let [sandbox (<e2b-create-sandbox! env template create-opts)]
-        {:sandbox sandbox
-         :snapshot-id nil
-         :restored? false}))))
+      (create-fn))))
 
 (defn- <e2b-runtime-base-url!
   [^js env runtime]
@@ -2631,14 +2676,19 @@
           repo-dir (get-repo-dir session-id task "e2b")
           checkpoint (task-sandbox-checkpoint task)
           backup-key (or (:backup-key checkpoint)
-                         (repo-backup-key task))
-          template (e2b-template env task nil)]
+                         (repo-backup-key task))]
       (p/let [env-vars (<e2b-agent-env-vars! env task)
               create-opts (e2b-create-opts env session-id env-vars)
-              {:keys [sandbox snapshot-id restored?]} (<e2b-create-sandbox-for-restore! env
-                                                                                        template
-                                                                                        checkpoint
-                                                                                        create-opts)
+              {:keys [sandbox snapshot-id restored? template]} (<e2b-create-sandbox-for-restore! env
+                                                                                                 checkpoint
+                                                                                                 create-opts
+                                                                                                 (fn []
+                                                                                                   (p/let [template (<e2b-resolve-template! env task nil)
+                                                                                                           sandbox (<e2b-create-sandbox! env template create-opts)]
+                                                                                                     {:sandbox sandbox
+                                                                                                      :snapshot-id nil
+                                                                                                      :restored? false
+                                                                                                      :template template})))
               _ (<e2b-ensure-running! env sandbox session-id task port agent-token env-vars)
               _ (when-not restored?
                   (p/catch
@@ -2649,14 +2699,6 @@
                                  :error (str error)
                                  :error-data (ex-data error)})
                      nil)))
-              _ (p/catch
-                 (<e2b-run-project-init-setup! sandbox session-id task)
-                 (fn [error]
-                   (log/error :agent/e2b-project-init-setup-failed
-                              {:session-id session-id
-                               :error (str error)
-                               :error-data (ex-data error)})
-                   nil))
               base-url (e2b-sandbox-host sandbox port)
               response (sandbox/<create-session base-url agent-token session-id payload)
               sandbox-id (e2b-sandbox-id sandbox)]

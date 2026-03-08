@@ -742,6 +742,67 @@
                            (is false (str "unexpected checkpoint bundle error: " error))
                            (done))))))))
 
+(deftest checkpoint-existing-snapshot-skips-workspace-bundle-for-e2b-test
+  (testing "e2b checkpoint refresh keeps snapshot metadata without persisting workspace bundle"
+    (async done
+           (let [env #js {"AGENT_RUNTIME_PROVIDER" "e2b"}
+                 self (make-self env)
+                 export-calls (atom 0)
+                 put-calls (atom 0)
+                 upsert-calls (atom 0)
+                 session {:id "sess-checkpoint-e2b"
+                          :status "running"
+                          :task {:id "sess-checkpoint-e2b"
+                                 :project {:repo-url "https://github.com/logseq/logseq"
+                                           :base-branch "main"}
+                                 :sandbox-checkpoint {:provider "e2b"
+                                                      :snapshot-id "e2b-snapshot-1"
+                                                      :bundle-id "old-bundle"
+                                                      :bundle-object-key "workspace-bundles/old.bundle.b64"}}
+                          :runtime {:provider "e2b"
+                                    :session-id "sess-checkpoint-e2b"
+                                    :sandbox-id "sbx-checkpoint-e2b"
+                                    :snapshot-id "e2b-snapshot-1"
+                                    :backup-key "github/logseq/logseq#main"
+                                    :backup-dir "/home/user/workspace/logseq"}
+                          :audit {}
+                          :created-at 0
+                          :updated-at 0}]
+             (-> (.put (.-storage self) "session" (clj->js session))
+                 (.then (fn [_]
+                          (with-redefs [checkpoint-store/<upsert-checkpoint-for-task! (fn [_env _task checkpoint]
+                                                                                        (js/Promise.resolve checkpoint))
+                                        runtime-provider/<export-workspace-bundle! (fn [_provider _runtime _opts]
+                                                                                     (swap! export-calls inc)
+                                                                                     (js/Promise.resolve nil))
+                                        workspace-bundle-r2/<put-bundle-base64! (fn [_env _object-key _bundle-base64 _metadata]
+                                                                                  (swap! put-calls inc)
+                                                                                  (js/Promise.resolve nil))
+                                        workspace-bundle-store/<upsert-bundle-for-task! (fn [_env _task _bundle]
+                                                                                          (swap! upsert-calls inc)
+                                                                                          (js/Promise.resolve nil))]
+                            (#'agent-do/<checkpoint-existing-snapshot! self
+                                                                       session
+                                                                       {:by "system"
+                                                                        :reason "pr-ready"}))))
+                 (.then (fn [ok?]
+                          (is (true? ok?))
+                          (is (zero? @export-calls))
+                          (is (zero? @put-calls))
+                          (is (zero? @upsert-calls))
+                          (.then (.get (.-storage self) "session")
+                                 (fn [session-js]
+                                   (let [stored (js->clj session-js :keywordize-keys true)
+                                         checkpoint (get-in stored [:task :sandbox-checkpoint])]
+                                     (is (= "e2b-snapshot-1" (:snapshot-id checkpoint)))
+                                     (is (= "e2b" (:provider checkpoint)))
+                                     (is (nil? (:bundle-id checkpoint)))
+                                     (is (nil? (:bundle-object-key checkpoint)))
+                                     (done))))))
+                 (.catch (fn [error]
+                           (is false (str "unexpected e2b checkpoint error: " error))
+                           (done))))))))
+
 (deftest provision-runtime-restores-workspace-bundle-test
   (testing "provision runtime applies latest workspace bundle and stores bundle metadata in checkpoint"
     (async done
@@ -812,6 +873,86 @@
                                      (done))))))
                  (.catch (fn [error]
                            (is false (str "unexpected restore bundle error: " error))
+                           (done))))))))
+
+(deftest provision-runtime-skips-workspace-bundle-restore-for-e2b-test
+  (testing "e2b provision should not restore workspace bundle metadata from R2"
+    (async done
+           (let [env #js {"AGENT_RUNTIME_PROVIDER" "e2b"
+                          "AGENTS_DB" #js {}}
+                 self (make-self env)
+                 task {:id "sess-restore-e2b"
+                       :agent "codex"
+                       :project {:repo-url "https://github.com/logseq/logseq"
+                                 :base-branch "main"}}
+                 runtime {:provider "e2b"
+                          :session-id "runtime-restore-e2b"
+                          :sandbox-id "sbx-restore-e2b"
+                          :snapshot-id "e2b-snapshot-restored"}
+                 get-bundle-calls (atom 0)
+                 apply-calls (atom 0)
+                 provider (reify runtime-provider/RuntimeProvider
+                            (<provision-runtime! [_ _session-id _task]
+                              (js/Promise.resolve runtime))
+                            (<open-events-stream! [_ _runtime]
+                              (js/Promise.resolve nil))
+                            (<send-message! [_ _runtime _message]
+                              (js/Promise.resolve true))
+                            (<open-terminal! [_ _runtime _request _opts]
+                              (js/Promise.resolve nil))
+                            (<snapshot-runtime! [_ _runtime _opts]
+                              (js/Promise.resolve nil))
+                            (<export-workspace-bundle! [_ _runtime _opts]
+                              (js/Promise.resolve nil))
+                            (<apply-workspace-bundle! [_ _runtime _opts]
+                              (swap! apply-calls inc)
+                              (js/Promise.resolve true))
+                            (<push-branch! [_ _runtime _opts]
+                              (js/Promise.resolve nil))
+                            (<terminate-runtime! [_ _runtime]
+                              (js/Promise.resolve nil)))]
+             (-> (.put (.-storage self)
+                       "session"
+                       (clj->js {:id "sess-restore-e2b"
+                                 :status "running"
+                                 :task task
+                                 :audit {}
+                                 :created-at 0
+                                 :updated-at 0}))
+                 (.then (fn [_]
+                          (with-redefs [runtime-provider/resolve-provider (fn [_env _runtime] provider)
+                                        runtime-provider/provider-id (fn [_provider] "e2b")
+                                        agent-do/start-runtime-events-stream-background! (fn [& _] nil)
+                                        common/<d1-all (fn [_db _sql & _args]
+                                                         (js/Promise.resolve
+                                                          #js {:results #js [#js {"provider" "e2b"
+                                                                                  "snapshot_id" "snapshot-from-d1"
+                                                                                  "bundle_id" "bundle-restore-1"
+                                                                                  "bundle_seq" 3
+                                                                                  "bundle_object_key" "workspace-bundles/github/logseq/logseq/main/bundle-restore-1.bundle.b64"
+                                                                                  "checkpoint_at" 1000}]}))
+                                        common/get-sql-rows (fn [result]
+                                                              (aget result "results"))
+                                        workspace-bundle-store/<load-latest-bundle-for-task! (fn [_env _task _session-id]
+                                                                                               (js/Promise.resolve {:bundle-id "bundle-restore-1"}))
+                                        workspace-bundle-r2/<get-bundle-base64! (fn [_env _object-key]
+                                                                                  (swap! get-bundle-calls inc)
+                                                                                  (js/Promise.resolve {:bundle-base64 "ZmFrZS1idW5kbGUtZGF0YQ=="}))]
+                            (#'agent-do/<provision-runtime! self task "sess-restore-e2b"))))
+                 (.then (fn [_]
+                          (is (zero? @get-bundle-calls))
+                          (is (zero? @apply-calls))
+                          (.then (.get (.-storage self) "session")
+                                 (fn [session-js]
+                                   (let [stored (js->clj session-js :keywordize-keys true)
+                                         checkpoint (get-in stored [:task :sandbox-checkpoint])]
+                                     (is (= "e2b-snapshot-restored" (:snapshot-id checkpoint)))
+                                     (is (= "e2b" (:provider checkpoint)))
+                                     (is (nil? (:bundle-id checkpoint)))
+                                     (is (nil? (:bundle-object-key checkpoint)))
+                                     (done))))))
+                 (.catch (fn [error]
+                           (is false (str "unexpected e2b restore provision error: " error))
                            (done))))))))
 
 (deftest restore-workspace-bundle-skips-when-session-changed-test

@@ -234,6 +234,8 @@
               [:title :string]
               [:repo-url :string]
               [:base-branch {:optional true} :string]
+              [:graph-id {:optional true} :string]
+              [:docker-file {:optional true} :string]
               [:sandbox-init-setup {:optional true} :string]]]
    [:agent [:or :string
             [:map

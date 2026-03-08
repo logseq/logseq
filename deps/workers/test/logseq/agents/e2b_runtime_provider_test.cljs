@@ -141,6 +141,146 @@
                          (is false (str "unexpected error: " error))
                          (done)))))))
 
+(deftest e2b-provider-provision-uses-existing-template-from-project-docker-file-test
+  (async done
+         (let [calls (atom [])
+               env #js {"E2B_API_KEY" "e2b-key"
+                        "SANDBOX_AGENT_TOKEN" "agent-token"
+                        "E2B_TEMPLATE" "fallback-template"}
+               provider (runtime-provider/create-provider env "e2b")
+               task {:agent {:provider "codex"}
+                     :project {:repo-url "https://github.com/logseq/agent-test"
+                               :graph-id "graph-123"
+                               :docker-file "FROM node:20\nRUN corepack enable"}}
+               e2b-ns (js/require "e2b")
+               original-template (aget e2b-ns "Template")
+               sandbox-class (runtime-provider/e2b-sandbox-class)
+               original-create (aget sandbox-class "create")
+               original-fetch js/fetch
+               restore! (fn []
+                          (aset e2b-ns "Template" original-template)
+                          (aset sandbox-class "create" original-create)
+                          (set! js/fetch original-fetch))
+               template-fn (fn [] #js {})]
+           (aset template-fn "getTags"
+                 (fn [name opts]
+                   (swap! calls conj {:type :get-tags
+                                      :name name
+                                      :opts (js->clj opts :keywordize-keys true)})
+                   (js/Promise.resolve #js [])))
+           (aset e2b-ns "Template" template-fn)
+           (aset sandbox-class "create"
+                 (fn [& args]
+                   (let [template (first args)
+                         opts (js->clj (last args) :keywordize-keys true)]
+                     (swap! calls conj {:type :create
+                                        :template template
+                                        :opts opts})
+                     (js/Promise.resolve
+                      #js {:sandboxId "e2b-sbx-docker"
+                           :getHost (fn [_port]
+                                      "https://e2b-agent.local")
+                           :commands
+                           #js {:run (fn [cmd _opts]
+                                       (if (string/includes? cmd "/v1/health")
+                                         (js/Promise.resolve #js {:stdout "__HEALTH_OK__"
+                                                                  :stderr ""
+                                                                  :exitCode 0})
+                                         (js/Promise.resolve #js {:stdout ""
+                                                                  :stderr ""
+                                                                  :exitCode 0})))}}))))
+           (set! js/fetch
+                 (fn [_request]
+                   (js/Promise.resolve
+                    (js/Response.
+                     (js/JSON.stringify #js {:ok true})
+                     #js {:status 200
+                          :headers #js {"content-type" "application/json"}}))))
+           (-> (runtime-provider/<provision-runtime! provider "sess-e2b-docker" task)
+               (.then (fn [runtime]
+                        (restore!)
+                        (is (= "e2b" (:provider runtime)))
+                        (is (= "logseq-graph-123-agent-test" (:template runtime)))
+                        (is (some #(and (= :get-tags (:type %))
+                                        (= "logseq-graph-123-agent-test" (:name %))
+                                        (= "e2b-key" (get-in % [:opts :apiKey])))
+                                  @calls))
+                        (is (some #(and (= :create (:type %))
+                                        (= "logseq-graph-123-agent-test" (:template %)))
+                                  @calls))
+                        (done)))
+               (.catch (fn [error]
+                         (restore!)
+                         (is false (str "unexpected error: " error))
+                         (done)))))))
+
+(deftest e2b-provider-provision-falls-back-to-default-sandbox-when-template-missing-test
+  (async done
+         (let [calls (atom [])
+               env #js {"E2B_API_KEY" "e2b-key"
+                        "SANDBOX_AGENT_TOKEN" "agent-token"
+                        "E2B_TEMPLATE" "fallback-template"}
+               provider (runtime-provider/create-provider env "e2b")
+               task {:agent {:provider "codex"}
+                     :project {:repo-url "https://github.com/logseq/agent-test"
+                               :graph-id "graph-123"
+                               :docker-file "FROM node:20\nRUN corepack enable"}}
+               e2b-ns (js/require "e2b")
+               original-template (aget e2b-ns "Template")
+               sandbox-class (runtime-provider/e2b-sandbox-class)
+               original-create (aget sandbox-class "create")
+               original-fetch js/fetch
+               restore! (fn []
+                          (aset e2b-ns "Template" original-template)
+                          (aset sandbox-class "create" original-create)
+                          (set! js/fetch original-fetch))
+               template-fn (fn [] #js {})]
+           (aset template-fn "getTags"
+                 (fn [_name _opts]
+                   (js/Promise.reject (js/Error. "404: Not Found"))))
+           (aset e2b-ns "Template" template-fn)
+           (aset sandbox-class "create"
+                 (fn [& args]
+                   (swap! calls conj {:type :create
+                                      :argc (count args)
+                                      :first-arg (first args)
+                                      :last-arg (js->clj (last args) :keywordize-keys true)})
+                   (js/Promise.resolve
+                    #js {:sandboxId "e2b-sbx-docker-default"
+                         :getHost (fn [_port]
+                                    "https://e2b-agent.local")
+                         :commands
+                         #js {:run (fn [cmd _opts]
+                                     (if (string/includes? cmd "/v1/health")
+                                       (js/Promise.resolve #js {:stdout "__HEALTH_OK__"
+                                                                :stderr ""
+                                                                :exitCode 0})
+                                       (js/Promise.resolve #js {:stdout ""
+                                                                :stderr ""
+                                                                :exitCode 0})))}})))
+           (set! js/fetch
+                 (fn [_request]
+                   (js/Promise.resolve
+                    (js/Response.
+                     (js/JSON.stringify #js {:ok true})
+                     #js {:status 200
+                          :headers #js {"content-type" "application/json"}}))))
+           (-> (runtime-provider/<provision-runtime! provider "sess-e2b-docker-default" task)
+               (.then (fn [runtime]
+                        (restore!)
+                        (is (= "e2b" (:provider runtime)))
+                        (is (nil? (:template runtime)))
+                        (is (some #(and (= :create (:type %))
+                                        (= 1 (:argc %))
+                                        (map? (:first-arg %))
+                                        (= "e2b-key" (get-in % [:first-arg :apiKey])))
+                                  @calls))
+                        (done)))
+               (.catch (fn [error]
+                         (restore!)
+                         (is false (str "unexpected error: " error))
+                         (done)))))))
+
 (deftest e2b-run-shell-wraps-commandexiterror-test
   (async done
          (let [env #js {"E2B_API_KEY" "e2b-key"}

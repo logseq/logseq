@@ -82,3 +82,18 @@
            (:kv/value (d/entity @conn :logseq.kv/schema-version))))
     (is (some? property))
     (is (= :map (:logseq.property/type property)))))
+
+(deftest migrate-adds-project-docker-file-property-builtin
+  (let [conn (db-test/create-conn)
+        property-ident :logseq.property/project.docker-file
+        _ (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                              :kv/value {:major 65 :minor 28}}])
+        existing-eid (d/entid @conn property-ident)
+        _ (when existing-eid
+            (d/transact! conn [[:db/retractEntity existing-eid]]))
+        _ (db-migrate/migrate conn :target-version "65.29")
+        property (d/entity @conn property-ident)]
+    (is (= {:major 65 :minor 29}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (is (some? property))
+    (is (= :default (:logseq.property/type property)))))

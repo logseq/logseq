@@ -11,6 +11,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
+            [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [logseq.sync.malli-schema :as db-sync-schema]
             [promesa.core :as p]))
@@ -105,9 +106,12 @@
   ([project-page {:keys [base-branch]}]
    (let [repo-url (blank->nil (or (pu/get-block-property-value project-page :logseq.property/git-repo)
                                   (:logseq.property/git-repo project-page)))
+         docker-file (blank->nil (or (pu/get-block-property-value project-page :logseq.property/project.docker-file)
+                                     (:logseq.property/project.docker-file project-page)))
          sandbox-init-setup (blank->nil (or (pu/get-block-property-value project-page :logseq.property/project-sandbox-init-setup)
                                             (:logseq.property/project-sandbox-init-setup project-page)))
          project-id (some-> (:block/uuid project-page) str)
+         graph-id (some-> (ldb/get-graph-rtc-uuid (db/get-db)) str blank->nil)
          title (blank->nil (:block/title project-page))
          base-branch (blank->nil base-branch)]
      (when (and project-id title repo-url)
@@ -115,6 +119,8 @@
                 :title title
                 :repo-url repo-url}
          (string? base-branch) (assoc :base-branch base-branch)
+         (string? graph-id) (assoc :graph-id graph-id)
+         (string? docker-file) (assoc :docker-file docker-file)
          (string? sandbox-init-setup) (assoc :sandbox-init-setup sandbox-init-setup))))))
 
 (defn- block-line-content

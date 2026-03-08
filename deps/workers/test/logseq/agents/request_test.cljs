@@ -14,7 +14,9 @@
                 :runner-id "runner-1"
                 :project {:id "project-1"
                           :title "Demo Project"
-                          :repo-url "https://github.com/example/repo"}
+                          :repo-url "https://github.com/example/repo"
+                          :graph-id "graph-1"
+                          :docker-file "FROM node:20\nRUN corepack enable"}
                 :agent "codex"}
           coerced (http/coerce-http-request :sessions/create body)]
       (is (= body coerced))))
@@ -30,7 +32,9 @@
                 :attachments ["https://example.com/a.png" "https://example.com/b.png"]
                 :project {:id "project-1"
                           :title "Demo Project"
-                          :repo-url "https://github.com/example/repo"}
+                          :repo-url "https://github.com/example/repo"
+                          :graph-id "graph-1"
+                          :docker-file "FROM node:20\nRUN corepack enable"}
                 :agent {:provider "codex"
                         :api-token "token-123"
                         :auth-json "{\"tokens\":{\"access_token\":\"abc\"}}"}
@@ -47,7 +51,9 @@
                                      "https://example.com/b.png"]}
               :project {:id "project-1"
                         :title "Demo Project"
-                        :repo-url "https://github.com/example/repo"}
+                        :repo-url "https://github.com/example/repo"
+                        :graph-id "graph-1"
+                        :docker-file "FROM node:20\nRUN corepack enable"}
               :agent {:provider "codex"
                       :api-token "token-123"
                       :auth-json "{\"tokens\":{\"access_token\":\"abc\"}}"}
