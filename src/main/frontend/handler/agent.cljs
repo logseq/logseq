@@ -832,7 +832,7 @@
   (when-let [summary (blank->nil summary)]
     (editor-handler/api-insert-new-block! (str "PR Summary: " summary)
                                           {:block-uuid block-uuid
-                                           :sibling? true})))
+                                           :sibling? false})))
 
 (defn- publish-status-message
   [resp]
