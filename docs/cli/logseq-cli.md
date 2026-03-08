@@ -56,12 +56,32 @@ Supported keys include:
 - `:data-dir`
 - `:timeout-ms`
 - `:output-format` (use `:json` or `:edn` for scripting)
+- sync config persisted via `sync config set|get|unset`: `:ws-url`, `:http-base`, `:e2ee-password`
+
+`cli.edn` no longer persists cloud auth tokens. CLI login state is stored separately in `~/logseq/auth.json`.
 
 CLI flags take precedence over environment variables, which take precedence over the config file.
+
+## Authentication
+
+Use `logseq login` to authenticate the current machine with Logseq cloud.
+
+- `logseq login` starts a temporary callback server at `http://localhost:8765/auth/callback`, opens a browser to the Logseq Cognito Hosted UI, exchanges the returned authorization code, and writes `~/logseq/auth.json`.
+- `logseq logout` removes `~/logseq/auth.json`, opens a browser to the Cognito Hosted UI logout endpoint, and completes the browser logout flow at `http://localhost:8765/logout-complete`.
+- Sync commands still pass an in-memory runtime `:auth-token` to db-sync, but that token is now resolved from `auth.json` instead of `cli.edn`.
+
+Default auth file: `~/logseq/auth.json`
+
+Auth file contents include the persisted Cognito `id-token`, `access-token`, `refresh-token`, `expires-at`, `sub`, `email`, and `updated-at` values needed for headless refresh.
 
 Verbose logging:
 - `--verbose` enables structured debug logs to stderr for CLI option parsing and db-worker-node API calls.
 - stdout remains reserved for command output; large payloads are truncated in debug previews.
+
+Timeouts:
+- `--timeout-ms` continues to control request timeout behavior for CLI transport.
+- Login callback timeout is controlled separately by `:login-timeout-ms` / `LOGSEQ_CLI_LOGIN_TIMEOUT_MS` and defaults to 5 minutes.
+- Logout callback timeout is controlled separately by `:logout-timeout-ms` / `LOGSEQ_CLI_LOGOUT_TIMEOUT_MS` and defaults to 2 minutes.
 
 ## Commands
 
@@ -85,6 +105,10 @@ Server commands:
 - `server restart --graph <name>` - restart db-worker-node for a graph
 - `doctor [--dev-script]` - run runtime diagnostics for `db-worker-node.js`, `data-dir` permissions, and running server readiness (`--dev-script` checks `static/db-worker-node.js` explicitly)
 
+Auth commands:
+- `login` - authenticate this machine and create/update `~/logseq/auth.json`
+- `logout` - remove persisted CLI auth from `~/logseq/auth.json`
+
 Server ownership behavior:
 - `server stop` and `server restart` can return `server-owned-by-other` if the daemon was started by another owner source.
 - `server start` can return `server-start-timeout-orphan` when lock creation times out and orphan matching processes are detected.
@@ -96,12 +120,12 @@ Sync commands:
 - `sync stop --graph <name>` - stop db-sync client on a graph daemon
 - `sync upload --graph <name>` - upload local graph snapshot to remote
 - `sync download --graph <name>` - download remote graph `<name>` into a same-name local graph directory
-- `sync remote-graphs [--graph <name>]` - list remote graphs visible to the current auth context
+- `sync remote-graphs [--graph <name>]` - list remote graphs visible to the current login context
 - `sync ensure-keys [--graph <name>]` - ensure user RSA keys for sync/e2ee
 - `sync grant-access --graph <name> --graph-id <uuid> --email <email>` - grant encrypted graph access to a user
-- `sync config set [--graph <name>] ws-url|http-base|auth-token|e2ee-password <value>` - set db-sync runtime config key
-- `sync config get [--graph <name>] ws-url|http-base|auth-token|e2ee-password` - get db-sync runtime config key
-- `sync config unset [--graph <name>] ws-url|http-base|auth-token|e2ee-password` - remove db-sync runtime config key
+- `sync config set [--graph <name>] ws-url|http-base|e2ee-password <value>` - set non-auth db-sync runtime config key
+- `sync config get [--graph <name>] ws-url|http-base|e2ee-password` - get non-auth db-sync runtime config key
+- `sync config unset [--graph <name>] ws-url|http-base|e2ee-password` - remove non-auth db-sync runtime config key
 
 Sync upload behavior:
 - `sync upload` requires `--graph <name>`.
@@ -110,9 +134,9 @@ Sync upload behavior:
 - If the local graph does not have a stored remote `graph-id`, upload first lists visible remote graphs and reuses an exact same-name match when one exists.
 - If no same-name remote graph exists, upload creates a new remote graph and persists the returned remote metadata locally before snapshot transfer.
 - Successful upload persists graph identity metadata locally in both client-op state and graph KV (`logseq.kv/graph-uuid`, `logseq.kv/graph-remote?`, and `logseq.kv/graph-rtc-e2ee?`) so CLI and web upload/bootstrap flows stay aligned.
-- Fresh uploads default to encrypted remote graph creation unless local sync metadata explicitly marks the graph as non-e2ee. In headless CLI mode, set `e2ee-password` via `sync config set` (or in `--config`) before uploading encrypted graphs.
-- `sync upload` returns a real error instead of false success when auth, remote graph bootstrap, or snapshot upload fails.
-- Common upload failures include missing/invalid `auth-token`, missing `http-base`, remote graph creation failure, snapshot upload failure, and local DB/worker startup failure.
+- Fresh uploads default to encrypted remote graph creation unless local sync metadata explicitly marks the graph as non-e2ee. In headless CLI mode, run `logseq login` first and set `e2ee-password` via `sync config set` (or in `--config`) before uploading encrypted graphs.
+- `sync upload` returns a real error instead of false success when login state, remote graph bootstrap, or snapshot upload fails.
+- Common upload failures include missing/invalid CLI login state, missing `http-base`, remote graph creation failure, snapshot upload failure, and local DB/worker startup failure.
 - Troubleshooting: after a successful upload, run `graph info --graph <name> --output json` and confirm `data.kv.logseq.kv/graph-uuid` is present. If it is missing, rerun `sync upload` for the same graph to trigger identity backfill.
 
 Sync download behavior:
@@ -121,12 +145,13 @@ Sync download behavior:
 - If no remote graph with that name exists, the CLI returns `remote-graph-not-found`.
 - `sync download` starts `db-worker-node` in create-empty mode so local startup does not write `db-initial-data` before snapshot import.
 - If the target graph DB is not empty at download time, the CLI returns `graph-db-not-empty` and aborts before import.
-- For e2ee remote graphs in headless CLI mode, set `e2ee-password` via `sync config set` (or in `--config`) before download.
+- For e2ee remote graphs in headless CLI mode, run `logseq login` first and set `e2ee-password` via `sync config set` (or in `--config`) before download.
 
 Sync config persistence:
-- `sync config set/unset` writes to the CLI config file selected by `--config`.
+- `sync config set/unset` writes non-auth sync config to the CLI config file selected by `--config`.
 - If `--config` is not provided, the default config path is `~/logseq/cli.edn`.
 - `sync config get` reads from that same config source.
+- Cloud auth is persisted separately in `~/logseq/auth.json`.
 
 Inspect and edit commands:
 - `list page [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list pages
@@ -222,9 +247,14 @@ id7 │   └── b7
 id8 └── b8
 ```
 
+Troubleshooting:
+- If authenticated sync commands fail with missing or invalid local auth, run `logseq logout` and then `logseq login` again.
+- You can also manually remove `~/logseq/auth.json` and repeat `logseq login`.
+
 Examples:
 
 ```bash
+node ./dist/logseq.js login
 node ./dist/logseq.js graph create --graph demo
 node ./dist/logseq.js graph export --type edn --file /tmp/demo.edn --graph demo
 node ./dist/logseq.js graph import --type edn --input /tmp/demo.edn --graph demo-import
@@ -236,4 +266,5 @@ node ./dist/logseq.js server list
 node ./dist/logseq.js doctor
 node ./dist/logseq.js doctor --dev-script
 node ./dist/logseq.js doctor --output json
+node ./dist/logseq.js logout
 ```

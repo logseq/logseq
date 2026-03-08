@@ -7,6 +7,7 @@
             [clojure.string :as string]
             [frontend.test.node-helper :as node-helper]
             [frontend.worker.db-worker-node-lock :as db-lock]
+            [logseq.cli.auth :as cli-auth]
             [logseq.cli.command.core :as command-core]
             [logseq.cli.command.show :as show-command]
             [logseq.cli.config :as cli-config]
@@ -185,6 +186,136 @@
   [payload]
   (first (get-in payload [:data :result])))
 
+(defn- sample-auth
+  ([]
+   (sample-auth {}))
+  ([overrides]
+   (merge {:provider "cognito"
+           :id-token "id-token-1"
+           :access-token "access-token-1"
+           :refresh-token "refresh-token-1"
+           :expires-at (+ (js/Date.now) 3600000)
+           :sub "user-123"
+           :email "user@example.com"
+           :updated-at 1735686000000}
+          overrides)))
+
+(deftest test-cli-login-integration
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "cli-login-data")
+               cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+               auth-path (node-path/join (node-helper/create-tmp-dir "cli-auth") "auth.json")
+               open-calls (atom [])
+               auth-data (sample-auth)]
+           (fs/writeFileSync cfg-path "{:output-format :json}")
+           (let [promise
+                 (p/with-redefs [cli-auth/default-auth-path (fn [] auth-path)
+                                 cli-auth/open-browser! (fn [authorize-url]
+                                                          (swap! open-calls conj authorize-url)
+                                                          (let [parsed (js/URL. authorize-url)
+                                                                redirect-uri (.get (.-searchParams parsed) "redirect_uri")
+                                                                state (.get (.-searchParams parsed) "state")]
+                                                            (-> (js/fetch (str redirect-uri "?code=integration-code&state=" state))
+                                                                (p/then (fn [_]
+                                                                          {:opened? true})))))
+                                 cli-auth/exchange-code-for-auth! (fn [_opts payload]
+                                                                    (is (= "integration-code" (:code payload)))
+                                                                    (p/resolved auth-data))]
+                   (p/let [result (run-cli ["login"] data-dir cfg-path)
+                           payload (parse-json-output-safe result "login")
+                           stored (cli-auth/read-auth-file {:auth-path auth-path})]
+                     (is (= 0 (:exit-code result)))
+                     (is (= "ok" (:status payload)))
+                     (is (= auth-path (get-in payload [:data :auth-path])))
+                     (is (= "user@example.com" (get-in payload [:data :email])))
+                     (is (= 1 (count @open-calls)))
+                     (is (= auth-data stored))
+                     (is (fs/existsSync auth-path))))]
+             (-> promise
+                 (p/catch (fn [e]
+                            (is false (str "unexpected error: " e))))
+                 (p/finally (fn []
+                              (done))))))))
+
+(deftest test-cli-logout-integration
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "cli-logout-data")
+               cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+               auth-path (node-path/join (node-helper/create-tmp-dir "cli-auth") "auth.json")
+               open-calls (atom [])]
+           (fs/writeFileSync cfg-path "{:output-format :json}")
+           (cli-auth/write-auth-file! {:auth-path auth-path} (sample-auth))
+           (let [promise
+                 (p/with-redefs [cli-auth/default-auth-path (fn [] auth-path)
+                                 cli-auth/open-browser! (fn [url]
+                                                          (swap! open-calls conj url)
+                                                          (let [parsed (js/URL. url)
+                                                                logout-uri (.get (.-searchParams parsed) "logout_uri")]
+                                                            (-> (js/fetch logout-uri)
+                                                                (p/then (fn [_]
+                                                                          {:opened? true})))))]
+                   (p/let [result (run-cli ["logout"] data-dir cfg-path)
+                           payload (parse-json-output-safe result "logout")]
+                     (is (= 0 (:exit-code result)))
+                     (is (= "ok" (:status payload)))
+                     (is (= 1 (count @open-calls)))
+                     (is (= auth-path (get-in payload [:data :auth-path])))
+                     (is (= true (get-in payload [:data :deleted?])))
+                     (is (= true (get-in payload [:data :opened?])))
+                     (is (= true (get-in payload [:data :logout-completed?])))
+                     (is (not (fs/existsSync auth-path)))))]
+             (-> promise
+                 (p/catch (fn [e]
+                            (is false (str "unexpected error: " e))))
+                 (p/finally (fn []
+                              (done))))))))
+
+(deftest test-cli-sync-remote-graphs-refreshes-auth-file-and-injects-runtime-token
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "cli-sync-auth")
+               cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+               auth-path (node-path/join (node-helper/create-tmp-dir "cli-auth") "auth.json")
+               invoke-calls (atom [])
+               expired-auth (sample-auth {:id-token "expired-token"
+                                          :access-token "expired-access-token"
+                                          :expires-at 0})
+               refreshed-auth (sample-auth {:id-token "fresh-token"
+                                            :access-token "fresh-access-token"
+                                            :expires-at (+ (js/Date.now) 7200000)
+                                            :updated-at 1735689600000})]
+           (fs/writeFileSync cfg-path "{:output-format :json}")
+           (cli-auth/write-auth-file! {:auth-path auth-path} expired-auth)
+           (let [promise
+                 (p/with-redefs [cli-auth/default-auth-path (fn [] auth-path)
+                                 cli-auth/refresh-auth! (fn [_opts _auth-data]
+                                                          (p/resolved refreshed-auth))
+                                 cli-server/list-graphs (fn [_config]
+                                                          ["demo"])
+                                 cli-server/ensure-server! (fn [config _repo]
+                                                             (p/resolved (assoc config :base-url "http://example")))
+                                 transport/invoke (fn [_ method direct-pass? args]
+                                                    (swap! invoke-calls conj [method direct-pass? args])
+                                                    (case method
+                                                      :thread-api/set-db-sync-config
+                                                      (p/resolved nil)
+                                                      :thread-api/db-sync-list-remote-graphs
+                                                      (p/resolved [])
+                                                      (p/resolved nil)))]
+                   (p/let [result (run-cli ["sync" "remote-graphs"] data-dir cfg-path)
+                           payload (parse-json-output-safe result "sync remote-graphs")
+                           stored (cli-auth/read-auth-file {:auth-path auth-path})]
+                     (is (= 0 (:exit-code result)))
+                     (is (= "ok" (:status payload)))
+                     (is (= :thread-api/set-db-sync-config (ffirst @invoke-calls)))
+                     (is (= "fresh-token" (get-in (nth @invoke-calls 0) [2 0 :auth-token])))
+                     (is (= "fresh-token" (:id-token stored)))
+                     (is (= "fresh-access-token" (:access-token stored)))))]
+             (-> promise
+                 (p/catch (fn [e]
+                            (is false (str "unexpected error: " e))))
+                 (p/finally (fn []
+                              (done))))))))
+
 (deftest test-cli-sync-download-and-start-readiness-with-mocked-sync
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-sync-cli")
@@ -199,7 +330,9 @@
                        _ (is (= 0 (:exit-code create-result)))
                        _ (is (= "ok" (:status create-payload)))
                        [download-result start-result]
-                       (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                       (p/with-redefs [cli-auth/resolve-auth-token! (fn [_config]
+                                                                      (p/resolved "runtime-token"))
+                                       cli-server/ensure-server! (fn [config _repo]
                                                                    (p/resolved (assoc config :base-url "http://example")))
                                        transport/invoke (fn [_ method _direct-pass? args]
                                                           (swap! invoke-calls conj [method args])
@@ -268,7 +401,9 @@
                        _ (is (= 0 (:exit-code create-result)))
                        _ (is (= "ok" (:status create-payload)))
                        upload-result (p/with-redefs
-                                      [cli-server/ensure-server! (fn [config _repo]
+                                      [cli-auth/resolve-auth-token! (fn [_config]
+                                                                      (p/resolved "runtime-token"))
+                                       cli-server/ensure-server! (fn [config _repo]
                                                                    (p/resolved (assoc config :base-url "http://example")))
                                        transport/invoke (fn [_ method _direct-pass? args]
                                                           (swap! invoke-calls conj [method args])
@@ -287,7 +422,7 @@
                  (is (= "created-graph-id" (get-in upload-payload [:data :graph-id])))
                  (is (= [[:thread-api/set-db-sync-config [{:ws-url nil
                                                            :http-base nil
-                                                           :auth-token nil
+                                                           :auth-token "runtime-token"
                                                            :e2ee-password nil}]]
                          [:thread-api/db-sync-upload-graph ["logseq_db_sync-upload-graph"]]]
                         @invoke-calls)))
@@ -308,7 +443,9 @@
                        _ (is (= 0 (:exit-code create-result)))
                        _ (is (= "ok" (:status create-payload)))
                        [upload-result info-result]
-                       (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                       (p/with-redefs [cli-auth/resolve-auth-token! (fn [_config]
+                                                                      (p/resolved "runtime-token"))
+                                       cli-server/ensure-server! (fn [config _repo]
                                                                    (p/resolved (assoc config :base-url "http://example")))
                                        transport/invoke (fn [_ method _direct-pass? args]
                                                           (swap! invoke-calls conj [method args])

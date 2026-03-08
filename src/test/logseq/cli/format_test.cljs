@@ -341,18 +341,6 @@
       (is (string/includes? result "Sync download"))
       (is (string/includes? result "demo-graph")))))
 
-(deftest test-human-output-sync-config-get-token-redaction
-  (testing "sync config get auth-token redacts value in human output"
-    (let [token "super-secret-token-value"
-          result (format/format-result {:status :ok
-                                        :command :sync-config-get
-                                        :data {:key :auth-token
-                                               :value token}}
-                                       {:output-format nil})]
-      (is (string/includes? result "auth-token"))
-      (is (string/includes? result "[REDACTED]"))
-      (is (not (string/includes? result token))))))
-
 (deftest test-human-output-sync-config-get-e2ee-password-redaction
   (testing "sync config get e2ee-password redacts value in human output"
     (let [password "super-secret-password"
@@ -364,6 +352,46 @@
       (is (string/includes? result "e2ee-password"))
       (is (string/includes? result "[REDACTED]"))
       (is (not (string/includes? result password))))))
+
+(deftest test-human-output-auth-commands
+  (testing "login human output reports auth path and user metadata without tokens"
+    (let [token "secret-token-value"
+          result (format/format-result {:status :ok
+                                        :command :login
+                                        :data {:auth-path "/tmp/auth.json"
+                                               :email "user@example.com"
+                                               :sub "user-123"
+                                               :authorize-url "https://example.com/oauth2/authorize?..."
+                                               :id-token token}}
+                                       {:output-format nil})]
+      (is (string/includes? result "Login successful"))
+      (is (string/includes? result "user@example.com"))
+      (is (string/includes? result "/tmp/auth.json"))
+      (is (not (string/includes? result token)))))
+
+  (testing "logout human output reports whether auth was removed"
+    (let [result (format/format-result {:status :ok
+                                        :command :logout
+                                        :data {:auth-path "/tmp/auth.json"
+                                               :deleted? true
+                                               :opened? true
+                                               :logout-completed? true}}
+                                       {:output-format nil})]
+      (is (string/includes? result "Logged out"))
+      (is (string/includes? result "/tmp/auth.json"))
+      (is (string/includes? result "Cognito logout: completed"))))
+
+  (testing "logout human output is still successful when auth file is absent"
+    (let [result (format/format-result {:status :ok
+                                        :command :logout
+                                        :data {:auth-path "/tmp/auth.json"
+                                               :deleted? false
+                                               :opened? true
+                                               :logout-completed? true}}
+                                       {:output-format nil})]
+      (is (string/includes? result "Already logged out"))
+      (is (string/includes? result "/tmp/auth.json"))
+      (is (string/includes? result "Cognito logout: completed")))))
 
 (deftest test-human-output-graph-info
   (testing "graph info includes key metadata lines and kv section"
