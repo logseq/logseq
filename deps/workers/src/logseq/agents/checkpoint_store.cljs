@@ -71,23 +71,6 @@
   [^js env]
   (aget env "AGENTS_DB"))
 
-(defn- <ensure-schema!
-  [^js db]
-  (p/do!
-   (common/<d1-run db
-                   (str "create table if not exists sandbox_checkpoints ("
-                        "repo_key TEXT NOT NULL,"
-                        "branch TEXT NOT NULL,"
-                        "provider TEXT NOT NULL,"
-                        "snapshot_id TEXT NOT NULL,"
-                        "checkpoint_at INTEGER NOT NULL,"
-                        "updated_at INTEGER NOT NULL,"
-                        "expires_at INTEGER NOT NULL,"
-                        "primary key (repo_key, branch)"
-                        ");"))
-   (common/<d1-run db
-                   "create index if not exists idx_sandbox_checkpoints_expires_at on sandbox_checkpoints(expires_at);")))
-
 (defn- <cleanup-expired!
   [^js db now-ms]
   (common/<d1-run db
@@ -102,8 +85,7 @@
   [^js env task]
   (if-let [db (db-binding env)]
     (if-let [{:keys [repo-key branch]} (task-key task)]
-      (p/let [_ (<ensure-schema! db)
-              now-ms (common/now-ms)
+      (p/let [now-ms (common/now-ms)
               _ (when (maybe-cleanup?)
                   (<cleanup-expired! db now-ms))
               result (common/<d1-all db
@@ -128,8 +110,7 @@
               updated-at (common/now-ms)
               expires-at (+ checkpoint-at checkpoint-ttl-ms)
               provider (or (:provider checkpoint) "unknown")]
-          (p/let [_ (<ensure-schema! db)
-                  _ (common/<d1-run db
+          (p/let [_ (common/<d1-run db
                                     (str "insert into sandbox_checkpoints "
                                          "(repo_key, branch, provider, snapshot_id, checkpoint_at, updated_at, expires_at) "
                                          "values (?, ?, ?, ?, ?, ?, ?) "

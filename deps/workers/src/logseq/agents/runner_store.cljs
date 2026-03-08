@@ -66,29 +66,6 @@
           (string? (non-empty-str (aget row "access_client_secret")))
           (assoc :access-client-secret (non-empty-str (aget row "access_client_secret"))))))))
 
-(defn- <ensure-schema!
-  [^js db]
-  (p/do!
-   (common/<d1-run db
-                   (str "create table if not exists agent_runners ("
-                        "runner_id TEXT NOT NULL,"
-                        "user_id TEXT NOT NULL,"
-                        "base_url TEXT NOT NULL,"
-                        "agent_token TEXT,"
-                        "access_client_id TEXT,"
-                        "access_client_secret TEXT,"
-                        "status TEXT NOT NULL DEFAULT 'online',"
-                        "max_sessions INTEGER NOT NULL DEFAULT 1,"
-                        "active_sessions INTEGER NOT NULL DEFAULT 0,"
-                        "last_heartbeat_at INTEGER NOT NULL,"
-                        "created_at INTEGER NOT NULL,"
-                        "updated_at INTEGER NOT NULL,"
-                        "primary key (user_id, runner_id)"
-                        ");"))
-   (common/<d1-run db
-                   (str "create index if not exists idx_agent_runners_user_status_heartbeat "
-                        "on agent_runners(user_id, status, last_heartbeat_at desc);"))))
-
 (defn <register-runner!
   [^js env runner]
   (if-let [db (db-binding env)]
@@ -101,8 +78,7 @@
           max-sessions (max 1 (normalize-int (:max-sessions runner) default-max-sessions))]
       (if (and (string? runner-id) (string? user-id) (string? base-url))
         (let [now (common/now-ms)]
-          (p/let [_ (<ensure-schema! db)
-                  _ (common/<d1-run db
+          (p/let [_ (common/<d1-run db
                                     (str "insert into agent_runners "
                                          "(runner_id, user_id, base_url, agent_token, access_client_id, access_client_secret, status, max_sessions, active_sessions, last_heartbeat_at, created_at, updated_at) "
                                          "values (?, ?, ?, ?, ?, ?, 'online', ?, 0, ?, ?, ?) "
@@ -144,8 +120,7 @@
   [^js env user-id]
   (if-let [db (db-binding env)]
     (if-let [user-id (some-> user-id non-empty-str)]
-      (p/let [_ (<ensure-schema! db)
-              result (common/<d1-all db
+      (p/let [result (common/<d1-all db
                                      (str "select runner_id, user_id, base_url, agent_token, access_client_id, access_client_secret, status, "
                                           "max_sessions, active_sessions, last_heartbeat_at, created_at, updated_at "
                                           "from agent_runners "
@@ -165,8 +140,7 @@
   (if-let [db (db-binding env)]
     (if-let [user-id (some-> user-id non-empty-str)]
       (if-let [runner-id (some-> runner-id non-empty-str)]
-        (p/let [_ (<ensure-schema! db)
-                result (common/<d1-all db
+        (p/let [result (common/<d1-all db
                                        (str "select runner_id, user_id, base_url, agent_token, access_client_id, access_client_secret, status, "
                                             "max_sessions, active_sessions, last_heartbeat_at, created_at, updated_at "
                                             "from agent_runners "
@@ -193,8 +167,7 @@
                            "online")
                        "online")
               now (common/now-ms)]
-          (p/let [_ (<ensure-schema! db)
-                  _ (if (number? active-sessions)
+          (p/let [_ (if (number? active-sessions)
                       (common/<d1-run db
                                       (str "update agent_runners "
                                            "set status = ?, active_sessions = ?, last_heartbeat_at = ?, updated_at = ? "
@@ -227,8 +200,7 @@
       (let [runner-id (some-> requested-runner-id non-empty-str)
             now (common/now-ms)
             min-heartbeat (- now (heartbeat-ttl-ms env))]
-        (p/let [_ (<ensure-schema! db)
-                result (if (string? runner-id)
+        (p/let [result (if (string? runner-id)
                          (common/<d1-all db
                                          (str "select runner_id, user_id, base_url, agent_token, access_client_id, access_client_secret, status, "
                                               "max_sessions, active_sessions, last_heartbeat_at, created_at, updated_at "
