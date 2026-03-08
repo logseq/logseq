@@ -2,6 +2,7 @@
   "Command parsing and action building for the Logseq CLI."
   (:require [babashka.cli :as cli]
             [clojure.string :as string]
+            [logseq.cli.command.auth :as auth-command]
             [logseq.cli.command.core :as command-core]
             [logseq.cli.command.doctor :as doctor-command]
             [logseq.cli.command.graph :as graph-command]
@@ -103,7 +104,8 @@
                query-command/entries
                show-command/entries
                doctor-command/entries
-               sync-command/entries)))
+               sync-command/entries
+               auth-command/entries)))
 
 ;; Global option parsing lives in logseq.cli.command.core.
 
@@ -417,6 +419,9 @@
          :sync-config-set :sync-config-get :sync-config-unset)
         (sync-command/build-action command options args repo)
 
+        (:login :logout)
+        (auth-command/build-action command)
+
         {:ok? false
          :error {:code :unknown-command
                  :message (str "unknown command: " command)}}))))
@@ -466,6 +471,8 @@
                           :sync-remote-graphs :sync-ensure-keys :sync-grant-access
                           :sync-config-set :sync-config-get :sync-config-unset)
                          (sync-command/execute action config)
+                         (:login :logout)
+                         (auth-command/execute action config)
                          {:status :error
                           :error {:code :unknown-action
                                   :message "unknown action"}}))]

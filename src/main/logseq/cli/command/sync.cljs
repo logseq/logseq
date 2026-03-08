@@ -1,6 +1,7 @@
 (ns logseq.cli.command.sync
   "Sync-related CLI commands."
   (:require [clojure.string :as string]
+            [logseq.cli.auth :as cli-auth]
             [logseq.cli.command.core :as core]
             [logseq.cli.config :as cli-config]
             [logseq.cli.server :as cli-server]
@@ -27,8 +28,15 @@
 (def ^:private config-key-map
   {"ws-url" :ws-url
    "http-base" :http-base
-   "auth-token" :auth-token
    "e2ee-password" :e2ee-password})
+
+(def ^:private authenticated-sync-actions
+  #{:sync-start
+    :sync-upload
+    :sync-download
+    :sync-remote-graphs
+    :sync-ensure-keys
+    :sync-grant-access})
 
 (def ^:private sync-start-timeout-ms 10000)
 (def ^:private sync-start-poll-interval-ms 100)
@@ -190,6 +198,15 @@
    :auth-token (:auth-token config)
    :e2ee-password (:e2ee-password config)})
 
+(defn- resolve-runtime-config!
+  [action config]
+  (if (contains? authenticated-sync-actions (:type action))
+    (if (seq (:auth-token config))
+      (p/resolved config)
+      (p/let [auth-token (cli-auth/resolve-auth-token! config)]
+        (assoc config :auth-token auth-token)))
+    (p/resolved config)))
+
 (defn- invoke-with-repo
   [config repo method args]
   (let [sync-cfg (sync-config config)]
@@ -235,7 +252,7 @@
   (let [timeout-ms (max 0 (or (:wait-timeout-ms action) sync-start-timeout-ms))
         poll-interval-ms (max 0 (or (:wait-poll-interval-ms action) sync-start-poll-interval-ms))
         deadline (+ (js/Date.now) timeout-ms)
-        config-skipped-hint "Set sync config keys (ws-url/http-base/auth-token) and retry sync start."
+        config-skipped-hint "Run logseq login, set sync config keys (ws-url/http-base), and retry sync start."
         graph-id-skipped-hint "Graph-id is missing locally. Run sync download first, then retry sync start."
         runtime-error-hint "Run sync status to inspect last-error and fix sync runtime error before retrying."
         timeout-hint "Run sync status to inspect ws-state and ensure sync endpoint/token are valid."]
@@ -336,10 +353,11 @@
        :data result})
 
     :sync-start
-    (-> (p/let [_ (invoke-with-repo config (:repo action)
+    (-> (p/let [config' (resolve-runtime-config! action config)
+                _ (invoke-with-repo config' (:repo action)
                                     :thread-api/db-sync-start
                                     [(:repo action)])
-                result (wait-sync-start-ready config (:repo action) action)]
+                result (wait-sync-start-ready config' (:repo action) action)]
           result)
         (p/catch (fn [error]
                    (exception->error error {:repo (:repo action)}))))
@@ -352,27 +370,45 @@
        :data {:result result}})
 
     :sync-upload
-    (execute-sync-upload action config)
+    (-> (p/let [config' (resolve-runtime-config! action config)]
+          (execute-sync-upload action config'))
+        (p/catch (fn [error]
+                   (exception->error error {:repo (:repo action)}))))
 
     :sync-download
-    (execute-sync-download action config)
+    (-> (p/let [config' (resolve-runtime-config! action config)]
+          (execute-sync-download action config'))
+        (p/catch (fn [error]
+                   (exception->error error {:repo (:repo action)
+                                            :graph (:graph action)}))))
 
     :sync-remote-graphs
-    (p/let [graphs (invoke-global config :thread-api/db-sync-list-remote-graphs [])]
-      {:status :ok
-       :data {:graphs (or graphs [])}})
+    (-> (p/let [config' (resolve-runtime-config! action config)
+                graphs (invoke-global config' :thread-api/db-sync-list-remote-graphs [])]
+          {:status :ok
+           :data {:graphs (or graphs [])}})
+        (p/catch (fn [error]
+                   (exception->error error nil))))
 
     :sync-ensure-keys
-    (p/let [result (invoke-global config :thread-api/db-sync-ensure-user-rsa-keys [])]
-      {:status :ok
-       :data {:result result}})
+    (-> (p/let [config' (resolve-runtime-config! action config)
+                result (invoke-global config' :thread-api/db-sync-ensure-user-rsa-keys [])]
+          {:status :ok
+           :data {:result result}})
+        (p/catch (fn [error]
+                   (exception->error error nil))))
 
     :sync-grant-access
-    (p/let [result (invoke-with-repo config (:repo action)
-                                     :thread-api/db-sync-grant-graph-access
-                                     [(:repo action) (:graph-id action) (:email action)])]
-      {:status :ok
-       :data {:result result}})
+    (-> (p/let [config' (resolve-runtime-config! action config)
+                result (invoke-with-repo config' (:repo action)
+                                         :thread-api/db-sync-grant-graph-access
+                                         [(:repo action) (:graph-id action) (:email action)])]
+          {:status :ok
+           :data {:result result}})
+        (p/catch (fn [error]
+                   (exception->error error {:repo (:repo action)
+                                            :graph-id (:graph-id action)
+                                            :email (:email action)}))))
 
     :sync-config-get
     (p/let [current config]
