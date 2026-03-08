@@ -27,21 +27,30 @@
                             (str "{:graph \"file-repo\" "
                                  ":data-dir \"file-data\" "
                                  ":timeout-ms 111 "
-                                 ":output-format :edn}"))
+                                 ":login-timeout-ms 444 "
+                                 ":logout-timeout-ms 555 "
+                                 ":output-format :edn "
+                                 ":auth-token \"file-secret\"}"))
         env {"LOGSEQ_CLI_GRAPH" "env-repo"
              "LOGSEQ_CLI_DATA_DIR" "env-data"
              "LOGSEQ_CLI_TIMEOUT_MS" "222"
+             "LOGSEQ_CLI_LOGIN_TIMEOUT_MS" "666"
+             "LOGSEQ_CLI_LOGOUT_TIMEOUT_MS" "777"
              "LOGSEQ_CLI_OUTPUT" "json"}
         opts {:config-path cfg-path
               :graph "cli-repo"
               :data-dir "cli-data"
               :timeout-ms 333
+              :login-timeout-ms 888
+              :logout-timeout-ms 999
               :output-format :human}
         result (with-env env #(config/resolve-config opts))]
     (is (= cfg-path (:config-path result)))
     (is (= "cli-repo" (:graph result)))
     (is (= "cli-data" (:data-dir result)))
     (is (= 333 (:timeout-ms result)))
+    (is (= 888 (:login-timeout-ms result)))
+    (is (= 999 (:logout-timeout-ms result)))
     (is (nil? (:auth-token result)))
     (is (nil? (:retries result)))
     (is (= :human (:output-format result)))))
@@ -82,7 +91,10 @@
   (let [result (config/resolve-config {})
         expected-config-path (node-path/join (.homedir os) "logseq" "cli.edn")]
     (is (= expected-config-path (:config-path result)))
-    (is (= "~/logseq/graphs" (:data-dir result)))))
+    (is (= "~/logseq/graphs" (:data-dir result)))
+    (is (= 10000 (:timeout-ms result)))
+    (is (= 300000 (:login-timeout-ms result)))
+    (is (= 120000 (:logout-timeout-ms result)))))
 
 (deftest test-update-config
   (let [dir (node-helper/create-tmp-dir "cli")
@@ -96,7 +108,7 @@
 (deftest test-update-config-strips-removed-options
   (let [dir (node-helper/create-tmp-dir "cli")
         cfg-path (node-path/join dir "cli.edn")
-        _ (fs/writeFileSync cfg-path "{:graph \"old\"}")
+        _ (fs/writeFileSync cfg-path "{:graph \"old\" :auth-token \"legacy-secret\"}")
         _ (config/update-config! {:config-path cfg-path}
                                  {:graph "new"
                                   :auth-token "secret"
@@ -104,7 +116,7 @@
         contents (.toString (fs/readFileSync cfg-path) "utf8")
         parsed (reader/read-string contents)]
     (is (= "new" (:graph parsed)))
-    (is (= "secret" (:auth-token parsed)))
+    (is (not (contains? parsed :auth-token)))
     (is (not (contains? parsed :retries)))))
 
 (deftest test-update-config-removes-nil-values
