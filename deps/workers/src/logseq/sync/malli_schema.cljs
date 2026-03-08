@@ -247,17 +247,7 @@
    [:sandbox-checkpoint {:optional true}
     [:map
      [:provider {:optional true} :string]
-     [:snapshot-id {:optional true} :string]
-     [:backup-key {:optional true} :string]
-     [:backup-dir {:optional true} :string]
-     [:bundle-id {:optional true} :string]
-     [:bundle-seq {:optional true} :int]
-     [:bundle-object-key {:optional true} :string]
-     [:bundle-byte-size {:optional true} :int]
-     [:bundle-checksum {:optional true} :string]
-     [:bundle-head-sha {:optional true} :string]
-     [:bundle-base-sha {:optional true} :string]
-     [:bundle-head-branch {:optional true} :string]]]
+     [:snapshot-id {:optional true} :string]]]
    [:capabilities {:optional true}
     [:map
      [:push-enabled {:optional true} :boolean]

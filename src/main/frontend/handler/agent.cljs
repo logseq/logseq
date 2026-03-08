@@ -46,39 +46,15 @@
   [checkpoint]
   (when (map? checkpoint)
     (let [snapshot-id (blank->nil (or (:snapshot-id checkpoint) (get checkpoint "snapshot-id")))
-          bundle-id (blank->nil (or (:bundle-id checkpoint) (get checkpoint "bundle-id")))
-          bundle-seq (or (:bundle-seq checkpoint) (get checkpoint "bundle-seq"))
-          bundle-object-key (blank->nil (or (:bundle-object-key checkpoint) (get checkpoint "bundle-object-key")))
-          bundle-byte-size (or (:bundle-byte-size checkpoint) (get checkpoint "bundle-byte-size"))
-          bundle-checksum (blank->nil (or (:bundle-checksum checkpoint) (get checkpoint "bundle-checksum")))
-          bundle-head-sha (blank->nil (or (:bundle-head-sha checkpoint) (get checkpoint "bundle-head-sha")))
-          bundle-base-sha (blank->nil (or (:bundle-base-sha checkpoint) (get checkpoint "bundle-base-sha")))
-          bundle-head-branch (some-> (or (:bundle-head-branch checkpoint) (get checkpoint "bundle-head-branch"))
-                                     str
-                                     string/trim
-                                     blank->nil)
           provider (some-> (or (:provider checkpoint) (get checkpoint "provider"))
                            str
                            string/trim
                            string/lower-case
-                           blank->nil)
-          backup-key (blank->nil (or (:backup-key checkpoint) (get checkpoint "backup-key")))
-          backup-dir (blank->nil (or (:backup-dir checkpoint) (get checkpoint "backup-dir")))]
-      (when (or (string? snapshot-id)
-                (string? bundle-id))
+                           blank->nil)]
+      (when (string? snapshot-id)
         (cond-> {}
           (string? snapshot-id) (assoc :snapshot-id snapshot-id)
-          (string? bundle-id) (assoc :bundle-id bundle-id)
-          (number? bundle-seq) (assoc :bundle-seq bundle-seq)
-          (string? bundle-object-key) (assoc :bundle-object-key bundle-object-key)
-          (number? bundle-byte-size) (assoc :bundle-byte-size bundle-byte-size)
-          (string? bundle-checksum) (assoc :bundle-checksum bundle-checksum)
-          (string? bundle-head-sha) (assoc :bundle-head-sha bundle-head-sha)
-          (string? bundle-base-sha) (assoc :bundle-base-sha bundle-base-sha)
-          (string? bundle-head-branch) (assoc :bundle-head-branch bundle-head-branch)
-          (string? provider) (assoc :provider provider)
-          (string? backup-key) (assoc :backup-key backup-key)
-          (string? backup-dir) (assoc :backup-dir backup-dir))))))
+          (string? provider) (assoc :provider provider))))))
 
 (defn task-sandbox-checkpoint
   [block]
@@ -360,11 +336,11 @@
   (some-> provider str string/trim string/lower-case not-empty))
 
 (defn- runtime-provider-terminal-enabled? [provider]
-  (contains? #{"cloudflare" "e2b"}
+  (contains? #{"e2b"}
              (normalize-runtime-provider provider)))
 
 (defn- runtime-provider-snapshot-enabled? [provider]
-  (not= "e2b" (normalize-runtime-provider provider)))
+  (= "e2b" (normalize-runtime-provider provider)))
 
 (defn- event-runtime-provider [event]
   (when (= "session.provisioned" (:type event))

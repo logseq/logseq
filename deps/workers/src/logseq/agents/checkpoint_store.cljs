@@ -49,14 +49,10 @@
   [checkpoint]
   (let [snapshot-id (some-> (:snapshot-id checkpoint) non-empty-str)
         provider (some-> (:provider checkpoint) normalize-provider)
-        backup-key (some-> (:backup-key checkpoint) non-empty-str)
-        backup-dir (some-> (:backup-dir checkpoint) non-empty-str)
         checkpoint-at (:checkpoint-at checkpoint)]
     (when (string? snapshot-id)
       (cond-> {:snapshot-id snapshot-id}
         (string? provider) (assoc :provider provider)
-        (string? backup-key) (assoc :backup-key backup-key)
-        (string? backup-dir) (assoc :backup-dir backup-dir)
         (number? checkpoint-at) (assoc :checkpoint-at checkpoint-at)))))
 
 (defn- checkpoint-from-row
@@ -65,8 +61,6 @@
     (normalize-checkpoint
      {:provider (aget row "provider")
       :snapshot-id (aget row "snapshot_id")
-      :backup-key (aget row "backup_key")
-      :backup-dir (aget row "backup_dir")
       :checkpoint-at (aget row "checkpoint_at")})))
 
 (defn- maybe-cleanup?
@@ -86,8 +80,6 @@
                         "branch TEXT NOT NULL,"
                         "provider TEXT NOT NULL,"
                         "snapshot_id TEXT NOT NULL,"
-                        "backup_key TEXT,"
-                        "backup_dir TEXT,"
                         "checkpoint_at INTEGER NOT NULL,"
                         "updated_at INTEGER NOT NULL,"
                         "expires_at INTEGER NOT NULL,"
@@ -115,7 +107,7 @@
               _ (when (maybe-cleanup?)
                   (<cleanup-expired! db now-ms))
               result (common/<d1-all db
-                                     (str "select provider, snapshot_id, backup_key, backup_dir, checkpoint_at "
+                                     (str "select provider, snapshot_id, checkpoint_at "
                                           "from sandbox_checkpoints "
                                           "where repo_key = ? and branch = ? and expires_at > ? "
                                           "limit 1")
@@ -135,19 +127,15 @@
         (let [checkpoint-at (or (:checkpoint-at checkpoint) (common/now-ms))
               updated-at (common/now-ms)
               expires-at (+ checkpoint-at checkpoint-ttl-ms)
-              provider (or (:provider checkpoint) "unknown")
-              backup-key (:backup-key checkpoint)
-              backup-dir (:backup-dir checkpoint)]
+              provider (or (:provider checkpoint) "unknown")]
           (p/let [_ (<ensure-schema! db)
                   _ (common/<d1-run db
                                     (str "insert into sandbox_checkpoints "
-                                         "(repo_key, branch, provider, snapshot_id, backup_key, backup_dir, checkpoint_at, updated_at, expires_at) "
-                                         "values (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                                         "(repo_key, branch, provider, snapshot_id, checkpoint_at, updated_at, expires_at) "
+                                         "values (?, ?, ?, ?, ?, ?, ?) "
                                          "on conflict(repo_key, branch) do update set "
                                          "provider = excluded.provider, "
                                          "snapshot_id = excluded.snapshot_id, "
-                                         "backup_key = excluded.backup_key, "
-                                         "backup_dir = excluded.backup_dir, "
                                          "checkpoint_at = excluded.checkpoint_at, "
                                          "updated_at = excluded.updated_at, "
                                          "expires_at = excluded.expires_at")
@@ -155,8 +143,6 @@
                                     branch
                                     provider
                                     (:snapshot-id checkpoint)
-                                    backup-key
-                                    backup-dir
                                     checkpoint-at
                                     updated-at
                                     expires-at)

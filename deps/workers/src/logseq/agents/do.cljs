@@ -6,8 +6,6 @@
             [logseq.agents.runtime-provider :as runtime-provider]
             [logseq.agents.session :as session]
             [logseq.agents.source-control :as source-control]
-            [logseq.agents.workspace-bundle-r2 :as workspace-bundle-r2]
-            [logseq.agents.workspace-bundle-store :as workspace-bundle-store]
             [logseq.sync.common :as common]
             [logseq.sync.platform.core :as platform]
             [logseq.sync.worker.http :as http]
@@ -106,80 +104,14 @@
   [result]
   (some-> (:snapshot-id result) str string/trim not-empty))
 
-(defn- checkpoint-bundle-fields
-  [value]
-  (let [bundle-id (some-> (:bundle-id value) str string/trim not-empty)
-        bundle-seq (:bundle-seq value)
-        bundle-object-key (some-> (:bundle-object-key value) str string/trim not-empty)
-        bundle-byte-size (:bundle-byte-size value)
-        bundle-checksum (some-> (:bundle-checksum value) str string/trim not-empty)
-        bundle-head-sha (some-> (:bundle-head-sha value) str string/trim not-empty)
-        bundle-base-sha (some-> (:bundle-base-sha value) str string/trim not-empty)
-        bundle-head-branch (some-> (:bundle-head-branch value) source-control/sanitize-branch-name)]
-    (cond-> {}
-      (string? bundle-id) (assoc :bundle-id bundle-id)
-      (number? bundle-seq) (assoc :bundle-seq bundle-seq)
-      (string? bundle-object-key) (assoc :bundle-object-key bundle-object-key)
-      (number? bundle-byte-size) (assoc :bundle-byte-size bundle-byte-size)
-      (string? bundle-checksum) (assoc :bundle-checksum bundle-checksum)
-      (string? bundle-head-sha) (assoc :bundle-head-sha bundle-head-sha)
-      (string? bundle-base-sha) (assoc :bundle-base-sha bundle-base-sha)
-      (string? bundle-head-branch) (assoc :bundle-head-branch bundle-head-branch))))
-
-(defn- merge-checkpoint-bundle
-  [checkpoint bundle]
-  (if-not (map? checkpoint)
-    checkpoint
-    (merge checkpoint (checkpoint-bundle-fields bundle))))
-
-(def ^:private checkpoint-bundle-ks
-  [:bundle-id
-   :bundle-seq
-   :bundle-object-key
-   :bundle-byte-size
-   :bundle-checksum
-   :bundle-head-sha
-   :bundle-base-sha
-   :bundle-head-branch])
-
-(defn- strip-checkpoint-bundle
-  [checkpoint]
-  (if (map? checkpoint)
-    (apply dissoc checkpoint checkpoint-bundle-ks)
-    checkpoint))
-
-(defn- runtime-provider-id
-  [runtime]
-  (some-> (:provider runtime) str string/lower-case))
-
-(defn- workspace-bundle-required?
-  [runtime]
-  (not= "e2b" (runtime-provider-id runtime)))
-
 (defn- runtime-checkpoint-payload
   [runtime result reason]
   (let [snapshot-id (runtime-snapshot-id result)
-        provider (some-> (:provider runtime) str string/lower-case)
-        backup-key (some-> (or (:backup-key result)
-                               (:backup-key runtime))
-                           str
-                           string/trim
-                           not-empty)
-        backup-dir (some-> (or (:backup-dir result)
-                               (:dir result)
-                               (:backup-dir runtime))
-                           str
-                           string/trim
-                           not-empty)
-        bundle-fields (merge (checkpoint-bundle-fields runtime)
-                             (checkpoint-bundle-fields result))]
+        provider (some-> (:provider runtime) str string/lower-case)]
     (when (string? snapshot-id)
       (cond-> {:provider provider
                :snapshot-id snapshot-id
                :checkpoint-at (common/now-ms)}
-        (string? backup-key) (assoc :backup-key backup-key)
-        (string? backup-dir) (assoc :backup-dir backup-dir)
-        (seq bundle-fields) (merge bundle-fields)
         (string? reason) (assoc :reason reason)))))
 
 (defn- checkpoint-payload-with-reason
@@ -194,30 +126,10 @@
 (defn- checkpoint-event-data
   [checkpoint data]
   (let [snapshot-id (runtime-snapshot-id checkpoint)
-        provider (some-> (:provider checkpoint) str string/trim not-empty)
-        backup-key (some-> (:backup-key checkpoint) str string/trim not-empty)
-        backup-dir (some-> (:backup-dir checkpoint) str string/trim not-empty)
-        bundle-id (some-> (:bundle-id checkpoint) str string/trim not-empty)
-        bundle-seq (:bundle-seq checkpoint)
-        bundle-object-key (some-> (:bundle-object-key checkpoint) str string/trim not-empty)
-        bundle-byte-size (:bundle-byte-size checkpoint)
-        bundle-checksum (some-> (:bundle-checksum checkpoint) str string/trim not-empty)
-        bundle-head-sha (some-> (:bundle-head-sha checkpoint) str string/trim not-empty)
-        bundle-base-sha (some-> (:bundle-base-sha checkpoint) str string/trim not-empty)
-        bundle-head-branch (some-> (:bundle-head-branch checkpoint) source-control/sanitize-branch-name)]
+        provider (some-> (:provider checkpoint) str string/trim not-empty)]
     (cond-> data
       (string? snapshot-id) (assoc :snapshot-id snapshot-id)
-      (string? provider) (assoc :provider provider)
-      (string? backup-key) (assoc :backup-key backup-key)
-      (string? backup-dir) (assoc :backup-dir backup-dir)
-      (string? bundle-id) (assoc :bundle-id bundle-id)
-      (number? bundle-seq) (assoc :bundle-seq bundle-seq)
-      (string? bundle-object-key) (assoc :bundle-object-key bundle-object-key)
-      (number? bundle-byte-size) (assoc :bundle-byte-size bundle-byte-size)
-      (string? bundle-checksum) (assoc :bundle-checksum bundle-checksum)
-      (string? bundle-head-sha) (assoc :bundle-head-sha bundle-head-sha)
-      (string? bundle-base-sha) (assoc :bundle-base-sha bundle-base-sha)
-      (string? bundle-head-branch) (assoc :bundle-head-branch bundle-head-branch))))
+      (string? provider) (assoc :provider provider))))
 
 (defn- <persist-session-checkpoint!
   [^js self expected-session-id checkpoint]
@@ -251,184 +163,6 @@
                      runtime-checkpoint)]
     (checkpoint-payload-with-reason checkpoint reason)))
 
-(defn- checkpoint-bundle-payload
-  [bundle]
-  (let [bundle-id (some-> (:bundle-id bundle) str string/trim not-empty)
-        bundle-seq (:bundle-seq bundle)
-        bundle-object-key (some-> (or (:bundle-object-key bundle)
-                                      (:object-key bundle))
-                                  str
-                                  string/trim
-                                  not-empty)
-        bundle-byte-size (or (:bundle-byte-size bundle)
-                             (:byte-size bundle))
-        bundle-checksum (some-> (or (:bundle-checksum bundle)
-                                    (:checksum bundle))
-                                str
-                                string/trim
-                                not-empty)
-        bundle-head-sha (some-> (or (:bundle-head-sha bundle)
-                                    (:head-sha bundle))
-                                str
-                                string/trim
-                                not-empty)
-        bundle-base-sha (some-> (or (:bundle-base-sha bundle)
-                                    (:base-sha bundle))
-                                str
-                                string/trim
-                                not-empty)
-        bundle-head-branch (some-> (or (:bundle-head-branch bundle)
-                                       (:head-branch bundle))
-                                   source-control/sanitize-branch-name)]
-    (cond-> {}
-      (string? bundle-id) (assoc :bundle-id bundle-id)
-      (number? bundle-seq) (assoc :bundle-seq bundle-seq)
-      (string? bundle-object-key) (assoc :bundle-object-key bundle-object-key)
-      (number? bundle-byte-size) (assoc :bundle-byte-size bundle-byte-size)
-      (string? bundle-checksum) (assoc :bundle-checksum bundle-checksum)
-      (string? bundle-head-sha) (assoc :bundle-head-sha bundle-head-sha)
-      (string? bundle-base-sha) (assoc :bundle-base-sha bundle-base-sha)
-      (string? bundle-head-branch) (assoc :bundle-head-branch bundle-head-branch))))
-
-(defn- <checkpoint-workspace-bundle!
-  [^js self current-session checkpoint {:keys [by reason head-branch]}]
-  (let [runtime (:runtime current-session)
-        task (session-task current-session)
-        env (.-env self)]
-    (if-not (and (map? runtime) (map? task) (map? checkpoint))
-      (p/resolved checkpoint)
-      (let [provider (runtime-provider/resolve-provider env runtime)
-            bundle-id (str (random-uuid))
-            object-key (workspace-bundle-store/bundle-object-key-for-task task bundle-id)]
-        (if-not (string? object-key)
-          (p/resolved checkpoint)
-          (-> (p/let [_ (<append-event! self {:type "sandbox.bundle.started"
-                                              :data (cond-> {:by (or by "system")
-                                                             :reason (or reason "checkpoint")}
-                                                      (string? bundle-id) (assoc :bundle-id bundle-id))
-                                              :ts (common/now-ms)})
-                      export-result (runtime-provider/<export-workspace-bundle! provider
-                                                                                runtime
-                                                                                (cond-> {:task task}
-                                                                                  (string? head-branch)
-                                                                                  (assoc :head-branch head-branch)))
-                      bundle-base64 (some-> (:bundle-base64 export-result) str string/trim not-empty)
-                      _ (when-not (string? bundle-base64)
-                          (throw (ex-info "missing workspace bundle payload"
-                                          {:reason :missing-bundle-payload})))
-                      bundle-byte-size (or (:byte-size export-result)
-                                           (count bundle-base64))
-                      bundle-checksum (some-> (:checksum export-result) str string/trim not-empty)
-                      bundle-head-sha (some-> (:head-sha export-result) str string/trim not-empty)
-                      bundle-base-sha (some-> (:base-sha export-result) str string/trim not-empty)
-                      bundle-head-branch (some-> (:head-branch export-result)
-                                                 source-control/sanitize-branch-name)
-                      _ (workspace-bundle-r2/<put-bundle-base64! env
-                                                                 object-key
-                                                                 bundle-base64
-                                                                 (cond-> {:bundle-id bundle-id}
-                                                                   (string? bundle-checksum) (assoc :checksum bundle-checksum)
-                                                                   (string? bundle-head-sha) (assoc :head-sha bundle-head-sha)))
-                      bundle-record (workspace-bundle-store/<upsert-bundle-for-task! env
-                                                                                     task
-                                                                                     (cond-> {:bundle-id bundle-id
-                                                                                              :session-id (:id current-session)
-                                                                                              :object-key object-key
-                                                                                              :byte-size bundle-byte-size}
-                                                                                       (string? (:provider checkpoint))
-                                                                                       (assoc :provider (:provider checkpoint))
-                                                                                       (string? (:snapshot-id checkpoint))
-                                                                                       (assoc :snapshot-id (:snapshot-id checkpoint))
-                                                                                       (string? (:backup-key checkpoint))
-                                                                                       (assoc :backup-key (:backup-key checkpoint))
-                                                                                       (string? (:backup-dir checkpoint))
-                                                                                       (assoc :backup-dir (:backup-dir checkpoint))
-                                                                                       (string? bundle-checksum)
-                                                                                       (assoc :checksum bundle-checksum)
-                                                                                       (string? bundle-head-sha)
-                                                                                       (assoc :head-sha bundle-head-sha)
-                                                                                       (string? bundle-base-sha)
-                                                                                       (assoc :base-sha bundle-base-sha)
-                                                                                       (string? bundle-head-branch)
-                                                                                       (assoc :head-branch bundle-head-branch)))
-                      bundle-checkpoint (checkpoint-bundle-payload bundle-record)
-                      next-checkpoint (merge-checkpoint-bundle checkpoint bundle-checkpoint)
-                      _ (<append-event! self {:type "sandbox.bundle.succeeded"
-                                              :data (checkpoint-event-data next-checkpoint
-                                                                           (cond-> {:by (or by "system")
-                                                                                    :reason (or reason "checkpoint")}
-                                                                             (string? bundle-id) (assoc :bundle-id bundle-id)))
-                                              :ts (common/now-ms)})]
-                next-checkpoint)
-              (p/catch (fn [error]
-                         (p/let [_ (<append-event! self {:type "sandbox.bundle.failed"
-                                                         :data (cond-> {:by (or by "system")
-                                                                        :reason (or reason "checkpoint")
-                                                                        :error (str error)}
-                                                                 (keyword? (some-> error ex-data :reason))
-                                                                 (assoc :provider-reason (name (some-> error ex-data :reason))))
-                                                         :ts (common/now-ms)})]
-                           checkpoint)))))))))
-
-(defn- <restore-workspace-bundle!
-  [^js self expected-session-id task runtime]
-  (let [env (.-env self)]
-    (if-not (and (string? expected-session-id) (map? task) (map? runtime))
-      (p/resolved nil)
-      (-> (p/let [current-session (<get-session self)]
-            (if (not= expected-session-id (:id current-session))
-              nil
-              (p/let [bundle (workspace-bundle-store/<load-latest-bundle-for-task! env
-                                                                                   task
-                                                                                   expected-session-id)]
-                (prn :debug :bundle bundle)
-                (if-not (map? bundle)
-                  nil
-                  (let [bundle-id (some-> (:bundle-id bundle) str string/trim not-empty)
-                        object-key (some-> (:object-key bundle) str string/trim not-empty)]
-                    (when-not (string? object-key)
-                      (throw (ex-info "workspace bundle missing object key"
-                                      {:reason :invalid-bundle-record})))
-                    (p/let [latest-session (<get-session self)]
-                      (if (not= expected-session-id (:id latest-session))
-                        nil
-                        (p/let [_ (<append-event! self {:type "sandbox.restore.started"
-                                                        :data (cond-> {:by "system"}
-                                                                (string? bundle-id) (assoc :bundle-id bundle-id)
-                                                                (number? (:bundle-seq bundle)) (assoc :bundle-seq (:bundle-seq bundle)))
-                                                        :ts (common/now-ms)})
-                                bundle-object (workspace-bundle-r2/<get-bundle-base64! env object-key)
-                                bundle-base64 (some-> (:bundle-base64 bundle-object) str string/trim not-empty)
-                                _ (when-not (string? bundle-base64)
-                                    (throw (ex-info "workspace bundle payload not found"
-                                                    {:reason :missing-bundle-payload
-                                                     :bundle-id bundle-id
-                                                     :object-key object-key})))
-                                latest-session (<get-session self)]
-                          (if (not= expected-session-id (:id latest-session))
-                            nil
-                            (p/let [provider (runtime-provider/resolve-provider env runtime)
-                                    _ (runtime-provider/<apply-workspace-bundle! provider
-                                                                                 runtime
-                                                                                 {:task task
-                                                                                  :head-sha (:head-sha bundle)
-                                                                                  :head-branch (:head-branch bundle)
-                                                                                  :bundle-base64 bundle-base64})
-                                    checkpoint-bundle (checkpoint-bundle-payload bundle)
-                                    _ (<append-event! self {:type "sandbox.restore.succeeded"
-                                                            :data (checkpoint-event-data checkpoint-bundle
-                                                                                         (cond-> {:by "system"}
-                                                                                           (string? bundle-id) (assoc :bundle-id bundle-id)
-                                                                                           (number? (:bundle-seq bundle)) (assoc :bundle-seq (:bundle-seq bundle))))
-                                                            :ts (common/now-ms)})]
-                              checkpoint-bundle))))))))))
-          (p/catch (fn [error]
-                     (p/let [_ (<append-event! self {:type "sandbox.restore.failed"
-                                                     :data {:by "system"
-                                                            :error (str error)}
-                                                     :ts (common/now-ms)})]
-                       nil)))))))
-
 (defn- <checkpoint-existing-snapshot!
   [^js self current-session {:keys [by reason head-branch]}]
   (-> (p/let [d1-checkpoint (-> (checkpoint-store/<load-checkpoint-for-task! (.-env self)
@@ -447,12 +181,7 @@
                                               (string? reason) (assoc :reason reason))
                                       :ts (common/now-ms)})]
         (if (map? checkpoint)
-          (p/let [checkpoint (if (workspace-bundle-required? (:runtime current-session))
-                               (<checkpoint-workspace-bundle! self current-session checkpoint (cond-> {:by by
-                                                                                                       :reason reason}
-                                                                                                (string? head-branch)
-                                                                                                (assoc :head-branch head-branch)))
-                               (p/resolved (strip-checkpoint-bundle checkpoint)))
+          (p/let [checkpoint checkpoint
                   _ (<persist-session-checkpoint! self (:id current-session) checkpoint)
                   _ (<append-event! self {:type "sandbox.checkpoint.succeeded"
                                           :data (checkpoint-event-data checkpoint
@@ -1139,30 +868,26 @@
       nil
 
       :else
-      (p/let [restored-bundle (if (workspace-bundle-required? runtime)
-                                (<restore-workspace-bundle! self session-id task runtime)
-                                (p/resolved nil))]
-        (let [base-checkpoint (or (runtime-checkpoint-payload runtime runtime "provisioned")
-                                  (some-> (checkpoint-payload-with-reason d1-checkpoint "provisioned")
-                                          strip-checkpoint-bundle))
-              runtime-checkpoint (merge-checkpoint-bundle base-checkpoint restored-bundle)
-              session (-> session
-                          (assoc :runtime runtime)
-                          (cond-> (map? runtime-checkpoint)
-                            (assoc-in [:task :sandbox-checkpoint] runtime-checkpoint)))
-              [session _ event] (session/append-event session [] {:type "session.provisioned"
-                                                                  :data {:provider (:provider runtime)
-                                                                         :runtime-session-id (:session-id runtime)
-                                                                         :runner-id (:runner-id runtime)
-                                                                         :sandbox-id (:sandbox-id runtime)
-                                                                         :sandbox-name (:sandbox-name runtime)
-                                                                         :sprite-name (:sprite-name runtime)}
-                                                                  :ts (common/now-ms)})]
-          (p/let [_ (<append-event-storage! self event)
-                  _ (<put-session! self session)]
-            (when-not (terminal-status? (:status session))
-              (start-runtime-events-stream-background! self (:id session) runtime))
-            runtime))))))
+      (let [base-checkpoint (or (runtime-checkpoint-payload runtime runtime "provisioned")
+                                (checkpoint-payload-with-reason d1-checkpoint "provisioned"))
+            runtime-checkpoint base-checkpoint
+            session (-> session
+                        (assoc :runtime runtime)
+                        (cond-> (map? runtime-checkpoint)
+                          (assoc-in [:task :sandbox-checkpoint] runtime-checkpoint)))
+            [session _ event] (session/append-event session [] {:type "session.provisioned"
+                                                                :data {:provider (:provider runtime)
+                                                                       :runtime-session-id (:session-id runtime)
+                                                                       :runner-id (:runner-id runtime)
+                                                                       :sandbox-id (:sandbox-id runtime)
+                                                                       :sandbox-name (:sandbox-name runtime)
+                                                                       :sprite-name (:sprite-name runtime)}
+                                                                :ts (common/now-ms)})]
+        (p/let [_ (<append-event-storage! self event)
+                _ (<put-session! self session)]
+          (when-not (terminal-status? (:status session))
+            (start-runtime-events-stream-background! self (:id session) runtime))
+          runtime)))))
 
 (defn- handle-init [^js self request]
   (p/let [existing (<get-session self)]
@@ -1584,8 +1309,6 @@
                                                                     runtime
                                                                     {:task (:task current-session)})
                         checkpoint (runtime-checkpoint-payload runtime result "manual")
-                        checkpoint (<checkpoint-workspace-bundle! self current-session checkpoint {:by user-id
-                                                                                                   :reason "manual-snapshot"})
                         _ (<persist-session-checkpoint! self (:id current-session) checkpoint)
                         _ (<append-event! self {:type "sandbox.snapshot.succeeded"
                                                 :data (checkpoint-event-data checkpoint {:by user-id})

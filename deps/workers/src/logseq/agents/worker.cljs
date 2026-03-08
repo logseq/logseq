@@ -1,17 +1,14 @@
 (ns logseq.agents.worker
   ;; Turn off false defclass errors
   {:clj-kondo/config {:linters {:unresolved-symbol {:level :off}}}}
-  (:require ["@cloudflare/sandbox" :as cf-sandbox]
-            ["cloudflare:workers" :refer [DurableObject]]
+  (:require ["cloudflare:workers" :refer [DurableObject]]
+            [logseq.agents.dispatch :as dispatch]
+            [logseq.agents.do :as agent-do]
             [logseq.sync.logging :as logging]
             [logseq.sync.sentry.worker :as sentry]
-            [logseq.agents.do :as agent-do]
-            [logseq.agents.dispatch :as dispatch]
             [shadow.cljs.modern :refer (defclass)]))
 
 (logging/install!)
-
-(def Sandbox (.-Sandbox cf-sandbox))
 
 (def worker
   (sentry/wrap-handler

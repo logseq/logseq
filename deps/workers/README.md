@@ -165,11 +165,7 @@ Create session pinned to local runner:
 
 Agent runtime is selected by `AGENT_RUNTIME_PROVIDER`:
 - `e2b`: provisions/manages E2B sandboxes via the `e2b` SDK, then runs `sandbox-agent` inside the sandbox.
-- `sprites`: provisions a Sprite and runs `sandbox-agent` inside it.
-- `local-dev`: uses `SANDBOX_AGENT_URL` directly.
 - `local-runner`: selects a registered user runner endpoint from `AGENTS_DB` and runs through that endpoint.
-- `vercel`: provisions/manages Vercel sandboxes via `@vercel/sandbox`, then runs `sandbox-agent` inside the sandbox.
-- `cloudflare`: provisions a sandbox first, then connects to the sandbox-hosted `sandbox-agent`.
 - Agents worker default is `e2b` (set in `worker/wrangler.agents.toml`).
 
 E2B runtime flow:
@@ -178,16 +174,6 @@ E2B runtime flow:
 - create runtime session via `sandbox-agent` HTTP API
 - stream events/messages through sandbox host URL
 - support runtime snapshot persistence and browser terminal open
-
-For `cloudflare`, bind and export `Sandbox` in the agents worker and configure the container image in
-`worker/wrangler.agents.toml` (`[[containers]] class_name = "Sandbox"`).
-
-Cloudflare runtime flow:
-- resolve sandbox by deterministic name (session id + prefix)
-- health probe `sandbox-agent` inside container
-- set runtime env vars and start `sandbox-agent` when needed
-- proxy create/message stream via `containerFetch`
-- terminate session and cleanup sandbox on terminal states
 
 ## Environment Variables
 
@@ -203,7 +189,7 @@ Cloudflare runtime flow:
 | DB_SYNC_STATIC_USER_ID | Static user id for local dev |
 | DB_SYNC_STATIC_EMAIL | Static user email for local dev |
 | DB_SYNC_STATIC_USERNAME | Static username for local dev |
-| AGENT_RUNTIME_PROVIDER | Runtime backend (`e2b`, `sprites`, `local-dev`, `local-runner`, `vercel`, `cloudflare`) |
+| AGENT_RUNTIME_PROVIDER | Runtime backend (`e2b`, `local-runner`) |
 | SENTRY_DSN | Sentry DSN |
 | SENTRY_RELEASE | Release identifier for Sentry events and sourcemaps |
 | SENTRY_ENVIRONMENT | Sentry environment name (prod, staging, etc.) |
@@ -221,45 +207,16 @@ Cloudflare runtime flow:
 | E2B_SANDBOX_TIMEOUT_MS | E2B sandbox timeout in milliseconds (default `1800000`) |
 | E2B_HEALTH_RETRIES | E2B sandbox health check retry count |
 | E2B_HEALTH_INTERVAL_MS | E2B sandbox health check retry interval (ms) |
-| SPRITE_TOKEN | Sprites API token (default runtime auth) |
-| SPRITES_TOKEN | Alias for `SPRITE_TOKEN` |
-| SPRITES_API_URL | Sprites API base URL override |
-| SPRITES_TIMEOUT_MS | Sprites API request timeout |
-| SPRITES_NAME_PREFIX | Prefix used when creating sprite names |
-| SPRITES_RAM_MB | Optional sprite RAM override |
-| SPRITES_CPUS | Optional sprite CPU override |
-| SPRITES_REGION | Optional sprite region |
-| SPRITES_STORAGE_GB | Optional sprite storage override |
-| SPRITES_BOOTSTRAP_COMMAND | Command to start `sandbox-agent` inside sprite |
-| SPRITES_SANDBOX_AGENT_PORT | sandbox-agent port inside sprite (default `2468`) |
-| SPRITES_HEALTH_RETRIES | Sprite health check retry count |
-| SPRITES_HEALTH_INTERVAL_MS | Sprite health check retry interval (ms) |
-| CLOUDFLARE_SANDBOX_NAME_PREFIX | Prefix used when creating Cloudflare sandbox names |
-| CLOUDFLARE_SANDBOX_AGENT_PORT | sandbox-agent port inside Cloudflare sandbox (default `2468`) |
-| CLOUDFLARE_BOOTSTRAP_COMMAND | Optional command override to start sandbox-agent in Cloudflare sandbox |
-| CLOUDFLARE_REPO_CLONE_COMMAND | Optional repo clone command template for Cloudflare sandbox |
-| CLOUDFLARE_HEALTH_RETRIES | Cloudflare sandbox health check retry count |
-| CLOUDFLARE_HEALTH_INTERVAL_MS | Cloudflare sandbox health check retry interval (ms) |
-| VERCEL_TEAM_ID | Vercel team ID for Sandbox SDK (required with `VERCEL_TOKEN`) |
-| VERCEL_PROJECT_ID | Vercel project ID for Sandbox SDK (required with `VERCEL_TOKEN`) |
-| VERCEL_TOKEN | Vercel API token for Sandbox SDK |
-| VERCEL_REPO_CLONE_COMMAND | Optional repo clone command template for Vercel runtime |
-| VERCEL_SANDBOX_AGENT_PORT | sandbox-agent port inside Vercel sandbox (default `2468`) |
-| VERCEL_SANDBOX_TIMEOUT_MS | Vercel sandbox timeout in milliseconds (default `1800000`) |
-| VERCEL_SANDBOX_RUNTIME | Vercel sandbox runtime image (default `node24`) |
-| VERCEL_SANDBOX_VCPUS | Optional Vercel sandbox vCPU count |
-| VERCEL_HEALTH_RETRIES | Vercel sandbox health check retry count |
-| VERCEL_HEALTH_INTERVAL_MS | Vercel sandbox health check retry interval (ms) |
 | LOCAL_RUNNER_HEARTBEAT_TTL_MS | Max runner heartbeat age before runner is considered unavailable (default `60000`) |
 | GITHUB_APP_ID | GitHub App ID used to mint installation tokens |
 | GITHUB_APP_INSTALLATION_ID | Optional fixed installation ID (if omitted, resolved from repo) |
 | GITHUB_APP_PRIVATE_KEY | GitHub App private key PEM used for JWT signing |
 | GITHUB_APP_SLUG | Optional app slug used to build install URL in setup prompts |
 | GITHUB_API_BASE | Optional GitHub API base URL override (default `https://api.github.com`) |
-| OPENAI_API_KEY | Passed into Cloudflare sandbox runtime env (if set) |
-| ANTHROPIC_API_KEY | Passed into Cloudflare sandbox runtime env (if set) |
-| OPENAI_BASE_URL | Passed into Cloudflare sandbox runtime env (if set) |
-| ANTHROPIC_BASE_URL | Passed into Cloudflare sandbox runtime env (if set) |
+| OPENAI_API_KEY | Passed into E2B sandbox runtime env for Codex sessions (if set) |
+| ANTHROPIC_API_KEY | Passed into E2B sandbox runtime env for Claude sessions (if set) |
+| OPENAI_BASE_URL | Passed into E2B sandbox runtime env (if set) |
+| ANTHROPIC_BASE_URL | Passed into E2B sandbox runtime env (if set) |
 
 For agent tasks with a GitHub repo configured, the worker also injects a short-lived GitHub App
 installation token into sandbox runtime env as `GITHUB_TOKEN`, `GH_TOKEN`, and

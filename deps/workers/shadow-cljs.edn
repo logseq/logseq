@@ -20,8 +20,7 @@
                                      :warnings {:fn-deprecated false
                                                 :redef false}}
                   :modules {:main {:exports {default logseq.agents.worker/worker
-                                             AgentSessionDO logseq.agents.worker/AgentSessionDO
-                                             Sandbox logseq.agents.worker/Sandbox}}}
+                                             AgentSessionDO logseq.agents.worker/AgentSessionDO}}}
                   :js-options {:js-provider :import}
                   :closure-defines {shadow.cljs.devtools.client.env/enabled false
                                     goog.debug.LOGGING_ENABLED true}

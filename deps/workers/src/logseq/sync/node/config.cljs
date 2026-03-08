@@ -32,36 +32,6 @@
      :e2b-sandbox-timeout-ms (env-value env "E2B_SANDBOX_TIMEOUT_MS")
      :e2b-health-retries (env-value env "E2B_HEALTH_RETRIES")
      :e2b-health-interval-ms (env-value env "E2B_HEALTH_INTERVAL_MS")
-     :sprite-token (env-value env "SPRITE_TOKEN")
-     :sprites-token (env-value env "SPRITES_TOKEN")
-     :sprites-api-url (env-value env "SPRITES_API_URL")
-     :sprites-timeout-ms (env-value env "SPRITES_TIMEOUT_MS")
-     :sprites-name-prefix (env-value env "SPRITES_NAME_PREFIX")
-     :sprites-ram-mb (env-value env "SPRITES_RAM_MB")
-     :sprites-cpus (env-value env "SPRITES_CPUS")
-     :sprites-region (env-value env "SPRITES_REGION")
-     :sprites-storage-gb (env-value env "SPRITES_STORAGE_GB")
-     :sprites-bootstrap-command (env-value env "SPRITES_BOOTSTRAP_COMMAND")
-     :sprites-repo-clone-command (env-value env "SPRITES_REPO_CLONE_COMMAND")
-     :sprites-sandbox-agent-port (env-value env "SPRITES_SANDBOX_AGENT_PORT")
-     :sprites-health-retries (env-value env "SPRITES_HEALTH_RETRIES")
-     :sprites-health-interval-ms (env-value env "SPRITES_HEALTH_INTERVAL_MS")
-     :cloudflare-sandbox-name-prefix (env-value env "CLOUDFLARE_SANDBOX_NAME_PREFIX")
-     :cloudflare-sandbox-agent-port (env-value env "CLOUDFLARE_SANDBOX_AGENT_PORT")
-     :cloudflare-bootstrap-command (env-value env "CLOUDFLARE_BOOTSTRAP_COMMAND")
-     :cloudflare-repo-clone-command (env-value env "CLOUDFLARE_REPO_CLONE_COMMAND")
-     :cloudflare-health-retries (env-value env "CLOUDFLARE_HEALTH_RETRIES")
-     :cloudflare-health-interval-ms (env-value env "CLOUDFLARE_HEALTH_INTERVAL_MS")
-     :vercel-team-id (env-value env "VERCEL_TEAM_ID")
-     :vercel-project-id (env-value env "VERCEL_PROJECT_ID")
-     :vercel-token (env-value env "VERCEL_TOKEN")
-     :vercel-repo-clone-command (env-value env "VERCEL_REPO_CLONE_COMMAND")
-     :vercel-sandbox-agent-port (env-value env "VERCEL_SANDBOX_AGENT_PORT")
-     :vercel-sandbox-timeout-ms (env-value env "VERCEL_SANDBOX_TIMEOUT_MS")
-     :vercel-sandbox-runtime (env-value env "VERCEL_SANDBOX_RUNTIME")
-     :vercel-sandbox-vcpus (env-value env "VERCEL_SANDBOX_VCPUS")
-     :vercel-health-retries (env-value env "VERCEL_HEALTH_RETRIES")
-     :vercel-health-interval-ms (env-value env "VERCEL_HEALTH_INTERVAL_MS")
      :github-app-id (env-value env "GITHUB_APP_ID")
      :github-app-installation-id (env-value env "GITHUB_APP_INSTALLATION_ID")
      :github-app-private-key (env-value env "GITHUB_APP_PRIVATE_KEY")
@@ -83,16 +53,6 @@
    :e2b-api-key :e2b-domain :e2b-template :e2b-repo-clone-command
    :e2b-sandbox-agent-port :e2b-sandbox-timeout-ms
    :e2b-health-retries :e2b-health-interval-ms
-   :sprite-token :sprites-token :sprites-api-url :sprites-timeout-ms
-   :sprites-name-prefix :sprites-ram-mb :sprites-cpus :sprites-region
-   :sprites-storage-gb :sprites-bootstrap-command :sprites-repo-clone-command
-   :sprites-sandbox-agent-port :sprites-health-retries :sprites-health-interval-ms
-   :cloudflare-sandbox-name-prefix :cloudflare-sandbox-agent-port
-   :cloudflare-bootstrap-command :cloudflare-repo-clone-command
-   :cloudflare-health-retries :cloudflare-health-interval-ms
-   :vercel-team-id :vercel-project-id :vercel-token :vercel-repo-clone-command
-   :vercel-sandbox-agent-port :vercel-sandbox-timeout-ms :vercel-sandbox-runtime
-   :vercel-sandbox-vcpus :vercel-health-retries :vercel-health-interval-ms
    :github-app-id :github-app-installation-id :github-app-private-key :github-app-slug :github-api-base
    :openai-api-key :anthropic-api-key :openai-base-url :anthropic-base-url
    :log-level :cognito-issuer :cognito-client-id :cognito-jwks-url])

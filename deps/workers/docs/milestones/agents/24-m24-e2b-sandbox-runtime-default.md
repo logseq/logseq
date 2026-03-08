@@ -35,14 +35,13 @@ Support `AGENT_RUNTIME_PROVIDER=e2b` end-to-end so sessions can provision E2B sa
 3) Add E2B template support:
 - choose template from env/config (`E2B_TEMPLATE`)
 - allow explicit template overrides where appropriate
-4) Keep workspace bundle and git push parity for E2B runtime.
-5) Make `e2b` the default runtime provider:
+4) Keep git push parity for E2B runtime.
+5) Make `e2b` the default runtime provider and keep `local-runner` as the only alternate runtime:
 - when `AGENT_RUNTIME_PROVIDER` is unset
 - in `worker/wrangler.agents.toml` local/staging/prod defaults
 6) Add config/env plumbing and docs for E2B credentials/options.
 
 ## Out of Scope
-- Removing existing providers (`cloudflare`, `vercel`, `sprites`, `local-dev`, `local-runner`).
 - Cross-provider snapshot migration.
 - New user-facing UI for selecting templates/snapshots.
 
@@ -86,7 +85,7 @@ Support `AGENT_RUNTIME_PROVIDER=e2b` end-to-end so sessions can provision E2B sa
 2) `AGENT_RUNTIME_PROVIDER=e2b` supports create/message/events end-to-end.
 3) E2B snapshots can be created and restored from checkpoint metadata.
 4) Browser terminal open works for E2B runtime sessions.
-5) Existing providers remain functional when explicitly selected.
+5) `local-runner` remains functional when explicitly selected.
 
 ## Validation
 - Add/update tests in:
@@ -94,4 +93,3 @@ Support `AGENT_RUNTIME_PROVIDER=e2b` end-to-end so sessions can provision E2B sa
   - `test/logseq/agents/do_test.cljs` (if runtime behavior contract changes require DO-level assertions)
 - Run targeted tests for changed namespaces.
 - Run full lint/test pass before rollout (`bb dev:lint-and-test` from repo root).
-
