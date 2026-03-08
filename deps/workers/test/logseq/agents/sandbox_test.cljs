@@ -6,7 +6,10 @@
   (testing "normalizes sandbox base urls"
     (is (= "https://sandbox.example" (sandbox/normalize-base-url "https://sandbox.example")))
     (is (= "https://sandbox.example" (sandbox/normalize-base-url "https://sandbox.example/")))
-    (is (= "http://localhost:8787" (sandbox/normalize-base-url "http://localhost:8787//")))))
+    (is (= "http://localhost:8787" (sandbox/normalize-base-url "http://localhost:8787//")))
+    (is (= "https://2468-sbx.e2b.app" (sandbox/normalize-base-url "2468-sbx.e2b.app")))
+    (is (= "https://2468-sbx.e2b.app" (sandbox/normalize-base-url " 2468-sbx.e2b.app/ ")))
+    (is (= "http://localhost:8787" (sandbox/normalize-base-url "localhost:8787")))))
 
 (deftest session-endpoint-test
   (testing "builds sandbox session endpoints"

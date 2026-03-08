@@ -643,6 +643,7 @@
         session-created? (or session-started?
                              (agent-handler/task-session-created? block))
         terminal-enabled? (agent-handler/session-terminal-enabled? session)
+        snapshot-enabled? (agent-handler/session-snapshot-enabled? session)
         session-chat-messages (->> session-messages
                                    (map message->chat-message)
                                    (remove nil?))
@@ -1020,7 +1021,7 @@
                 :class "h-7 px-2 text-xs"
                 :on-click (fn [_] (close-terminal!))}
                "Disconnect"))])
-         (when-not pr-created?
+         (when (and (not pr-created?) snapshot-enabled?)
            (shui/button
             {:size :sm
              :variant :outline

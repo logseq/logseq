@@ -123,6 +123,7 @@
   (str "http://127.0.0.1:" port path))
 
 (def ^:private default-repo-base-dir "/workspace")
+(def ^:private e2b-repo-base-dir "/home/user/workspace")
 (def ^:private vercel-repo-base-dir "/vercel/sandbox")
 (def ^:private cloudflare-local-host "http://localhost")
 (def ^:private cloudflare-snapshot-ttl-seconds (* 30 24 60 60))
@@ -372,19 +373,22 @@
 
 (defn- repo-base-dir
   [provider]
-  (if (= "vercel" (normalize-provider provider))
-    vercel-repo-base-dir
+  (case (normalize-provider provider)
+    "e2b" e2b-repo-base-dir
+    "vercel" vercel-repo-base-dir
     default-repo-base-dir))
 
 (defn- get-repo-dir
   ([session-id]
    (get-repo-dir session-id nil nil))
   ([session-id task provider]
-   (if (= "vercel" (normalize-provider provider))
-     (str vercel-repo-base-dir "/" (task-repo-name task))
-     (let [session-id (some-> session-id str)]
-       (when (string? session-id)
-         (str default-repo-base-dir "/" (sanitize-name session-id)))))))
+   (case (normalize-provider provider)
+     "e2b" (str e2b-repo-base-dir "/" (task-repo-name task))
+     "vercel" (str vercel-repo-base-dir "/" (task-repo-name task))
+     (let [session-id (some-> session-id str)
+           base-dir (repo-base-dir provider)]
+       (when (and (string? session-id) (string? base-dir))
+         (str base-dir "/" (sanitize-name session-id)))))))
 
 (defn- repo-cd-command
   ([session-id]
@@ -965,7 +969,7 @@
 
 (defn- e2b-sandbox-timeout-ms
   [^js env]
-  (parse-int (env-str env "E2B_SANDBOX_TIMEOUT_MS") (* 30 60 1000)))
+  (parse-int (env-str env "E2B_SANDBOX_TIMEOUT_MS") (* 5 60 1000)))
 
 (defn- e2b-api-opts
   [^js env]
@@ -990,13 +994,30 @@
   (or (aget sandbox "sandboxId")
       (aget sandbox "id")))
 
+(defn- e2b-command-error-data
+  [command error]
+  (let [stdout (or (some-> error (aget "stdout")) "")
+        stderr (or (some-> error (aget "stderr")) "")
+        exit-code (or (some-> error (aget "exitCode"))
+                      (some-> error (aget "exit_code")))
+        name (some-> error (aget "name"))
+        message (or (some-> error (aget "message"))
+                    (str error))]
+    (cond-> {:reason :e2b-command-failed
+             :command command
+             :message message
+             :stdout stdout
+             :stderr stderr}
+      (string? name) (assoc :error-name name)
+      (number? exit-code) (assoc :exit-code exit-code))))
+
 (defn- e2b-sandbox-host
   [sandbox port]
   (let [get-host (js-method sandbox "getHost")]
     (when-not (fn? get-host)
       (throw (ex-info "e2b sandbox missing getHost method"
                       {:reason :missing-e2b-get-host})))
-    (.call get-host sandbox port)))
+    (sandbox/normalize-base-url (.call get-host sandbox port))))
 
 (defn <e2b-create-sandbox!
   [^js env template opts]
@@ -1032,6 +1053,15 @@
       (->promise (.call kill sandbox-class sandbox-id opts))
       (p/resolved nil))))
 
+(defn <e2b-pause-sandbox!
+  [^js env sandbox-id]
+  (let [sandbox-class (e2b-sandbox-class)
+        pause (js-method sandbox-class "pause")
+        opts (clj->js (e2b-api-opts env))]
+    (if (and (string? sandbox-id) (fn? pause))
+      (->promise (.call pause sandbox-class sandbox-id opts))
+      (p/resolved nil))))
+
 (defn <e2b-run-shell!
   [sandbox command & [opts]]
   (let [commands (when sandbox (aget sandbox "commands"))
@@ -1048,7 +1078,12 @@
                       {:reason :missing-e2b-run-command})))
     (if (true? (:background opts))
       (->promise (.call run-command commands command (clj->js params)))
-      (p/let [result (->promise (.call run-command commands command (clj->js params)))
+      (p/let [result (-> (.call run-command commands command (clj->js params))
+                         ->promise
+                         (p/catch (fn [error]
+                                    (throw (ex-info "e2b sandbox command failed"
+                                                    (e2b-command-error-data command error)
+                                                    error)))))
               stdout (or (aget result "stdout") "")
               stderr (or (aget result "stderr") "")
               exit-code (or (aget result "exitCode")
@@ -1219,7 +1254,7 @@
         port (e2b-agent-port env runtime)
         sandbox-id (:sandbox-id runtime)]
     (if (string? cached)
-      (p/resolved cached)
+      (p/resolved (sandbox/normalize-base-url cached))
       (p/let [sandbox (<e2b-connect-sandbox! env sandbox-id)]
         (e2b-sandbox-host sandbox port)))))
 
@@ -1283,28 +1318,93 @@
       true)))
 
 (defn- <e2b-open-terminal!
-  [^js env runtime request]
-  (let [session-id (:session-id runtime)]
+  [^js env runtime request {:keys [cols rows]}]
+  (let [sandbox-id (:sandbox-id runtime)
+        session-id (:session-id runtime)
+        cwd (or (:backup-dir runtime)
+                (get-repo-dir session-id nil "e2b"))]
+    (when-not (string? sandbox-id)
+      (throw (ex-info "missing sandbox-id on runtime" {:runtime runtime})))
     (when-not (string? session-id)
       (throw (ex-info "missing runtime session-id on runtime"
                       {:runtime runtime})))
-    (let [agent-token (e2b-agent-token env runtime)]
-      (p/let [base-url (<e2b-runtime-base-url! env runtime)
-              req-url (platform/request-url request)
-              terminal-url (str (sandbox/session-url base-url session-id) "/terminal" (.-search req-url))
-              headers (js/Headers. (.-headers request))
-              _ (when (string? agent-token)
-                  (.set headers "authorization" (str "Bearer " agent-token)))
-              req (js/Request. terminal-url
-                               #js {:method (.-method request)
-                                    :headers headers})
-              resp (js/fetch req)
-              status (.-status resp)]
-        (if (or (= status 101) (<= 200 status 299))
-          resp
-          (throw (ex-info "e2b open-terminal failed"
-                          {:status status
-                           :session-id session-id})))))))
+    (when-not (= "websocket"
+                 (some-> request .-headers (.get "Upgrade") str string/lower-case))
+      (throw (ex-info "e2b terminal requires websocket upgrade"
+                      {:reason :unsupported-terminal
+                       :session-id session-id})))
+    (p/let [sandbox (<e2b-connect-sandbox! env sandbox-id)]
+      (let [pty (some-> sandbox (aget "pty"))
+            create-pty (js-method pty "create")]
+        (when-not (fn? create-pty)
+          (throw (ex-info "e2b sandbox missing pty.create"
+                          {:reason :unsupported-terminal
+                           :sandbox-id sandbox-id
+                           :session-id session-id})))
+        (let [pair (js/WebSocketPair.)
+              client (aget pair 0)
+              server (aget pair 1)]
+          (.accept server)
+          (set! (.-binaryType server) "arraybuffer")
+          (-> (->promise
+               (.call create-pty pty
+                      (clj->js (cond-> {:cols (or cols 120)
+                                        :rows (or rows 40)
+                                        :cwd cwd
+                                        :onData (fn [payload]
+                                                  (.send server payload))}
+                                 (number? cols) (assoc :cols cols)
+                                 (number? rows) (assoc :rows rows)))))
+              (p/then
+               (fn [handle]
+                 (let [pid (aget handle "pid")
+                       send-input (js-method pty "sendInput")
+                       resize (js-method pty "resize")
+                       kill-handle (js-method handle "kill")
+                       close-handler (fn []
+                                       (when (fn? kill-handle)
+                                         (-> (->promise (.call kill-handle handle))
+                                             (p/catch (fn [_] nil)))))]
+                   (.addEventListener
+                    server
+                    "message"
+                    (fn [event]
+                      (let [payload (.-data event)]
+                        (cond
+                          (string? payload)
+                          (let [parsed (parse-json-safe payload)]
+                            (if (= "resize" (:type parsed))
+                              (when (and (number? pid) (fn? resize))
+                                (-> (->promise (.call resize pty pid
+                                                      (clj->js {:cols (:cols parsed)
+                                                                :rows (:rows parsed)})))
+                                    (p/catch (fn [_] nil))))
+                              (when (and (number? pid) (fn? send-input))
+                                (-> (->promise (.call send-input pty pid payload))
+                                    (p/catch (fn [_] nil))))))
+
+                          (instance? js/ArrayBuffer payload)
+                          (when (and (number? pid) (fn? send-input))
+                            (-> (->promise (.call send-input pty pid (js/Uint8Array. payload)))
+                                (p/catch (fn [_] nil))))
+
+                          (instance? js/Uint8Array payload)
+                          (when (and (number? pid) (fn? send-input))
+                            (-> (->promise (.call send-input pty pid payload))
+                                (p/catch (fn [_] nil))))
+
+                          :else nil))))
+                   (.addEventListener server "close" close-handler)
+                   (.addEventListener server "error" (fn [_] (close-handler)))
+                   (.send server (js/JSON.stringify #js {:type "ready"}))
+                   (js/Response. nil #js {:status 101
+                                          :webSocket client}))))
+              (p/catch
+               (fn [error]
+                 (try
+                   (.close server 1011 "terminal init failed")
+                   (catch :default _ nil))
+                 (throw error)))))))))
 
 (defn- vercel-agent-token [^js env runtime]
   (or (:agent-token runtime)
@@ -2546,14 +2646,16 @@
                    (fn [error]
                      (log/error :agent/e2b-repo-clone-failed
                                 {:session-id session-id
-                                 :error (str error)})
+                                 :error (str error)
+                                 :error-data (ex-data error)})
                      nil)))
               _ (p/catch
                  (<e2b-run-project-init-setup! sandbox session-id task)
                  (fn [error]
                    (log/error :agent/e2b-project-init-setup-failed
                               {:session-id session-id
-                               :error (str error)})
+                               :error (str error)
+                               :error-data (ex-data error)})
                    nil))
               base-url (e2b-sandbox-host sandbox port)
               response (sandbox/<create-session base-url agent-token session-id payload)
@@ -2583,8 +2685,8 @@
       (p/let [base-url (<e2b-runtime-base-url! env runtime)]
         (sandbox/<send-message base-url agent-token (:session-id runtime) message))))
 
-  (<open-terminal! [_ runtime request _opts]
-    (<e2b-open-terminal! env runtime request))
+  (<open-terminal! [_ runtime request opts]
+    (<e2b-open-terminal! env runtime request opts))
 
   (<snapshot-runtime! [_ runtime opts]
     (let [session-id (:session-id runtime)
@@ -2666,7 +2768,7 @@
       (if-not (string? sandbox-id)
         (p/resolved nil)
         (p/catch
-         (<e2b-kill-sandbox! env sandbox-id)
+         (<e2b-pause-sandbox! env sandbox-id)
          (fn [_] nil))))))
 
 (defrecord VercelProvider [env]

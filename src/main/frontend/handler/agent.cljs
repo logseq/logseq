@@ -354,7 +354,11 @@
   (some-> provider str string/trim string/lower-case not-empty))
 
 (defn- runtime-provider-terminal-enabled? [provider]
-  (= "cloudflare" (normalize-runtime-provider provider)))
+  (contains? #{"cloudflare" "e2b"}
+             (normalize-runtime-provider provider)))
+
+(defn- runtime-provider-snapshot-enabled? [provider]
+  (not= "e2b" (normalize-runtime-provider provider)))
 
 (defn- event-runtime-provider [event]
   (when (= "session.provisioned" (:type event))
@@ -380,6 +384,15 @@
                               (keep event-runtime-provider)
                               first))]
     (runtime-provider-terminal-enabled? provider)))
+
+(defn session-snapshot-enabled?
+  [session]
+  (let [provider (or (normalize-runtime-provider (:runtime-provider session))
+                     (some->> (:events session)
+                              reverse
+                              (keep event-runtime-provider)
+                              first))]
+    (runtime-provider-snapshot-enabled? provider)))
 
 (defn- status->label [status-ident]
   (some-> (db/entity status-ident) :block/title))

@@ -3,8 +3,17 @@
             [logseq.sync.platform.core :as platform]
             [promesa.core :as p]))
 
+(def ^:private absolute-url-re #"^[A-Za-z][A-Za-z0-9+.-]*://")
+(def ^:private local-host-re #"^(localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:/.*)?$")
+
 (defn normalize-base-url [base]
-  (string/replace (or base "") #"/+$" ""))
+  (let [base (some-> base str string/trim not-empty)
+        base (some-> base (string/replace #"/+$" ""))]
+    (cond
+      (not (string? base)) ""
+      (re-find absolute-url-re base) base
+      (re-find local-host-re base) (str "http://" base)
+      :else (str "https://" base))))
 
 (defn sessions-base-url [base]
   (str (normalize-base-url base) "/v1/sessions"))
