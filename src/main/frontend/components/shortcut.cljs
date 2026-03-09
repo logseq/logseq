@@ -716,6 +716,7 @@
                                         (false? (first binding)))
                           unset? (and (not disabled?)
                                       (or (= user-binding [])
+                                          (and (nil? binding) (nil? user-binding))
                                           (and (= binding [])
                                                (nil? user-binding))))]]
 
@@ -753,23 +754,22 @@
                       {:class (util/classnames [{:disabled disabled?}])}
 
                       (cond
-                        (or unset? user-binding (false? user-binding))
-                        [:code
-                         (if unset?
-                           (t :keymap/unset)
-                           (str (t :keymap/custom) ": "
-                                (if disabled?
-                                  (t :keymap/disabled)
-                                  (bean/->js
-                                   (map #(if (false? %)
-                                           (t :keymap/disabled)
-                                           (shortcut-utils/decorate-binding %)) user-binding)))))]
+                        unset?
+                        [:span.shortcut-status-label (t :keymap/unset)]
 
-                        (not unset?)
-                        [:code.flex.items-center.bg-transparent
-                         {:style {:min-height "20px"
-                                  :flex-wrap "nowrap"
-                                  :white-space "nowrap"}}
-                         (shui/shortcut
-                          (string/join " | " (map #(dh/binding-for-display id %) binding))
-                          {:raw-binding binding})])]]))))])])]]))
+                        (or user-binding (false? user-binding))
+                        [:<>
+                         [:span.shortcut-status-label (str (t :keymap/custom) ":")]
+                         (if disabled?
+                           [:span.shortcut-status-label (t :keymap/disabled)]
+                           (for [b user-binding
+                                 :when (string? b)]
+                             [:span {:key b}
+                              (shui/shortcut b)]))]
+
+                        :else
+                        (for [b binding
+                              :when (string? b)]
+                          [:span {:key b}
+                           (shui/shortcut (dh/binding-for-display id b)
+                                          {:raw-binding [b]})]))]]))))])])]]))

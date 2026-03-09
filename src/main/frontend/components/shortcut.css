@@ -106,14 +106,27 @@
 
         .label-wrap {
           @apply flex flex-1;
+          min-width: 120px;
         }
 
         .action-wrap {
-          @apply flex space-x-2 items-center flex-nowrap
+          @apply flex items-center flex-wrap justify-end
           select-none;
+          column-gap: 16px;
+          row-gap: 6px;
+          max-width: 55%;
 
           &.disabled {
             @apply opacity-60 cursor-default;
+          }
+
+          .shortcut-status-label {
+            @apply text-xs whitespace-nowrap;
+            opacity: 0.5;
+
+            &:not(:only-child) {
+              margin-right: -8px;
+            }
           }
         }
       }
