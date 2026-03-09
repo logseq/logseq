@@ -501,8 +501,8 @@
                data-dir (node-helper/create-tmp-dir "db-worker-sync-status")
                repo (str "logseq_db_sync_status_" (subs (str (random-uuid)) 0 8))]
            (-> (p/let [{:keys [host port stop!]}
-                       (db-worker-node/start-daemon! {:data-dir data-dir
-                                                      :repo repo})
+                       (start-daemon! {:data-dir data-dir
+                                       :repo repo})
                        _ (reset! daemon {:host host :port port :stop! stop!})
                        {:keys [status body]} (invoke-raw host port "thread-api/db-sync-status" [])
                        parsed (js->clj (js/JSON.parse body) :keywordize-keys true)
@@ -532,8 +532,8 @@
                data-dir (node-helper/create-tmp-dir "db-worker-sync-start")
                repo (str "logseq_db_sync_start_" (subs (str (random-uuid)) 0 8))]
            (-> (p/let [{:keys [host port stop!]}
-                       (db-worker-node/start-daemon! {:data-dir data-dir
-                                                      :repo repo})
+                       (start-daemon! {:data-dir data-dir
+                                       :repo repo})
                        _ (reset! daemon {:host host :port port :stop! stop!})
                        _ (invoke host port "thread-api/create-or-open-db" [repo {}])
                        _ (invoke host port "thread-api/set-db-sync-config"
