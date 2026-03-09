@@ -39,44 +39,161 @@
 (declare customize-shortcut-dialog-inner)
 
 (rum/defc keyboard-filter-record-inner
-  [keystroke set-keystroke! close-fn]
+  [initial-keystroke parent-set-keystroke! close-fn]
 
-  (let [keypressed? (not= "" keystroke)]
+  (let [*ref-el (rum/use-ref nil)
+        ;; Local keystroke state (popup renders outside parent React tree)
+        [keystroke set-local-keystroke!] (rum/use-state initial-keystroke)
+        ;; Wrapper that updates both local state and parent filter
+        set-keystroke! (fn [ks]
+                         (set-local-keystroke! ks)
+                         (parent-set-keystroke! ks))
+        ;; accumulating? = dashed border while still typing a sequence
+        [accumulating? set-accumulating!] (rum/use-state false)
+        *commit-timer (rum/use-ref nil)
+        ;; committed-ref: after 400ms or modifier combo, next plain key starts fresh
+        *committed-ref (rum/use-ref (not (string/blank? keystroke)))
+        *keystroke-ref (rum/use-ref keystroke)
 
+        has-keystroke? (not (string/blank? keystroke))
+
+        commit!
+        (fn [ks]
+          (set-keystroke! ks)
+          (set-accumulating! false)
+          (rum/set-ref! *committed-ref true))
+
+        clear!
+        (fn []
+          (when-let [timer (rum/deref *commit-timer)]
+            (js/clearTimeout timer))
+          (set-keystroke! "")
+          (set-accumulating! false)
+          (rum/set-ref! *committed-ref false))
+
+        start-commit-timer!
+        (fn [ks]
+          (when-let [timer (rum/deref *commit-timer)]
+            (js/clearTimeout timer))
+          (let [timer (js/setTimeout #(commit! ks) 400)]
+            (rum/set-ref! *commit-timer timer)))]
+
+    ;; Keep ref in sync
+    (rum/set-ref! *keystroke-ref keystroke)
+
+    ;; Scoped key handler on the popup element
     (hooks/use-effect!
      (fn []
-       (let [key-handler (KeyHandler. js/document)]
-          ;; setup
-         (util/profile
-           "[shortcuts] unlisten*"
-           (shortcut/unlisten-all! true))
+       (let [^js el (rum/deref *ref-el)
+             key-handler (KeyHandler. el)
+
+             teardown-global!
+             (when-not @*global-listener-setup?
+               (shortcut/unlisten-all! true)
+               (reset! *global-listener-setup? true)
+               (fn []
+                 (shortcut/listen-all!)
+                 (reset! *global-listener-setup? false)))]
+
          (events/listen key-handler "key"
                         (fn [^js e]
                           (.preventDefault e)
-                          (set-keystroke! #(util/trim-safe (str % (shortcut/keyname e))))))
+                          (let [key-code (.-keyCode e)
+                                is-esc? (= key-code 27)
+                                is-backspace? (= key-code 8)
+                                has-modifier? (or (.-metaKey e) (.-ctrlKey e) (.-altKey e))]
+                            (cond
+                              ;; Esc: close the popup
+                              is-esc?
+                              (do (.stopPropagation e)
+                                  (clear!)
+                                  (close-fn))
 
-          ;; teardown
-         #(do
-            (util/profile
-              "[shortcuts] listen*"
-              (shortcut/listen-all!))
-            (.dispose key-handler))))
+                              ;; Backspace during accumulation: remove last key from sequence
+                              (and is-backspace? (not (rum/deref *committed-ref)))
+                              (let [ks (rum/deref *keystroke-ref)
+                                    parts (when-not (string/blank? ks)
+                                            (string/split ks #" "))
+                                    remaining (when (seq parts)
+                                                (string/join " " (butlast parts)))]
+                                (if (or (string/blank? remaining) (nil? remaining))
+                                  (clear!)
+                                  (do (set-keystroke! remaining)
+                                      (start-commit-timer! remaining))))
+
+                              ;; Backspace after commit: clear the whole chip
+                              is-backspace?
+                              (clear!)
+
+                              ;; Any other key
+                              :else
+                              (when-let [kn (shortcut/keyname e)]
+                                (let [kn-trimmed (util/trim-safe kn)]
+                                  (if has-modifier?
+                                    ;; Modifier combo: commit immediately, replace everything
+                                    (do (when-let [timer (rum/deref *commit-timer)]
+                                          (js/clearTimeout timer))
+                                        (commit! kn-trimmed))
+                                    ;; Plain key: accumulate or start fresh
+                                    (if (rum/deref *committed-ref)
+                                      ;; After a committed chip, start fresh
+                                      (do (rum/set-ref! *committed-ref false)
+                                          (set-accumulating! true)
+                                          (set-keystroke! kn-trimmed)
+                                          (start-commit-timer! kn-trimmed))
+                                      ;; During accumulation, append
+                                      (let [cur (rum/deref *keystroke-ref)
+                                            new-ks (util/trim-safe (str cur kn))]
+                                        (set-accumulating! true)
+                                        (set-keystroke! new-ks)
+                                        (start-commit-timer! new-ks))))))))))
+
+         (js/setTimeout #(.focus el) 128)
+
+         #(do (when-let [timer (rum/deref *commit-timer)]
+                (js/clearTimeout timer))
+              (some-> teardown-global! (apply nil))
+              (.dispose key-handler))))
      [])
 
-    [:div.keyboard-filter-record
-     [:h2
-      [:strong (t :keymap/keystroke-filter)]
-      [:span.flex.space-x-2
-       (when keypressed?
-         [:a.flex.items-center
-          {:on-click #(set-keystroke! "")} (ui/icon "zoom-reset" {:size 12})])
-       [:a.flex.items-center
-        {:on-click #(do (close-fn) (set-keystroke! ""))} (ui/icon "x" {:size 12})]]]
-     [:div.wrap.p-2
-      (if-not keypressed?
-        [:small (t :keymap/keystroke-record-desc)]
-        (when-not (string/blank? keystroke)
-          (ui/render-keyboard-shortcut [keystroke])))]]))
+    [:div.shortcut-filter-popover
+     {:tab-index -1
+      :ref       *ref-el}
+
+     ;; TITLE
+     [:div.shortcut-popover-title (t :keymap/keystroke-filter)]
+
+     ;; INPUT FIELD
+     [:div.shortcut-input-field
+      ;; Filter chip (pending or committed)
+      (when has-keystroke?
+        [:div {:class (str "shortcut-input-binding"
+                           (when accumulating? " shortcut-input-binding--pending"))}
+         (shui/shortcut keystroke)
+         [:a.shortcut-binding-remove
+          {:on-click (fn [^js e]
+                       (.stopPropagation e)
+                       (clear!))}
+          (ui/icon "x" {:size 12})]])
+      ;; Placeholder
+      (when-not has-keystroke?
+        [:span.shortcut-input-placeholder "Press keys to filter\u2026"])]
+
+     ;; SEPARATOR + TOOLBAR
+     (shui/separator)
+     [:div.shortcut-toolbar
+      [:div
+       (when has-keystroke?
+         [:a.shortcut-toolbar-action
+          {:on-click clear!}
+          (ui/icon "rotate" {:size 12})
+          [:span "Clear"]])]
+      [:div.flex.items-center
+       (when has-keystroke?
+         [:span.shortcut-toolbar-hint
+          "Remove " (shui/shortcut "backspace" {:style :compact})])
+       [:span.shortcut-toolbar-hint
+        "Close " (shui/shortcut "escape" {:style :compact})]]]]))
 
 (rum/defc pane-controls
   [q set-q! filters set-filters! keystroke set-keystroke! toggle-categories-fn]
@@ -114,17 +231,29 @@
          (ui/icon "x" {:size 14})])]
 
      ;; keyboard filter
-     (ui/dropdown
-      (fn [{:keys [toggle-fn]}]
-        [:a.flex.items-center.icon-link
-         {:on-click toggle-fn} (ui/icon "keyboard")
-
-         (when-not (string/blank? keystroke)
-           (ui/point "bg-red-600.absolute" 4 {:style {:right -2 :top -2}}))])
-      (fn [{:keys [close-fn]}]
-        (keyboard-filter-record-inner keystroke set-keystroke! close-fn))
-      {:outside?      true
-       :trigger-class "keyboard-filter"})
+     (let [filter-popup-id :shortcut-keystroke-filter
+           open-filter! (fn [^js e]
+                          (shui/popup-show!
+                           (.-currentTarget e)
+                           (fn [_]
+                             (keyboard-filter-record-inner
+                              keystroke set-keystroke!
+                              #(shui/popup-hide! filter-popup-id)))
+                           {:id filter-popup-id
+                            :force-popover? true
+                            :align "end"
+                            :content-props
+                            {:class "shortcut-filter-popover-content p-0 w-auto"
+                             :collision-padding 12
+                             :onOpenAutoFocus #(.preventDefault %)
+                             :onCloseAutoFocus #(.preventDefault %)
+                             :onEscapeKeyDown (fn [_] false)
+                             :onPointerDownOutside (fn [_] nil)}}))]
+       [:a.flex.items-center.icon-link
+        {:on-click open-filter!}
+        (ui/icon "keyboard")
+        (when-not (string/blank? keystroke)
+          (ui/point "bg-red-600.absolute" 4 {:style {:right -2 :top -2}}))])
 
      ;; other filter
      (ui/dropdown-with-links
