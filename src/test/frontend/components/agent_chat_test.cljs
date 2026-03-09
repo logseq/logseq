@@ -250,6 +250,23 @@
                :parts [{:type "text" :text "Second"}]}]
              messages)))))
 
+(deftest session->messages-dedupes-initial-task-text-against-bulleted-first-user-message-test
+  (testing "does not duplicate the synthetic task title when the first persisted user message is the markdown bullet export"
+    (let [session {:events [{:event-id "evt-user-1"
+                             :type "audit.log"
+                             :ts 1100
+                             :data {:event "user-message"
+                                    :kind "user"
+                                    :by "u1"
+                                    :message "- test test"}}]}
+          block {:block/uuid "b8"
+                 :block/title "test test"}
+          messages (#'agent-chat/session->messages session block)]
+      (is (= [{:id "evt-user-1"
+               :role "user"
+               :parts [{:type "text" :text "- test test"}]}]
+             messages)))))
+
 (deftest session-messages-need-sync-detects-content-growth-without-clobbering-optimistic-ui-test
   (testing "session updates with richer content should sync even when count is unchanged"
     (let [f (some-> (resolve 'frontend.components.agent-chat/session-messages-need-sync?)

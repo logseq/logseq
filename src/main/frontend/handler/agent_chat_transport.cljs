@@ -17,12 +17,6 @@
     (let [trimmed (string/trim value)]
       (when-not (string/blank? trimmed) trimmed))))
 
-(defn- non-blank-str-preserve
-  [value]
-  (when (string? value)
-    (when-not (string/blank? value)
-      value)))
-
 (defn- read-field
   [x k]
   (cond
@@ -164,31 +158,6 @@
 (defn- terminal-session-event?
   [event-type]
   (contains? #{"session.completed" "session.failed" "session.canceled"} event-type))
-
-(defn- acp-runtime-update
-  [event]
-  (let [data (if (map? (:data event)) (:data event) {})]
-    (when (= "session/update" (:method data))
-      (let [update (:update data)]
-        (when (map? update)
-          update)))))
-
-(defn- acp-runtime-update-kind
-  [event]
-  (some-> (acp-runtime-update event)
-          :sessionUpdate
-          str
-          string/trim
-          not-empty))
-
-(defn- acp-update-text
-  [update]
-  (let [content (:content update)]
-    (or (when (map? content)
-          (or (non-blank-str-preserve (:text content))
-              (non-blank-str-preserve (:delta content))))
-        (non-blank-str-preserve (:text update))
-        (non-blank-str-preserve (:delta update)))))
 
 (defn- ^:large-vars/cleanup-todo start-stream-consumer!
   [{:keys [response writer start-ts idle-timeout-ms abort-signal]}]
@@ -360,7 +329,7 @@
                                  :id text-part-id
                                  :delta delta}])))))
             (acp-text-delta-chunks! [delta]
-              (let [delta (non-blank-str-preserve delta)]
+              (let [delta (chat-event/non-blank-str-preserve delta)]
                 (if-not (string? delta)
                   []
                   (vec (concat (start-chunks!)
@@ -465,8 +434,7 @@
               [event]
               (let [event-type (:type event)
                     event-ts (:ts event)
-                    runtime-update (acp-runtime-update event)
-                    runtime-update-kind (acp-runtime-update-kind event)]
+                    runtime-update-kind (chat-event/acp-runtime-update-kind event)]
                 (if (or (not (number? event-ts))
                         (<= event-ts start-ts)
                         @finished?)
@@ -480,12 +448,12 @@
 
                       (and (= event-type "agent.runtime")
                            (= "agent_message_chunk" runtime-update-kind))
-                      (<write-event-chunks! (acp-text-delta-chunks! (acp-update-text runtime-update)))
+                      (<write-event-chunks! (acp-text-delta-chunks! (chat-event/acp-runtime-update-text event)))
 
                       (and (= event-type "agent.runtime")
                            (= "agent_thought_chunk" runtime-update-kind))
                       (<write-event-chunks! (reasoning-delta-chunks! "acp-reasoning"
-                                                                     (acp-update-text runtime-update)))
+                                                                     (chat-event/acp-runtime-update-text event)))
 
                       (= event-type "agent.runtime")
                       (js/Promise.resolve nil)

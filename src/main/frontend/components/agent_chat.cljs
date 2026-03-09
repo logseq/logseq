@@ -21,6 +21,13 @@
       (when-not (string/blank? value)
         value))))
 
+(defn- normalize-initial-user-text
+  [value]
+  (some-> value
+          normalized-text
+          (string/replace #"^-+\s*" "")
+          normalized-text))
+
 (defn- text-from-content-parts
   [parts]
   (when (seq parts)
@@ -81,49 +88,6 @@
       (when (string? (:message payload)) (:message payload))
       (when (string? (:output_text payload)) (:output_text payload))
       (when (string? (:raw payload)) (:raw payload))))
-
-(defn- acp-runtime-update
-  [event]
-  (let [data (when (map? (:data event)) (:data event))]
-    (when (= "session/update" (:method data))
-      (let [update (:update data)]
-        (when (map? update)
-          update)))))
-
-(defn- acp-runtime-update-kind
-  [event]
-  (some-> (acp-runtime-update event)
-          :sessionUpdate
-          str
-          string/trim
-          not-empty))
-
-(defn- acp-runtime-session-id
-  [event]
-  (some-> (when (map? (:data event)) (:data event))
-          :session-id
-          str
-          string/trim
-          not-empty))
-
-(defn- acp-runtime-update-text
-  [event]
-  (let [update (acp-runtime-update event)
-        content (:content update)]
-    (or (when (map? content)
-          (or (some-> (:text content) str)
-              (some-> (:delta content) str)))
-        (some-> (:text update) str)
-        (some-> (:delta update) str))))
-
-(defn- acp-runtime-stop-reason
-  [event]
-  (some-> (when (map? (:data event)) (:data event))
-          :result
-          :stopReason
-          str
-          string/trim
-          not-empty))
 
 (defn- agent-title
   [agent-value]
@@ -313,21 +277,21 @@
                              :else nil)))
                        (process-event! [event]
                          (let [event-type (:type event)
-                               runtime-update-kind (acp-runtime-update-kind event)]
+                               runtime-update-kind (chat-event/acp-runtime-update-kind event)]
                            (cond
                              (and (= "agent.runtime" event-type)
                                   (= "agent_message_chunk" runtime-update-kind))
-                             (when-let [item-id (ensure-acp-item-id! (acp-runtime-session-id event))]
-                               (append-text-part! item-id "assistant" (acp-runtime-update-text event)))
+                             (when-let [item-id (ensure-acp-item-id! (chat-event/acp-runtime-session-id event))]
+                               (append-text-part! item-id "assistant" (chat-event/acp-runtime-update-text event)))
 
                              (and (= "agent.runtime" event-type)
                                   (= "agent_thought_chunk" runtime-update-kind))
-                             (when-let [item-id (ensure-acp-item-id! (acp-runtime-session-id event))]
-                               (append-reasoning-part! item-id "assistant" (acp-runtime-update-text event)))
+                             (when-let [item-id (ensure-acp-item-id! (chat-event/acp-runtime-session-id event))]
+                               (append-reasoning-part! item-id "assistant" (chat-event/acp-runtime-update-text event)))
 
                              (and (= "agent.runtime" event-type)
-                                  (string? (acp-runtime-stop-reason event)))
-                             (advance-acp-turn! (or (acp-runtime-session-id event)
+                                  (string? (chat-event/acp-runtime-stop-reason event)))
+                             (advance-acp-turn! (or (chat-event/acp-runtime-session-id event)
                                                     (:last-acp-runtime-session-id @acc)))
 
                              (= "agent.runtime" event-type)
@@ -382,7 +346,8 @@
                                                                         (chat-event/payload-text payload)))))
 
                                    "audit.log"
-                                   (set-text-part! item-id "user" (chat-event/payload-text payload))
+                                   (set-text-part! item-id "user" (or (chat-event/user-message-text event)
+                                                                      (chat-event/payload-text payload)))
 
                                    nil)
 
@@ -419,7 +384,8 @@
                         :parts [{:type "text" :text task-text}]})
         has-task? (some (fn [message]
                           (and (= "user" (normalize-role (:role message)))
-                               (= task-text (ui-message-text message))))
+                               (= (normalize-initial-user-text task-text)
+                                  (normalize-initial-user-text (ui-message-text message)))))
                         base)]
     (cond
       (and user-message (not has-task?)) (into [user-message] base)

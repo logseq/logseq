@@ -7,6 +7,12 @@
     (let [trimmed (string/trim value)]
       (when-not (string/blank? trimmed) trimmed))))
 
+(defn non-blank-str-preserve
+  [value]
+  (when (string? value)
+    (when-not (string/blank? value)
+      value)))
+
 (defn payload-text
   [payload]
   (cond
@@ -230,3 +236,53 @@
       "Permission canceled."
 
       :else nil)))
+
+(defn acp-runtime-update
+  [event]
+  (let [data (when (map? (:data event)) (:data event))]
+    (when (= "session/update" (:method data))
+      (let [update (:update data)]
+        (when (map? update)
+          update)))))
+
+(defn acp-runtime-update-kind
+  [event]
+  (some-> (acp-runtime-update event)
+          :sessionUpdate
+          str
+          string/trim
+          not-empty))
+
+(defn acp-runtime-session-id
+  [event]
+  (some-> (when (map? (:data event)) (:data event))
+          :session-id
+          str
+          string/trim
+          not-empty))
+
+(defn acp-runtime-update-text
+  [event]
+  (let [update (acp-runtime-update event)
+        content (:content update)]
+    (or (when (map? content)
+          (or (non-blank-str-preserve (:text content))
+              (non-blank-str-preserve (:delta content))))
+        (non-blank-str-preserve (:text update))
+        (non-blank-str-preserve (:delta update)))))
+
+(defn acp-runtime-stop-reason
+  [event]
+  (some-> (when (map? (:data event)) (:data event))
+          :result
+          :stopReason
+          str
+          string/trim
+          not-empty))
+
+(defn user-message-text
+  [event]
+  (let [data (when (map? (:data event)) (:data event))]
+    (when (and (= "audit.log" (:type event))
+               (= "user-message" (:event data)))
+      (non-empty-str (:message data)))))
