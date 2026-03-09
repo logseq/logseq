@@ -10,7 +10,6 @@
 @import "photoswipe/dist/photoswipe.css";
 @import "shepherd.js/dist/css/shepherd.css";
 @import "katex/dist/katex.min.css";
-@import "@xterm/xterm/css/xterm.css";
 @import "codemirror/lib/codemirror.css";
 @import "codemirror/theme/solarized.css";
 @import "codemirror/addon/hint/show-hint.css";

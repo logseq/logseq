@@ -1,7 +1,6 @@
 (ns frontend.components.agent-chat
   (:require ["@ai-sdk/react" :refer [useChat]]
-            ["@xterm/addon-fit/lib/addon-fit.mjs" :refer [FitAddon]]
-            ["@xterm/xterm/lib/xterm.mjs" :refer [Terminal]]
+            ["ghostty-web" :refer [FitAddon Terminal init]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.components.select :as select]
@@ -500,16 +499,6 @@
   [^js socket]
   (and socket (= (.-readyState socket) js/WebSocket.OPEN)))
 
-(defn- terminal-status-label
-  [status]
-  (case status
-    :connecting "Connecting"
-    :connected "Connected"
-    :disconnected "Disconnected"
-    :failed "Failed"
-    :idle "Idle"
-    "Idle"))
-
 (defn- terminal-status-dot-class
   [status]
   (case status
@@ -528,85 +517,6 @@
             (clj->js {:type "resize"
                       :cols (.-cols terminal)
                       :rows (.-rows terminal)})))))
-
-(defn- install-terminal-query-suppressors!
-  "Suppress terminal auto-replies that can leak into shell input in websocket PTY mode."
-  [^js terminal]
-  (let [parser (.-parser terminal)
-        register-csi (when parser (aget parser "registerCsiHandler"))
-        register-dcs (when parser (aget parser "registerDcsHandler"))
-        register-osc (when parser (aget parser "registerOscHandler"))
-        csi-da (when (fn? register-csi)
-                 (.call register-csi parser #js {:final "c"}
-                        (fn [_params] true)))
-        csi-da-secondary (when (fn? register-csi)
-                           (.call register-csi parser #js {:prefix ">" :final "c"}
-                                  (fn [_params] true)))
-        csi-dsr (when (fn? register-csi)
-                  (.call register-csi parser #js {:final "n"}
-                         (fn [_params] true)))
-        csi-dsr-private (when (fn? register-csi)
-                          (.call register-csi parser #js {:prefix "?" :final "n"}
-                                 (fn [_params] true)))
-        csi-request-mode (when (fn? register-csi)
-                           (.call register-csi parser #js {:intermediates "$" :final "p"}
-                                  (fn [_params] true)))
-        csi-request-mode-private (when (fn? register-csi)
-                                   (.call register-csi parser #js {:prefix "?"
-                                                                   :intermediates "$"
-                                                                   :final "p"}
-                                          (fn [_params] true)))
-        csi-window-options (when (fn? register-csi)
-                             (.call register-csi parser #js {:final "t"}
-                                    (fn [_params] true)))
-        dcs-rqss (when (fn? register-dcs)
-                   (.call register-dcs parser #js {:intermediates "$" :final "q"}
-                          (fn [_data _params] true)))
-        osc10 (when (fn? register-osc)
-                (.call register-osc parser 10 (fn [_data] true)))
-        osc11 (when (fn? register-osc)
-                (.call register-osc parser 11 (fn [_data] true)))
-        osc12 (when (fn? register-osc)
-                (.call register-osc parser 12 (fn [_data] true)))]
-    (->> [csi-da
-          csi-da-secondary
-          csi-dsr
-          csi-dsr-private
-          csi-request-mode
-          csi-request-mode-private
-          csi-window-options
-          dcs-rqss
-          osc10
-          osc11
-          osc12]
-         (filter some?)
-         vec)))
-
-(defn- terminal-generated-reply?
-  "Detect xterm auto-generated terminal replies so they don't get sent as user stdin."
-  [payload]
-  (when (string? payload)
-    (let [esc (str (char 27))
-          csi-prefix (str esc "[")
-          dcs-prefix (str esc "P")
-          osc10-prefix (str esc "]10;")
-          osc11-prefix (str esc "]11;")
-          osc12-prefix (str esc "]12;")
-          last-char (when (pos? (count payload))
-                      (subs payload (dec (count payload))))]
-      (or
-       (and (string/starts-with? payload dcs-prefix)
-            (or (string/includes? payload "$r")
-                (string/includes? payload "$y")))
-       (and (string/starts-with? payload csi-prefix)
-            (or (= "c" last-char)
-                (= "n" last-char)
-                (= "R" last-char)
-                (= "t" last-char)
-                (string/ends-with? payload "$y")))
-       (string/starts-with? payload osc10-prefix)
-       (string/starts-with? payload osc11-prefix)
-       (string/starts-with? payload osc12-prefix)))))
 
 (rum/defc ^:large-vars/cleanup-todo agent-chat-dialog
   [block]
@@ -809,22 +719,22 @@
      [session-id session-started?])
     (hooks/use-effect!
      (fn []
-       (if (and terminal-visible?
-                terminal-enabled?
-                (string? terminal-url))
-         (if-let [container (hooks/deref terminal-container-ref)]
-           (let [terminal (Terminal. #js {:convertEol true
-                                          :cursorBlink true
-                                          :fontSize 12
-                                          :fontFamily "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"})
-                 fit-addon (FitAddon.)
+       (when (and terminal-visible?
+                  terminal-enabled?
+                  (string? terminal-url))
+         (when-let [container (hooks/deref terminal-container-ref)]
+           (let [terminal* (atom nil)
+                 fit-addon* (atom nil)
+                 dispose-data* (atom nil)
                  socket (js/WebSocket. terminal-url)
                  encoder (js/TextEncoder.)
                  handle-window-resize (fn []
-                                        (try
-                                          (.fit fit-addon)
-                                          (catch :default _ nil))
-                                        (send-terminal-resize! socket terminal))
+                                        (when-let [fit-addon @fit-addon*]
+                                          (try
+                                            (.fit fit-addon)
+                                            (catch :default _ nil)))
+                                        (when-let [terminal @terminal*]
+                                          (send-terminal-resize! socket terminal)))
                  handle-open (fn []
                                nil)
                  handle-message (fn [event]
@@ -836,7 +746,8 @@
                                           "ready"
                                           (do
                                             (set-terminal-status! :connected)
-                                            (send-terminal-resize! socket terminal))
+                                            (when-let [terminal @terminal*]
+                                              (send-terminal-resize! socket terminal)))
 
                                           "error"
                                           (do
@@ -848,15 +759,18 @@
                                           (set-terminal-status! :disconnected)
 
                                           nil)
-                                        (.write terminal payload))
+                                        (when-let [terminal @terminal*]
+                                          (.write terminal payload)))
 
                                       (instance? js/ArrayBuffer payload)
-                                      (.write terminal (js/Uint8Array. payload))
+                                      (when-let [terminal @terminal*]
+                                        (.write terminal (js/Uint8Array. payload)))
 
                                       (instance? js/Blob payload)
                                       (-> (.arrayBuffer payload)
                                           (.then (fn [buffer]
-                                                   (.write terminal (js/Uint8Array. buffer))))
+                                                   (when-let [terminal @terminal*]
+                                                     (.write terminal (js/Uint8Array. buffer)))))
                                           (.catch (fn [_] nil)))
 
                                       :else nil)))
@@ -866,46 +780,54 @@
                  handle-close (fn []
                                 (set-terminal-status! :disconnected))]
              (set! (.-innerHTML container) "")
-             (.loadAddon terminal fit-addon)
-             (let [query-suppressors (install-terminal-query-suppressors! terminal)]
-               (.open terminal container)
+             (-> (init)
+                 (.then (fn []
+                          (let [terminal (Terminal. #js {:convertEol true
+                                                         :cursorBlink true
+                                                         :fontSize 12
+                                                         :fontFamily "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"})
+                                fit-addon (FitAddon.)]
+                            (reset! terminal* terminal)
+                            (reset! fit-addon* fit-addon)
+                            (.loadAddon terminal fit-addon)
+                            (.open terminal container)
+                            (try
+                              (.fit fit-addon)
+                              (catch :default _ nil))
+                            (.focus terminal)
+                            (reset! dispose-data*
+                                    (.onData terminal
+                                             (fn [payload]
+                                               (let [payload-str (if (string? payload)
+                                                                   payload
+                                                                   (str payload))]
+                                                 (when (websocket-open? socket)
+                                                   (.send socket (.encode encoder payload-str))))))))
+                          (set! (.-binaryType socket) "arraybuffer")))
+                 (.catch (fn [error]
+                           (set-terminal-status! :failed)
+                           (set-terminal-error! (or (some-> error .-message)
+                                                    (str error))))))
+             (.addEventListener socket "open" handle-open)
+             (.addEventListener socket "message" handle-message)
+             (.addEventListener socket "error" handle-error)
+             (.addEventListener socket "close" handle-close)
+             (.addEventListener js/window "resize" handle-window-resize)
+             (fn []
+               (.removeEventListener socket "open" handle-open)
+               (.removeEventListener socket "message" handle-message)
+               (.removeEventListener socket "error" handle-error)
+               (.removeEventListener socket "close" handle-close)
+               (.removeEventListener js/window "resize" handle-window-resize)
+               (when-let [dispose-data @dispose-data*]
+                 (.dispose dispose-data))
+               (when (or (= (.-readyState socket) js/WebSocket.CONNECTING)
+                         (websocket-open? socket))
+                 (.close socket 1000 "client-close"))
                (try
-                 (.fit fit-addon)
-                 (catch :default _ nil))
-               (.focus terminal)
-               (set! (.-binaryType socket) "arraybuffer")
-               (let [dispose-data (.onData terminal
-                                           (fn [payload]
-                                             (let [payload-str (if (string? payload)
-                                                                 payload
-                                                                 (str payload))]
-                                               (when (and (websocket-open? socket)
-                                                          (not (terminal-generated-reply? payload-str)))
-                                                 (.send socket (.encode encoder payload-str))))))]
-                 (.addEventListener socket "open" handle-open)
-                 (.addEventListener socket "message" handle-message)
-                 (.addEventListener socket "error" handle-error)
-                 (.addEventListener socket "close" handle-close)
-                 (.addEventListener js/window "resize" handle-window-resize)
-                 (fn []
-                   (.removeEventListener socket "open" handle-open)
-                   (.removeEventListener socket "message" handle-message)
-                   (.removeEventListener socket "error" handle-error)
-                   (.removeEventListener socket "close" handle-close)
-                   (.removeEventListener js/window "resize" handle-window-resize)
-                   (when dispose-data
-                     (.dispose dispose-data))
-                   (doseq [^js disposable query-suppressors]
-                     (when (fn? (aget disposable "dispose"))
-                       (.dispose disposable)))
-                   (when (or (= (.-readyState socket) js/WebSocket.CONNECTING)
-                             (websocket-open? socket))
-                     (.close socket 1000 "client-close"))
-                   (try
-                     (.dispose terminal)
-                     (catch :default _ nil))))))
-           nil)
-         nil))
+                 (when-let [terminal @terminal*]
+                   (.dispose terminal))
+                 (catch :default _ nil)))))))
      [terminal-visible?
       terminal-enabled?
       terminal-url
