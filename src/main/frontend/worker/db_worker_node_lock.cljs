@@ -19,7 +19,7 @@
 
 (defn resolve-data-dir
   [data-dir]
-  (expand-home (or data-dir common-graph/get-default-graphs-dir)))
+  (expand-home (or data-dir (common-graph/get-default-graphs-dir))))
 
 (defn repo->graph-dir-key
   [repo]
