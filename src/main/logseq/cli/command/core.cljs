@@ -107,7 +107,7 @@
                 {:title "Authentication"
                  :commands #{"login" "logout"}}
                 {:title "Utilities"
-                 :commands #{"completions"}}]
+                 :commands #{"completion"}}]
         render-group (fn [{:keys [title commands]}]
                        (let [entries (filter #(contains? commands (first (:cmds %))) table)]
                          (string/join "\n" [title (format-commands entries)])))]

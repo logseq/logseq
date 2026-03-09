@@ -1,10 +1,10 @@
 # Shell Completions — TDD Implementation Tasks
 
-Implementation plan for the `logseq completions <shell>` feature as specified
+Implementation plan for the `logseq completion <shell>` feature as specified
 in [DESIGN.md](DESIGN.md). Each task follows **Red → Green → Refactor**: write
 a failing test first, then make it pass, then clean up.
 
-Test file: `src/test/logseq/cli/command/completions_test.cljs`
+Test file: `src/test/logseq/cli/command/completion_test.cljs`
 Generator test: `src/test/logseq/cli/completion_generator_test.cljs`
 
 > **Require registration:** The nbb test runner auto-discovers `*_test.cljs`
@@ -26,11 +26,11 @@ Generator test: `src/test/logseq/cli/completion_generator_test.cljs`
       Confirm the test runner loads both files (`yarn nbb-logseq -cp test -m
       nextjournal.test-runner`).
 
-- [ ] **0.3** Create `src/test/logseq/cli/command/completions_test.cljs` with a
-      skeleton ns requiring `[logseq.cli.command.completions :as completions-command]`.
+- [ ] **0.3** Create `src/test/logseq/cli/command/completion_test.cljs` with a
+      skeleton ns requiring `[logseq.cli.command.completion :as completion-command]`.
       Add a trivial failing test.
 
-- [ ] **0.4** Create `src/main/logseq/cli/command/completions.cljs` with a stub
+- [ ] **0.4** Create `src/main/logseq/cli/command/completion.cljs` with a stub
       ns and `entries` def (empty vector). Confirm test runner loads it.
 
 - [ ] **0.5** Remove placeholder failing tests; verify `yarn test` passes
@@ -98,7 +98,7 @@ Pure functions tested in `completion_generator_test.cljs`.
       hierarchy:
   - Test: `["graph" "export"]` → group `"graph"`, subcommand `"export"`
   - Test: `["show"]` → leaf command `"show"`
-  - Test: `["completions"]` → leaf command `"completions"`
+  - Test: `["completion"]` → leaf command `"completion"`
   - Implement in `completion_generator.cljs`.
 
 - [ ] **2.2** `leaf-commands` / `group-commands` — classify entries:
@@ -197,27 +197,27 @@ Pure functions tested in `completion_generator_test.cljs`.
 
 ---
 
-## Phase 5 — `completions` command entry
+## Phase 5 — `completion` command entry
 
 - [ ] **5.1** Command registration:
-  - Test: `completions-command/entries` contains one entry with
-        `:cmds ["completions"]` and `:command :completions`
+  - Test: `completion-command/entries` contains one entry with
+        `:cmds ["completion"]` and `:command :completions`
   - Test: spec has `{:shell {:values ["zsh" "bash"]}}`
-  - Implement `command/completions.cljs` with `entries` and spec.
+  - Implement `command/completion.cljs` with `entries` and spec.
 
 - [ ] **5.2** Wire into `commands.cljs`:
-  - Test: `(commands/parse-args ["completions" "--shell" "zsh"])` returns
+  - Test: `(commands/parse-args ["completion" "--shell" "zsh"])` returns
         `{:ok? true :command :completions}`
-  - Test: `(commands/parse-args ["completions" "zsh"])` handles positional arg
-  - Implement: add `completions-command/entries` to the table concat in
+  - Test: `(commands/parse-args ["completion" "zsh"])` handles positional arg
+  - Implement: add `completion-command/entries` to the table concat in
         `commands.cljs`.
 
 - [ ] **5.3** Build action and execute:
-  - Test: `build-action` for `:completions` returns an action with
+  - Test: `build-action` for `:completion` returns an action with
         `:type :completions` and `:shell "zsh"`
-  - Test: `execute` for `:completions` calls `generate-completions` and returns
+  - Test: `execute` for `:completion` calls `generate-completions` and returns
         the output string
-  - Implement in `command/completions.cljs` and wire into
+  - Implement in `command/completion.cljs` and wire into
         `commands.cljs` `build-action`/`execute`.
 
 ---
@@ -251,14 +251,14 @@ Pure functions tested in `completion_generator_test.cljs`.
 ## Phase 7 — Replace hand-maintained files
 
 - [ ] **7.1** Generate fresh `_logseq.zsh` and `logseq.bash` from the
-      `completions` command; write them to
+      `completion` command; write them to
       `dz/scripts/shell-completions/`.
 
 - [ ] **7.2** Verify the generated files include the "do not edit manually"
       header comment.
 
 - [ ] **7.3** Update `dz/scripts/shell-completions/README.md` to document the
-      new `logseq completions` workflow instead of hand-editing.
+      new `logseq completion` workflow instead of hand-editing.
 
 ---
 
@@ -270,7 +270,7 @@ All new test namespaces that must be discoverable by the test runner
 | Test file | Requires |
 |---|---|
 | `src/test/logseq/cli/completion_generator_test.cljs` | `logseq.cli.completion-generator` |
-| `src/test/logseq/cli/command/completions_test.cljs` | `logseq.cli.command.completions` |
+| `src/test/logseq/cli/command/completion_test.cljs` | `logseq.cli.command.completion` |
 
 The nbb test runner scans the `test` classpath for `*_test.cljs` files
 automatically. Verify with:
