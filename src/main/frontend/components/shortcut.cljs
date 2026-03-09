@@ -866,7 +866,7 @@
                                                   (and (sequential? s) (sequential? keystroke')
                                                        (apply = (map first [s keystroke']))))) binding')))))
 
-                    [:li.shortcut-row.flex.items-center.justify-between.text-sm
+                    [:li.shortcut-row.flex.items-start.justify-between.text-sm
                      {:key (str id)
                       :class (when (= active-id id) "active")
                       :on-click (when (and id (not disabled?))
