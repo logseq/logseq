@@ -1,5 +1,5 @@
 (ns frontend.worker.db-sync-test
-  (:require [cljs.test :refer [deftest is testing async]]
+  (:require [cljs.test :refer [deftest is testing async use-fixtures]]
             [datascript.core :as d]
             [frontend.common.crypt :as crypt]
             [frontend.worker-common.util :as worker-util]
@@ -20,6 +20,19 @@
             [promesa.core :as p]))
 
 (def ^:private test-repo "test-db-sync-repo")
+
+(defn- reset-db-sync-test-state!
+  []
+  (db-sync/stop!)
+  (reset! worker-state/*datascript-conns nil)
+  (reset! worker-state/*client-ops-conns nil)
+  (reset! worker-state/*db-sync-client nil)
+  (reset! worker-state/*db-sync-config {:ws-url nil})
+  (reset! db-sync/*repo->latest-remote-tx {})
+  (reset! db-sync/*start-inflight-target nil))
+
+(use-fixtures :each {:before reset-db-sync-test-state!
+                     :after reset-db-sync-test-state!})
 
 (defn- with-datascript-conns
   [db-conn ops-conn f]
@@ -278,15 +291,15 @@
                          :last-sync-error (atom {:code :previous-error})
                          :online-users (atom [])
                          :ws-state (atom :open)}]
-             (with-datascript-conns conn client-ops-conn
-               (fn []
-                 (client-op/update-local-tx test-repo 16)
-                 (-> (p/let [_ (#'db-sync/handle-message! test-repo client raw-message)]
+             (-> (with-datascript-conns conn client-ops-conn
+                   (fn []
+                     (client-op/update-local-tx test-repo 16)
+                     (p/let [_ (#'db-sync/handle-message! test-repo client raw-message)]
                        (is (= 18 (client-op/get-local-tx test-repo)))
-                       (is (nil? @(:last-sync-error client))))
-                     (p/catch (fn [e]
-                                (is false (str "unexpected error: " e))))
-                     (p/finally done))))))))
+                       (is (nil? @(:last-sync-error client))))))
+                 (p/catch (fn [e]
+                            (is false (str "unexpected error: " e))))
+                 (p/finally done))))))
 
 (deftest pull-ok-failure-records-last-sync-error-test
   (testing "pull/ok failures should surface structured runtime error state"
@@ -340,18 +353,18 @@
                          :online-users (atom [])
                          :ws-state (atom :open)}]
              (reset! db-sync/*repo->latest-remote-tx {})
-             (with-datascript-conns conn client-ops-conn
-               (fn []
-                 (-> (p/with-redefs [sync-crypt/graph-e2ee? (fn [_repo] false)]
+             (-> (with-datascript-conns conn client-ops-conn
+                   (fn []
+                     (p/with-redefs [sync-crypt/graph-e2ee? (fn [_repo] false)]
                        (p/let [_ (client-op/update-local-tx test-repo 0)
                                _ (#'db-sync/handle-message! test-repo client raw-new)
                                _ (#'db-sync/handle-message! test-repo client raw-stale)
                                parent' (d/entity @conn parent-id)]
                          (is (= "remote-new-title" (:block/title parent')))
-                         (is (= 2 (client-op/get-local-tx test-repo)))))
-                     (p/finally (fn []
-                                  (reset! db-sync/*repo->latest-remote-tx latest-prev)
-                                  (done))))))))))
+                         (is (= 2 (client-op/get-local-tx test-repo)))))))
+                 (p/finally (fn []
+                              (reset! db-sync/*repo->latest-remote-tx latest-prev)))
+                 (p/finally done))))))
 
 (deftest pull-ok-batched-txs-preserve-tempid-boundaries-test
   (testing "pull/ok applies tx batches without cross-tx tempid collisions"
@@ -388,17 +401,17 @@
                          :inflight (atom [])
                          :online-users (atom [])
                          :ws-state (atom :open)}]
-             (with-datascript-conns conn client-ops-conn
-               (fn []
-                 (reset! db-sync/*repo->latest-remote-tx {})
-                 (-> (p/let [_ (client-op/update-local-tx test-repo 0)
+             (-> (with-datascript-conns conn client-ops-conn
+                   (fn []
+                     (reset! db-sync/*repo->latest-remote-tx {})
+                     (p/let [_ (client-op/update-local-tx test-repo 0)
                              _ (#'db-sync/handle-message! test-repo client raw-message)]
                        ;; TODO(db-sync): re-enable after batched pull tempid-boundary behavior is stabilized.
                        #_(is (= "remote-a" (:block/title (d/entity @conn [:block/uuid block-uuid-a]))))
-                       #_(is (= "remote-b" (:block/title (d/entity @conn [:block/uuid block-uuid-b])))))
-                     (p/finally (fn []
-                                  (reset! db-sync/*repo->latest-remote-tx latest-prev)
-                                  (done))))))))))
+                       #_(is (= "remote-b" (:block/title (d/entity @conn [:block/uuid block-uuid-b])))))))
+                 (p/finally (fn []
+                              (reset! db-sync/*repo->latest-remote-tx latest-prev)))
+                 (p/finally done))))))
 
 (deftest get-graph-id-falls-back-to-client-op-graph-uuid-test
   (let [conn (d/create-conn {})
@@ -417,16 +430,16 @@
            (set! db-sync/list-remote-graphs! (fn []
                                                (p/resolved [{:graph-name test-repo
                                                              :graph-id "remote-graph-id"}])))
-           (with-datascript-conns conn client-ops-conn
-             (fn []
-               (-> (p/let [graph-id (#'db-sync/<resolve-start-graph-id test-repo)]
+           (-> (with-datascript-conns conn client-ops-conn
+                 (fn []
+                   (p/let [graph-id (#'db-sync/<resolve-start-graph-id test-repo)]
                      (is (= "remote-graph-id" graph-id))
-                     (is (= "remote-graph-id" (client-op/get-graph-uuid test-repo))))
-                   (p/catch (fn [e]
-                              (is false (str "unexpected error: " e))))
-                   (p/finally (fn []
-                                (set! db-sync/list-remote-graphs! orig-list-remote-graphs!)
-                                (done)))))))))
+                     (is (= "remote-graph-id" (client-op/get-graph-uuid test-repo))))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (set! db-sync/list-remote-graphs! orig-list-remote-graphs!)))
+               (p/finally done)))))
 
 (deftest start-skips-without-ws-url-before-remote-graph-lookup-test
   (async done
@@ -1308,10 +1321,10 @@
 
                          :else
                          (js/Promise.reject (js/Error. (str "unexpected fetch url: " method " " url)))))))
-             (with-worker-conns {test-repo conn} {test-repo client-ops-conn}
-               (fn []
-                 (with-redefs [db-sync/coerce-http-request (fn [_schema-key body] body)]
-                   (-> (p/let [result (#'db-sync/<ensure-upload-graph-identity! test-repo)]
+             (-> (with-worker-conns {test-repo conn} {test-repo client-ops-conn}
+                   (fn []
+                     (with-redefs [db-sync/coerce-http-request (fn [_schema-key body] body)]
+                       (p/let [result (#'db-sync/<ensure-upload-graph-identity! test-repo)]
                          (is (= {:graph-id created-graph-id
                                  :graph-e2ee? false}
                                 result))
@@ -1320,14 +1333,14 @@
                                 (some-> (ldb/get-graph-rtc-uuid @conn) str)))
                          (is (= [{:url "https://example.com/graphs" :method "GET"}
                                  {:url "https://example.com/graphs" :method "POST"}]
-                                @fetch-calls)))
-                       (p/catch (fn [e]
-                                  (is false (str "unexpected error: " e))))
-                       (p/finally (fn []
-                                    (aset js/globalThis "self" self-prev)
-                                    (set! js/fetch fetch-prev)
-                                    (reset! worker-state/*db-sync-config config-prev)
-                                    (done)))))))))))
+                                @fetch-calls))))))
+                 (p/catch (fn [e]
+                            (is false (str "unexpected error: " e))))
+                 (p/finally (fn []
+                              (aset js/globalThis "self" self-prev)
+                              (set! js/fetch fetch-prev)
+                              (reset! worker-state/*db-sync-config config-prev)))
+                 (p/finally done))))))
 
 (deftest ensure-upload-graph-identity-reuses-existing-remote-graph-when-local-graph-id-missing-test
   (testing "first upload bootstrap reuses a same-name remote graph instead of creating a duplicate"
@@ -1357,9 +1370,9 @@
 
                          :else
                          (js/Promise.reject (js/Error. (str "unexpected fetch url: " method " " url)))))))
-             (with-worker-conns {test-repo conn} {test-repo client-ops-conn}
-               (fn []
-                 (-> (p/let [result (#'db-sync/<ensure-upload-graph-identity! test-repo)]
+             (-> (with-worker-conns {test-repo conn} {test-repo client-ops-conn}
+                   (fn []
+                     (p/let [result (#'db-sync/<ensure-upload-graph-identity! test-repo)]
                        (is (= {:graph-id remote-graph-id
                                :graph-e2ee? false}
                               result))
@@ -1367,14 +1380,14 @@
                        (is (= remote-graph-id
                               (some-> (ldb/get-graph-rtc-uuid @conn) str)))
                        (is (= [{:url "https://example.com/graphs" :method "GET"}]
-                              @fetch-calls)))
-                     (p/catch (fn [e]
-                                (is false (str "unexpected error: " e))))
-                     (p/finally (fn []
-                                  (aset js/globalThis "self" self-prev)
-                                  (set! js/fetch fetch-prev)
-                                  (reset! worker-state/*db-sync-config config-prev)
-                                  (done))))))))))
+                              @fetch-calls)))))
+                 (p/catch (fn [e]
+                            (is false (str "unexpected error: " e))))
+                 (p/finally (fn []
+                              (aset js/globalThis "self" self-prev)
+                              (set! js/fetch fetch-prev)
+                              (reset! worker-state/*db-sync-config config-prev)))
+                 (p/finally done))))))
 
 (deftest ensure-upload-graph-identity-propagates-create-graph-failures-test
   (testing "first upload bootstrap rejects when remote graph creation fails"
@@ -1400,19 +1413,19 @@
 
                          :else
                          (js/Promise.reject (js/Error. (str "unexpected fetch url: " method " " url)))))))
-             (with-worker-conns {} {test-repo client-ops-conn}
-               (fn []
-                 (with-redefs [db-sync/coerce-http-request (fn [_schema-key body] body)]
-                   (-> (p/let [_ (#'db-sync/<ensure-upload-graph-identity! test-repo)]
-                         (is false "expected graph creation failure to reject"))
-                       (p/catch (fn [e]
-                                  (is (= "db-sync request failed" (ex-message e)))
-                                  (is (= 500 (:status (ex-data e))))))
-                       (p/finally (fn []
-                                    (aset js/globalThis "self" self-prev)
-                                    (set! js/fetch fetch-prev)
-                                    (reset! worker-state/*db-sync-config config-prev)
-                                    (done)))))))))))
+             (-> (with-worker-conns {} {test-repo client-ops-conn}
+                   (fn []
+                     (with-redefs [db-sync/coerce-http-request (fn [_schema-key body] body)]
+                       (p/let [_ (#'db-sync/<ensure-upload-graph-identity! test-repo)]
+                         (is false "expected graph creation failure to reject")))))
+                 (p/catch (fn [e]
+                            (is (= "db-sync request failed" (ex-message e)))
+                            (is (= 500 (:status (ex-data e))))))
+                 (p/finally (fn []
+                              (aset js/globalThis "self" self-prev)
+                              (set! js/fetch fetch-prev)
+                              (reset! worker-state/*db-sync-config config-prev)))
+                 (p/finally done))))))
 
 (deftest ensure-upload-graph-identity-defaults-e2ee-enabled-test
   (testing "first upload bootstrap defaults graph-e2ee? to true when local sync metadata is missing"
@@ -1442,23 +1455,23 @@
 
                          :else
                          (js/Promise.reject (js/Error. (str "unexpected fetch url: " method " " url)))))))
-             (with-worker-conns {} {test-repo client-ops-conn}
-               (fn []
-                 (with-redefs [db-sync/coerce-http-request (fn [_schema-key body] body)
-                               sync-crypt/graph-e2ee? (fn [_repo] nil)]
-                   (-> (p/let [result (#'db-sync/<ensure-upload-graph-identity! test-repo)]
+             (-> (with-worker-conns {} {test-repo client-ops-conn}
+                   (fn []
+                     (with-redefs [db-sync/coerce-http-request (fn [_schema-key body] body)
+                                   sync-crypt/graph-e2ee? (fn [_repo] nil)]
+                       (p/let [result (#'db-sync/<ensure-upload-graph-identity! test-repo)]
                          (is (= {:graph-id "encrypted-graph-id"
                                  :graph-e2ee? true}
                                 result))
                          (is (= true (:graph-e2ee? @create-body)))
-                         (is (= "11111" (:e2ee-password @worker-state/*db-sync-config))))
-                       (p/catch (fn [e]
-                                  (is false (str "unexpected error: " e))))
-                       (p/finally (fn []
-                                    (aset js/globalThis "self" self-prev)
-                                    (set! js/fetch fetch-prev)
-                                    (reset! worker-state/*db-sync-config config-prev)
-                                    (done)))))))))))
+                         (is (= "11111" (:e2ee-password @worker-state/*db-sync-config)))))))
+                 (p/catch (fn [e]
+                            (is false (str "unexpected error: " e))))
+                 (p/finally (fn []
+                              (aset js/globalThis "self" self-prev)
+                              (set! js/fetch fetch-prev)
+                              (reset! worker-state/*db-sync-config config-prev)))
+                 (p/finally done))))))
 
 (deftest ensure-upload-graph-identity-backfills-graph-kv-from-client-op-fallback-test
   (testing "upload identity fallback backfills graph kv and stays idempotent"
@@ -1466,30 +1479,31 @@
            (let [conn (d/create-conn {})
                  client-ops-conn (d/create-conn client-op/schema-in-db)
                  fallback-graph-id "6f3b0d47-4a62-4da7-8e56-7e5dbfbe3f47"
-                 list-calls (atom 0)]
-             (with-worker-conns {test-repo conn} {test-repo client-ops-conn}
-               (fn []
-                 (with-redefs [sync-crypt/graph-e2ee? (fn [_repo] nil)
-                               db-sync/get-graph-id (fn [_repo] fallback-graph-id)
-                               db-sync/list-remote-graphs! (fn []
-                                                             (swap! list-calls inc)
-                                                             (p/resolved []))]
-                   (is (nil? (client-op/get-graph-uuid test-repo)))
-                   (is (nil? (ldb/get-graph-rtc-uuid @conn)))
-                   (let [first-result-p (#'db-sync/<ensure-upload-graph-identity! test-repo)
-                         second-result-p (#'db-sync/<ensure-upload-graph-identity! test-repo)]
-                     (-> (p/let [first-result first-result-p
-                                 second-result second-result-p]
-                           (is (= fallback-graph-id (:graph-id first-result)))
-                           (is (= fallback-graph-id (:graph-id second-result)))
-                           (is (= (:graph-e2ee? first-result)
-                                  (:graph-e2ee? second-result)))
-                           (is (= fallback-graph-id
-                                  (some-> (ldb/get-graph-rtc-uuid @conn) str)))
-                           (is (= 0 @list-calls)))
-                         (p/catch (fn [e]
-                                    (is false (str "unexpected error: " e))))
-                         (p/finally done))))))))))
+                 list-calls (atom 0)
+                 result-p (with-worker-conns {test-repo conn} {test-repo client-ops-conn}
+                            (fn []
+                              (with-redefs [sync-crypt/graph-e2ee? (fn [_repo] nil)
+                                            db-sync/get-graph-id (fn [_repo] fallback-graph-id)
+                                            db-sync/list-remote-graphs! (fn []
+                                                                          (swap! list-calls inc)
+                                                                          (p/resolved []))]
+                                (is (nil? (client-op/get-graph-uuid test-repo)))
+                                (is (nil? (ldb/get-graph-rtc-uuid @conn)))
+                                (let [first-result-p (#'db-sync/<ensure-upload-graph-identity! test-repo)
+                                      second-result-p (#'db-sync/<ensure-upload-graph-identity! test-repo)]
+                                  (p/let [first-result first-result-p
+                                          second-result second-result-p]
+                                    (is (= fallback-graph-id (:graph-id first-result)))
+                                    (is (= fallback-graph-id (:graph-id second-result)))
+                                    (is (= (:graph-e2ee? first-result)
+                                           (:graph-e2ee? second-result)))
+                                    (is (= fallback-graph-id
+                                           (some-> (ldb/get-graph-rtc-uuid @conn) str)))
+                                    (is (= 0 @list-calls)))))))]
+             (-> result-p
+                 (p/catch (fn [e]
+                            (is false (str "unexpected error: " e))))
+                 (p/finally done))))))
 
 (deftest ^:long rehydrate-large-title-test
   (testing "rehydrate fills empty title from object storage"
