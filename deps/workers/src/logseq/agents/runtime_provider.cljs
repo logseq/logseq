@@ -11,7 +11,7 @@
 ;; -----------------------
 
 (def ^:private local-host "http://localhost")
-(def ^:private default-repo-base-dir "/workspace")
+(def ^:private default-repo-base-dir "/home/user/workspace")
 (def ^:private e2b-repo-base-dir "/home/user/workspace")
 
 (defn- js-method
@@ -186,7 +186,7 @@
 (defn- sandbox-agent-version
   [^js env]
   (or (env-str env "SANDBOX_AGENT_VERSION")
-      "0.1.5"))
+      "0.3.x"))
 
 (defn- sandbox-agent-install-command
   [^js env]
@@ -948,13 +948,15 @@
                                                 agent-token
                                                 session-id
                                                 payload
-                                                {:headers headers})]
+                                                {:headers headers
+                                                 :cwd (get-repo-dir session-id task "local-runner")})]
         {:provider "local-runner"
          :runner-id runner-id
          :base-url base-url
          :agent-token agent-token
          :access-client-id (get headers "CF-Access-Client-Id")
          :access-client-secret (get headers "CF-Access-Client-Secret")
+         :server-id (:server-id response)
          :session-id (:session-id response)})))
 
   (<open-events-stream! [_ runtime]
@@ -967,7 +969,7 @@
                          :runtime runtime})))
       (sandbox/<open-events-stream base-url
                                    agent-token
-                                   (:session-id runtime)
+                                   (or (:server-id runtime) (:session-id runtime))
                                    {:headers headers})))
 
   (<send-message! [_ runtime message]
@@ -980,6 +982,7 @@
                          :runtime runtime})))
       (sandbox/<send-message base-url
                              agent-token
+                             (or (:server-id runtime) (:session-id runtime))
                              (:session-id runtime)
                              message
                              {:headers headers})))
@@ -1014,7 +1017,7 @@
           (p/catch
            (sandbox/<terminate-session base-url
                                        agent-token
-                                       session-id
+                                       (or (:server-id runtime) session-id)
                                        {:headers headers})
            (fn [_] nil)))))))
 
@@ -1042,7 +1045,11 @@
                                  :error-data (ex-data error)})
                      nil)))
               base-url (e2b-sandbox-host sandbox port)
-              response (sandbox/<create-session base-url agent-token session-id payload)
+              response (sandbox/<create-session base-url
+                                                agent-token
+                                                session-id
+                                                payload
+                                                {:cwd (e2b-runtime-repo-dir {:session-id session-id} task)})
               sandbox-id (e2b-sandbox-id sandbox)]
         (when-not (string? sandbox-id)
           (throw (ex-info "e2b sandbox missing sandboxId"
@@ -1054,18 +1061,25 @@
          :backup-dir (e2b-runtime-repo-dir {:session-id session-id} task)
          :base-url base-url
          :agent-token agent-token
+         :server-id (:server-id response)
          :session-id (:session-id response)
          :template template})))
 
   (<open-events-stream! [_ runtime]
     (let [agent-token (e2b-agent-token env runtime)]
       (p/let [base-url (<e2b-runtime-base-url! env runtime)]
-        (sandbox/<open-events-stream base-url agent-token (:session-id runtime)))))
+        (sandbox/<open-events-stream base-url
+                                     agent-token
+                                     (or (:server-id runtime) (:session-id runtime))))))
 
   (<send-message! [_ runtime message]
     (let [agent-token (e2b-agent-token env runtime)]
       (p/let [base-url (<e2b-runtime-base-url! env runtime)]
-        (sandbox/<send-message base-url agent-token (:session-id runtime) message))))
+        (sandbox/<send-message base-url
+                               agent-token
+                               (or (:server-id runtime) (:session-id runtime))
+                               (:session-id runtime)
+                               message))))
 
   (<open-terminal! [_ runtime request opts]
     (<e2b-open-terminal! env runtime request opts))

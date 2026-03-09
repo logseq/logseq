@@ -17,6 +17,12 @@
     (let [trimmed (string/trim value)]
       (when-not (string/blank? trimmed) trimmed))))
 
+(defn- non-blank-str-preserve
+  [value]
+  (when (string? value)
+    (when-not (string/blank? value)
+      value)))
+
 (defn- read-field
   [x k]
   (cond
@@ -158,6 +164,31 @@
 (defn- terminal-session-event?
   [event-type]
   (contains? #{"session.completed" "session.failed" "session.canceled"} event-type))
+
+(defn- acp-runtime-update
+  [event]
+  (let [data (if (map? (:data event)) (:data event) {})]
+    (when (= "session/update" (:method data))
+      (let [update (:update data)]
+        (when (map? update)
+          update)))))
+
+(defn- acp-runtime-update-kind
+  [event]
+  (some-> (acp-runtime-update event)
+          :sessionUpdate
+          str
+          string/trim
+          not-empty))
+
+(defn- acp-update-text
+  [update]
+  (let [content (:content update)]
+    (or (when (map? content)
+          (or (non-blank-str-preserve (:text content))
+              (non-blank-str-preserve (:delta content))))
+        (non-blank-str-preserve (:text update))
+        (non-blank-str-preserve (:delta update)))))
 
 (defn- ^:large-vars/cleanup-todo start-stream-consumer!
   [{:keys [response writer start-ts idle-timeout-ms abort-signal]}]
@@ -328,6 +359,15 @@
                                [{:type "text-delta"
                                  :id text-part-id
                                  :delta delta}])))))
+            (acp-text-delta-chunks! [delta]
+              (let [delta (non-blank-str-preserve delta)]
+                (if-not (string? delta)
+                  []
+                  (vec (concat (start-chunks!)
+                               (text-start-chunks!)
+                               [{:type "text-delta"
+                                 :id text-part-id
+                                 :delta delta}])))))
             (event-chunks-for-content-part! [item-id idx part]
               (let [part-kind (chat-event/content-part-kind part)
                     nested-item-id (str (or item-id "item") "-" idx)]
@@ -424,21 +464,31 @@
             (<handle-event!
               [event]
               (let [event-type (:type event)
-                    event-ts (:ts event)]
+                    event-ts (:ts event)
+                    runtime-update (acp-runtime-update event)
+                    runtime-update-kind (acp-runtime-update-kind event)]
                 (if (or (not (number? event-ts))
                         (<= event-ts start-ts)
                         @finished?)
                   (js/Promise.resolve nil)
-                  (let [data (:data event)
-                        payload (chat-event/unwrap-event-payload
-                                 {:data (if (map? data) data {})})
-                        item (:item payload)
-                        item-id (chat-event/event-item-id {} payload item)]
+                  (let [data (:data event)]
                     (cond
                       (= event-type "agent.runtime.error")
                       (-> (write-chunks! writer [{:type "error"
                                                   :errorText (runtime-error-message event)}])
                           (.finally (fn [] (finish!))))
+
+                      (and (= event-type "agent.runtime")
+                           (= "agent_message_chunk" runtime-update-kind))
+                      (<write-event-chunks! (acp-text-delta-chunks! (acp-update-text runtime-update)))
+
+                      (and (= event-type "agent.runtime")
+                           (= "agent_thought_chunk" runtime-update-kind))
+                      (<write-event-chunks! (reasoning-delta-chunks! "acp-reasoning"
+                                                                     (acp-update-text runtime-update)))
+
+                      (= event-type "agent.runtime")
+                      (js/Promise.resolve nil)
 
                       (terminal-session-event? event-type)
                       (-> (if (= event-type "session.completed")
@@ -447,77 +497,78 @@
                                                     :errorText event-type}]))
                           (.finally (fn [] (finish!))))
 
-                      (= event-type "item.started")
-                      (let [item-kind (or (chat-event/event-item-kind payload item)
-                                          (known-item-kind item-id))
-                            merged (merge (if (map? payload) payload {})
-                                          (if (map? item) item {}))
-                            _ (remember-item-kind! item-id item-kind)
-                            chunks (cond
-                                     (= "tool-result" item-kind)
-                                     (vec (concat (start-chunks!)
-                                                  (tool-input-available-once-chunks! item-id merged)))
-
-                                     :else
-                                     [])]
-                        (<write-event-chunks! chunks))
-
-                      (chat-event/delta-event? event-type)
-                      (let [delta (non-empty-str (chat-event/payload-text payload))
+                      :else
+                      (let [payload (chat-event/unwrap-event-payload
+                                     {:data (if (map? data) data {})})
+                            item (:item payload)
+                            item-id (chat-event/event-item-id {} payload item)
                             item-kind (or (chat-event/event-item-kind payload item)
                                           (known-item-kind item-id))
-                            item-key (item-key item-id)
                             merged (merge (if (map? payload) payload {})
-                                          (if (map? item) item {}))
-                            tool-call-id (resolve-tool-call-id item-id merged)
-                            known-tool-call? (contains? @tool-input-available-ids tool-call-id)
-                            tool-result-like? (or (= "tool-result" item-kind)
-                                                  known-tool-call?)
-                            _ (remember-item-kind! item-id item-kind)
-                            chunks (cond
-                                     (and (= "reasoning" item-kind) (string? delta))
-                                     (reasoning-delta-chunks! item-id delta)
+                                          (if (map? item) item {}))]
+                        (cond
+                          (= event-type "item.started")
+                          (let [_ (remember-item-kind! item-id item-kind)
+                                chunks (cond
+                                         (= "tool-result" item-kind)
+                                         (vec (concat (start-chunks!)
+                                                      (tool-input-available-once-chunks! item-id merged)))
 
-                                     (and (= "tool-call" item-kind) (string? delta))
-                                     (tool-input-delta-chunks! item-id merged delta)
+                                         :else
+                                         [])]
+                            (<write-event-chunks! chunks))
 
-                                     (and tool-result-like? (string? delta))
-                                     (let [previous (or (get @tool-output-text-by-call tool-call-id) "")
-                                           next-output (str previous delta)]
-                                       (swap! tool-output-text-by-call assoc tool-call-id next-output)
-                                       (vec (concat (start-chunks!)
-                                                    (tool-input-available-once-chunks! item-id merged)
-                                                    [{:type "tool-output-available"
-                                                      :toolCallId tool-call-id
-                                                      :output next-output
-                                                      :preliminary true}])))
+                          (chat-event/delta-event? event-type)
+                          (let [delta (non-empty-str (chat-event/payload-text payload))
+                                tool-call-id (resolve-tool-call-id item-id merged)
+                                known-tool-call? (contains? @tool-input-available-ids tool-call-id)
+                                tool-result-like? (or (= "tool-result" item-kind)
+                                                      known-tool-call?)
+                                item-key (item-key item-id)
+                                chunks (cond
+                                         (and (= "reasoning" item-kind) (string? delta))
+                                         (reasoning-delta-chunks! item-id delta)
 
-                                     (string? delta)
-                                     (text-delta-chunks! delta)
+                                         (and (= "tool-call" item-kind) (string? delta))
+                                         (tool-input-delta-chunks! item-id merged delta)
 
-                                     :else
-                                     [])]
-                        (when (and (string? item-key)
-                                   (= item-kind nil)
-                                   (string? delta))
-                          (swap! text-delta-item-ids conj item-key))
-                        (when (and (string? item-key)
-                                   (contains? #{"message" "text"} item-kind)
-                                   (string? delta))
-                          (swap! text-delta-item-ids conj item-key))
-                        (<write-event-chunks! chunks))
+                                         (and tool-result-like? (string? delta))
+                                         (let [previous (or (get @tool-output-text-by-call tool-call-id) "")
+                                               next-output (str previous delta)]
+                                           (swap! tool-output-text-by-call assoc tool-call-id next-output)
+                                           (vec (concat (start-chunks!)
+                                                        (tool-input-available-once-chunks! item-id merged)
+                                                        [{:type "tool-output-available"
+                                                          :toolCallId tool-call-id
+                                                          :output next-output
+                                                          :preliminary true}])))
 
-                      (item-completed-event? event-type)
-                      (let [chunks (item-completed-chunks! payload item item-id)]
-                        (<write-event-chunks! chunks))
+                                         (string? delta)
+                                         (text-delta-chunks! delta)
 
-                      (response-completed-event? event-type)
-                      (let [chunks (item-completed-chunks! payload item item-id)]
-                        (-> (<write-event-chunks! chunks)
-                            (.finally (fn [] (finish!)))))
+                                         :else
+                                         [])]
+                            (when (and (string? item-key)
+                                       (= item-kind nil)
+                                       (string? delta))
+                              (swap! text-delta-item-ids conj item-key))
+                            (when (and (string? item-key)
+                                       (contains? #{"message" "text"} item-kind)
+                                       (string? delta))
+                              (swap! text-delta-item-ids conj item-key))
+                            (<write-event-chunks! chunks))
 
-                      :else
-                      (js/Promise.resolve nil))))))
+                          (item-completed-event? event-type)
+                          (let [chunks (item-completed-chunks! payload item item-id)]
+                            (<write-event-chunks! chunks))
+
+                          (response-completed-event? event-type)
+                          (let [chunks (item-completed-chunks! payload item item-id)]
+                            (-> (<write-event-chunks! chunks)
+                                (.finally (fn [] (finish!)))))
+
+                          :else
+                          (js/Promise.resolve nil))))))))
             (<drain-frames!
               [frames]
               (reduce (fn [promise frame]

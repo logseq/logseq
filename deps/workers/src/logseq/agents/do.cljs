@@ -4,6 +4,7 @@
             [logseq.agents.checkpoint-store :as checkpoint-store]
             [logseq.agents.runner-store :as runner-store]
             [logseq.agents.runtime-provider :as runtime-provider]
+            [logseq.agents.sandbox :as sandbox]
             [logseq.agents.session :as session]
             [logseq.agents.source-control :as source-control]
             [logseq.sync.common :as common]
@@ -597,9 +598,12 @@
 (defn- <append-runtime-event! [^js self session-id payload]
   (p/let [current-session (<get-session self)]
     (when (= session-id (:id current-session))
-      (let [event-type (or (:type payload) "agent.runtime")]
+      (let [{:keys [type data]} (or (sandbox/acp-envelope->event payload)
+                                    {:type (or (:type payload) "agent.runtime")
+                                     :data payload})
+            event-type type]
         (p/let [_ (<append-event! self {:type event-type
-                                        :data payload
+                                        :data data
                                         :ts (common/now-ms)})]
           (when (= "session.completed" event-type)
             (<checkpoint-and-terminate-completed-runtime! self session-id))
@@ -745,13 +749,17 @@
                        (if-not (and provider-value (runtime-ready? runtime-value))
                          (p/rejected (ex-info "session runtime unavailable"
                                               {:session-id (:id session-value)}))
-                         (let [ready-promise (ensure-runtime-events-stream-ready! self (:id session-value) runtime-value)]
-                           (-> (<await-events-stream-ready ready-promise events-stream-ready-timeout-ms)
-                               (.then (fn [_]
-                                        (runtime-provider/<send-message! provider-value
-                                                                         runtime-value
-                                                                         {:message message
-                                                                          :kind kind}))))))))
+                         (let [ready-promise (ensure-runtime-events-stream-ready! self
+                                                                                  (:id session-value)
+                                                                                  runtime-value)]
+                           (-> (<await-events-stream-ready ready-promise
+                                                           events-stream-ready-timeout-ms)
+                               (.then
+                                (fn [_]
+                                  (runtime-provider/<send-message! provider-value
+                                                                   runtime-value
+                                                                   {:message message
+                                                                    :kind kind}))))))))
         retry-send! (fn [error]
                       (p/let [latest-session (<get-session self)]
                         (if (or (not (map? latest-session))
@@ -1000,7 +1008,8 @@
                  (p/let [res (<append-event! self {:type "audit.log"
                                                    :data {:event "user-message"
                                                           :kind (:kind body)
-                                                          :by user-id}})
+                                                          :by user-id
+                                                          :message message}})
                          session-before (<get-session self)
                          current-session (<maybe-resume-session-for-message! self session-before user-id)]
                    (cond

@@ -82,6 +82,49 @@
       (when (string? (:output_text payload)) (:output_text payload))
       (when (string? (:raw payload)) (:raw payload))))
 
+(defn- acp-runtime-update
+  [event]
+  (let [data (when (map? (:data event)) (:data event))]
+    (when (= "session/update" (:method data))
+      (let [update (:update data)]
+        (when (map? update)
+          update)))))
+
+(defn- acp-runtime-update-kind
+  [event]
+  (some-> (acp-runtime-update event)
+          :sessionUpdate
+          str
+          string/trim
+          not-empty))
+
+(defn- acp-runtime-session-id
+  [event]
+  (some-> (when (map? (:data event)) (:data event))
+          :session-id
+          str
+          string/trim
+          not-empty))
+
+(defn- acp-runtime-update-text
+  [event]
+  (let [update (acp-runtime-update event)
+        content (:content update)]
+    (or (when (map? content)
+          (or (some-> (:text content) str)
+              (some-> (:delta content) str)))
+        (some-> (:text update) str)
+        (some-> (:delta update) str))))
+
+(defn- acp-runtime-stop-reason
+  [event]
+  (some-> (when (map? (:data event)) (:data event))
+          :result
+          :stopReason
+          str
+          string/trim
+          not-empty))
+
 (defn- agent-title
   [agent-value]
   (cond
@@ -96,7 +139,10 @@
         base (let [acc (atom {:items {}
                               :order []
                               :item-kind-by-id {}
-                              :tool-call-id-by-item-id {}})]
+                              :tool-call-id-by-item-id {}
+                              :acp-turn-by-runtime {}
+                              :acp-active-item-by-runtime {}
+                              :last-acp-runtime-session-id nil})]
                (letfn [(known-item-kind [item-id]
                          (get-in @acc [:item-kind-by-id item-id]))
                        (remember-item-kind! [item-id item-kind]
@@ -231,6 +277,20 @@
                                                                    (:output part)
                                                                    "")
                                                                  delta)))))))
+                       (current-acp-item-id [runtime-session-id]
+                         (get-in @acc [:acp-active-item-by-runtime runtime-session-id]))
+                       (ensure-acp-item-id! [runtime-session-id]
+                         (when (string? runtime-session-id)
+                           (swap! acc assoc :last-acp-runtime-session-id runtime-session-id)
+                           (or (current-acp-item-id runtime-session-id)
+                               (let [turn (or (get-in @acc [:acp-turn-by-runtime runtime-session-id]) 1)
+                                     item-id (str runtime-session-id "-turn-" turn)]
+                                 (swap! acc assoc-in [:acp-active-item-by-runtime runtime-session-id] item-id)
+                                 item-id))))
+                       (advance-acp-turn! [runtime-session-id]
+                         (when (string? runtime-session-id)
+                           (swap! acc update-in [:acp-turn-by-runtime runtime-session-id] (fnil inc 1))
+                           (swap! acc update :acp-active-item-by-runtime dissoc runtime-session-id)))
                        (process-content-part! [item-id role part]
                          (let [part-kind (chat-event/content-part-kind part)]
                            (cond
@@ -253,71 +313,92 @@
                              :else nil)))
                        (process-event! [event]
                          (let [event-type (:type event)
-                               payload (chat-event/unwrap-event-payload event)
-                               payload (if (map? payload) payload {})
-                               item (if (map? (:item payload)) (:item payload) {})
-                               item-id (chat-event/event-item-id event payload item)
-                               item-kind (or (chat-event/event-item-kind payload item)
-                                             (known-item-kind item-id))
-                               role (chat-role (or (:role item)
-                                                   (:role payload)
-                                                   (when (= "audit.log" event-type)
-                                                     (role-from-kind (:kind payload) "user"))
-                                                   (:kind payload)
-                                                   "assistant"))
-                               merged (merge payload item)
-                               delta (payload-delta payload)
-                               known-tool-call? (string? (known-tool-call-id item-id))
-                               tool-result-like? (or (= "tool-result" item-kind)
-                                                     known-tool-call?)]
-                           (when (string? item-id)
-                             (remember-item-kind! item-id item-kind)
-                             (case event-type
-                               "item.started"
-                               (when (= "tool-result" item-kind)
-                                 (set-tool-input! item-id role merged))
+                               runtime-update-kind (acp-runtime-update-kind event)]
+                           (cond
+                             (and (= "agent.runtime" event-type)
+                                  (= "agent_message_chunk" runtime-update-kind))
+                             (when-let [item-id (ensure-acp-item-id! (acp-runtime-session-id event))]
+                               (append-text-part! item-id "assistant" (acp-runtime-update-text event)))
 
-                               ("item.completed" "response.completed")
-                               (if (seq (:content item))
-                                 (doseq [part (:content item)]
-                                   (process-content-part! item-id role part))
-                                 (cond
-                                   (= "reasoning" item-kind)
-                                   (set-reasoning-part! item-id role (or (chat-event/payload-text item)
-                                                                         (chat-event/payload-text payload)))
+                             (and (= "agent.runtime" event-type)
+                                  (= "agent_thought_chunk" runtime-update-kind))
+                             (when-let [item-id (ensure-acp-item-id! (acp-runtime-session-id event))]
+                               (append-reasoning-part! item-id "assistant" (acp-runtime-update-text event)))
 
-                                   (= "tool-call" item-kind)
-                                   (set-tool-input! item-id role merged)
+                             (and (= "agent.runtime" event-type)
+                                  (string? (acp-runtime-stop-reason event)))
+                             (advance-acp-turn! (or (acp-runtime-session-id event)
+                                                    (:last-acp-runtime-session-id @acc)))
 
-                                   (= "tool-result" item-kind)
-                                   (set-tool-output! item-id role merged)
+                             (= "agent.runtime" event-type)
+                             nil
 
-                                   (= "status" item-kind)
-                                   (when-let [error-message (chat-event/status-error-message merged)]
-                                     (set-text-part! item-id "assistant" error-message))
+                             :else
+                             (let [payload (chat-event/unwrap-event-payload event)
+                                   payload (if (map? payload) payload {})
+                                   item (if (map? (:item payload)) (:item payload) {})
+                                   item-id (chat-event/event-item-id event payload item)
+                                   item-kind (or (chat-event/event-item-kind payload item)
+                                                 (known-item-kind item-id))
+                                   role (chat-role (or (:role item)
+                                                       (:role payload)
+                                                       (when (= "audit.log" event-type)
+                                                         (role-from-kind (:kind payload) "user"))
+                                                       (:kind payload)
+                                                       "assistant"))
+                                   merged (merge payload item)
+                                   delta (payload-delta payload)
+                                   known-tool-call? (string? (known-tool-call-id item-id))
+                                   tool-result-like? (or (= "tool-result" item-kind)
+                                                         known-tool-call?)]
+                               (when (string? item-id)
+                                 (remember-item-kind! item-id item-kind)
+                                 (case event-type
+                                   "item.started"
+                                   (when (= "tool-result" item-kind)
+                                     (set-tool-input! item-id role merged))
 
-                                   :else
-                                   (set-text-part! item-id role (or (chat-event/payload-text item)
-                                                                    (chat-event/payload-text payload)))))
+                                   ("item.completed" "response.completed")
+                                   (if (seq (:content item))
+                                     (doseq [part (:content item)]
+                                       (process-content-part! item-id role part))
+                                     (cond
+                                       (= "reasoning" item-kind)
+                                       (set-reasoning-part! item-id role (or (chat-event/payload-text item)
+                                                                             (chat-event/payload-text payload)))
 
-                               "audit.log"
-                               (set-text-part! item-id "user" (chat-event/payload-text payload))
+                                       (= "tool-call" item-kind)
+                                       (set-tool-input! item-id role merged)
 
-                               nil)
+                                       (= "tool-result" item-kind)
+                                       (set-tool-output! item-id role merged)
 
-                             (when (chat-event/delta-event? event-type)
-                               (cond
-                                 (= "reasoning" item-kind)
-                                 (append-reasoning-part! item-id role delta)
+                                       (= "status" item-kind)
+                                       (when-let [error-message (chat-event/status-error-message merged)]
+                                         (set-text-part! item-id "assistant" error-message))
 
-                                 (= "tool-call" item-kind)
-                                 (set-tool-input! item-id role merged)
+                                       :else
+                                       (set-text-part! item-id role (or (chat-event/payload-text item)
+                                                                        (chat-event/payload-text payload)))))
 
-                                 tool-result-like?
-                                 (append-tool-output-delta! item-id role merged delta)
+                                   "audit.log"
+                                   (set-text-part! item-id "user" (chat-event/payload-text payload))
 
-                                 :else
-                                 (append-text-part! item-id role delta))))))]
+                                   nil)
+
+                                 (when (chat-event/delta-event? event-type)
+                                   (cond
+                                     (= "reasoning" item-kind)
+                                     (append-reasoning-part! item-id role delta)
+
+                                     (= "tool-call" item-kind)
+                                     (set-tool-input! item-id role merged)
+
+                                     tool-result-like?
+                                     (append-tool-output-delta! item-id role merged delta)
+
+                                     :else
+                                     (append-text-part! item-id role delta))))))))]
                  (doseq [event events]
                    (process-event! event))
                  (->> (:order @acc)

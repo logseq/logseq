@@ -62,23 +62,37 @@
                                                                   :exitCode 0})))}}))))
            (set! js/fetch
                  (fn [request]
-                   (is (= "POST" (.-method request)))
-                   (is (= "https://e2b-agent.local/v1/sessions/sess-e2b-1" (.-url request)))
-                   (is (= "Bearer agent-token"
-                          (.get (.-headers request) "authorization")))
-                   (js/Promise.resolve
-                    (js/Response.
-                     (js/JSON.stringify #js {:ok true})
-                     #js {:status 200
-                          :headers #js {"content-type" "application/json"}}))))
+                   (-> (.text (.clone request))
+                       (.then (fn [body-text]
+                                (swap! calls conj {:type :fetch
+                                                   :url (.-url request)
+                                                   :method (.-method request)
+                                                   :auth (.get (.-headers request) "authorization")
+                                                   :body (js->clj (js/JSON.parse body-text)
+                                                                  :keywordize-keys true)})
+                                (let [result (case (get-in @calls [(dec (count @calls)) :body :method])
+                                               "initialize" #js {:protocolVersion "0.1.0"}
+                                               "session/new" #js {:sessionId "remote-e2b-1"}
+                                               "session/set_mode" #js {}
+                                               #js {:ok true})]
+                                  (js/Response.
+                                   (js/JSON.stringify #js {:jsonrpc "2.0"
+                                                           :id (get-in @calls [(dec (count @calls)) :body :id])
+                                                           :result result})
+                                   #js {:status 200
+                                        :headers #js {"content-type" "application/json"}})))))))
            (-> (runtime-provider/<provision-runtime! provider "sess-e2b-1" task)
                (.then (fn [runtime]
                         (restore!)
                         (is (= "e2b" (:provider runtime)))
                         (is (= "e2b-sbx-1" (:sandbox-id runtime)))
                         (is (= "https://e2b-agent.local" (:base-url runtime)))
-                        (is (= "sess-e2b-1" (:session-id runtime)))
+                        (is (= "sess-e2b-1" (:server-id runtime)))
+                        (is (= "remote-e2b-1" (:session-id runtime)))
                         (is (= 2468 (:sandbox-port runtime)))
+                        (is (some #(and (= :fetch (:type %))
+                                        (= "https://e2b-agent.local/v1/acp/sess-e2b-1?agent=codex" (:url %)))
+                                  @calls))
                         (is (some #(and (= :command (:type %))
                                         (string/includes? (:cmd %) "mkdir -p '/home/user/workspace'"))
                                   @calls))

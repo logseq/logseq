@@ -152,6 +152,104 @@
                         :text "Your access token could not be refreshed because your refresh token was already used. Please log out and sign in again."}]}]
              messages)))))
 
+(deftest session->messages-includes-acp-agent-message-chunks-test
+  (testing "maps ACP agent.runtime session/update message chunks into assistant text"
+    (let [session {:events [{:type "agent.runtime"
+                             :ts 1100
+                             :data {:method "session/update"
+                                    :session-id "runtime-1"
+                                    :update {:sessionUpdate "agent_message_chunk"
+                                             :content {:type "text"
+                                                       :text "Received"}}}}
+                            {:type "agent.runtime"
+                             :ts 1110
+                             :data {:method "session/update"
+                                    :session-id "runtime-1"
+                                    :update {:sessionUpdate "agent_message_chunk"
+                                             :content {:type "text"
+                                                       :text " test"}}}}]}
+          messages (#'agent-chat/session->messages session {:block/uuid "b5"})]
+      (is (= [{:id "runtime-1"
+               :role "assistant"
+               :parts [{:type "text"
+                        :text "Received test"}]}]
+             messages)))))
+
+(deftest session->messages-ignores-non-chat-acp-runtime-events-test
+  (testing "does not render ACP setup/config events as chat messages"
+    (let [session {:events [{:type "agent.runtime"
+                             :ts 1100
+                             :data {:id 1
+                                    :jsonrpc "2.0"
+                                    :result {:protocolVersion 1}}}
+                            {:type "agent.runtime"
+                             :ts 1110
+                             :data {:method "session/update"
+                                    :session-id "runtime-1"
+                                    :update {:sessionUpdate "config_option_update"
+                                             :configOptions [{:id "mode"
+                                                              :currentValue "auto"}]}}}
+                            {:type "agent.runtime"
+                             :ts 1120
+                             :data {:method "session/update"
+                                    :session-id "runtime-1"
+                                    :update {:sessionUpdate "usage_update"
+                                             :used 42}}}]}
+          messages (#'agent-chat/session->messages session {:block/uuid "b6"})]
+      (is (= [] messages)))))
+
+(deftest session->messages-splits-acp-turns-by-end-turn-result-test
+  (testing "separates assistant replies across ACP turns in the same runtime session"
+    (let [session {:events [{:type "audit.log"
+                             :ts 1000
+                             :data {:event "user-message"
+                                    :kind "user"
+                                    :by "u1"
+                                    :message "first"}}
+                            {:type "agent.runtime"
+                             :ts 1100
+                             :data {:method "session/update"
+                                    :session-id "runtime-1"
+                                    :update {:sessionUpdate "agent_message_chunk"
+                                             :content {:type "text"
+                                                       :text "First"}}}}
+                            {:type "agent.runtime"
+                             :ts 1110
+                             :session-id "do-session-1"
+                             :data {:id 4
+                                    :jsonrpc "2.0"
+                                    :result {:stopReason "end_turn"}}}
+                            {:type "audit.log"
+                             :ts 1200
+                             :data {:event "user-message"
+                                    :kind "user"
+                                    :by "u1"
+                                    :message "second"}}
+                            {:type "agent.runtime"
+                             :ts 1300
+                             :data {:method "session/update"
+                                    :session-id "runtime-1"
+                                    :update {:sessionUpdate "agent_message_chunk"
+                                             :content {:type "text"
+                                                       :text "Second"}}}}
+                            {:type "agent.runtime"
+                             :ts 1310
+                             :session-id "do-session-1"
+                             :data {:id 5
+                                    :jsonrpc "2.0"
+                                    :result {:stopReason "end_turn"}}}]}
+          messages (#'agent-chat/session->messages session {:block/uuid "b7"})]
+      (is (= [{:id "task-b7"
+               :role "user"
+               :parts [{:type "text" :text "first"}]}
+              {:id "runtime-1-turn-1"
+               :role "assistant"
+               :parts [{:type "text" :text "First"}]}
+              {:id "runtime-1-turn-2"
+               :role "assistant"
+               :parts [{:type "text" :text "Second"}]}]
+             messages)))))
+
 (deftest session-messages-need-sync-detects-content-growth-without-clobbering-optimistic-ui-test
   (testing "session updates with richer content should sync even when count is unchanged"
     (let [f (some-> (resolve 'frontend.components.agent-chat/session-messages-need-sync?)

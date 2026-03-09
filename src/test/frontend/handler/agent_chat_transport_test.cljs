@@ -102,6 +102,149 @@
                          (is false (str "unexpected error: " error))
                          (done)))))))
 
+(deftest send-messages-streams-acp-agent-message-chunks-test
+  (async done
+         (let [fetch-fn (fn [url init]
+                          (let [method (or (aget init "method") "GET")]
+                            (cond
+                              (and (= "POST" method)
+                                   (= "http://db-sync.local/sessions/sess-1/messages" url))
+                              (js/Promise.resolve
+                               (js/Response.
+                                (js/JSON.stringify #js {:ok true})
+                                #js {:status 200
+                                     :headers #js {"content-type" "application/json"}}))
+
+                              (and (= "GET" method)
+                                   (= "http://db-sync.local/sessions/sess-1/stream" url))
+                              (js/Promise.resolve
+                               (sse-response
+                                [{:type "agent.runtime"
+                                  :ts 1100
+                                  :data {:method "session/update"
+                                         :session-id "runtime-1"
+                                         :update {:sessionUpdate "agent_message_chunk"
+                                                  :content {:type "text"
+                                                            :text "Received"}}}}
+                                 {:type "agent.runtime"
+                                  :ts 1200
+                                  :data {:method "session/update"
+                                         :session-id "runtime-1"
+                                         :update {:sessionUpdate "agent_message_chunk"
+                                                  :content {:type "text"
+                                                            :text " test"}}}}
+                                 {:type "agent.runtime"
+                                  :ts 1300
+                                  :data {:id 4
+                                         :jsonrpc "2.0"
+                                         :result {:stopReason "end_turn"}}}]))
+
+                              :else
+                              (js/Promise.resolve
+                               (js/Response.
+                                (js/JSON.stringify #js {:error "unexpected request"})
+                                #js {:status 500
+                                     :headers #js {"content-type" "application/json"}})))))
+               transport (agent-chat-transport/make-transport
+                          {:base "http://db-sync.local"
+                           :session-id "sess-1"
+                           :fetch-fn fetch-fn
+                           :now-fn (fn [] 1000)
+                           :idle-timeout-ms 50})]
+           (-> (.sendMessages transport
+                              #js {:chatId "sess-1"
+                                   :trigger "submit-message"
+                                   :messageId nil
+                                   :messages #js [#js {:id "user-1"
+                                                       :role "user"
+                                                       :parts #js [#js {:type "text"
+                                                                        :text "hello from ui"}]}]})
+               (.then <read-all-chunks)
+               (.then (fn [chunks]
+                        (let [types (mapv :type chunks)
+                              deltas (->> chunks
+                                          (filter #(= "text-delta" (:type %)))
+                                          (map :delta)
+                                          vec)]
+                          (is (= ["start"
+                                  "start-step"
+                                  "text-start"
+                                  "text-delta"
+                                  "text-delta"
+                                  "text-end"
+                                  "finish-step"
+                                  "finish"]
+                                 types))
+                          (is (= ["Received" " test"] deltas))
+                          (done))))
+               (.catch (fn [error]
+                         (is false (str "unexpected error: " error))
+                         (done)))))))
+
+(deftest send-messages-ignores-acp-setup-and-config-runtime-events-test
+  (async done
+         (let [fetch-fn (fn [url init]
+                          (let [method (or (aget init "method") "GET")]
+                            (cond
+                              (and (= "POST" method)
+                                   (= "http://db-sync.local/sessions/sess-1/messages" url))
+                              (js/Promise.resolve
+                               (js/Response.
+                                (js/JSON.stringify #js {:ok true})
+                                #js {:status 200
+                                     :headers #js {"content-type" "application/json"}}))
+
+                              (and (= "GET" method)
+                                   (= "http://db-sync.local/sessions/sess-1/stream" url))
+                              (js/Promise.resolve
+                               (sse-response
+                                [{:type "agent.runtime"
+                                  :ts 1100
+                                  :data {:id 1
+                                         :jsonrpc "2.0"
+                                         :result {:protocolVersion 1}}}
+                                 {:type "agent.runtime"
+                                  :ts 1200
+                                  :data {:method "session/update"
+                                         :session-id "runtime-1"
+                                         :update {:sessionUpdate "config_option_update"
+                                                  :configOptions [{:id "mode"
+                                                                   :currentValue "auto"}]}}}
+                                 {:type "agent.runtime"
+                                  :ts 1300
+                                  :data {:method "session/update"
+                                         :session-id "runtime-1"
+                                         :update {:sessionUpdate "usage_update"
+                                                  :used 42}}}]))
+
+                              :else
+                              (js/Promise.resolve
+                               (js/Response.
+                                (js/JSON.stringify #js {:error "unexpected request"})
+                                #js {:status 500
+                                     :headers #js {"content-type" "application/json"}})))))
+               transport (agent-chat-transport/make-transport
+                          {:base "http://db-sync.local"
+                           :session-id "sess-1"
+                           :fetch-fn fetch-fn
+                           :now-fn (fn [] 1000)
+                           :idle-timeout-ms 50})]
+           (-> (.sendMessages transport
+                              #js {:chatId "sess-1"
+                                   :trigger "submit-message"
+                                   :messageId nil
+                                   :messages #js [#js {:id "user-1"
+                                                       :role "user"
+                                                       :parts #js [#js {:type "text"
+                                                                        :text "hello from ui"}]}]})
+               (.then <read-all-chunks)
+               (.then (fn [chunks]
+                        (is (= ["finish"] (mapv :type chunks)))
+                        (done)))
+               (.catch (fn [error]
+                         (is false (str "unexpected error: " error))
+                         (done)))))))
+
 (deftest send-messages-emits-error-chunk-on-runtime-error-test
   (async done
          (let [fetch-fn (fn [url init]

@@ -70,28 +70,45 @@
                               :agent-token "runner-token"
                               :access-client-id "cf-access-id"
                               :access-client-secret "cf-access-secret"}}
-               original-fetch js/fetch]
+               original-fetch js/fetch
+               calls (atom [])]
            (set! js/fetch
                  (fn [request init]
-                   (is (= "https://runner.example.com/v1/sessions/sess-local-1" (fetch-url request)))
-                   (is (= "POST" (fetch-method request init)))
-                   (is (= "Bearer runner-token"
-                          (.get (.-headers request) "authorization")))
-                   (is (= "cf-access-id"
-                          (.get (.-headers request) "CF-Access-Client-Id")))
-                   (is (= "cf-access-secret"
-                          (.get (.-headers request) "CF-Access-Client-Secret")))
-                   (js/Promise.resolve
-                    (js/Response.
-                     (js/JSON.stringify #js {:ok true})
-                     #js {:status 200 :headers #js {"content-type" "application/json"}}))))
+                   (-> (.text (.clone request))
+                       (.then (fn [body-text]
+                                (swap! calls conj {:url (fetch-url request)
+                                                   :method (fetch-method request init)
+                                                   :auth (.get (.-headers request) "authorization")
+                                                   :cf-id (.get (.-headers request) "CF-Access-Client-Id")
+                                                   :cf-secret (.get (.-headers request) "CF-Access-Client-Secret")
+                                                   :body (js->clj (js/JSON.parse body-text)
+                                                                  :keywordize-keys true)})
+                                (let [result (case (get-in @calls [(dec (count @calls)) :body :method])
+                                               "initialize" #js {:protocolVersion "0.1.0"}
+                                               "session/new" #js {:sessionId "remote-local-1"}
+                                               "session/set_mode" #js {}
+                                               #js {:ok true})]
+                                  (js/Response.
+                                   (js/JSON.stringify #js {:jsonrpc "2.0"
+                                                           :id (get-in @calls [(dec (count @calls)) :body :id])
+                                                           :result result})
+                                   #js {:status 200 :headers #js {"content-type" "application/json"}})))))))
            (-> (runtime-provider/<provision-runtime! provider "sess-local-1" task)
                (.then (fn [runtime]
                         (set! js/fetch original-fetch)
+                        (is (= ["https://runner.example.com/v1/acp/sess-local-1?agent=codex"
+                                "https://runner.example.com/v1/acp/sess-local-1"
+                                "https://runner.example.com/v1/acp/sess-local-1"]
+                               (mapv :url @calls)))
+                        (is (every? #(= "POST" (:method %)) @calls))
+                        (is (every? #(= "Bearer runner-token" (:auth %)) @calls))
+                        (is (every? #(= "cf-access-id" (:cf-id %)) @calls))
+                        (is (every? #(= "cf-access-secret" (:cf-secret %)) @calls))
                         (is (= "local-runner" (:provider runtime)))
                         (is (= "runner-1" (:runner-id runtime)))
                         (is (= "https://runner.example.com" (:base-url runtime)))
-                        (is (= "sess-local-1" (:session-id runtime)))
+                        (is (= "sess-local-1" (:server-id runtime)))
+                        (is (= "remote-local-1" (:session-id runtime)))
                         (done)))
                (.catch (fn [error]
                          (set! js/fetch original-fetch)
