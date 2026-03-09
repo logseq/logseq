@@ -88,6 +88,7 @@
         .label-wrap {
           @apply flex flex-1;
           min-width: 120px;
+          padding-top: 1px;
         }
 
         .action-wrap {
@@ -96,6 +97,7 @@
           column-gap: 16px;
           row-gap: 6px;
           max-width: 55%;
+          padding-top: 1px;
 
           &.disabled {
             @apply opacity-60 cursor-default;
@@ -104,6 +106,7 @@
           .shortcut-status-label {
             @apply text-xs whitespace-nowrap;
             opacity: 0.5;
+            padding-top: 2px;
 
             &:not(:only-child) {
               margin-right: -8px;
