@@ -83,7 +83,7 @@
 
 (deftest migrate-adds-project-docker-file-property-builtin
   (let [conn (db-test/create-conn)
-        property-ident :logseq.property/project.docker-file
+        property-ident :logseq.property/project-sandbox-docker-file
         _ (d/transact! conn [{:db/ident :logseq.kv/schema-version
                               :kv/value {:major 65 :minor 28}}])
         existing-eid (d/entid @conn property-ident)

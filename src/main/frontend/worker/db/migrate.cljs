@@ -85,7 +85,7 @@
    ["65.25" {:properties [:logseq.property/pr]}]
    ["65.27" {:properties [:logseq.property/agent-session-id]}]
    ["65.28" {:properties [:logseq.property/sandbox-checkpoint]}]
-   ["65.29" {:properties [:logseq.property/project.docker-file]}]])
+   ["65.29" {:properties [:logseq.property/project-sandbox-docker-file]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

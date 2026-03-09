@@ -449,8 +449,8 @@
                :public? true
                :view-context :page}
       :properties {:logseq.property/description "Runs after sandbox startup is ready. Store setup commands in a code block, e.g. `yarn install`."}}
-     :logseq.property/project.docker-file
-     {:title "Project Dockerfile"
+     :logseq.property/project-sandbox-docker-file
+     {:title "Project sandbox Dockerfile"
       :schema {:type :default
                :public? true
                :view-context :page}
