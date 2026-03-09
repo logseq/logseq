@@ -104,7 +104,9 @@
     (->> (if plugin?
            (->> (keys dict) (filter #(string/starts-with? (str %) ":plugin.")))
            (shortcut-config/get-category-shortcuts name))
-         (mapv (fn [k] [k (assoc (get dict k) :category name)])))))
+         (keep (fn [k] (when-let [m (get dict k)]
+                         [k (assoc m :category name)])))
+         (vec))))
 
 (defn shortcuts-map-full
   []
