@@ -726,6 +726,7 @@
            (let [terminal* (atom nil)
                  fit-addon* (atom nil)
                  dispose-data* (atom nil)
+                 input-seq* (atom 0)
                  socket (js/WebSocket. terminal-url)
                  encoder (js/TextEncoder.)
                  handle-window-resize (fn []
@@ -802,7 +803,12 @@
                                                                    payload
                                                                    (str payload))]
                                                  (when (websocket-open? socket)
-                                                   (.send socket (.encode encoder payload-str))))))))
+                                                   (let [seq-no (swap! input-seq* inc)]
+                                                     (.send socket
+                                                            (js/JSON.stringify
+                                                             (clj->js {:type "input"
+                                                                       :seq seq-no
+                                                                       :data payload-str}))))))))))
                           (set! (.-binaryType socket) "arraybuffer")))
                  (.catch (fn [error]
                            (set-terminal-status! :failed)

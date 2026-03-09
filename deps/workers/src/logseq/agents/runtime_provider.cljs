@@ -826,6 +826,7 @@
                (.call create-pty pty
                       (clj->js (cond-> {:cols (or cols 120)
                                         :rows (or rows 40)
+                                        :timeoutMs 0
                                         :cwd cwd
                                         :onData (fn [payload]
                                                   (.send server payload))}
@@ -836,11 +837,36 @@
                  (let [pid (aget handle "pid")
                        send-input (js-method pty "sendInput")
                        resize (js-method pty "resize")
-                       kill-handle (js-method handle "kill")
-                       close-handler (fn []
-                                       (when (fn? kill-handle)
-                                         (-> (->promise (.call kill-handle handle))
-                                             (p/catch (fn [_] nil)))))]
+                       text-encoder (js/TextEncoder.)
+                       input-buffer* (atom "")
+                       flush-timer* (atom nil)
+                       input-chain* (atom (p/resolved nil))
+                       enqueue-input-bytes! (fn [input-payload]
+                                              (when (and (number? pid) (fn? send-input))
+                                                (swap! input-chain*
+                                                       (fn [chain]
+                                                         (-> chain
+                                                             (p/catch (fn [_] nil))
+                                                             (p/then
+                                                              (fn [_]
+                                                                (-> (->promise (.call send-input pty pid input-payload))
+                                                                    (p/catch (fn [_] nil))))))))
+                                                nil))
+                       flush-input! (fn []
+                                      (when-let [timer @flush-timer*]
+                                        (js/clearTimeout timer)
+                                        (reset! flush-timer* nil))
+                                      (let [buffer @input-buffer*]
+                                        (reset! input-buffer* "")
+                                        (when (seq buffer)
+                                          (enqueue-input-bytes! (.encode text-encoder buffer)))))
+                       enqueue-input! (fn [input-text]
+                                        (when (string? input-text)
+                                          (swap! input-buffer* str input-text)
+                                          (when-not @flush-timer*
+                                            (reset! flush-timer*
+                                                    (js/setTimeout flush-input! 10))))
+                                        nil)]
                    (.addEventListener
                     server
                     "message"
@@ -849,32 +875,45 @@
                         (cond
                           (string? payload)
                           (let [parsed (parse-json-safe payload)]
-                            (if (= "resize" (:type parsed))
-                              (when (and (number? pid) (fn? resize))
-                                (-> (->promise (.call resize pty pid
-                                                      (clj->js {:cols (:cols parsed)
-                                                                :rows (:rows parsed)})))
-                                    (p/catch (fn [_] nil))))
-                              (when (and (number? pid) (fn? send-input))
-                                (-> (->promise (.call send-input pty pid payload))
-                                    (p/catch (fn [_] nil))))))
+                            (cond
+                              (= "resize" (:type parsed))
+                              (do
+                                (flush-input!)
+                                (when (and (number? pid) (fn? resize))
+                                  (-> (->promise (.call resize pty pid
+                                                        (clj->js {:cols (:cols parsed)
+                                                                  :rows (:rows parsed)})))
+                                      (p/catch (fn [_] nil)))))
 
-                          (instance? js/ArrayBuffer payload)
-                          (when (and (number? pid) (fn? send-input))
-                            (-> (->promise (.call send-input pty pid (js/Uint8Array. payload)))
-                                (p/catch (fn [_] nil))))
+                              (= "input" (:type parsed))
+                              (let [input (or (:data parsed) "")]
+                                (enqueue-input! input))
 
-                          (instance? js/Uint8Array payload)
-                          (when (and (number? pid) (fn? send-input))
-                            (-> (->promise (.call send-input pty pid payload))
-                                (p/catch (fn [_] nil))))
+                              :else
+                              (enqueue-input! payload))))
 
-                          :else nil))))
-                   (.addEventListener server "close" close-handler)
-                   (.addEventListener server "error" (fn [_] (close-handler)))
-                   (.send server (js/JSON.stringify #js {:type "ready"}))
-                   (js/Response. nil #js {:status 101
-                                          :webSocket client}))))
+                        (instance? js/ArrayBuffer payload)
+                        (enqueue-input-bytes! (js/Uint8Array. payload))
+
+                        (instance? js/Uint8Array payload)
+                        (enqueue-input-bytes! payload)
+
+                        :else nil))))
+                 (.addEventListener server
+                                    "close"
+                                    (fn []
+                                      (when-let [kill-handle (js-method handle "kill")]
+                                        (-> (->promise (.call kill-handle handle))
+                                            (p/catch (fn [_] nil))))))
+                 (.addEventListener server
+                                    "error"
+                                    (fn [_]
+                                      (when-let [kill-handle (js-method handle "kill")]
+                                        (-> (->promise (.call kill-handle handle))
+                                            (p/catch (fn [_] nil))))))
+                 (.send server (js/JSON.stringify #js {:type "ready"}))
+                 (js/Response. nil #js {:status 101
+                                        :webSocket client})))
               (p/catch
                (fn [error]
                  (try
