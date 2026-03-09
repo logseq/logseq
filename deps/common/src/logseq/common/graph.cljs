@@ -101,8 +101,9 @@ Rules:
        (filter #(contains? allowed-formats (get-ext %)))))
 
 (defn get-default-graphs-dir
+  "Get default dir for storing graphs by first looking in env var."
   []
-  common-config/default-graphs-dir)
+  (or js/process.env.LOGSEQ_GRAPHS_DIR common-config/default-graphs-dir))
 
 (defn expand-home
   "Expands path if it starts with '~'"
