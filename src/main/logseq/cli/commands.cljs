@@ -3,7 +3,7 @@
   (:require [babashka.cli :as cli]
             [clojure.string :as string]
             [logseq.cli.command.auth :as auth-command]
-            [logseq.cli.command.completions :as completions-command]
+            [logseq.cli.command.completion :as completion-command]
             [logseq.cli.command.core :as command-core]
             [logseq.cli.command.doctor :as doctor-command]
             [logseq.cli.command.graph :as graph-command]
@@ -108,7 +108,7 @@
                doctor-command/entries
                sync-command/entries
                auth-command/entries
-               completions-command/entries)))
+               completion-command/entries)))
 
 ;; Global option parsing lives in logseq.cli.command.core.
 
@@ -425,9 +425,9 @@
         (:login :logout)
         (auth-command/build-action command)
 
-        :completions
+        :completion
         {:ok? true
-         :action {:type :completions
+         :action {:type :completion
                   :shell (or (:shell options) (first args))}}
 
         {:ok? false
@@ -470,7 +470,7 @@
                          :query-list (query-command/execute-query-list action config)
                          :show (show-command/execute-show action config)
                          :doctor (doctor-command/execute-doctor action config)
-                         :completions (p/resolved
+                         :completion (p/resolved
                                        {:status :ok
                                         :data {:message (completion-gen/generate-completions
                                                          (:shell action) table)}})

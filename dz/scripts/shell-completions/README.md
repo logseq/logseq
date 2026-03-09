@@ -9,8 +9,8 @@ These files are **auto-generated** from the CLI command table. Do not edit
 them manually — regenerate instead:
 
 ```bash
-logseq completions zsh  > dz/scripts/shell-completions/_logseq.zsh
-logseq completions bash > dz/scripts/shell-completions/logseq.bash
+logseq completion zsh  > dz/scripts/shell-completions/_logseq.zsh
+logseq completion bash > dz/scripts/shell-completions/logseq.bash
 ```
 
 The generator reads the command table at generation time, so adding or
@@ -29,6 +29,14 @@ completion scripts stay in sync automatically.
 ## zsh
 
 ### Installation (zsh)
+
+**Option A — eval in `~/.zshrc`** (simplest, always up to date):
+
+```zsh
+eval "$(logseq completion zsh)"
+```
+
+**Option B — fpath** (avoids running `logseq` at shell startup):
 
 1. Copy `_logseq.zsh` to a directory on your `$fpath`, **renaming it to
    `_logseq`** (no extension — required by zsh's autoload mechanism):
@@ -74,7 +82,7 @@ rm -f ~/.zcompcache/logseq_*
 After upgrading the `logseq` CLI, regenerate and re-copy:
 
 ```zsh
-logseq completions zsh > ~/.zsh/completions/_logseq
+logseq completion zsh > ~/.zsh/completions/_logseq
 compinit
 ```
 
@@ -133,7 +141,7 @@ are as fresh as the CLI response.
 After upgrading the `logseq` CLI, regenerate and re-copy:
 
 ```bash
-logseq completions bash > ~/.local/share/bash-completion/completions/logseq
+logseq completion bash > ~/.local/share/bash-completion/completions/logseq
 ```
 
 ---
@@ -151,7 +159,7 @@ logseq graph       list | create | switch | remove | validate | info | export | 
 logseq server      list | status | start | stop | restart
 logseq show
 logseq doctor
-logseq completions
+logseq completion
 ```
 
 ### Global options
