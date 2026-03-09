@@ -15,7 +15,7 @@
             :alias :c}
    :graph {:desc "Graph name"
            :alias :g}
-   :data-dir {:desc "Path to db-worker data dir (default ~/logseq/graphs)"}
+   :data-dir {:desc (str "Path to db-worker data dir (default " common-config/default-graphs-dir ")")}
    :timeout-ms {:desc "Request timeout in ms (default 10000)"
                 :coerce :long}
    :output {:desc "Output format (human, json, edn). Default: human"

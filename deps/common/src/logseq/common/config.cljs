@@ -52,6 +52,7 @@
                        name'))]
       (str db-version-prefix stripped))))
 
+(defonce default-graphs-dir "~/logseq/graphs")
 (defonce local-assets-dir "assets")
 (defonce unlinked-graphs-dir "Unlinked graphs")
 

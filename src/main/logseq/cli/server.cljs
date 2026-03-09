@@ -1,24 +1,18 @@
 (ns logseq.cli.server
   "db-worker-node lifecycle orchestration for logseq."
   (:require ["fs" :as fs]
-            ["os" :as os]
             ["path" :as node-path]
             [clojure.string :as string]
             [frontend.worker.db-worker-node-lock :as db-lock]
-            [logseq.common.config :as common-config]
-            [logseq.db-worker.daemon :as daemon]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
+            [logseq.common.graph :as common-graph]
+            [logseq.db-worker.daemon :as daemon]
             [promesa.core :as p]))
-
-(defn- expand-home
-  [path]
-  (if (string/starts-with? path "~")
-    (node-path/join (.homedir os) (subs path 1))
-    path))
 
 (defn resolve-data-dir
   [config]
-  (expand-home (or (:data-dir config) "~/logseq/graphs")))
+  (common-graph/expand-home (or (:data-dir config) (common-graph/get-default-graphs-dir))))
 
 (defn- repo-dir
   [data-dir repo]
