@@ -1,7 +1,7 @@
 (ns frontend.worker.platform.node
   "Node.js platform adapter for db-worker."
-  (:require ["node:sqlite" :as node-sqlite]
-            ["fs/promises" :as fs]
+  (:require ["fs/promises" :as fs]
+            ["node:sqlite" :as node-sqlite]
             ["os" :as os]
             ["path" :as node-path]
             ["ws" :as ws]
@@ -10,6 +10,7 @@
             [frontend.worker.db-worker-node-lock :as db-lock]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
             [promesa.core :as p]))
 
 (defn- resolve-database-sync-ctor
@@ -72,6 +73,7 @@
                                (db-lock/decode-canonical-graph-dir-key (.-name dirent)))
                              db-dirs)]
       (->> graph-names
+           (remove #(= % common-config/unlinked-graphs-dir))
            (filter some?)
            (vec)))))
 
