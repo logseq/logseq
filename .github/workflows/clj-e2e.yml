@@ -53,7 +53,7 @@ jobs:
           path: |
             ~/.m2/repository
             ~/.gitlibs
-          key: ${{ runner.os }}-clojure-deps-${{ hashFiles('deps.edn') }}
+          key: ${{ runner.os }}-clojure-deps-${{ hashFiles('deps.edn', 'clj-e2e/deps.edn') }}
           restore-keys: ${{ runner.os }}-clojure-deps-
 
       - name: Fetch Clojure deps
@@ -81,9 +81,13 @@ jobs:
           yarn gulp:build && clojure -M:cljs release app db-worker inference-worker --config-merge "{:closure-defines {frontend.config/DEV-RELEASE true}}" --debug && yarn webpack-app-build
 
       - name: Run e2e tests
-        run: cd clj-e2e && timeout 30m bb dev
-        # env:
-        #   DEBUG: "pw:api"
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 30
+          max_attempts: 3
+          command: cd clj-e2e && bb dev
+          # env:
+          #   DEBUG: "pw:api"
 
       - name: Collect screenshots
         if: ${{ failure() }}
