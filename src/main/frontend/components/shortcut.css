@@ -17,14 +17,31 @@
   @apply relative;
 
   &-pane-controls {
-    @apply flex space-x-3 absolute top-[-4px] right-4 items-center;
+    @apply flex gap-3 items-center;
 
     .search-input-wrap {
-      @apply pr-1 relative;
+      @apply relative flex-1 min-w-0;
+
+      .search-icon {
+        @apply absolute left-2 flex items-center opacity-40 pointer-events-none;
+        top: 50%;
+        transform: translateY(-50%);
+      }
+
+      input.form-input {
+        @apply w-full pl-7 text-sm mt-0;
+
+        &:focus {
+          @apply outline-none border-gray-04 ring-2 ring-ring ring-offset-2;
+          --tw-ring-offset-color: var(--ls-primary-background-color, hsl(var(--background)));
+        }
+      }
 
       a.x {
-        @apply flex items-center absolute right-1 top-0 py-[7px] px-1 opacity-60
+        @apply flex items-center absolute right-1 px-1 opacity-60
         hover:opacity-90;
+        top: 50%;
+        transform: translateY(-50%);
       }
     }
 
@@ -41,18 +58,18 @@
   }
 
   > header {
-    @apply px-4 pb-4 pt-2;
+    @apply px-4 pb-2 flex flex-col gap-2 sticky top-0 z-10;
+    padding-top: 20px;
+    background-color: hsl(var(--background));
+  }
 
-    > h2 {
-      @apply relative top-[-6px];
-    }
+  .shortcut-status-line {
+    @apply text-xs select-none;
+    color: var(--rx-gray-09, var(--ls-secondary-text-color));
   }
 
   > article {
-    @apply relative pb-4 overflow-y-auto;
-
-    max-height: calc(70vh - 100px);
-    overflow-y: overlay;
+    @apply relative pb-4;
 
     > ul {
       @apply px-4 m-0 py-0;
@@ -79,8 +96,9 @@
         }
 
         &.th {
-          @apply rounded mb-2 sticky top-0 cursor-pointer
+          @apply rounded mb-2 sticky cursor-pointer
           select-none active:opacity-80 px-2 py-1 z-[1];
+          top: var(--shortcut-header-h, 0px);
 
           background-color: var(--ls-tertiary-background-color);
         }

@@ -199,19 +199,12 @@
   [q set-q! filters set-filters! keystroke set-keystroke! toggle-categories-fn]
   (let [*search-ref (rum/use-ref nil)]
     [:div.cp__shortcut-page-x-pane-controls
-     [:a.flex.items-center.icon-link
-      {:on-click toggle-categories-fn
-       :title "Toggle categories pane"}
-      (ui/icon "fold")]
 
-     [:a.flex.items-center.icon-link
-      {:on-click refresh-shortcuts-list!
-       :title "Refresh all"}
-      (ui/icon "refresh")]
-
+     ;; search input — first and widest element
      [:span.search-input-wrap
+      [:span.search-icon (ui/icon "search" {:size 15})]
       [:input.form-input.is-small
-       {:placeholder (t :keymap/search)
+       {:placeholder "Search shortcuts..."
         :ref         *search-ref
         :value       (or q "")
         :auto-focus  true
@@ -229,6 +222,18 @@
                       (set-q! "")
                       (js/setTimeout #(some-> (rum/deref *search-ref) (.focus)) 50))}
          (ui/icon "x" {:size 14})])]
+
+     ;; toggle fold/unfold categories
+     [:a.flex.items-center.icon-link
+      {:on-click toggle-categories-fn
+       :title "Toggle categories pane"}
+      (ui/icon "fold")]
+
+     ;; refresh
+     [:a.flex.items-center.icon-link
+      {:on-click refresh-shortcuts-list!
+       :title "Refresh all"}
+      (ui/icon "refresh")]
 
      ;; keyboard filter
      (let [filter-popup-id :shortcut-keystroke-filter
@@ -249,17 +254,19 @@
                              :onCloseAutoFocus #(.preventDefault %)
                              :onEscapeKeyDown (fn [_] false)
                              :onPointerDownOutside (fn [_] nil)}}))]
-       [:a.flex.items-center.icon-link
-        {:on-click open-filter!}
+       [:a.flex.items-center.icon-link.relative
+        {:on-click open-filter!
+         :title "Filter by keystroke"}
         (ui/icon "keyboard")
         (when-not (string/blank? keystroke)
           (ui/point "bg-red-600.absolute" 4 {:style {:right -2 :top -2}}))])
 
-     ;; other filter
+     ;; category filter
      (ui/dropdown-with-links
       (fn [{:keys [toggle-fn]}]
         [:a.flex.items-center.icon-link.relative
-         {:on-click toggle-fn}
+         {:on-click toggle-fn
+          :title "Filter by status"}
          (ui/icon "filter")
 
          (when (seq filters)
@@ -752,6 +759,39 @@
         (if (= :recording rec-state) "Cancel " "Close ")
         (shui/shortcut "escape" {:style :compact})]]]]))
 
+(defn- count-visible-shortcuts
+  "Count shortcuts visible after applying category filters and keystroke filter."
+  [result-list-map filters in-keystroke? keystroke]
+  (->> result-list-map
+       (mapcat
+        (fn [[_c binding-map]]
+          (for [[id {:keys [binding user-binding]}] binding-map
+                :let [binding (to-vector binding)
+                      user-binding (and user-binding (to-vector user-binding))
+                      custom? (not (nil? user-binding))
+                      disabled? (or (false? user-binding)
+                                    (false? (first binding)))
+                      unset? (and (not disabled?)
+                                  (or (= user-binding [])
+                                      (and (nil? binding) (nil? user-binding))
+                                      (and (= binding [])
+                                           (nil? user-binding))))]
+                :when (or (nil? (seq filters))
+                          (when (contains? filters :Custom) custom?)
+                          (when (contains? filters :Disabled) disabled?)
+                          (when (contains? filters :Unset) unset?))
+                :when (or (not in-keystroke?)
+                          (and (not disabled?) (not unset?)
+                               (let [binding' (or user-binding binding)
+                                     keystroke' (some-> (shortcut-utils/safe-parse-string-binding keystroke) (bean/->clj))]
+                                 (when (sequential? binding')
+                                   (some #(when-let [s (some-> % (dh/mod-key) (shortcut-utils/safe-parse-string-binding) (bean/->clj))]
+                                            (or (= s keystroke')
+                                                (and (sequential? s) (sequential? keystroke')
+                                                     (apply = (map first [s keystroke']))))) binding')))))]
+            id)))
+       count))
+
 (defn build-categories-map
   []
   (->> categories
@@ -788,7 +828,25 @@
         result-list-map (or matched-list-map categories-list-map)
         toggle-categories! #(if (= folded-categories all-categories)
                               (set-folded-categories! #{})
-                              (set-folded-categories! all-categories))]
+                              (set-folded-categories! all-categories))
+
+        total-count (apply + (map #(count (second %)) categories-list-map))
+        visible-count (if (or in-filters? in-keystroke?)
+                        (count-visible-shortcuts result-list-map filters in-keystroke? keystroke)
+                        (apply + (map #(count (second %)) result-list-map)))
+        shortcuts-word (fn [n] (if (= n 1) "shortcut" "shortcuts"))
+        filter-qualifier (cond
+                           (and in-filters? (contains? filters :Custom)) "custom "
+                           (and in-filters? (contains? filters :Disabled)) "disabled "
+                           (and in-filters? (contains? filters :Unset)) "unset "
+                           :else "")
+        status-text (cond
+                      (not ready?) "..."
+                      (zero? visible-count) "No matching shortcuts"
+                      (or in-query? in-keystroke? in-filters?)
+                      (str visible-count " " filter-qualifier (shortcuts-word visible-count))
+                      :else
+                      (str total-count " " (shortcuts-word total-count)))]
 
     (hooks/use-effect!
      (fn []
@@ -804,15 +862,14 @@
      [])
 
     [:div.cp__shortcut-page-x
-     [:header.relative
-      [:h2.text-xs.opacity-70
-       (str (t :keymap/total)
-            " "
-            (if ready?
-              (apply + (map #(count (second %)) result-list-map))
-              " ..."))]
-
-      (pane-controls q set-q! filters set-filters! keystroke set-keystroke! toggle-categories!)]
+     {:ref (fn [^js el]
+             (when el
+               (when-let [header (.querySelector el ":scope > header")]
+                 (let [h (.-offsetHeight header)]
+                   (.setProperty (.-style el) "--shortcut-header-h" (str h "px"))))))}
+     [:header
+      (pane-controls q set-q! filters set-filters! keystroke set-keystroke! toggle-categories!)
+      [:div.shortcut-status-line status-text]]
 
      [:article
       (when-not ready?
