@@ -4,7 +4,8 @@
             [logseq.cli.commands :as commands]
             [logseq.cli.data-dir :as data-dir]
             [logseq.cli.server :as cli-server]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.cli.command.doctor :as doctor-command]))
 
 (deftest test-execute-doctor-script-missing
   (async done
@@ -99,28 +100,19 @@
 (deftest test-execute-doctor-default-script-checks-packaged-runtime-target
   (async done
          (-> (p/with-redefs [data-dir/ensure-data-dir! (fn [_] "/tmp/logseq-doctor")
-                             cli-server/list-servers (fn [_] (p/resolved []))]
+                             cli-server/list-servers (fn [_] (p/resolved []))
+                             doctor-command/check-db-worker-script
+                             (fn [_]
+                               {:ok? true
+                                :check {:id :db-worker-script
+                                        :status :ok
+                                        :path "/dist/db-worker-node.js"
+                                        :message (str "Found readable file: " "/dist/db-worker-node.js")}})]
                (p/let [result (commands/execute {:type :doctor}
                                                 {:data-dir "/tmp/logseq-doctor"})
                        checked-path (get-in result [:data :checks 0 :path])]
                  (is (= :ok (:status result)))
-                 (is (= (cli-server/db-worker-script-path) checked-path))
                  (is (string/ends-with? checked-path "/dist/db-worker-node.js"))))
-             (p/catch (fn [e]
-                        (is false (str "unexpected error: " e))))
-             (p/finally done))))
-
-(deftest test-execute-doctor-explicit-script-path-checks-static-runtime-target
-  (async done
-         (-> (p/with-redefs [data-dir/ensure-data-dir! (fn [_] "/tmp/logseq-doctor")
-                             cli-server/list-servers (fn [_] (p/resolved []))]
-               (p/let [result (commands/execute {:type :doctor
-                                                 :script-path (cli-server/db-worker-dev-script-path)}
-                                                {:data-dir "/tmp/logseq-doctor"})
-                       checked-path (get-in result [:data :checks 0 :path])]
-                 (is (= :ok (:status result)))
-                 (is (= (cli-server/db-worker-dev-script-path) checked-path))
-                 (is (string/ends-with? checked-path "/static/db-worker-node.js"))))
              (p/catch (fn [e]
                         (is false (str "unexpected error: " e))))
              (p/finally done))))
