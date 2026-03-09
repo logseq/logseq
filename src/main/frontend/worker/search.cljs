@@ -145,18 +145,6 @@ DROP TRIGGER IF EXISTS blocks_au;
 (def ^:private query-boolean-operators #{"and" "or" "not" "|" "&"})
 (def ^:private query-break-chars #{\, \. \; \! \? \uFF0C \u3002 \uFF1B \uFF01 \uFF1F \u3001}) ;; , . ; ! ? ， 。 ； ！ ？ 、
 
-(defn- snippet-by
-  [content length]
-  (str (subs content 0 length) (when (> (count content) max-snippet-length) "...")))
-
-(defn- get-snippet-result
-  [snippet]
-  (let [;; Cut snippet to limited size chars for non-matched results
-        snippet (if (string/includes? snippet snippet-highlight-start)
-                  snippet
-                  (snippet-by snippet max-snippet-length))]
-    snippet))
-
 (defn- query->terms
   [q]
   (->> (string/split (string/trim q) #"\s+")
@@ -378,9 +366,9 @@ DROP TRIGGER IF EXISTS blocks_au;
       [input limit])))
 
 (defn- search-blocks-aux
-  ([db sql q input page limit enable-snippet?]
-   (search-blocks-aux db sql q input page limit enable-snippet? false))
-  ([db sql q input page limit enable-snippet? use-namespace-last-part?]
+  ([db sql q input page limit]
+   (search-blocks-aux db sql q input page limit false))
+  ([db sql q input page limit use-namespace-last-part?]
    (try
      (let [bind (build-search-bind q input page limit use-namespace-last-part?)
            result (.exec db (bean/->js
@@ -389,9 +377,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                               :rowMode "array"}))
            blocks (bean/->clj result)]
        (keep (fn [block]
-               (let [[id page title _rank snippet] (if enable-snippet?
-                                                     (update block 4 get-snippet-result)
-                                                     block)]
+               (let [[id page title _rank snippet] block]
                  (when title
                    {:id id
                     :keyword-score (fuzzy/score q title)
@@ -580,10 +566,12 @@ DROP TRIGGER IF EXISTS blocks_au;
   (let [block-id (uuid id)]
     (when-let [block (d/entity @conn [:block/uuid block-id])]
       (when (include-search-block? conn block code-class option)
-        (let [display-title (or (block-search-title block) title)]
+        (let [display-title (if (:enable-snippet? option)
+                              (ensure-highlighted-snippet snippet (or (block-search-title block) title) q)
+                              (or snippet title))]
           {:db/id (:db/id block)
            :block/uuid (:block/uuid block)
-           :block/title (ensure-highlighted-snippet snippet display-title q)
+           :block/title display-title
            :block.temp/original-title (:block/title block)
            :block/page (or
                         (:block/uuid (:block/page block))
@@ -601,7 +589,7 @@ DROP TRIGGER IF EXISTS blocks_au;
    * :page - the page to specifically search on
    * :limit - Number of result to limit search results. Defaults to 100
    * :search-limit - Number of result to limit sqlite search results. Defaults to nil
-   * :enable-snippet? - Whether to ask sqlite to generate snippet values. Defaults to true
+   * :enable-snippet? - Whether to replace title with snippet. Defaults to true
    * :dev? - Allow all nodes to be seen for development. Defaults to false
    * :code-only? - Whether to return only code blocks. Defaults to false
    * :built-in?  - Whether to return public built-in nodes for db graphs. Defaults to false"
@@ -610,30 +598,25 @@ DROP TRIGGER IF EXISTS blocks_au;
                           :or {enable-snippet? true}}]
   (m/sp
    (when-not (string/blank? q)
-     (let [match-input (get-match-input q)
+     (let [option (assoc option :enable-snippet? enable-snippet?)
+           match-input (get-match-input q)
            page-count (count (d/datoms @conn :avet :block/name))
            large-graph? (> page-count 2500)
            non-match-input (when (<= (count q) 2)
                              (str "%" (string/replace q #"\s+" "%") "%"))
            limit (or limit 100)
            limit-p (or search-limit limit)
-            ;; https://www.sqlite.org/fts5.html#the_highlight_function
-            ;; the 2nd column in blocks_fts (content)
-            ;; pfts_2lqh is a key for retrieval
-            ;; highlight and snippet only works for some matching with high rank
-           snippet-aux "snippet(blocks_fts, 1, '$pfts_2lqh>$', '$<pfts_2lqh$', '...', 256)"
-           select (if enable-snippet?
-                    (str "select id, page, title, rank, " snippet-aux " from blocks_fts where ")
-                    "select id, page, title, rank from blocks_fts where ")
+           ;; don't use sqlite snippet function anymore, all snippets will be handled by ensure-highlighted-snippet
+           select "select id, page, title, rank from blocks_fts where "
            pg-sql (if page "page = ? and" "")
            match-sql (if (ns-util/namespace-page? q)
                        (str select pg-sql " title match ? or title match ? order by rank limit ?")
                        (str select pg-sql " title match ? order by rank limit ?"))
            non-match-sql (str select pg-sql " title like ? limit ?")
            matched-result (when-not page-only?
-                            (search-blocks-aux search-db match-sql q match-input page limit-p enable-snippet? (ns-util/namespace-page? q)))
+                            (search-blocks-aux search-db match-sql q match-input page limit-p (ns-util/namespace-page? q)))
            non-match-result (when (and (not page-only?) non-match-input)
-                              (->> (search-blocks-aux search-db non-match-sql q non-match-input page limit-p enable-snippet?)
+                              (->> (search-blocks-aux search-db non-match-sql q non-match-input page limit-p)
                                    (map (fn [result]
                                           (assoc result :keyword-score (fuzzy/score q (:title result)))))))
             ;; fuzzy is too slow for large graphs
