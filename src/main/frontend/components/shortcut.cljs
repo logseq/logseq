@@ -359,22 +359,6 @@
     (shortcut/persist-user-shortcut! action-id previous-binding))
   (js/setTimeout #(do (shortcut/refresh!) (refresh-shortcuts-list!)) 50))
 
-(defn- show-undo-toast!
-  [description snapshot set-current-binding! self-id]
-  (shui/toast!
-   {:description description
-    :action (fn [{:keys [dismiss!]}]
-              [:button.font-medium.underline.cursor-pointer
-               {:on-click (fn []
-                            (execute-undo! snapshot)
-                            ;; Update local state if dialog is still open
-                            (when-let [own (some #(when (= (:action-id %) self-id) %) (:entries snapshot))]
-                              (set-current-binding! (:previous-binding own)))
-                            (dismiss!))}
-               "Undo"])
-    :duration 6000}
-   :default))
-
 (defn- conflict-action-names
   "Extract human-readable action names from a key-conflicts map."
   [key-conflicts]
@@ -397,6 +381,7 @@
         [key-conflicts set-key-conflicts!] (rum/use-state nil)
         [rec-state set-rec-state!] (rum/use-state :idle)
         [accepted-info set-accepted-info!] (rum/use-state nil)
+        [undo-snapshot set-undo-snapshot!] (rum/use-state nil)
         *auto-accept-timer (rum/use-ref nil)
         *fade-timer (rum/use-ref nil)
         ;; Refs to avoid stale closures in mount-only key handler effect
@@ -426,9 +411,8 @@
             (set-current-binding! binding)
             (shortcut/persist-user-shortcut! k nil)
             (js/setTimeout #(do (shortcut/refresh!) (saved-cb)) 50)
-            (show-undo-toast! "Reset to default"
-                              {:entries undo-entries}
-                              set-current-binding! k)))
+            (set-undo-snapshot! {:entries undo-entries})
+            (set-rec-state! :reset)))
 
         override-fn!
         (fn []
@@ -462,11 +446,8 @@
                 (set-current-binding! new-binding)
                 (persist-binding! new-binding)
 
-                ;; Undo toast
-                (show-undo-toast!
-                 (str "Reassigned from " (conflict-action-names conflicts))
-                 {:entries undo-entries}
-                 set-current-binding! k)
+                ;; Store undo snapshot for inline undo
+                (set-undo-snapshot! {:entries undo-entries})
 
                 ;; Transition to :accepted with reassign info
                 (set-accepted-info! {:key accepted-key :from (conflict-action-names conflicts)})
@@ -528,10 +509,11 @@
     ;; Auto-fade for transient states: conflict-same, esc-hint, accepted
     (hooks/use-effect!
      (fn []
-       (when (#{:conflict-same :esc-hint :accepted} rec-state)
+       (when (#{:conflict-same :esc-hint :accepted :removed :reset} rec-state)
          (let [ms (case rec-state
                     :esc-hint 2000
                     :accepted (if (:cross-context? accepted-info) 6000 3000)
+                    (:removed :reset) 10000
                     3000)
                timer (js/setTimeout
                       #(set-rec-state! :idle)
@@ -574,6 +556,8 @@
                                   :idle           (close-fn)
                                   :accepted       (close-fn)
                                   :esc-hint       (close-fn)
+                                  :removed        (close-fn)
+                                  :reset          (close-fn)
                                   :recording      (do (set-keystroke! "")
                                                       (set-key-conflicts! nil)
                                                       (set-rec-state! :esc-hint))
@@ -587,7 +571,7 @@
 
                               ;; Backspace in idle/accepted: remove last committed binding
                               (and is-backspace?
-                                   (#{:idle :accepted} state)
+                                   (#{:idle :accepted :removed :reset} state)
                                    (string/blank? (rum/deref *keystroke-ref)))
                               (let [cur-binding (rum/deref *current-binding-ref)]
                                 (when (seq (filter string? cur-binding))
@@ -595,10 +579,8 @@
                                         undo-entries [{:action-id k :previous-binding cur-binding}]]
                                     (set-current-binding! new-binding)
                                     (persist-binding! new-binding)
-                                    (set-rec-state! :idle)
-                                    (show-undo-toast! "Shortcut removed"
-                                                      {:entries undo-entries}
-                                                      set-current-binding! k))))
+                                    (set-undo-snapshot! {:entries undo-entries})
+                                    (set-rec-state! :removed))))
 
                               ;; Conflict-cross + Cmd+Enter => override
                               (and is-cmd-enter? (= state :conflict-cross))
@@ -614,8 +596,8 @@
                                 (set-rec-state! :recording)
                                 (set-keystroke! (util/trim-safe kn)))
 
-                              ;; Idle / accepted + key => start recording
-                              (#{:idle :accepted} state)
+                              ;; Idle / accepted / removed / reset + key => start recording
+                              (#{:idle :accepted :removed :reset} state)
                               (when-let [kn (shortcut/keyname e)]
                                 (set-rec-state! :recording)
                                 (set-keystroke! (util/trim-safe kn)))
@@ -652,7 +634,7 @@
             :when (string? x)]
         [:div.shortcut-input-binding {:key x}
          (shui/shortcut x)
-         (when (#{:idle :accepted :esc-hint} rec-state)
+         (when (#{:idle :accepted :esc-hint :removed :reset} rec-state)
            [:a.shortcut-binding-remove
             {:on-click (fn [^js e]
                          (.stopPropagation e)
@@ -661,10 +643,8 @@
                                undo-entries [{:action-id k :previous-binding current-binding}]]
                            (set-current-binding! new-binding)
                            (persist-binding! new-binding)
-                           (set-rec-state! :idle)
-                           (show-undo-toast! "Shortcut removed"
-                                             {:entries undo-entries}
-                                             set-current-binding! k)))}
+                           (set-undo-snapshot! {:entries undo-entries})
+                           (set-rec-state! :removed)))}
             (ui/icon "x" {:size 12})])])
       ;; Recording in progress — dashed keys (uncommitted)
       (when (and (#{:recording :conflict-cross :conflict-same} rec-state)
@@ -678,57 +658,78 @@
                          (cancel-fn!))}
             (ui/icon "x" {:size 12})])])
       ;; Placeholder
-      (when (#{:idle :recording :accepted} rec-state)
+      (when (#{:idle :recording :accepted :removed :reset} rec-state)
         [:span.shortcut-input-placeholder "Press a shortcut\u2026"])]
 
      ;; FEEDBACK BANNER (conditional)
-     (case rec-state
-       :conflict-cross
-       [:div.shortcut-feedback.shortcut-feedback--error
-        [:span "Used by "
-         [:span.shortcut-feedback-name (str "\u201c" (conflict-action-names key-conflicts) "\u201d")]]
-        (ui/tooltip
-         (shui/button {:variant :destructive
-                       :size :xs
-                       :on-click override-fn!}
-                      "Reassign")
-         "Remove from the other action and assign here")]
+     (let [undo-link
+           (when undo-snapshot
+             [:a.shortcut-feedback-action
+              {:on-click (fn []
+                           (execute-undo! undo-snapshot)
+                           (when-let [own (some #(when (= (:action-id %) k) %) (:entries undo-snapshot))]
+                             (set-current-binding! (:previous-binding own)))
+                           (set-undo-snapshot! nil)
+                           (set-rec-state! :idle))}
+              "Undo"])]
+       (case rec-state
+         :conflict-cross
+         [:div.shortcut-feedback.shortcut-feedback--error
+          [:span "Used by "
+           [:span.shortcut-feedback-name (str "\u201c" (conflict-action-names key-conflicts) "\u201d")]]
+          (ui/tooltip
+           (shui/button {:variant :destructive
+                         :size :xs
+                         :on-click override-fn!}
+                        "Reassign")
+           "Remove from the other action and assign here")]
 
-       :conflict-same
-       [:div.shortcut-feedback.shortcut-feedback--error
-        [:span "Already bound to this action"]]
+         :conflict-same
+         [:div.shortcut-feedback.shortcut-feedback--error
+          [:span "Already bound to this action"]]
 
-       :accepted
-       (cond
-         (:cross-context? accepted-info)
-         [:div.shortcut-feedback.shortcut-feedback--warning
-          [:span "Also used for "
-           [:span.shortcut-feedback-name
-            (str "\u201c" (:cross-action-name accepted-info) "\u201d")]
-           (when-let [ctx (:cross-context-label accepted-info)]
-             (str " in " ctx))]]
+         :accepted
+         (cond
+           (:cross-context? accepted-info)
+           [:div.shortcut-feedback.shortcut-feedback--warning
+            [:span "Also used for "
+             [:span.shortcut-feedback-name
+              (str "\u201c" (:cross-action-name accepted-info) "\u201d")]
+             (when-let [ctx (:cross-context-label accepted-info)]
+               (str " in " ctx))]]
 
-         (:from accepted-info)
-         [:div.shortcut-feedback.shortcut-feedback--success
-          [:span "Reassigned from "
-           [:span.shortcut-feedback-name (str "\u201c" (:from accepted-info) "\u201d")]]]
+           (:from accepted-info)
+           [:div.shortcut-feedback.shortcut-feedback--success
+            [:span "Reassigned from "
+             [:span.shortcut-feedback-name (str "\u201c" (:from accepted-info) "\u201d")]]
+            undo-link]
 
-         :else
-         [:div.shortcut-feedback.shortcut-feedback--success
-          [:span "Shortcut added"]])
+           :else
+           [:div.shortcut-feedback.shortcut-feedback--success
+            [:span "Shortcut added"]])
 
-       :esc-hint
-       [:div.shortcut-feedback.shortcut-feedback--muted
-        [:span "Esc is reserved"]]
+         :removed
+         [:div.shortcut-feedback.shortcut-feedback--muted
+          [:span "Shortcut removed"]
+          undo-link]
 
-       nil)
+         :reset
+         [:div.shortcut-feedback.shortcut-feedback--muted
+          [:span "Reset to default"]
+          undo-link]
+
+         :esc-hint
+         [:div.shortcut-feedback.shortcut-feedback--muted
+          [:span "Esc is reserved"]]
+
+         nil))
 
      ;; SEPARATOR + TOOLBAR
      (shui/separator)
      [:div.shortcut-toolbar
       [:div.shortcut-toolbar-left
        ;; Reset (only when changed from default)
-       (when (and (#{:idle :accepted} rec-state)
+       (when (and (#{:idle :accepted :removed} rec-state)
                   (not= current-binding binding))
          [:a.shortcut-toolbar-action
           {:on-click reset-fn!}
@@ -740,8 +741,8 @@
          [:span.shortcut-toolbar-hint
           "Reassign "
           (shui/shortcut (if util/mac? "meta+enter" "ctrl+enter") {:style :compact})])
-       ;; Remove hint (idle/accepted with bindings, or conflict states)
-       (when (or (and (#{:idle :accepted} rec-state) has-bindings?)
+       ;; Remove hint (idle/accepted/removed/reset with bindings, or conflict states)
+       (when (or (and (#{:idle :accepted :removed :reset} rec-state) has-bindings?)
                  (#{:conflict-cross :conflict-same} rec-state))
          [:span.shortcut-toolbar-hint
           "Remove "

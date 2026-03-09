@@ -247,12 +247,18 @@
     color: var(--rx-red-11, #dc2626);
     background-color: var(--rx-red-03-alpha, rgb(239 68 68 / 0.08));
   }
-  &--success { color: var(--rx-green-11, #16a34a); }
+  &--success {
+    color: var(--rx-green-11, #16a34a);
+    background-color: var(--rx-green-03-alpha, rgb(34 197 94 / 0.08));
+  }
   &--warning {
     color: var(--rx-amber-11, #b45309);
     background-color: var(--rx-amber-03-alpha, hsla(44, 100%, 50%, 0.1));
   }
-  &--muted { color: var(--rx-gray-09, var(--ls-secondary-text-color)); }
+  &--muted {
+    color: var(--rx-gray-09, var(--ls-secondary-text-color));
+    background-color: var(--rx-gray-03-alpha, rgba(0, 0, 0, 0.04));
+  }
 }
 
 .shortcut-feedback-name {
@@ -272,6 +278,14 @@
   @apply cursor-pointer font-medium whitespace-nowrap;
   color: var(--rx-red-11, #dc2626);
   &:hover { text-decoration: underline; }
+
+  .shortcut-feedback--muted & {
+    color: var(--rx-gray-11, var(--ls-secondary-text-color));
+  }
+
+  .shortcut-feedback--success & {
+    color: var(--rx-green-11, #16a34a);
+  }
 }
 
 /* Toolbar */
