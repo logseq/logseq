@@ -793,6 +793,38 @@
         (e2b-sandbox-host sandbox port))
       (p/resolved (sandbox/normalize-base-url cached)))))
 
+(defn- <e2b-ensure-bound-runtime-running!
+  [^js env runtime]
+  (let [sandbox-id (:sandbox-id runtime)
+        server-id (or (:server-id runtime) (:session-id runtime))
+        port (e2b-agent-port env runtime)
+        agent-token (e2b-agent-token env runtime)
+        backup-dir (or (:backup-dir runtime)
+                       (e2b-runtime-repo-dir runtime nil))]
+    (when-not (string? sandbox-id)
+      (throw (ex-info "missing sandbox-id on runtime"
+                      {:reason :missing-sandbox-id
+                       :runtime runtime})))
+    (p/let [sandbox (<e2b-connect-sandbox! env sandbox-id)
+            healthy? (<e2b-health-once! sandbox port agent-token)]
+      (if healthy?
+        {:sandbox sandbox
+         :base-url (e2b-sandbox-host sandbox port)}
+        (let [repo-cd (when (string? backup-dir)
+                        (str "cd '" (escape-shell-single backup-dir) "'; "))
+              bootstrap-cmd (str repo-cd
+                                 "nohup sandbox-agent server "
+                                 (if (string? agent-token)
+                                   (str "--token '" (escape-shell-single agent-token) "'")
+                                   "--no-token")
+                                 " --host 0.0.0.0 --port " port
+                                 " --no-telemetry >/tmp/sandbox-agent.log 2>&1 &")]
+          (p/let [_ (<e2b-run-shell! sandbox bootstrap-cmd)
+                  _ (<e2b-health! env sandbox port agent-token)]
+            {:sandbox sandbox
+             :base-url (e2b-sandbox-host sandbox port)
+             :server-id server-id}))))))
+
 (defn- <e2b-open-terminal!
   [^js env runtime request {:keys [cols rows]}]
   (let [sandbox-id (:sandbox-id runtime)
@@ -929,6 +961,8 @@
   (<snapshot-runtime! [this runtime opts])
   (<push-branch! [this runtime opts])
   (<terminate-runtime! [this runtime]))
+
+(declare provider-id resolve-provider)
 
 (defrecord LocalRunnerProvider [env]
   RuntimeProvider
@@ -1067,14 +1101,14 @@
 
   (<open-events-stream! [_ runtime]
     (let [agent-token (e2b-agent-token env runtime)]
-      (p/let [base-url (<e2b-runtime-base-url! env runtime)]
+      (p/let [{:keys [base-url]} (<e2b-ensure-bound-runtime-running! env runtime)]
         (sandbox/<open-events-stream base-url
                                      agent-token
                                      (or (:server-id runtime) (:session-id runtime))))))
 
   (<send-message! [_ runtime message]
     (let [agent-token (e2b-agent-token env runtime)]
-      (p/let [base-url (<e2b-runtime-base-url! env runtime)]
+      (p/let [{:keys [base-url]} (<e2b-ensure-bound-runtime-running! env runtime)]
         (sandbox/<send-message base-url
                                agent-token
                                (or (:server-id runtime) (:session-id runtime))
@@ -1082,7 +1116,8 @@
                                message))))
 
   (<open-terminal! [_ runtime request opts]
-    (<e2b-open-terminal! env runtime request opts))
+    (p/let [_ (<e2b-ensure-bound-runtime-running! env runtime)]
+      (<e2b-open-terminal! env runtime request opts)))
 
   (<snapshot-runtime! [_ runtime opts]
     (let [session-id (:session-id runtime)
@@ -1158,6 +1193,47 @@
         (p/catch
          (<e2b-pause-sandbox! env sandbox-id)
          (fn [_] nil))))))
+
+(defn <refresh-runtime-session!
+  [^js env runtime task]
+  (let [provider (resolve-provider env runtime)
+        provider-id' (provider-id provider)
+        payload (session-payload task)]
+    (case provider-id'
+      "e2b"
+      (let [agent-token (e2b-agent-token env runtime)
+            server-id (or (:server-id runtime) (:session-id runtime))
+            cwd (or (:backup-dir runtime)
+                    (e2b-runtime-repo-dir runtime task))]
+        (p/let [{:keys [base-url]} (<e2b-ensure-bound-runtime-running! env runtime)
+                response (sandbox/<create-session base-url
+                                                  agent-token
+                                                  server-id
+                                                  payload
+                                                  {:cwd cwd})]
+          (assoc runtime
+                 :base-url base-url
+                 :server-id (:server-id response)
+                 :session-id (:session-id response))))
+
+      "local-runner"
+      (let [base-url (local-runner-base-url task runtime)
+            agent-token (local-runner-token task runtime)
+            headers (local-runner-headers task runtime)
+            server-id (or (:server-id runtime) (:session-id runtime))]
+        (p/let [response (sandbox/<create-session base-url
+                                                  agent-token
+                                                  server-id
+                                                  payload
+                                                  {:headers headers
+                                                   :cwd (get-repo-dir server-id task "local-runner")})]
+          (assoc runtime
+                 :server-id (:server-id response)
+                 :session-id (:session-id response))))
+
+      (p/rejected
+       (ex-info "runtime provider does not support session refresh"
+                {:provider provider-id'})))))
 
 (defn provider-id [provider]
   (cond

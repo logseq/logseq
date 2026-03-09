@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [electron.ipc :as electron-ipc]
             [frontend.db :as db]
+            [frontend.handler.agent-cancel :as agent-cancel]
             [frontend.handler.db-based.sync :as db-sync]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
@@ -384,9 +385,6 @@
   (contains? #{"e2b"}
              (normalize-runtime-provider provider)))
 
-(defn- runtime-provider-snapshot-enabled? [provider]
-  (= "e2b" (normalize-runtime-provider provider)))
-
 (defn- event-runtime-provider [event]
   (when (= "session.provisioned" (:type event))
     (some-> (get-in event [:data :provider]) normalize-runtime-provider)))
@@ -412,25 +410,20 @@
                               first))]
     (runtime-provider-terminal-enabled? provider)))
 
-(defn session-snapshot-enabled?
-  [session]
-  (let [provider (or (normalize-runtime-provider (:runtime-provider session))
-                     (some->> (:events session)
-                              reverse
-                              (keep event-runtime-provider)
-                              first))]
-    (runtime-provider-snapshot-enabled? provider)))
-
 (defn- status->label [status-ident]
   (some-> (db/entity status-ident) :block/title))
 
 (defn- maybe-update-task-status!
   [block-uuid status]
+  (prn :debug :status status
+       :ident (get session-status->task-status status))
   (when-let [status-ident (get session-status->task-status status)]
     (when-let [block (db/entity [:block/uuid block-uuid])]
       (let [current (pu/get-block-property-value block :logseq.property/status)
             desired (status->label status-ident)]
         (when (and desired (not= current desired))
+          (when (= status-ident :logseq.property/status.canceled)
+            (agent-cancel/suppress-next-cancel! block-uuid))
           (property-handler/set-block-property! block-uuid :logseq.property/status status-ident))))))
 
 (defn- maybe-update-task-pr-url!
@@ -523,6 +516,15 @@
 (defn- append-events!
   [block-uuid events]
   (update-session! block-uuid #(merge-events % events)))
+
+(declare session-state)
+
+(defn- seen-event?
+  [block-uuid event]
+  (let [event-id (:event-id event)
+        event-ids (get-in (session-state block-uuid) [:event-ids])]
+    (and (string? event-id)
+         (contains? (or event-ids #{}) event-id))))
 
 (defn- parse-sse-frame [frame]
   (let [lines (string/split frame #"\n")
@@ -631,19 +633,20 @@
 
 (defn- handle-stream-event!
   [block-uuid event]
-  (append-events! block-uuid [event])
-  (when-let [provider (event-runtime-provider event)]
-    (update-session-state! block-uuid {:runtime-provider provider
-                                       :terminal-enabled (runtime-provider-terminal-enabled? provider)}))
-  (let [runtime-provider (or (event-runtime-provider event)
-                             (:runtime-provider (session-state block-uuid)))]
-    (when-let [checkpoint (event->sandbox-checkpoint event runtime-provider)]
-      (maybe-store-task-sandbox-checkpoint! block-uuid checkpoint)))
-  (when-let [status (event->status event)]
-    (update-session-state! block-uuid {:status status})
-    (maybe-update-task-status! block-uuid status)
-    (when (terminal-status? status)
-      (stop-session-stream! block-uuid))))
+  (when-not (seen-event? block-uuid event)
+    (append-events! block-uuid [event])
+    (when-let [provider (event-runtime-provider event)]
+      (update-session-state! block-uuid {:runtime-provider provider
+                                         :terminal-enabled (runtime-provider-terminal-enabled? provider)}))
+    (let [runtime-provider (or (event-runtime-provider event)
+                               (:runtime-provider (session-state block-uuid)))]
+      (when-let [checkpoint (event->sandbox-checkpoint event runtime-provider)]
+        (maybe-store-task-sandbox-checkpoint! block-uuid checkpoint)))
+    (when-let [status (event->status event)]
+      (update-session-state! block-uuid {:status status})
+      (maybe-update-task-status! block-uuid status)
+      (when (terminal-status? status)
+        (stop-session-stream! block-uuid)))))
 
 (defn- <consume-sse-stream!
   [block-uuid resp]
@@ -673,7 +676,13 @@
             (stream-controller-active? (:stream-controller session)))
       (p/resolved nil)
       (when (string? stream-url)
-        (let [controller (js/AbortController.)
+        (let [stream-url (if-let [since-ts (when (number? (:last-event-ts session))
+                                             (:last-event-ts session))]
+                           (let [url (js/URL. stream-url)]
+                             (.set (.-searchParams url) "since" (str since-ts))
+                             (.toString url))
+                           stream-url)
+              controller (js/AbortController.)
               headers (auth-headers)
               opts (cond-> {:method "GET"
                             :signal (.-signal controller)}
@@ -726,8 +735,10 @@
         (do
           (maybe-store-task-session-id! block-uuid (:session-id session))
           (when-not (:streaming? session)
-            (<connect-session-stream! block-uuid (or (:stream-url session)
-                                                     (session-stream-url base session-id))))
+            (-> (<fetch-events! block)
+                (p/then (fn [_]
+                          (<connect-session-stream! block-uuid (or (:stream-url (session-state block-uuid))
+                                                                   (session-stream-url base session-id)))))))
           (p/resolved session))
 
         :else
@@ -746,7 +757,9 @@
                                                    :loading? false})
                 (maybe-store-task-session-id! block-uuid session-id')
                 (maybe-update-task-status! block-uuid (:status resp))
-                (<connect-session-stream! block-uuid stream-url)
+                (<fetch-events! block)
+                (<connect-session-stream! block-uuid (or (:stream-url (session-state block-uuid))
+                                                         stream-url))
                 resp)
               (p/catch (fn [error]
                          (update-session-state! block-uuid {:loading? false})
@@ -754,52 +767,6 @@
                            (when-not (= status 404)
                              (log/error :agent/ensure-session-failed error)))
                          nil))))))))
-
-(defn <cancel-session!
-  [block]
-  (let [base (db-sync/http-base)
-        block-uuid (:block/uuid block)
-        session (session-state block-uuid)
-        session-id (or (:session-id session)
-                       (task-session-id block)
-                       (some-> block-uuid str))]
-    (cond
-      (not (string? base))
-      (p/resolved nil)
-
-      (not (string? session-id))
-      (p/resolved nil)
-
-      :else
-      (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)]
-        (-> (db-sync/fetch-json (str base "/sessions/" session-id "/cancel")
-                                {:method "POST"
-                                 :headers {"content-type" "application/json"}}
-                                {:response-schema :sessions/cancel})
-            (p/then (fn [resp]
-                      (update-session-state! block-uuid {:status "canceled"})
-                      (stop-session-stream! block-uuid)
-                      resp))
-            (p/catch (fn [error]
-                       (when-not (= 404 (:status (ex-data error)))
-                         (log/error :agent/cancel-session-failed error))
-                       nil)))))))
-
-(defn- task-status-canceled?
-  [block]
-  (let [status (pu/get-block-property-value block :logseq.property/status)]
-    (or (= :logseq.property/status.canceled status)
-        (= :logseq.property/status.canceled (:db/ident status)))))
-
-(defn <cancel-session-if-task-canceled!
-  [block]
-  (let [block-uuid (:block/uuid block)
-        session (session-state block-uuid)
-        session-id (or (:session-id session)
-                       (task-session-id block))]
-    (when (and (task-status-canceled? block)
-               (string? session-id))
-      (<cancel-session! block))))
 
 (defn <start-session!
   ([block]

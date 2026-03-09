@@ -11,6 +11,21 @@
   (some-> block-uuid str))
 
 (def ^:private canceled-status-ident :logseq.property/status.canceled)
+(defonce ^:private suppressed-block-uuids* (atom #{}))
+
+(defn suppress-next-cancel!
+  [block-uuid]
+  (when block-uuid
+    (swap! suppressed-block-uuids* conj (str block-uuid))))
+
+(defn- consume-suppressed-cancel?
+  [block-uuid]
+  (let [k (some-> block-uuid str)]
+    (when (string? k)
+      (let [suppressed? (contains? @suppressed-block-uuids* k)]
+        (when suppressed?
+          (swap! suppressed-block-uuids* disj k))
+        suppressed?))))
 
 (defn- stop-session-stream!
   [block-uuid]
@@ -58,13 +73,6 @@
        (= :logseq.property/status (:a datom))
        (canceled-status-value? (:v datom) canceled-status-id)))
 
-(defn maybe-cancel-session-on-status-change!
-  [block property-id property-value]
-  (let [canceled-status-id (:db/id (db/entity canceled-status-ident))]
-    (when (and (= :logseq.property/status property-id)
-               (canceled-status-value? property-value canceled-status-id))
-      (<cancel-session-by-block-uuid! (:block/uuid block)))))
-
 (defn maybe-cancel-sessions-on-db-change!
   [tx-data]
   (if (seq tx-data)
@@ -73,6 +81,7 @@
                                (filter #(status-canceled-datom? % canceled-status-id))
                                (keep (fn [datom]
                                        (:block/uuid (db/entity (:e datom)))))
+                               (remove consume-suppressed-cancel?)
                                distinct
                                (map <cancel-session-by-block-uuid!)
                                (remove nil?)

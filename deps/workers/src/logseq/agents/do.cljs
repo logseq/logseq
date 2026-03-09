@@ -273,6 +273,48 @@
 (defn- session-runtime-provider [session]
   (some-> (get-in session [:runtime :provider]) str string/lower-case))
 
+(defn- sandbox-bound-runtime?
+  [runtime]
+  (and (map? runtime)
+       (= "e2b" (some-> (:provider runtime) str string/lower-case))
+       (string? (:sandbox-id runtime))))
+
+(defn- missing-bound-sandbox-error?
+  [error runtime]
+  (let [reason (some-> error ex-data :reason)
+        sandbox-id (some-> runtime :sandbox-id str string/trim not-empty)
+        message (-> (str (or (some-> error ex-message) error))
+                    string/lower-case)]
+    (or (= :missing-sandbox-id reason)
+        (= "missing-sandbox-id" reason)
+        (and (string? sandbox-id)
+             (or (and (string/includes? message "sandbox")
+                      (or (string/includes? message "not found")
+                          (string/includes? message "notfound")
+                          (string/includes? message "no such")))
+                 (and (string/includes? message sandbox-id)
+                      (or (string/includes? message "not found")
+                          (string/includes? message "notfound")
+                          (string/includes? message "no such"))))))))
+
+(defn- <cancel-bound-runtime-session!
+  [^js self current-session runtime reason error]
+  (prn :debug :<cancel-bound-runtime-session! :reason reason
+       :error error)
+  (js/console.trace)
+  (p/let [latest-session (<get-session self)]
+    (when (and (map? latest-session)
+               (= (:id current-session) (:id latest-session))
+               (map? (:runtime latest-session)))
+      (p/let [_ (<append-event! self {:type "session.canceled"
+                                      :data {:by "system"
+                                             :reason reason
+                                             :runtime-session-id (:session-id runtime)
+                                             :sandbox-id (:sandbox-id runtime)
+                                             :error (str error)}
+                                      :ts (common/now-ms)})]
+        (<save-session! self (assoc latest-session :runtime nil))))))
+
 (defn- session-terminal-enabled? [session]
   (runtime-provider/runtime-terminal-supported? (:runtime session)))
 
@@ -525,11 +567,9 @@
                                                           :sandbox-id (:sandbox-id runtime)
                                                           :error error})
                                               false)))
-                   latest-session (<get-session self)]
-             (when (and terminated?
-                        (map? latest-session)
-                        (map? (:runtime latest-session)))
-               (<save-session! self (assoc latest-session :runtime nil))))))))))
+                   _latest-session (<get-session self)]
+             (when terminated?
+               true))))))))
 
 (defn- <checkpoint-and-terminate-completed-runtime!
   [^js self session-id]
@@ -550,12 +590,9 @@
                                                        :sandbox-id (:sandbox-id runtime)
                                                        :error error})
                                            false)))
-                latest-session (<get-session self)]
-          (when (and terminated?
-                     (map? latest-session)
-                     (= session-id (:id latest-session))
-                     (map? (:runtime latest-session)))
-            (<save-session! self (assoc latest-session :runtime nil))))))))
+                _latest-session (<get-session self)]
+          (when terminated?
+            true))))))
 
 (defn- <terminate-runtime-on-status!
   [^js self session-id status]
@@ -575,12 +612,9 @@
                                                        :sandbox-id (:sandbox-id runtime)
                                                        :error error})
                                            false)))
-                latest-session (<get-session self)]
-          (when (and terminated?
-                     (map? latest-session)
-                     (= session-id (:id latest-session))
-                     (map? (:runtime latest-session)))
-            (<save-session! self (assoc latest-session :runtime nil))))))))
+                _latest-session (<get-session self)]
+          (when terminated?
+            true))))))
 
 (defn- parse-sse-data [frame]
   (let [lines (string/split frame #"\n")
@@ -659,6 +693,7 @@
                                                    runtime
                                                    #(resolve-ready! :ready))
                           (.catch (fn [error]
+                                    (js/console.error error)
                                     (resolve-ready! :error)
                                     (p/let [latest-session (<get-session self)
                                             latest-runtime-session-id (some-> latest-session :runtime :session-id)
@@ -667,15 +702,18 @@
                                                                (= (:session-id runtime) latest-runtime-session-id))
                                             session-terminal? (terminal-status? (:status latest-session))]
                                       (if (and same-runtime? (not session-terminal?))
-                                        (do
-                                          (log/error :agent/runtime-events-stream-error
-                                                     {:session-id session-id
-                                                      :runtime-session-id (:session-id runtime)
-                                                      :error error})
-                                          (<append-event! self {:type "agent.runtime.error"
-                                                                :data {:session-id session-id
-                                                                       :message (str error)}
-                                                                :ts (common/now-ms)}))
+                                        (if (and (sandbox-bound-runtime? runtime)
+                                                 (missing-bound-sandbox-error? error runtime))
+                                          (<cancel-bound-runtime-session! self latest-session runtime "sandbox-missing" error)
+                                          (do
+                                            (log/error :agent/runtime-events-stream-error
+                                                       {:session-id session-id
+                                                        :runtime-session-id (:session-id runtime)
+                                                        :error error})
+                                            (<append-event! self {:type "agent.runtime.error"
+                                                                  :data {:session-id session-id
+                                                                         :message (str error)}
+                                                                  :ts (common/now-ms)})))
                                         (do
                                           (log/info :agent/runtime-events-stream-closed
                                                     {:session-id session-id
@@ -771,13 +809,28 @@
                                 latest-runtime-id (some-> (:session-id latest-runtime) str)
                                 same-runtime? (and (string? failed-runtime-id)
                                                    (= failed-runtime-id latest-runtime-id))]
-                            (p/let [_ (when same-runtime?
-                                        (<save-session! self (assoc latest-session :runtime nil)))
-                                    retry-session (if same-runtime?
-                                                    (<get-session self)
-                                                    latest-session)
-                                    session-with-runtime (<ensure-runtime-for-session! self retry-session)]
-                              (send-once! session-with-runtime))))))]
+                            (cond
+                              (and same-runtime?
+                                   (sandbox-bound-runtime? latest-runtime)
+                                   (missing-bound-sandbox-error? error latest-runtime))
+                              (<cancel-bound-runtime-session! self latest-session latest-runtime "sandbox-missing" error)
+
+                              (and same-runtime? (map? latest-runtime))
+                              (p/let [refreshed-runtime (runtime-provider/<refresh-runtime-session! (.-env self)
+                                                                                                    latest-runtime
+                                                                                                    (:task latest-session))
+                                      _ (<save-session! self (assoc latest-session :runtime refreshed-runtime))
+                                      refreshed-session (<get-session self)]
+                                (send-once! refreshed-session))
+
+                              :else
+                              (p/let [_ (when same-runtime?
+                                          (<save-session! self (assoc latest-session :runtime nil)))
+                                      retry-session (if same-runtime?
+                                                      (<get-session self)
+                                                      latest-session)
+                                      session-with-runtime (<ensure-runtime-for-session! self retry-session)]
+                                (send-once! session-with-runtime)))))))]
     (-> (send-once! current-session)
         (p/catch retry-send!)
         (p/catch (fn [error]
@@ -1360,10 +1413,7 @@
                                                       {:by user-id
                                                        :reason "cancel"}))
                   _ (<terminate-runtime! self runtime)
-                  latest-session (<get-session self)
-                  _ (when (and (map? latest-session)
-                               (map? (:runtime latest-session)))
-                      (<save-session! self (assoc latest-session :runtime nil)))]
+                  _latest-session (<get-session self)]
             (if (= (:error res) :missing-session)
               (http/not-found)
               (http/json-response :sessions/cancel {:ok true}))))))))
@@ -1376,16 +1426,17 @@
               runtime (:runtime session-with-runtime)]
         (if-not (runtime-ready? runtime)
           0
-          (let [[orders next-session] (session/drain-orders session-with-runtime)
-                provider (runtime-provider/resolve-provider (.-env self) runtime)]
+          (let [[orders next-session] (session/drain-orders session-with-runtime)]
             (p/let [_ (<save-session! self next-session)
                     _ (start-runtime-events-stream-background! self (:id session-with-runtime) runtime)
                     _ (p/all
                        (map (fn [order]
-                              (runtime-provider/<send-message! provider
-                                                               runtime
-                                                               {:message (:message order)
-                                                                :kind (:kind order)}))
+                              (send-runtime-message! self
+                                                     next-session
+                                                     runtime
+                                                     nil
+                                                     (:message order)
+                                                     (:kind order)))
                             orders))]
               (count orders))))))))
 
@@ -1416,8 +1467,12 @@
   [v]
   (js/Promise.resolve v))
 
+(declare parse-int)
+
 (defn- handle-stream [^js self request]
-  (let [streams (.-streams self)
+  (let [url (platform/request-url request)
+        since-ts (parse-int (.get (.-searchParams url) "since"))
+        streams (.-streams self)
         stream (js/TransformStream.)
         writer (.getWriter (.-writable stream))
         stream-id (str (random-uuid))
@@ -1433,7 +1488,8 @@
     ;; IMPORTANT: don't block returning the Response; write the initial backlog async
     (js/queueMicrotask
      (fn []
-       (p/let [events (<get-events self)]
+       (p/let [events (<get-events self)
+               events (session/filter-events events {:since-ts since-ts})]
          (doseq [event events]
            ;; writer.write returns a promise; wait so order is preserved
            (p/let [_ (->promise (.write writer (sse-bytes event)))]

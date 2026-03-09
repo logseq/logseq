@@ -128,13 +128,22 @@
 
 (defn acp-envelope->event [payload]
   (let [method (:method payload)
-        params (:params payload)]
+        params (:params payload)
+        runtime-event-type (:type payload)
+        runtime-payload (:payload payload)]
     (cond
       (= "session/update" method)
       {:type "agent.runtime"
        :data {:method method
               :session-id (:sessionId params)
               :update (:update params)}}
+
+      (and (= "event_msg" runtime-event-type)
+           (= "task_complete" (:type runtime-payload)))
+      {:type "session.completed"
+       :data {:turn-id (:turn_id runtime-payload)
+              :last-agent-message (:last_agent_message runtime-payload)
+              :source "task_complete"}}
 
       :else nil)))
 
