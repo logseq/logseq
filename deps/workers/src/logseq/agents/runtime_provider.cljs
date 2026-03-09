@@ -433,10 +433,9 @@
   [^js env]
   (parse-int (env-str env "E2B_HEALTH_INTERVAL_MS") 300))
 
-;; default to 1 hour
 (defn- e2b-sandbox-timeout-ms
   [^js env]
-  (parse-int (env-str env "E2B_SANDBOX_TIMEOUT_MS") (* 60 60 1000)))
+  (parse-int (env-str env "E2B_SANDBOX_TIMEOUT_MS") (* 10 60 1000)))
 
 (defn- e2b-api-opts
   [^js env]
