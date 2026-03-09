@@ -32,7 +32,7 @@
    :data {:status :error
           :checks checks}})
 
-(defn- check-db-worker-script
+(defn check-db-worker-script
   [action]
   (let [path (or (:script-path action)
                  (cli-server/db-worker-runtime-script-path))]
