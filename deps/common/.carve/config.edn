@@ -8,6 +8,7 @@
                   logseq.common.util.date-time
                   logseq.common.date
                   logseq.common.util.macro
+                  logseq.common.cognito-config
                   logseq.common.config
                   logseq.common.defkeywords]
  :report {:format :ignore}}
