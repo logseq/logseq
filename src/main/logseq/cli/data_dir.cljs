@@ -1,21 +1,12 @@
 (ns logseq.cli.data-dir
   "Data-dir validation and normalization for the CLI and db-worker-node."
   (:require ["fs" :as fs]
-            ["os" :as os]
             ["path" :as node-path]
-            [clojure.string :as string]))
-
-(def ^:private default-data-dir "~/logseq/graphs")
-
-(defn- expand-home
-  [path]
-  (if (and (seq path) (string/starts-with? path "~"))
-    (node-path/join (.homedir os) (subs path 1))
-    path))
+            [logseq.common.graph :as common-graph]))
 
 (defn normalize-data-dir
   [path]
-  (node-path/resolve (expand-home (or path default-data-dir))))
+  (node-path/resolve (common-graph/expand-home (or path (common-graph/get-default-graphs-dir)))))
 
 (defn ensure-data-dir!
   [path]

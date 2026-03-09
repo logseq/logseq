@@ -1,8 +1,10 @@
 (ns ^:node-only logseq.common.graph
   "This ns provides common fns for a graph directory and only runs in a node environment"
   (:require ["fs" :as fs]
+            ["os" :as os]
             ["path" :as node-path]
             [clojure.string :as string]
+            [logseq.common.config :as common-config]
             [logseq.common.path :as path]))
 
 (def ^:private win32?
@@ -97,3 +99,14 @@ Rules:
   (->> (readdir graph-dir)
        (remove (partial ignored-path? graph-dir))
        (filter #(contains? allowed-formats (get-ext %)))))
+
+(defn get-default-graphs-dir
+  []
+  common-config/default-graphs-dir)
+
+(defn expand-home
+  "Expands path if it starts with '~'"
+  [path]
+  (if (and (seq path) (string/starts-with? path "~"))
+    (node-path/join (os/homedir) (subs path 1))
+    path))

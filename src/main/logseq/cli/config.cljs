@@ -5,7 +5,8 @@
             [goog.object :as gobj]
             ["fs" :as fs]
             ["os" :as os]
-            ["path" :as node-path]))
+            ["path" :as node-path]
+            [logseq.common.graph :as common-graph]))
 
 (defn- parse-int
   [value]
@@ -98,7 +99,7 @@
                   :login-timeout-ms 300000
                   :logout-timeout-ms 120000
                   :output-format nil
-                  :data-dir "~/logseq/graphs"
+                  :data-dir (common-graph/get-default-graphs-dir)
                   :config-path (default-config-path)}
         env (env-config)
         config-path (or (:config-path opts)

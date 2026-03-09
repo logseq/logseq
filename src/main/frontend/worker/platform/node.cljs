@@ -11,6 +11,7 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
+            [logseq.common.graph :as common-graph]
             [promesa.core :as p]))
 
 (defn- resolve-database-sync-ctor
@@ -299,7 +300,7 @@
 
 (defn node-platform
   [{:keys [data-dir event-fn write-guard-fn owner-source]}]
-  (let [data-dir (expand-home (or data-dir "~/logseq/graphs"))
+  (let [data-dir (expand-home (or data-dir (common-graph/get-default-graphs-dir)))
         owner-source (db-lock/normalize-owner-source owner-source)
         kv (kv-store data-dir)]
     (p/do!
