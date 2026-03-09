@@ -4,10 +4,11 @@
             ["os" :as os]
             ["path" :as node-path]
             [clojure.string :as string]
-            [frontend.worker.graph-dir :as graph-dir]
             [frontend.worker-common.util :as worker-util]
+            [frontend.worker.graph-dir :as graph-dir]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
+            [logseq.common.graph :as common-graph]
             [promesa.core :as p]))
 
 (defn- expand-home
@@ -18,7 +19,7 @@
 
 (defn resolve-data-dir
   [data-dir]
-  (expand-home (or data-dir "~/logseq/graphs")))
+  (expand-home (or data-dir common-graph/get-default-graphs-dir)))
 
 (defn repo->graph-dir-key
   [repo]

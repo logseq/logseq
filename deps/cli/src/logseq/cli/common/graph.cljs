@@ -1,8 +1,6 @@
 (ns ^:node-only logseq.cli.common.graph
   "Graph related fns shared between CLI and electron"
   (:require ["fs-extra" :as fs-extra]
-            ["os" :as os]
-            ["path" :as node-path]
             [clojure.string :as string]
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]))
@@ -17,7 +15,7 @@
 (defn get-db-graphs-dir
   "Directory where DB graphs are stored"
   []
-  (node-path/join (os/homedir) "logseq" "graphs"))
+  (common-graph/expand-home (common-graph/get-default-graphs-dir)))
 
 (defn get-db-based-graphs
   []

@@ -10,6 +10,7 @@
             [frontend.worker.state :as worker-state]
             [lambdaisland.glogi :as log]
             [logseq.cli.style :as style]
+            [logseq.common.config :as common-config]
             [logseq.cli.data-dir :as data-dir]
             [logseq.db :as ldb]
             [promesa.core :as p]))
@@ -282,7 +283,7 @@
 (defn- show-help!
   []
   (println (str (style/bold "db-worker-node") " " (style/bold "options") ":"))
-  (println (str "  " (style/bold "--data-dir") " <path>    (default ~/logseq/graphs)"))
+  (println (str "  " (style/bold "--data-dir") " <path>    (default " common-config/default-graphs-dir ")"))
   (println (str "  " (style/bold "--repo") " <name>        (required)"))
   (println (str "  " (style/bold "--create-empty-db") "  (start with empty initial datoms)"))
   (println (str "  " (style/bold "--log-level") " <level>  (default info)"))
