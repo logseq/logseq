@@ -2511,38 +2511,39 @@
                                          {:align :end}))}
           (clock/seconds->days:hours:minutes:seconds time-spent))]))))
 
-(rum/defc task-agent-session-cp < rum/reactive
+(rum/defc task-agent-session-cp
   [block]
-  (when (ldb/class-instance? (db/entity :logseq.class/Task) block)
-    (let [sessions (state/sub :agent/sessions)
-          session (get sessions (str (:block/uuid block)))
-          status (:status session)
-          runnable? (agent-handler/task-runnable? block)
-          running? (contains? #{"running" "paused"} status)
-          session-started? (boolean (:session-id session))
-          session-created? (or session-started?
-                               (agent-handler/task-session-created? block))
-          btn-title (if runnable?
-                      (if session-created? "Open chat" "Run agent")
-                      "Set Project + Agent")]
-      [:div.flex.flex-row.items-center.gap-1
-       (shui/button
-        {:variant :ghost
-         :size :sm
-         :class "text-xs h-6 !px-2"
-         :title btn-title
-         :disabled (not runnable?)
-         :on-click (fn [e]
-                     (util/stop e)
-                     (p/do!
-                      ;; Ensure project is loaded
-                      (db-async/<get-block (state/get-current-repo) (:db/id (:logseq.property/project block)))
-                      (let [block' (db/entity (:db/id block))]
-                        (agent-chat/open-agent-chat-dialog! block'))))}
-        (cond
-          running? "Running"
-          session-created? "Thread"
-          :else "Run"))])))
+  (let [task? (ldb/class-instance? (db/entity :logseq.class/Task) block)
+        [sessions] (hooks/use-atom (:agent/sessions @state/state))
+        runnable? (when task? (agent-handler/task-runnable? block))]
+    (when task?
+      (let [session (get sessions (str (:block/uuid block)))
+            status (:status session)
+            running? (contains? #{"running" "paused"} status)
+            session-started? (boolean (:session-id session))
+            session-created? (or session-started?
+                                 (agent-handler/task-session-created? block))
+            btn-title (if runnable?
+                        (if session-created? "Open chat" "Run agent")
+                        "Set Project + Agent")]
+        [:div.flex.flex-row.items-center.gap-1
+         (shui/button
+          {:variant :ghost
+           :size :sm
+           :class "text-xs h-6 !px-2"
+           :title btn-title
+           :disabled (not runnable?)
+           :on-click (fn [e]
+                       (util/stop e)
+                       (p/do!
+                        ;; Ensure project is loaded
+                        (db-async/<get-block (state/get-current-repo) (:db/id (:logseq.property/project block)))
+                        (let [block' (db/entity (:db/id block))]
+                          (agent-chat/open-agent-chat-dialog! block'))))}
+          (cond
+            running? "Running"
+            session-created? "Thread"
+            :else "Run"))]))))
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
   [config {:block/keys [uuid] :as block} edit-input-id block-id *show-query?]

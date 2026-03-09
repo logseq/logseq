@@ -47,4 +47,9 @@
                                      :output-to "worker/dist/agents-e2b-runtime-provider-test.js"
                                      :ns-regexp "logseq\\.agents\\.e2b-runtime-provider-test$"
                                      :devtools {:enabled false}
-                                     :main logseq.agents.e2b-runtime-provider-test-runner/main}}}
+                                     :main logseq.agents.e2b-runtime-provider-test-runner/main}
+  :agents-m25-managed-auth-test {:target :node-test
+                                 :output-to "worker/dist/agents-m25-managed-auth-test.js"
+                                 :ns-regexp "logseq\\.agents\\.m25-managed-auth-test$"
+                                 :devtools {:enabled false}
+                                 :main logseq.agents.m25-managed-auth-test-runner/main}}}

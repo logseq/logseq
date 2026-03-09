@@ -1,6 +1,7 @@
 (ns frontend.handler.agent
   "Agent sessions for tasks."
   (:require [clojure.string :as string]
+            [electron.ipc :as electron-ipc]
             [frontend.db :as db]
             [frontend.handler.db-based.sync :as db-sync]
             [frontend.handler.editor :as editor-handler]
@@ -17,7 +18,6 @@
             [promesa.core :as p]))
 
 (def ^:private invalid-coerce ::invalid-coerce)
-
 (defn- coerce
   [coercer value context]
   (try
@@ -37,6 +37,8 @@
   (when (string? value)
     (let [value (string/trim value)]
       (when-not (string/blank? value) value))))
+
+(declare <start-session!)
 
 (def ^:private task-sandbox-checkpoint-property :logseq.property/sandbox-checkpoint)
 (def ^:private task-session-id-property :logseq.property/agent-session-id)
@@ -75,6 +77,10 @@
       (string? provider) (assoc :provider provider)
       (string? api-token) (assoc :api-token api-token)
       (string? auth-json) (assoc :auth-json auth-json))))
+
+(defn- codex-agent?
+  [agent]
+  (= "codex" (some-> (:provider agent) blank->nil string/lower-case)))
 
 (defn- project-config
   ([project-page]
@@ -159,6 +165,55 @@
          project
          agent)))
 
+(defn managed-auth-enabled-task?
+  [block]
+  (let [{:keys [agent]} (task-context block)]
+    (and (map? agent)
+         (codex-agent? agent))))
+
+(defn- login-required-error?
+  [error]
+  (let [status (:status (ex-data error))
+        message (some-> (ex-data error) :body :error blank->nil)]
+    (and (= 401 status)
+         (contains? #{"chatgpt login required"
+                      "chatgpt login expired, reconnect required"}
+                    message))))
+
+(defn- start-session-error-message
+  [error]
+  (or (some-> (ex-data error) :body :error)
+      (some-> error ex-message)
+      "Failed to start agent session."))
+
+(defn- <start-managed-auth-login!
+  [block opts]
+  (let [base (db-sync/http-base)]
+    (cond
+      (not util/electron?)
+      (do
+        (notification/show! "ChatGPT login is only supported in Electron right now." :warning false)
+        (p/resolved nil))
+
+      (not (string? base))
+      (do
+        (notification/show! "DB sync is not configured." :error false)
+        (p/resolved nil))
+
+      :else
+      (-> (electron-ipc/ipc :openai/authenticate)
+          (p/then (fn [credentials]
+                    (db-sync/fetch-json (str base "/auth/chatgpt/import")
+                                        {:method "POST"
+                                         :headers {"content-type" "application/json"}
+                                         :body (js/JSON.stringify (clj->js credentials))}
+                                        {:response-schema :auth.chatgpt/import})))
+          (p/then (fn [_]
+                    (<start-session! block (assoc opts :managed-auth/skip-login-redirect? true))))
+          (p/catch (fn [error]
+                     (notification/show! (start-session-error-message error) :error false)
+                     nil))))))
+
 (defn project-repo-url
   [block]
   (some-> block
@@ -188,12 +243,6 @@
   (some-> (when (string? text)
             (re-find #"https?://[^\s)\]}]+" text))
           (string/replace #"[,.;:!?]+$" "")))
-
-(defn- start-session-error-message
-  [error]
-  (or (some-> (ex-data error) :body :error)
-      (some-> error ex-message)
-      "Failed to start agent session."))
 
 (defn- start-session-install-url
   [error]
@@ -808,12 +857,19 @@
                  (<connect-session-stream! block-uuid stream-url)
                  resp)
                (p/catch (fn [error]
-                          (if (= 412 (:status (ex-data error)))
+                          (cond
+                            (and (managed-auth-enabled-task? block)
+                                 (not (:managed-auth/skip-login-redirect? opts))
+                                 (login-required-error? error))
+                            (<start-managed-auth-login! block opts)
+
+                            (= 412 (:status (ex-data error)))
                             (show-github-install-required-notification!
                              error
                              (fn []
                                (-> (<start-session! block opts)
                                    (p/catch (fn [_] nil)))))
+                            :else
                             (notification/show! (start-session-error-message error) :error false))
                           nil)))))))))
 

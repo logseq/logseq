@@ -1,5 +1,7 @@
 (ns logseq.agents.handler
-  (:require [lambdaisland.glogi :as log]
+  (:require [clojure.string :as string]
+            [lambdaisland.glogi :as log]
+            [logseq.agents.managed-auth :as managed-auth]
             [logseq.agents.request :as agent-request]
             [logseq.agents.routes :as routes]
             [logseq.agents.runner-store :as runner-store]
@@ -41,6 +43,48 @@
   [claims]
   (aget claims "sub"))
 
+(defn- codex-agent?
+  [agent]
+  (cond
+    (string? agent)
+    (= "codex" (string/lower-case agent))
+
+    (map? agent)
+    (= "codex" (some-> (:provider agent) str string/lower-case))
+
+    :else
+    false))
+
+(defn- agent-auth-present?
+  [agent]
+  (and (map? agent)
+       (or (string? (:api-token agent))
+           (string? (:auth-json agent))
+           (map? (:managed-auth agent)))))
+
+(defn- <inject-managed-auth
+  [env user-id body]
+  (let [agent (:agent body)]
+    (if (or (not (string? user-id))
+            (not (codex-agent? agent))
+            (agent-auth-present? agent))
+      (p/resolved body)
+      (p/let [managed-auth (managed-auth/<get-active-managed-auth-for-user! env user-id)]
+        (cond
+          (and (map? managed-auth)
+               (= "valid" (:auth-state managed-auth)))
+          (if (map? agent)
+            (assoc-in body [:agent :managed-auth] managed-auth)
+            (assoc body :agent {:provider "codex"
+                                :managed-auth managed-auth}))
+
+          (and (map? managed-auth)
+               (= "expired" (:auth-state managed-auth)))
+          ::managed-auth-expired
+
+          :else
+          ::managed-auth-missing)))))
+
 (defn- runner-response
   [runner]
   (select-keys runner
@@ -77,29 +121,70 @@
       (.fetch stub forwarded-request))))
 
 (defn- handle-create [{:keys [env request url claims]}]
-  (.then (common/read-json request)
-         (fn [result]
-           (if (nil? result)
-             (http/bad-request "missing body")
-             (let [body (js->clj result :keywordize-keys true)
-                   body (http/coerce-http-request :sessions/create body)
-                   session-id (:session-id body)]
-               (cond
-                 (nil? body)
-                 (http/bad-request "invalid body")
+  (p/let [result (common/read-json request)]
+    (if (nil? result)
+      (http/bad-request "missing body")
+      (let [body (js->clj result :keywordize-keys true)
+            body (http/coerce-http-request :sessions/create body)
+            session-id (:session-id body)
+            user-id (claims-user-id claims)]
+        (cond
+          (nil? body)
+          (http/bad-request "invalid body")
 
-                 (not (string? session-id))
-                 (http/bad-request "invalid session id")
+          (not (string? session-id))
+          (http/bad-request "invalid session id")
 
-                 :else
-                 (if-let [^js stub (session-stub env session-id)]
-                   (let [headers (base-headers request claims)
-                         _ (.set headers "x-stream-base" (.-origin url))
-                         task (agent-request/normalize-session-create body)
-                         body-json (js/JSON.stringify (clj->js task))
-                         do-url (str (.-origin url) "/__session__/init")]
-                     (forward-request stub do-url "POST" headers body-json))
-                   (http/error-response "server error" 500))))))))
+          :else
+          (p/let [body' (<inject-managed-auth env user-id body)]
+            (cond
+              (= ::managed-auth-missing body')
+              (http/error-response "chatgpt login required" 401)
+
+              (= ::managed-auth-expired body')
+              (http/error-response "chatgpt login expired, reconnect required" 401)
+
+              :else
+              (if-let [^js stub (session-stub env session-id)]
+                (let [headers (base-headers request claims)
+                      _ (.set headers "x-stream-base" (.-origin url))
+                      task (agent-request/normalize-session-create body')
+                      body-json (js/JSON.stringify (clj->js task))
+                      do-url (str (.-origin url) "/__session__/init")]
+                  (forward-request stub do-url "POST" headers body-json))
+                (http/error-response "server error" 500)))))))))
+
+(defn- handle-auth-status [{:keys [env claims]}]
+  (let [user-id (claims-user-id claims)]
+    (if-not (string? user-id)
+      (http/unauthorized)
+      (p/let [managed-auth (managed-auth/<get-active-managed-auth-for-user! env user-id)]
+        (http/json-response :auth.chatgpt/status
+                            {:managed-auth (some-> managed-auth
+                                                   (dissoc :runtime-auth-payload))})))))
+
+(defn- handle-auth-import [{:keys [env request claims]}]
+  (let [user-id (claims-user-id claims)]
+    (if-not (string? user-id)
+      (http/unauthorized)
+      (.then (common/read-json request)
+             (fn [result]
+               (if (nil? result)
+                 (http/bad-request "missing body")
+                 (let [body (js->clj result :keywordize-keys true)
+                       body (http/coerce-http-request :auth.chatgpt/import body)]
+                   (if (nil? body)
+                     (http/bad-request "invalid body")
+                     (-> (managed-auth/<import-credentials! env user-id body)
+                         (.then (fn [managed-auth]
+                                  (http/json-response :auth.chatgpt/import
+                                                      {:managed-auth (some-> managed-auth
+                                                                             (dissoc :runtime-auth-payload))})))
+                         (.catch (fn [error]
+                                   (log/error :agent/managed-auth-import-failed
+                                              {:error (str error)
+                                               :data (ex-data error)})
+                                   (http/error-response "failed to import chatgpt credentials" 400))))))))))))
 
 (defn- handle-get [{:keys [env request url claims route]}]
   (let [session-id (get-in route [:path-params :session-id])]
@@ -298,6 +383,8 @@
 
 (defn handle [{:keys [route] :as ctx}]
   (case (:handler route)
+    :auth.chatgpt/import (handle-auth-import ctx)
+    :auth.chatgpt/status (handle-auth-status ctx)
     :sessions/create (handle-create ctx)
     :sessions/get (handle-get ctx)
     :sessions/messages (handle-messages ctx)
@@ -330,8 +417,8 @@
           (common/options-response)
 
           :else
-          (p/let [claims (auth/auth-claims request env)
-                  route (routes/match-route method path)
+          (p/let [route (routes/match-route method path)
+                  claims (auth/auth-claims request env)
                   response (cond
                              (nil? claims)
                              (http/unauthorized)

@@ -50,7 +50,8 @@
          (string/starts-with? path "/e2ee")
          (index-handler/handle-fetch #js {:env env :d1 (aget env "DB")} request)
 
-         (string/starts-with? path "/sessions")
+         (or (string/starts-with? path "/auth")
+             (string/starts-with? path "/sessions"))
          (if-let [^js agents-service (aget env "AGENTS_SERVICE")]
            (if (local-dev-host? request)
              (<forward-sessions-local! agents-service request)

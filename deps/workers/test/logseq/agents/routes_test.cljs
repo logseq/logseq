@@ -61,3 +61,10 @@
     (let [match (routes/match-route "POST" "/runners/runner-2/heartbeat")]
       (is (= :runners/heartbeat (:handler match)))
       (is (= "runner-2" (get-in match [:path-params :runner-id]))))))
+
+(deftest match-route-auth-test
+  (testing "managed auth routes"
+    (let [match (routes/match-route "POST" "/auth/chatgpt/import")]
+      (is (= :auth.chatgpt/import (:handler match))))
+    (let [match (routes/match-route "GET" "/auth/chatgpt/status")]
+      (is (= :auth.chatgpt/status (:handler match))))))

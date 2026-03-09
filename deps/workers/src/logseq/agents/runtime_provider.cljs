@@ -98,6 +98,17 @@
     (str "mkdir -p ~/.codex; "
          "printf \"%s\" \"" encoded "\" | base64 -d > ~/.codex/auth.json; ")))
 
+(defn task-runtime-auth-payload
+  [task]
+  (let [payload (get-in task [:agent :managed-auth :runtime-auth-payload])]
+    (when (map? payload)
+      payload)))
+
+(defn task-auth-json
+  [task]
+  (or (some-> (task-runtime-auth-payload task) :auth-json)
+      (get-in task [:agent :auth-json])))
+
 (def ^:private github-installation-token-env-keys
   ["GITHUB_TOKEN"
    "GH_TOKEN"
@@ -720,7 +731,7 @@
 
 (defn- e2b-server-command
   [^js env task session-id port agent-token env-vars]
-  (let [auth-json (get-in task [:agent :auth-json])
+  (let [auth-json (task-auth-json task)
         write-auth (or (auth-json-write-command auth-json) "")
         repo-cd (or (repo-cd-command session-id task "e2b") "")
         token-exports (shell-export-command env-vars)

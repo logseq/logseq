@@ -243,7 +243,20 @@
              [:mode {:optional true} :string]
              [:permission-mode {:optional true} :string]
              [:api-token {:optional true} :string]
-             [:auth-json {:optional true} :string]]]]
+             [:auth-json {:optional true} :string]
+             [:managed-auth {:optional true}
+              [:map
+               [:auth-id {:optional true} :string]
+               [:auth-state {:optional true} :string]
+               [:auth-method {:optional true} :string]
+               [:user-id {:optional true} :string]
+               [:workspace-id {:optional true} :string]
+               [:issued-at {:optional true} :int]
+               [:expires-at {:optional true} :int]
+               [:revoked-at {:optional true} :int]
+               [:runtime-auth-payload {:optional true}
+                [:map
+                 [:auth-json {:optional true} :string]]]]]]]]
    [:sandbox-checkpoint {:optional true}
     [:map
      [:provider {:optional true} :string]
@@ -283,6 +296,30 @@
 (def runners-heartbeat-request-schema
   [:map
    [:active-sessions {:optional true} :int]])
+
+(def auth-chatgpt-status-response-schema
+  [:map
+   [:managed-auth {:optional true}
+    [:maybe
+     [:map
+      [:auth-id {:optional true} :string]
+      [:auth-state {:optional true} :string]
+      [:auth-method {:optional true} :string]
+      [:provider {:optional true} :string]
+      [:user-id {:optional true} :string]
+      [:issued-at {:optional true} :int]
+      [:expires-at {:optional true} :int]
+      [:revoked-at {:optional true} :int]]]]])
+
+(def auth-chatgpt-import-request-schema
+  [:map
+   [:access_token :string]
+   [:refresh_token {:optional true} :string]
+   [:id_token {:optional true} :string]
+   [:token_type {:optional true} :string]
+   [:expires_in {:optional true} :int]
+   [:expires_at {:optional true} :int]
+   [:scope {:optional true} :string]])
 
 (def sessions-create-response-schema
   [:map
@@ -373,6 +410,7 @@
    :e2ee/graph-aes-key e2ee-graph-aes-key-request-schema
    :e2ee/grant-access e2ee-grant-access-request-schema
    :sessions/create sessions-create-request-schema
+   :auth.chatgpt/import auth-chatgpt-import-request-schema
    :sessions/message sessions-message-request-schema
    :sessions/pr sessions-pr-request-schema
    :sessions/snapshot sessions-snapshot-request-schema
@@ -413,6 +451,8 @@
    :sessions/snapshot sessions-snapshot-response-schema
    :sessions/events sessions-events-response-schema
    :sessions/branches sessions-branches-response-schema
+   :auth.chatgpt/import auth-chatgpt-status-response-schema
+   :auth.chatgpt/status auth-chatgpt-status-response-schema
    :runners/register runners-register-response-schema
    :runners/list runners-list-response-schema
    :runners/get runners-get-response-schema

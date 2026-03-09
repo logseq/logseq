@@ -2,7 +2,10 @@
   (:require [reitit.core :as r]))
 
 (def ^:private route-data
-  [["/sessions"
+  [["/auth"
+    ["/chatgpt/import" {:methods {"POST" :auth.chatgpt/import}}]
+    ["/chatgpt/status" {:methods {"GET" :auth.chatgpt/status}}]]
+   ["/sessions"
     ["" {:methods {"POST" :sessions/create}}]
     ["/:session-id"
      ["" {:methods {"GET" :sessions/get}}]
