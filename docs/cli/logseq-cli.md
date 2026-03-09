@@ -5,7 +5,7 @@ The Logseq CLI is a Node.js program compiled from ClojureScript that connects to
 ## Build the CLI
 
 ```bash
-clojure -M:cljs compile logseq-cli db-worker-node
+clojure -M:cljs compile logseq-cli
 yarn db-worker-node:release:bundle
 ```
 
