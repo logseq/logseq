@@ -1,7 +1,7 @@
 (ns logseq.cli.completion-generator-test
   (:require [cljs.test :refer [deftest is testing]]
             [clojure.string :as string]
-            [logseq.cli.command.completions :as completions-command]
+            [logseq.cli.command.completion :as completion-command]
             [logseq.cli.command.core :as core]
             [logseq.cli.command.doctor :as doctor-command]
             [logseq.cli.command.graph :as graph-command]
@@ -22,7 +22,7 @@
                query-command/entries
                show-command/entries
                doctor-command/entries
-               completions-command/entries)))
+               completion-command/entries)))
 
 ;; ---------------------------------------------------------------------------
 ;; Phase 1 — Spec enrichment tests
@@ -130,10 +130,10 @@
       (let [show-entries (get groups "show")]
         (is (= 1 (count show-entries)))
         (is (= ["show"] (:cmds (first show-entries))))))
-    (testing "completions is a standalone group"
-      (let [completions-entries (get groups "completions")]
-        (is (= 1 (count completions-entries)))
-        (is (= ["completions"] (:cmds (first completions-entries))))))))
+    (testing "completion is a standalone group"
+      (let [completion-entries (get groups "completion")]
+        (is (= 1 (count completion-entries)))
+        (is (= ["completion"] (:cmds (first completion-entries))))))))
 
 (deftest test-leaf-and-group-commands
   (let [leaves (gen/leaf-commands full-table)
@@ -198,8 +198,8 @@
       (is (string/includes? output "_logseq_upsert()")))
     (testing "output contains top-level dispatcher"
       (is (string/includes? output "_logseq()")))
-    (testing "output ends with _logseq \"$@\""
-      (is (string/includes? output "_logseq \"$@\"")))
+    (testing "output ends with compdef _logseq logseq"
+      (is (string/includes? output "compdef _logseq logseq")))
     (testing "boolean flags emit bare flag form"
       (is (re-find #"--verbose\[" output)))
     (testing "enum options emit value list form"
@@ -267,16 +267,16 @@
             (str "missing command: " group-name))))))
 
 ;; ---------------------------------------------------------------------------
-;; Phase 5 — Completions command entry
+;; Phase 5 — Completion command entry
 ;; ---------------------------------------------------------------------------
 
-(deftest test-completions-command-entry
-  (let [entries completions-command/entries]
-    (testing "contains one entry with :cmds [\"completions\"]"
+(deftest test-completion-command-entry
+  (let [entries completion-command/entries]
+    (testing "contains one entry with :cmds [\"completion\"]"
       (is (= 1 (count entries)))
-      (is (= ["completions"] (:cmds (first entries)))))
-    (testing "command is :completions"
-      (is (= :completions (:command (first entries)))))
+      (is (= ["completion"] (:cmds (first entries)))))
+    (testing "command is :completion"
+      (is (= :completion (:command (first entries)))))
     (testing "spec has :shell with :values"
       (is (= ["zsh" "bash"]
              (get-in (first entries) [:spec :shell :values]))))))
@@ -291,7 +291,7 @@
       (is (string/includes? output "#compdef"))
       (is (string/includes? output "_logseq_graph_export"))
       (is (string/includes? output "_logseq_show"))
-      (is (string/includes? output "_logseq \"$@\"")))))
+      (is (string/includes? output "compdef _logseq logseq")))))
 
 (deftest test-e2e-bash-structural-markers
   (let [output (gen/generate-completions "bash" full-table)]
