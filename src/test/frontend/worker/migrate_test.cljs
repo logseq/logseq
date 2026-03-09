@@ -29,9 +29,7 @@
         remove-idents [:logseq.class/Project
                        :logseq.class/Agent
                        :logseq.property/project
-                       :logseq.property/git-repo
-                       :logseq.property/agent-api-token
-                       :logseq.property/agent-auth-json]
+                       :logseq.property/git-repo]
         _ (doseq [ident remove-idents
                   :let [eid (d/entid @conn ident)]
                   :when eid]

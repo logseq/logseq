@@ -70,13 +70,9 @@
 
 (defn- agent-config
   [agent-page]
-  (let [api-token (blank->nil (:logseq.property/agent-api-token agent-page))
-        auth-json (blank->nil (:logseq.property/agent-auth-json agent-page))
-        provider (blank->nil (:block/title agent-page))]
+  (let [provider (blank->nil (:block/title agent-page))]
     (cond-> {}
-      (string? provider) (assoc :provider provider)
-      (string? api-token) (assoc :api-token api-token)
-      (string? auth-json) (assoc :auth-json auth-json))))
+      (string? provider) (assoc :provider provider))))
 
 (defn- codex-agent?
   [agent]

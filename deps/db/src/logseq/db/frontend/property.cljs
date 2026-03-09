@@ -460,17 +460,6 @@
       :schema {:type :url
                :public? true}
       :queryable? true}
-     :logseq.property/agent-api-token
-     {:title "API Token"
-      :schema {:type :string
-               :public? true
-               :view-context :page}}
-     :logseq.property/agent-auth-json
-     {:title "auth.json"
-      :schema {:type :string
-               :public? true
-               :view-context :page}
-      :properties {:logseq.property/description "Store a text block with the auth.json content."}}
 
      :logseq.property/icon {:title "Icon"
                             :schema {:type :map}}

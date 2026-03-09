@@ -51,7 +51,7 @@
 
      :logseq.class/Agent
      {:title "Agent"
-      :schema {:properties [:logseq.property/agent-api-token :logseq.property/agent-auth-json]}}
+      :schema {:properties []}}
 
      :logseq.class/Query
      {:title "Query"

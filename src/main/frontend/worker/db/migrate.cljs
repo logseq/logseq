@@ -81,9 +81,7 @@
              :properties [:logseq.property/project
                           :logseq.property/agent
                           :logseq.property/git-repo
-                          :logseq.property/project-sandbox-init-setup
-                          :logseq.property/agent-api-token
-                          :logseq.property/agent-auth-json]}]
+                          :logseq.property/project-sandbox-init-setup]}]
    ["65.25" {:properties [:logseq.property/pr]}]
    ["65.27" {:properties [:logseq.property/agent-session-id]}]
    ["65.28" {:properties [:logseq.property/sandbox-checkpoint]}]
