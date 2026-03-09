@@ -81,8 +81,15 @@ jobs:
       - name: Run ClojureScript query tests against basic query type
         run: DB_QUERY_TYPE=basic node static/tests.js -r frontend.db.query-dsl-test
 
-      - name: Run ClojureScript tests
+      - name: Run ClojureScript unit tests
         run: yarn cljs:run-test
+
+      - name: Setup CLI integration test
+        # logseq-cli.js needed just for test-cli-query-human-output-pipes-to-show
+        run: clojure -M:cljs compile logseq-cli && yarn db-worker-node:release:bundle
+
+      - name: Run ClojureScript integration tests
+        run: yarn cljs:run-integration-test
 
   lint:
     runs-on: ubuntu-22.04
