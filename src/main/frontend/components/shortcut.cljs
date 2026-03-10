@@ -245,7 +245,6 @@
                              {:class "shortcut-filter-popover-content p-0 w-auto"
                               :collision-padding 12
                               :onOpenAutoFocus #(.preventDefault %)
-                              :onCloseAutoFocus #(.preventDefault %)
                               :onEscapeKeyDown (fn [_] false)
                               :onPointerDownOutside (fn [_] nil)}}))]
         (if in-keystroke?
@@ -337,7 +336,6 @@
         {:class "p-0 w-auto"
          :collision-padding 12
          :onOpenAutoFocus #(.preventDefault %)
-         :onCloseAutoFocus #(.preventDefault %)
          :onEscapeKeyDown (fn [_] false)
          :onPointerDownOutside
          (fn [^js e]
@@ -923,6 +921,7 @@
         [:ul.list-none.m-0.py-3
          (for [[c binding-map] result-list-map
                :let [folded? (contains? folded-categories c)]]
+           ^{:key (str c)}
            [:<>
             ;; category row
             (when (and (not in-query?)

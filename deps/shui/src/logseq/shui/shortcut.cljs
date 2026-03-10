@@ -101,10 +101,11 @@
       (string? binding)
       (let [trimmed (string/trim binding)
             normalized (string/lower-case trimmed)]
-        ;; Handle 'mod' in strings like "mod+k"
-        (if (string/includes? normalized "mod")
-          (string/replace normalized "mod" (if mac? "meta" "ctrl"))
-          normalized))
+        ;; Normalize modifier aliases to canonical form (meta/ctrl)
+        (-> normalized
+            (string/replace #"\bmod\b" (if mac? "meta" "ctrl"))
+            (string/replace #"\b(?:cmd|command)\b" "meta")
+            (string/replace #"\b(?:opt|option)\b" "alt")))
 
       (coll? binding)
       (if (and (coll? (first binding)) (> (count binding) 1) (every? coll? binding))
