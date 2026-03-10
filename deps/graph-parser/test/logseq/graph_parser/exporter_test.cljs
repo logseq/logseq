@@ -48,6 +48,42 @@
        first
        (d/entity db)))
 
+(defn- ordered-children
+  [block]
+  (->> (:block/_parent block)
+       (remove :logseq.property/created-from-property)
+       (sort-by :block/order)
+       vec))
+
+(defn- block-tree-with-properties
+  [block]
+  {:title (:block/title block)
+   :properties (dissoc (db-test/readable-properties block) :block/tags)
+   :children (mapv block-tree-with-properties (ordered-children block))})
+
+(defn- find-template-by-title
+  [db title]
+  (some->> (d/q '[:find [?b ...]
+                  :in $ ?title
+                  :where
+                  [?b :block/title ?title]
+                  [?b :block/tags :logseq.class/Template]]
+                db title)
+           first
+           (d/entity db)))
+
+(defn- template-content-trees
+  [db title]
+  (some->> (find-template-by-title db title)
+           ordered-children
+           (mapv block-tree-with-properties)))
+
+(defn- journal-top-level-trees
+  [db journal-day]
+  (some->> (db-test/find-journal-by-journal-day db journal-day)
+           ordered-children
+           (mapv block-tree-with-properties)))
+
 (defn- build-graph-files
   "Given a file graph directory, return all files including assets and adds relative paths
    on ::rpath since paths are absolute by default and exporter needs relative paths for
@@ -174,6 +210,85 @@
      "assets/subdir/partydino.gif"]
     "[[FIRST UUID]] and [[UUID]]"))
 
+(deftest extract-template-blocks
+  (let [conn (db-test/create-conn)
+        page-uuid (random-uuid)
+        parent-uuid (random-uuid)
+        child-uuid (random-uuid)
+        include-children-only-uuid (random-uuid)
+        child-only-1-uuid (random-uuid)
+        child-only-2-uuid (random-uuid)
+        blocks [{:block/uuid parent-uuid
+                 :block/title "source parent"
+                 :block/page [:block/uuid page-uuid]
+                 :block/parent {:block/uuid page-uuid}
+                 :block/order "a"
+                 :block/properties {:template "  trimmed template  "
+                                    :name ""}
+                 :block/properties-text-values {:template "  trimmed template  "
+                                                :name ""}
+                 :block/properties-order [:template :name]}
+                {:block/uuid child-uuid
+                 :block/title "child"
+                 :block/page [:block/uuid page-uuid]
+                 :block/parent [:block/uuid parent-uuid]
+                 :block/order "b"
+                 :block/properties {:template "nested child"
+                                    :name "child default"}
+                 :block/properties-text-values {:template "nested child"
+                                                :name "child default"}
+                 :block/properties-order [:template :name]}
+                {:block/uuid include-children-only-uuid
+                 :block/title "exclude source block"
+                 :block/page [:block/uuid page-uuid]
+                 :block/parent {:block/uuid page-uuid}
+                 :block/order "c"
+                 :block/properties {:template "children only"
+                                    :template-including-parent false}
+                 :block/properties-text-values {:template "children only"
+                                                :template-including-parent "false"}
+                 :block/properties-order [:template :template-including-parent]}
+                {:block/uuid child-only-1-uuid
+                 :block/title "first child"
+                 :block/page [:block/uuid page-uuid]
+                 :block/parent [:block/uuid include-children-only-uuid]
+                 :block/order "d"}
+                {:block/uuid child-only-2-uuid
+                 :block/title "second child"
+                 :block/page [:block/uuid page-uuid]
+                 :block/parent [:block/uuid include-children-only-uuid]
+                 :block/order "e"}]
+        {:keys [blocks template-blocks preserve-empty-properties-uuids]}
+        (#'gp-exporter/extract-template-blocks @conn blocks)]
+    (testing "source blocks remove template metadata and mark template subtrees to preserve empty properties"
+      (is (= [{:title "source parent" :properties {:name ""}}
+              {:title "child" :properties {:name "child default"}}
+              {:title "exclude source block" :properties {}}
+              {:title "first child" :properties nil}
+              {:title "second child" :properties nil}]
+             (mapv (fn [block]
+                     {:title (:block/title block)
+                      :properties (:block/properties block)})
+                   blocks)))
+      (is (= #{parent-uuid child-uuid include-children-only-uuid child-only-1-uuid child-only-2-uuid}
+             (set/intersection preserve-empty-properties-uuids
+                               #{parent-uuid child-uuid include-children-only-uuid child-only-1-uuid child-only-2-uuid}))))
+
+    (testing "template roots use trimmed names and clone the correct content"
+      (is (= #{"trimmed template" "nested child" "children only"}
+             (->> template-blocks
+                  (filter #(some #{:logseq.class/Template} (:block/tags %)))
+                  (map :block/title)
+                  set)))
+      (is (= ["source parent" "child" "child" "first child" "second child"]
+             (->> template-blocks
+                  (remove #(some #{:logseq.class/Template} (:block/tags %)))
+                  (map :block/title))))
+      (is (= 5
+             (count (set/difference preserve-empty-properties-uuids
+                                    #{parent-uuid child-uuid include-children-only-uuid child-only-1-uuid child-only-2-uuid})))
+          "cloned template content blocks are also marked to preserve empty properties"))))
+
 (deftest-async ^:integration export-docs-graph-with-convert-all-tags
   (p/let [file-graph-dir "test/resources/docs-0.10.12"
           start-time (cljs.core/system-time)
@@ -226,7 +341,7 @@
       (is (= 1 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Cards]] @conn))))
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Code-block]] @conn))))
       (is (= 1 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Math-block]] @conn))))
-      (is (= 1 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Template]] @conn))))
+      (is (= 9 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Template]] @conn))))
       (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Quote-block]] @conn))))
       (is (= 7 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Pdf-annotation]] @conn))))
 
@@ -269,7 +384,7 @@
               set))))
 
     (testing "user properties"
-      (is (= 21
+      (is (= 23
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident]) ...]
                          :where [?b :block/tags :logseq.class/Property]])
@@ -433,10 +548,115 @@
           "Math block title has delimiters stripped")
 
       ;; Templates
-      (let [b (db-test/find-block-by-content @conn #"MEETING TITLE")]
-        (is (= {:block/tags [:logseq.class/Template]}
-               (and b (db-test/readable-properties b)))
-            "Template block is tagged as Template class"))
+      (is (= #{"meeting"
+               "title-only-no-children"
+               "properties-only-no-children"
+               "title-only-with-children"
+               "empty-title-with-children"
+               "children-only"
+               "nested-father"
+               "nested-child-1"
+               "nested-child-2"}
+             (->> (d/q '[:find [?title ...]
+                         :where
+                         [?b :block/tags :logseq.class/Template]
+                         [?b :block/title ?title]]
+                       @conn)
+                  set))
+          "All template definitions are imported as Template blocks")
+      (is (= [{:title "MEETING TITLE"
+               :properties {:user.property/participants #{"TODO"}}
+               :children []}]
+             (template-content-trees @conn "meeting")))
+      (is (= [{:title "TITLE"
+               :properties {}
+               :children []}]
+             (template-content-trees @conn "title-only-no-children")))
+      (is (= [{:title ""
+               :properties {:user.property/name ""
+                            :user.property/author ""}
+               :children []}]
+             (template-content-trees @conn "properties-only-no-children")))
+      (is (= [{:title "TITLE"
+               :properties {}
+               :children [{:title "intro" :properties {} :children []}
+                          {:title "notes" :properties {} :children []}]}]
+             (template-content-trees @conn "title-only-with-children")))
+      (is (= [{:title ""
+               :properties {}
+               :children [{:title "intro" :properties {} :children []}
+                          {:title "notes" :properties {} :children []}]}]
+             (template-content-trees @conn "empty-title-with-children")))
+      (is (= [{:title "intro" :properties {} :children []}
+              {:title "notes" :properties {} :children []}]
+             (template-content-trees @conn "children-only")))
+      (is (= [{:title "it's a template with nested templates"
+               :properties {:user.property/name "you named it"}
+               :children [{:title "child-1"
+                           :properties {:user.property/name ""}
+                           :children [{:title "child-1-1"
+                                       :properties {:user.property/name ""}
+                                       :children []}]}
+                          {:title "child-2"
+                           :properties {:user.property/name ""}
+                           :children [{:title "child-2-1"
+                                       :properties {:user.property/name ""}
+                                       :children []}]}
+                          {:title "child-3"
+                           :properties {:user.property/name ""}
+                           :children []}]}]
+             (template-content-trees @conn "nested-father")))
+      (is (= [{:title "child-1"
+               :properties {:user.property/name ""}
+               :children [{:title "child-1-1"
+                           :properties {:user.property/name ""}
+                           :children []}]}]
+             (template-content-trees @conn "nested-child-1")))
+      (is (= [{:title "child-2-1"
+               :properties {:user.property/name ""}
+               :children []}]
+             (template-content-trees @conn "nested-child-2")))
+      (is (= [{:title "MEETING TITLE"
+               :properties {:user.property/participants #{"TODO"}}
+               :children []}
+              {:title "TITLE"
+               :properties {}
+               :children []}
+              {:title ""
+               :properties {:user.property/name ""
+                            :user.property/author ""}
+               :children []}
+              {:title "TITLE"
+               :properties {}
+               :children [{:title "intro" :properties {} :children []}
+                          {:title "notes" :properties {} :children []}]}
+              {:title ""
+               :properties {}
+               :children [{:title "intro" :properties {} :children []}
+                          {:title "notes" :properties {} :children []}]}
+              {:title "it should not be included in the template"
+               :properties {}
+               :children [{:title "intro" :properties {} :children []}
+                          {:title "notes" :properties {} :children []}]}
+              {:title "it's a template with nested templates"
+               :properties {:user.property/name "you named it"}
+               :children [{:title "child-1"
+                           :properties {:user.property/name ""}
+                           :children [{:title "child-1-1"
+                                       :properties {:user.property/name ""}
+                                       :children []}]}
+                          {:title "child-2"
+                           :properties {:user.property/name ""}
+                           :children [{:title "child-2-1"
+                                       :properties {:user.property/name ""}
+                                       :children []}]}
+                          {:title "child-3"
+                           :properties {:user.property/name ""}
+                           :children []}]}]
+             (->> (journal-top-level-trees @conn 20240216)
+                  (drop 1)
+                  (take 7)))
+          "Template metadata is removed from the journal while user properties and children remain")
 
       ;; Assets
       (is (= {:block/tags [:logseq.class/Asset]
@@ -672,9 +892,12 @@
       (is (= :node
              (:logseq.property/type (d/entity @conn :user.property/finishedat)))
           ":date property to :node value changes to :node")
-      (is (= :node
+      (is (= :default
              (:logseq.property/type (d/entity @conn :user.property/participants)))
-          ":node property to :date value remains :node")
+          "template values cause participants to remain a :default property")
+      (is (= #{"[[Feb 7th, 2024]]"}
+             (:user.property/participants (db-test/readable-properties (db-test/find-block-by-content @conn #"test :node -> :date"))))
+          ":default participants property keeps the imported text value")
 
       (is (= :default
              (:logseq.property/type (d/entity @conn :user.property/description)))
