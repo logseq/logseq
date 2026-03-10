@@ -170,10 +170,11 @@
         [:div {:class (str "shortcut-input-binding"
                            (when accumulating? " shortcut-input-binding--pending"))}
          (shui/shortcut keystroke)
-         [:a.shortcut-binding-remove
+         [:button.shortcut-binding-remove
           {:on-click (fn [^js e]
                        (.stopPropagation e)
-                       (clear!))}
+                       (clear!))
+           :aria-label "Remove filter"}
           (ui/icon "x" {:size 12})]])
       ;; Placeholder
       (when-not has-keystroke?
@@ -184,7 +185,7 @@
      [:div.shortcut-toolbar
       [:div
        (when has-keystroke?
-         [:a.shortcut-toolbar-action
+         [:button.shortcut-toolbar-action
           {:on-click clear!}
           (ui/icon "rotate" {:size 12})
           [:span "Clear"]])]
@@ -221,10 +222,11 @@
                          (set-q! v))}]
 
        (when-not (string/blank? q)
-         [:a.x
+         [:button.x
           {:on-click (fn []
                        (set-q! "")
-                       (js/setTimeout #(some-> (rum/deref *search-ref) (.focus)) 50))}
+                       (js/setTimeout #(some-> (rum/deref *search-ref) (.focus)) 50))
+           :aria-label "Clear search"}
           (ui/icon "x" {:size 12})])]
 
       ;; keystroke filter button
@@ -253,10 +255,11 @@
            [:span.shortcut-keystroke-keys
             (ui/icon "keyboard" {:size 14})
             (shui/shortcut keystroke)]
-           [:a.shortcut-keystroke-clear
+           [:button.shortcut-keystroke-clear
             {:on-click (fn [^js e]
                          (.stopPropagation e)
-                         (set-keystroke! ""))}
+                         (set-keystroke! ""))
+             :aria-label "Clear keystroke filter"}
             (ui/icon "x" {:size 12})]]
           [:button.shortcut-keystroke-inactive
            {:on-click open-filter!}
@@ -280,14 +283,14 @@
 
       (when (string/blank? q)
         [:div.flex.items-center.gap-2
-         [:a.flex.items-center.icon-link
+         [:button.flex.items-center.icon-link
           {:on-click toggle-categories-fn
-           :title "Toggle categories pane"}
+           :aria-label "Toggle categories pane"}
           (ui/icon "fold")]
 
-         [:a.flex.items-center.icon-link
+         [:button.flex.items-center.icon-link
           {:on-click refresh-shortcuts-list!
-           :title "Refresh all"}
+           :aria-label "Refresh all"}
           (ui/icon "refresh")]])]]))
 
 (rum/defc shortcut-desc-label
@@ -357,9 +360,10 @@
                :when (not (nil? m))]
            [:li
             {:key (str id')}
-            [:a.select-none.hover:underline
+            [:button.select-none.hover:underline
              {:on-click (fn [^js e] (open-customize-shortcut-dialog! e id'))
-              :title (str handler-id)}
+              :title (str handler-id)
+              :aria-label (dh/get-shortcut-desc m)}
              [:code.inline-block.mr-1.text-xs
               (shortcut-utils/decorate-binding k)]
              [:span
@@ -647,8 +651,9 @@
         [:div.shortcut-input-binding {:key x}
          (shui/shortcut x)
          (when (#{:idle :accepted :esc-hint :removed :reset} rec-state)
-           [:a.shortcut-binding-remove
-            {:on-click (fn [^js e]
+           [:button.shortcut-binding-remove
+            {:aria-label "Remove binding"
+             :on-click (fn [^js e]
                          (.stopPropagation e)
                          (let [new-binding (vec (concat (subvec current-binding 0 idx)
                                                         (subvec current-binding (inc idx))))
@@ -664,8 +669,9 @@
         [:div.shortcut-input-binding.shortcut-input-binding--pending
          (shui/shortcut keystroke)
          (when (#{:conflict-cross :conflict-same} rec-state)
-           [:a.shortcut-binding-remove
-            {:on-click (fn [^js e]
+           [:button.shortcut-binding-remove
+            {:aria-label "Remove binding"
+             :on-click (fn [^js e]
                          (.stopPropagation e)
                          (cancel-fn!))}
             (ui/icon "x" {:size 12})])])
@@ -676,7 +682,7 @@
      ;; FEEDBACK BANNER (conditional)
      (let [undo-link
            (when undo-snapshot
-             [:a.shortcut-feedback-action
+             [:button.shortcut-feedback-action
               {:on-click (fn []
                            (execute-undo! undo-snapshot)
                            (when-let [own (some #(when (= (:action-id %) k) %) (:entries undo-snapshot))]
@@ -743,7 +749,7 @@
        ;; Reset (only when changed from default)
        (when (and (#{:idle :accepted :removed} rec-state)
                   (not= current-binding binding))
-         [:a.shortcut-toolbar-action
+         [:button.shortcut-toolbar-action
           {:on-click reset-fn!}
           (ui/icon "rotate" {:size 12})
           [:span "Reset"]])]
@@ -798,6 +804,17 @@
             {:All 0 :Custom 0 :Unset 0 :Disabled 0}
             all-bindings)))
 
+(defn- matches-keystroke?
+  "Check if any of the shortcut's bindings match the recorded keystroke filter."
+  [binding user-binding keystroke]
+  (let [binding' (or user-binding binding)
+        keystroke' (some-> (shortcut-utils/safe-parse-string-binding keystroke) (bean/->clj))]
+    (when (sequential? binding')
+      (some #(when-let [s (some-> % (dh/mod-key) (shortcut-utils/safe-parse-string-binding) (bean/->clj))]
+               (or (= s keystroke')
+                   (and (sequential? s) (sequential? keystroke')
+                        (apply = (map first [s keystroke']))))) binding'))))
+
 (defn- count-visible-shortcuts
   "Count shortcuts visible after applying category filter and keystroke filter."
   [result-list-map filter-key in-keystroke? keystroke]
@@ -815,13 +832,7 @@
                           (contains? cats filter-key))
                 :when (or (not in-keystroke?)
                           (and (not disabled?) (not unset?)
-                               (let [binding' (or user-binding binding)
-                                     keystroke' (some-> (shortcut-utils/safe-parse-string-binding keystroke) (bean/->clj))]
-                                 (when (sequential? binding')
-                                   (some #(when-let [s (some-> % (dh/mod-key) (shortcut-utils/safe-parse-string-binding) (bean/->clj))]
-                                            (or (= s keystroke')
-                                                (and (sequential? s) (sequential? keystroke')
-                                                     (apply = (map first [s keystroke']))))) binding')))))]
+                               (matches-keystroke? binding user-binding keystroke)))]
             id)))
        count))
 
@@ -935,13 +946,7 @@
                   (when (or (not in-keystroke?)
                             (and (not disabled?)
                                  (not unset?)
-                                 (let [binding' (or user-binding binding)
-                                       keystroke' (some-> (shortcut-utils/safe-parse-string-binding keystroke) (bean/->clj))]
-                                   (when (sequential? binding')
-                                     (some #(when-let [s (some-> % (dh/mod-key) (shortcut-utils/safe-parse-string-binding) (bean/->clj))]
-                                              (or (= s keystroke')
-                                                  (and (sequential? s) (sequential? keystroke')
-                                                       (apply = (map first [s keystroke']))))) binding')))))
+                                 (matches-keystroke? binding user-binding keystroke)))
 
                     (let [row-action (when (and id (not disabled?))
                                        (fn [^js e]

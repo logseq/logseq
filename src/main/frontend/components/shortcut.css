@@ -13,6 +13,23 @@
   }
 }
 
+/* Reset button styles for interactive elements changed from <a> to <button> */
+.cp__shortcut-page-x button.shortcut-binding-remove,
+.cp__shortcut-page-x button.shortcut-toolbar-action,
+.cp__shortcut-page-x button.shortcut-keystroke-clear,
+.cp__shortcut-page-x button.icon-link,
+.cp__shortcut-page-x button.x,
+.shortcut-popover button.shortcut-binding-remove,
+.shortcut-popover button.shortcut-toolbar-action,
+.shortcut-filter-popover button.shortcut-binding-remove,
+.shortcut-filter-popover button.shortcut-toolbar-action,
+button.shortcut-feedback-action {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+
 .cp__shortcut-page-x {
   @apply relative;
 
