@@ -283,13 +283,15 @@ div[data-radix-popper-content-wrapper] {
 /* Glow effect for combo and separate keys */
 /* Combo keys: glow on container (wraps all keys together) */
 .shui-shortcut-combo.shui-shortcut-glow {
-  box-shadow: rgba(255, 255, 255, 0.15) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.15) 0px -1px 0px 0px inset;
+  box-shadow: var(--lx-gray-01-alpha, rgba(255, 255, 255, 0.15)) 0px 1px 0px 0px inset,
+              var(--lx-gray-12-alpha, rgba(0, 0, 0, 0.15)) 0px -1px 0px 0px inset;
   border: none;
 }
 
 /* Separate keys: glow on individual keys (not container) */
 .shui-shortcut-separate.shui-shortcut-glow kbd.shui-shortcut-key {
-  box-shadow: rgba(255, 255, 255, 0.15) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.15) 0px -1px 0px 0px inset;
+  box-shadow: var(--lx-gray-01-alpha, rgba(255, 255, 255, 0.15)) 0px 1px 0px 0px inset,
+              var(--lx-gray-12-alpha, rgba(0, 0, 0, 0.15)) 0px -1px 0px 0px inset;
   border: none;
 }
 
@@ -350,7 +352,7 @@ kbd.shui-shortcut-key,
   line-height: 16px;
   min-width: fit-content;
   transition: transform 140ms ease-out, box-shadow 140ms ease-out;
-  box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+  box-shadow: 0 0 0 transparent;
 }
 
 /* Keys in separate containers get their own styling */
@@ -383,23 +385,27 @@ kbd.shui-shortcut-key-pressed,
 /* Key press animation with glow - preserve glow effect */
 /* Combo keys: animate the container */
 .shui-shortcut-combo.shui-shortcut-glow.shui-shortcut-key-pressed {
-  box-shadow: rgba(255, 255, 255, 0.15) 0px 2px 0px 0px inset, rgba(0, 0, 0, 0.15) 0px 0px 0px 0px inset, 0 1px 2px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--lx-gray-01-alpha, rgba(255, 255, 255, 0.15)) 0px 2px 0px 0px inset,
+              var(--lx-gray-12-alpha, rgba(0, 0, 0, 0.15)) 0px 0px 0px 0px inset,
+              0 1px 2px var(--lx-gray-12-alpha, rgba(0, 0, 0, 0.2));
 }
 
 /* Separate keys: animate individual keys */
 .shui-shortcut-separate.shui-shortcut-glow kbd.shui-shortcut-key-pressed {
-  box-shadow: rgba(255, 255, 255, 0.15) 0px 2px 0px 0px inset, rgba(0, 0, 0, 0.15) 0px 0px 0px 0px inset, 0 1px 2px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--lx-gray-01-alpha, rgba(255, 255, 255, 0.15)) 0px 2px 0px 0px inset,
+              var(--lx-gray-12-alpha, rgba(0, 0, 0, 0.15)) 0px 0px 0px 0px inset,
+              0 1px 2px var(--lx-gray-12-alpha, rgba(0, 0, 0, 0.2));
 }
 
 /* Key press animation without glow */
 .shui-shortcut-combo:not(.shui-shortcut-glow) kbd.shui-shortcut-key-pressed,
 .shui-shortcut-separate:not(.shui-shortcut-glow) kbd.shui-shortcut-key-pressed {
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 2px var(--lx-gray-12-alpha, rgba(0, 0, 0, 0.2));
 }
 
 /* Row highlight animation */
 .shui-shortcut-row--pressed {
-  background-color: rgba(223, 239, 254, 0.1);
+  background-color: var(--lx-accent-04-alpha, rgba(223, 239, 254, 0.1));
   transition: background-color 160ms ease-out;
 }
 
@@ -417,7 +423,7 @@ kbd.shui-shortcut-key-pressed,
   .shui-shortcut-row--pressed {
     transition: none;
     transform: none;
-    box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+    box-shadow: 0 0 0 transparent;
   }
   
   .shui-shortcut-row--pressed {
