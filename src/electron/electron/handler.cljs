@@ -1,7 +1,8 @@
 (ns electron.handler
   "This ns starts the event handling for the electron main process and defines
   all the application-specific event types"
-  (:require ["/electron/utils" :as js-utils]
+  (:require ["/electron/openai_oauth" :as openai-oauth]
+            ["/electron/utils" :as js-utils]
             ["abort-controller" :as AbortController]
             ["buffer" :as buffer]
             ["diff-match-patch" :as google-diff]
@@ -459,6 +460,12 @@
 
 (defmethod handle :system/info [^js _win _]
   {:home-dir (.homedir os)})
+
+(defmethod handle :openai/authenticate [_window _]
+  (.authenticate openai-oauth))
+
+(defmethod handle :openai/clear-credentials [_window _]
+  (.clearCredentials openai-oauth))
 
 (defmethod handle :window/open-blank-callback [^js win [_ _type]]
   (win/setup-window-listeners! win) nil)

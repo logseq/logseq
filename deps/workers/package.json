@@ -1,0 +1,38 @@
+{
+  "name": "@logseq/db-sync",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "cd ./worker && npx wrangler dev",
+    "dev:agents": "cd ./worker && npx wrangler dev -c wrangler.agents.toml",
+    "watch": "clojure -M:cljs watch db-sync agents-worker",
+    "release": "clojure -M:cljs release db-sync agents-worker",
+    "build:node-adapter": "clojure -M:cljs release db-sync-node",
+    "dev:node-adapter": "clojure -M:cljs watch db-sync-node",
+    "start:node-adapter": "node worker/dist/node-adapter.js",
+    "migrate:local": "cd ./worker && wrangler d1 migrations apply DB --local",
+    "migrate:staging": "cd ./worker && wrangler d1 migrations apply logseq-sync-graph-meta-staging --env staging --remote",
+    "migrate:prod": "cd ./worker && wrangler d1 migrations apply logseq-sync-graphs-prod --env prod --remote",
+    "test:node-adapter": "clojure -M:cljs:test compile db-sync-test && node worker/dist/worker-test.js",
+    "test:worker-split": "clojure -M:cljs:test compile db-sync-worker-split-test && node worker/dist/worker-split-test.js",
+    "test": "clojure -M:cljs:test compile db-sync-test && node worker/dist/worker-test.js",
+    "clean": "rm -rf ./worker/dist/",
+    "sentry:sourcemaps": "sentry-cli sourcemaps upload --release $SENTRY_RELEASE --rewrite --strip-prefix worker/dist/worker --url-prefix \"~/\" worker/dist/worker",
+    "sentry:sourcemaps:agents": "sentry-cli sourcemaps upload --release $SENTRY_RELEASE --rewrite --strip-prefix worker/dist/agents --url-prefix \"~/\" worker/dist/agents",
+    "deploy-sync-prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && yarn clean && yarn release && yarn sentry:sourcemaps && cd ./worker && wrangler deploy --env prod",
+    "deploy-sync-staging": "export SENTRY_RELEASE=$(git rev-parse HEAD) && yarn clean && yarn release && yarn sentry:sourcemaps && cd ./worker && wrangler deploy --env staging",
+    "deploy-agents-prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && yarn clean && clojure -M:cljs release agents-worker && yarn sentry:sourcemaps:agents && cd ./worker && wrangler deploy -c wrangler.agents.toml --env prod",
+    "deploy-agents-staging": "export SENTRY_RELEASE=$(git rev-parse HEAD) && yarn clean && clojure -M:cljs release agents-worker && yarn sentry:sourcemaps:agents && cd ./worker && wrangler deploy -c wrangler.agents.toml --env staging"
+  },
+  "dependencies": {
+    "@sentry/cloudflare": "^10.38.0",
+    "@sentry/node": "^10.38.0",
+    "better-sqlite3": "^12.6.2",
+    "e2b": "2.14.0",
+    "shadow-cljs": "^3.3.4",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@sentry/cli": "^3.1.0"
+  }
+}

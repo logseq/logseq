@@ -128,14 +128,14 @@ The final released binaries or installers will be at `static/out/`.
 DB sync can be run locally in one of two ways as described in the following
 sections. To use a local sync approach, the app must be built with
 `$ENABLE_DB_SYNC_LOCAL` e.g. `ENABLE_DB_SYNC_LOCAL=true yarn watch`. For more
-about db sync, see [its readme](/deps/db-sync/README.md).
+about db sync, see [its readme](/deps/workers/README.md).
 
 ### DB sync Cloudflare Worker adapter
 
 Build and run a Cloudlare worker locally
 
 ```bash
-cd deps/db-sync
+cd deps/workers
 yarn install
 yarn release
 # This migration is a one time setup
@@ -150,7 +150,7 @@ When testing
 Build and run the Node.js adapter for self-hosted DB sync.
 
 ```bash
-cd deps/db-sync
+cd deps/workers
 yarn install
 DB_SYNC_PORT=8787 \
 COGNITO_ISSUER=https://cognito-idp.us-east-2.amazonaws.com/us-east-2_kAqZcxIeM \

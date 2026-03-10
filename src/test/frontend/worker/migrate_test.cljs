@@ -3,7 +3,8 @@
             [cljs.test :refer [deftest is]]
             [datascript.core :as d]
             [frontend.worker.db.migrate :as db-migrate]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.test.helper :as db-test]))
 
 (deftest ensure-built-in-data-exists!
   (let [db-transit (str (fs-node/readFileSync "src/test/migration/64.8.transit"))
@@ -20,3 +21,97 @@
     (is (= graph-created-at
            (:kv/value (d/entity @conn :logseq.kv/graph-created-at)))
         "Graph created at not changed by fn")))
+
+(deftest migrate-adds-project-agent-builtins
+  (let [conn (db-test/create-conn)
+        _ (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                              :kv/value {:major 65 :minor 22}}])
+        remove-idents [:logseq.class/Project
+                       :logseq.class/Agent
+                       :logseq.property/project
+                       :logseq.property/git-repo]
+        _ (doseq [ident remove-idents
+                  :let [eid (d/entid @conn ident)]
+                  :when eid]
+            (d/transact! conn [[:db/retractEntity eid]]))
+        _ (db-migrate/migrate conn :target-version "65.23")]
+    (is (= {:major 65 :minor 23}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (doseq [ident remove-idents]
+      (is (some? (d/entity @conn ident))))))
+
+(deftest migrate-adds-pr-property-builtin
+  (let [conn (db-test/create-conn)
+        property-ident :logseq.property/pr
+        _ (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                              :kv/value {:major 65 :minor 24}}])
+        existing-eid (d/entid @conn property-ident)
+        _ (when existing-eid
+            (d/transact! conn [[:db/retractEntity existing-eid]]))
+        _ (db-migrate/migrate conn :target-version "65.25")]
+    (is (= {:major 65 :minor 25}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (is (some? (d/entity @conn property-ident)))))
+
+(deftest migrate-adds-agent-session-id-property-builtin
+  (let [conn (db-test/create-conn)
+        property-ident :logseq.property/agent-session-id
+        _ (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                              :kv/value {:major 65 :minor 26}}])
+        existing-eid (d/entid @conn property-ident)
+        _ (when existing-eid
+            (d/transact! conn [[:db/retractEntity existing-eid]]))
+        _ (db-migrate/migrate conn :target-version "65.27")]
+    (is (= {:major 65 :minor 27}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (is (some? (d/entity @conn property-ident)))))
+
+(deftest migrate-adds-sandbox-checkpoint-property-builtin
+  (let [conn (db-test/create-conn)
+        property-ident :logseq.property/sandbox-checkpoint
+        _ (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                              :kv/value {:major 65 :minor 27}}])
+        existing-eid (d/entid @conn property-ident)
+        _ (when existing-eid
+            (d/transact! conn [[:db/retractEntity existing-eid]]))
+        _ (db-migrate/migrate conn :target-version "65.28")
+        property (d/entity @conn property-ident)]
+    (is (= {:major 65 :minor 28}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (is (some? property))
+    (is (= :map (:logseq.property/type property)))))
+
+(deftest migrate-adds-project-docker-file-property-builtin
+  (let [conn (db-test/create-conn)
+        property-ident :logseq.property/project-sandbox-docker-file
+        _ (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                              :kv/value {:major 65 :minor 28}}])
+        existing-eid (d/entid @conn property-ident)
+        _ (when existing-eid
+            (d/transact! conn [[:db/retractEntity existing-eid]]))
+        _ (db-migrate/migrate conn :target-version "65.29")
+        property (d/entity @conn property-ident)]
+    (is (= {:major 65 :minor 29}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (is (some? property))
+    (is (= :default (:logseq.property/type property)))))
+
+(deftest migrate-adds-planner-properties-builtin
+  (let [conn (db-test/create-conn)
+        property-idents [:logseq.property/agent-plan
+                         :logseq.property/post-review]
+        _ (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                              :kv/value {:major 65 :minor 29}}])
+        _ (doseq [property-ident property-idents
+                  :let [existing-eid (d/entid @conn property-ident)]
+                  :when existing-eid]
+            (d/transact! conn [[:db/retractEntity existing-eid]]))
+        _ (db-migrate/migrate conn :target-version "65.30")
+        agent-plan (d/entity @conn :logseq.property/agent-plan)
+        post-review (d/entity @conn :logseq.property/post-review)]
+    (is (= {:major 65 :minor 30}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (is (some? agent-plan))
+    (is (some? post-review))
+    (is (= :default (:logseq.property/type agent-plan)))
+    (is (= :default (:logseq.property/type post-review)))))

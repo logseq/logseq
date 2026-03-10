@@ -1,28 +1,30 @@
 (ns frontend.components.plugins
-  (:require [cljs-bean.core :as bean]
-            [clojure.string :as string]
-            [electron.ipc :as ipc]
-            [frontend.components.plugins-settings :as plugins-settings]
-            [frontend.components.svg :as svg]
-            [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
-            [frontend.handler.common.plugin :as plugin-common-handler]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.handler.notification :as notification]
-            [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.plugin-config :as plugin-config-handler]
-            [frontend.handler.ui :as ui-handler]
-            [frontend.mixins :as mixins]
-            [frontend.rum :as rum-utils]
-            [frontend.search :as search]
-            [frontend.state :as state]
-            [frontend.storage :as storage]
-            [frontend.ui :as ui]
-            [frontend.util :as util]
-            [logseq.shui.hooks :as hooks]
-            [logseq.shui.ui :as shui]
-            [promesa.core :as p]
-            [rum.core :as rum]))
+  (:require
+   ["react" :as react]
+   [cljs-bean.core :as bean]
+   [clojure.string :as string]
+   [electron.ipc :as ipc]
+   [frontend.components.plugins-settings :as plugins-settings]
+   [frontend.components.svg :as svg]
+   [frontend.config :as config]
+   [frontend.context.i18n :refer [t]]
+   [frontend.handler.common.plugin :as plugin-common-handler]
+   [frontend.handler.editor :as editor-handler]
+   [frontend.handler.notification :as notification]
+   [frontend.handler.plugin :as plugin-handler]
+   [frontend.handler.plugin-config :as plugin-config-handler]
+   [frontend.handler.ui :as ui-handler]
+   [frontend.mixins :as mixins]
+   [frontend.rum :as rum-utils]
+   [frontend.search :as search]
+   [frontend.state :as state]
+   [frontend.storage :as storage]
+   [frontend.ui :as ui]
+   [frontend.util :as util]
+   [logseq.shui.hooks :as hooks]
+   [logseq.shui.ui :as shui]
+   [promesa.core :as p]
+   [rum.core :as rum]))
 
 (declare open-waiting-updates-modal!)
 (defonce PER-PAGE-SIZE 15)
@@ -1357,7 +1359,7 @@
        (ui/button (ui/icon "source-code" {:size 14})
                   :on-click #(editor-handler/edit-block! block (count content1)))]
       (when (fn? render)
-        (js/React.createElement render #js {:content content1}))]]))
+        ((.-createElement react) render #js {:content content1}))]]))
 
 (rum/defc plugins-page
   []

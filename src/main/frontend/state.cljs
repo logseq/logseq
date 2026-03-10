@@ -292,6 +292,7 @@
       :rtc/online-info                       (atom {})
       :rtc/asset-upload-download-progress    (atom {})
       :rtc/users-info                        (atom {})
+      :agent/sessions                        (atom {})
 
       :user/info                             {:UserGroups (storage/get :user-groups)}
       :encryption/graph-parsing?             false
@@ -1114,7 +1115,6 @@ Similar to re-frame subscriptions"
   []
   (when (empty? (:sidebar/blocks @state))
     (sidebar-add-block! (get-current-repo) "contents" :contents)))
-
 
 (defn open-right-sidebar!
   []

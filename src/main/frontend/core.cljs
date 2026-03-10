@@ -1,27 +1,30 @@
 (ns frontend.core
   "Entry ns for the mobile, browser and electron frontend apps"
   {:dev/always true}
-  (:require ["react-dom/client" :as rdc]
-            [frontend.background-tasks]
-            [frontend.common-keywords]
-            [frontend.components.plugins :as plugins]
-            [frontend.config :as config]
-            [frontend.handler :as handler]
-            [frontend.handler.db-based.rtc-background-tasks]
-            [frontend.handler.db-based.vector-search-background-tasks]
-            [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.route :as route-handler]
-            [frontend.log]
-            [frontend.page :as page]
-            [frontend.routes :as routes]
-            [frontend.spec]
-            [frontend.util :as util]
-            [lambdaisland.glogi :as log]
-            [logseq.api]
-            [logseq.db.frontend.kv-entity]
-            [malli.dev.cljs :as md]
-            [reitit.frontend :as rf]
-            [reitit.frontend.easy :as rfe]))
+  (:require
+   ["react" :as react]
+   ["react-dom" :as react-dom]
+   ["react-dom/client" :as rdc]
+   [frontend.background-tasks]
+   [frontend.common-keywords]
+   [frontend.components.plugins :as plugins]
+   [frontend.config :as config]
+   [frontend.handler :as handler]
+   [frontend.handler.db-based.rtc-background-tasks]
+   [frontend.handler.db-based.vector-search-background-tasks]
+   [frontend.handler.plugin :as plugin-handler]
+   [frontend.handler.route :as route-handler]
+   [frontend.log]
+   [frontend.page :as page]
+   [frontend.routes :as routes]
+   [frontend.spec]
+   [frontend.util :as util]
+   [lambdaisland.glogi :as log]
+   [logseq.api]
+   [logseq.db.frontend.kv-entity]
+   [malli.dev.cljs :as md]
+   [reitit.frontend :as rf]
+   [reitit.frontend.easy :as rfe]))
 
 (defn set-router!
   []
@@ -85,6 +88,8 @@
   ;; so it is available even in :advanced release builds
 
   ;; (setup-entity-profile!)
+  (set! js/React react)
+  (set! js/ReactDOM react-dom)
   (log/info ::init "App started")
   (handler/start! start))
 

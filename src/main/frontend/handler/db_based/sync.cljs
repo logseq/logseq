@@ -10,8 +10,8 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
-            [logseq.db-sync.malli-schema :as db-sync-schema]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.sync.malli-schema :as db-sync-schema]
             [promesa.core :as p]))
 
 (defn- ws->http-base [ws-url]

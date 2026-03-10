@@ -1,14 +1,14 @@
 This document describes the handling of cycles formed between multiple blocks in the implementation of db-sync.
 
 ## When cycles are detected
-- Cycles are detected on the server when applying client tx batches in `deps/db-sync/src/logseq/db_sync/worker.cljs`.
-- The server calls `logseq.db-sync.cycle/detect-cycle` which inspects updates to `:block/parent` (and other special attrs like class extends).
+- Cycles are detected on the server when applying client tx batches in `deps/workers/src/logseq/sync/worker.cljs`.
+- The server calls `logseq.sync.cycle/detect-cycle` which inspects updates to `:block/parent` (and other special attrs like class extends).
 - If applying the tx would introduce a cycle, the server rejects the batch with `{:type "tx/reject" :reason "cycle" ...}`.
 
 ## What the server returns
 - The reject payload includes:
   - `attr`: the attribute that introduced the cycle (for blocks this is `:block/parent`).
-  - `server-values`: a map of the affected entities to the server’s current value for `attr` (from `logseq.db-sync.cycle/server-values-for`).
+  - `server-values`: a map of the affected entities to the server’s current value for `attr` (from `logseq.sync.cycle/server-values-for`).
 - This allows the client to realign its local state to the server’s authoritative values.
 
 ## Client-side reconciliation

@@ -404,7 +404,72 @@
       :schema {:type :property
                :hide? true}}
 
-     ;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project
+     ;; TODO: Add more props :Assignee, :Estimate, :Cycle
+
+     :logseq.property/project
+     {:title "Project"
+      :schema {:type :page
+               :public? true
+               :classes #{:logseq.class/Project}}
+      :queryable? true}
+     :logseq.property/agent
+     {:title "Agent"
+      :schema {:type :page
+               :public? true
+               :classes #{:logseq.class/Agent}}
+      :closed-values
+      (mapv (fn [[db-ident value]]
+              {:db-ident db-ident
+               :value value
+               :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)})
+            [[:logseq.property/agent.codex "Codex"]
+             [:logseq.property/agent.claude-code "Claude Code"]])
+      :queryable? true}
+     :logseq.property/agent-session-id
+     {:title "Agent session id"
+      :schema {:type :string
+               :public? false
+               :hide? true}
+      :queryable? false}
+     :logseq.property/sandbox-checkpoint
+     {:title "Sandbox checkpoint"
+      :schema {:type :map
+               :public? false
+               :hide? true}
+      :queryable? false}
+     :logseq.property/agent-plan
+     {:title "Agent plan"
+      :schema {:type :default
+               :public? true}
+      :properties {:logseq.property/description "Stores the task plan markdown emitted at the start of an agent session."}}
+     :logseq.property/post-review
+     {:title "Post-review"
+      :schema {:type :default
+               :public? true}
+      :properties {:logseq.property/description "Stores the post-review markdown emitted when an agent session finishes."}}
+     :logseq.property/git-repo
+     {:title "Git Repo"
+      :schema {:type :url
+               :public? true
+               :view-context :page}
+      :queryable? true}
+     :logseq.property/project-sandbox-init-setup
+     {:title "Project sandbox init setup"
+      :schema {:type :default
+               :public? true
+               :view-context :page}
+      :properties {:logseq.property/description "Runs after sandbox startup is ready. Store setup commands in a code block, e.g. `yarn install`."}}
+     :logseq.property/project-sandbox-docker-file
+     {:title "Project sandbox Dockerfile"
+      :schema {:type :default
+               :public? true
+               :view-context :page}
+      :properties {:logseq.property/description "Store Dockerfile content in a code block. Used to build the sandbox image before startup."}}
+     :logseq.property/pr
+     {:title "PR"
+      :schema {:type :url
+               :public? true}
+      :queryable? true}
 
      :logseq.property/icon {:title "Icon"
                             :schema {:type :map}}

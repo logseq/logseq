@@ -1,32 +1,34 @@
 (ns frontend.components.user.login
-  (:require [cljs-bean.core :as bean]
-            [clojure.string :as string]
-            [dommy.core :refer-macros [sel by-id]]
-            [frontend.config :as config]
-            [frontend.handler.route :as route-handler]
-            [frontend.handler.user :as user]
-            [frontend.modules.shortcut.core :as shortcut]
-            [frontend.rum :refer [adapt-class]]
-            [frontend.state :as state]
-            [logseq.shui.hooks :as hooks]
-            [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+  (:require
+   ["ui" :as lsui]
+   [cljs-bean.core :as bean]
+   [clojure.string :as string]
+   [dommy.core :refer-macros [sel by-id]]
+   [frontend.config :as config]
+   [frontend.handler.route :as route-handler]
+   [frontend.handler.user :as user]
+   [frontend.modules.shortcut.core :as shortcut]
+   [frontend.rum :refer [adapt-class]]
+   [frontend.state :as state]
+   [logseq.shui.hooks :as hooks]
+   [logseq.shui.ui :as shui]
+   [rum.core :as rum]))
 
 (declare setupAuthConfigure! LSAuthenticator)
 
 (defn sign-out!
   []
-  (try (.signOut js/LSAuth.Auth)
+  (try (.signOut (.-Auth (.-LSAuth lsui)))
        (catch :default e (js/console.warn e))))
 
 (defn setup-configure!
   []
   #_:clj-kondo/ignore
   (defn setupAuthConfigure! [config]
-    (.init js/LSAuth (bean/->js {:authCognito (merge config {:loginWith {:email true}})})))
+    (.init (.-LSAuth lsui) (bean/->js {:authCognito (merge config {:loginWith {:email true}})})))
   #_:clj-kondo/ignore
   (def LSAuthenticator
-    (adapt-class (.-LSAuthenticator js/LSAuth)))
+    (adapt-class (.-LSAuthenticator (.-LSAuth lsui))))
 
   (setupAuthConfigure!
    {:region config/REGION,

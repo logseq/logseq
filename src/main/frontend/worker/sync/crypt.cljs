@@ -10,7 +10,7 @@
             [frontend.worker.sync.const :as sync-const]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
-            [logseq.db-sync.malli-schema :as db-sync-schema]
+            [logseq.sync.malli-schema :as db-sync-schema]
             [promesa.core :as p]))
 
 (defonce ^:private *graph->aes-key (atom {}))

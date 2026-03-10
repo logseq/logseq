@@ -951,9 +951,9 @@
     (walk/prewalk
      (fn [x]
        (cond
-        (and (vector? x)
-             (= "Link" (first x))
-             (let [path-or-map (second (:url (second x)))]
+         (and (vector? x)
+              (= "Link" (first x))
+              (let [path-or-map (second (:url (second x)))]
                 (cond
                   (string? path-or-map)
                   (or (common-config/local-relative-asset? path-or-map)
@@ -967,19 +967,19 @@
               (= "Macro" (first x))
               (= "embed" (:name (second x))))
          (swap! results update :embeds conj x)
-        (and (vector? x)
-             (= "Macro" (first x))
-             (= "zotero-imported-file" (:name (second x))))
-        (let [[item-key filename] (:arguments (second x))]
-          (when (and item-key filename)
-            (swap! results update :zotero-imported-files assoc item-key (common-util/safe-read-string filename))))
-        (and (vector? x)
-             (= "Macro" (first x))
-             (= "zotero-linked-file" (:name (second x))))
-        (let [[relative-path] (:arguments (second x))
-              parsed-path (common-util/safe-read-string relative-path)]
-          (when (string? parsed-path)
-            (swap! results update :zotero-linked-files conj parsed-path)))
+         (and (vector? x)
+              (= "Macro" (first x))
+              (= "zotero-imported-file" (:name (second x))))
+         (let [[item-key filename] (:arguments (second x))]
+           (when (and item-key filename)
+             (swap! results update :zotero-imported-files assoc item-key (common-util/safe-read-string filename))))
+         (and (vector? x)
+              (= "Macro" (first x))
+              (= "zotero-linked-file" (:name (second x))))
+         (let [[relative-path] (:arguments (second x))
+               parsed-path (common-util/safe-read-string relative-path)]
+           (when (string? parsed-path)
+             (swap! results update :zotero-linked-files conj parsed-path)))
          (and (vector? x)
               (= "Macro" (first x))
               (= "query" (:name (second x))))

@@ -1,21 +1,23 @@
 (ns frontend.components.theme
-  (:require [clojure.string :as string]
-            [electron.ipc :as ipc]
-            [frontend.components.settings :as settings]
-            [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
-            [frontend.extensions.pdf.core :as pdf]
-            [frontend.handler.plugin :as plugin-handler]
-            [frontend.handler.plugin-config :as plugin-config-handler]
-            [frontend.handler.route :as route-handler]
-            [frontend.handler.ui :as ui-handler]
-            [frontend.rum :refer [use-mounted]]
-            [frontend.state :as state]
-            [frontend.ui :as ui]
-            [frontend.util :as util]
-            [logseq.shui.hooks :as hooks]
-            [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+  (:require
+   ["ui" :as lsui]
+   [clojure.string :as string]
+   [electron.ipc :as ipc]
+   [frontend.components.settings :as settings]
+   [frontend.config :as config]
+   [frontend.context.i18n :refer [t]]
+   [frontend.extensions.pdf.core :as pdf]
+   [frontend.handler.plugin :as plugin-handler]
+   [frontend.handler.plugin-config :as plugin-config-handler]
+   [frontend.handler.route :as route-handler]
+   [frontend.handler.ui :as ui-handler]
+   [frontend.rum :refer [use-mounted]]
+   [frontend.state :as state]
+   [frontend.ui :as ui]
+   [frontend.util :as util]
+   [logseq.shui.hooks :as hooks]
+   [logseq.shui.ui :as shui]
+   [rum.core :as rum]))
 
 (rum/defc scrollbar-measure
   []
@@ -70,7 +72,8 @@
     (hooks/use-effect!
      #(let [doc js/document.documentElement]
         (.setAttribute doc "lang" preferred-language)
-        (some-> preferred-language (string/lower-case) (js/LSI18N.setLocale)))
+        (when preferred-language
+          (.setLocale (.-LSI18N lsui) (string/lower-case preferred-language))))
      [preferred-language])
 
     (hooks/use-effect!

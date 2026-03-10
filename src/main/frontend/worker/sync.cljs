@@ -16,14 +16,14 @@
             [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db-sync.cycle :as sync-cycle]
-            [logseq.db-sync.malli-schema :as db-sync-schema]
-            [logseq.db-sync.order :as sync-order]
             [logseq.db.common.normalize :as db-normalize]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]
+            [logseq.sync.cycle :as sync-cycle]
+            [logseq.sync.malli-schema :as db-sync-schema]
+            [logseq.sync.order :as sync-order]
             [promesa.core :as p]))
 
 (defonce *repo->latest-remote-tx (atom {}))
@@ -41,14 +41,17 @@
 (defn- sync-counts
   [repo]
   (when (worker-state/get-datascript-conn repo)
-    (let [pending-local (when-let [conn (client-ops-conn repo)]
-                          (count (d/datoms @conn :avet :db-sync/created-at)))
+    (let [ops-conn (client-ops-conn repo)
+          pending-local (when ops-conn
+                          (count (d/datoms @ops-conn :avet :db-sync/created-at)))
           pending-asset (client-op/get-unpushed-asset-ops-count repo)
-          local-tx (client-op/get-local-tx repo)
+          local-tx (when ops-conn
+                     (client-op/get-local-tx repo))
           remote-tx (get @*repo->latest-remote-tx repo)
           pending-server (when (and (number? local-tx) (number? remote-tx))
                            (max 0 (- remote-tx local-tx)))
-          graph-uuid (client-op/get-graph-uuid repo)]
+          graph-uuid (when ops-conn
+                       (client-op/get-graph-uuid repo))]
       {:pending-local pending-local
        :pending-asset pending-asset
        :pending-server pending-server

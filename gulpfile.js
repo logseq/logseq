@@ -75,7 +75,6 @@ const common = {
         'node_modules/marked/marked.min.js',
         'node_modules/@highlightjs/cdn-assets/highlight.min.js',
         'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
-        'packages/ui/dist/ui.js',
         'node_modules/@sqlite.org/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
         'node_modules/react/umd/react.production.min.js',
         'node_modules/react/umd/react.development.js',
@@ -125,7 +124,6 @@ const common = {
         'node_modules/prop-types/prop-types.min.js',
         'node_modules/interactjs/dist/interact.min.js',
         'node_modules/photoswipe/dist/umd/*.js',
-        'packages/ui/dist/ui.js',
         'node_modules/@sqlite.org/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'js'))),
       () => gulp.src([
@@ -219,25 +217,6 @@ const common = {
 
     cb()
   },
-
-  switchReactDevelopmentMode (cb) {
-    try {
-      const reactFrom = path.join(outputPath, 'js', 'react.development.js')
-      const reactTo = path.join(outputPath, 'js', 'react.production.min.js')
-      fs.renameSync(reactFrom, reactTo)
-
-      const reactDomFrom = path.join(outputPath, 'js',
-        'react-dom.development.js')
-      const reactDomTo = path.join(outputPath, 'js',
-        'react-dom.production.min.js')
-      fs.renameSync(reactDomFrom, reactDomTo)
-
-      cb()
-    } catch (err) {
-      console.error('Error during switchReactDevelopmentMode:', err)
-      cb(err)
-    }
-  },
 }
 
 exports.electron = () => {
@@ -290,7 +269,7 @@ exports.cap = common.runCapWithLocalDevServerEntry
 exports.clean = common.clean
 exports.watch = gulp.series(
   common.syncResourceFile,
-  common.syncAssetFiles, common.switchReactDevelopmentMode,
+  common.syncAssetFiles,
   gulp.parallel(common.keepSyncResourceFile, css.watchCSS))
 exports.watchMobile = gulp.series(
   common.syncResourceFile, common.syncAssetFiles,

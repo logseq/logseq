@@ -26,7 +26,19 @@
                                :else nil)))
         reaction-username (fn [reaction]
                             (let [user (:logseq.property/created-by-ref reaction)]
-                              (:block/title (db/entity (:db/id user)))))
+                              (cond
+                                (map? user)
+                                (if-let [user-id (:db/id user)]
+                                  (let [entity (db/entity user-id)]
+                                    (or (:block/title user)
+                                        (:block/title entity)))
+                                  (or (:block/title user)
+                                      (:logseq.property.user/name user)))
+                                (number? user)
+                                (let [entity (db/entity user)]
+                                  (or (:block/title entity)
+                                      (:logseq.property.user/name entity)))
+                                :else nil)))
         summary (reduce (fn [acc reaction]
                           (let [emoji-id (:logseq.property.reaction/emoji-id reaction)
                                 user-id (reaction-user-id reaction)
@@ -43,10 +55,10 @@
                         reactions)]
     (->> summary
          (map (fn [[emoji-id {:keys [count reacted-by-me? usernames]}]]
-                {:emoji-id emoji-id
-                 :count count
-                 :reacted-by-me? (boolean reacted-by-me?)
-                 :usernames (when (seq usernames)
-                              (->> usernames sort vec))}))
+                (cond-> {:emoji-id emoji-id
+                         :count count
+                         :reacted-by-me? (boolean reacted-by-me?)}
+                  (seq usernames)
+                  (assoc :usernames (->> usernames sort vec)))))
          (sort-by (juxt (comp - :count) :emoji-id))
          vec)))

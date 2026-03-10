@@ -923,8 +923,8 @@
     (hooks/use-effect!
      #(c.m/run-task*
        (m/sp
-        (c.m/<? (rtc-handler/<rtc-get-users-info))
-        (set-loading! false)))
+         (c.m/<? (rtc-handler/<rtc-get-users-info))
+         (set-loading! false)))
      [])
     [:div.flex.flex-col.gap-2.mt-4
      {:on-key-press (fn [e]

@@ -1,0 +1,28 @@
+{:linters
+ {:aliased-namespace-symbol {:level :warning}
+  :namespace-name-mismatch {:level :warning}
+  :used-underscored-binding {:level :warning}
+  :shadowed-var {:level :warning
+                 :exclude [meta name key keys uuid type]}
+
+  :consistent-alias
+  {:aliases {clojure.pprint pprint
+             clojure.string string
+             datascript.core d
+             datascript.transit dt
+             logseq.sync.common common
+             logseq.sync.config config
+             logseq.sync.node.routes node-routes
+             logseq.sync.platform.core platform
+             logseq.sync.protocol protocol
+             logseq.sync.storage storage
+             logseq.sync.worker.auth auth
+             logseq.sync.worker.handler.sync sync-handler
+             logseq.sync.worker.handler.ws ws-handler
+             logseq.sync.worker.http http
+             logseq.sync.worker.routes.index routes
+             logseq.sync.worker.ws ws}}}
+ :lint-as {promesa.core/let clojure.core/let
+           shadow.cljs.modern/defclass clj-kondo.lint-as/def-catch-all}
+ :skip-comments true
+ :output {:progress true}}

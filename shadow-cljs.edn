@@ -178,6 +178,7 @@
          :closure-defines {frontend.util/NODETEST true
                            logseq.shui.util/NODETEST true}
          :devtools {:enabled false}
+         :build-options {:ns-exclude-regexp "^logseq\\.agents(\\.|$)"}
          ;; disable :static-fns to allow for with-redefs and repl development
          :compiler-options {:static-fns false}
          :main frontend.test.frontend-node-test-runner/main}
@@ -187,7 +188,7 @@
                    :closure-defines {frontend.util/NODETEST true
                                      logseq.shui.util/NODETEST true}
                    :devtools {:enabled false}
-                   :build-options {:ns-exclude-regexp "^(frontend\\.worker|logseq\\.db-sync\\.worker)"}
+                   :build-options {:ns-exclude-regexp "^(frontend\\.worker|logseq\\.sync\\.worker|logseq\\.agents(\\.|$))"}
                    ;; disable :static-fns to allow for with-redefs and repl development
                    :compiler-options {:static-fns false}
                    :main frontend.test.frontend-node-test-runner/main}
@@ -201,11 +202,7 @@
 
   :publishing {:target :browser
                :module-loader true
-               :js-options {:ignore-asset-requires true
-                            :resolve {"react" {:target :global
-                                               :global "React"}
-                                      "react-dom" {:target :global
-                                                   :global "ReactDOM"}}}
+               :js-options {:ignore-asset-requires true}
                :modules {:main
                          {:init-fn frontend.publishing/init}
                          :code-editor

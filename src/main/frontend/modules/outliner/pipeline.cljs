@@ -3,6 +3,7 @@
             [datascript.core :as d]
             [frontend.db :as db]
             [frontend.db.react :as react]
+            [frontend.handler.agent-cancel :as agent-cancel]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
@@ -76,6 +77,8 @@
             ;;     (fs/unlink! repo (path/path-join (config/get-current-repo-assets-root) (str (:block/uuid asset) "." (:ext asset))) {})))
 
             (state/set-state! :editor/start-pos nil)
+
+            (agent-cancel/maybe-cancel-sessions-on-db-change! tx-data)
 
             (when-not (:graph/importing @state/state)
 

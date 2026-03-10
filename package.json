@@ -2,6 +2,9 @@
     "name": "logseq",
     "version": "0.0.1",
     "private": true,
+    "workspaces": [
+        "packages/*"
+    ],
     "main": "static/electron.js",
     "engines": {
         "node": ">=22.20.0"
@@ -94,10 +97,10 @@
         "cljs:release-electron": "clojure -M:cljs release app db-worker inference-worker electron --debug && clojure -M:cljs release publishing",
         "cljs:release-app": "clojure -M:cljs release app db-worker inference-worker",
         "cljs:release-publishing": "clojure -M:cljs release app publishing",
-        "cljs:test": "clojure -M:test compile test",
-        "cljs:run-test": "node static/tests.js -r '^(?!logseq.db-sync.).*' -e fix-me",
-        "cljs:test-no-worker": "clojure -M:test compile test-no-worker",
-        "cljs:run-test-no-worker": "node static/tests-no-worker.js",
+        "cljs:test": "node scripts/clean-shadow-test-builds.js && clojure -M:test compile test",
+        "cljs:run-test": "node scripts/run-tests-with-dom-shim.js -r '^(?!logseq.sync.).*' -r '^(?!logseq.agents.).*' -e fix-me",
+        "cljs:test-no-worker": "node scripts/clean-shadow-test-builds.js && clojure -M:test compile test-no-worker",
+        "cljs:run-test-no-worker": "node scripts/run-tests-no-worker-with-dom-shim.js",
         "cljs:dev-release-app": "clojure -M:cljs release app db-worker inference-worker --config-merge \"{:closure-defines {frontend.config/DEV-RELEASE true}}\"",
         "cljs:dev-release-electron": "clojure -M:cljs release app db-worker inference-worker electron --debug --config-merge \"{:closure-defines {frontend.config/DEV-RELEASE true}}\" && clojure -M:cljs release publishing",
         "cljs:debug": "clojure -M:cljs release app db-worker inference-worker --debug",
@@ -107,10 +110,11 @@
         "ios:dev": "cross-env PLATFORM=ios gulp cap",
         "android:dev": "cross-env PLATFORM=android gulp cap",
         "amplify:build": "yarn --cwd packages/amplify install",
-        "ui:build": "yarn --cwd packages/ui install",
+        "ui:build": "yarn --cwd packages/ui build:ui",
         "postinstall": "yarn ui:build"
     },
     "dependencies": {
+        "@ai-sdk/react": "^3.0.70",
         "@aparajita/capacitor-secure-storage": "^7.1.6",
         "@capacitor-community/safe-area": "7.0.0-alpha.1",
         "@capacitor/action-sheet": "7.0.1",
@@ -150,6 +154,8 @@
         "@tabler/icons-react": "^2.47.0",
         "@tabler/icons-webfont": "^2.47.0",
         "@tippyjs/react": "4.2.5",
+        "aws-amplify": "^6.15.6",
+        "ghostty-web": "^0.4.0",
         "bignumber.js": "^9.0.2",
         "chokidar": "3.5.1",
         "chrono-node": "2.2.4",
@@ -193,9 +199,11 @@
         "shepherd.js": "^9.1.0",
         "tailwind-capitalize-first-letter": "^1.0.4",
         "threads": "1.6.5",
+        "ui": "0.0.1",
         "url": "^0.11.0",
         "util": "^0.12.5",
-        "yargs-parser": "20.2.4"
+        "yargs-parser": "20.2.4",
+        "zod": "^4.3.6"
     },
     "resolutions": {
         "pixi-graph-fork/@pixi/app": "6.2.0",

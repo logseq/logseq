@@ -1,0 +1,60 @@
+;; shadow-cljs configuration
+{:deps true
+ :http {:port 9632}
+ :nrepl {:port 8703}
+ :builds
+ {:db-sync {:target :esm
+            :output-dir "worker/dist/worker"
+            :compiler-options {:source-map true
+                               :warnings {:fn-deprecated false
+                                          :redef false}}
+            :modules {:main {:exports {default logseq.sync.worker/worker
+                                       SyncDO logseq.sync.worker/SyncDO}}}
+            :js-options {:js-provider :import}
+            :closure-defines {shadow.cljs.devtools.client.env/enabled false
+                              goog.debug.LOGGING_ENABLED true}
+            :devtools {:enabled false}}
+  :agents-worker {:target :esm
+                  :output-dir "worker/dist/agents"
+                  :compiler-options {:source-map true
+                                     :warnings {:fn-deprecated false
+                                                :redef false}}
+                  :modules {:main {:exports {default logseq.agents.worker/worker
+                                             AgentSessionDO logseq.agents.worker/AgentSessionDO}}}
+                  :js-options {:js-provider :import}
+                  :closure-defines {shadow.cljs.devtools.client.env/enabled false
+                                    goog.debug.LOGGING_ENABLED true}
+                  :devtools {:enabled false}}
+  :db-sync-node {:target :node-script
+                 :output-to "worker/dist/node-adapter.js"
+                 :main logseq.sync.node.entry/main
+                 :compiler-options {:source-map true
+                                    :warnings {:fn-deprecated false
+                                               :redef false}}
+                 :devtools {:enabled false}
+                 :closure-defines {goog.debug.LOGGING_ENABLED true}}
+  :db-sync-test {:target :node-test
+                 :output-to "worker/dist/worker-test.js"
+                 :ns-regexp "logseq\\.sync\\.(?!node-server-test$).*-test$"
+                 :devtools {:enabled false}
+                 :main logseq.sync.test-runner/main}
+  :db-sync-worker-split-test {:target :node-test
+                              :output-to "worker/dist/worker-split-test.js"
+                              :ns-regexp "logseq\\.(sync\\.worker-test|agents\\.dispatch-test)$"
+                              :devtools {:enabled false}
+                              :main logseq.sync.worker-split-test-runner/main}
+  :agents-e2b-runtime-provider-test {:target :node-test
+                                     :output-to "worker/dist/agents-e2b-runtime-provider-test.js"
+                                     :ns-regexp "logseq\\.agents\\.e2b-runtime-provider-test$"
+                                     :devtools {:enabled false}
+                                     :main logseq.agents.e2b-runtime-provider-test-runner/main}
+  :agents-runtime-transport-test {:target :node-test
+                                  :output-to "worker/dist/agents-runtime-transport-test.js"
+                                  :ns-regexp "logseq\\.agents\\.(sandbox-test|runtime-provider-test)$"
+                                  :devtools {:enabled false}
+                                  :main logseq.agents.runtime-transport-test-runner/main}
+  :agents-m25-managed-auth-test {:target :node-test
+                                 :output-to "worker/dist/agents-m25-managed-auth-test.js"
+                                 :ns-regexp "logseq\\.agents\\.m25-managed-auth-test$"
+                                 :devtools {:enabled false}
+                                 :main logseq.agents.m25-managed-auth-test-runner/main}}}
