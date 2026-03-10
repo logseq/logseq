@@ -33,6 +33,8 @@
 
 (defn delete-graph!
   [graph]
-  (p/let [_ (persist-db/<unsafe-delete graph)]
-    (when (util/electron?)
-      (ipc/ipc "deleteGraph" graph))))
+  (if (util/electron?)
+    (p/do
+      (persist-db/<close-db graph)
+      (ipc/ipc "deleteGraph" graph))
+    (persist-db/<unsafe-delete graph)))
