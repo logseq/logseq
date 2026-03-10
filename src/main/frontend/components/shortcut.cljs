@@ -102,7 +102,6 @@
                               ;; Esc: close the popup
                               is-esc?
                               (do (.stopPropagation e)
-                                  (clear!)
                                   (close-fn))
 
                               ;; Backspace during accumulation: remove last key from sequence
@@ -178,23 +177,23 @@
           (ui/icon "x" {:size 12})]])
       ;; Placeholder
       (when-not has-keystroke?
-        [:span.shortcut-input-placeholder "Press keys to filter\u2026"])]
+        [:span.shortcut-input-placeholder (t :keymap/press-keys-to-filter)])]
 
      ;; SEPARATOR + TOOLBAR
      (shui/separator)
      [:div.shortcut-toolbar
       [:div
        (when has-keystroke?
-         [:button.shortcut-toolbar-action
+         [:button.shortcut-toolbar-action.shortcut-toolbar-reset
           {:on-click clear!}
           (ui/icon "rotate" {:size 12})
-          [:span "Clear"]])]
+          [:span (t :keymap/clear)]])]
       [:div.flex.items-center
        (when has-keystroke?
          [:span.shortcut-toolbar-hint
-          "Remove " (shui/shortcut "backspace" {:style :compact})])
+          (t :keymap/hint-remove) (shui/shortcut "backspace" {:style :compact})])
        [:span.shortcut-toolbar-hint
-        "Close " (shui/shortcut "escape" {:style :compact})]]]]))
+        (t :keymap/hint-close) (shui/shortcut "escape" {:style :compact})]]]]))
 
 (rum/defc pane-controls
   [q set-q! filter-key set-filter-key! keystroke set-keystroke! toggle-categories-fn pill-counts]
@@ -207,7 +206,7 @@
       [:span.search-input-wrap
        [:span.search-icon (ui/icon "search" {:size 15})]
        [:input.form-input.is-small
-        {:placeholder "Search shortcuts..."
+        {:placeholder (t :keymap/search-placeholder)
          :ref         *search-ref
          :value       (or q "")
          :auto-focus  true
@@ -264,7 +263,7 @@
           [:button.shortcut-keystroke-inactive
            {:on-click open-filter!}
            (ui/icon "keyboard" {:size 14})
-           [:span "Search by keys"]]))]
+           [:span (t :keymap/search-by-keys)]]))]
 
      ;; Row 2: filter pills + fold + refresh
      [:div.shortcut-pills-row
@@ -273,7 +272,12 @@
              :let [active? (or (and (= k :All) (nil? filter-key))
                                (= filter-key k))
                    cnt (get pill-counts k 0)
-                   title (if (= k :All) "All" (name k))]]
+                   title (case k
+                           :All (t :keymap/all)
+                           :Custom (t :keymap/custom)
+                           :Unset (t :keymap/unset)
+                           :Disabled (t :keymap/disabled)
+                           (name k))]]
          [:button.shortcut-filter-pill
           {:key   (name k)
            :class (when active? "shortcut-filter-pill--active")
@@ -653,7 +657,7 @@
       (for [[idx x] (map-indexed vector current-binding)
             :when (string? x)]
         [:div.shortcut-input-binding {:key x}
-         (shui/shortcut x)
+         (shui/shortcut x {:chord-separator (t :keymap/chord-separator)})
          (when (#{:idle :accepted :esc-hint :removed :reset} rec-state)
            [:button.shortcut-binding-remove
             {:aria-label "Remove binding"
@@ -681,7 +685,7 @@
             (ui/icon "x" {:size 12})])])
       ;; Placeholder
       (when (#{:idle :recording :accepted :removed :reset} rec-state)
-        [:span.shortcut-input-placeholder "Press a shortcut\u2026"])]
+        [:span.shortcut-input-placeholder (t :keymap/press-a-shortcut)])]
 
      ;; FEEDBACK BANNER (conditional)
      (let [undo-link
@@ -693,56 +697,56 @@
                              (set-current-binding! (:previous-binding own)))
                            (set-undo-snapshot! nil)
                            (set-rec-state! :idle))}
-              "Undo"])]
+              (t :keymap/undo)])]
        (case rec-state
          :conflict-cross
          [:div.shortcut-feedback.shortcut-feedback--error
-          [:span "Used by "
+          [:span (t :keymap/used-by)
            [:span.shortcut-feedback-name (str "\u201c" (conflict-action-names key-conflicts) "\u201d")]]
           (ui/tooltip
            (shui/button {:variant :destructive
                          :size :xs
                          :on-click override-fn!}
-                        "Reassign")
-           "Remove from the other action and assign here")]
+                        (t :keymap/reassign))
+           (t :keymap/reassign-tooltip))]
 
          :conflict-same
          [:div.shortcut-feedback.shortcut-feedback--error
-          [:span "Already bound to this action"]]
+          [:span (t :keymap/already-bound)]]
 
          :accepted
          (cond
            (:cross-context? accepted-info)
            [:div.shortcut-feedback.shortcut-feedback--warning
-            [:span "Also used for "
+            [:span (t :keymap/also-used-for)
              [:span.shortcut-feedback-name
               (str "\u201c" (:cross-action-name accepted-info) "\u201d")]
              (when-let [ctx (:cross-context-label accepted-info)]
-               (str " in " ctx))]]
+               (str (t :keymap/in-context) ctx))]]
 
            (:from accepted-info)
            [:div.shortcut-feedback.shortcut-feedback--success
-            [:span "Reassigned from "
+            [:span (t :keymap/reassigned-from)
              [:span.shortcut-feedback-name (str "\u201c" (:from accepted-info) "\u201d")]]
             undo-link]
 
            :else
            [:div.shortcut-feedback.shortcut-feedback--success
-            [:span "Shortcut added"]])
+            [:span (t :keymap/shortcut-added)]])
 
          :removed
          [:div.shortcut-feedback.shortcut-feedback--muted
-          [:span "Shortcut removed"]
+          [:span (t :keymap/shortcut-removed)]
           undo-link]
 
          :reset
          [:div.shortcut-feedback.shortcut-feedback--muted
-          [:span "Reset to default"]
+          [:span (t :keymap/reset-to-default)]
           undo-link]
 
          :esc-hint
          [:div.shortcut-feedback.shortcut-feedback--muted
-          [:span "Esc is reserved"]]
+          [:span (t :keymap/esc-is-reserved)]]
 
          nil))
 
@@ -756,22 +760,22 @@
          [:button.shortcut-toolbar-action.shortcut-toolbar-reset
           {:on-click reset-fn!}
           (ui/icon "rotate" {:size 12})
-          [:span "Reset"]])]
+          [:span (t :keymap/reset)]])]
       [:div.shortcut-toolbar-right
        ;; Reassign hint (conflict-cross only)
        (when (= :conflict-cross rec-state)
          [:span.shortcut-toolbar-hint
-          "Reassign "
+          (t :keymap/hint-reassign)
           (shui/shortcut (if util/mac? "meta+enter" "ctrl+enter") {:style :compact})])
        ;; Remove hint (idle/accepted/removed/reset with bindings, or conflict states)
        (when (or (and (#{:idle :accepted :removed :reset} rec-state) has-bindings?)
                  (#{:conflict-cross :conflict-same} rec-state))
          [:span.shortcut-toolbar-hint
-          "Remove "
+          (t :keymap/hint-remove)
           (shui/shortcut "backspace" {:style :compact})])
        ;; Close/Cancel hint
        [:span.shortcut-toolbar-hint
-        (if (= :recording rec-state) "Cancel " "Close ")
+        (if (= :recording rec-state) (t :keymap/hint-cancel) (t :keymap/hint-close))
         (shui/shortcut "escape" {:style :compact})]]]]))
 
 (defn- classify-shortcut
@@ -913,7 +917,7 @@
       (when (and ready? no-results?)
         [:div.shortcut-empty-state
          (ui/icon "list-search" {:size 24})
-         [:span.text-sm "No matching shortcuts"]])
+         [:span.text-sm (t :keymap/no-matching-shortcuts)]])
 
       (when (and ready? (not no-results?))
         [:ul.list-none.m-0.py-3
@@ -988,11 +992,12 @@
                              (for [b user-binding
                                    :when (string? b)]
                                [:span {:key b :style {:display "contents"}}
-                                (shui/shortcut b)]))]
+                                (shui/shortcut b {:chord-separator (t :keymap/chord-separator)})]))]
 
                           :else
                           (for [b binding
                                 :when (string? b)]
                             [:span {:key b :style {:display "contents"}}
                              (shui/shortcut (dh/binding-for-display id b)
-                                            {:raw-binding [b]})]))]])))))])])]]))
+                                            {:raw-binding [b]
+                                             :chord-separator (t :keymap/chord-separator)})]))]])))))])])]]))
