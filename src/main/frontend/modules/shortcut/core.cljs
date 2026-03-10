@@ -146,7 +146,8 @@
                       (when b
                         (try
                           (shui/shortcut-press! b true)
-                          (catch :default _e nil))))))
+                          (catch :default e
+                            (log/warn :shortcut-press-animation-error {:binding b :error e})))))))
                 ;; trigger fn
                 (when dispatch-fn
                   (plugin-handler/hook-lifecycle-fn! id dispatch-fn e))))
