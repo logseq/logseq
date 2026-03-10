@@ -491,7 +491,9 @@
                         :let [conflicts-ids-map (second v)]
                         [conflicting-id _handler] conflicts-ids-map]
                   (let [their-binding (dh/shortcut-binding conflicting-id)
-                        filtered (vec (remove #(= % accepted-key) their-binding))]
+                        canonical-accepted (shortcut-utils/canonicalize-binding accepted-key)
+                        filtered (vec (remove #(= (shortcut-utils/canonicalize-binding %) canonical-accepted)
+                                              their-binding))]
                     (shortcut/persist-user-shortcut! conflicting-id
                                                      (if (empty? filtered) [] filtered))))
 
@@ -528,7 +530,7 @@
                               (set-rec-state! :conflict-same)
                               (set-keystroke! ""))
                             ;; Check cross-action conflicts
-                            (let [conflicts-map (dh/get-conflicts-by-keys keystroke handler-id {:exclude-ids #{k}})]
+                            (let [conflicts-map (dh/get-conflicts-by-keys keystroke handler-id {:exclude-ids #{k} :group-global? true})]
                               (if-not (seq conflicts-map)
                                 ;; No same-context conflicts — check cross-context
                                 (let [cross-conflicts (dh/get-cross-context-conflicts keystroke handler-id {:exclude-ids #{k}})

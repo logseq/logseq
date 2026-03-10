@@ -271,11 +271,13 @@
         meta (.-metaKey e)
         shift (.-shiftKey e)
         keyname (get key-names (str (.-keyCode e)))]
+    ;; cond->> applies bottom-to-top, so list modifiers in reverse
+    ;; canonical order (ctrl+alt+meta+shift) to produce correct output
     (cond->> keyname
-      ctrl (str "ctrl+")
-      alt (str "alt+")
+      shift (str "shift+")
       meta (str "meta+")
-      shift (str "shift+"))))
+      alt (str "alt+")
+      ctrl (str "ctrl+"))))
 
 (defn keyname
   [e]

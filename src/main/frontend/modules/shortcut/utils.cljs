@@ -3,6 +3,37 @@
             [frontend.util :as util])
   (:import [goog.ui KeyboardShortcutHandler]))
 
+(def ^:private modifier-order
+  {"ctrl" 0 "alt" 1 "meta" 2 "shift" 3})
+
+(def ^:private modifier-aliases
+  {"mod"     (if util/mac? "meta" "ctrl")
+   "cmd"     "meta"
+   "command" "meta"
+   "opt"     "alt"
+   "option"  "alt"})
+
+(def ^:private modifier-set
+  #{"ctrl" "alt" "meta" "shift"})
+
+(defn canonicalize-binding
+  "Normalizes a binding string to canonical form:
+   - Resolves modifier aliases (mod/cmd/command → meta, opt/option → alt)
+   - Sorts modifiers into ctrl+alt+meta+shift order
+   - Lowercases everything
+   - Handles chord sequences (space-separated steps)"
+  [binding]
+  (when (string? binding)
+    (let [canonicalize-step
+          (fn [step]
+            (let [parts (map #(get modifier-aliases % %) (string/split step #"\+"))
+                  mods  (filter modifier-set parts)
+                  keys  (remove modifier-set parts)
+                  sorted-mods (sort-by #(get modifier-order % 99) mods)]
+              (string/join "+" (concat sorted-mods keys))))
+          steps (string/split (-> binding string/trim string/lower-case) #" ")]
+      (string/join " " (map canonicalize-step steps)))))
+
 (defn safe-parse-string-binding
   [binding]
   (try
