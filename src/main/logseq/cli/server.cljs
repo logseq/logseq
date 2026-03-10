@@ -1,5 +1,5 @@
 (ns logseq.cli.server
-  "db-worker-node lifecycle orchestration for logseq."
+  "db-worker-node lifecycle orchestration for logseq. Used by CLI and electron"
   (:require ["fs" :as fs]
             ["path" :as node-path]
             [clojure.string :as string]

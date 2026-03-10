@@ -4,7 +4,6 @@
             ["path" :as node-path]
             [electron.backup-file :as backup-file]
             [logseq.cli.common.graph :as cli-common-graph]
-            [logseq.common.config :as common-config]
             [logseq.db.common.sqlite :as common-sqlite]))
 
 (defn ensure-graphs-dir!
@@ -40,17 +39,3 @@
                                 :truncate-daily? true
                                 :keep-versions 12}))
     (fs/writeFileSync db-path data)))
-
-(defn unlink-graph!
-  [repo]
-  (let [db-name (common-sqlite/sanitize-db-name repo)
-        path (node-path/join (cli-common-graph/get-db-graphs-dir) db-name)
-        unlinked (node-path/join (cli-common-graph/get-db-graphs-dir) common-config/unlinked-graphs-dir)
-        new-path (node-path/join unlinked db-name)
-        new-path-exists? (fs/existsSync new-path)
-        new-path' (if new-path-exists?
-                    (node-path/join unlinked (str db-name "-" (random-uuid)))
-                    new-path)]
-    (when (fs/existsSync path)
-      (fs/ensureDirSync unlinked)
-      (fs/moveSync path new-path'))))
