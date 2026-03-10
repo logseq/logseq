@@ -143,10 +143,13 @@
                                           (start-commit-timer! kn-trimmed))
                                       ;; During accumulation, append
                                       (let [cur (rum/deref *keystroke-ref)
-                                            new-ks (util/trim-safe (str cur kn))]
-                                        (set-accumulating! true)
-                                        (set-keystroke! new-ks)
-                                        (start-commit-timer! new-ks))))))))))
+                                            parts (string/split (string/trim cur) #" ")
+                                            at-limit? (and (seq (first parts)) (>= (count parts) 5))]
+                                        (when-not at-limit?
+                                          (let [new-ks (util/trim-safe (str cur kn))]
+                                            (set-accumulating! true)
+                                            (set-keystroke! new-ks)
+                                            (start-commit-timer! new-ks))))))))))))
 
          (js/setTimeout #(.focus el) 128)
 
@@ -196,91 +199,99 @@
         "Close " (shui/shortcut "escape" {:style :compact})]]]]))
 
 (rum/defc pane-controls
-  [q set-q! filters set-filters! keystroke set-keystroke! toggle-categories-fn]
-  (let [*search-ref (rum/use-ref nil)]
+  [q set-q! filter-key set-filter-key! keystroke set-keystroke! toggle-categories-fn pill-counts]
+  (let [*search-ref (rum/use-ref nil)
+        in-keystroke? (not (string/blank? keystroke))]
     [:div.cp__shortcut-page-x-pane-controls
 
-     ;; search input — first and widest element
-     [:span.search-input-wrap
-      [:span.search-icon (ui/icon "search" {:size 15})]
-      [:input.form-input.is-small
-       {:placeholder "Search shortcuts..."
-        :ref         *search-ref
-        :value       (or q "")
-        :auto-focus  true
-        :on-key-down #(when (= 27 (.-keyCode %))
-                        (util/stop %)
-                        (if (string/blank? q)
-                          (some-> (rum/deref *search-ref) (.blur))
-                          (set-q! "")))
-        :on-change   #(let [v (util/evalue %)]
-                        (set-q! v))}]
+     ;; Row 1: search + keystroke button
+     [:div.shortcut-toolbar-row
+      [:span.search-input-wrap
+       [:span.search-icon (ui/icon "search" {:size 15})]
+       [:input.form-input.is-small
+        {:placeholder "Search shortcuts..."
+         :ref         *search-ref
+         :value       (or q "")
+         :auto-focus  true
+         :on-key-down #(when (= 27 (.-keyCode %))
+                         (util/stop %)
+                         (if (string/blank? q)
+                           (some-> (rum/deref *search-ref) (.blur))
+                           (set-q! "")))
+         :on-change   #(let [v (util/evalue %)]
+                         (when-not (string/blank? v)
+                           (set-keystroke! ""))
+                         (set-q! v))}]
 
-      (when-not (string/blank? q)
-        [:a.x
-         {:on-click (fn []
-                      (set-q! "")
-                      (js/setTimeout #(some-> (rum/deref *search-ref) (.focus)) 50))}
-         (ui/icon "x" {:size 14})])]
+       (when-not (string/blank? q)
+         [:a.x
+          {:on-click (fn []
+                       (set-q! "")
+                       (js/setTimeout #(some-> (rum/deref *search-ref) (.focus)) 50))}
+          (ui/icon "x" {:size 12})])]
 
-     ;; toggle fold/unfold categories
-     [:a.flex.items-center.icon-link
-      {:on-click toggle-categories-fn
-       :title "Toggle categories pane"}
-      (ui/icon "fold")]
+      ;; keystroke filter button
+      (let [filter-popup-id :shortcut-keystroke-filter
+            open-filter! (fn [^js e]
+                           (set-q! "")
+                           (shui/popup-show!
+                            (.-currentTarget e)
+                            (fn [_]
+                              (keyboard-filter-record-inner
+                               keystroke set-keystroke!
+                               #(shui/popup-hide! filter-popup-id)))
+                            {:id filter-popup-id
+                             :force-popover? true
+                             :align "end"
+                             :content-props
+                             {:class "shortcut-filter-popover-content p-0 w-auto"
+                              :collision-padding 12
+                              :onOpenAutoFocus #(.preventDefault %)
+                              :onCloseAutoFocus #(.preventDefault %)
+                              :onEscapeKeyDown (fn [_] false)
+                              :onPointerDownOutside (fn [_] nil)}}))]
+        (if in-keystroke?
+          [:button.shortcut-keystroke-active
+           {:on-click open-filter!}
+           [:span.shortcut-keystroke-keys
+            (ui/icon "keyboard" {:size 14})
+            (shui/shortcut keystroke)]
+           [:a.shortcut-keystroke-clear
+            {:on-click (fn [^js e]
+                         (.stopPropagation e)
+                         (set-keystroke! ""))}
+            (ui/icon "x" {:size 12})]]
+          [:button.shortcut-keystroke-inactive
+           {:on-click open-filter!}
+           (ui/icon "keyboard" {:size 14})
+           [:span "Search by keys"]]))]
 
-     ;; refresh
-     [:a.flex.items-center.icon-link
-      {:on-click refresh-shortcuts-list!
-       :title "Refresh all"}
-      (ui/icon "refresh")]
+     ;; Row 2: filter pills + fold + refresh
+     [:div.shortcut-pills-row
+      [:div.shortcut-filter-pills
+       (for [k [:All :Custom :Unset :Disabled]
+             :let [active? (or (and (= k :All) (nil? filter-key))
+                               (= filter-key k))
+                   cnt (get pill-counts k 0)
+                   title (if (= k :All) "All" (name k))]]
+         [:button.shortcut-filter-pill
+          {:key   (name k)
+           :class (when active? "shortcut-filter-pill--active")
+           :on-click #(set-filter-key! (when-not (or (= k :All) (= filter-key k)) k))}
+          [:span.shortcut-filter-pill-title title]
+          [:span.shortcut-filter-pill-count (str " \u00B7 " cnt)]])]
 
-     ;; keyboard filter
-     (let [filter-popup-id :shortcut-keystroke-filter
-           open-filter! (fn [^js e]
-                          (shui/popup-show!
-                           (.-currentTarget e)
-                           (fn [_]
-                             (keyboard-filter-record-inner
-                              keystroke set-keystroke!
-                              #(shui/popup-hide! filter-popup-id)))
-                           {:id filter-popup-id
-                            :force-popover? true
-                            :align "end"
-                            :content-props
-                            {:class "shortcut-filter-popover-content p-0 w-auto"
-                             :collision-padding 12
-                             :onOpenAutoFocus #(.preventDefault %)
-                             :onCloseAutoFocus #(.preventDefault %)
-                             :onEscapeKeyDown (fn [_] false)
-                             :onPointerDownOutside (fn [_] nil)}}))]
-       [:a.flex.items-center.icon-link.relative
-        {:on-click open-filter!
-         :title "Filter by keystroke"}
-        (ui/icon "keyboard")
-        (when-not (string/blank? keystroke)
-          (ui/point "bg-red-600.absolute" 4 {:style {:right -2 :top -2}}))])
+      (when (string/blank? q)
+        [:div.flex.items-center.gap-2
+         [:a.flex.items-center.icon-link
+          {:on-click toggle-categories-fn
+           :title "Toggle categories pane"}
+          (ui/icon "fold")]
 
-     ;; category filter
-     (ui/dropdown-with-links
-      (fn [{:keys [toggle-fn]}]
-        [:a.flex.items-center.icon-link.relative
-         {:on-click toggle-fn
-          :title "Filter by status"}
-         (ui/icon "filter")
-
-         (when (seq filters)
-           (ui/point "bg-red-600.absolute" 4 {:style {:right -2 :top -2}}))])
-
-      (for [k [:All :Disabled :Unset :Custom]
-            :let [all? (= k :All)
-                  checked? (or (contains? filters k) (and all? (nil? (seq filters))))]]
-
-        {:title   (if all? (t :keymap/all) (t (keyword :keymap (string/lower-case (name k)))))
-         :icon    (ui/icon (if checked? "checkbox" "square"))
-         :options {:on-click #(set-filters! (if all? #{} (let [f (if checked? disj conj)] (f filters k))))}})
-
-      nil)]))
+         [:a.flex.items-center.icon-link
+          {:on-click refresh-shortcuts-list!
+           :title "Refresh all"}
+          (ui/icon "refresh")]])]]))
 
 (rum/defc shortcut-desc-label
   [id binding-map]
@@ -759,27 +770,55 @@
         (if (= :recording rec-state) "Cancel " "Close ")
         (shui/shortcut "escape" {:style :compact})]]]]))
 
+(defn- classify-shortcut
+  "Return a set of category keywords (:Custom, :Disabled, :Unset) for a shortcut."
+  [{:keys [binding user-binding]}]
+  (let [binding (to-vector binding)
+        user-binding (and user-binding (to-vector user-binding))
+        custom? (not (nil? user-binding))
+        disabled? (or (false? user-binding)
+                      (false? (first binding)))
+        unset? (and (not disabled?)
+                    (or (= user-binding [])
+                        (and (nil? binding) (nil? user-binding))
+                        (and (= binding [])
+                             (nil? user-binding))))]
+    (cond-> #{}
+      custom? (conj :Custom)
+      disabled? (conj :Disabled)
+      unset? (conj :Unset))))
+
+(defn- count-shortcuts-by-filter
+  "Count shortcuts per filter category in result-list-map.
+   Returns {:All n :Custom n :Unset n :Disabled n}."
+  [result-list-map]
+  (let [all-bindings (mapcat (fn [[_c bm]] (vals bm)) result-list-map)]
+    (reduce (fn [acc m]
+              (let [cats (classify-shortcut m)]
+                (-> acc
+                    (update :All inc)
+                    (cond->
+                     (contains? cats :Custom) (update :Custom inc)
+                     (contains? cats :Disabled) (update :Disabled inc)
+                     (contains? cats :Unset) (update :Unset inc)))))
+            {:All 0 :Custom 0 :Unset 0 :Disabled 0}
+            all-bindings)))
+
 (defn- count-visible-shortcuts
-  "Count shortcuts visible after applying category filters and keystroke filter."
-  [result-list-map filters in-keystroke? keystroke]
+  "Count shortcuts visible after applying category filter and keystroke filter."
+  [result-list-map filter-key in-keystroke? keystroke]
   (->> result-list-map
        (mapcat
         (fn [[_c binding-map]]
-          (for [[id {:keys [binding user-binding]}] binding-map
-                :let [binding (to-vector binding)
-                      user-binding (and user-binding (to-vector user-binding))
-                      custom? (not (nil? user-binding))
-                      disabled? (or (false? user-binding)
-                                    (false? (first binding)))
-                      unset? (and (not disabled?)
-                                  (or (= user-binding [])
-                                      (and (nil? binding) (nil? user-binding))
-                                      (and (= binding [])
-                                           (nil? user-binding))))]
-                :when (or (nil? (seq filters))
-                          (when (contains? filters :Custom) custom?)
-                          (when (contains? filters :Disabled) disabled?)
-                          (when (contains? filters :Unset) unset?))
+          (for [[id m] binding-map
+                :let [cats (classify-shortcut m)
+                      binding (to-vector (:binding m))
+                      user-binding (and (:user-binding m) (to-vector (:user-binding m)))
+                      disabled? (contains? cats :Disabled)
+                      unset? (contains? cats :Unset)]
+                :when (or (= filter-key :All)
+                          (nil? filter-key)
+                          (contains? cats filter-key))
                 :when (or (not in-keystroke?)
                           (and (not disabled?) (not unset?)
                                (let [binding' (or user-binding binding)
@@ -803,13 +842,13 @@
         _ (r/use-atom shortcut-config/*category)
         _ (r/use-atom *refresh-sentry)
         [ready?, set-ready!] (rum/use-state false)
-        [filters, set-filters!] (rum/use-state #{})
+        [filter-key, set-filter-key!] (rum/use-state nil)
         [keystroke, set-keystroke!] (rum/use-state "")
         [q set-q!] (rum/use-state nil)
 
         categories-list-map (build-categories-map)
         all-categories (into #{} (map first categories-list-map))
-        in-filters? (boolean (seq filters))
+        in-filter? (some? filter-key)
         in-query? (not (string/blank? (util/trim-safe q)))
         in-keystroke? (not (string/blank? keystroke))
 
@@ -830,23 +869,11 @@
                               (set-folded-categories! #{})
                               (set-folded-categories! all-categories))
 
-        total-count (apply + (map #(count (second %)) categories-list-map))
-        visible-count (if (or in-filters? in-keystroke?)
-                        (count-visible-shortcuts result-list-map filters in-keystroke? keystroke)
+        pill-counts (count-shortcuts-by-filter result-list-map)
+        visible-count (if (or in-filter? in-keystroke?)
+                        (count-visible-shortcuts result-list-map filter-key in-keystroke? keystroke)
                         (apply + (map #(count (second %)) result-list-map)))
-        shortcuts-word (fn [n] (if (= n 1) "shortcut" "shortcuts"))
-        filter-qualifier (cond
-                           (and in-filters? (contains? filters :Custom)) "custom "
-                           (and in-filters? (contains? filters :Disabled)) "disabled "
-                           (and in-filters? (contains? filters :Unset)) "unset "
-                           :else "")
-        status-text (cond
-                      (not ready?) "..."
-                      (zero? visible-count) "No matching shortcuts"
-                      (or in-query? in-keystroke? in-filters?)
-                      (str visible-count " " filter-qualifier (shortcuts-word visible-count))
-                      :else
-                      (str total-count " " (shortcuts-word total-count)))]
+        no-results? (and ready? (zero? visible-count))]
 
     (hooks/use-effect!
      (fn []
@@ -868,21 +895,25 @@
                  (let [h (.-offsetHeight header)]
                    (.setProperty (.-style el) "--shortcut-header-h" (str h "px"))))))}
      [:header
-      (pane-controls q set-q! filters set-filters! keystroke set-keystroke! toggle-categories!)
-      [:div.shortcut-status-line status-text]]
+      (pane-controls q set-q! filter-key set-filter-key! keystroke set-keystroke! toggle-categories! pill-counts)]
 
      [:article
       (when-not ready?
         [:p.py-8.flex.justify-center (ui/loading "")])
 
-      (when ready?
+      (when (and ready? no-results?)
+        [:div.shortcut-empty-state
+         (ui/icon "search" {:size 24})
+         [:span "No matching shortcuts"]])
+
+      (when (and ready? (not no-results?))
         [:ul.list-none.m-0.py-3
          (for [[c binding-map] result-list-map
                :let [folded? (contains? folded-categories c)]]
            [:<>
             ;; category row
             (when (and (not in-query?)
-                       (not in-filters?)
+                       (not in-filter?)
                        (not in-keystroke?))
               [:li.flex.justify-between.th
                {:key      (str c)
@@ -892,25 +923,19 @@
                [:i.flex.items-center
                 (ui/icon (if folded? "chevron-left" "chevron-down"))]])
 
-            ;; binding row
-            (when (or in-query? in-filters? (not folded?))
+            ;; binding rows
+            (when (or in-query? in-filter? (not folded?))
               (for [[id {:keys [binding user-binding] :as m}] binding-map
                     :let [binding (to-vector binding)
                           user-binding (and user-binding (to-vector user-binding))
                           label (shortcut-desc-label id m)
-                          custom? (not (nil? user-binding))
-                          disabled? (or (false? user-binding)
-                                        (false? (first binding)))
-                          unset? (and (not disabled?)
-                                      (or (= user-binding [])
-                                          (and (nil? binding) (nil? user-binding))
-                                          (and (= binding [])
-                                               (nil? user-binding))))]]
+                          cats (classify-shortcut m)
+                          custom? (contains? cats :Custom)
+                          disabled? (contains? cats :Disabled)
+                          unset? (contains? cats :Unset)]]
 
-                (when (or (nil? (seq filters))
-                          (when (contains? filters :Custom) custom?)
-                          (when (contains? filters :Disabled) disabled?)
-                          (when (contains? filters :Unset) unset?))
+                (when (or (nil? filter-key)
+                          (contains? cats filter-key))
 
                   ;; keystrokes filter
                   (when (or (not in-keystroke?)

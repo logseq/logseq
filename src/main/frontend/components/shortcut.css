@@ -17,7 +17,11 @@
   @apply relative;
 
   &-pane-controls {
-    @apply flex gap-3 items-center;
+    @apply flex flex-col gap-2;
+
+    .shortcut-toolbar-row {
+      @apply flex gap-3 items-center;
+    }
 
     .search-input-wrap {
       @apply relative flex-1 min-w-0;
@@ -30,18 +34,23 @@
 
       input.form-input {
         @apply w-full pl-7 text-sm mt-0;
+        border-radius: 6px;
 
         &:focus {
           @apply outline-none border-gray-04 ring-2 ring-ring ring-offset-2;
-          --tw-ring-offset-color: var(--ls-primary-background-color, hsl(var(--background)));
+          --tw-ring-offset-color: var(--lx-gray-01, var(--ls-primary-background-color, var(--rx-gray-01)));
         }
       }
 
       a.x {
-        @apply flex items-center absolute right-1 px-1 opacity-60
-        hover:opacity-90;
+        @apply flex items-center absolute right-1 px-1 cursor-pointer;
         top: 50%;
         transform: translateY(-50%);
+        color: var(--lx-gray-09, var(--rx-gray-09));
+
+        &:hover {
+          color: var(--lx-gray-12, var(--rx-gray-12));
+        }
       }
     }
 
@@ -50,22 +59,115 @@
     }
 
     a.icon-link {
-      @apply opacity-80 hover:opacity-100 active:opacity-40 select-none;
+      @apply hover:opacity-80 active:opacity-40 select-none;
 
-      color: var(--ls-secondary-text-color);
+      color: var(--lx-gray-09, var(--color-level-6, var(--rx-gray-09)));
+    }
+
+    .shortcut-pills-row {
+      @apply flex items-center justify-between gap-2;
+    }
+
+    .shortcut-filter-pills {
+      @apply flex items-center gap-1 flex-wrap;
+    }
+
+    .shortcut-filter-pill {
+      @apply text-xs px-2 py-0.5 rounded-full cursor-pointer select-none
+      border;
+      color: var(--lx-gray-09, var(--rx-gray-09));
+      background-color: transparent;
+      border-color: var(--lx-gray-06, var(--ls-quaternary-background-color, var(--rx-gray-06)));
+      transition: all 100ms ease;
+
+      &:hover {
+        background-color: var(--lx-gray-05-alpha, var(--rx-gray-05-alpha));
+        color: var(--lx-gray-12, var(--rx-gray-12));
+      }
+
+      &-title {
+        font-weight: 400;
+      }
+
+      &-count {
+        font-weight: 400;
+        opacity: 0.6;
+      }
+
+      &--active {
+        background-color: var(--lx-gray-06-alpha, var(--rx-gray-06-alpha));
+        border-color: transparent;
+        color: var(--lx-gray-12, var(--rx-gray-12));
+
+        .shortcut-filter-pill-title {
+          font-weight: 500;
+        }
+      }
+    }
+
+    .shortcut-keystroke-inactive,
+    .shortcut-keystroke-active {
+      @apply flex items-center gap-1.5 text-sm cursor-pointer
+      select-none flex-shrink-0;
+      height: 30px;
+      padding: 0 10px;
+      min-width: 140px;
+      border-radius: 6px;
+      border: 1px solid var(--lx-gray-06, var(--ls-quaternary-background-color, var(--rx-gray-06)));
+      background-color: var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02)));
+      color: var(--lx-gray-12, var(--rx-gray-12));
+      transition: background-color 150ms ease;
+      outline: none;
+
+      &:hover {
+        background-color: var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)));
+      }
+
+      &:focus-visible {
+        @apply ring-2 ring-ring ring-offset-2;
+        --tw-ring-offset-color: var(--lx-gray-01, var(--ls-primary-background-color, var(--rx-gray-01)));
+      }
+    }
+
+    .shortcut-keystroke-active {
+      max-width: 50%;
+
+      .shui-shortcut-key {
+        animation: shortcut-badge-in 150ms ease-out;
+      }
+    }
+
+    .shortcut-keystroke-keys {
+      @apply flex items-center gap-1.5;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      mask-image: linear-gradient(to right, black 80%, transparent);
+      -webkit-mask-image: linear-gradient(to right, black 80%, transparent);
+    }
+
+    .shortcut-keystroke-clear {
+      @apply flex items-center cursor-pointer;
+      color: var(--lx-gray-09, var(--rx-gray-09));
+      margin-left: auto;
+
+      &:hover {
+        color: var(--lx-gray-12, var(--rx-gray-12));
+      }
     }
 
   }
 
   > header {
-    @apply px-4 pb-2 flex flex-col gap-2 sticky top-0 z-10;
+    @apply px-4 flex flex-col gap-2 sticky top-0 z-10;
     padding-top: 20px;
+    padding-bottom: 20px;
     background-color: hsl(var(--background));
   }
 
-  .shortcut-status-line {
-    @apply text-xs select-none;
-    color: var(--rx-gray-09, var(--ls-secondary-text-color));
+  .shortcut-empty-state {
+    @apply flex flex-col items-center justify-center gap-2 py-16 select-none;
+    color: var(--lx-gray-09, var(--rx-gray-09));
   }
 
   > article {
@@ -79,10 +181,10 @@
 
         &.shortcut-row {
           @apply rounded-md cursor-pointer select-none py-1 px-2 -mx-1;
-          transition: background-color 100ms ease, color 100ms ease;
+          transition: background-color 100ms ease, opacity 100ms ease;
 
           &:hover {
-            background-color: var(--rx-gray-04, rgba(255, 255, 255, 0.06));
+            background-color: var(--lx-gray-04-alpha, var(--rx-gray-04-alpha));
           }
 
           &:active {
@@ -91,7 +193,7 @@
 
           /* Active row (popover open) — stronger than hover so it stays visible */
           &.active {
-            background-color: var(--rx-gray-05, rgba(255, 255, 255, 0.1));
+            background-color: var(--lx-gray-05-alpha, var(--rx-gray-05-alpha));
           }
         }
 
@@ -100,7 +202,7 @@
           select-none active:opacity-80 px-2 py-1 z-[1];
           top: var(--shortcut-header-h, 0px);
 
-          background-color: var(--ls-tertiary-background-color);
+          background-color: var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)));
         }
 
         .label-wrap {
@@ -135,15 +237,15 @@
 
       /* CSS-only hover dimming: dim all rows except hovered */
       &:hover li.shortcut-row:not(:hover):not(.active) {
-        color: var(--rx-gray-11);
+        opacity: 0.5;
       }
 
       /* When popover is open: dim non-active rows, but restore on hover */
       &:has(.active) li.shortcut-row:not(.active) {
-        color: var(--rx-gray-11);
+        opacity: 0.5;
 
         &:hover {
-          color: var(--rx-gray-12);
+          opacity: 0.85;
         }
       }
     }
@@ -179,7 +281,7 @@
   @apply px-4 font-medium text-xs select-none;
   padding-top: 16px;
   padding-bottom: 2px;
-  color: var(--rx-gray-11, var(--ls-secondary-text-color));
+  color: var(--lx-gray-11, var(--rx-gray-11));
 }
 
 /* Input field — borderless, content sits directly on popover surface */
@@ -214,15 +316,15 @@
 /* Each binding grouped in a subtle container */
 .shortcut-input-binding {
   @apply inline-flex items-center flex-wrap rounded-md p-1;
-  background-color: var(--rx-gray-04-alpha, rgba(0, 0, 0, 0.07));
+  background-color: var(--lx-gray-04-alpha, var(--rx-gray-04-alpha));
   max-width: 100%;
 
   .shortcut-binding-remove {
     @apply flex items-center ml-1 cursor-pointer select-none;
-    color: var(--rx-gray-10);
+    color: var(--lx-gray-10, var(--rx-gray-10));
 
     &:hover {
-      color: var(--rx-gray-12);
+      color: var(--lx-gray-12, var(--rx-gray-12));
     }
   }
 }
@@ -274,8 +376,8 @@
     background-color: var(--rx-amber-03-alpha, hsla(44, 100%, 50%, 0.1));
   }
   &--muted {
-    color: var(--rx-gray-09, var(--ls-secondary-text-color));
-    background-color: var(--rx-gray-03-alpha, rgba(0, 0, 0, 0.04));
+    color: var(--lx-gray-09, var(--rx-gray-09));
+    background-color: var(--lx-gray-03-alpha, var(--rx-gray-03-alpha));
   }
 }
 
@@ -298,7 +400,7 @@
   &:hover { text-decoration: underline; }
 
   .shortcut-feedback--muted & {
-    color: var(--rx-gray-11, var(--ls-secondary-text-color));
+    color: var(--lx-gray-11, var(--rx-gray-11));
   }
 
   .shortcut-feedback--success & {
@@ -309,13 +411,13 @@
 /* Toolbar */
 .shortcut-toolbar {
   @apply flex items-center justify-between px-4 py-1.5 text-xs select-none;
-  color: var(--rx-gray-08, rgba(0, 0, 0, 0.4));
+  color: var(--lx-gray-08, var(--rx-gray-08));
   margin-top: auto;
 }
 
 .shortcut-toolbar-action {
   @apply cursor-pointer flex items-center gap-1;
-  &:hover { color: var(--rx-gray-12, var(--ls-primary-text-color)); }
+  &:hover { color: var(--lx-gray-12, var(--rx-gray-12)); }
 }
 
 .shortcut-toolbar-hint {
@@ -324,6 +426,11 @@
 }
 
 /* Animations */
+@keyframes shortcut-badge-in {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 @keyframes shortcut-fade-in {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
@@ -376,7 +483,7 @@
 
 .sidebar-item .cp__shortcut-page-x {
   padding: 12px 0 0 0;
-  background-color: var(--color-level-2);
+  background-color: var(--color-level-2, var(--lx-gray-02, var(--rx-gray-02)));
 }
 
 .sidebar-item article {
