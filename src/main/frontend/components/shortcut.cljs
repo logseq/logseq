@@ -30,7 +30,7 @@
 
 (defonce *refresh-sentry (atom 0))
 (defn refresh-shortcuts-list! [] (reset! *refresh-sentry (inc @*refresh-sentry)))
-(defonce *global-listener-setup? (atom false))
+(defonce *global-listener-refcount (atom 0))
 
 (defn- to-vector [v]
   (when-not (nil? v)
@@ -87,13 +87,9 @@
        (let [^js el (rum/deref *ref-el)
              key-handler (KeyHandler. el)
 
-             teardown-global!
-             (when-not @*global-listener-setup?
-               (shortcut/unlisten-all! true)
-               (reset! *global-listener-setup? true)
-               (fn []
-                 (shortcut/listen-all!)
-                 (reset! *global-listener-setup? false)))]
+             _ (when (zero? @*global-listener-refcount)
+                 (shortcut/unlisten-all! true))
+             _ (swap! *global-listener-refcount inc)]
 
          (events/listen key-handler "key"
                         (fn [^js e]
@@ -155,7 +151,8 @@
 
          #(do (when-let [timer (rum/deref *commit-timer)]
                 (js/clearTimeout timer))
-              (some-> teardown-global! (apply nil))
+              (when (zero? (swap! *global-listener-refcount dec))
+                (shortcut/listen-all!))
               (.dispose key-handler))))
      [])
 
@@ -547,13 +544,9 @@
        (let [^js el (rum/deref *ref-el)
              key-handler (KeyHandler. el)
 
-             teardown-global!
-             (when-not @*global-listener-setup?
-               (shortcut/unlisten-all! true)
-               (reset! *global-listener-setup? true)
-               (fn []
-                 (shortcut/listen-all!)
-                 (reset! *global-listener-setup? false)))]
+             _ (when (zero? @*global-listener-refcount)
+                 (shortcut/unlisten-all! true))
+             _ (swap! *global-listener-refcount inc)]
 
          (events/listen key-handler "key"
                         (fn [^js e]
@@ -632,7 +625,8 @@
                 (js/clearTimeout timer))
               (when-let [timer (rum/deref *fade-timer)]
                 (js/clearTimeout timer))
-              (some-> teardown-global! (apply nil))
+              (when (zero? (swap! *global-listener-refcount dec))
+                (shortcut/listen-all!))
               (.dispose key-handler))))
      [])
 
@@ -930,7 +924,7 @@
                           user-binding (and user-binding (to-vector user-binding))
                           label (shortcut-desc-label id m)
                           cats (classify-shortcut m)
-                          custom? (contains? cats :Custom)
+                          _custom? (contains? cats :Custom)
                           disabled? (contains? cats :Disabled)
                           unset? (contains? cats :Unset)]]
 
@@ -949,39 +943,47 @@
                                                   (and (sequential? s) (sequential? keystroke')
                                                        (apply = (map first [s keystroke']))))) binding')))))
 
-                    [:li.shortcut-row.flex.items-start.justify-between.text-sm
-                     {:key (str id)
-                      :class (when (= active-id id) "active")
-                      :on-click (when (and id (not disabled?))
-                                  (fn [^js e]
-                                    (if (= active-id id)
-                                      (let [popup-id (keyword (str "customize-shortcut-" (name id)))]
-                                        (reset! *active-shortcut-id nil)
-                                        (shui/popup-hide! popup-id))
-                                      (let [anchor-el (-> (.-currentTarget e) (.querySelector ".action-wrap"))]
-                                        (open-customize-shortcut-dialog! anchor-el id)))))}
-                     [:span.label-wrap label]
+                    (let [row-action (when (and id (not disabled?))
+                                       (fn [^js e]
+                                         (if (= active-id id)
+                                           (let [popup-id (keyword (str "customize-shortcut-" (name id)))]
+                                             (reset! *active-shortcut-id nil)
+                                             (shui/popup-hide! popup-id))
+                                           (let [anchor-el (-> (.-currentTarget e) (.querySelector ".action-wrap"))]
+                                             (open-customize-shortcut-dialog! anchor-el id)))))]
+                      [:li.shortcut-row.flex.items-start.justify-between.text-sm
+                       {:key (str id)
+                        :class (when (= active-id id) "active")
+                        :tab-index (when (and id (not disabled?)) 0)
+                        :role (when (and id (not disabled?)) "button")
+                        :on-click row-action
+                        :on-key-down (when row-action
+                                       (fn [^js e]
+                                         (when (contains? #{13 32} (.-keyCode e))
+                                           (.preventDefault e)
+                                           (row-action e))))}
+                       [:span.label-wrap label]
 
-                     [:span.action-wrap
-                      {:class (util/classnames [{:disabled disabled?}])}
+                       [:span.action-wrap
+                        {:class (util/classnames [{:disabled disabled?}])}
 
-                      (cond
-                        unset?
-                        [:span.shortcut-status-label (t :keymap/unset)]
+                        (cond
+                          unset?
+                          [:span.shortcut-status-label (t :keymap/unset)]
 
-                        (or user-binding (false? user-binding))
-                        [:<>
-                         [:span.shortcut-status-label (str (t :keymap/custom) ":")]
-                         (if disabled?
-                           [:span.shortcut-status-label (t :keymap/disabled)]
-                           (for [b user-binding
-                                 :when (string? b)]
-                             [:span {:key b}
-                              (shui/shortcut b)]))]
+                          (or user-binding (false? user-binding))
+                          [:<>
+                           [:span.shortcut-status-label (str (t :keymap/custom) ":")]
+                           (if disabled?
+                             [:span.shortcut-status-label (t :keymap/disabled)]
+                             (for [b user-binding
+                                   :when (string? b)]
+                               [:span {:key b}
+                                (shui/shortcut b)]))]
 
-                        :else
-                        (for [b binding
-                              :when (string? b)]
-                          [:span {:key b}
-                           (shui/shortcut (dh/binding-for-display id b)
-                                          {:raw-binding [b]})]))]]))))])])]]))
+                          :else
+                          (for [b binding
+                                :when (string? b)]
+                            [:span {:key b}
+                             (shui/shortcut (dh/binding-for-display id b)
+                                            {:raw-binding [b]})]))]])))))])])]]))
