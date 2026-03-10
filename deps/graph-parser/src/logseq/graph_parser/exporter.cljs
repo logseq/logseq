@@ -57,6 +57,126 @@
             :block/title new-title
             :block/name (common-util/page-name-sanity-lc new-title)})))
 
+(def template-file-property-names #{:template :template-including-parent})
+
+(defn- get-template-name
+  [block]
+  (let [template-name (get-in block [:block/properties :template])]
+    (when (string? template-name)
+      (not-empty (string/trim template-name)))))
+
+(defn- template-including-parent?
+  [block]
+  (not= false (get-in block [:block/properties :template-including-parent])))
+
+(defn- remove-template-property-lines
+  [title]
+  (if (string? title)
+    (->> (string/split-lines title)
+         (remove (fn [line]
+                   (let [trimmed-line (string/triml line)]
+                     (or (string/starts-with? trimmed-line "template::")
+                         (string/starts-with? trimmed-line "template-including-parent::")))))
+         (string/join "\n"))
+    title))
+
+(defn- strip-template-properties
+  [block]
+  (cond-> block
+    (:block/title block)
+    (update :block/title remove-template-property-lines)
+
+    (seq (:block/properties block))
+    (update :block/properties #(apply dissoc % template-file-property-names))
+
+    (seq (:block/properties-text-values block))
+    (update :block/properties-text-values #(apply dissoc % template-file-property-names))
+
+    (seq (:block/properties-order block))
+    (update :block/properties-order (fn [props-order] (vec (remove template-file-property-names props-order))))))
+
+(defn- group-block-children-by-parent
+  [blocks]
+  (reduce (fn [result {:block/keys [parent uuid]}]
+            (if (and (vector? parent)
+                     (= :block/uuid (first parent)))
+              (update result (second parent) (fnil conj []) uuid)
+              result))
+          {}
+          blocks))
+
+(defn- get-block-subtree-uuids
+  [block-children root-uuid]
+  (loop [queue [root-uuid]
+         result []]
+    (if-let [current-uuid (first queue)]
+      (recur (into (vec (rest queue)) (get block-children current-uuid))
+             (conj result current-uuid))
+      result)))
+
+(defn- clone-template-content-blocks
+  [blocks-by-uuid block-children template-page-uuid template-root-uuid content-root-uuids]
+  (let [*cloned-uuids (atom #{})
+        clone-block
+        (fn clone-block [source-uuid parent-uuid]
+          (let [source-block (get blocks-by-uuid source-uuid)
+                cloned-uuid (common-uuid/gen-uuid)
+                cloned-block (-> source-block
+                                 strip-template-properties
+                                 (assoc :block/uuid cloned-uuid
+                                        :block/page [:block/uuid template-page-uuid]
+                                        :block/parent [:block/uuid parent-uuid])
+                                 (dissoc :db/id))]
+            (swap! *cloned-uuids conj cloned-uuid)
+            (cons cloned-block
+                  (mapcat #(clone-block % cloned-uuid)
+                          (get block-children source-uuid)))))]
+    {:blocks (vec (mapcat #(clone-block % template-root-uuid) content-root-uuids))
+     :preserve-empty-properties-uuids @*cloned-uuids}))
+
+(defn- extract-template-blocks
+  [db blocks]
+  (let [template-page (d/entity db :logseq.class/Template)
+        template-page-uuid (:block/uuid template-page)
+        blocks-by-uuid (into {} (map (juxt :block/uuid identity) blocks))
+        block-children (group-block-children-by-parent blocks)]
+    (reduce
+     (fn [{:keys [blocks template-blocks preserve-empty-properties-uuids]} block]
+       (let [template-name (get-template-name block)
+             cleaned-block (strip-template-properties block)
+             source-preserve-empty-properties-uuids
+             (if template-name
+               (set (get-block-subtree-uuids block-children (:block/uuid block)))
+               #{})
+             content-root-uuids (if (template-including-parent? block)
+                                  [(:block/uuid block)]
+                                  (get block-children (:block/uuid block)))
+             template-root-block
+             (when template-name
+               {:block/uuid (common-uuid/gen-uuid)
+                :block/title template-name
+                :block/page [:block/uuid template-page-uuid]
+                :block/parent [:block/uuid template-page-uuid]
+                :block/order (db-order/gen-key)
+                :block/format (:block/format block)
+                :block/tags [:logseq.class/Template]})
+             template-content
+             (if template-root-block
+               (clone-template-content-blocks blocks-by-uuid block-children template-page-uuid (:block/uuid template-root-block) content-root-uuids)
+               {:blocks []
+                :preserve-empty-properties-uuids #{}})]
+         {:blocks (conj blocks cleaned-block)
+          :template-blocks (cond-> template-blocks
+                             template-root-block
+                             (into (into [template-root-block] (:blocks template-content))))
+          :preserve-empty-properties-uuids (set/union preserve-empty-properties-uuids
+                                                      source-preserve-empty-properties-uuids
+                                                      (:preserve-empty-properties-uuids template-content))}))
+     {:blocks []
+      :template-blocks []
+      :preserve-empty-properties-uuids #{}}
+     blocks)))
+
 (defn- get-page-uuid [page-names-to-uuids page-name ex-data']
   (or (get @page-names-to-uuids (some-> (if (string/includes? (str page-name) "#")
                                           (string/lower-case (gp-block/sanitize-hashtag-name page-name))
@@ -684,7 +804,7 @@
    {:keys [import-state user-options] :as options}]
   (let [{:keys [all-idents property-schemas]} import-state
         get-ident' #(get-ident @all-idents %)
-        user-properties (apply dissoc props file-built-in-property-names)]
+        user-properties (apply dissoc props (concat file-built-in-property-names template-file-property-names))]
     (when (seq user-properties)
       (swap! (:block-properties-text-values import-state)
              assoc
@@ -693,20 +813,18 @@
                (get-page-uuid page-names-to-uuids ((some-fn ::original-name :block/name) block) {:block block})
                (:block/uuid block))
              properties-text-values))
-    (if (contains? props :template)
-      {}
-      (let [props' (-> (update-built-in-property-values
-                        (select-keys props file-built-in-property-names)
-                        page-names-to-uuids
-                        (select-keys import-state [:ignored-properties :all-idents])
-                        (select-keys block [:block/name :block/title])
-                        (select-keys user-options [:property-classes]))
-                       (merge (update-user-property-values user-properties page-names-to-uuids properties-text-values import-state options)))
-            pvalue-tx-m (->property-value-tx-m block props' #(get-property-schema @property-schemas %) @all-idents)
-            block-properties (-> (merge props' (db-property-build/build-properties-with-ref-values pvalue-tx-m))
-                                 (update-keys get-ident'))]
-        {:block-properties block-properties
-         :pvalues-tx (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))}))))
+    (let [props' (-> (update-built-in-property-values
+                      (select-keys props file-built-in-property-names)
+                      page-names-to-uuids
+                      (select-keys import-state [:ignored-properties :all-idents])
+                      (select-keys block [:block/name :block/title])
+                      (select-keys user-options [:property-classes]))
+                     (merge (update-user-property-values user-properties page-names-to-uuids properties-text-values import-state options)))
+          pvalue-tx-m (->property-value-tx-m block props' #(get-property-schema @property-schemas %) @all-idents)
+          block-properties (-> (merge props' (db-property-build/build-properties-with-ref-values pvalue-tx-m))
+                               (update-keys get-ident'))]
+      {:block-properties block-properties
+       :pvalues-tx (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))})))
 
 (def ignored-built-in-properties
   "Ignore built-in properties that are already imported or not supported in db graphs"
@@ -725,8 +843,9 @@
 
 (defn- pre-update-properties
   "Updates page and block properties before their property types are inferred"
-  [properties class-related-properties]
+  [properties class-related-properties {:keys [preserve-empty-properties?]}]
   (let [dissoced-props (concat ignored-built-in-properties
+                               template-file-property-names
                                ;; TODO: Deal with these dissoced built-in properties
                                [:title :created-at :updated-at]
                                class-related-properties)]
@@ -735,8 +854,9 @@
                  (if (not (contains? file-built-in-property-names prop))
                   ;; only update user properties
                    (if (string? val)
-                    ;; Ignore blank values as they were usually generated by templates
-                     (when-not (string/blank? val)
+                    ;; Ignore blank values outside template-related blocks to preserve existing import behavior
+                     (when (or preserve-empty-properties?
+                               (not (string/blank? val)))
                        [prop
                        ;; handle float strings b/c graph-parser doesn't
                         (or (parse-double val) val)])
@@ -756,14 +876,15 @@
     :keys [import-state macros]
     :as options}]
   (-> (if (seq properties)
-        (let [classes-from-properties (->> (select-keys properties property-classes)
+        (let [preserve-empty-properties? (contains? (or (:preserve-empty-property-block-uuids options) #{})
+                                                    (:block/uuid block))
+              classes-from-properties (->> (select-keys properties property-classes)
                                            (mapcat (fn [[_k v]] (if (coll? v) v [v])))
                                            distinct)
-              properties' (pre-update-properties properties (into property-classes property-parent-classes))
-              properties-to-infer (if (:template properties')
-                                    ;; Ignore template properties as they don't consistently have representative property values
-                                    {}
-                                    (apply dissoc properties' file-built-in-property-names))
+              properties' (pre-update-properties properties
+                                                 (into property-classes property-parent-classes)
+                                                 {:preserve-empty-properties? preserve-empty-properties?})
+              properties-to-infer (apply dissoc properties' file-built-in-property-names)
               property-changes
               (->> properties-to-infer
                    (keep (fn [[prop val]]
@@ -781,8 +902,6 @@
            (cond-> block
              true
              (merge block-properties)
-             (:template properties')
-             (update :block/tags (fnil conj []) :logseq.class/Template)
              (seq classes-from-properties)
              ;; Add a map of {:block.temp/new-class TAG} to be processed later
              (update :block/tags
@@ -2066,8 +2185,12 @@
                       :as *options}]
   (p/let [options (assoc *options :notify-user notify-user :log-fn log-fn :file file)
           {:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
+          {:keys [blocks template-blocks preserve-empty-properties-uuids]}
+          (extract-template-blocks @conn blocks)
+          blocks (into blocks template-blocks)
           tx-options (merge (build-tx-options options)
-                            {:journal-created-ats (build-journal-created-ats pages)})
+                            {:journal-created-ats (build-journal-created-ats pages)
+                             :preserve-empty-property-block-uuids preserve-empty-properties-uuids})
           old-properties (keys @(get-in options [:import-state :property-schemas]))
           ;; Build page and block txs
           {:keys [pages-tx page-properties-tx per-file-state existing-pages]} (build-pages-tx conn pages blocks tx-options)
