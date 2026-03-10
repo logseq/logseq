@@ -377,6 +377,7 @@
 
   [:div.cp__shortcut-conflicts-list-wrap
    (for [[g ks] conflicts-map]
+     ^{:key (str g)}
      [:section.relative
       [:h2 (ui/icon "alert-triangle" {:size 15})
        [:span (t :keymap/conflicts-for-label)]
@@ -384,22 +385,22 @@
       [:ul
        (for [v (vals ks)
              :let [k (first v)
-                   vs (second v)]]
-         (for [[id' handler-id] vs
-               :let [m (dh/shortcut-item id')]
-               :when (not (nil? m))]
-           [:li
-            {:key (str id')}
-            [:button.select-none.hover:underline
-             {:on-click (fn [^js e] (open-customize-shortcut-dialog! e id'))
-              :title (str handler-id)
-              :aria-label (dh/get-shortcut-desc m)}
-             [:code.inline-block.mr-1.text-xs
-              (shortcut-utils/decorate-binding k)]
-             [:span
-              (dh/get-shortcut-desc m)
-              (ui/icon "external-link" {:size 18})]
-             [:code [:small (str id')]]]]))]])])
+                   vs (second v)]
+             [id' handler-id] vs
+             :let [m (dh/shortcut-item id')]
+             :when (not (nil? m))]
+         [:li
+          {:key (str id')}
+          [:button.select-none.hover:underline
+           {:on-click (fn [^js e] (open-customize-shortcut-dialog! e id'))
+            :title (str handler-id)
+            :aria-label (dh/get-shortcut-desc m)}
+           [:code.inline-block.mr-1.text-xs
+            (shortcut-utils/decorate-binding k)]
+           [:span
+            (dh/get-shortcut-desc m)
+            (ui/icon "external-link" {:size 18})]
+           [:code [:small (str id')]]]])]])])
 
 (defn- execute-undo!
   "Restore previous bindings for all affected actions."
