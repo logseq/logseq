@@ -97,10 +97,11 @@
 
 (defn- group-block-children-by-parent
   [blocks]
-  (reduce (fn [result {:block/keys [parent uuid]}]
+  (reduce (fn [result {parent :block/parent
+                       child-uuid :block/uuid}]
             (if (and (vector? parent)
                      (= :block/uuid (first parent)))
-              (update result (second parent) (fnil conj []) uuid)
+              (update result (second parent) (fnil conj []) child-uuid)
               result))
           {}
           blocks))
