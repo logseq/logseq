@@ -270,7 +270,8 @@
 (rum/defc chord-sequence-keys
   "Renders a chord sequence (multi-step key combinations) with 'then' separators.
    E.g., [['⌘' 'c'] ['⌘' 'r']] renders as: [⌘ C] then [⌘ R]"
-  [groups binding {:keys [aria-label aria-hidden? glow?]}]
+  [groups binding {:keys [aria-label aria-hidden? glow? chord-separator]
+                   :or {chord-separator "then"}}]
   (let [normalized-binding (normalize-binding binding)
         container-attrs (cond-> {:class "shui-shortcut-chord"
                                  :data-shortcut-binding normalized-binding
@@ -288,7 +289,7 @@
            {:key (str "chord-sep-" gi)
             :style {:font-size "10px"
                     :opacity 0.45}}
-           "then"])
+           chord-separator])
         (let [key-elements (map print-shortcut-key group)]
           [:span
            {:key (str "chord-group-" gi)
@@ -315,7 +316,7 @@
    - :glow? - if true, adds inner glow effect to combo/separate keys (default: true)
    - :raw-binding - raw binding format for data-shortcut-binding (for animation matching).
                     If not provided, will normalize from shortcut prop."
-  [shortcut & {:keys [style aria-label aria-hidden? glow? raw-binding]
+  [shortcut & {:keys [style aria-label aria-hidden? glow? raw-binding chord-separator]
                :or {style :auto
                     aria-hidden? false
                     glow? true}}]
@@ -327,9 +328,10 @@
                           [shortcut]  ; single shortcut string
                           shortcut))  ; multiple shortcuts
                       (parse-shortcuts shortcut))
-          opts {:aria-label aria-label
-                :aria-hidden? aria-hidden?
-                :glow? glow?}]
+          opts (cond-> {:aria-label aria-label
+                        :aria-hidden? aria-hidden?
+                        :glow? glow?}
+                 chord-separator (assoc :chord-separator chord-separator))]
       (for [[index binding] (map-indexed vector shortcuts)]
         (let [;; Chord sequence: multiple nested groups like [["⌘" "c"] ["⌘" "r"]]
               chord-sequence? (and (coll? binding)
