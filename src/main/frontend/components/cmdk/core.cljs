@@ -378,9 +378,9 @@
                    files)]
       (swap! !results update group merge {:status :success :items items}))))
 
-(defmethod load-results :themes [group _state]
-  (let [!input (::input _state)
-        !results (::results _state)
+(defmethod load-results :themes [group state]
+  (let [!input (::input state)
+        !results (::results state)
         themes (state/sub :plugin/installed-themes)
         themes (if (string/blank? @!input)
                  themes
@@ -1110,7 +1110,7 @@
       filter'
       [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
        [:div "Type"]
-       (shui/shortcut "esc" {:tiled false})
+       (shui/shortcut "esc")
        [:div "to clear search filter"]]
 
       :else
