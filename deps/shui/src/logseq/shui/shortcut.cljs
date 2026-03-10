@@ -149,11 +149,33 @@
                            (string/split % #"\+")
                            %)))))))
 
+(def ^:private press-animation-ms 160)
+
+(defn- highlight-row!
+  "Add or remove the row highlight class on the closest .shui-shortcut-row ancestor."
+  [^js container add?]
+  (when-let [^js row (or (.closest container ".shui-shortcut-row")
+                         (.-parentElement container))]
+    (if add?
+      (.add (.-classList row) "shui-shortcut-row--pressed")
+      (.remove (.-classList row) "shui-shortcut-row--pressed"))))
+
+(defn- animate-element!
+  "Add pressed class, optionally highlight row, then auto-reset after animation."
+  [^js el ^js container highlight-row?]
+  (.add (.-classList el) "shui-shortcut-key-pressed")
+  (when highlight-row? (highlight-row! container true))
+  (js/setTimeout
+   (fn []
+     (.remove (.-classList el) "shui-shortcut-key-pressed")
+     (when highlight-row? (highlight-row! container false)))
+   press-animation-ms))
+
 (defn shortcut-press!
   "Central helper to trigger key press animation.
    Finds all nodes with matching data-shortcut-binding and animates individual keys.
    Optionally highlights parent row.
-   
+
    Args:
    - binding: normalized shortcut binding string (e.g., \"cmd+k\")
    - highlight-row?: if true, also highlights parent row (default: false)"
@@ -163,44 +185,11 @@
          selector (str "[data-shortcut-binding=\"" normalized "\"]")
          containers (.querySelectorAll js/document selector)]
      (doseq [^js container (array-seq containers)]
-       ;; Find all individual keys within this container
        (let [keys (.querySelectorAll container "kbd.shui-shortcut-key")]
          (if (> (.-length keys) 0)
-           ;; Animate individual keys
            (doseq [^js key-el (array-seq keys)]
-             (.add (.-classList key-el) "shui-shortcut-key-pressed")
-             (when highlight-row?
-               (let [^js row (or (.closest container ".shui-shortcut-row")
-                                 (.-parentElement container))]
-                 (when row
-                   (.add (.-classList row) "shui-shortcut-row--pressed"))))
-             ;; Auto-reset after animation duration
-             (js/setTimeout
-              (fn []
-                (.remove (.-classList key-el) "shui-shortcut-key-pressed")
-                (when highlight-row?
-                  (let [^js row (or (.closest container ".shui-shortcut-row")
-                                    (.-parentElement container))]
-                    (when row
-                      (.remove (.-classList row) "shui-shortcut-row--pressed")))))
-              160))
-           ;; Fallback: animate container if no keys found
-           (do
-             (.add (.-classList container) "shui-shortcut-key-pressed")
-             (when highlight-row?
-               (let [^js row (or (.closest container ".shui-shortcut-row")
-                                 (.-parentElement container))]
-                 (when row
-                   (.add (.-classList row) "shui-shortcut-row--pressed"))))
-             (js/setTimeout
-              (fn []
-                (.remove (.-classList container) "shui-shortcut-key-pressed")
-                (when highlight-row?
-                  (let [^js row (or (.closest container ".shui-shortcut-row")
-                                    (.-parentElement container))]
-                    (when row
-                      (.remove (.-classList row) "shui-shortcut-row--pressed")))))
-              160))))))))
+             (animate-element! key-el container highlight-row?))
+           (animate-element! container container highlight-row?)))))))
 
 (rum/defc combo-keys
   "Renders combo keys (simultaneous key combinations) with separator."
