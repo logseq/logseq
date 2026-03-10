@@ -278,6 +278,7 @@ div[data-radix-popper-content-wrapper] {
   border: 1px solid var(--lx-gray-06-alpha, var(--rx-gray-06-alpha));
   box-sizing: border-box;
   white-space: nowrap;
+  min-width: 0;
 }
 
 /* Glow effect for combo and separate keys */
@@ -313,6 +314,7 @@ div[data-radix-popper-content-wrapper] {
   @apply flex items-start relative;
   gap: 4px;
   white-space: nowrap;
+  min-width: 0;
 }
 
 .shui-shortcut-separate kbd.shui-shortcut-key {
