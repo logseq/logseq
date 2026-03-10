@@ -405,6 +405,7 @@
         [undo-snapshot set-undo-snapshot!] (rum/use-state nil)
         *auto-accept-timer (rum/use-ref nil)
         *fade-timer (rum/use-ref nil)
+        *prev-rec-state (rum/use-ref nil)
         ;; Refs to avoid stale closures in mount-only key handler effect
         *rec-state-ref (rum/use-ref rec-state)
         *keystroke-ref (rum/use-ref keystroke)
@@ -412,6 +413,8 @@
         *key-conflicts-ref (rum/use-ref key-conflicts)
 
         handler-id (hooks/use-memo #(dh/get-group k) [])
+        ;; For rendering, :dismissing looks like :idle — only the banner needs the real state
+        render-state (if (= rec-state :dismissing) :idle rec-state)
         has-bindings? (boolean (seq (filter string? current-binding)))
 
         persist-binding!
@@ -527,17 +530,27 @@
           (js/clearTimeout timer)))
      [keystroke])
 
+    ;; Track previous banner state for dismiss animation
+    (hooks/use-effect!
+     (fn []
+       (when (#{:conflict-cross :conflict-same :esc-hint :accepted :removed :reset} rec-state)
+         (rum/set-ref! *prev-rec-state rec-state))
+       js/undefined)
+     [rec-state])
+
     ;; Auto-fade for transient states: conflict-same, esc-hint, accepted
     (hooks/use-effect!
      (fn []
        (when (#{:conflict-same :esc-hint :accepted :removed :reset} rec-state)
          (let [ms (case rec-state
                     :esc-hint 2000
-                    :accepted (if (:cross-context? accepted-info) 6000 3000)
-                    (:removed :reset) 10000
-                    3000)
+                    :accepted (if (:cross-context? accepted-info)
+                                6000
+                                (if (:from accepted-info) 6000 2500))
+                    (:removed :reset) 6000
+                    3500)
                timer (js/setTimeout
-                      #(set-rec-state! :idle)
+                      #(set-rec-state! :dismissing)
                       ms)]
            (rum/set-ref! *fade-timer timer)))
        #(when-let [timer (rum/deref *fade-timer)]
@@ -575,6 +588,7 @@
                                   :esc-hint       (close-fn)
                                   :removed        (close-fn)
                                   :reset          (close-fn)
+                                  :dismissing     (close-fn)
                                   :recording      (do (set-keystroke! "")
                                                       (set-key-conflicts! nil)
                                                       (set-rec-state! :esc-hint))
@@ -588,7 +602,7 @@
 
                               ;; Backspace in idle/accepted: remove last committed binding
                               (and is-backspace?
-                                   (#{:idle :accepted :removed :reset} state)
+                                   (#{:idle :accepted :removed :reset :dismissing} state)
                                    (string/blank? (rum/deref *keystroke-ref)))
                               (let [cur-binding (rum/deref *current-binding-ref)]
                                 (when (seq (filter string? cur-binding))
@@ -613,8 +627,8 @@
                                 (set-rec-state! :recording)
                                 (set-keystroke! (util/trim-safe kn)))
 
-                              ;; Idle / accepted / removed / reset + key => start recording
-                              (#{:idle :accepted :removed :reset} state)
+                              ;; Idle / accepted / removed / reset / dismissing + key => start recording
+                              (#{:idle :accepted :removed :reset :dismissing} state)
                               (when-let [kn (shortcut/keyname e)]
                                 (set-rec-state! :recording)
                                 (set-keystroke! (util/trim-safe kn)))
@@ -650,13 +664,13 @@
 
      ;; INPUT FIELD
      [:div.shortcut-input-field
-      {:class (when (#{:conflict-cross :conflict-same} rec-state) "conflict")}
+      {:class (when (#{:conflict-cross :conflict-same} render-state) "conflict")}
       ;; Existing bindings — each wrapped in a grouping container
       (for [[idx x] (map-indexed vector current-binding)
             :when (string? x)]
         [:div.shortcut-input-binding {:key x}
          (shui/shortcut x {:chord-separator (t :keymap/chord-separator)})
-         (when (#{:idle :accepted :esc-hint :removed :reset} rec-state)
+         (when (#{:idle :accepted :esc-hint :removed :reset} render-state)
            [:button.shortcut-binding-remove
             {:aria-label "Remove binding"
              :on-click (fn [^js e]
@@ -670,11 +684,11 @@
                            (set-rec-state! :removed)))}
             (ui/icon "x" {:size 12})])])
       ;; Recording in progress — dashed keys (uncommitted)
-      (when (and (#{:recording :conflict-cross :conflict-same} rec-state)
+      (when (and (#{:recording :conflict-cross :conflict-same} render-state)
                  (not (string/blank? keystroke)))
         [:div.shortcut-input-binding.shortcut-input-binding--pending
          (shui/shortcut keystroke)
-         (when (#{:conflict-cross :conflict-same} rec-state)
+         (when (#{:conflict-cross :conflict-same} render-state)
            [:button.shortcut-binding-remove
             {:aria-label "Remove binding"
              :on-click (fn [^js e]
@@ -682,7 +696,7 @@
                          (cancel-fn!))}
             (ui/icon "x" {:size 12})])])
       ;; Placeholder
-      (when (#{:idle :recording :accepted :removed :reset} rec-state)
+      (when (#{:idle :recording :accepted :removed :reset} render-state)
         [:span.shortcut-input-placeholder (t :keymap/press-a-shortcut)])]
 
      ;; FEEDBACK BANNER (conditional)
@@ -746,6 +760,17 @@
          [:div.shortcut-feedback.shortcut-feedback--muted
           [:span (t :keymap/esc-is-reserved)]]
 
+         :dismissing
+         (let [prev (rum/deref *prev-rec-state)
+               variant (case prev
+                         (:conflict-cross :conflict-same) "shortcut-feedback--error"
+                         :accepted (if (:cross-context? accepted-info)
+                                     "shortcut-feedback--warning"
+                                     "shortcut-feedback--success")
+                         "shortcut-feedback--muted")]
+           [:div {:class (str "shortcut-feedback " variant " is-dismissing")
+                  :on-animation-end #(set-rec-state! :idle)}])
+
          nil))
 
      ;; SEPARATOR + TOOLBAR
@@ -753,7 +778,7 @@
      [:div.shortcut-toolbar
       [:div.shortcut-toolbar-left
        ;; Reset (only when changed from default)
-       (when (and (#{:idle :accepted :removed} rec-state)
+       (when (and (#{:idle :accepted :removed} render-state)
                   (not= current-binding binding))
          [:button.shortcut-toolbar-action.shortcut-toolbar-reset
           {:on-click reset-fn!}
@@ -761,19 +786,19 @@
           [:span (t :keymap/reset)]])]
       [:div.shortcut-toolbar-right
        ;; Reassign hint (conflict-cross only)
-       (when (= :conflict-cross rec-state)
+       (when (= :conflict-cross render-state)
          [:span.shortcut-toolbar-hint
           (t :keymap/hint-reassign)
           (shui/shortcut (if util/mac? "meta+enter" "ctrl+enter") {:style :compact})])
        ;; Remove hint (idle/accepted/removed/reset with bindings, or conflict states)
-       (when (or (and (#{:idle :accepted :removed :reset} rec-state) has-bindings?)
-                 (#{:conflict-cross :conflict-same} rec-state))
+       (when (or (and (#{:idle :accepted :removed :reset} render-state) has-bindings?)
+                 (#{:conflict-cross :conflict-same} render-state))
          [:span.shortcut-toolbar-hint
           (t :keymap/hint-remove)
           (shui/shortcut "backspace" {:style :compact})])
        ;; Close/Cancel hint
        [:span.shortcut-toolbar-hint
-        (if (= :recording rec-state) (t :keymap/hint-cancel) (t :keymap/hint-close))
+        (if (= :recording render-state) (t :keymap/hint-cancel) (t :keymap/hint-close))
         (shui/shortcut "escape" {:style :compact})]]]]))
 
 (defn- classify-shortcut
