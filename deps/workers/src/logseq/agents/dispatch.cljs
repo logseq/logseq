@@ -17,7 +17,6 @@
          (http/json-response :worker/health {:ok true})
 
          (or (string/starts-with? path "/auth")
-             (string/starts-with? path "/planning")
              (string/starts-with? path "/sessions")
              (string/starts-with? path "/runners"))
          (agent-handler/handle-fetch #js {:env env} request)

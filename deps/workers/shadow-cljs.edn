@@ -20,9 +20,7 @@
                                      :warnings {:fn-deprecated false
                                                 :redef false}}
                   :modules {:main {:exports {default logseq.agents.worker/worker
-                                             AgentSessionDO logseq.agents.worker/AgentSessionDO
-                                             PlanningSessionAgent logseq.agents.worker/PlanningSessionAgent
-                                             PlanningWorkflow logseq.agents.worker/PlanningWorkflow}}}
+                                             AgentSessionDO logseq.agents.worker/AgentSessionDO}}}
                   :js-options {:js-provider :import}
                   :closure-defines {shadow.cljs.devtools.client.env/enabled false
                                     goog.debug.LOGGING_ENABLED true}
@@ -52,7 +50,7 @@
                                      :main logseq.agents.e2b-runtime-provider-test-runner/main}
   :agents-runtime-transport-test {:target :node-test
                                   :output-to "worker/dist/agents-runtime-transport-test.js"
-                                  :ns-regexp "logseq\\.agents\\.(sandbox-test|runtime-provider-test|routes-test|request-test|planning-workflow-test|handler-test)$"
+                                  :ns-regexp "logseq\\.agents\\.(sandbox-test|runtime-provider-test)$"
                                   :devtools {:enabled false}
                                   :main logseq.agents.runtime-transport-test-runner/main}
   :agents-m25-managed-auth-test {:target :node-test

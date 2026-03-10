@@ -126,21 +126,6 @@
   [base session-id]
   (str base "/sessions/" session-id "/messages"))
 
-(defn- endpoint-url
-  [base endpoint]
-  (let [endpoint (non-empty-str endpoint)]
-    (cond
-      (and (string? endpoint)
-           (or (string/starts-with? endpoint "http://")
-               (string/starts-with? endpoint "https://")))
-      endpoint
-
-      (and (string? base) (string? endpoint))
-      (str base endpoint)
-
-      :else
-      nil)))
-
 (defn- runtime-error-message
   [event]
   (let [data (if (map? (:data event)) (:data event) {})]
@@ -588,14 +573,7 @@
           (.finally (fn [] nil))))))
 
 (defn- send-messages!
-  [{:keys [base
-           session-id
-           fetch-fn
-           now-fn
-           idle-timeout-ms
-           open-stream?
-           message-endpoint
-           stream-endpoint]} opts]
+  [{:keys [base session-id fetch-fn now-fn idle-timeout-ms open-stream?]} opts]
   (let [message (last-user-message-text (aget opts "messages"))]
     (if-not (and (string? base) (string? session-id))
       (js/Promise.reject
@@ -607,10 +585,8 @@
               start-ts (now-fn)
               abort-signal (aget opts "abortSignal")
               headers (auth-headers)
-              post-url (or (endpoint-url base message-endpoint)
-                           (messages-url base session-id))
-              stream-url' (or (endpoint-url base stream-endpoint)
-                              (stream-url base session-id))]
+              post-url (messages-url base session-id)
+              stream-endpoint (stream-url base session-id)]
           (-> (p/let [post-resp (fetch-fn post-url
                                           #js {:method "POST"
                                                :headers headers
@@ -622,45 +598,34 @@
                           (throw (js/Error. (str "send message failed: " (.-status post-resp)))))]
                 (if (false? open-stream?)
                   (chunks->readable-stream [{:type "finish"}])
-                  (if-not (string? stream-url')
-                    (chunks->readable-stream [{:type "finish"}])
-                    (p/let [stream-resp (fetch-fn stream-url'
-                                                  #js {:method "GET"
-                                                       :headers headers
-                                                       :signal abort-signal})
-                            _ (when-not (.-ok stream-resp)
-                                (throw (js/Error. (str "open stream failed: " (.-status stream-resp)))))
-                            _ (when-not (.-body stream-resp)
-                                (throw (js/Error. "stream response has no body")))]
-                      (let [ts (js/TransformStream.)
-                            writer (.getWriter (.-writable ts))]
-                        (start-stream-consumer! {:response stream-resp
-                                                 :writer writer
-                                                 :start-ts start-ts
-                                                 :idle-timeout-ms (or idle-timeout-ms default-idle-timeout-ms)
-                                                 :abort-signal abort-signal})
-                        (.-readable ts))))))
+                  (p/let [stream-resp (fetch-fn stream-endpoint
+                                                #js {:method "GET"
+                                                     :headers headers
+                                                     :signal abort-signal})
+                          _ (when-not (.-ok stream-resp)
+                              (throw (js/Error. (str "open stream failed: " (.-status stream-resp)))))
+                          _ (when-not (.-body stream-resp)
+                              (throw (js/Error. "stream response has no body")))]
+                    (let [ts (js/TransformStream.)
+                          writer (.getWriter (.-writable ts))]
+                      (start-stream-consumer! {:response stream-resp
+                                               :writer writer
+                                               :start-ts start-ts
+                                               :idle-timeout-ms (or idle-timeout-ms default-idle-timeout-ms)
+                                               :abort-signal abort-signal})
+                      (.-readable ts)))))
               (.catch (fn [error]
                         (js/Promise.reject error)))))))))
 
 (defn make-transport
-  [{:keys [base
-           session-id
-           fetch-fn
-           now-fn
-           idle-timeout-ms
-           open-stream?
-           message-endpoint
-           stream-endpoint]}]
+  [{:keys [base session-id fetch-fn now-fn idle-timeout-ms open-stream?]}]
   #js {:sendMessages (fn [opts]
                        (send-messages! {:base base
                                         :session-id session-id
                                         :fetch-fn fetch-fn
                                         :now-fn now-fn
                                         :idle-timeout-ms idle-timeout-ms
-                                        :open-stream? open-stream?
-                                        :message-endpoint message-endpoint
-                                        :stream-endpoint stream-endpoint}
+                                        :open-stream? open-stream?}
                                        opts))
        :reconnectToStream (fn [_opts]
                             (js/Promise.resolve nil))})

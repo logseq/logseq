@@ -71,9 +71,6 @@
 (goog-define ENABLE-PLUGINS true)
 (defonce feature-plugin-system-on? ENABLE-PLUGINS)
 
-(goog-define ENABLE-AGENT-PLANNING false)
-(defonce feature-agent-planning-on? ENABLE-AGENT-PLANNING)
-
 ;; Desktop only as other platforms requires better understanding of their
 ;; multi-graph workflows and optimal place for a "global" dir
 (def global-config-enabled? util/electron?)

@@ -1,15 +1,12 @@
 (ns frontend.components.agent-chat
   (:require ["@ai-sdk/react" :refer [useChat]]
-            ["agents/client" :refer [AgentClient]]
             ["ghostty-web" :refer [FitAddon Terminal init]]
             [cljs-bean.core :as bean]
-            [clojure.set :as set]
             [clojure.string :as string]
             [frontend.components.select :as select]
             [frontend.handler.agent :as agent-handler]
             [frontend.handler.agent-chat-transport :as chat-transport]
             [frontend.handler.db-based.sync :as db-sync]
-            [frontend.handler.notification :as notification]
             [frontend.modules.agent-chat.event :as chat-event]
             [frontend.state :as state]
             [logseq.shui.hooks :as hooks]
@@ -102,9 +99,7 @@
 
 (defn- ^:large-vars/cleanup-todo session->messages
   [session block]
-  (let [planning-messages (when (sequential? (:planning-messages session))
-                            (vec (:planning-messages session)))
-        events (:events session)
+  (let [events (:events session)
         base (let [acc (atom {:items {}
                               :order []
                               :item-kind-by-id {}
@@ -371,18 +366,16 @@
                                      (append-text-part! item-id role delta))))))))]
                  (doseq [event events]
                    (process-event! event))
-                 (if (seq planning-messages)
-                   planning-messages
-                   (->> (:order @acc)
-                        (keep (fn [item-id]
-                                (let [entry (get-in @acc [:items item-id])
-                                      parts (vec (keep normalize-message-part (:parts entry)))
-                                      role (chat-role (:role entry))]
-                                  (when (seq parts)
-                                    {:id item-id
-                                     :role role
-                                     :parts parts}))))
-                        vec))))
+                 (->> (:order @acc)
+                      (keep (fn [item-id]
+                              (let [entry (get-in @acc [:items item-id])
+                                    parts (vec (keep normalize-message-part (:parts entry)))
+                                    role (chat-role (:role entry))]
+                                (when (seq parts)
+                                  {:id item-id
+                                   :role role
+                                   :parts parts}))))
+                      vec)))
         task-text (some-> (or (:block/raw-title block) (:block/title block))
                           string/trim)
         user-message (when-not (string/blank? task-text)
@@ -433,48 +426,6 @@
   (when-let [summary (normalized-text summary)]
     (let [single-line (string/replace summary #"\s+" " ")]
       (subs single-line 0 (min commit-message-max-len (count single-line))))))
-
-(def ^:private planner-started-statuses
-  #{"Doing" "Done" "In Review" "Canceled"})
-
-(defn- planning-session-tasks
-  [session session-chat-messages]
-  (or (some-> session :plan :tasks seq vec)
-      (some-> session-chat-messages
-              latest-assistant-summary
-              agent-handler/planner-tasks-from-text)))
-
-(defn- planning-task-started?
-  [task]
-  (or (string? (normalized-text (:session-id task)))
-      (contains? planner-started-statuses
-                 (some-> (:status task) normalized-text))))
-
-(defn- executable-planner-tasks
-  [tasks]
-  (->> tasks
-       (filter map?)
-       (remove planning-task-started?)
-       vec))
-
-(defn- planning-task-title
-  [task]
-  (or (some-> (:title task) normalized-text)
-      (some-> (:content task)
-              normalized-text
-              (string/split #"\n")
-              first
-              normalized-text)
-      "Planned task"))
-
-(defn- planning-task-status-label
-  [task]
-  (or (some-> (:status task) normalized-text)
-      (when (string? (normalized-text (:session-id task)))
-        "Doing")
-      (when (string? (normalized-text (:block-uuid task)))
-        "Todo")
-      "Draft"))
 
 (defn- session-messages-need-sync?
   [session-messages ui-messages]
@@ -618,9 +569,7 @@
   [block]
   (let [block-uuid (:block/uuid block)
         [sessions] (hooks/use-atom (:agent/sessions @state/state))
-        [planning-sessions] (hooks/use-atom (:agent/planning-sessions @state/state))
-        session (or (get planning-sessions (str block-uuid))
-                    (get sessions (str block-uuid)))
+        session (get sessions (str block-uuid))
         session-id (or (:session-id session)
                        (agent-handler/task-session-id block)
                        (some-> block-uuid str))
@@ -630,25 +579,12 @@
         pr-created? (string? task-pr-url)
         agent-value (:logseq.property/agent block)
         agent-label (agent-title agent-value)
-        session-kind (some-> (:session-kind session) normalized-text)
-        planning-chat-path (some-> (:planning-chat-path session) normalized-text)
-        planning-session? (or (= "planning" session-kind)
-                              (string? planning-chat-path))
-        planning-session-id (some-> (:planning-session-id session) normalized-text)
-        execution-session? (not planning-session?)
-        start-strategy (agent-handler/session-start-strategy block)
-        message-endpoint (when planning-session?
-                           (or planning-chat-path
-                               (when (string? session-id)
-                                 (str "/planning/chat/" session-id))))
         session-messages (session->messages session block)
         transport (hooks/use-memo
                    #(chat-transport/make-transport {:base base
                                                     :session-id session-id
-                                                    :open-stream? false
-                                                    :message-endpoint message-endpoint
-                                                    :stream-endpoint nil})
-                   [base session-id message-endpoint])
+                                                    :open-stream? false})
+                   [base session-id])
         chat (useChat #js {:id session-id
                            :transport transport
                            :messages (clj->js session-messages)})
@@ -678,15 +614,10 @@
         [loading-branches? set-loading-branches?!] (rum/use-state false)
         [starting-session? set-starting-session?!] (rum/use-state false)
         [publish-mode set-publish-mode!] (rum/use-state nil)
-        [creating-tasks? set-creating-tasks?!] (rum/use-state false)
-        [planning-action-mode set-planning-action-mode!] (rum/use-state nil)
-        [planning-note set-planning-note!] (rum/use-state "")
-        [selected-task-uuids set-selected-task-uuids!] (rum/use-state #{})
         [terminal-visible? set-terminal-visible!] (rum/use-state false)
         [terminal-status set-terminal-status!] (rum/use-state :idle)
         [terminal-error set-terminal-error!] (rum/use-state nil)
         [terminal-connection-key set-terminal-connection-key!] (rum/use-state 0)
-        planning-client-ref (hooks/use-ref nil)
         terminal-container-ref (hooks/use-ref nil)
         auth-token (state/get-auth-id-token)
         terminal-url (agent-handler/terminal-websocket-url base
@@ -695,16 +626,6 @@
         terminal-open-disabled? (or (not session-started?)
                                     (not (string? terminal-url)))
         trimmed-draft (string/trim (or draft ""))
-        trimmed-planning-note (string/trim (or planning-note ""))
-        planner-tasks (planning-session-tasks session session-chat-messages)
-        executable-planner-task-list (executable-planner-tasks planner-tasks)
-        selectable-task-uuids (->> executable-planner-task-list
-                                   (keep (fn [task]
-                                           (some-> (:task-uuid task) normalized-text)))
-                                   set)
-        selected-planner-task-uuids (if (empty? selectable-task-uuids)
-                                      #{}
-                                      (set/intersection selected-task-uuids selectable-task-uuids))
         selected-start-branch (normalized-text start-branch)
         branch-select-items (vec (map (fn [branch]
                                         {:value branch
@@ -718,20 +639,6 @@
                                     (not (string? selected-start-branch))
                                     (not (agent-handler/task-ready? block)))
         publish-disabled? (or input-disabled? busy? publish-busy?)
-        create-tasks-disabled? (or creating-tasks? busy? (empty? planner-tasks))
-        planning-action-busy? (some? planning-action-mode)
-        approve-disabled? (or planning-action-busy?
-                              (not planning-session?)
-                              (= "approved" (:approval-status session)))
-        reject-disabled? (or planning-action-busy?
-                             (not planning-session?)
-                             (= "rejected" (:approval-status session)))
-        replan-disabled? (or planning-action-busy?
-                             (not planning-session?))
-        execute-selected-disabled? (or planning-action-busy?
-                                       creating-tasks?
-                                       (empty? planner-tasks)
-                                       (empty? selected-planner-task-uuids))
         can-send? (and (not input-disabled?)
                        (not (string/blank? trimmed-draft))
                        (not busy?))
@@ -739,20 +646,13 @@
         send-message! (fn []
                         (when (and can-send? base session-id)
                           (set-draft! "")
-                          (if planning-session?
-                            (do
-                              (agent-handler/append-planning-message! block-uuid "user" trimmed-draft)
-                              (when-let [client (hooks/deref planning-client-ref)]
-                                (.send client
-                                       (js/JSON.stringify
-                                        (clj->js {:content trimmed-draft})))))
-                            (-> (.sendMessage chat #js {:text trimmed-draft})
-                                (.catch (fn [_] nil))))))
+                          (-> (.sendMessage chat #js {:text trimmed-draft})
+                              (.catch (fn [_] nil)))))
         start-session! (fn []
                          (when (and base session-id (not start-session-disabled?))
                            (set-starting-session?! true)
                            (let [opts {:base-branch selected-start-branch}]
-                             (-> (agent-handler/<start-auto-session! block opts)
+                             (-> (agent-handler/<start-session! block opts)
                                  (p/then (fn [resp]
                                            (when (and (map? resp)
                                                       (string? selected-start-branch)
@@ -787,82 +687,6 @@
                        (-> (agent-handler/<publish-session! block opts)
                            (p/catch (fn [_] nil))
                            (p/finally (fn [] (set-publish-mode! nil)))))))
-        create-tasks! (fn []
-                        (when-not create-tasks-disabled?
-                          (set-creating-tasks?! true)
-                          (-> (agent-handler/<upsert-planner-tasks! block-uuid
-                                                                    planner-tasks
-                                                                    (cond-> {}
-                                                                      (string? planning-session-id)
-                                                                      (assoc :planning-session-id planning-session-id)))
-                              (p/then (fn [results]
-                                        (notification/show! (str "Synced " (count results) " task"
-                                                                 (when (not= 1 (count results)) "s")
-                                                                 ".")
-                                                            :success false)))
-                              (p/catch (fn [error]
-                                         (notification/show! (or (some-> error ex-message)
-                                                                 "Failed to create tasks.")
-                                                             :error false)
-                                         nil))
-                              (p/finally (fn [] (set-creating-tasks?! false))))))
-        planning-action! (fn [mode f success-message error-message]
-                           (set-planning-action-mode! mode)
-                           (-> (f)
-                               (p/then (fn [result]
-                                         (when (string? success-message)
-                                           (notification/show! success-message :success false))
-                                         result))
-                               (p/catch (fn [error]
-                                          (notification/show! (or (some-> error ex-message)
-                                                                  error-message)
-                                                              :error false)
-                                          nil))
-                               (p/finally (fn [] (set-planning-action-mode! nil)))))
-        maybe-send-planning-note! (fn []
-                                    (when (and planning-session?
-                                               (not (string/blank? trimmed-planning-note)))
-                                      (agent-handler/append-planning-message! block-uuid "user" trimmed-planning-note)
-                                      (when-let [client (hooks/deref planning-client-ref)]
-                                        (.send client
-                                               (js/JSON.stringify
-                                                (clj->js {:content trimmed-planning-note}))))))
-        approve-plan! (fn []
-                        (planning-action! :approve
-                                          (fn []
-                                            (agent-handler/<set-planning-approval! block-uuid
-                                                                                   "approved"
-                                                                                   {:comment trimmed-planning-note}))
-                                          "Planning approved."
-                                          "Failed to approve planning."))
-        reject-plan! (fn []
-                       (planning-action! :reject
-                                         (fn []
-                                           (agent-handler/<set-planning-approval! block-uuid
-                                                                                  "rejected"
-                                                                                  {:comment trimmed-planning-note}))
-                                         "Planning rejected."
-                                         "Failed to reject planning."))
-        replan! (fn []
-                  (planning-action! :replan
-                                    (fn []
-                                      (maybe-send-planning-note!)
-                                      (agent-handler/<replan-planning-session! block-uuid
-                                                                               {:replan-note trimmed-planning-note}))
-                                    "Replanning queued."
-                                    "Failed to queue replanning."))
-        execute-selected! (fn []
-                            (when-not execute-selected-disabled?
-                              (planning-action! :execute
-                                                (fn []
-                                                  (agent-handler/<execute-planned-tasks! block-uuid
-                                                                                         planner-tasks
-                                                                                         {:planning-session-id planning-session-id
-                                                                                          :selected-task-uuids selected-planner-task-uuids}))
-                                                (str "Started " (count selected-planner-task-uuids) " planned task"
-                                                     (when (not= 1 (count selected-planner-task-uuids)) "s")
-                                                     ".")
-                                                "Failed to start planned tasks.")))
         open-terminal! (fn []
                          (when (and terminal-enabled? (not terminal-open-disabled?))
                            (set-terminal-visible! true)
@@ -892,48 +716,6 @@
          (agent-handler/<ensure-session! block))
        nil)
      [block-uuid (:logseq.property/project block) (:logseq.property/agent block) session-created?])
-    (hooks/use-effect!
-     (fn []
-       (when-let [client (hooks/deref planning-client-ref)]
-         (.close client))
-       (hooks/set-ref! planning-client-ref nil)
-       (when (and planning-session?
-                  base
-                  (string? planning-session-id)
-                  (string? auth-token))
-         (let [client (new AgentClient
-                           (clj->js {:agent "PlanningSessionAgent"
-                                     :basePath (str "planning/chat/" planning-session-id)
-                                     :host base
-                                     :query {:token auth-token}
-                                     :onMessage (fn [event]
-                                                  (when-let [raw (some-> event .-data)]
-                                                    (when-let [message (parse-json-safe raw)]
-                                                      (case (:type message)
-                                                        "planning.state"
-                                                        (agent-handler/replace-planning-messages! block-uuid
-                                                                                                  (:state message))
-
-                                                        "planning.message"
-                                                        (agent-handler/replace-planning-messages! block-uuid
-                                                                                                  (:state message))
-
-                                                        nil))))}))]
-           (hooks/set-ref! planning-client-ref client)))
-       (fn []
-         (when-let [client (hooks/deref planning-client-ref)]
-           (.close client))
-         (hooks/set-ref! planning-client-ref nil)))
-     [planning-session? planning-session-id auth-token base block-uuid])
-    (hooks/use-effect!
-     (fn []
-       (when planning-session?
-         (set-selected-task-uuids! selectable-task-uuids))
-       nil)
-     [planning-session?
-      (pr-str (mapv (fn [task]
-                      (select-keys task [:task-uuid :block-uuid :session-id :status]))
-                    planner-tasks))])
     (hooks/use-effect!
      (fn []
        (let [alive? (atom true)
@@ -978,10 +760,10 @@
      [session-id (pr-str session-chat-messages) (pr-str chat-messages)])
     (hooks/use-effect!
      (fn []
-       (when (and base session-id session-started? (not planning-session?))
+       (when (and base session-id session-started?)
          (agent-handler/<fetch-events! block))
        nil)
-     [session-id session-started? planning-session?])
+     [session-id session-started?])
     (hooks/use-effect!
      (fn []
        (when (and terminal-visible?
@@ -993,6 +775,7 @@
                  dispose-data* (atom nil)
                  input-seq* (atom 0)
                  socket (js/WebSocket. terminal-url)
+                 encoder (js/TextEncoder.)
                  handle-window-resize (fn []
                                         (when-let [fit-addon @fit-addon*]
                                           (try
@@ -1157,11 +940,7 @@
            :on-click (fn [_] (start-session!))}
           (if starting-session?
             "Starting..."
-            (if (:planning? start-strategy)
-              "Start agent"
-              "Start agent")))
-         [:div.mt-1.text-xs.opacity-70
-          (:reason start-strategy)]]]
+            "Start session"))]]
        [:<>
         [:div.flex.flex-wrap.items-center.gap-2
          [:div {:class "inline-flex w-fit items-center gap-1 rounded-lg border border-border bg-muted/40 p-1"}
@@ -1209,67 +988,13 @@
           {:size :sm
            :variant :outline
            :class "h-7 px-2 text-xs"
-           :disabled create-tasks-disabled?
+           :disabled publish-disabled?
            :on-click (fn [_]
-                       (create-tasks!))}
-          (if creating-tasks?
-            "Syncing tasks..."
-            (if planning-session? "Sync tasks" "Create tasks")))
-         (when planning-session?
-           (shui/button
-            {:size :sm
-             :variant :outline
-             :class "h-7 px-2 text-xs"
-             :disabled execute-selected-disabled?
-             :on-click (fn [_]
-                         (execute-selected!))}
-            (if (= planning-action-mode :execute)
-              "Starting..."
-              "Execute selected")))
-         (when planning-session?
-           (shui/button
-            {:size :sm
-             :variant :outline
-             :class "h-7 px-2 text-xs"
-             :disabled reject-disabled?
-             :on-click (fn [_]
-                         (reject-plan!))}
-            (if (= planning-action-mode :reject)
-              "Rejecting..."
-              "Reject")))
-         (when planning-session?
-           (shui/button
-            {:size :sm
-             :variant :outline
-             :class "h-7 px-2 text-xs"
-             :disabled replan-disabled?
-             :on-click (fn [_]
-                         (replan!))}
-            (if (= planning-action-mode :replan)
-              "Replanning..."
-              "Replan")))
-         (when planning-session?
-           (shui/button
-            {:size :sm
-             :class "h-7 px-2 text-xs"
-             :disabled approve-disabled?
-             :on-click (fn [_]
-                         (approve-plan!))}
-            (if (= planning-action-mode :approve)
-              "Approving..."
-              "Approve")))
-         (when execution-session?
-           (shui/button
-            {:size :sm
-             :variant :outline
-             :class "h-7 px-2 text-xs"
-             :disabled publish-disabled?
-             :on-click (fn [_]
-                         (publish! false))}
-            (if (= publish-mode :push)
-              "Pushing..."
-              "Push")))
-         (when (and execution-session? (not pr-created?))
+                       (publish! false))}
+          (if (= publish-mode :push)
+            "Pushing..."
+            "Push"))
+         (when-not pr-created?
            (shui/button
             {:size :sm
              :class "h-7 px-2 text-xs"
@@ -1279,72 +1004,6 @@
             (if (= publish-mode :pr)
               "Creating PR..."
               "Push + PR")))]
-        (when planning-session?
-          [:div {:class "rounded-xl border border-border/70 bg-muted/20 p-3"}
-           [:div.flex.flex-col.gap-3
-            [:div.flex.flex-wrap.items-center.justify-between.gap-2
-             [:div.text-xs.opacity-70
-              (str "Approval: " (or (:approval-status session) "pending")
-                   " | Tasks: " (count planner-tasks)
-                   " | Selected: " (count selected-planner-task-uuids))]
-             (when (seq selectable-task-uuids)
-               [:div.flex.items-center.gap-2.text-xs
-                (shui/button
-                 {:size :sm
-                  :variant :ghost
-                  :class "h-7 px-2 text-xs"
-                  :on-click (fn [_]
-                              (set-selected-task-uuids! selectable-task-uuids))}
-                 "Select all")
-                (shui/button
-                 {:size :sm
-                  :variant :ghost
-                  :class "h-7 px-2 text-xs"
-                  :on-click (fn [_]
-                              (set-selected-task-uuids! #{}))}
-                 "Clear")])]
-            [:textarea.w-full.rounded-lg.border.border-border.bg-background.p-2.text-sm.outline-none
-             {:rows 3
-              :value planning-note
-              :placeholder "Add approval notes or replanning feedback..."
-              :on-change (fn [e]
-                           (set-planning-note! (.. e -target -value)))}]
-            (if (seq planner-tasks)
-              [:div.flex.flex-col.gap-2
-               (for [task planner-tasks
-                     :let [task-uuid (some-> (:task-uuid task) normalized-text)
-                           selectable? (and (string? task-uuid)
-                                            (contains? selectable-task-uuids task-uuid))
-                           checked? (and selectable?
-                                         (contains? selected-planner-task-uuids task-uuid))]]
-                 [:label {:key (or task-uuid (str "planned-task-" (random-uuid)))
-                          :class "flex items-start gap-3 rounded-lg border border-border/60 bg-background/70 px-3 py-2"}
-                  [:input.mt-1
-                   {:type "checkbox"
-                    :disabled (not selectable?)
-                    :checked (boolean checked?)
-                    :on-change (fn [e]
-                                 (let [checked (.. e -target -checked)]
-                                   (set-selected-task-uuids!
-                                    (if checked
-                                      (conj selected-planner-task-uuids task-uuid)
-                                      (disj selected-planner-task-uuids task-uuid)))))}]
-                  [:div.min-w-0.flex-1
-                   [:div.flex.flex-wrap.items-center.gap-2
-                    [:div.font-medium (planning-task-title task)]
-                    [:div {:class "rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide opacity-70"}
-                     (planning-task-status-label task)]]
-                   (when-let [description (some-> (:description task) normalized-text)]
-                     [:div.mt-1.text-xs.opacity-80 description])
-                   [:div {:class "mt-1 flex flex-wrap items-center gap-2 text-[10px] opacity-60"}
-                    (when-let [task-uuid task-uuid]
-                      [:span (str "task " task-uuid)])
-                    (when-let [block-id (some-> (:block-uuid task) str normalized-text)]
-                      [:span (str "block " block-id)])
-                    (when-let [task-session-id (some-> (:session-id task) normalized-text)]
-                      [:span (str "session " task-session-id)])]]])]
-              [:div.text-xs.opacity-70
-               "Planning tasks will appear here once the workflow produces a persisted plan."])]])
         (when (string? error)
           [:div {:class "mt-0.5 rounded-lg border border-red-300/40 bg-red-500/5 px-3 py-1.5 text-xs text-red-500"}
            error])

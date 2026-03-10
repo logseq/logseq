@@ -16,15 +16,6 @@ invocation_logs = false
 name = "LOGSEQ_AGENT_SESSION_DO"
 class_name = "AgentSessionDO"
 
-[[durable_objects.bindings]]
-name = "PLANNING_AGENT"
-class_name = "PlanningSessionAgent"
-
-[[workflows]]
-binding = "PLANNING_WORKFLOW"
-name = "logseq-agents-planning-dev"
-class_name = "PlanningWorkflow"
-
 [[r2_buckets]]
 binding = "BACKUP_BUCKET"
 bucket_name = "logseq-sync-assets-dev"
@@ -38,10 +29,6 @@ database_id = "00325aa2-c805-4693-b599-900a25dcde42"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = [ "AgentSessionDO" ]
-
-[[migrations]]
-tag = "v2"
-new_sqlite_classes = [ "PlanningSessionAgent" ]
 
 [vars]
 COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
@@ -69,15 +56,6 @@ SENTRY_TRACES_SAMPLE_RATE = "0.1"
 name = "LOGSEQ_AGENT_SESSION_DO"
 class_name = "AgentSessionDO"
 
-[[env.staging.durable_objects.bindings]]
-name = "PLANNING_AGENT"
-class_name = "PlanningSessionAgent"
-
-[[env.staging.workflows]]
-binding = "PLANNING_WORKFLOW"
-name = "logseq-agents-planning-staging"
-class_name = "PlanningWorkflow"
-
 [[env.staging.r2_buckets]]
 binding = "BACKUP_BUCKET"
 bucket_name = "logseq-sync-assets-dev"
@@ -91,10 +69,6 @@ database_id = "00325aa2-c805-4693-b599-900a25dcde42"
 [[env.staging.migrations]]
 tag = "v1"
 new_sqlite_classes = [ "AgentSessionDO" ]
-
-[[env.staging.migrations]]
-tag = "v2"
-new_sqlite_classes = [ "PlanningSessionAgent" ]
 
 [env.staging.version_metadata]
 binding = "CF_VERSION_METADATA"
@@ -117,15 +91,6 @@ SENTRY_TRACES_SAMPLE_RATE = "0.1"
 name = "LOGSEQ_AGENT_SESSION_DO"
 class_name = "AgentSessionDO"
 
-[[env.prod.durable_objects.bindings]]
-name = "PLANNING_AGENT"
-class_name = "PlanningSessionAgent"
-
-[[env.prod.workflows]]
-binding = "PLANNING_WORKFLOW"
-name = "logseq-agents-planning-prod"
-class_name = "PlanningWorkflow"
-
 [[env.prod.r2_buckets]]
 binding = "BACKUP_BUCKET"
 bucket_name = "logseq-sync-assets-prod"
@@ -139,10 +104,6 @@ database_id = "4c80e058-69b5-4985-88d1-f53711d817ba"
 [[env.prod.migrations]]
 tag = "v1"
 new_sqlite_classes = [ "AgentSessionDO" ]
-
-[[env.prod.migrations]]
-tag = "v2"
-new_sqlite_classes = [ "PlanningSessionAgent" ]
 
 [env.prod.version_metadata]
 binding = "CF_VERSION_METADATA"

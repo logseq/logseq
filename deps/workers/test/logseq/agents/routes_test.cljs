@@ -68,25 +68,3 @@
       (is (= :auth.chatgpt/import (:handler match))))
     (let [match (routes/match-route "GET" "/auth/chatgpt/status")]
       (is (= :auth.chatgpt/status (:handler match))))))
-
-(deftest match-route-planning-test
-  (testing "planning routes"
-    (let [match (routes/match-route "POST" "/planning/sessions")]
-      (is (= :planning.sessions/create (:handler match))))
-    (let [match (routes/match-route "GET" "/planning/sessions/plan-1")]
-      (is (= :planning.sessions/get (:handler match)))
-      (is (= "plan-1" (get-in match [:path-params :planning-session-id]))))
-    (let [match (routes/match-route "POST" "/planning/sessions/plan-1/approval")]
-      (is (= :planning.sessions/approval (:handler match)))
-      (is (= "plan-1" (get-in match [:path-params :planning-session-id]))))
-    (let [match (routes/match-route "POST" "/planning/sessions/plan-1/replan")]
-      (is (= :planning.sessions/replan (:handler match)))
-      (is (= "plan-1" (get-in match [:path-params :planning-session-id]))))
-    (let [match (routes/match-route "GET" "/planning/chat/plan-1")]
-      (is (= :planning.chat/transport (:handler match)))
-      (is (= "plan-1" (get-in match [:path-params :planning-session-id]))))
-    (let [match (routes/match-route "POST" "/planning/workflows")]
-      (is (= :planning.workflows/create (:handler match))))
-    (let [match (routes/match-route "GET" "/planning/workflows/workflow-1")]
-      (is (= :planning.workflows/get (:handler match)))
-      (is (= "workflow-1" (get-in match [:path-params :workflow-id]))))))
