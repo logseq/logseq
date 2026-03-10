@@ -7,6 +7,7 @@
             [datascript.core :as d]
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
+            [logseq.common.path :as path]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
@@ -54,8 +55,8 @@
   [dir*]
   (let [dir (node-path/resolve dir*)]
     (->> (common-graph/get-files dir)
-         (concat (when (fs/existsSync (node-path/join dir* "assets"))
-                   (common-graph/readdir (node-path/join dir* "assets"))))
+         (concat (when (fs/existsSync (path/path-join dir* "assets"))
+                   (common-graph/readdir (path/path-join dir* "assets"))))
          (mapv #(hash-map :path %
                           ::rpath (node-path/relative dir* %))))))
 
@@ -826,7 +827,7 @@
 
 (deftest-async export-files-with-tag-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_07.md" "pages/Interstellar.md"])
+          files (mapv #(path/path-join file-graph-dir %) ["journals/2024_02_07.md" "pages/Interstellar.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:tag-classes ["movie"]})]
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
@@ -852,7 +853,7 @@
 
 (deftest-async export-files-with-property-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %)
+          files (mapv #(path/path-join file-graph-dir %)
                       ["journals/2024_02_23.md" "pages/url.md" "pages/Whiteboard___Tool.md"
                        "pages/Whiteboard___Arrow_head_toggle.md"
                        "pages/Library.md"])
@@ -899,7 +900,7 @@
 
 (deftest-async export-files-with-remove-inline-tags
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_07.md"
+          files (mapv #(path/path-join file-graph-dir %) ["journals/2024_02_07.md"
                                                           "journals/2026_01_27.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:remove-inline-tags? false :convert-all-tags? true})]
@@ -915,7 +916,7 @@
 
 (deftest-async export-files-with-ignored-properties
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %) ["ignored/icon-page.md"])
+          files (mapv #(path/path-join file-graph-dir %) ["ignored/icon-page.md"])
           conn (db-test/create-conn)
           {:keys [import-state]} (import-files-to-db files conn {})]
     (is (= 2
@@ -924,7 +925,7 @@
 
 (deftest-async export-files-with-property-parent-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_11_26.md"
+          files (mapv #(path/path-join file-graph-dir %) ["journals/2024_11_26.md"
                                                           "pages/CreativeWork.md" "pages/Movie.md" "pages/type.md"
                                                           "pages/Whiteboard___Tool.md" "pages/Whiteboard___Arrow_head_toggle.md"
                                                           "pages/Property.md" "pages/url.md"])
@@ -952,7 +953,7 @@
 (deftest-async export-files-with-property-pages-disabled
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           ;; any page with properties
-          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_01_17.md"])
+          files (mapv #(path/path-join file-graph-dir %) ["journals/2024_01_17.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:user-config {:property-pages/enabled? false
                                                           :property-pages/excludelist #{:prop-string}}})]
@@ -1035,7 +1036,7 @@
 
 (deftest-async export-files-with-extract-code-snippet
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %) ["journals/2026_03_01.md"])
+          files (mapv #(path/path-join file-graph-dir %) ["journals/2026_03_01.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:extract-code-snippets? true})
           journal-page-eid (d/q '[:find ?p . :where [?p :block/journal-day 20260301]] @conn)
@@ -1137,7 +1138,7 @@
 
 (deftest-async export-files-without-extract-code-snippet
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %) ["journals/2026_03_01.md"])
+          files (mapv #(path/path-join file-graph-dir %) ["journals/2026_03_01.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:extract-code-snippets? false})
           journal-page-eid (d/q '[:find ?p . :where [?p :block/journal-day 20260301]] @conn)
