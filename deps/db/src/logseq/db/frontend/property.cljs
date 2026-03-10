@@ -437,6 +437,16 @@
                :public? false
                :hide? true}
       :queryable? false}
+     :logseq.property/agent-plan
+     {:title "Agent plan"
+      :schema {:type :default
+               :public? true}
+      :properties {:logseq.property/description "Stores the task plan markdown emitted at the start of an agent session."}}
+     :logseq.property/post-review
+     {:title "Post-review"
+      :schema {:type :default
+               :public? true}
+      :properties {:logseq.property/description "Stores the post-review markdown emitted when an agent session finishes."}}
      :logseq.property/git-repo
      {:title "Git Repo"
       :schema {:type :url

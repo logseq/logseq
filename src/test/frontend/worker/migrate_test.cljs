@@ -95,3 +95,23 @@
            (:kv/value (d/entity @conn :logseq.kv/schema-version))))
     (is (some? property))
     (is (= :default (:logseq.property/type property)))))
+
+(deftest migrate-adds-planner-properties-builtin
+  (let [conn (db-test/create-conn)
+        property-idents [:logseq.property/agent-plan
+                         :logseq.property/post-review]
+        _ (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                              :kv/value {:major 65 :minor 29}}])
+        _ (doseq [property-ident property-idents
+                  :let [existing-eid (d/entid @conn property-ident)]
+                  :when existing-eid]
+            (d/transact! conn [[:db/retractEntity existing-eid]]))
+        _ (db-migrate/migrate conn :target-version "65.30")
+        agent-plan (d/entity @conn :logseq.property/agent-plan)
+        post-review (d/entity @conn :logseq.property/post-review)]
+    (is (= {:major 65 :minor 30}
+           (:kv/value (d/entity @conn :logseq.kv/schema-version))))
+    (is (some? agent-plan))
+    (is (some? post-review))
+    (is (= :default (:logseq.property/type agent-plan)))
+    (is (= :default (:logseq.property/type post-review)))))

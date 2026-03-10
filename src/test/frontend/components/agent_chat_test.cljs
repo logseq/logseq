@@ -49,6 +49,37 @@
           result (#'agent-chat/message->chat-message message)]
       (is (nil? result)))))
 
+(deftest message->chat-message-hides-artifact-protocol-prompt-test
+  (testing "drops the hidden protocol prompt from chat UI"
+    (let [message {:id "m-protocol"
+                   :role "user"
+                   :parts [{:type "text"
+                            :text (str
+                                   "You are executing a coding task in a single session.\n"
+                                   "<logseq-plan>{\"planMarkdown\":\"## Plan\"}</logseq-plan>\n"
+                                   "<logseq-post-review>{\"reviewMarkdown\":\"## Review\"}</logseq-post-review>")}]}
+          result (#'agent-chat/message->chat-message message)]
+      (is (nil? result)))))
+
+(deftest session->messages-strips-leading-artifact-json-from-assistant-text-test
+  (testing "keeps only the visible assistant narration after a hidden plan artifact"
+    (let [session {:events [{:type "item.completed"
+                             :ts 1100
+                             :data {:item_id "itm-artifact"
+                                    :item {:item_id "itm-artifact"
+                                           :kind "message"
+                                           :role "assistant"
+                                           :content [{:type "text"
+                                                      :text (str
+                                                             "{\"planMarkdown\":\"## Plan\\n- Real plan\",\"subtasks\":[{\"title\":\"Build board\",\"status\":\"todo\"}]}"
+                                                             "The workspace is minimal and I’m reading the app structure now.")}]}}}]}
+          messages (#'agent-chat/session->messages session {:block/uuid "b-artifact"})]
+      (is (= [{:id "itm-artifact"
+               :role "assistant"
+               :parts [{:type "text"
+                        :text "The workspace is minimal and I’m reading the app structure now."}]}]
+             messages)))))
+
 (deftest session->messages-keeps-reasoning-and-tool-parts-from-item-content-test
   (testing "maps item.content parts to AI element friendly message parts"
     (let [session {:events [{:type "item.completed"

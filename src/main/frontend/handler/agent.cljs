@@ -10,6 +10,7 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.user :as user-handler]
+            [frontend.modules.agent-chat.event :as chat-event]
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
@@ -41,9 +42,12 @@
 
 (declare <start-session!)
 
+(def ^:private task-agent-plan-property :logseq.property/agent-plan)
 (def ^:private task-sandbox-checkpoint-property :logseq.property/sandbox-checkpoint)
 (def ^:private task-session-id-property :logseq.property/agent-session-id)
 (def ^:private task-pr-property :logseq.property/pr)
+(def ^:private task-post-review-property :logseq.property/post-review)
+(defonce ^:private *artifact-buffers (atom {}))
 
 (defn- normalize-sandbox-checkpoint
   [checkpoint]
@@ -78,6 +82,21 @@
 (defn- codex-agent?
   [agent]
   (= "codex" (some-> (:provider agent) blank->nil string/lower-case)))
+
+(defn- artifact-protocol-content
+  [content]
+  (str
+   "You are executing a coding task in a single session.\n"
+   "Before making code changes, output exactly one planning artifact using this XML tag:\n"
+   "<logseq-plan>{\"planMarkdown\":\"## Plan\\n- concise implementation plan\",\"subtasks\":[{\"title\":\"<meaningful subtask title>\",\"status\":\"todo\"},{\"title\":\"<another meaningful subtask title>\",\"status\":\"doing\"}]}</logseq-plan>\n"
+   "If the task should be split, list the proposed smaller tasks in `subtasks` and summarize them in `planMarkdown`. Use an empty `subtasks` array when no split is needed.\n"
+   "Do not use placeholder titles like `subtask 1`, `subtask 2`, or similar template text.\n"
+   "After emitting <logseq-plan>, continue implementation in the same session without waiting for confirmation.\n"
+   "When the task is finished, output exactly one final post-review artifact:\n"
+   "<logseq-post-review>{\"reviewMarkdown\":\"## Post-review\\n- what changed\\n- tests run\\n- risks\"}</logseq-post-review>\n"
+   "Outside these XML tags, continue normal coding communication.\n\n"
+   "Task source:\n\n"
+   (or content "")))
 
 (defn- project-config
   ([project-page]
@@ -316,7 +335,8 @@
    (build-session-body block nil))
   ([block opts]
    (let [{:keys [block-uuid node-id node-title content attachments sandbox-checkpoint project agent]} (task-context block opts)
-         session-id (some-> block-uuid str)]
+         session-id (some-> block-uuid str)
+         content (artifact-protocol-content content)]
      (when (and session-id node-id (string? node-title) (string? content) (map? project) (map? agent))
        (cond-> {:session-id session-id
                 :node-id node-id
@@ -472,6 +492,175 @@
                                                   task-sandbox-checkpoint-property
                                                   (checkpoint->property-value checkpoint))))))))
 
+(defn- event-text
+  [event]
+  (let [payload (chat-event/unwrap-event-payload
+                 {:data (if (map? (:data event)) (:data event) {})})
+        item (:item payload)]
+    (or (chat-event/payload-text item)
+        (chat-event/payload-text payload)
+        (blank->nil (get-in event [:data :last-agent-message])))))
+
+(defn- extract-tagged-json
+  [text tag]
+  (let [text (or text "")
+        pattern (js/RegExp. (str "<" tag ">\\s*([\\s\\S]*?)\\s*</" tag ">"))]
+    (when-let [match (.exec pattern text)]
+      (let [raw-json (aget match 1)
+            parsed (chat-event/parse-json-safe raw-json)]
+        (when (map? parsed)
+          parsed)))))
+
+(defn- normalize-plan-markdown
+  [payload]
+  (blank->nil (:planMarkdown payload)))
+
+(defn- normalize-post-review-markdown
+  [payload]
+  (blank->nil (:reviewMarkdown payload)))
+
+(defn- subtask-status-ident
+  [subtask]
+  (case (some-> (:status subtask) str string/lower-case)
+    "backlog" :logseq.property/status.backlog
+    "doing" :logseq.property/status.doing
+    "in-review" :logseq.property/status.in-review
+    "done" :logseq.property/status.done
+    "canceled" :logseq.property/status.canceled
+    :logseq.property/status.todo))
+
+(defn- placeholder-subtask-title?
+  [title]
+  (let [title (some-> title blank->nil string/lower-case)]
+    (boolean
+     (and title
+          (or (re-matches #"subtask\s*\d+" title)
+              (re-matches #"task\s*\d+" title)
+              (re-matches #"step\s*\d+" title)
+              (string/includes? title "<meaningful subtask title>")
+              (string/includes? title "<another meaningful subtask title>")
+              (string/includes? title "<title>"))))))
+
+(defn- normalize-subtasks
+  [payload]
+  (->> (:subtasks payload)
+       (keep (fn [subtask]
+               (cond
+                 (string? subtask)
+                 (when-let [title (blank->nil subtask)]
+                   (when-not (placeholder-subtask-title? title)
+                     {:title title
+                      :status :logseq.property/status.todo}))
+
+                 (map? subtask)
+                 (when-let [title (or (blank->nil (:title subtask))
+                                      (blank->nil (:name subtask)))]
+                   (when-not (placeholder-subtask-title? title)
+                     {:title title
+                      :status (subtask-status-ident subtask)}))
+
+                 :else nil)))
+       (reduce (fn [acc {:keys [title] :as subtask}]
+                 (assoc acc title subtask))
+               {})
+       vals
+       vec))
+
+(defn- append-artifact-buffer!
+  [block-uuid text]
+  (let [buffer-key (str block-uuid)]
+    (get (swap! *artifact-buffers update buffer-key (fnil str "") (or text ""))
+         buffer-key)))
+
+(defn- artifact-text
+  [block event]
+  (let [block-uuid (:block/uuid block)
+        chunk-kind (chat-event/acp-runtime-update-kind event)
+        chunk-text (when (= "agent_message_chunk" chunk-kind)
+                     (chat-event/acp-runtime-update-text event))
+        stop-reason (chat-event/acp-runtime-stop-reason event)
+        message-complete? (or (contains? #{"item.completed" "response.completed" "session.completed"} (:type event))
+                              (string? stop-reason))
+        event-text' (event-text event)]
+    (cond
+      (string? chunk-text)
+      (do
+        (append-artifact-buffer! block-uuid chunk-text)
+        nil)
+
+      (and message-complete?
+           (string? event-text'))
+      (str (get @*artifact-buffers (str block-uuid) "")
+           event-text')
+
+      message-complete?
+      (get @*artifact-buffers (str block-uuid) "")
+
+      :else
+      nil)))
+
+(defn- child-block-with-title
+  [block title]
+  (some (fn [child]
+          (when (= title (:block/title child))
+            child))
+        (db/sort-by-order (:block/_parent (db/entity [:block/uuid (:block/uuid block)])))))
+
+(defn- maybe-set-block-property!
+  [block-uuid property-id value]
+  (when-let [block (db/entity [:block/uuid block-uuid])]
+    (let [current (pu/get-block-property-value block property-id)]
+      (when (not= current value)
+        (property-handler/set-block-property! block-uuid property-id value)))))
+
+(defn- copy-parent-task-properties!
+  [parent-block child-uuid status-ident]
+  (when-let [project (:logseq.property/project parent-block)]
+    (maybe-set-block-property! child-uuid :logseq.property/project (:db/id project)))
+  (when-let [agent (:logseq.property/agent parent-block)]
+    (maybe-set-block-property! child-uuid :logseq.property/agent (:db/id agent)))
+  (maybe-set-block-property! child-uuid :block/tags :logseq.class/Task)
+  (maybe-set-block-property! child-uuid :logseq.property/status (or status-ident :logseq.property/status.todo)))
+
+(defn- <ensure-split-subtasks!
+  [block subtasks]
+  (reduce (fn [promise {:keys [title status]}]
+            (p/let [_ promise]
+              (if-let [existing (child-block-with-title block title)]
+                (do
+                  (copy-parent-task-properties! block (:block/uuid existing) status)
+                  nil)
+                (p/let [created (editor-handler/api-insert-new-block! title
+                                                                      {:block-uuid (:block/uuid block)
+                                                                       :edit-block? false})]
+                  (copy-parent-task-properties! block (:block/uuid created) status)
+                  nil))))
+          (p/resolved nil)
+          subtasks))
+
+(defn <sync-task-artifacts-from-event!
+  [block event]
+  (let [text (artifact-text block event)
+        plan-payload (extract-tagged-json text "logseq-plan")
+        review-payload (extract-tagged-json text "logseq-post-review")
+        block-uuid (:block/uuid block)
+        plan-md (normalize-plan-markdown plan-payload)
+        subtasks (when (map? plan-payload)
+                   (normalize-subtasks plan-payload))
+        post-review-md (normalize-post-review-markdown review-payload)
+        stop-reason (chat-event/acp-runtime-stop-reason event)
+        message-complete? (or (contains? #{"item.completed" "response.completed" "session.completed"} (:type event))
+                              (string? stop-reason))]
+    (p/let [_ (when (and block-uuid (string? plan-md))
+                (maybe-set-block-property! block-uuid task-agent-plan-property plan-md))
+            _ (when (and block-uuid (seq subtasks))
+                (<ensure-split-subtasks! block subtasks))
+            _ (when (and block-uuid (string? post-review-md))
+                (maybe-set-block-property! block-uuid task-post-review-property post-review-md))]
+      (when message-complete?
+        (swap! *artifact-buffers dissoc (str block-uuid)))
+      nil)))
+
 (defn- update-session!
   [block-uuid f]
   (state/update-state! :agent/sessions
@@ -575,6 +764,11 @@
           (p/then (fn [resp]
                     (when (seq (:events resp))
                       (append-events! block-uuid (:events resp))
+                      (reduce (fn [promise event]
+                                (p/let [_ promise]
+                                  (<sync-task-artifacts-from-event! block event)))
+                              (p/resolved nil)
+                              (:events resp))
                       (let [provider (some->> (:events resp)
                                               reverse
                                               (keep event-runtime-provider)
@@ -635,6 +829,9 @@
   [block-uuid event]
   (when-not (seen-event? block-uuid event)
     (append-events! block-uuid [event])
+    (when-let [block (db/entity [:block/uuid block-uuid])]
+      (-> (<sync-task-artifacts-from-event! block event)
+          (.catch (fn [_] nil))))
     (when-let [provider (event-runtime-provider event)]
       (update-session-state! block-uuid {:runtime-provider provider
                                          :terminal-enabled (runtime-provider-terminal-enabled? provider)}))

@@ -182,7 +182,6 @@
    (when-let [dir (get-repo-dir session-id task provider)]
      (str "cd '" (escape-shell-single dir) "'"))))
 
-;; FIXME: sandbox-agent 2.x.x changes session routes to opencode/session
 (defn- sandbox-agent-version
   [^js env]
   (or (env-str env "SANDBOX_AGENT_VERSION")

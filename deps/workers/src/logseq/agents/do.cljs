@@ -24,6 +24,32 @@
 (defn- sse-bytes [event]
   (.encode (js/TextEncoder.) (sse-encode event)))
 
+(defn- make-event
+  [session-id type data ts]
+  {:event-id (str (random-uuid))
+   :session-id session-id
+   :type type
+   :ts (or ts (common/now-ms))
+   :data data})
+
+(defn- acp-live-message-event
+  [session-id runtime-session-id turn text reasoning ts]
+  (let [text (some-> text str string/trim not-empty)
+        reasoning (some-> reasoning str string/trim not-empty)
+        parts (cond-> []
+                (string? reasoning) (conj {:type "reasoning" :text reasoning})
+                (string? text) (conj {:type "text" :text text}))]
+    (when (seq parts)
+      {:event-id (str "live-" runtime-session-id "-turn-" turn)
+       :session-id session-id
+       :type "item.completed"
+       :ts (or ts (common/now-ms))
+       :data {:item_id (str runtime-session-id "-turn-" turn)
+              :item {:item_id (str runtime-session-id "-turn-" turn)
+                     :kind "message"
+                     :role "assistant"
+                     :content parts}}})))
+
 (defn- <storage-get [storage key]
   (p/let [value (.get storage key)]
     (when value (js->clj value :keywordize-keys true))))
@@ -100,6 +126,52 @@
   (if (map? (:task session))
     (:task session)
     {}))
+
+(defn- sanitize-agent-for-public
+  [agent]
+  (if (map? agent)
+    (dissoc agent :api-token :auth-json :managed-auth)
+    agent))
+
+(defn- sanitize-task-for-public
+  [task]
+  (if (map? task)
+    (update task :agent sanitize-agent-for-public)
+    task))
+
+(defn- sanitize-event-data-for-public
+  [data]
+  (if (map? data)
+    (cond-> data
+      (contains? data :agent) (update :agent sanitize-agent-for-public)
+      (contains? data :task) (update :task sanitize-task-for-public))
+    data))
+
+(defn- sanitize-event-for-public
+  [event]
+  (if (map? event)
+    (update event :data sanitize-event-data-for-public)
+    event))
+
+(defn- session-live-messages
+  [session]
+  (if (map? (:live-messages session))
+    (:live-messages session)
+    {}))
+
+(defn- assoc-live-message
+  [session runtime-session-id event]
+  (assoc session :live-messages
+         (cond-> (session-live-messages session)
+           (and (string? runtime-session-id) (map? event))
+           (assoc runtime-session-id event))))
+
+(defn- dissoc-live-message
+  [session runtime-session-id]
+  (assoc session :live-messages
+         (if (string? runtime-session-id)
+           (dissoc (session-live-messages session) runtime-session-id)
+           (session-live-messages session))))
 
 (defn- runtime-snapshot-id
   [result]
@@ -219,6 +291,93 @@
                   (-> (.write writer payload)
                       (.catch (fn [_]
                                 (.delete streams key)))))))))
+
+(defn- runtime-delta-event?
+  [event-type]
+  (and (string? event-type)
+       (or (= "item.delta" event-type)
+           (= "response.delta" event-type)
+           (string/ends-with? event-type ".delta"))))
+
+(defn- runtime-transient-event?
+  [event-type]
+  (contains? #{"item.started"
+               "response.started"}
+             event-type))
+
+(defn- ensure-acp-turn-state!
+  [^js self runtime-session-id]
+  (let [store (or (.-acpTurnState self)
+                  (let [m (js/Map.)]
+                    (set! (.-acpTurnState self) m)
+                    m))
+        existing (.get store runtime-session-id)]
+    (if existing
+      existing
+      (let [state #js {:turn 1
+                       :text ""
+                       :reasoning ""}]
+        (.set store runtime-session-id state)
+        state))))
+
+(defn- remember-acp-runtime-session-id!
+  [^js self runtime-session-id]
+  (when (string? runtime-session-id)
+    (set! (.-lastAcpRuntimeSessionId self) runtime-session-id)))
+
+(defn- last-acp-runtime-session-id
+  [^js self]
+  (some-> (.-lastAcpRuntimeSessionId self) str string/trim not-empty))
+
+(defn- clear-acp-turn-state!
+  [^js self runtime-session-id]
+  (when-let [store (.-acpTurnState self)]
+    (.delete store runtime-session-id))
+  (when (= runtime-session-id (last-acp-runtime-session-id self))
+    (set! (.-lastAcpRuntimeSessionId self) nil)))
+
+(defn- append-acp-text!
+  [^js self runtime-session-id field text]
+  (when (and (string? runtime-session-id)
+             (string? text)
+             (contains? #{"text" "reasoning"} field))
+    (let [state (ensure-acp-turn-state! self runtime-session-id)
+          current (or (aget state field) "")]
+      (aset state field (str current text)))))
+
+(defn- acp-completed-message-event
+  [^js self session-id runtime-session-id ts]
+  (when (string? runtime-session-id)
+    (let [state (ensure-acp-turn-state! self runtime-session-id)
+          turn (or (aget state "turn") 1)
+          text (some-> (aget state "text") str string/trim not-empty)
+          reasoning (some-> (aget state "reasoning") str string/trim not-empty)
+          parts (cond-> []
+                  (string? reasoning) (conj {:type "reasoning" :text reasoning})
+                  (string? text) (conj {:type "text" :text text}))]
+      (when (seq parts)
+        (aset state "turn" (inc turn))
+        (aset state "text" "")
+        (aset state "reasoning" "")
+        (make-event session-id
+                    "item.completed"
+                    {:item_id (str runtime-session-id "-turn-" turn)
+                     :item {:item_id (str runtime-session-id "-turn-" turn)
+                            :kind "message"
+                            :role "assistant"
+                            :content parts}}
+                    ts)))))
+
+(defn- current-acp-live-message
+  [^js self session-id runtime-session-id ts]
+  (when (string? runtime-session-id)
+    (let [state (ensure-acp-turn-state! self runtime-session-id)]
+      (acp-live-message-event session-id
+                              runtime-session-id
+                              (or (aget state "turn") 1)
+                              (aget state "text")
+                              (aget state "reasoning")
+                              ts))))
 
 (defn- <append-event! [^js self event-opts]
   (p/let [session (<get-session self)]
@@ -635,14 +794,66 @@
       (let [{:keys [type data]} (or (sandbox/acp-envelope->event payload)
                                     {:type (or (:type payload) "agent.runtime")
                                      :data payload})
-            event-type type]
-        (p/let [_ (<append-event! self {:type event-type
-                                        :data data
-                                        :ts (common/now-ms)})]
-          (when (= "session.completed" event-type)
-            (<checkpoint-and-terminate-completed-runtime! self session-id))
-          (when (= "session.canceled" event-type)
-            (<terminate-runtime-on-status! self session-id "canceled")))))))
+            event-type type
+            ts (common/now-ms)
+            live-event (make-event session-id event-type data ts)
+            runtime-session-id (or (some-> data :session-id str string/trim not-empty)
+                                   (some-> payload :params :sessionId str string/trim not-empty)
+                                   (last-acp-runtime-session-id self))
+            update-kind (some-> data :update :sessionUpdate str string/trim not-empty)
+            stop-reason (some-> payload :result :stopReason str string/trim not-empty)]
+        (cond
+          (= "agent_message_chunk" update-kind)
+          (do
+            (remember-acp-runtime-session-id! self runtime-session-id)
+            (append-acp-text! self runtime-session-id "text" (some-> data :update :content :text))
+            (broadcast-event! self live-event)
+            (p/let [latest-session (<get-session self)
+                    live-message (current-acp-live-message self session-id runtime-session-id ts)]
+              (when (and (map? latest-session)
+                         (string? runtime-session-id)
+                         (map? live-message))
+                (<save-session! self (assoc-live-message latest-session runtime-session-id live-message)))))
+
+          (= "agent_thought_chunk" update-kind)
+          (do
+            (remember-acp-runtime-session-id! self runtime-session-id)
+            (append-acp-text! self runtime-session-id "reasoning" (some-> data :update :content :text))
+            (broadcast-event! self live-event)
+            (p/let [latest-session (<get-session self)
+                    live-message (current-acp-live-message self session-id runtime-session-id ts)]
+              (when (and (map? latest-session)
+                         (string? runtime-session-id)
+                         (map? live-message))
+                (<save-session! self (assoc-live-message latest-session runtime-session-id live-message)))))
+
+          (string? stop-reason)
+          (let [completed-event (acp-completed-message-event self session-id runtime-session-id ts)]
+            (broadcast-event! self live-event)
+            (p/let [_ (when (map? completed-event)
+                        (<append-event! self completed-event))
+                    latest-session (<get-session self)]
+              (when (and (map? latest-session)
+                         (string? runtime-session-id))
+                (<save-session! self (dissoc-live-message latest-session runtime-session-id)))
+              nil))
+
+          (runtime-delta-event? event-type)
+          (broadcast-event! self live-event)
+
+          (runtime-transient-event? event-type)
+          (broadcast-event! self live-event)
+
+          :else
+          (p/let [_ (<append-event! self {:type event-type
+                                          :data data
+                                          :ts ts})]
+            (when (= "session.completed" event-type)
+              (clear-acp-turn-state! self runtime-session-id)
+              (<checkpoint-and-terminate-completed-runtime! self session-id))
+            (when (= "session.canceled" event-type)
+              (clear-acp-turn-state! self runtime-session-id)
+              (<terminate-runtime-on-status! self session-id "canceled"))))))))
 
 (defn- <consume-events-stream! [^js self session-id runtime on-ready]
   (let [provider (runtime-provider/resolve-provider (.-env self) runtime)]
@@ -1007,7 +1218,7 @@
                                    (session/append-event session [] {:type "session.created"
                                                                      :data {:requested-by user-id
                                                                             :project (:project task)
-                                                                            :agent (:agent task)}
+                                                                            :agent (sanitize-agent-for-public (:agent task))}
                                                                      :ts now})]
                                (p/let [_ (<put-session! self session)
                                        _ (<put-events! self events)
@@ -1037,7 +1248,7 @@
                            :status (:status session)
                            :runtime-provider (session-runtime-provider session)
                            :terminal-enabled (session-terminal-enabled? session)
-                           :task (:task session)
+                           :task (sanitize-task-for-public (:task session))
                            :audit (:audit session)
                            :created-at (:created-at session)
                            :updated-at (:updated-at session)}))))
@@ -1589,7 +1800,10 @@
       (if (nil? session)
         (http/not-found)
         (p/let [events (<get-events self)
-                filtered (session/filter-events events {:since-ts since-ts :limit limit})]
+                combined (into (vec events) (vals (session-live-messages session)))
+                filtered (->> (session/filter-events combined {:since-ts since-ts :limit limit})
+                              (map sanitize-event-for-public)
+                              vec)]
           (http/json-response :sessions/events {:events filtered}))))))
 
 (defn- handle-branches [^js self request]

@@ -38,28 +38,102 @@
              (apply str)
              normalized-text)))
 
+(defn- artifact-protocol-message?
+  [text]
+  (and (string? text)
+       (string/includes? text "You are executing a coding task in a single session.")
+       (string/includes? text "<logseq-plan>")
+       (string/includes? text "<logseq-post-review>")))
+
+(defn- leading-artifact-json-split
+  [text]
+  (let [text (or text "")
+        leading-space (count (or (re-find #"^\s*" text) ""))
+        len (count text)]
+    (when (and (< leading-space len)
+               (= \{ (nth text leading-space)))
+      (loop [idx leading-space
+             depth 0
+             in-string? false
+             escaped? false]
+        (when (< idx len)
+          (let [ch (nth text idx)]
+            (cond
+              escaped?
+              (recur (inc idx) depth in-string? false)
+
+              (= ch \\)
+              (recur (inc idx) depth in-string? true)
+
+              (= ch \")
+              (recur (inc idx) depth (not in-string?) false)
+
+              in-string?
+              (recur (inc idx) depth true false)
+
+              (= ch \{)
+              (recur (inc idx) (inc depth) false false)
+
+              (= ch \})
+              (let [next-depth (dec depth)]
+                (if (zero? next-depth)
+                  [(subs text leading-space (inc idx))
+                   (subs text (inc idx))]
+                  (recur (inc idx) next-depth false false)))
+
+              :else
+              (recur (inc idx) depth false false))))))))
+
+(defn- artifact-json?
+  [text]
+  (let [parsed (chat-event/parse-json-safe text)]
+    (and (map? parsed)
+         (or (contains? parsed :planMarkdown)
+             (contains? parsed :reviewMarkdown)
+             (contains? parsed :subtasks)))))
+
+(defn- strip-leading-artifact-json
+  [text]
+  (if-let [[json-part remainder] (leading-artifact-json-split text)]
+    (if (artifact-json? json-part)
+      remainder
+      text)
+    text))
+
+(defn- visible-chat-text
+  [text]
+  (when-let [text (normalized-text text)]
+    (when-not (artifact-protocol-message? text)
+      (-> text
+          (string/replace #"(?s)<logseq-plan>\s*.*?\s*</logseq-plan>" "")
+          (string/replace #"(?s)<logseq-post-review>\s*.*?\s*</logseq-post-review>" "")
+          strip-leading-artifact-json
+          normalized-text))))
+
 (defn- normalize-message-part
   [part]
   (when (map? part)
     (if (= "text" (:type part))
-      (when-let [text (normalized-text (or (:text part) (:content part)))]
+      (when-let [text (visible-chat-text (or (:text part) (:content part)))]
         {:type "text"
          :text text})
       part)))
 
 (defn- ui-message-text
   [message]
-  (or (text-from-content-parts (:parts message))
+  (or (some-> (text-from-content-parts (:parts message))
+              visible-chat-text)
       (let [content (:content message)]
         (cond
           (string? content)
-          (normalized-text content)
+          (visible-chat-text content)
 
           (seq content)
-          (text-from-content-parts content)
+          (some-> (text-from-content-parts content)
+                  visible-chat-text)
 
           :else nil))
-      (normalized-text (:text message))))
+      (visible-chat-text (:text message))))
 
 (defn- normalize-role [role]
   (cond
