@@ -32,13 +32,13 @@ button.shortcut-feedback-action {
 }
 
 .cp__shortcut-page-x {
-  @apply relative;
+  @apply relative w-full max-w-full;
 
   &-pane-controls {
     @apply flex flex-col gap-2;
 
     .shortcut-toolbar-row {
-      @apply flex gap-3 items-center;
+      @apply flex flex-wrap gap-3 items-center;
     }
 
     .search-input-wrap {
@@ -126,10 +126,10 @@ button.shortcut-feedback-action {
     .shortcut-keystroke-inactive,
     .shortcut-keystroke-active {
       @apply flex items-center gap-1.5 text-sm cursor-pointer
-      select-none flex-shrink-0;
+      select-none;
       height: 30px;
       padding: 0 10px;
-      min-width: 140px;
+      min-width: 0;
       border-radius: 6px;
       border: 1px solid var(--lx-gray-07, var(--ls-quaternary-background-color, var(--rx-gray-07)));
       background-color: var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02)));
@@ -190,7 +190,7 @@ button.shortcut-feedback-action {
   }
 
   > article {
-    @apply relative pb-4;
+    @apply relative pb-4 w-full;
 
     > ul {
       @apply px-4 m-0 py-0;
@@ -199,7 +199,7 @@ button.shortcut-feedback-action {
         @apply text-[15px] px-1;
 
         &.shortcut-row {
-          @apply rounded-md cursor-pointer select-none py-1 px-2 -mx-1;
+          @apply rounded-md cursor-pointer select-none py-1 px-2 -mx-1 flex-wrap min-w-0;
           transition: background-color 100ms ease, opacity 100ms ease;
 
           &:hover {
@@ -226,7 +226,7 @@ button.shortcut-feedback-action {
 
         .label-wrap {
           @apply flex flex-1;
-          min-width: 120px;
+          min-width: 60px;
         }
 
         .action-wrap {
@@ -235,6 +235,8 @@ button.shortcut-feedback-action {
           column-gap: 16px;
           row-gap: 6px;
           max-width: 55%;
+          min-width: 0;
+          overflow: hidden;
 
           &.disabled {
             @apply opacity-60 cursor-default;
