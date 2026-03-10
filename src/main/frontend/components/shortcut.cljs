@@ -617,11 +617,15 @@
                                 (set-rec-state! :recording)
                                 (set-keystroke! (util/trim-safe kn)))
 
-                              ;; Recording + key => accumulate
+                              ;; Recording + key => accumulate (max 5 keys)
                               (= state :recording)
                               (when-let [kn (shortcut/keyname e)]
-                                (set-key-conflicts! nil)
-                                (set-keystroke! #(util/trim-safe (str % kn))))))))
+                                (let [cur (rum/deref *keystroke-ref)
+                                      parts (string/split (string/trim cur) #" ")
+                                      at-limit? (and (seq (first parts)) (>= (count parts) 5))]
+                                  (when-not at-limit?
+                                    (set-key-conflicts! nil)
+                                    (set-keystroke! #(util/trim-safe (str % kn))))))))))
 
          (js/setTimeout #(.focus el) 128)
 
@@ -749,7 +753,7 @@
        ;; Reset (only when changed from default)
        (when (and (#{:idle :accepted :removed} rec-state)
                   (not= current-binding binding))
-         [:button.shortcut-toolbar-action
+         [:button.shortcut-toolbar-action.shortcut-toolbar-reset
           {:on-click reset-fn!}
           (ui/icon "rotate" {:size 12})
           [:span "Reset"]])]
@@ -908,8 +912,8 @@
 
       (when (and ready? no-results?)
         [:div.shortcut-empty-state
-         (ui/icon "search" {:size 24})
-         [:span "No matching shortcuts"]])
+         (ui/icon "list-search" {:size 24})
+         [:span.text-sm "No matching shortcuts"]])
 
       (when (and ready? (not no-results?))
         [:ul.list-none.m-0.py-3
@@ -983,12 +987,12 @@
                              [:span.shortcut-status-label (t :keymap/disabled)]
                              (for [b user-binding
                                    :when (string? b)]
-                               [:span {:key b}
+                               [:span {:key b :style {:display "contents"}}
                                 (shui/shortcut b)]))]
 
                           :else
                           (for [b binding
                                 :when (string? b)]
-                            [:span {:key b}
+                            [:span {:key b :style {:display "contents"}}
                              (shui/shortcut (dh/binding-for-display id b)
                                             {:raw-binding [b]})]))]])))))])])]]))

@@ -107,8 +107,14 @@
           normalized))
 
       (coll? binding)
-      (let [keys (flatten-keys binding)]
-        (string/join "+" (map normalize-key keys)))
+      (if (and (coll? (first binding)) (> (count binding) 1) (every? coll? binding))
+        ;; Chord sequence: normalize each group separately, join with space
+        (string/join " " (map (fn [group]
+                                (string/join "+" (map normalize-key (flatten-keys group))))
+                              binding))
+        ;; Single combo group
+        (let [keys (flatten-keys binding)]
+          (string/join "+" (map normalize-key keys))))
 
       (keyword? binding)
       (name binding)
@@ -261,6 +267,44 @@
                  :margin-right "2px"}}
         key-text])]))
 
+(rum/defc chord-sequence-keys
+  "Renders a chord sequence (multi-step key combinations) with 'then' separators.
+   E.g., [['⌘' 'c'] ['⌘' 'r']] renders as: [⌘ C] then [⌘ R]"
+  [groups binding {:keys [aria-label aria-hidden? glow?]}]
+  (let [normalized-binding (normalize-binding binding)
+        container-attrs (cond-> {:class "shui-shortcut-chord"
+                                 :data-shortcut-binding normalized-binding
+                                 :style {:white-space "nowrap"
+                                         :display "inline-flex"
+                                         :align-items "center"
+                                         :gap "8px"}}
+                          aria-label (assoc :aria-label aria-label)
+                          aria-hidden? (assoc :aria-hidden "true"))]
+    [:div container-attrs
+     (for [[gi group] (map-indexed vector groups)]
+       (list
+        (when (> gi 0)
+          [:span.shui-shortcut-chord-sep
+           {:key (str "chord-sep-" gi)
+            :style {:font-size "10px"
+                    :opacity 0.45}}
+           "then"])
+        (let [key-elements (map print-shortcut-key group)]
+          [:span
+           {:key (str "chord-group-" gi)
+            :class (str "shui-shortcut-combo" (when glow? " shui-shortcut-glow"))
+            :style {:display "inline-flex"
+                    :align-items "center"
+                    :white-space "nowrap"}}
+           (for [[ki key-text] (map-indexed vector key-elements)]
+             (list
+              (when (< 0 ki)
+                [:span.shui-shortcut-separator {:key (str "gsep-" gi "-" ki)}])
+              [:kbd.shui-shortcut-key
+               {:key (str "chord-key-" gi "-" ki)
+                :aria-hidden (if aria-label "true" "false")}
+               key-text]))])))]))
+
 (rum/defc root
   "Main shortcut component with automatic style detection.
    
@@ -287,7 +331,11 @@
                 :aria-hidden? aria-hidden?
                 :glow? glow?}]
       (for [[index binding] (map-indexed vector shortcuts)]
-        (let [detected-style (if (= style :auto)
+        (let [;; Chord sequence: multiple nested groups like [["⌘" "c"] ["⌘" "r"]]
+              chord-sequence? (and (coll? binding)
+                                   (> (count binding) 1)
+                                   (every? coll? binding))
+              detected-style (if (= style :auto)
                                (detect-style binding)
                                style)
               keys (cond
@@ -330,10 +378,11 @@
            {:key (str "shortcut-" index)
             :style {:display "inline-flex"
                     :align-items "center"
-                    :min-height "20px"
                     :white-space "nowrap"}}
            (when (< 0 index)
              [:span.text-gray-11.text-sm {:key (str "sep-" index)
                                           :style {:margin "0 4px"}} "|"])
-           (render-fn keys binding-for-data opts)])))))
+           (if chord-sequence?
+             (chord-sequence-keys binding binding-for-data opts)
+             (render-fn keys binding-for-data opts))])))))
 

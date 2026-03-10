@@ -28,6 +28,7 @@ button.shortcut-feedback-action {
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  white-space: nowrap;
 }
 
 .cp__shortcut-page-x {
@@ -50,7 +51,7 @@ button.shortcut-feedback-action {
       }
 
       input.form-input {
-        @apply w-full pl-7 text-sm mt-0;
+        @apply w-full pl-7 pr-7 text-sm mt-0;
         border-radius: 6px;
 
         &:focus {
@@ -59,7 +60,7 @@ button.shortcut-feedback-action {
         }
       }
 
-      a.x {
+      .x {
         @apply flex items-center absolute right-1 px-1 cursor-pointer;
         top: 50%;
         transform: translateY(-50%);
@@ -130,7 +131,7 @@ button.shortcut-feedback-action {
       padding: 0 10px;
       min-width: 140px;
       border-radius: 6px;
-      border: 1px solid var(--lx-gray-06, var(--ls-quaternary-background-color, var(--rx-gray-06)));
+      border: 1px solid var(--lx-gray-07, var(--ls-quaternary-background-color, var(--rx-gray-07)));
       background-color: var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02)));
       color: var(--lx-gray-12, var(--rx-gray-12));
       transition: background-color 150ms ease;
@@ -183,7 +184,8 @@ button.shortcut-feedback-action {
   }
 
   .shortcut-empty-state {
-    @apply flex flex-col items-center justify-center gap-2 py-16 select-none;
+    @apply flex flex-col items-center justify-center gap-2 select-none;
+    min-height: calc(60dvh - var(--shortcut-header-h, 120px));
     color: var(--lx-gray-09, var(--rx-gray-09));
   }
 
@@ -225,7 +227,6 @@ button.shortcut-feedback-action {
         .label-wrap {
           @apply flex flex-1;
           min-width: 120px;
-          padding-top: 1px;
         }
 
         .action-wrap {
@@ -234,7 +235,6 @@ button.shortcut-feedback-action {
           column-gap: 16px;
           row-gap: 6px;
           max-width: 55%;
-          padding-top: 1px;
 
           &.disabled {
             @apply opacity-60 cursor-default;
@@ -333,11 +333,12 @@ button.shortcut-feedback-action {
 /* Each binding grouped in a subtle container */
 .shortcut-input-binding {
   @apply inline-flex items-center flex-wrap rounded-md p-1;
+  gap: 4px;
   background-color: var(--lx-gray-04-alpha, var(--rx-gray-04-alpha));
   max-width: 100%;
 
   .shortcut-binding-remove {
-    @apply flex items-center ml-1 cursor-pointer select-none;
+    @apply flex items-center cursor-pointer select-none;
     color: var(--lx-gray-10, var(--rx-gray-10));
 
     &:hover {
@@ -432,9 +433,19 @@ button.shortcut-feedback-action {
   margin-top: auto;
 }
 
-.shortcut-toolbar-action {
-  @apply cursor-pointer flex items-center gap-1;
-  &:hover { color: var(--lx-gray-12, var(--rx-gray-12)); }
+.shortcut-toolbar button.shortcut-toolbar-action {
+  gap: 4px;
+  &:hover {
+    color: var(--lx-gray-12, var(--rx-gray-12));
+    text-decoration: underline;
+  }
+}
+
+.shortcut-toolbar button.shortcut-toolbar-reset {
+  color: var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary) / 0.8)));
+  &:hover {
+    color: var(--lx-accent-12, var(--ls-link-text-hover-color, hsl(var(--primary))));
+  }
 }
 
 .shortcut-toolbar-hint {
