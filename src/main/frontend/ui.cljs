@@ -538,16 +538,15 @@
                                               (if (and (gobj/get e "shiftKey") on-shift-chosen)
                                                 (on-shift-chosen item)
                                                 (on-chosen item e))))}
-                               (if item-render (item-render item chosen?) item)))]]
-
-                       (let [group-name (and (fn? get-group-name) (get-group-name item))]
-                         (if (and group-name (not (contains? @*groups group-name)))
-                           (do
-                             (swap! *groups conj group-name)
-                             [:div
-                              [:div.ui__ac-group-name group-name]
-                              item-cp])
-                           item-cp)))))]
+                               (if item-render (item-render item chosen?) item)))]
+                           group-name (and (fn? get-group-name) (get-group-name item))]
+                       (if (and group-name (not (contains? @*groups group-name)))
+                         (do
+                           (swap! *groups conj group-name)
+                           [:div
+                            [:div.ui__ac-group-name group-name]
+                            item-cp])
+                         item-cp))))]
     [:div#ui__ac {:class class}
      (if (seq matched)
        [:div#ui__ac-inner.hide-scrollbar
