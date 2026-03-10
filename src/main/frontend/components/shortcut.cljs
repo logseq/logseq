@@ -937,104 +937,140 @@
          (shui/popup-hide-all!)))
      [])
 
-    [:div.cp__shortcut-page-x
-     {:ref (fn [^js el]
-             (when el
-               (when-let [header (.querySelector el ":scope > header")]
-                 (let [h (.-offsetHeight header)]
-                   (.setProperty (.-style el) "--shortcut-header-h" (str h "px"))))))}
-     [:header
-      (pane-controls q set-q! filter-key set-filter-key! keystroke set-keystroke! toggle-categories! pill-counts)]
+    (let [*container-ref (rum/use-ref nil)]
+      ;; Track header height for sticky offset
+      (hooks/use-effect!
+       (fn []
+         (when-let [^js el (rum/deref *container-ref)]
+           (when-let [header (.querySelector el ":scope > header")]
+             (let [update-h! #(let [h (.-offsetHeight header)]
+                                (.setProperty (.-style el) "--shortcut-header-h" (str h "px")))
+                   observer (js/ResizeObserver. update-h!)]
+               (.observe observer header)
+               #(.disconnect observer)))))
+       [])
 
-     [:article
-      (when-not ready?
-        [:p.py-8.flex.justify-center (ui/loading "")])
+      ;; Constrain container to the actual available width inside the settings dialog.
+      ;; The article parent has CSS width: 44rem (for dialog intrinsic sizing) but the
+      ;; dialog may be narrower when the viewport is small. The inner flex container
+      ;; overflows the dialog (which clips via overflow:hidden), so we observe the
+      ;; dialog element itself and compute available width from its clientWidth.
+      (hooks/use-effect!
+       (fn []
+         (when-let [^js el (rum/deref *container-ref)]
+           (when-let [^js dialog (.closest el ".ui__dialog-content")]
+             (let [aside (.querySelector dialog "aside")
+                   inner (.closest el ".cp__settings-inner")
+                   sync! (fn []
+                           (let [row? (and inner
+                                           (= "row" (.-flexDirection (js/getComputedStyle inner))))
+                                 available (- (.-clientWidth dialog)
+                                              (if (and aside row?)
+                                                (.-offsetWidth aside) 0))]
+                             (when (pos? available)
+                               (.setProperty (.-style el) "max-width" (str available "px")))))
+                   observer (js/ResizeObserver. (fn [_] (sync!)))]
+               (.observe observer dialog)
+               (sync!)
+               #(do (.disconnect observer)
+                    (.removeProperty (.-style el) "max-width"))))))
+       [])
 
-      (when (and ready? no-results?)
-        [:div.shortcut-empty-state
-         (ui/icon "list-search" {:size 24})
-         [:span.text-sm (t :keymap/no-matching-shortcuts)]])
+      [:div.cp__shortcut-page-x
+       {:ref *container-ref}
+       [:header
+        (pane-controls q set-q! filter-key set-filter-key! keystroke set-keystroke! toggle-categories! pill-counts)]
 
-      (when (and ready? (not no-results?))
-        [:ul.list-none.m-0.py-3
-         (for [[c binding-map] result-list-map
-               :let [folded? (contains? folded-categories c)]]
-           ^{:key (str c)}
-           [:<>
-            ;; category row
-            (when (and (not in-query?)
-                       (not in-filter?)
-                       (not in-keystroke?))
-              [:li.flex.justify-between.th
-               {:key      (str c)
-                :on-click #(let [f (if folded? disj conj)]
-                             (set-folded-categories! (f folded-categories c)))}
-               [:strong.font-semibold (t c)]
-               [:i.flex.items-center
-                (ui/icon (if folded? "chevron-left" "chevron-down"))]])
+       [:article
+        (when-not ready?
+          [:p.py-8.flex.justify-center (ui/loading "")])
 
-            ;; binding rows
-            (when (or in-query? in-filter? (not folded?))
-              (for [[id {:keys [binding user-binding] :as m}] binding-map
-                    :let [binding (to-vector binding)
-                          user-binding (and user-binding (to-vector user-binding))
-                          label (shortcut-desc-label id m)
-                          cats (classify-shortcut m)
-                          _custom? (contains? cats :Custom)
-                          disabled? (contains? cats :Disabled)
-                          unset? (contains? cats :Unset)]]
+        (when (and ready? no-results?)
+          [:div.shortcut-empty-state
+           (ui/icon "list-search" {:size 24})
+           [:span.text-sm (t :keymap/no-matching-shortcuts)]])
 
-                (when (or (nil? filter-key)
-                          (contains? cats filter-key))
+        (when (and ready? (not no-results?))
+          [:ul.list-none.m-0.py-3
+           (for [[c binding-map] result-list-map
+                 :let [folded? (contains? folded-categories c)]]
+             ^{:key (str c)}
+             [:<>
+             ;; category row
+              (when (and (not in-query?)
+                         (not in-filter?)
+                         (not in-keystroke?))
+                [:li.flex.justify-between.th
+                 {:key      (str c)
+                  :on-click #(let [f (if folded? disj conj)]
+                               (set-folded-categories! (f folded-categories c)))}
+                 [:strong.font-semibold (t c)]
+                 [:i.flex.items-center
+                  (ui/icon (if folded? "chevron-left" "chevron-down"))]])
 
-                  ;; keystrokes filter
-                  (when (or (not in-keystroke?)
-                            (and (not disabled?)
-                                 (not unset?)
-                                 (matches-keystroke? binding user-binding keystroke)))
+             ;; binding rows
+              (when (or in-query? in-filter? (not folded?))
+                (for [[id {:keys [binding user-binding] :as m}] binding-map
+                      :let [binding (to-vector binding)
+                            user-binding (and user-binding (to-vector user-binding))
+                            label (shortcut-desc-label id m)
+                            cats (classify-shortcut m)
+                            _custom? (contains? cats :Custom)
+                            disabled? (contains? cats :Disabled)
+                            unset? (contains? cats :Unset)]]
 
-                    (let [row-action (when (and id (not disabled?))
-                                       (fn [^js e]
-                                         (if (= active-id id)
-                                           (let [popup-id (keyword (str "customize-shortcut-" (name id)))]
-                                             (reset! *active-shortcut-id nil)
-                                             (shui/popup-hide! popup-id))
-                                           (let [anchor-el (-> (.-currentTarget e) (.querySelector ".action-wrap"))]
-                                             (open-customize-shortcut-dialog! anchor-el id)))))]
-                      [:li.shortcut-row.flex.items-start.justify-between.text-sm
-                       {:key (str id)
-                        :class (when (= active-id id) "active")
-                        :tab-index (when (and id (not disabled?)) 0)
-                        :role (when (and id (not disabled?)) "button")
-                        :on-click row-action
-                        :on-key-down (when row-action
-                                       (fn [^js e]
-                                         (when (contains? #{13 32} (.-keyCode e))
-                                           (.preventDefault e)
-                                           (row-action e))))}
-                       [:span.label-wrap label]
+                  (when (or (nil? filter-key)
+                            (contains? cats filter-key))
 
-                       [:span.action-wrap
-                        {:class (util/classnames [{:disabled disabled?}])}
+                   ;; keystrokes filter
+                    (when (or (not in-keystroke?)
+                              (and (not disabled?)
+                                   (not unset?)
+                                   (matches-keystroke? binding user-binding keystroke)))
 
-                        (cond
-                          unset?
-                          [:span.shortcut-status-label (t :keymap/unset)]
+                      (let [row-action (when (and id (not disabled?))
+                                         (fn [^js e]
+                                           (if (= active-id id)
+                                             (let [popup-id (keyword (str "customize-shortcut-" (name id)))]
+                                               (reset! *active-shortcut-id nil)
+                                               (shui/popup-hide! popup-id))
+                                             (let [anchor-el (-> (.-currentTarget e) (.querySelector ".action-wrap"))]
+                                               (open-customize-shortcut-dialog! anchor-el id)))))]
+                        [:li.shortcut-row.flex.items-start.justify-between.text-sm
+                         {:key (str id)
+                          :class (when (= active-id id) "active")
+                          :tab-index (when id 0)
+                          :role (when id "button")
+                          :aria-disabled (when disabled? "true")
+                          :on-click row-action
+                          :on-key-down (when row-action
+                                         (fn [^js e]
+                                           (when (contains? #{13 32} (.-keyCode e))
+                                             (.preventDefault e)
+                                             (row-action e))))}
+                         [:span.label-wrap label]
 
-                          (or user-binding (false? user-binding))
-                          [:<>
-                           [:span.shortcut-status-label (str (t :keymap/custom) ":")]
-                           (if disabled?
-                             [:span.shortcut-status-label (t :keymap/disabled)]
-                             (for [b user-binding
-                                   :when (string? b)]
-                               [:span {:key b :style {:display "contents"}}
-                                (shui/shortcut b {:chord-separator (t :keymap/chord-separator)})]))]
+                         [:span.action-wrap
+                          {:class (util/classnames [{:disabled disabled?}])}
 
-                          :else
-                          (for [b binding
-                                :when (string? b)]
-                            [:span {:key b :style {:display "contents"}}
-                             (shui/shortcut (dh/binding-for-display id b)
-                                            {:raw-binding [b]
-                                             :chord-separator (t :keymap/chord-separator)})]))]])))))])])]]))
+                          (cond
+                            unset?
+                            [:span.shortcut-status-label (t :keymap/unset)]
+
+                            (or user-binding (false? user-binding))
+                            [:<>
+                             [:span.shortcut-status-label (str (t :keymap/custom) ":")]
+                             (if disabled?
+                               [:span.shortcut-status-label (t :keymap/disabled)]
+                               (for [b user-binding
+                                     :when (string? b)]
+                                 [:span {:key b :style {:display "contents"}}
+                                  (shui/shortcut b {:chord-separator (t :keymap/chord-separator)})]))]
+
+                            :else
+                            (for [b binding
+                                  :when (string? b)]
+                              [:span {:key b :style {:display "contents"}}
+                               (shui/shortcut (dh/binding-for-display id b)
+                                              {:raw-binding [b]
+                                               :chord-separator (t :keymap/chord-separator)})]))]])))))])])]])))
