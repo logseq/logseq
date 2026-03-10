@@ -29,6 +29,7 @@
             [electron.window :as win]
             [electron.graph-switch-flow :as graph-switch-flow]
             [logseq.cli.common.graph :as cli-common-graph]
+            [logseq.cli.common :as cli-common]
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -224,7 +225,7 @@
 
 (defmethod handle :deleteGraph [_window [_ graph]]
   (when-let [repo (canonical-repo graph)]
-    (db/unlink-graph! repo)))
+    (cli-common/unlink-graph! repo)))
 
 ;; DB related IPCs start
 

@@ -3,6 +3,7 @@
   (:require [cljs.pprint :as pprint]
             [clojure.string :as string]
             [logseq.cli.command.core :as core]
+            [logseq.cli.common :as cli-common]
             [logseq.cli.config :as cli-config]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
@@ -95,11 +96,8 @@
     (if-not (seq graph)
       (missing-graph-error)
       {:ok? true
-       :action {:type :invoke
+       :action {:type :graph-remove
                 :command :graph-remove
-                :method :thread-api/unsafe-unlink-db
-                :direct-pass? false
-                :args [repo]
                 :repo repo
                 :graph (core/repo->graph repo)}})
 
@@ -199,6 +197,21 @@
 
         :else
         {:status :ok :data {:result result}}))))
+
+(defn execute-graph-remove
+  [action config]
+  (-> (p/let [stop-result (cli-server/stop-server! config (:repo action))
+              _ (when-not (or (:ok? stop-result)
+                              (= :server-not-found (get-in stop-result [:error :code])))
+                  (throw (ex-info (get-in stop-result [:error :message] "failed to stop server")
+                                  {:code (get-in stop-result [:error :code])})))
+              unlinked-dir (cli-common/unlink-graph! (:repo action))]
+        (if unlinked-dir
+          {:status :ok
+           :data {:result nil}}
+          {:status :error
+           :error {:code :graph-not-removed
+                   :message "unable to remove graph"}}))))
 
 (defn execute-graph-switch
   [action config]
