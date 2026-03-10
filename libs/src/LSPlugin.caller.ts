@@ -19,6 +19,9 @@ export const LSPMSG_READY = '#lspmsg#ready#'
 export const LSPMSGFn = (id: string) => `${LSPMSG}${id}`
 export const AWAIT_LSPMSGFn = (id: string) => `${FLAG_AWAIT}${id}`
 
+const HEAD_BAR_HEIGHT = 45
+const MAX_LAYOUT_PERCENT = 99
+
 /**
  * Call between core and user
  */
@@ -37,7 +40,7 @@ class LSPluginCaller extends EventEmitter {
   private _call?: (
     type: string,
     payload: any,
-    actor?: DeferredActor
+    actor?: DeferredActor,
   ) => Promise<any>
   private _callUserModel?: (type: string, ...payloads: any[]) => Promise<any>
 
@@ -106,7 +109,7 @@ class LSPluginCaller extends EventEmitter {
       [LSPMSG]: async ({ ns, type, payload }: any) => {
         debug(
           `[host (async) -> *user] ${this._debugTag} ns=${ns} type=${type}`,
-          payload
+          payload,
         )
 
         if (ns && ns.startsWith('hook')) {
@@ -215,6 +218,40 @@ class LSPluginCaller extends EventEmitter {
     return this._callUserModel?.apply(this, [type, ...args])
   }
 
+  /**
+   * Converts a raw pixel position to a percentage or pixel CSS value,
+   * clamping the value to [minValue, MAX_LAYOUT_PERCENT%].
+   */
+  private _calcLayoutPosition(
+    value: number,
+    viewportSize: number | undefined,
+    minValue: number = 0,
+  ): string {
+    const clamped = Math.max(value, minValue)
+    if (typeof viewportSize === 'number') {
+      return `${Math.min((clamped * 100) / viewportSize, MAX_LAYOUT_PERCENT)}%`
+    }
+    return `${clamped}px`
+  }
+
+  /**
+   * Restores persisted layout data onto the container element.
+   */
+  private async _applyContainerLayout(cnt: HTMLDivElement): Promise<void> {
+    const mainLayoutInfo = (await this._pluginLocal?._loadLayoutsData())?.$$0
+    if (!mainLayoutInfo) return
+
+    const { width, height, left, top, vw, vh } = mainLayoutInfo
+
+    cnt.dataset.inited_layout = 'true'
+    Object.assign(cnt.style, {
+      width: `${width}px`,
+      height: `${height}px`,
+      left: this._calcLayoutPosition(left, vw),
+      top: this._calcLayoutPosition(top, vh, HEAD_BAR_HEIGHT),
+    })
+  }
+
   // run in host
   async _setupIframeSandbox() {
     const pl = this._pluginLocal!
@@ -224,7 +261,7 @@ class LSPluginCaller extends EventEmitter {
 
     url.searchParams.set(
       `__v__`,
-      IS_DEV ? Date.now().toString() : pl.options.version
+      IS_DEV ? Date.now().toString() : pl.options.version,
     )
 
     // clear zombie sandbox
@@ -236,33 +273,8 @@ class LSPluginCaller extends EventEmitter {
     cnt.id = domId
     cnt.dataset.pid = id
 
-    // TODO: apply any container layout data
     try {
-      const mainLayoutInfo = (await this._pluginLocal._loadLayoutsData())?.$$0
-      if (mainLayoutInfo) {
-        cnt.dataset.inited_layout = 'true'
-        let { width, height, left, top, vw, vh } = mainLayoutInfo
-
-        left = Math.max(left, 0)
-        left =
-          typeof vw === 'number'
-            ? `${Math.min((left * 100) / vw, 99)}%`
-            : `${left}px`
-
-        // 45 is height of head bar
-        top = Math.max(top, 45)
-        top =
-          typeof vh === 'number'
-            ? `${Math.min((top * 100) / vh, 99)}%`
-            : `${top}px`
-
-        Object.assign(cnt.style, {
-          width: width + 'px',
-          height: height + 'px',
-          left,
-          top,
-        })
-      }
+      await this._applyContainerLayout(cnt)
     } catch (e) {
       console.error('[Restore Layout Error]', e)
     }
@@ -277,7 +289,7 @@ class LSPluginCaller extends EventEmitter {
       model: { baseInfo: JSON.parse(JSON.stringify(pl.toJSON())) },
       allow: pl.options.allow,
       // for optimized postmate message
-      enableMessageChannel: true
+      enableMessageChannel: true,
     })
 
     let handshake = pt.sendHandshake()
@@ -319,7 +331,7 @@ class LSPluginCaller extends EventEmitter {
             if (type.startsWith(FLAG_AWAIT)) {
               return await parentRefChild.get(
                 type.replace(FLAG_AWAIT, ''),
-                ...payloads
+                ...payloads,
               )
             } else {
               parentRefChild.call(type, payloads?.[0])
@@ -364,7 +376,7 @@ class LSPluginCaller extends EventEmitter {
           type,
           Object.assign(payload, {
             $$pid: pl.id,
-          })
+          }),
         )
 
         return actor?.promise
@@ -438,4 +450,6 @@ class LSPluginCaller extends EventEmitter {
   }
 }
 
-export { LSPluginCaller }
+export {
+  LSPluginCaller
+}

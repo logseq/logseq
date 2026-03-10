@@ -178,6 +178,15 @@ type RegisterPluginOpts = PluginLocalOptions | PluginLocalUrl
 
 type PluginLocalIdentity = string
 
+interface MainUILayoutData {
+  width: number
+  height: number
+  left: number
+  top: number
+  vw: number
+  vh: number
+}
+
 enum PluginLocalLoadStatus {
   LOADING = 'loading',
   UNLOADING = 'unloading',
@@ -724,12 +733,7 @@ class PluginLocal extends EventEmitter<
     await invokeHostExportedApi('save_plugin_user_settings', key, data)
   }
 
-  async _persistMainUILayoutData(e: {
-    width: number
-    height: number
-    left: number
-    top: number
-  }) {
+  async _persistMainUILayoutData(e: MainUILayoutData) {
     const layouts = await this._loadLayoutsData()
     layouts.$$0 = e
     await this._saveLayoutsData(layouts)
