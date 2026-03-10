@@ -32,6 +32,50 @@
 (defn refresh-shortcuts-list! [] (reset! *refresh-sentry (inc @*refresh-sentry)))
 (defonce *global-listener-refcount (atom 0))
 
+(defn- use-scoped-key-handler
+  "Manages KeyHandler lifecycle on a popup element: suppresses global shortcuts
+   while mounted, focuses the element, and disposes on unmount. Calls key-handler-fn
+   with each key event. Clears any timer refs on unmount.
+
+   Installs a bubble-phase keydown/keyup/keypress blocker on the popup element
+   so that key events never bubble to js/window — preventing
+   KeyboardShortcutHandler (including the :misc handler excluded from
+   unlisten-all!) and setup-active-keystroke! from firing during recording.
+   The blocker is registered in bubble phase (not capture) so that
+   goog.events.KeyHandler's listener on the same element fires first."
+  [*ref-el key-handler-fn timer-refs]
+  (hooks/use-effect!
+   (fn []
+     (let [^js el (rum/deref *ref-el)
+           key-handler (KeyHandler. el)
+           ;; Bubble-phase blocker: registered AFTER KeyHandler (which uses
+           ;; goog.events.listen in bubble phase). On the same element,
+           ;; bubble-phase listeners fire in registration order, so KeyHandler
+           ;; processes the key first, then this blocker calls stopPropagation
+           ;; to prevent the event from reaching js/window. preventDefault
+           ;; suppresses browser-native actions (Cmd+F, Cmd+S, etc.).
+           bubble-blocker (fn [^js e]
+                            (.stopPropagation e)
+                            (.preventDefault e))
+           _ (.addEventListener el "keydown" bubble-blocker false)
+           _ (.addEventListener el "keypress" bubble-blocker false)
+           _ (.addEventListener el "keyup" bubble-blocker false)
+           _ (when (zero? @*global-listener-refcount)
+               (shortcut/unlisten-all! true))
+           _ (swap! *global-listener-refcount inc)]
+       (events/listen key-handler "key" key-handler-fn)
+       (js/setTimeout #(.focus el) 128)
+       #(do (doseq [*t timer-refs]
+              (when-let [timer (rum/deref *t)]
+                (js/clearTimeout timer)))
+            (.removeEventListener el "keydown" bubble-blocker false)
+            (.removeEventListener el "keypress" bubble-blocker false)
+            (.removeEventListener el "keyup" bubble-blocker false)
+            (when (zero? (swap! *global-listener-refcount (fn [n] (max 0 (dec n)))))
+              (shortcut/listen-all!))
+            (.dispose key-handler))))
+   []))
+
 (defn- to-vector [v]
   (when-not (nil? v)
     (if (sequential? v) (vec v) [v])))
@@ -82,78 +126,62 @@
     (rum/set-ref! *keystroke-ref keystroke)
 
     ;; Scoped key handler on the popup element
-    (hooks/use-effect!
-     (fn []
-       (let [^js el (rum/deref *ref-el)
-             key-handler (KeyHandler. el)
+    (use-scoped-key-handler
+     *ref-el
+     (fn [^js e]
+       (.preventDefault e)
+       (let [key-code (.-keyCode e)
+             is-esc? (= key-code 27)
+             is-backspace? (= key-code 8)
+             has-modifier? (or (.-metaKey e) (.-ctrlKey e) (.-altKey e))]
+         (cond
+           ;; Esc: close the popup
+           is-esc?
+           (do (.stopPropagation e)
+               (close-fn))
 
-             _ (when (zero? @*global-listener-refcount)
-                 (shortcut/unlisten-all! true))
-             _ (swap! *global-listener-refcount inc)]
+           ;; Backspace during accumulation: remove last key from sequence
+           (and is-backspace? (not (rum/deref *committed-ref)))
+           (let [ks (rum/deref *keystroke-ref)
+                 parts (when-not (string/blank? ks)
+                         (string/split ks #" "))
+                 remaining (when (seq parts)
+                             (string/join " " (butlast parts)))]
+             (if (or (string/blank? remaining) (nil? remaining))
+               (clear!)
+               (do (set-keystroke! remaining)
+                   (start-commit-timer! remaining))))
 
-         (events/listen key-handler "key"
-                        (fn [^js e]
-                          (.preventDefault e)
-                          (let [key-code (.-keyCode e)
-                                is-esc? (= key-code 27)
-                                is-backspace? (= key-code 8)
-                                has-modifier? (or (.-metaKey e) (.-ctrlKey e) (.-altKey e))]
-                            (cond
-                              ;; Esc: close the popup
-                              is-esc?
-                              (do (.stopPropagation e)
-                                  (close-fn))
+           ;; Backspace after commit: clear the whole chip
+           is-backspace?
+           (clear!)
 
-                              ;; Backspace during accumulation: remove last key from sequence
-                              (and is-backspace? (not (rum/deref *committed-ref)))
-                              (let [ks (rum/deref *keystroke-ref)
-                                    parts (when-not (string/blank? ks)
-                                            (string/split ks #" "))
-                                    remaining (when (seq parts)
-                                                (string/join " " (butlast parts)))]
-                                (if (or (string/blank? remaining) (nil? remaining))
-                                  (clear!)
-                                  (do (set-keystroke! remaining)
-                                      (start-commit-timer! remaining))))
-
-                              ;; Backspace after commit: clear the whole chip
-                              is-backspace?
-                              (clear!)
-
-                              ;; Any other key
-                              :else
-                              (when-let [kn (shortcut/keyname e)]
-                                (let [kn-trimmed (util/trim-safe kn)]
-                                  (if has-modifier?
-                                    ;; Modifier combo: commit immediately, replace everything
-                                    (do (when-let [timer (rum/deref *commit-timer)]
-                                          (js/clearTimeout timer))
-                                        (commit! kn-trimmed))
-                                    ;; Plain key: accumulate or start fresh
-                                    (if (rum/deref *committed-ref)
-                                      ;; After a committed chip, start fresh
-                                      (do (rum/set-ref! *committed-ref false)
-                                          (set-accumulating! true)
-                                          (set-keystroke! kn-trimmed)
-                                          (start-commit-timer! kn-trimmed))
-                                      ;; During accumulation, append
-                                      (let [cur (rum/deref *keystroke-ref)
-                                            parts (string/split (string/trim cur) #" ")
-                                            at-limit? (and (seq (first parts)) (>= (count parts) 5))]
-                                        (when-not at-limit?
-                                          (let [new-ks (util/trim-safe (str cur kn))]
-                                            (set-accumulating! true)
-                                            (set-keystroke! new-ks)
-                                            (start-commit-timer! new-ks))))))))))))
-
-         (js/setTimeout #(.focus el) 128)
-
-         #(do (when-let [timer (rum/deref *commit-timer)]
-                (js/clearTimeout timer))
-              (when (zero? (swap! *global-listener-refcount dec))
-                (shortcut/listen-all!))
-              (.dispose key-handler))))
-     [])
+           ;; Any other key
+           :else
+           (when-let [kn (shortcut/keyname e)]
+             (let [kn-trimmed (util/trim-safe kn)]
+               (if has-modifier?
+                 ;; Modifier combo: commit immediately, replace everything
+                 (do (when-let [timer (rum/deref *commit-timer)]
+                       (js/clearTimeout timer))
+                     (commit! kn-trimmed))
+                 ;; Plain key: accumulate or start fresh
+                 (if (rum/deref *committed-ref)
+                   ;; After a committed chip, start fresh
+                   (do (rum/set-ref! *committed-ref false)
+                       (set-accumulating! true)
+                       (set-keystroke! kn-trimmed)
+                       (start-commit-timer! kn-trimmed))
+                   ;; During accumulation, append
+                   (let [cur (rum/deref *keystroke-ref)
+                         parts (string/split (string/trim cur) #" ")
+                         at-limit? (and (seq (first parts)) (>= (count parts) 5))]
+                     (when-not at-limit?
+                       (let [new-ks (util/trim-safe (str cur kn))]
+                         (set-accumulating! true)
+                         (set-keystroke! new-ks)
+                         (start-commit-timer! new-ks)))))))))))
+     [*commit-timer])
 
     [:div.shortcut-filter-popover
      {:tab-index -1
@@ -558,101 +586,83 @@
      [rec-state])
 
     ;; Key handler (mount-only, uses refs for current state)
-    (hooks/use-effect!
-     (fn []
-       (let [^js el (rum/deref *ref-el)
-             key-handler (KeyHandler. el)
+    (use-scoped-key-handler
+     *ref-el
+     (fn [^js e]
+       (.preventDefault e)
+       (let [state (rum/deref *rec-state-ref)
+             key-code (.-keyCode e)
+             is-esc? (= key-code 27)
+             is-backspace? (= key-code 8)
+             is-cmd-enter? (and (= key-code 13)
+                                (or (.-metaKey e) (.-ctrlKey e)))]
+         (cond
+           ;; Esc: never recordable, always cancel/dismiss
+           is-esc?
+           (do
+             ;; Always stop propagation so Esc doesn't close the Settings dialog
+             (.stopPropagation e)
+             (case state
+               :idle           (close-fn)
+               :accepted       (close-fn)
+               :esc-hint       (close-fn)
+               :removed        (close-fn)
+               :reset          (close-fn)
+               :dismissing     (close-fn)
+               :recording      (do (set-keystroke! "")
+                                   (set-key-conflicts! nil)
+                                   (set-rec-state! :esc-hint))
+               :conflict-cross (close-fn)
+               :conflict-same  (close-fn)
+               nil))
 
-             _ (when (zero? @*global-listener-refcount)
-                 (shortcut/unlisten-all! true))
-             _ (swap! *global-listener-refcount inc)]
+           ;; Backspace in conflict: remove pending keystroke
+           (and is-backspace? (#{:conflict-cross :conflict-same} state))
+           (cancel-fn!)
 
-         (events/listen key-handler "key"
-                        (fn [^js e]
-                          (.preventDefault e)
-                          (let [state (rum/deref *rec-state-ref)
-                                key-code (.-keyCode e)
-                                is-esc? (= key-code 27)
-                                is-backspace? (= key-code 8)
-                                is-cmd-enter? (and (= key-code 13)
-                                                   (or (.-metaKey e) (.-ctrlKey e)))]
-                            (cond
-                              ;; Esc: never recordable, always cancel/dismiss
-                              is-esc?
-                              (do
-                                ;; Always stop propagation so Esc doesn't close the Settings dialog
-                                (.stopPropagation e)
-                                (case state
-                                  :idle           (close-fn)
-                                  :accepted       (close-fn)
-                                  :esc-hint       (close-fn)
-                                  :removed        (close-fn)
-                                  :reset          (close-fn)
-                                  :dismissing     (close-fn)
-                                  :recording      (do (set-keystroke! "")
-                                                      (set-key-conflicts! nil)
-                                                      (set-rec-state! :esc-hint))
-                                  :conflict-cross (close-fn)
-                                  :conflict-same  (close-fn)
-                                  nil))
+           ;; Backspace in idle/accepted: remove last committed binding
+           (and is-backspace?
+                (#{:idle :accepted :removed :reset :dismissing} state)
+                (string/blank? (rum/deref *keystroke-ref)))
+           (let [cur-binding (rum/deref *current-binding-ref)]
+             (when (seq (filter string? cur-binding))
+               (let [new-binding (vec (butlast cur-binding))
+                     undo-entries [{:action-id k :previous-binding cur-binding}]]
+                 (set-current-binding! new-binding)
+                 (persist-binding! new-binding)
+                 (set-undo-snapshot! {:entries undo-entries})
+                 (set-rec-state! :removed))))
 
-                              ;; Backspace in conflict: remove pending keystroke
-                              (and is-backspace? (#{:conflict-cross :conflict-same} state))
-                              (cancel-fn!)
+           ;; Conflict-cross + Cmd+Enter => override
+           (and is-cmd-enter? (= state :conflict-cross))
+           (override-fn!)
 
-                              ;; Backspace in idle/accepted: remove last committed binding
-                              (and is-backspace?
-                                   (#{:idle :accepted :removed :reset :dismissing} state)
-                                   (string/blank? (rum/deref *keystroke-ref)))
-                              (let [cur-binding (rum/deref *current-binding-ref)]
-                                (when (seq (filter string? cur-binding))
-                                  (let [new-binding (vec (butlast cur-binding))
-                                        undo-entries [{:action-id k :previous-binding cur-binding}]]
-                                    (set-current-binding! new-binding)
-                                    (persist-binding! new-binding)
-                                    (set-undo-snapshot! {:entries undo-entries})
-                                    (set-rec-state! :removed))))
+           ;; Conflict-cross + other keys => ignore (dead-end)
+           (= state :conflict-cross)
+           nil
 
-                              ;; Conflict-cross + Cmd+Enter => override
-                              (and is-cmd-enter? (= state :conflict-cross))
-                              (override-fn!)
+           ;; Conflict-same / esc-hint + key => start new recording
+           (#{:conflict-same :esc-hint} state)
+           (when-let [kn (shortcut/keyname e)]
+             (set-rec-state! :recording)
+             (set-keystroke! (util/trim-safe kn)))
 
-                              ;; Conflict-cross + other keys => ignore (dead-end)
-                              (= state :conflict-cross)
-                              nil
+           ;; Idle / accepted / removed / reset / dismissing + key => start recording
+           (#{:idle :accepted :removed :reset :dismissing} state)
+           (when-let [kn (shortcut/keyname e)]
+             (set-rec-state! :recording)
+             (set-keystroke! (util/trim-safe kn)))
 
-                              ;; Conflict-same / esc-hint + key => start new recording
-                              (#{:conflict-same :esc-hint} state)
-                              (when-let [kn (shortcut/keyname e)]
-                                (set-rec-state! :recording)
-                                (set-keystroke! (util/trim-safe kn)))
-
-                              ;; Idle / accepted / removed / reset / dismissing + key => start recording
-                              (#{:idle :accepted :removed :reset :dismissing} state)
-                              (when-let [kn (shortcut/keyname e)]
-                                (set-rec-state! :recording)
-                                (set-keystroke! (util/trim-safe kn)))
-
-                              ;; Recording + key => accumulate (max 5 keys)
-                              (= state :recording)
-                              (when-let [kn (shortcut/keyname e)]
-                                (let [cur (rum/deref *keystroke-ref)
-                                      parts (string/split (string/trim cur) #" ")
-                                      at-limit? (and (seq (first parts)) (>= (count parts) 5))]
-                                  (when-not at-limit?
-                                    (set-key-conflicts! nil)
-                                    (set-keystroke! #(util/trim-safe (str % kn))))))))))
-
-         (js/setTimeout #(.focus el) 128)
-
-         #(do (when-let [timer (rum/deref *auto-accept-timer)]
-                (js/clearTimeout timer))
-              (when-let [timer (rum/deref *fade-timer)]
-                (js/clearTimeout timer))
-              (when (zero? (swap! *global-listener-refcount dec))
-                (shortcut/listen-all!))
-              (.dispose key-handler))))
-     [])
+           ;; Recording + key => accumulate (max 5 keys)
+           (= state :recording)
+           (when-let [kn (shortcut/keyname e)]
+             (let [cur (rum/deref *keystroke-ref)
+                   parts (string/split (string/trim cur) #" ")
+                   at-limit? (and (seq (first parts)) (>= (count parts) 5))]
+               (when-not at-limit?
+                 (set-key-conflicts! nil)
+                 (set-keystroke! #(util/trim-safe (str % kn)))))))))
+     [*auto-accept-timer *fade-timer])
 
     ;; === V3 LAYOUT ===
     [:div.shortcut-popover
