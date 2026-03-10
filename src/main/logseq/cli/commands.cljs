@@ -443,6 +443,7 @@
                        (case (:type action)
                          :graph-list (graph-command/execute-graph-list action config)
                          :invoke (graph-command/execute-invoke action config)
+                         :graph-remove (graph-command/execute-graph-remove action config)
                          :graph-switch (graph-command/execute-graph-switch action config)
                          :graph-info (graph-command/execute-graph-info action config)
                          :graph-export (graph-command/execute-graph-export action config)
