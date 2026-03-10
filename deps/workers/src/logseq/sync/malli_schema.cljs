@@ -373,6 +373,32 @@
    [:snapshot-id {:optional true} [:maybe :string]]
    [:message {:optional true} [:maybe :string]]])
 
+(def planning-session-response-schema
+  [:map
+   [:planning-session-id :string]
+   [:status :string]
+   [:workflow-id {:optional true} [:maybe :string]]
+   [:chat-path {:optional true} :string]
+   [:goal {:optional true} :map]
+   [:project {:optional true} :map]
+   [:agent {:optional true} :any]
+   [:approval-status {:optional true} :string]
+   [:require-approval {:optional true} :boolean]
+   [:auto-dispatch {:optional true} :boolean]
+   [:auto-replan {:optional true} :boolean]
+   [:replan-delay-sec {:optional true} :int]
+   [:plan {:optional true} :map]
+   [:scheduled-actions {:optional true} [:sequential :map]]
+   [:dispatch-sessions {:optional true} [:sequential :map]]
+   [:created-at {:optional true} :int]
+   [:updated-at {:optional true} :int]])
+
+(def planning-workflow-response-schema
+  [:map
+   [:workflow-id :string]
+   [:status :string]
+   [:planning-session-id {:optional true} :string]])
+
 (def runner-response-schema
   [:map
    [:runner-id :string]
@@ -451,6 +477,10 @@
    :sessions/snapshot sessions-snapshot-response-schema
    :sessions/events sessions-events-response-schema
    :sessions/branches sessions-branches-response-schema
+   :planning.sessions/create planning-session-response-schema
+   :planning.sessions/get planning-session-response-schema
+   :planning.workflows/create planning-workflow-response-schema
+   :planning.workflows/get planning-workflow-response-schema
    :auth.chatgpt/import auth-chatgpt-status-response-schema
    :auth.chatgpt/status auth-chatgpt-status-response-schema
    :runners/register runners-register-response-schema

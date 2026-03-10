@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [lambdaisland.glogi :as log]
             [logseq.agents.checkpoint-store :as checkpoint-store]
+            [logseq.agents.planning-store :as planning-store]
             [logseq.agents.runner-store :as runner-store]
             [logseq.agents.runtime-provider :as runtime-provider]
             [logseq.agents.sandbox :as sandbox]
@@ -94,6 +95,7 @@
     session))
 
 (declare <append-event!)
+(declare non-empty-str session-requested-by send-runtime-message!)
 
 (defn- session-task
   [session]
@@ -272,6 +274,176 @@
 
 (defn- session-runtime-provider [session]
   (some-> (get-in session [:runtime :provider]) str string/lower-case))
+
+(def ^:private session-status->planning-task-status
+  {"created" "Doing"
+   "running" "Doing"
+   "paused" "Todo"
+   "completed" "Done"
+   "pr-created" "In Review"
+   "failed" "Canceled"
+   "canceled" "Canceled"})
+
+(def ^:private terminal-planning-task-statuses
+  #{"Done" "In Review" "Canceled"})
+
+(defn- session-planning-session-id
+  [session]
+  (some-> (get-in (session-task session) [:source :node-id]) non-empty-str))
+
+(defn- session-planning-task-uuid
+  [session]
+  (some-> (get-in (session-task session) [:task-uuid]) non-empty-str))
+
+(defn- task-message-content
+  [task]
+  (or (some-> (get-in task [:intent :content]) non-empty-str)
+      (some-> (:content task) non-empty-str)
+      (some-> (:description task) non-empty-str)
+      (some-> (:title task) non-empty-str)))
+
+(defn- planning-task-terminal?
+  [task]
+  (contains? terminal-planning-task-statuses
+             (some-> (:status task) non-empty-str)))
+
+(defn- planning-task-active?
+  [task]
+  (or (string? (some-> (:session-id task) non-empty-str))
+      (contains? #{"Doing" "Done" "In Review" "Canceled"}
+                 (some-> (:status task) non-empty-str))))
+
+(defn- planning-dependencies-satisfied?
+  [task task-by-uuid]
+  (let [deps (if (sequential? (:dependencies task))
+               (keep non-empty-str (:dependencies task))
+               [])]
+    (every? (fn [task-uuid]
+              (planning-task-terminal? (get task-by-uuid task-uuid)))
+            deps)))
+
+(defn- next-sequenced-task
+  [tasks current-task-uuid]
+  (let [tasks (vec (or tasks []))
+        task-by-uuid (into {}
+                           (keep (fn [task]
+                                   (when-let [task-uuid (some-> (:task-uuid task) non-empty-str)]
+                                     [task-uuid task])))
+                           tasks)
+        current-index (or (some (fn [[idx task]]
+                                  (when (= current-task-uuid (some-> (:task-uuid task) non-empty-str))
+                                    idx))
+                                (map-indexed vector tasks))
+                          -1)]
+    (some (fn [task]
+            (when (and (not (planning-task-active? task))
+                       (planning-dependencies-satisfied? task task-by-uuid))
+              task))
+          (drop (inc current-index) tasks))))
+
+(defn- update-planning-tasks-for-terminal-event
+  [tasks current-task-uuid session-id session-status]
+  (mapv (fn [task]
+          (if (= current-task-uuid (some-> (:task-uuid task) non-empty-str))
+            (cond-> (assoc task
+                           :session-id session-id
+                           :status (or (get session-status->planning-task-status session-status)
+                                       (:status task)))
+              (string? (task-message-content task)) (assoc :content (task-message-content task)))
+            task))
+        (or tasks [])))
+
+(defn- mark-next-task-doing
+  [tasks next-task-uuid session-id]
+  (mapv (fn [task]
+          (if (= next-task-uuid (some-> (:task-uuid task) non-empty-str))
+            (assoc task :session-id session-id :status "Doing")
+            task))
+        (or tasks [])))
+
+(defn- append-dispatch-session-record
+  [dispatch-sessions session-id task planning-session]
+  (let [task-uuid (some-> (:task-uuid task) non-empty-str)]
+    (if-not (and (string? session-id) (string? task-uuid))
+      (vec (or dispatch-sessions []))
+      (let [existing (some #(when (= task-uuid (some-> (:task-uuid %) non-empty-str)) %) dispatch-sessions)
+            record (or existing
+                       {:id session-id
+                        :task-uuid task-uuid
+                        :source {:node-id (:planning-session-id planning-session)
+                                 :node-title (or (some-> planning-session :goal :title non-empty-str)
+                                                 (some-> planning-session :goal :node-title non-empty-str)
+                                                 "Planning Task")}
+                        :intent {:content (task-message-content task)}
+                        :project (:project planning-session)
+                        :agent (:agent planning-session)})]
+        (conj (vec (remove #(= task-uuid (some-> (:task-uuid %) non-empty-str))
+                           (or dispatch-sessions [])))
+              record)))))
+
+(defn- <continue-planning-session!
+  [^js self current-session next-task]
+  (let [message (task-message-content next-task)
+        user-id (or (session-requested-by current-session) "system")]
+    (if-not (string? message)
+      (p/resolved nil)
+      (p/let [_ (<append-event! self {:type "audit.log"
+                                      :data {:event "user-message"
+                                             :kind "user"
+                                             :by user-id
+                                             :message message}
+                                      :ts (common/now-ms)})
+              latest-session (<get-session self)
+              resumed-session (<maybe-resume-session-for-message! self latest-session user-id)
+              runtime (:runtime resumed-session)
+              provider (when (map? runtime)
+                         (runtime-provider/resolve-provider (.-env self) runtime))
+              _ (send-runtime-message! self
+                                       resumed-session
+                                       runtime
+                                       provider
+                                       message
+                                       "user")]
+        true))))
+
+(defn- <advance-planning-session-after-terminal-event!
+  [^js self session-id session-status]
+  (p/let [current-session (<get-session self)
+          planning-session-id (some-> current-session session-planning-session-id)
+          current-task-uuid (some-> current-session session-planning-task-uuid)]
+    (when (and (map? current-session)
+               (= session-id (:id current-session))
+               (string? planning-session-id)
+               (string? current-task-uuid)
+               (contains? #{"completed" "failed" "canceled"} session-status))
+      (p/let [planning-session (planning-store/<get-planning-session-by-id! (.-env self)
+                                                                            planning-session-id)]
+        (when (map? planning-session)
+          (let [tasks (update-planning-tasks-for-terminal-event (get-in planning-session [:plan :tasks])
+                                                                current-task-uuid
+                                                                session-id
+                                                                session-status)
+                next-task (when (and (= "completed" session-status)
+                                     (true? (:auto-dispatch planning-session)))
+                            (next-sequenced-task tasks current-task-uuid))
+                next-task-uuid (some-> next-task :task-uuid non-empty-str)
+                tasks (if (string? next-task-uuid)
+                        (mark-next-task-doing tasks next-task-uuid session-id)
+                        tasks)
+                updated-session (assoc planning-session
+                                       :status (if (string? next-task-uuid) "dispatching" (:status planning-session))
+                                       :plan (assoc (:plan planning-session) :tasks tasks)
+                                       :dispatch-sessions (if (map? next-task)
+                                                            (append-dispatch-session-record (:dispatch-sessions planning-session)
+                                                                                            session-id
+                                                                                            next-task
+                                                                                            planning-session)
+                                                            (:dispatch-sessions planning-session)))]
+            (p/let [_ (planning-store/<upsert-planning-session! (.-env self) updated-session)]
+              (when (map? next-task)
+                (<continue-planning-session! self
+                                             current-session
+                                             next-task)))))))))
 
 (defn- sandbox-bound-runtime?
   [runtime]
@@ -642,7 +814,15 @@
           (when (= "session.completed" event-type)
             (<checkpoint-and-terminate-completed-runtime! self session-id))
           (when (= "session.canceled" event-type)
-            (<terminate-runtime-on-status! self session-id "canceled")))))))
+            (<terminate-runtime-on-status! self session-id "canceled"))
+          (when (contains? #{"session.completed" "session.failed" "session.canceled"} event-type)
+            (<advance-planning-session-after-terminal-event! self
+                                                             session-id
+                                                             (case event-type
+                                                               "session.completed" "completed"
+                                                               "session.failed" "failed"
+                                                               "session.canceled" "canceled"
+                                                               nil))))))))
 
 (defn- <consume-events-stream! [^js self session-id runtime on-ready]
   (let [provider (runtime-provider/resolve-provider (.-env self) runtime)]
@@ -1488,12 +1668,19 @@
     ;; IMPORTANT: don't block returning the Response; write the initial backlog async
     (js/queueMicrotask
      (fn []
-       (p/let [events (<get-events self)
-               events (session/filter-events events {:since-ts since-ts})]
-         (doseq [event events]
-           ;; writer.write returns a promise; wait so order is preserved
-           (p/let [_ (->promise (.write writer (sse-bytes event)))]
-             nil)))))
+       (-> (p/let [events (<get-events self)
+                   events (session/filter-events events {:since-ts since-ts})]
+             (doseq [event events]
+               (when-not @closed?
+                 ;; writer.write returns a promise; wait so order is preserved
+                 (p/let [_ (->promise (.write writer (sse-bytes event)))]
+                   nil))))
+           (p/catch (fn [error]
+                      (when-not @closed?
+                        (log/error :agent/session-stream-backlog-failed
+                                   {:error error
+                                    :since-ts since-ts})
+                        (cleanup)))))))
 
     (js/Response.
      (.-readable stream)

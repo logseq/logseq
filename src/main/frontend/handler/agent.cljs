@@ -2,6 +2,7 @@
   "Agent sessions for tasks."
   (:require [clojure.string :as string]
             [electron.ipc :as electron-ipc]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.agent-cancel :as agent-cancel]
             [frontend.handler.db-based.sync :as db-sync]
@@ -39,7 +40,25 @@
     (let [value (string/trim value)]
       (when-not (string/blank? value) value))))
 
-(declare <start-session!)
+(defn- parse-uuid-safe
+  [value]
+  (cond
+    (uuid? value) value
+    (string? value)
+    (try
+      (uuid value)
+      (catch :default _
+        nil))
+    :else nil))
+
+(declare <start-session!
+         task-session-created?
+         task-session-id
+         task-pr-url
+         maybe-store-task-session-id!
+         session-state
+         update-session!
+         update-session-state!)
 
 (def ^:private task-sandbox-checkpoint-property :logseq.property/sandbox-checkpoint)
 (def ^:private task-session-id-property :logseq.property/agent-session-id)
@@ -70,7 +89,7 @@
   (normalize-sandbox-checkpoint checkpoint))
 
 (defn- agent-config
-  [agent-page]
+  [agent-page opts]
   (let [provider (blank->nil (:block/title agent-page))]
     (cond-> {}
       (string? provider) (assoc :provider provider))))
@@ -138,7 +157,10 @@
                                   (task-sandbox-checkpoint project-page)))
          agent-page (:logseq.property/agent block)
          project (when project-page (project-config project-page opts))
-         agent (when agent-page (agent-config agent-page))]
+         agent (when agent-page
+                 (cond-> (agent-config agent-page opts)
+                   (string? (blank->nil (:agent/mode opts))) (assoc :mode (blank->nil (:agent/mode opts)))
+                   (string? (blank->nil (:agent/permission-mode opts))) (assoc :permission-mode (blank->nil (:agent/permission-mode opts)))))]
      {:block-uuid block-uuid
       :node-id node-id
       :node-title node-title
@@ -167,6 +189,50 @@
   (let [{:keys [agent]} (task-context block)]
     (and (map? agent)
          (codex-agent? agent))))
+
+(defn planning-enabled?
+  []
+  (or config/dev?
+      config/feature-agent-planning-on?
+      (user-handler/alpha-or-beta-user?)))
+
+(def ^:private planning-intent-pattern
+  #"(?i)\b(plan|planning|roadmap|break down|decompose|architecture|research|investigate|clarify|phases?|milestones?|workstreams?)\b")
+
+(def ^:private execution-intent-pattern
+  #"(?i)\b(implement|build|create|fix|refactor|update|change|add|remove|debug|repair|ship)\b")
+
+(defn session-start-strategy
+  [block]
+  (let [{:keys [content]} (task-context block)
+        content (blank->nil content)
+        lines (if (string? content)
+                (count (string/split-lines content))
+                0)
+        content-length (count (or content ""))
+        planning-signals (cond-> 0
+                           (and (string? content)
+                                (re-find planning-intent-pattern content)) inc
+                           (> lines 6) inc
+                           (> content-length 260) inc
+                           (and (string? content)
+                                (>= (count (re-seq #"\band\b|," content)) 3)) inc)
+        _ (prn :debug :planning-signals planning-signals
+               :content content)
+        execution-signal? (and (string? content)
+                               (re-find execution-intent-pattern content))
+        planning? (and (planning-enabled?)
+                       (or (>= planning-signals 2)
+                           (and (>= planning-signals 1)
+                                (not execution-signal?))))]
+    {:mode (if planning? :planning :execution)
+     :planning? planning?
+     :reason (cond
+               planning?
+               "Task looks broad enough to benefit from planning first."
+
+               :else
+               "Task looks concrete enough to execute directly.")}))
 
 (defn- login-required-error?
   [error]
@@ -316,7 +382,8 @@
    (build-session-body block nil))
   ([block opts]
    (let [{:keys [block-uuid node-id node-title content attachments sandbox-checkpoint project agent]} (task-context block opts)
-         session-id (some-> block-uuid str)]
+         session-id (or (some-> (:session-id opts) blank->nil)
+                        (some-> block-uuid str))]
      (when (and session-id node-id (string? node-title) (string? content) (map? project) (map? agent))
        (cond-> {:session-id session-id
                 :node-id node-id
@@ -328,6 +395,335 @@
                 :capabilities {:push-enabled true
                                :pr-enabled true}}
          (map? sandbox-checkpoint) (assoc :sandbox-checkpoint sandbox-checkpoint))))))
+
+(def ^:private planner-default-status :logseq.property/status.todo)
+
+(defn- parse-block-uuid
+  [value]
+  (cond
+    (uuid? value) value
+    (string? value)
+    (try
+      (uuid value)
+      (catch :default _ nil))
+    :else nil))
+
+(defn- planner-task-title
+  [{:keys [title content description]}]
+  (or (blank->nil title)
+      (some-> (or (blank->nil content)
+                  (blank->nil description))
+              (string/split #"\n")
+              first
+              blank->nil)))
+
+(defn- planner-task-content
+  [{:keys [content title description]}]
+  (or (blank->nil content)
+      (let [title (blank->nil title)
+            description (blank->nil description)]
+        (cond
+          (and title description) (str title "\n" description)
+          title title
+          description description
+          :else nil))))
+
+(defn- unwrap-json-code-fence
+  [text]
+  (when-let [text (blank->nil text)]
+    (or (some->> text
+                 (re-find #"(?is)```(?:json)?\s*\n(.*?)\n```")
+                 second
+                 blank->nil)
+        text)))
+
+(defn- parse-json-safe
+  [text]
+  (when-let [text (unwrap-json-code-fence text)]
+    (try
+      (js->clj (js/JSON.parse text) :keywordize-keys true)
+      (catch :default _ nil))))
+
+(defn planner-tasks-from-text
+  [text]
+  (let [parsed (parse-json-safe text)
+        tasks (cond
+                (vector? parsed) parsed
+                (sequential? (:tasks parsed)) (vec (:tasks parsed))
+                :else nil)]
+    (when (seq tasks)
+      (->> tasks
+           (keep (fn [task]
+                   (when (map? task)
+                     (let [task' (cond-> {}
+                                   (parse-block-uuid (:block-uuid task)) (assoc :block-uuid (parse-block-uuid (:block-uuid task)))
+                                   (string? (blank->nil (:title task))) (assoc :title (blank->nil (:title task)))
+                                   (string? (blank->nil (:description task))) (assoc :description (blank->nil (:description task)))
+                                   (string? (blank->nil (:content task))) (assoc :content (blank->nil (:content task))))]
+                       (when (planner-task-content task')
+                         task')))))
+           vec
+           seq
+           vec))))
+
+(defn- planning-summary-task
+  [task]
+  (when (map? task)
+    (let [title (blank->nil (:title task))
+          description (blank->nil (:description task))
+          content (blank->nil (:content task))
+          task-uuid (blank->nil (:task-uuid task))
+          block-uuid (blank->nil (:block-uuid task))
+          session-id (blank->nil (:session-id task))]
+      (cond-> {}
+        (string? title) (assoc :title title)
+        (string? description) (assoc :description description)
+        (string? content) (assoc :content content)
+        (string? task-uuid) (assoc :task-uuid task-uuid)
+        (string? block-uuid) (assoc :block-uuid block-uuid)
+        (string? session-id) (assoc :session-id session-id)))))
+
+(defn- planning-session-summary
+  [planning-session]
+  (let [tasks (or (some-> planning-session :plan :tasks)
+                  [])
+        tasks (->> tasks
+                   (keep planning-summary-task)
+                   vec)
+        status (blank->nil (:status planning-session))
+        approval-status (blank->nil (:approval-status planning-session))
+        workflow-id (blank->nil (:workflow-id planning-session))
+        scheduled-actions (or (:scheduled-actions planning-session) [])
+        header-lines (cond-> []
+                       (string? status) (conj (str "Planning status: " status "."))
+                       (string? approval-status) (conj (str "Approval status: " approval-status "."))
+                       (string? workflow-id) (conj (str "Workflow id: " workflow-id "."))
+                       (seq scheduled-actions) (conj (str "Scheduled actions: "
+                                                          (pr-str scheduled-actions)
+                                                          ".")))]
+    (when (or (seq tasks) (seq header-lines))
+      (str (string/join "\n" header-lines)
+           (when (seq header-lines) "\n\n")
+           "```json\n"
+           (js/JSON.stringify (clj->js {:tasks tasks}) nil 2)
+           "\n```"))))
+
+(defn- planning-summary-messages
+  [planning-session]
+  (when-let [summary (planning-session-summary planning-session)]
+    [{:id (str "planning-summary-" (or (:planning-session-id planning-session)
+                                       (random-uuid)))
+      :role "assistant"
+      :parts [{:type "text"
+               :text summary}]}]))
+
+(defn- planning-chat-message
+  [message]
+  (let [content (blank->nil (:content message))
+        role (blank->nil (:role message))
+        message-id (blank->nil (:id message))]
+    (when (and (string? content)
+               (string? role))
+      {:id (or message-id (str "planning-message-" (random-uuid)))
+       :role role
+       :parts [{:type "text"
+                :text content}]})))
+
+(defn- planning-chat-messages
+  [planning-state]
+  (->> (:messages planning-state)
+       (keep planning-chat-message)
+       vec))
+
+(defn- planning-summary-message?
+  [message]
+  (string/starts-with? (or (:id message) "") "planning-summary-"))
+
+(defn- merge-planning-summary-messages
+  [block-uuid planning-session]
+  (let [existing-messages (or (get-in (session-state block-uuid) [:planning-messages]) [])
+        non-summary (remove planning-summary-message? existing-messages)]
+    (into (or (planning-summary-messages planning-session) [])
+          non-summary)))
+
+(defn- planning-session-state-update
+  [block-uuid planning-session]
+  (let [planning-session-id (or (:planning-session-id planning-session)
+                                (:session-id planning-session))
+        session-id (blank->nil planning-session-id)]
+    {:session-id session-id
+     :session-kind "planning"
+     :planning-session-id session-id
+     :planning-chat-path (or (blank->nil (:chat-path planning-session))
+                             (when (string? session-id)
+                               (str "/planning/chat/" session-id)))
+     :workflow-id (:workflow-id planning-session)
+     :status (:status planning-session)
+     :plan (:plan planning-session)
+     :dispatch-sessions (:dispatch-sessions planning-session)
+     :scheduled-actions (:scheduled-actions planning-session)
+     :approval-status (:approval-status planning-session)
+     :require-approval (true? (:require-approval planning-session))
+     :auto-dispatch (if (boolean? (:auto-dispatch planning-session))
+                      (:auto-dispatch planning-session)
+                      true)
+     :auto-replan (true? (:auto-replan planning-session))
+     :replan-delay-sec (:replan-delay-sec planning-session)
+     :planning-messages (merge-planning-summary-messages block-uuid planning-session)
+     :planning-loaded? true
+     :planning-loading? false}))
+
+(defn- enrich-planning-task-state
+  [task]
+  (if-let [block (some-> (:block-uuid task) parse-uuid-safe (vector :block/uuid) db/entity)]
+    (cond-> task
+      true (assoc :status (or (pu/get-block-property-value block :logseq.property/status)
+                              (:status task)))
+      (string? (task-session-id block)) (assoc :session-id (task-session-id block))
+      (string? (task-pr-url block)) (assoc :pr-url (task-pr-url block)))
+    task))
+
+(defn- apply-planning-session!
+  [block-uuid planning-session]
+  (when (map? planning-session)
+    (let [planning-session (update-in planning-session [:plan :tasks]
+                                      (fn [tasks]
+                                        (if (sequential? tasks)
+                                          (mapv enrich-planning-task-state tasks)
+                                          tasks)))]
+      (doseq [task (get-in planning-session [:plan :tasks])]
+        (when (and (:block-uuid task) (:session-id task))
+          (maybe-store-task-session-id! (:block-uuid task) (:session-id task))))
+      (update-session-state! block-uuid
+                             (planning-session-state-update block-uuid planning-session)))
+    planning-session))
+
+(defn replace-planning-messages!
+  [block-uuid planning-state]
+  (let [existing-summary (->> (get-in (session-state block-uuid) [:planning-messages])
+                              (filter #(string/starts-with? (or (:id %) "") "planning-summary-"))
+                              vec)
+        messages (into existing-summary (planning-chat-messages planning-state))]
+    (update-session-state! block-uuid {:planning-messages messages
+                                       :planning-agent-state planning-state})))
+
+(defn append-planning-message!
+  [block-uuid role content]
+  (when-let [content (blank->nil content)]
+    (update-session! block-uuid
+                     (fn [session]
+                       (let [messages (vec (or (:planning-messages session) []))]
+                         (assoc session
+                                :planning-messages
+                                (conj messages {:id (str "planning-local-" (random-uuid))
+                                                :role role
+                                                :parts [{:type "text"
+                                                         :text content}]}))))
+                     :agent/planning-sessions)))
+
+(defn- planner-goal-context
+  [goal-block {:keys [project agent] :as _opts}]
+  {:project (or project (:logseq.property/project goal-block))
+   :agent (or agent (:logseq.property/agent goal-block))})
+
+(defn- task-tagged?
+  [block class-ident]
+  (boolean
+   (some #(= class-ident (:db/ident %))
+         (:block/tags block))))
+
+(defn- maybe-set-planner-task-defaults!
+  [block-uuid {:keys [project agent]}]
+  (when-let [block (db/entity [:block/uuid block-uuid])]
+    (when-not (task-tagged? block :logseq.class/Task)
+      (property-handler/set-block-property! block-uuid :block/tags :logseq.class/Task))
+    (when-not (pu/get-block-property-value block :logseq.property/status)
+      (property-handler/set-block-property! block-uuid :logseq.property/status planner-default-status))
+    (when (and project
+               (not= (:db/id (:logseq.property/project block))
+                     (:db/id project)))
+      (property-handler/set-block-property! block-uuid :logseq.property/project (:block/title project)))
+    (when (and agent
+               (not= (:db/id (:logseq.property/agent block))
+                     (:db/id agent)))
+      (property-handler/set-block-property! block-uuid :logseq.property/agent (:block/title agent)))))
+
+(defn- maybe-update-planner-task-content!
+  [block task]
+  (when-let [content (planner-task-content task)]
+    (when (not= (:block/title block) content)
+      (editor-handler/save-block! (state/get-current-repo) (:block/uuid block) content))))
+
+(defn- <create-planner-task!
+  [goal-block anchor-block-uuid task context]
+  (let [target-block-id (or anchor-block-uuid (:db/id goal-block))
+        sibling? (some? anchor-block-uuid)
+        content (planner-task-content task)]
+    (if-not (and target-block-id (string? content))
+      (p/resolved nil)
+      (p/let [result (editor-handler/insert-block-tree-after-target target-block-id sibling? [{:content content}] :markdown false)
+              block-uuid (some-> result :blocks first :block/uuid)]
+        (when block-uuid
+          (maybe-set-planner-task-defaults! block-uuid context)
+          {:block-uuid block-uuid})))))
+
+(defn- <upsert-planner-task!
+  [goal-block anchor-block-uuid task context]
+  (if-let [block (when-let [block-uuid (:block-uuid task)]
+                   (db/entity [:block/uuid block-uuid]))]
+    (if (task-session-created? block)
+      (p/resolved {:block-uuid (:block/uuid block)})
+      (do
+        (maybe-update-planner-task-content! block task)
+        (maybe-set-planner-task-defaults! (:block/uuid block) context)
+        (p/resolved {:block-uuid (:block/uuid block)})))
+    (<create-planner-task! goal-block anchor-block-uuid task context)))
+
+(defn- <sync-planning-task-bindings!
+  [planning-session-id tasks]
+  (let [base (db-sync/http-base)
+        bindings (->> tasks
+                      (keep (fn [task]
+                              (let [task-uuid (blank->nil (:task-uuid task))
+                                    block-uuid (some-> (:block-uuid task) str blank->nil)
+                                    session-id (blank->nil (:session-id task))]
+                                (when (and (string? task-uuid)
+                                           (string? block-uuid))
+                                  (cond-> {:task-uuid task-uuid
+                                           :block-uuid block-uuid}
+                                    (string? session-id) (assoc :session-id session-id))))))
+                      vec)]
+    (if-not (and (string? base)
+                 (string? (blank->nil planning-session-id))
+                 (seq bindings))
+      (p/resolved nil)
+      (db-sync/fetch-json (str base "/planning/sessions/" planning-session-id "/tasks/sync")
+                          {:method "POST"
+                           :headers {"content-type" "application/json"}
+                           :body (js/JSON.stringify (clj->js {:tasks bindings}))}
+                          {:response-schema :planning.sessions/get}))))
+
+(defn <upsert-planner-tasks!
+  ([goal-block-uuid tasks]
+   (<upsert-planner-tasks! goal-block-uuid tasks nil))
+  ([goal-block-uuid tasks opts]
+   (if-let [goal-block (db/entity [:block/uuid goal-block-uuid])]
+     (let [context (planner-goal-context goal-block opts)
+           planning-session-id (blank->nil (:planning-session-id opts))]
+       (p/loop [remaining (seq tasks)
+                acc []
+                anchor-block-uuid nil]
+         (if-let [task (first remaining)]
+           (p/let [result (<upsert-planner-task! goal-block anchor-block-uuid task context)]
+             (p/recur (next remaining)
+                      (cond-> acc result (conj (merge task result)))
+                      (or (:block-uuid result)
+                          anchor-block-uuid)))
+           (p/let [_ (<sync-planning-task-bindings! planning-session-id acc)]
+             (mapv (fn [task]
+                     (select-keys task [:task-uuid :block-uuid :session-id]))
+                   acc)))))
+     (p/resolved []))))
 
 (def ^:private stream-reconnect-delay-ms 1500)
 
@@ -454,6 +850,150 @@
       (when (and session-id (not= current-session-id session-id))
         (property-handler/set-block-property! block-uuid task-session-id-property session-id)))))
 
+(def ^:private planning-started-task-statuses
+  #{"Doing" "Done" "In Review" "Canceled"})
+
+(defn- planning-task-started?
+  [task]
+  (or (string? (blank->nil (:session-id task)))
+      (contains? planning-started-task-statuses
+                 (some-> (:status task) str string/trim not-empty))))
+
+(defn <fetch-planning-session!
+  [block-uuid planning-session-id]
+  (let [base (db-sync/http-base)
+        planning-session-id (blank->nil planning-session-id)]
+    (if-not (and (string? base) (string? planning-session-id))
+      (p/resolved nil)
+      (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+              resp (db-sync/fetch-json (str base "/planning/sessions/" planning-session-id)
+                                       {:method "GET"}
+                                       {:response-schema :planning.sessions/get})]
+        (apply-planning-session! block-uuid resp)))))
+
+(defn <set-planning-approval!
+  ([block-uuid approval-status]
+   (<set-planning-approval! block-uuid approval-status nil))
+  ([block-uuid approval-status opts]
+   (let [base (db-sync/http-base)
+         planning-session-id (or (some-> (session-state block-uuid) :planning-session-id blank->nil)
+                                 (some-> (session-state block-uuid) :session-id blank->nil))
+         approval-status (some-> approval-status str string/trim string/lower-case not-empty)
+         approval-comment (some-> (:comment opts) blank->nil)]
+     (if-not (and (string? base)
+                  (string? planning-session-id)
+                  (contains? #{"pending" "approved" "rejected"} approval-status))
+       (p/resolved nil)
+       (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+               resp (db-sync/fetch-json (str base "/planning/sessions/" planning-session-id "/approval")
+                                        {:method "POST"
+                                         :headers {"content-type" "application/json"}
+                                         :body (js/JSON.stringify
+                                                (clj->js (cond-> {:approval {:decision approval-status}}
+                                                           (string? approval-comment) (assoc-in [:approval :comment] approval-comment))))}
+                                        {:response-schema :planning.sessions/get})]
+         (apply-planning-session! block-uuid resp))))))
+
+(defn <replan-planning-session!
+  ([block-uuid]
+   (<replan-planning-session! block-uuid nil))
+  ([block-uuid opts]
+   (let [base (db-sync/http-base)
+         planning-session-id (or (some-> (session-state block-uuid) :planning-session-id blank->nil)
+                                 (some-> (session-state block-uuid) :session-id blank->nil))
+         replan-note (some-> (:replan-note opts) blank->nil)]
+     (if-not (and (string? base)
+                  (string? planning-session-id))
+       (p/resolved nil)
+       (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+               resp (db-sync/fetch-json (str base "/planning/sessions/" planning-session-id "/replan")
+                                        {:method "POST"
+                                         :headers {"content-type" "application/json"}
+                                         :body (js/JSON.stringify
+                                                (clj->js (cond-> {}
+                                                           (string? replan-note) (assoc :replan-note replan-note))))}
+                                        {:response-schema :planning.sessions/get})]
+         (apply-planning-session! block-uuid resp))))))
+
+(defn- <start-planned-task!
+  [goal-block-uuid task]
+  (let [goal-block (db/entity [:block/uuid goal-block-uuid])
+        parent-session-id (or (some-> goal-block task-session-id blank->nil)
+                              (some-> goal-block-uuid str blank->nil))
+        block-uuid (:block-uuid task)
+        block (when block-uuid
+                (db/entity [:block/uuid block-uuid]))
+        existing-session-id (or (blank->nil (:session-id task))
+                                (some-> goal-block task-session-id blank->nil)
+                                (some-> block task-session-id blank->nil))]
+    (cond
+      (not block)
+      (p/resolved nil)
+
+      (or existing-session-id
+          (task-session-created? block)
+          (planning-task-started? task))
+      (let [session-id (or existing-session-id
+                           (task-session-id block))]
+        (when (string? session-id)
+          (when goal-block-uuid
+            (maybe-store-task-session-id! goal-block-uuid session-id))
+          (maybe-store-task-session-id! block-uuid session-id))
+        (p/resolved (cond-> (select-keys task [:task-uuid :block-uuid])
+                      (string? session-id) (assoc :session-id session-id))))
+
+      :else
+      (p/let [resp (<start-session! block {:session-id parent-session-id})
+              session-id (or (some-> resp :session-id blank->nil)
+                             (some-> (db/entity [:block/uuid goal-block-uuid])
+                                     task-session-id
+                                     blank->nil)
+                             (some-> (db/entity [:block/uuid block-uuid])
+                                     task-session-id
+                                     blank->nil))]
+        (when (string? session-id)
+          (when goal-block-uuid
+            (maybe-store-task-session-id! goal-block-uuid session-id))
+          (maybe-store-task-session-id! block-uuid session-id))
+        (cond-> (select-keys task [:task-uuid :block-uuid])
+          (string? session-id) (assoc :session-id session-id))))))
+
+(defn <execute-planned-tasks!
+  ([goal-block-uuid tasks]
+   (<execute-planned-tasks! goal-block-uuid tasks nil))
+  ([goal-block-uuid tasks opts]
+   (let [planning-session-id (blank->nil (:planning-session-id opts))
+         selected-task-uuids (set (keep blank->nil (:selected-task-uuids opts)))]
+     (p/let [persisted-tasks (<upsert-planner-tasks! goal-block-uuid
+                                                     tasks
+                                                     {:planning-session-id planning-session-id})
+             persisted-by-task-uuid (into {}
+                                          (keep (fn [task]
+                                                  (when-let [task-uuid (blank->nil (:task-uuid task))]
+                                                    [task-uuid task])))
+                                          persisted-tasks)
+             selected-tasks (->> tasks
+                                 (map (fn [task]
+                                        (merge task
+                                               (get persisted-by-task-uuid
+                                                    (blank->nil (:task-uuid task))))))
+                                 (filter (fn [task]
+                                           (or (empty? selected-task-uuids)
+                                               (contains? selected-task-uuids
+                                                          (blank->nil (:task-uuid task))))))
+                                 vec)
+             results (p/loop [remaining selected-tasks
+                              acc []]
+                       (if-let [task (first remaining)]
+                         (p/let [result (<start-planned-task! goal-block-uuid task)]
+                           (p/recur (next remaining)
+                                    (cond-> acc result (conj result))))
+                         acc))
+             sync-response (<sync-planning-task-bindings! planning-session-id results)]
+       (when (map? sync-response)
+         (apply-planning-session! goal-block-uuid sync-response))
+       results))))
+
 (defn- maybe-store-task-sandbox-checkpoint!
   [block-uuid checkpoint]
   (when-let [block (db/entity [:block/uuid block-uuid])]
@@ -473,16 +1013,34 @@
                                                   (checkpoint->property-value checkpoint))))))))
 
 (defn- update-session!
-  [block-uuid f]
-  (state/update-state! :agent/sessions
-                       (fn [sessions]
-                         (let [key (session-key block-uuid)
-                               session (get sessions key {})]
-                           (assoc sessions key (f session))))))
+  ([block-uuid f]
+   (update-session! block-uuid f nil))
+  ([block-uuid f bucket-key]
+   (let [bucket-key (or bucket-key :agent/sessions)]
+     (state/update-state! bucket-key
+                          (fn [sessions]
+                            (let [key (session-key block-uuid)
+                                  session (get sessions key {})]
+                              (assoc sessions key (f session))))))))
+
+(defn- session-bucket-key
+  [block-uuid data]
+  (let [session-kind (some-> (:session-kind data)
+                             blank->nil
+                             string/lower-case)
+        planning-sessions (state/sub :agent/planning-sessions)
+        key (session-key block-uuid)]
+    (cond
+      (= "planning" session-kind) :agent/planning-sessions
+      (= "session" session-kind) :agent/sessions
+      (contains? planning-sessions key) :agent/planning-sessions
+      :else :agent/sessions)))
 
 (defn- update-session-state!
   [block-uuid data]
-  (update-session! block-uuid #(merge % data)))
+  (update-session! block-uuid
+                   #(merge % data)
+                   (session-bucket-key block-uuid data)))
 
 (defn- event->status [event]
   (case (:type event)
@@ -556,7 +1114,9 @@
      :kind "user"}))
 
 (defn- session-state [block-uuid]
-  (get (state/sub :agent/sessions) (session-key block-uuid)))
+  (let [key (session-key block-uuid)]
+    (or (get (state/sub :agent/planning-sessions) key)
+        (get (state/sub :agent/sessions) key))))
 
 (defn <fetch-events!
   [block]
@@ -718,11 +1278,21 @@
          (<connect-session-stream! block-uuid stream-url))))
    stream-reconnect-delay-ms))
 
+(defn- planning-session?
+  [session]
+  (let [session-kind (some-> (:session-kind session)
+                             str
+                             string/trim
+                             string/lower-case)]
+    (or (= "planning" session-kind)
+        (string? (blank->nil (:planning-chat-path session))))))
+
 (defn <ensure-session!
   [block]
   (let [block-uuid (:block/uuid block)
         base (db-sync/http-base)
         session (session-state block-uuid)
+        planning? (planning-session? session)
         session-id (or (:session-id session)
                        (task-session-id block)
                        (some-> block-uuid str))]
@@ -732,47 +1302,81 @@
         (p/resolved nil)
 
         (:session-id session)
-        (do
-          (maybe-store-task-session-id! block-uuid (:session-id session))
-          (when-not (:streaming? session)
-            (-> (<fetch-events! block)
-                (p/then (fn [_]
-                          (<connect-session-stream! block-uuid (or (:stream-url (session-state block-uuid))
-                                                                   (session-stream-url base session-id)))))))
-          (p/resolved session))
+        (if planning?
+          (do
+            (when (and (not (:planning-loaded? session))
+                       (not (:planning-loading? session)))
+              (update-session-state! block-uuid {:planning-loading? true})
+              (-> (db-sync/fetch-json (str base "/planning/sessions/" session-id)
+                                      {:method "GET"}
+                                      {:response-schema :planning.sessions/get})
+                  (p/then (fn [resp]
+                            (apply-planning-session! block-uuid resp)))
+                  (p/catch (fn [error]
+                             (update-session-state! block-uuid {:planning-loading? false})
+                             (let [status (:status (ex-data error))]
+                               (when-not (= status 404)
+                                 (log/error :agent/ensure-planning-session-failed error)))
+                             nil))))
+            (p/resolved session))
+          (do
+            (maybe-store-task-session-id! block-uuid (:session-id session))
+            (when-not (:streaming? session)
+              (-> (<fetch-events! block)
+                  (p/then (fn [_]
+                            (<connect-session-stream! block-uuid (or (:stream-url (session-state block-uuid))
+                                                                     (session-stream-url base session-id)))))))
+            (p/resolved session)))
 
         :else
-        (do
-          (update-session-state! block-uuid {:loading? true})
-          (-> (p/let [resp (db-sync/fetch-json (str base "/sessions/" session-id)
-                                               {:method "GET"}
-                                               {:response-schema :sessions/get})
-                      session-id' (or (:session-id resp) session-id)
-                      stream-url (session-stream-url base session-id')]
-                (update-session-state! block-uuid {:session-id session-id'
-                                                   :status (:status resp)
-                                                   :runtime-provider (:runtime-provider resp)
-                                                   :terminal-enabled (true? (:terminal-enabled resp))
-                                                   :stream-url stream-url
-                                                   :loading? false})
-                (maybe-store-task-session-id! block-uuid session-id')
-                (maybe-update-task-status! block-uuid (:status resp))
-                (<fetch-events! block)
-                (<connect-session-stream! block-uuid (or (:stream-url (session-state block-uuid))
-                                                         stream-url))
-                resp)
-              (p/catch (fn [error]
-                         (update-session-state! block-uuid {:loading? false})
-                         (let [status (:status (ex-data error))]
-                           (when-not (= status 404)
-                             (log/error :agent/ensure-session-failed error)))
-                         nil))))))))
+        (if planning?
+          (p/resolved nil)
+          (do
+            (update-session-state! block-uuid {:loading? true})
+            (-> (p/let [resp (db-sync/fetch-json (str base "/sessions/" session-id)
+                                                 {:method "GET"}
+                                                 {:response-schema :sessions/get})
+                        session-id' (or (:session-id resp) session-id)
+                        stream-url (session-stream-url base session-id')]
+                  (update-session-state! block-uuid {:session-id session-id'
+                                                     :status (:status resp)
+                                                     :runtime-provider (:runtime-provider resp)
+                                                     :terminal-enabled (true? (:terminal-enabled resp))
+                                                     :stream-url stream-url
+                                                     :loading? false})
+                  (maybe-store-task-session-id! block-uuid session-id')
+                  (maybe-update-task-status! block-uuid (:status resp))
+                  (<fetch-events! block)
+                  (<connect-session-stream! block-uuid (or (:stream-url (session-state block-uuid))
+                                                           stream-url))
+                  resp)
+                (p/catch (fn [error]
+                           (update-session-state! block-uuid {:loading? false})
+                           (let [status (:status (ex-data error))]
+                             (when-not (= status 404)
+                               (log/error :agent/ensure-session-failed error)))
+                           nil)))))))))
+
+(defn- <ensure-auth!
+  []
+  (js/Promise. user-handler/task--ensure-id&access-token))
+
+(defn- planning-create-path?
+  [create-path]
+  (= "/planning/sessions" (some-> create-path str string/trim)))
 
 (defn <start-session!
   ([block]
    (<start-session! block nil))
   ([block opts]
-   (let [base (db-sync/http-base)]
+   (<start-session! block opts "/sessions"))
+  ([block opts create-path]
+   (let [base (db-sync/http-base)
+         opts (or opts {})
+         planning? (planning-create-path? create-path)
+         response-schema (if planning?
+                           :planning.sessions/create
+                           :sessions/create)]
      (cond
        (not base)
        (do
@@ -785,39 +1389,78 @@
          (p/resolved nil))
 
        :else
-       (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+       (p/let [_ (<ensure-auth!)
                raw-body (build-session-body block opts)
                body (coerce-http-request :sessions/create raw-body)]
          (if (nil? body)
            (do
              (notification/show! "Invalid agent session payload." :error false)
              nil)
-           (-> (p/let [resp (db-sync/fetch-json (str base "/sessions")
+           (-> (p/let [resp (db-sync/fetch-json (str base create-path)
                                                 {:method "POST"
                                                  :headers {"content-type" "application/json"}
                                                  :body (js/JSON.stringify (clj->js body))}
-                                                {:response-schema :sessions/create})
-                       session-id (:session-id resp)
+                                                {:response-schema response-schema})
+                       session-id (or (:session-id resp)
+                                      (:planning-session-id resp))
                        status (:status resp)
-                       stream-url (:stream-url resp)
+                       stream-url (when-not planning?
+                                    (:stream-url resp))
+                       planning-chat-path (when planning?
+                                            (or (blank->nil (:chat-path resp))
+                                                (when (string? session-id)
+                                                  (str "/planning/chat/" session-id))))
                        block-uuid (:block/uuid block)
-                       _ (when-let [raw-message (message-body (:content raw-body))]
-                           (let [coerced (coerce-http-request :sessions/message raw-message)
-                                 msg-body (if (map? coerced) coerced raw-message)]
-                             (db-sync/fetch-json (str base "/sessions/" session-id "/messages")
-                                                 {:method "POST"
-                                                  :headers {"content-type" "application/json"}
-                                                  :body (js/JSON.stringify (clj->js msg-body))}
-                                                 {:response-schema :sessions/message})))]
+                       _ (when (and (not planning?)
+                                    (string? session-id))
+                           (when-let [raw-message (message-body (:content raw-body))]
+                             (let [coerced (coerce-http-request :sessions/message raw-message)
+                                   msg-body (if (map? coerced) coerced raw-message)]
+                               (db-sync/fetch-json (str base "/sessions/" session-id "/messages")
+                                                   {:method "POST"
+                                                    :headers {"content-type" "application/json"}
+                                                    :body (js/JSON.stringify (clj->js msg-body))}
+                                                   {:response-schema :sessions/message}))))]
                  (notification/clear! github-install-required-notification-uid)
-                 (update-session-state! block-uuid {:session-id session-id
-                                                    :status status
-                                                    :runtime-provider (:runtime-provider resp)
-                                                    :terminal-enabled (true? (:terminal-enabled resp))
-                                                    :stream-url stream-url
-                                                    :started-at (util/time-ms)})
-                 (maybe-store-task-session-id! block-uuid session-id)
-                 (<connect-session-stream! block-uuid stream-url)
+                 (if planning?
+                   (update-session-state! block-uuid {:session-id session-id
+                                                      :session-kind "planning"
+                                                      :planning-session-id session-id
+                                                      :planning-chat-path planning-chat-path
+                                                      :workflow-id (:workflow-id resp)
+                                                      :status status
+                                                      :approval-status (:approval-status resp)
+                                                      :require-approval (true? (:require-approval resp))
+                                                      :auto-dispatch (if (boolean? (:auto-dispatch resp))
+                                                                       (:auto-dispatch resp)
+                                                                       true)
+                                                      :auto-replan (true? (:auto-replan resp))
+                                                      :replan-delay-sec (:replan-delay-sec resp)
+                                                      :runtime-provider nil
+                                                      :terminal-enabled false
+                                                      :stream-url nil
+                                                      :streaming? false
+                                                      :stream-controller nil
+                                                      :plan nil
+                                                      :dispatch-sessions nil
+                                                      :scheduled-actions nil
+                                                      :planning-messages nil
+                                                      :planning-loaded? false
+                                                      :planning-loading? false
+                                                      :started-at (util/time-ms)})
+                   (update-session-state! block-uuid {:session-id session-id
+                                                      :session-kind "session"
+                                                      :planning-session-id nil
+                                                      :planning-chat-path nil
+                                                      :status status
+                                                      :runtime-provider (:runtime-provider resp)
+                                                      :terminal-enabled (true? (:terminal-enabled resp))
+                                                      :stream-url stream-url
+                                                      :started-at (util/time-ms)}))
+                 (when (and (not planning?)
+                            (string? session-id))
+                   (maybe-store-task-session-id! block-uuid session-id)
+                   (<connect-session-stream! block-uuid stream-url))
                  resp)
                (p/catch (fn [error]
                           (cond
@@ -830,11 +1473,33 @@
                             (show-github-install-required-notification!
                              error
                              (fn []
-                               (-> (<start-session! block opts)
+                               (-> (<start-session! block opts create-path)
                                    (p/catch (fn [_] nil)))))
                             :else
                             (notification/show! (start-session-error-message error) :error false))
                           nil)))))))))
+
+(defn <start-planning-session!
+  ([block]
+   (<start-planning-session! block nil))
+  ([block opts]
+   (if-not (planning-enabled?)
+     (do
+       (notification/show! "Planning is not enabled for this build/account." :warning false)
+       (p/resolved nil))
+     (let [opts (cond-> (or opts {})
+                  (nil? (:agent/permission-mode opts))
+                  (assoc :agent/permission-mode "read-only"))]
+       (<start-session! block opts "/planning/sessions")))))
+
+(defn <start-auto-session!
+  ([block]
+   (<start-auto-session! block nil))
+  ([block opts]
+   (let [{:keys [planning?]} (session-start-strategy block)]
+     (if planning?
+       (<start-planning-session! block opts)
+       (<start-session! block opts)))))
 
 (defn- publish-request-body
   [{:keys [title body commit-message head-branch base-branch create-pr? force?]}]

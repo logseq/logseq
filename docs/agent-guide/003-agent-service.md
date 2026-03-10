@@ -149,6 +149,57 @@ Errors and idempotency:
 - GET /sandbox/sessions/:id/stream
   - server-sent events of normalized agent events
 
+## Planning Layer
+- Planning sessions are separate from execution sessions.
+- Planning sessions are backed by a Cloudflare Agent instance and addressed by
+  `planning-session-id`.
+- Planning workflows are backed by Cloudflare Workflows and persist their
+  orchestration state into `planning_sessions`.
+- Planning state is product-visible through:
+  - `GET /planning/sessions/:planning-session-id`
+  - `POST /planning/sessions`
+  - `POST /planning/sessions/:planning-session-id/approval`
+  - `POST /planning/sessions/:planning-session-id/replan`
+  - `GET|POST /planning/chat/:planning-session-id`
+
+### Planning Session Shape
+- `planning-session-id`
+- `workflow-id`
+- `status`
+- `goal`
+- `project`
+- `agent`
+- `plan`
+- `approval-status`
+- `require-approval`
+- `auto-dispatch`
+- `auto-replan`
+- `replan-delay-sec`
+- `scheduled-actions`
+- `dispatch-sessions`
+
+### Planning To Execution Mapping
+- A planning task becomes a normal execution `POST /sessions` payload.
+- The mapping is:
+  - `dispatch-session.id` -> `sessions/create.session-id`
+  - `dispatch-session.source.node-id` -> `source.node-id`
+  - `dispatch-session.source.node-title` -> `source.node-title`
+  - `dispatch-session.intent.content` -> `intent.content`
+  - `dispatch-session.project` -> `project`
+  - `dispatch-session.agent` -> `agent`
+  - `dispatch-session.runtime-provider` -> `runtime-provider`
+  - `dispatch-session.runner-id` -> `runner-id`
+  - `dispatch-session.capabilities` -> `capabilities`
+- Execution remains on the existing `/sessions` substrate; planning never
+  provisions a second execution backend.
+
+### Planning Ownership Rules
+- Planning session reads/writes are always resolved against the authenticated
+  `claims.sub`.
+- Planning chat transport is not forwarded by `planning-session-id` alone.
+- Approval and replan act on the stored planning session and its tracked
+  workflow, not on arbitrary workflow ids supplied by the client.
+
 ## Example: Session Creation Payload
 ```json
 {

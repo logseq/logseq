@@ -42,6 +42,12 @@ Local split note:
 - `worker/wrangler.agents.toml` sets `AGENT_RUNTIME_PROVIDER=e2b` by default.
 - On localhost, `/sessions*` forwarding retries during agents startup (up to ~30s) to avoid transient `503`.
 
+Planning note:
+- planning APIs live in the same `logseq-agents` service as execution APIs
+- current planning entrypoint is `POST /planning/sessions`
+- this keeps auth, managed ChatGPT token reuse, runtime dispatch, and future agent types inside one unified agent service
+- `/sessions*`, `/planning*`, and future agent endpoints should continue to share the same worker unless there is a clear operational reason to split them
+
 Production routing note:
 - If `api.logseq.com` is currently routed via AWS Route53/API Gateway, keep hostname routing in API Gateway.
 - Forward only `/sessions*` from API Gateway to the deployed agents worker URL (`*.workers.dev` or another worker-facing domain).

@@ -27,6 +27,7 @@
   "dependencies": {
     "@sentry/cloudflare": "^10.38.0",
     "@sentry/node": "^10.38.0",
+    "agents": "^0.7.5",
     "better-sqlite3": "^12.6.2",
     "e2b": "2.14.0",
     "shadow-cljs": "^3.3.4",

@@ -1,11 +1,11 @@
 (ns logseq.sync.worker-test
   (:require [cljs.test :refer [async deftest is]]
             [datascript.core :as d]
+            [logseq.db.common.order :as db-order]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.sync.order :as sync-order]
             [logseq.sync.platform.core :as platform]
-            [logseq.sync.worker.dispatch :as dispatch]
-            [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.sync.worker.dispatch :as dispatch]))
 
 (defn- new-conn []
   (d/create-conn db-schema/schema))
@@ -55,6 +55,17 @@
                          (is false (str "unexpected error: " error))
                          (done)))))))
 
+(deftest dispatch-worker-fetch-planning-service-unavailable-test
+  (async done
+         (let [request (platform/request "http://example.com/planning/sessions" #js {:method "POST"})
+               resp (dispatch/handle-worker-fetch request #js {})]
+           (-> (.then resp (fn [resolved]
+                             (is (= 503 (.-status resolved)))
+                             (done)))
+               (.catch (fn [error]
+                         (is false (str "unexpected error: " error))
+                         (done)))))))
+
 (deftest dispatch-worker-fetch-sessions-forward-to-agents-service-test
   (async done
          (let [request (platform/request "http://example.com/sessions/session-2/events?since=1" #js {:method "GET"})
@@ -69,6 +80,27 @@
                (.then (fn [resolved]
                         (is (= 202 (.-status resolved)))
                         (is (= "http://example.com/sessions/session-2/events?since=1" @captured-url))
+                        (done)))
+               (.catch (fn [error]
+                         (is false (str "unexpected error: " error))
+                         (done)))))))
+
+(deftest dispatch-worker-fetch-planning-forward-to-agents-service-test
+  (async done
+         (let [request (platform/request "http://example.com/planning/sessions" #js {:method "POST"
+                                                                                     :headers #js {"content-type" "application/json"}
+                                                                                     :body (js/JSON.stringify #js {:session-id "plan-1"})})
+               captured-url (atom nil)
+               env #js {:AGENTS_SERVICE #js {:fetch (fn [forwarded]
+                                                      (reset! captured-url (.-url forwarded))
+                                                      (js/Promise.resolve
+                                                       (js/Response. (js/JSON.stringify #js {:ok true})
+                                                                     #js {:status 202
+                                                                          :headers #js {"content-type" "application/json"}})))}}]
+           (-> (dispatch/handle-worker-fetch request env)
+               (.then (fn [resolved]
+                        (is (= 202 (.-status resolved)))
+                        (is (= "http://example.com/planning/sessions" @captured-url))
                         (done)))
                (.catch (fn [error]
                          (is false (str "unexpected error: " error))

@@ -51,6 +51,7 @@
          (index-handler/handle-fetch #js {:env env :d1 (aget env "DB")} request)
 
          (or (string/starts-with? path "/auth")
+             (string/starts-with? path "/planning")
              (string/starts-with? path "/sessions"))
          (if-let [^js agents-service (aget env "AGENTS_SERVICE")]
            (if (local-dev-host? request)

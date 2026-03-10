@@ -5,6 +5,16 @@
   [["/auth"
     ["/chatgpt/import" {:methods {"POST" :auth.chatgpt/import}}]
     ["/chatgpt/status" {:methods {"GET" :auth.chatgpt/status}}]]
+   ["/planning"
+    ["/sessions" {:methods {"POST" :planning.sessions/create}}]
+    ["/sessions/:planning-session-id" {:methods {"GET" :planning.sessions/get}}]
+    ["/sessions/:planning-session-id/approval" {:methods {"POST" :planning.sessions/approval}}]
+    ["/sessions/:planning-session-id/tasks/sync" {:methods {"POST" :planning.sessions/tasks.sync}}]
+    ["/sessions/:planning-session-id/replan" {:methods {"POST" :planning.sessions/replan}}]
+    ["/chat/:planning-session-id" {:methods {"GET" :planning.chat/transport
+                                             "POST" :planning.chat/transport}}]
+    ["/workflows" {:methods {"POST" :planning.workflows/create}}]
+    ["/workflows/:workflow-id" {:methods {"GET" :planning.workflows/get}}]]
    ["/sessions"
     ["" {:methods {"POST" :sessions/create}}]
     ["/:session-id"

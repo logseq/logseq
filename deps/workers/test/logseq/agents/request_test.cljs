@@ -63,6 +63,95 @@
                              :pr-enabled true}}
              normalized)))))
 
+(deftest normalize-planning-create-test
+  (testing "normalizes planning request into agent task with codex read-only default"
+    (let [body {:session-id "plan-1"
+                :node-id "goal-1"
+                :node-title "Plan Goal"
+                :content "Plan this task graph"
+                :project {:id "project-1"
+                          :title "Demo Project"
+                          :repo-url "https://github.com/example/repo"}
+                :agent "codex"}
+          normalized (request/normalize-planning-create body)]
+      (is (= {:id "plan-1"
+              :source {:node-id "goal-1"
+                       :node-title "Plan Goal"}
+              :intent {:content "Plan this task graph"}
+              :project {:id "project-1"
+                        :title "Demo Project"
+                        :repo-url "https://github.com/example/repo"}
+              :agent {:provider "codex"
+                      :permission-mode "read-only"}
+              :capabilities {:push-enabled true
+                             :pr-enabled true}}
+             normalized))))
+
+  (testing "keeps explicit agent permission mode"
+    (let [body {:session-id "plan-2"
+                :node-id "goal-2"
+                :node-title "Plan Goal"
+                :content "Plan this task graph"
+                :project {:id "project-1"
+                          :title "Demo Project"
+                          :repo-url "https://github.com/example/repo"}
+                :agent {:provider "codex"
+                        :permission-mode "full-access"}}
+          normalized (request/normalize-planning-create body)]
+      (is (= "full-access" (get-in normalized [:agent :permission-mode]))))))
+
+(deftest normalize-planning-workflow-create-test
+  (let [body {:workflow-id "wf-1"
+              :planning-session-id "plan-1"
+              :user-id "user-1"
+              :goal {:title "Plan Goal"
+                     :description "Plan this feature"}
+              :tasks [{:title "Task A"
+                       :description "Desc A"}]
+              :project {:id "project-1"
+                        :repo-url "https://github.com/example/repo"
+                        :base-branch "main"}
+              :agent {:provider "codex"}
+              :runtime-provider "local-runner"
+              :runner-id "runner-1"
+              :approval {:decision "approved"
+                         :comment "looks good"}
+              :auto-dispatch true
+              :auto-replan true
+              :replan-delay-sec 300
+              :require-approval true}
+        normalized (request/normalize-planning-workflow-create body)]
+    (is (= {:workflow-id "wf-1"
+            :planning-session-id "plan-1"
+            :user-id "user-1"
+            :goal {:title "Plan Goal"
+                   :description "Plan this feature"}
+            :tasks [{:title "Task A"
+                     :description "Desc A"}]
+            :project {:id "project-1"
+                      :repo-url "https://github.com/example/repo"
+                      :base-branch "main"}
+            :agent {:provider "codex"}
+            :runtime-provider "local-runner"
+            :runner-id "runner-1"
+            :approval {:decision "approved"
+                       :comment "looks good"}
+            :auto-dispatch true
+            :auto-replan true
+            :replan-delay-sec 300
+            :require-approval true}
+           normalized))))
+
+(deftest normalize-planning-workflow-create-defaults-test
+  (let [body {:goal {:title "Plan Goal"}}
+        normalized (request/normalize-planning-workflow-create body)]
+    (is (= {:goal {:title "Plan Goal"}
+            :require-approval false
+            :auto-dispatch true
+            :auto-replan false
+            :replan-delay-sec 0}
+           normalized))))
+
 (deftest sessions-pr-coerce-test
   (testing "accepts sessions/pr request payload"
     (let [body {:title "feat: add m14 publish"
