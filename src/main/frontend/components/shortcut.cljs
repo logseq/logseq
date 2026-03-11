@@ -263,22 +263,24 @@
       ;; keystroke filter button
       (let [filter-popup-id :shortcut-keystroke-filter
             open-filter! (fn [^js e]
-                           (set-q! "")
-                           (shui/popup-show!
-                            (.-currentTarget e)
-                            (fn [_]
-                              (keyboard-filter-record-inner
-                               keystroke set-keystroke!
-                               #(shui/popup-hide! filter-popup-id)))
-                            {:id filter-popup-id
-                             :force-popover? true
-                             :align "end"
-                             :content-props
-                             {:class "shortcut-filter-popover-content p-0 w-auto"
-                              :collision-padding 12
-                              :onOpenAutoFocus #(.preventDefault %)
-                              :onEscapeKeyDown (fn [_] false)
-                              :onPointerDownOutside (fn [_] nil)}}))]
+                           (let [anchor-el (.-currentTarget e)]
+                             (set-q! "")
+                             (shui/popup-show!
+                              anchor-el
+                              (fn [_]
+                                (keyboard-filter-record-inner
+                                 keystroke set-keystroke!
+                                 #(shui/popup-hide! filter-popup-id)))
+                              {:id filter-popup-id
+                               :force-popover? true
+                               :align "end"
+                               :on-after-hide #(when anchor-el (.focus anchor-el))
+                               :content-props
+                               {:class "shortcut-filter-popover-content p-0 w-auto"
+                                :collision-padding 12
+                                :onOpenAutoFocus #(.preventDefault %)
+                                :onEscapeKeyDown (fn [_] false)
+                                :onPointerDownOutside (fn [_] nil)}})))]
         (if in-keystroke?
           [:button.shortcut-keystroke-active
            {:on-click open-filter!}
