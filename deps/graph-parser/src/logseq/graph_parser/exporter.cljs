@@ -115,68 +115,77 @@
              (conj result current-uuid))
       result)))
 
-(defn- clone-template-content-blocks
-  [blocks-by-uuid block-children template-page-uuid template-root-uuid content-root-uuids]
-  (let [*cloned-uuids (atom #{})
-        clone-block
-        (fn clone-block [source-uuid parent-uuid]
-          (let [source-block (get blocks-by-uuid source-uuid)
-                cloned-uuid (common-uuid/gen-uuid)
-                cloned-block (-> source-block
-                                 strip-template-properties
-                                 (assoc :block/uuid cloned-uuid
-                                        :block/page [:block/uuid template-page-uuid]
-                                        :block/parent [:block/uuid parent-uuid])
-                                 (dissoc :db/id))]
-            (swap! *cloned-uuids conj cloned-uuid)
-            (cons cloned-block
-                  (mapcat #(clone-block % cloned-uuid)
-                          (get block-children source-uuid)))))]
-    {:blocks (vec (mapcat #(clone-block % template-root-uuid) content-root-uuids))
-     :preserve-empty-properties-uuids @*cloned-uuids}))
+(defn- get-parent-uuid [parent]
+  (cond
+    (and (vector? parent) (= :block/uuid (first parent)))
+    (second parent)
+    (and (map? parent) (:block/uuid parent))
+    (:block/uuid parent)
+    :else
+    nil))
 
-(defn- extract-template-blocks
-  [db blocks]
-  (let [template-page (d/entity db :logseq.class/Template)
-        template-page-uuid (:block/uuid template-page)
-        blocks-by-uuid (into {} (map (juxt :block/uuid identity) blocks))
-        block-children (group-block-children-by-parent blocks)]
+(defn- handle-template-blocks
+  "Handles creating #Template blocks and their children and calculates
+  :preserve-empty-properties-uuids for use later"
+  [blocks*]
+  (let [include-parent-template-uuids (->> blocks*
+                                           (filter (fn [block]
+                                                     (and (get-template-name block)
+                                                          (template-including-parent? block))))
+                                           (map :block/uuid)
+                                           set)
+        content-uuids-by-template (into {}
+                                        (map (fn [template-uuid]
+                                               [template-uuid (common-uuid/gen-uuid)]))
+                                        include-parent-template-uuids)]
     (reduce
-     (fn [{:keys [blocks template-blocks preserve-empty-properties-uuids]} block]
-       (let [template-name (get-template-name block)
-             cleaned-block (strip-template-properties block)
-             source-preserve-empty-properties-uuids
-             (if template-name
-               (set (get-block-subtree-uuids block-children (:block/uuid block)))
-               #{})
-             content-root-uuids (if (template-including-parent? block)
-                                  [(:block/uuid block)]
-                                  (get block-children (:block/uuid block)))
-             template-root-block
-             (when template-name
-               {:block/uuid (common-uuid/gen-uuid)
-                :block/title template-name
-                :block/page [:block/uuid template-page-uuid]
-                :block/parent [:block/uuid template-page-uuid]
-                :block/order (db-order/gen-key)
-                :block/format (:block/format block)
-                :block/tags [:logseq.class/Template]})
-             template-content
-             (if template-root-block
-               (clone-template-content-blocks blocks-by-uuid block-children template-page-uuid (:block/uuid template-root-block) content-root-uuids)
-               {:blocks []
-                :preserve-empty-properties-uuids #{}})]
-         {:blocks (conj blocks cleaned-block)
-          :template-blocks (cond-> template-blocks
-                             template-root-block
-                             (into (into [template-root-block] (:blocks template-content))))
-          :preserve-empty-properties-uuids (set/union preserve-empty-properties-uuids
-                                                      source-preserve-empty-properties-uuids
-                                                      (:preserve-empty-properties-uuids template-content))}))
+     (fn [{:keys [blocks preserve-empty-properties-uuids]} block]
+       (if-let [template-name (get-template-name block)]
+         (let [block-children (group-block-children-by-parent blocks*)
+               base-block (strip-template-properties block)
+               parent (:block/parent base-block)
+               parent-uuid (get-parent-uuid parent)
+               content-uuid (when parent-uuid
+                              (get content-uuids-by-template parent-uuid))
+               updated-parent (if content-uuid
+                                [:block/uuid content-uuid]
+                                parent)
+               cleaned-block' (if content-uuid
+                                (assoc base-block :block/parent updated-parent)
+                                base-block)
+               source-preserve-empty-properties-uuids (set (get-block-subtree-uuids block-children (:block/uuid block)))
+               template-root-block (-> cleaned-block'
+                                       (assoc :block/title template-name)
+                                       (update :block/tags (fnil conj []) :logseq.class/Template)
+                                       (dissoc :block/refs
+                                               :block/properties
+                                               :block/properties-text-values
+                                               :block/properties-order))
+               template-content-block (when (template-including-parent? block)
+                                        (-> base-block
+                                            (assoc :block/uuid (get content-uuids-by-template (:block/uuid block))
+                                                   :block/parent [:block/uuid (:block/uuid base-block)]
+                                                   :block/order (db-order/gen-key))
+                                            (dissoc :db/id)))]
+           {:blocks (cond-> blocks
+                      true
+                      (conj template-root-block)
+                      template-content-block
+                      (conj template-content-block))
+            :preserve-empty-properties-uuids (set/union preserve-empty-properties-uuids
+                                                        source-preserve-empty-properties-uuids
+                                                        (cond-> #{}
+                                                          template-content-block
+                                                          (conj (:block/uuid template-content-block))))})
+         {:blocks (if-let [content-uuid (some->> (get-parent-uuid (:block/parent block))
+                                                 (get content-uuids-by-template))]
+                    (conj blocks
+                          (assoc block :block/parent [:block/uuid content-uuid]))
+                    (conj blocks block))
+          :preserve-empty-properties-uuids preserve-empty-properties-uuids}))
      {:blocks []
-      :template-blocks []
       :preserve-empty-properties-uuids #{}}
-     blocks)))
+     blocks*)))
 
 (defn- get-page-uuid [page-names-to-uuids page-name ex-data']
   (or (get @page-names-to-uuids (some-> (if (string/includes? (str page-name) "#")
@@ -2186,9 +2195,7 @@
                       :as *options}]
   (p/let [options (assoc *options :notify-user notify-user :log-fn log-fn :file file)
           {:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
-          {:keys [blocks template-blocks preserve-empty-properties-uuids]}
-          (extract-template-blocks @conn blocks)
-          blocks (into blocks template-blocks)
+          {:keys [blocks preserve-empty-properties-uuids]} (handle-template-blocks blocks)
           tx-options (merge (build-tx-options options)
                             {:journal-created-ats (build-journal-created-ats pages)
                              :preserve-empty-property-block-uuids preserve-empty-properties-uuids})
