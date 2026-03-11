@@ -427,7 +427,13 @@
         (fn [new-binding]
           (let [binding' (if (= binding new-binding) nil new-binding)]
             (shortcut/persist-user-shortcut! k binding')
-            (js/setTimeout #(do (shortcut/refresh!) (saved-cb)) 50)))
+            (js/setTimeout #(do (shortcut/refresh!)
+                                ;; refresh! reinstalls global handlers unconditionally.
+                                ;; If a scoped key handler is active (popover open),
+                                ;; re-suppress to prevent the new handlers from firing.
+                                (when (pos? @*global-listener-refcount)
+                                  (shortcut/unlisten-all! true))
+                                (saved-cb)) 50)))
 
         cancel-fn!
         (fn []
@@ -637,6 +643,17 @@
                  (set-key-conflicts! nil)
                  (set-keystroke! #(util/trim-safe (str % kn)))))))))
      [*auto-accept-timer *fade-timer])
+
+    ;; Re-focus the popover when rec-state changes and focus has drifted outside.
+    ;; This handles the case where a focused element (e.g., the Reassign button)
+    ;; is removed from the DOM during a state transition, causing focus to fall
+    ;; to document.body and making the popover deaf to subsequent keypresses.
+    (hooks/use-effect!
+     (fn []
+       (when-let [el (rum/deref *ref-el)]
+         (when-not (.contains el (.-activeElement js/document))
+           (js/requestAnimationFrame #(.focus el)))))
+     [rec-state])
 
     ;; === V3 LAYOUT ===
     [:div.shortcut-popover
