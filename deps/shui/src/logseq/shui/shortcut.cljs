@@ -157,30 +157,58 @@
                            %)))))))
 
 (def ^:private press-animation-ms 160)
+(def ^:private row-shimmer-ms 750)
 
 (defn- highlight-row!
-  "Add or remove the row highlight class on the closest shortcut row ancestor."
+  "Add or remove the row highlight class on the closest shortcut row ancestor.
+   On first trigger, forces a reflow to start the CSS animation.
+   On repeated triggers, the class stays applied (no reflow) and the
+   removal timer is reset so it fires after the last trigger."
   [^js container add?]
   (when-let [^js row (or (.closest container ".shui-shortcut-row, .shortcut-row")
                          (.-parentElement container))]
     (if add?
-      (.add (.-classList row) "shui-shortcut-row--pressed")
-      (.remove (.-classList row) "shui-shortcut-row--pressed"))))
+      (let [already? (.contains (.-classList row) "shui-shortcut-row--pressed")]
+        ;; Cancel any pending removal
+        (when-let [t (.-__sweepTimer row)]
+          (js/clearTimeout t)
+          (set! (.-__sweepTimer row) nil))
+        ;; Only force reflow on first trigger to start the animation
+        (when-not already?
+          (.add (.-classList row) "shui-shortcut-row--pressed"))
+        ;; Schedule removal after the last trigger
+        (set! (.-__sweepTimer row)
+              (js/setTimeout
+               (fn []
+                 (.remove (.-classList row) "shui-shortcut-row--pressed")
+                 (set! (.-__sweepTimer row) nil))
+               row-shimmer-ms)))
+      (do
+        (when-let [t (.-__sweepTimer row)]
+          (js/clearTimeout t)
+          (set! (.-__sweepTimer row) nil))
+        (.remove (.-classList row) "shui-shortcut-row--pressed")))))
 
 (defn- animate-element!
-  "Add pressed class, optionally highlight row, then auto-reset after animation."
+  "Add pressed class, optionally highlight row, then auto-reset after animation.
+   Key badge uses a simple clearTimeout+reset pattern to avoid stale removals."
   [^js el ^js container highlight-row?]
   (.add (.-classList el) "shui-shortcut-key-pressed")
   (when highlight-row? (highlight-row! container true))
-  (js/setTimeout
-   (fn []
-     (.remove (.-classList el) "shui-shortcut-key-pressed")
-     (when highlight-row? (highlight-row! container false)))
-   press-animation-ms))
+  ;; Clear any pending badge removal, then schedule a new one
+  (when-let [t (.-__badgeTimer el)]
+    (js/clearTimeout t))
+  (set! (.-__badgeTimer el)
+        (js/setTimeout
+         (fn []
+           (.remove (.-classList el) "shui-shortcut-key-pressed")
+           (set! (.-__badgeTimer el) nil))
+         press-animation-ms)))
 
 (defn shortcut-press!
   "Central helper to trigger key press animation.
-   Finds all nodes with matching data-shortcut-binding and animates individual keys.
+   For combo keys, animates the container (the whole keycap depresses).
+   For separate keys, animates individual kbd elements.
    Optionally highlights parent row.
 
    Args:
@@ -192,11 +220,15 @@
          selector (str "[data-shortcut-binding=\"" normalized "\"]")
          containers (.querySelectorAll js/document selector)]
      (doseq [^js container (array-seq containers)]
-       (let [keys (.querySelectorAll container "kbd.shui-shortcut-key")]
-         (if (> (.-length keys) 0)
-           (doseq [^js key-el (array-seq keys)]
-             (animate-element! key-el container highlight-row?))
-           (animate-element! container container highlight-row?)))))))
+       (if (.contains (.-classList container) "shui-shortcut-combo")
+         ;; Combo keys: animate the container as a unit (one keycap)
+         (animate-element! container container highlight-row?)
+         ;; Separate keys: animate each kbd individually
+         (let [keys (.querySelectorAll container "kbd.shui-shortcut-key")]
+           (if (> (.-length keys) 0)
+             (doseq [^js key-el (array-seq keys)]
+               (animate-element! key-el container highlight-row?))
+             (animate-element! container container highlight-row?))))))))
 
 (rum/defc combo-keys
   "Renders combo keys (simultaneous key combinations) with separator."

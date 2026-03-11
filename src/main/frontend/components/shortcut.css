@@ -215,9 +215,19 @@ button.shortcut-feedback-action {
             background-color: var(--lx-gray-05-alpha, var(--rx-gray-05-alpha));
           }
 
-          /* Shortcut keypress highlight — briefly flashes the row when the user presses a shortcut */
+          /* Shortcut keypress shimmer — accent band sweeps left-to-right across the row */
           &.shui-shortcut-row--pressed {
-            background-color: var(--lx-gray-05-alpha, var(--rx-gray-05-alpha));
+            background-image: linear-gradient(
+              90deg,
+              transparent 0%,
+              transparent 35%,
+              color-mix(in srgb, var(--lx-accent-09, hsl(var(--primary))) 10%, transparent) 50%,
+              transparent 65%,
+              transparent 100%
+            );
+            background-size: 300% 100%;
+            background-repeat: no-repeat;
+            animation: shortcut-row-sweep 700ms ease-out forwards;
           }
 
           /* Keyboard navigation focus ring — two levels above hover for clear distinction */
@@ -287,6 +297,11 @@ button.shortcut-feedback-action {
     }
   }
 
+}
+
+@keyframes shortcut-row-sweep {
+  from { background-position: -50% 0; }
+  to   { background-position: 150% 0; }
 }
 
 /* === V3 SHORTCUT POPOVER === */
