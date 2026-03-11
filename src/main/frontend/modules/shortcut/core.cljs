@@ -309,3 +309,29 @@
          :shortcuts (into-shortcuts (:shortcuts (state/get-global-config))))
         ;; web browser platform
         (storage/set :ls-shortcuts (into-shortcuts (storage/get :ls-shortcuts)))))))
+
+(defn persist-user-shortcuts-batch!
+  "Persist multiple shortcut binding changes atomically.
+   changes is a seq of [id binding] pairs where binding is a string, vector,
+   boolean, or nil (nil means remove/reset to default).
+   Reads each config source once, applies all changes, and writes once per source
+   to avoid read-modify-write races between sequential persist-user-shortcut! calls."
+  [changes]
+  (let [apply-changes
+        (fn [shortcuts]
+          (reduce (fn [m [id binding]]
+                    (if (nil? binding)
+                      (dissoc m id)
+                      (if (or (string? binding)
+                              (vector? binding)
+                              (boolean? binding))
+                        (assoc m id binding)
+                        m)))
+                  (or shortcuts {})
+                  changes))]
+    (config-handler/set-config!
+     :shortcuts (apply-changes (:shortcuts (state/get-graph-config))))
+    (if (util/electron?)
+      (global-config-handler/set-global-config-kv!
+       :shortcuts (apply-changes (:shortcuts (state/get-global-config))))
+      (storage/set :ls-shortcuts (apply-changes (storage/get :ls-shortcuts))))))
