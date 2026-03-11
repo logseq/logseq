@@ -163,10 +163,10 @@
       nil)))
 
 (defn- ^:large-vars/cleanup-todo finalize-command
-  [summary {:keys [command opts args cmds spec]}]
+  [summary {:keys [command opts args cmds spec long-desc]}]
   (let [opts (command-core/normalize-opts opts)
         args (vec args)
-        cmd-summary (command-core/command-summary {:cmds cmds :spec spec})
+        cmd-summary (command-core/command-summary {:cmds cmds :spec spec :long-desc long-desc})
         graph (:graph opts)
         has-args? (seq args)
         has-content? (or (seq (:content opts))
