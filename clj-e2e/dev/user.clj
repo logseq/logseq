@@ -3,6 +3,7 @@
   (:require [clojure.test :refer [run-tests run-test]]
             [logseq.e2e.bidirectional-properties-test]
             [logseq.e2e.block :as b]
+            [logseq.e2e.cmdk-scroll-basic-test]
             [logseq.e2e.commands-basic-test]
             [logseq.e2e.config :as config]
             [logseq.e2e.editor-basic-test]

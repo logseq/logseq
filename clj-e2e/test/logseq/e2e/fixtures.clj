@@ -42,8 +42,7 @@
                    :persistent false
                    :slow-mo @config/*slow-mo}
         p1 (w/make-page page-opts)
-        p2 (w/make-page page-opts)
-        port' (or port @config/*port)]
+        p2 (w/make-page page-opts)]
     (reset! *page1 p1)
     (reset! *page2 p2)
     (binding [custom-report/*pw-contexts* (set [(.context @p1) (.context @p2)])
@@ -52,7 +51,7 @@
       (run!
        #(w/with-page %
           (w/grant-permissions :clipboard-write :clipboard-read)
-          (w/navigate (pw-page/get-test-url port))
+          (w/navigate (pw-page/get-test-url (or port @config/*port)))
           (settings/developer-mode)
           (w/refresh)
           (assert/assert-graph-loaded?)

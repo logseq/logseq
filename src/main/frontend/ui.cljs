@@ -939,14 +939,16 @@
 (rum/defc lazy-visible
   ([content-fn]
    (lazy-visible content-fn nil))
-  ([content-fn {:keys [initial-state trigger-once? fade-in? root-margin placeholder _debug-id]
+  ([content-fn {:keys [initial-state trigger-once? fade-in? root root-margin placeholder _debug-id]
                 :or {initial-state false
                      trigger-once? true
                      fade-in? true
-                     root-margin 100}}]
+                     root nil
+                     root-margin "100px 0px"}}]
    (let [[visible? set-visible!] (rum/use-state initial-state)
          ^js inViewState (useInView #js {:initialInView initial-state
-                                         :rootMargin (str root-margin "px")
+                                         :root root
+                                         :rootMargin root-margin
                                          :triggerOnce trigger-once?
                                          :onChange (fn [in-view? _entry]
                                                      (set-visible! in-view?))})

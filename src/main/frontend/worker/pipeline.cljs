@@ -454,11 +454,34 @@
             fix-page-tags-tx-data
             fix-inline-page-tx-data)))
 
+(def ^:private journal-protected-update-attrs
+  #{:block/title :block/name})
+
+(defn- ensure-journal-page-protected-attrs-not-updated!
+  [{:keys [db-before tx-data]}]
+  (when-let [violation
+             (some (fn [{:keys [e a v added]}]
+                     (when (and added
+                                (contains? journal-protected-update-attrs a))
+                       (let [before-ent (d/entity db-before e)]
+                         (when (and before-ent
+                                    (ldb/journal? before-ent)
+                                    (not= (get before-ent a) v))
+                           {:type :journal-page-protected-attr-updated
+                            :entity-id e
+                            :attr a
+                            :before (get before-ent a)
+                            :after v
+                            :journal-day (:block/journal-day before-ent)}))))
+                   tx-data)]
+    (throw (ex-info "journal page protected attr updated" violation))))
+
 (defn transact-pipeline
   "Compute extra tx-data and block/refs, should ensure it's a pure function and
   doesn't call `d/transact!` or `ldb/transact!`."
   [{:keys [db-after tx-meta _tx-data] :as tx-report}]
   (when-not (or (:temp-conn? tx-meta) (:sync-download-graph? tx-meta))
+    (ensure-journal-page-protected-attrs-not-updated! tx-report)
     (let [extra-tx-data (compute-extra-tx-data tx-report)
           tx-report* (if (seq extra-tx-data)
                        (let [result (d/with db-after extra-tx-data)]

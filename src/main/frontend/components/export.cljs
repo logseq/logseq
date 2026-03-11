@@ -317,7 +317,7 @@
            [:div.flex.items-center
             (ui/checkbox {:class "mr-2"
                           :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
-                          :value (contains? @*text-remove-options :page-ref)
+                          :checked (contains? @*text-remove-options :page-ref)
                           :on-change (fn [e]
                                        (state/update-export-block-text-remove-options! e :page-ref)
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
@@ -327,7 +327,7 @@
 
             (ui/checkbox {:class "mr-2 ml-4"
                           :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
-                          :value (contains? @*text-remove-options :emphasis)
+                          :checked (contains? @*text-remove-options :emphasis)
                           :on-change (fn [e]
                                        (state/update-export-block-text-remove-options! e :emphasis)
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
@@ -338,7 +338,7 @@
 
             (ui/checkbox {:class "mr-2 ml-4"
                           :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
-                          :value (contains? @*text-remove-options :tag)
+                          :checked (contains? @*text-remove-options :tag)
                           :on-change (fn [e]
                                        (state/update-export-block-text-remove-options! e :tag)
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
@@ -350,7 +350,7 @@
            [:div.flex.items-center
             (ui/checkbox {:class "mr-2"
                           :style {:visibility (if (#{:text} tp) "visible" "hidden")}
-                          :value (boolean (:newline-after-block @*text-other-options))
+                          :checked (boolean (:newline-after-block @*text-other-options))
                           :on-change (fn [e]
                                        (state/update-export-block-text-other-options!
                                         :newline-after-block (boolean (util/echecked? e)))
@@ -361,13 +361,25 @@
 
             (ui/checkbox {:class "mr-2 ml-4"
                           :style {:visibility (if (#{:text} tp) "visible" "hidden")}
-                          :value (contains? @*text-remove-options :property)
+                          :checked (contains? @*text-remove-options :property)
                           :on-change (fn [e]
                                        (state/update-export-block-text-remove-options! e :property)
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
                                        (reset! *content (export-helper top-level-uuids)))})
             [:div {:style {:visibility (if (#{:text} tp) "visible" "hidden")}}
              "remove properties"]]
+
+           [:div.flex.items-center
+            (ui/checkbox {:class "mr-2"
+                          :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
+                          :checked (boolean (:open-blocks-only @*text-other-options))
+                          :on-change (fn [e]
+                                       (state/update-export-block-text-other-options!
+                                        :open-blocks-only (boolean (util/echecked? e)))
+                                       (reset! *text-other-options (state/get-export-block-text-other-options))
+                                       (reset! *content (export-helper top-level-uuids)))})
+            [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
+             "open blocks only (skip collapsed children)"]]
 
            [:div.flex.items-center
             [:label.mr-2 {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}

@@ -341,7 +341,6 @@
             db-dirs (filter (fn [file]
                               (string/starts-with? (.-name file) db-dir-prefix))
                             current-dir-dirs)]
-      (log/info :db-dirs (map #(.-name %) db-dirs) :all-dirs (map #(.-name %) current-dir-dirs))
       (p/all (map (fn [dir]
                     (p/let [graph-name (-> (.-name dir)
                                            (string/replace-first ".logseq-pool-" "")
@@ -967,9 +966,10 @@
     (shared-service/broadcast-to-clients! :notification
                                           [["Invalid data writing to db!"] :error])
     (worker-util/post-message :capture-error
-                              {:error (ex-info "Invalid data writing to db" {})
+                              {:error (ex-info "Invalid data writing to db" tx-meta)
                                :payload {}
-                               :extra {:errors (str errors)}})))
+                               :extra {:errors (str errors)
+                                       :tx-meta tx-meta}})))
 
 (defn init
   "web worker entry"

@@ -369,7 +369,7 @@
 
 (rum/defc appearance < rum/reactive
   []
-  [:div#appearance_settings.cp__settings-appearance-modal-inner.w-96.p-4.shadow-xl
+  [:div#appearance_settings.cp__settings-appearance-modal-inner
    (theme-modes-row t)
    (editor-font-family-row t (state/sub :ui/editor-font))
    (toggle-wide-mode-row t (state/sub :ui/wide-mode?))

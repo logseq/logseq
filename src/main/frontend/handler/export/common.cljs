@@ -14,19 +14,26 @@
 
 (defn root-block-uuids->content
   "Converts given block uuids to content for given repo"
-  [repo root-block-uuids]
-  (binding [cli-export-common/*current-db* (conn/get-db repo)
-            cli-export-common/*content-config* (get-content-config)]
-    (let [contents (mapv (fn [id]
-                           (cli-export-common/get-blocks-contents id)) root-block-uuids)]
-      (string/join "\n" (mapv string/trim-newline contents)))))
+  ([repo root-block-uuids]
+   (root-block-uuids->content repo root-block-uuids nil))
+  ([repo root-block-uuids {:keys [open-blocks-only?]}]
+   (binding [cli-export-common/*current-db* (conn/get-db repo)
+             cli-export-common/*content-config* (get-content-config)]
+     (let [contents (mapv (fn [id]
+                            (cli-export-common/get-blocks-contents id
+                                                                   :open-blocks-only? open-blocks-only?))
+                          root-block-uuids)]
+       (string/join "\n" (mapv string/trim-newline contents))))))
 
 (defn get-page-content
   "Gets page content for current repo, db and state"
-  [page-uuid]
-  (binding [cli-export-common/*current-db* (conn/get-db (state/get-current-repo))
-            cli-export-common/*content-config* (get-content-config)]
-    (cli-export-common/get-page-content page-uuid)))
+  ([page-uuid]
+   (get-page-content page-uuid nil))
+  ([page-uuid {:keys [open-blocks-only?]}]
+   (binding [cli-export-common/*current-db* (conn/get-db (state/get-current-repo))
+             cli-export-common/*content-config* (get-content-config)]
+     (cli-export-common/get-page-content page-uuid
+                                         :open-blocks-only? open-blocks-only?))))
 
 (defn <get-debug-datoms
   [repo]

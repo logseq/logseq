@@ -59,15 +59,34 @@
 (def ^:dynamic *content-config* nil)
 
 ;;; internal utils
+(defn- remove-collapsed-descendants
+  [tree]
+  (mapv
+   (fn [node]
+     (let [children (:block/children node)]
+       (cond
+         (and (:block/collapsed? node) (seq children))
+         (dissoc node :block/children)
+
+         (seq children)
+         (assoc node :block/children (remove-collapsed-descendants children))
+
+         :else
+         node)))
+   tree))
+
 (defn ^:api get-blocks-contents
-  [root-block-uuid & {:keys [init-level]
+  [root-block-uuid & {:keys [init-level open-blocks-only?]
                       :or {init-level 1}}]
   (let [block (d/entity *current-db* [:block/uuid root-block-uuid])
         link (:block/link block)
         block' (or link block)
         root-id (:block/uuid block')
         blocks (ldb/get-block-and-children *current-db* root-id)
-        tree (otree/blocks->vec-tree *current-db* blocks root-id {:link link})]
+        tree (otree/blocks->vec-tree *current-db* blocks root-id {:link link})
+        tree (if open-blocks-only?
+               (remove-collapsed-descendants tree)
+               tree)]
     (common-file/tree->file-content *current-db* tree
                                     {:init-level init-level :link link}
                                     *content-config*)))
@@ -94,8 +113,11 @@
                      (gp-mldoc/->db-edn content format))))))
 
 (defn ^:api get-page-content
-  [page-uuid]
-  (common-file/block->content *current-db* page-uuid nil *content-config*))
+  [page-uuid & {:keys [open-blocks-only?]}]
+  (common-file/block->content *current-db*
+                              page-uuid
+                              {:open-blocks-only? open-blocks-only?}
+                              *content-config*))
 
 (defn- page-name->ast
   [page-name]
