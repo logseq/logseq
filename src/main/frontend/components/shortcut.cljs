@@ -227,10 +227,38 @@
        [:span.shortcut-toolbar-hint
         (t :keymap/hint-close) (shui/shortcut "escape" {:style :compact})]]]]))
 
+(defn- navigable-rows
+  "Query all non-disabled shortcut rows from the <ul>, in DOM order."
+  [^js ul-el]
+  (when ul-el
+    (array-seq (.querySelectorAll ul-el "li.shortcut-row:not([aria-disabled])"))))
+
+(defn- navigable-items
+  "Query all navigable items (category headers + non-disabled rows) from the <ul>, in DOM order."
+  [^js ul-el]
+  (when ul-el
+    (array-seq (.querySelectorAll ul-el "li.th[tabindex], li.shortcut-row:not([aria-disabled])"))))
+
+(defn- scroll-row-into-view!
+  "Scroll a row into view, accounting for sticky page header and category headers."
+  [^js row-el]
+  (when-let [page-el (.closest row-el ".cp__shortcut-page-x")]
+    (when-let [scroll-parent (.-parentElement page-el)]
+      (let [page-header (.querySelector page-el ":scope > header")
+            sticky-h (+ (if page-header (.-offsetHeight page-header) 0) 40)
+            row-rect (.getBoundingClientRect row-el)
+            container-rect (.getBoundingClientRect scroll-parent)
+            above? (< (.-top row-rect) (+ (.-top container-rect) sticky-h))
+            below? (> (.-bottom row-rect) (.-bottom container-rect))]
+        (cond
+          above? (.scrollBy scroll-parent #js {:top (- (.-top row-rect) (.-top container-rect) sticky-h 4)
+                                               :behavior "instant"})
+          below? (.scrollBy scroll-parent #js {:top (- (.-bottom row-rect) (.-bottom container-rect) -4)
+                                               :behavior "instant"}))))))
+
 (rum/defc pane-controls
-  [q set-q! filter-key set-filter-key! keystroke set-keystroke! toggle-categories-fn pill-counts]
-  (let [*search-ref (rum/use-ref nil)
-        in-keystroke? (not (string/blank? keystroke))]
+  [q set-q! filter-key set-filter-key! keystroke set-keystroke! toggle-categories-fn pill-counts *search-ref]
+  (let [in-keystroke? (not (string/blank? keystroke))]
     [:div.cp__shortcut-page-x-pane-controls
 
      ;; Row 1: search + keystroke button
@@ -242,11 +270,22 @@
          :ref         *search-ref
          :value       (or q "")
          :auto-focus  true
-         :on-key-down #(when (= 27 (.-keyCode %))
-                         (util/stop %)
-                         (if (string/blank? q)
-                           (some-> (rum/deref *search-ref) (.blur))
-                           (set-q! "")))
+         :on-key-down (fn [^js e]
+                        (let [kc (.-keyCode e)]
+                          (cond
+                            (= kc 27) ;; Escape
+                            (do (util/stop e)
+                                (if (string/blank? q)
+                                  (some-> (rum/deref *search-ref) (.blur))
+                                  (set-q! "")))
+
+                            (= kc 40) ;; ArrowDown → focus first navigable row
+                            (when-let [row (some-> (rum/deref *search-ref)
+                                                   (.closest ".cp__shortcut-page-x")
+                                                   (.querySelector "ul li.shortcut-row:not([aria-disabled])"))]
+                              (.preventDefault e)
+                              (.focus row)
+                              (scroll-row-into-view! row)))))
          :on-change   #(let [v (util/evalue %)]
                          (when-not (string/blank? v)
                            (set-keystroke! ""))
@@ -367,7 +406,8 @@
         :force-popover? true
         :align "start"
         :on-after-hide #(do (reset! *active-shortcut-id nil)
-                            (when anchor-el (.focus anchor-el)))
+                            (when-let [row (some-> anchor-el (.closest "li.shortcut-row"))]
+                              (.focus row)))
         :content-props
         {:class "p-0 w-auto"
          :collision-padding 12
@@ -1034,9 +1074,17 @@
         ;; Deduplicated bindings: shortcuts listed in multiple categories
         ;; should only be counted/rendered once when flattened.
         deduped-bindings (into (sorted-map) (mapcat second result-list-map))
-        toggle-categories! #(if (= folded-categories all-categories)
-                              (set-folded-categories! #{})
-                              (set-folded-categories! all-categories))
+        toggle-categories! (fn []
+                             (let [folding-all? (not= folded-categories all-categories)
+                                   active-el (.-activeElement js/document)
+                                   row-focused? (and active-el
+                                                     (some-> active-el (.closest "li.shortcut-row")))]
+                               (set-folded-categories! (if folding-all? all-categories #{}))
+                               ;; If folding all while a row has focus, rescue to search input
+                               (when (and folding-all? row-focused?)
+                                 (js/requestAnimationFrame
+                                  #(when-let [input (.querySelector js/document ".cp__shortcut-page-x .search-input-wrap input")]
+                                     (.focus input))))))
 
         pill-counts (count-shortcuts-by-filter [[:all deduped-bindings]])
         visible-count (if (or in-filter? in-keystroke?)
@@ -1058,7 +1106,9 @@
          (shui/popup-hide-all!)))
      [])
 
-    (let [*container-ref (rum/use-ref nil)]
+    (let [*container-ref (rum/use-ref nil)
+          *search-ref (rum/use-ref nil)
+          *rescue-target-ref (rum/use-ref nil)]
       ;; Track header height for sticky offset
       (hooks/use-effect!
        (fn []
@@ -1097,10 +1147,21 @@
                     (.removeProperty (.-style el) "max-width"))))))
        [])
 
+      ;; Rescue focus when a fold removes the focused row from DOM
+      (hooks/use-effect!
+       (fn []
+         (when-let [target (rum/deref *rescue-target-ref)]
+           (rum/set-ref! *rescue-target-ref nil)
+           (when (or (nil? (.-activeElement js/document))
+                     (identical? (.-activeElement js/document) (.-body js/document)))
+             (.focus target)
+             (scroll-row-into-view! target))))
+       [folded-categories])
+
       [:div.cp__shortcut-page-x
        {:ref *container-ref}
        [:header
-        (pane-controls q set-q! filter-key set-filter-key! keystroke set-keystroke! toggle-categories! pill-counts)]
+        (pane-controls q set-q! filter-key set-filter-key! keystroke set-keystroke! toggle-categories! pill-counts *search-ref)]
 
        [:article
         (when-not ready?
@@ -1113,6 +1174,32 @@
 
         (when (and ready? (not no-results?))
           [:ul.list-none.m-0.py-3
+           {:on-key-down
+            (fn [^js e]
+              (let [key (.-key e)
+                    ul-el (.-currentTarget e)
+                    active-el (.-activeElement js/document)
+                    active-item (or (some-> active-el (.closest "li.shortcut-row"))
+                                    (some-> active-el (.closest "li.th")))
+                    items (navigable-items ul-el)]
+                (when (and (seq items) (contains? #{"ArrowDown" "ArrowUp" "Home" "End"} key))
+                  (.preventDefault e)
+                  (let [cur-idx (when active-item
+                                  (some (fn [[i el]] (when (identical? el active-item) i))
+                                        (map-indexed vector items)))
+                        next-idx (case key
+                                   "ArrowDown" (if cur-idx (min (inc cur-idx) (dec (count items))) 0)
+                                   "ArrowUp"   (cond
+                                                 (nil? cur-idx) (dec (count items))
+                                                 (zero? cur-idx) nil
+                                                 :else (dec cur-idx))
+                                   "Home"      0
+                                   "End"       (dec (count items)))]
+                    (if (nil? next-idx)
+                      (some-> (rum/deref *search-ref) (.focus))
+                      (when-let [target (nth items next-idx nil)]
+                        (.focus target)
+                        (scroll-row-into-view! target)))))))}
            (for [[c binding-map] (if (or in-filter? in-keystroke?)
                                    [[:all deduped-bindings]]
                                    result-list-map)
@@ -1124,9 +1211,21 @@
                          (not in-filter?)
                          (not in-keystroke?))
                 [:li.flex.justify-between.th
-                 {:key      (str c)
-                  :on-click #(let [f (if folded? disj conj)]
-                               (set-folded-categories! (f folded-categories c)))}
+                 {:key       (str c)
+                  :tab-index -1
+                  :on-click  (fn [^js e]
+                               (let [header-el (.-currentTarget e)
+                                     folding? (not folded?)
+                                     active-el (.-activeElement js/document)]
+                                 (when (and folding?
+                                            active-el
+                                            (some-> active-el (.closest "li.shortcut-row")))
+                                   (rum/set-ref! *rescue-target-ref header-el))
+                                 (set-folded-categories! ((if folded? disj conj) folded-categories c))))
+                  :on-key-down (fn [^js e]
+                                 (when (contains? #{13 32} (.-keyCode e))
+                                   (.preventDefault e)
+                                   (set-folded-categories! ((if folded? disj conj) folded-categories c))))}
                  [:strong.font-semibold (t c)]
                  [:i.flex.items-center
                   (ui/icon (if folded? "chevron-left" "chevron-down"))]])
