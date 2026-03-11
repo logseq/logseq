@@ -3,14 +3,12 @@
   (:require ["fs-extra" :as fs-extra]
             [clojure.string :as string]
             [logseq.common.config :as common-config]
-            [logseq.common.graph :as common-graph]))
+            [logseq.common.graph :as common-graph]
+            [logseq.common.graph-dir :as graph-dir]))
 
 (defn ^:api graph-name->path
   [graph-name]
-  (when graph-name
-    (-> graph-name
-        (string/replace "+3A+" ":")
-        (string/replace "++" "/"))))
+  (graph-dir/decode-graph-dir-name graph-name))
 
 (defn get-db-graphs-dir
   "Directory where DB graphs are stored"

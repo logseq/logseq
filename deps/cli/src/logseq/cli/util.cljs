@@ -4,7 +4,7 @@
             ["path" :as node-path]
             [clojure.string :as string]
             [logseq.cli.common.graph :as cli-common-graph]
-            [logseq.db.common.sqlite :as common-sqlite]
+            [logseq.common.graph-dir :as graph-dir]
             [nbb.error]
             [promesa.core :as p]))
 
@@ -17,7 +17,7 @@
     (string/includes? graph "/")
     ((juxt node-path/dirname node-path/basename) graph)
     :else
-    [(cli-common-graph/get-db-graphs-dir) (common-sqlite/sanitize-db-name graph)]))
+    [(cli-common-graph/get-db-graphs-dir) (graph-dir/repo->encoded-graph-dir-name graph)]))
 
 (defn get-graph-path
   "If graph is a file, return its path. Otherwise returns the graph's dir"
