@@ -1266,6 +1266,78 @@
           (sync-loop! server [{:repo repo-a :conn conn-a :client client-a :online? true}])
           (is (= "test" (:block/title (d/entity @conn-a [:block/uuid block-uuid])))))))))
 
+(deftest ^:long two-clients-undo-skips-conflicted-move-but-keeps-db-valid-test
+  (testing "undo skips a conflicted move while syncing the remaining safe history"
+    (let [base-uuid (uuid "31111111-1111-1111-1111-111111111111")
+          parent-a-uuid (uuid "32222222-2222-2222-2222-222222222222")
+          parent-b-uuid (uuid "33333333-3333-3333-3333-333333333333")
+          child-uuid (uuid "34444444-4444-4444-4444-444444444444")
+          conn-a (db-test/create-conn)
+          conn-b (db-test/create-conn)
+          ops-a (d/create-conn client-op/schema-in-db)
+          ops-b (d/create-conn client-op/schema-in-db)
+          client-a (make-client repo-a)
+          client-b (make-client repo-b)
+          server (make-server)
+          seed 20260311
+          history (atom [])]
+      (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}
+                        repo-b {:conn conn-b :ops-conn ops-b}}
+        (fn []
+          (let [{:keys [repro restore]} (install-invalid-tx-repro! seed history)]
+            (try
+              (reset! db-sync/*repo->latest-remote-tx {})
+              (client-op/update-local-tx repo-a 0)
+              (client-op/update-local-tx repo-b 0)
+              (ensure-base-page! conn-a base-uuid)
+              (let [base-a (d/entity @conn-a [:block/uuid base-uuid])]
+                (create-block! conn-a base-a "parent-a" parent-a-uuid)
+                (create-block! conn-a base-a "parent-b" parent-b-uuid)
+                (let [parent-a (d/entity @conn-a [:block/uuid parent-a-uuid])]
+                  (create-block! conn-a parent-a "seed-child" child-uuid)))
+              (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                        {:repo repo-b :conn conn-b :client client-b :online? true}]
+                                20)
+
+              (update-title! conn-a child-uuid "local-title")
+              (move-block! conn-a
+                           {:block/uuid child-uuid}
+                           {:block/uuid parent-b-uuid})
+              (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                        {:repo repo-b :conn conn-b :client client-b :online? true}]
+                                50)
+
+              (delete-block! conn-b parent-a-uuid)
+              (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                        {:repo repo-b :conn conn-b :client client-b :online? true}]
+                                50)
+
+              (is (not= :frontend.undo-redo/empty-undo-stack
+                        (undo-redo/undo repo-a)))
+
+              (let [rounds (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                                     {:repo repo-b :conn conn-b :client client-b :online? true}]
+                                             50)
+                    child-a (d/entity @conn-a [:block/uuid child-uuid])
+                    child-b (d/entity @conn-b [:block/uuid child-uuid])
+                    attrs-a (block-attr-map @conn-a)
+                    attrs-b (block-attr-map @conn-b)
+                    issues-a (db-issues @conn-a)
+                    issues-b (db-issues @conn-b)]
+                (is (< rounds 50) (str "sync did not become idle rounds=" rounds))
+                (is (= "seed-child" (:block/title child-a)))
+                (is (= "seed-child" (:block/title child-b)))
+                (is (= parent-b-uuid
+                       (:block/uuid (:block/parent child-a))))
+                (is (= parent-b-uuid
+                       (:block/uuid (:block/parent child-b))))
+                (is (empty? issues-a) (str "db A issues " (pr-str issues-a)))
+                (is (empty? issues-b) (str "db B issues " (pr-str issues-b)))
+                (assert-synced-attrs! seed history attrs-a attrs-b attrs-b)
+                (assert-no-invalid-tx! seed history repro))
+              (finally
+                (restore)))))))))
+
 (defonce op-runs 200)
 
 (defn- run-random-ops!
