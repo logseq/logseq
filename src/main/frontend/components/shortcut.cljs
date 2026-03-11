@@ -530,8 +530,9 @@
             (for [[conflicting-id keys-to-strip] conflicts-by-id]
               (let [their-binding (dh/shortcut-binding conflicting-id)
                     canonical-keys (set (map shortcut-utils/canonicalize-binding keys-to-strip))
-                    filtered (vec (remove #(contains? canonical-keys
-                                                      (shortcut-utils/canonicalize-binding %))
+                    filtered (vec (remove (fn [b]
+                                            (contains? canonical-keys
+                                                       (shortcut-utils/canonicalize-binding b)))
                                           their-binding))]
                 {:action-id conflicting-id
                  :new-binding (cond

@@ -198,7 +198,8 @@
   ([ks handler-id {:keys [exclude-ids group-global?]}]
    (let [global-handlers #{:shortcut.handler/editor-global
                            :shortcut.handler/global-non-editing-only
-                           :shortcut.handler/global-prevent-default}
+                           :shortcut.handler/global-prevent-default
+                           :shortcut.handler/misc}
          ks-bindings (get-bindings-keys-map)
          handler-ids (should-be-included-to-global-handler handler-id)
          global? (when group-global? (seq (set/intersection global-handlers handler-ids)))]
@@ -211,7 +212,7 @@
                          (fn [[k' _]]
                            (when (sequential? input-binding)
                              (or (= input-binding k')
-                                 (and (> (count k') (count input-binding))
+                                 (and (not= (count k') (count input-binding))
                                       (= (first input-binding) (first k'))))))
 
                          into-conflict-refs
@@ -220,16 +221,18 @@
                              [k [key (reduce-kv (fn [r id handler-id']
                                                   (if (and
                                                        (not (contains? exclude-ids id))
+                                                       ;; Only exact key matches are blocking conflicts.
+                                                       ;; Chord-prefix overlaps (mod+c vs mod+c mod+s)
+                                                       ;; coexist at runtime on separate handler instances,
+                                                       ;; and stripping them is destructive (chords can't
+                                                       ;; be re-recorded in the UI). Dormant chords
+                                                       ;; auto-restore when the conflicting key is freed.
+                                                       (= input-binding k)
                                                        (or (= handler-ids #{handler-id'})
                                                            (and (set? handler-ids) (contains? handler-ids handler-id'))
                                                            (and global?
                                                                 (contains? global-handlers handler-id')
-                                                                (every? #(handlers-co-active? % handler-id') handler-ids)
-                                                                ;; For cross-handler conflicts, only exact key
-                                                                ;; matches are blocking. Chord prefix matches
-                                                                ;; (e.g., mod+c vs mod+c mod+s) live on separate
-                                                                ;; handler instances and don't conflict at runtime.
-                                                                (= input-binding k))))
+                                                                (every? #(handlers-co-active? % handler-id') handler-ids))))
                                                     (assoc r id handler-id')
                                                     r))
                                                 {} refs)]]))]
@@ -278,16 +281,20 @@
 
                         cross-context-ref
                         (fn [[k o]]
-                          (when-let [{:keys [key refs]} o]
-                            [k [key (reduce-kv
-                                     (fn [r id handler-id']
-                                       (if (and (not (contains? exclude-ids id))
-                                                (not (contains? caller-handlers handler-id'))
-                                                (not (and caller-is-global?
-                                                          (contains? global-handlers handler-id'))))
-                                         (assoc r id handler-id')
-                                         r))
-                                     {} refs)]]))]
+                          ;; Only exact key matches — chord-prefix overlaps from
+                          ;; other contexts coexist fine at runtime and don't
+                          ;; warrant even an amber warning.
+                          (when (= k-parsed k)
+                            (when-let [{:keys [key refs]} o]
+                              [k [key (reduce-kv
+                                       (fn [r id handler-id']
+                                         (if (and (not (contains? exclude-ids id))
+                                                  (not (contains? caller-handlers handler-id'))
+                                                  (not (and caller-is-global?
+                                                            (contains? global-handlers handler-id'))))
+                                           (assoc r id handler-id')
+                                           r))
+                                       {} refs)]])))]
 
                     [k' (->> ks-bindings
                              (filterv same-leading-key?)
