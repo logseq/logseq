@@ -78,11 +78,6 @@
            ordered-children
            (mapv block-tree-with-properties)))
 
-(defn- journal-top-level-trees
-  [db journal-day]
-  (some->> (db-test/find-journal-by-journal-day db journal-day)
-           ordered-children
-           (mapv block-tree-with-properties)))
 
 (defn- build-graph-files
   "Given a file graph directory, return all files including assets and adds relative paths
@@ -211,8 +206,7 @@
     "[[FIRST UUID]] and [[UUID]]"))
 
 (deftest extract-template-blocks
-  (let [conn (db-test/create-conn)
-        page-uuid (random-uuid)
+  (let [page-uuid (random-uuid)
         parent-uuid (random-uuid)
         child-uuid (random-uuid)
         include-children-only-uuid (random-uuid)
@@ -258,12 +252,14 @@
                  :block/page [:block/uuid page-uuid]
                  :block/parent [:block/uuid include-children-only-uuid]
                  :block/order "e"}]
-        {:keys [blocks template-blocks preserve-empty-properties-uuids]}
-        (#'gp-exporter/extract-template-blocks @conn blocks)]
-    (testing "source blocks remove template metadata and mark template subtrees to preserve empty properties"
-      (is (= [{:title "source parent" :properties {:name ""}}
+        {:keys [blocks preserve-empty-properties-uuids]}
+        (#'gp-exporter/handle-template-blocks blocks)]
+    (testing "template roots replace source blocks and strip template metadata"
+      (is (= [{:title "trimmed template" :properties nil}
+              {:title "source parent" :properties {:name ""}}
+              {:title "nested child" :properties nil}
               {:title "child" :properties {:name "child default"}}
-              {:title "exclude source block" :properties {}}
+              {:title "children only" :properties nil}
               {:title "first child" :properties nil}
               {:title "second child" :properties nil}]
              (mapv (fn [block]
@@ -274,20 +270,21 @@
              (set/intersection preserve-empty-properties-uuids
                                #{parent-uuid child-uuid include-children-only-uuid child-only-1-uuid child-only-2-uuid}))))
 
-    (testing "template roots use trimmed names and clone the correct content"
+    (testing "template roots use trimmed names and include parent content when configured"
       (is (= #{"trimmed template" "nested child" "children only"}
-             (->> template-blocks
+             (->> blocks
                   (filter #(some #{:logseq.class/Template} (:block/tags %)))
                   (map :block/title)
                   set)))
-      (is (= ["source parent" "child" "child" "first child" "second child"]
-             (->> template-blocks
+      (is (= ["source parent"]
+             (->> blocks
                   (remove #(some #{:logseq.class/Template} (:block/tags %)))
+                  (filter #(= [:block/uuid parent-uuid] (:block/parent %)))
                   (map :block/title))))
-      (is (= 5
+      (is (= 2
              (count (set/difference preserve-empty-properties-uuids
                                     #{parent-uuid child-uuid include-children-only-uuid child-only-1-uuid child-only-2-uuid})))
-          "cloned template content blocks are also marked to preserve empty properties"))))
+          "in-place template content blocks are marked to preserve empty properties"))))
 
 (deftest-async ^:integration export-docs-graph-with-convert-all-tags
   (p/let [file-graph-dir "test/resources/docs-0.10.12"
@@ -564,6 +561,16 @@
                        @conn)
                   set))
           "All template definitions are imported as Template blocks")
+      (let [journal-uuid (:block/uuid (db-test/find-journal-by-journal-day @conn 20240216))
+            template-page-uuids (->> (d/q '[:find [?page-uuid ...]
+                                            :where
+                                            [?b :block/tags :logseq.class/Template]
+                                            [?b :block/page ?page]
+                                            [?page :block/uuid ?page-uuid]]
+                                          @conn)
+                                     set)]
+        (is (= #{journal-uuid} template-page-uuids)
+            "All template blocks are created on their source journal page"))
       (is (= [{:title "MEETING TITLE"
                :properties {:user.property/participants #{"TODO"}}
                :children []}]
@@ -592,13 +599,15 @@
              (template-content-trees @conn "children-only")))
       (is (= [{:title "it's a template with nested templates"
                :properties {:user.property/name "you named it"}
-               :children [{:title "child-1"
-                           :properties {:user.property/name ""}
-                           :children [{:title "child-1-1"
+               :children [{:title "nested-child-1"
+                           :properties {}
+                           :children [{:title "child-1"
                                        :properties {:user.property/name ""}
-                                       :children []}]}
-                          {:title "child-2"
-                           :properties {:user.property/name ""}
+                                       :children [{:title "child-1-1"
+                                                   :properties {:user.property/name ""}
+                                                   :children []}]}]}
+                          {:title "nested-child-2"
+                           :properties {}
                            :children [{:title "child-2-1"
                                        :properties {:user.property/name ""}
                                        :children []}]}
@@ -616,47 +625,6 @@
                :properties {:user.property/name ""}
                :children []}]
              (template-content-trees @conn "nested-child-2")))
-      (is (= [{:title "MEETING TITLE"
-               :properties {:user.property/participants #{"TODO"}}
-               :children []}
-              {:title "TITLE"
-               :properties {}
-               :children []}
-              {:title ""
-               :properties {:user.property/name ""
-                            :user.property/author ""}
-               :children []}
-              {:title "TITLE"
-               :properties {}
-               :children [{:title "intro" :properties {} :children []}
-                          {:title "notes" :properties {} :children []}]}
-              {:title ""
-               :properties {}
-               :children [{:title "intro" :properties {} :children []}
-                          {:title "notes" :properties {} :children []}]}
-              {:title "it should not be included in the template"
-               :properties {}
-               :children [{:title "intro" :properties {} :children []}
-                          {:title "notes" :properties {} :children []}]}
-              {:title "it's a template with nested templates"
-               :properties {:user.property/name "you named it"}
-               :children [{:title "child-1"
-                           :properties {:user.property/name ""}
-                           :children [{:title "child-1-1"
-                                       :properties {:user.property/name ""}
-                                       :children []}]}
-                          {:title "child-2"
-                           :properties {:user.property/name ""}
-                           :children [{:title "child-2-1"
-                                       :properties {:user.property/name ""}
-                                       :children []}]}
-                          {:title "child-3"
-                           :properties {:user.property/name ""}
-                           :children []}]}]
-             (->> (journal-top-level-trees @conn 20240216)
-                  (drop 1)
-                  (take 7)))
-          "Template metadata is removed from the journal while user properties and children remain")
 
       ;; Assets
       (is (= {:block/tags [:logseq.class/Asset]
