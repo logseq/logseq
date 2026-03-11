@@ -19,7 +19,6 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
-            [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.modules.shortcut.utils :as shortcut-utils]
@@ -582,12 +581,11 @@
        :aria-hidden "true"}]]]))
 
 (defn keyboard-shortcut-from-config [shortcut-name & {:keys [pick-first?]}]
-  (let [built-in-binding (:binding (get shortcut-config/all-built-in-keyboard-shortcuts shortcut-name))
-        custom-binding  (when (state/custom-shortcuts) (get (state/custom-shortcuts) shortcut-name))
-        binding         (or custom-binding built-in-binding)]
-    (if (and pick-first? (coll? binding))
-      (first binding)
-      (shortcut-utils/decorate-binding binding))))
+  (let [binding (shortcut-dh/shortcut-binding shortcut-name)]
+    (cond
+      (or (nil? binding) (false? binding)) nil
+      (and pick-first? (coll? binding))    (first binding)
+      :else (shortcut-utils/decorate-binding binding))))
 
 (defn dropdown-shortcut
   "Renders a compact shui shortcut for use inside dropdown menu items.
@@ -595,11 +593,9 @@
    string (e.g. \"shift+click\"). Returns nil for disabled/missing bindings."
   [shortcut-or-id]
   (let [binding (if (keyword? shortcut-or-id)
-                  (let [built-in (:binding (get shortcut-config/all-built-in-keyboard-shortcuts shortcut-or-id))
-                        custom   (when (state/custom-shortcuts) (get (state/custom-shortcuts) shortcut-or-id))
-                        b        (or custom built-in)]
+                  (let [b (shortcut-dh/shortcut-binding shortcut-or-id)]
                     (when (and b (not (false? b)))
-                      (if (coll? b) (first b) b)))
+                      (first b)))
                   shortcut-or-id)]
     (when binding
       [:span.ml-auto.pl-2
