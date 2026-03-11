@@ -11,6 +11,7 @@
             [frontend.storage :as storage]
             [frontend.util :as util]
             [goog.events :as events]
+            [goog.object :as gobj]
             [goog.ui.KeyboardShortcutHandler.EventType :as EventType]
             [lambdaisland.glogi :as log]
             [logseq.shui.ui :as shui])
@@ -287,15 +288,84 @@
     (state/pub-event! [:shortcut-handler-refreshed])
     (state/set-state! :ui/shortcut-handler-refreshing? false)))
 
-(defn- name-with-meta [e]
+(def ^:private code->key-name-map
+  "Maps KeyboardEvent.code values to the key-name strings used by key-names.
+   Used as fallback when Closure's KeyHandler corrupts keyCode (e.g. macOS
+   Option+key producing Unicode characters, or AltGr on Windows)."
+  {"Space"        "space"
+   "Enter"        "enter"
+   "Tab"          "tab"
+   "Backspace"    "backspace"
+   "Delete"       "delete"
+   "Escape"       "esc"
+   "ArrowUp"      "up"
+   "ArrowDown"    "down"
+   "ArrowLeft"    "left"
+   "ArrowRight"   "right"
+   "BracketLeft"  "open-square-bracket"
+   "BracketRight" "close-square-bracket"
+   "Semicolon"    "semicolon"
+   "Equal"        "equals"
+   "Minus"        "dash"
+   "Quote"        "single-quote"
+   "Backquote"    "grave-accent"
+   "Backslash"    "backslash"
+   "Comma"        "comma"
+   "Period"       "period"
+   "Slash"        "slash"
+   "PageUp"       "page-up"
+   "PageDown"     "page-down"
+   "Home"         "home"
+   "End"          "end"
+   "Insert"       "insert"
+   "CapsLock"     "caps-lock"
+   "NumpadEnter"  "enter"
+   "NumpadAdd"    "+"
+   "NumpadSubtract" "-"
+   "NumpadMultiply" "*"
+   "NumpadDivide" "/"
+   "Numpad0" "0" "Numpad1" "1" "Numpad2" "2" "Numpad3" "3" "Numpad4" "4"
+   "Numpad5" "5" "Numpad6" "6" "Numpad7" "7" "Numpad8" "8" "Numpad9" "9"})
+
+(defn- code->key-name
+  "Maps a KeyboardEvent.code string to the key-name used by key-names."
+  [code]
+  (when (string? code)
+    (cond
+      ;; KeyA-KeyZ → "a"-"z"
+      (string/starts-with? code "Key")
+      (string/lower-case (subs code 3))
+
+      ;; Digit0-Digit9 → "0"-"9"
+      (string/starts-with? code "Digit")
+      (subs code 5)
+
+      ;; F1-F12
+      (re-matches #"F\d{1,2}" code)
+      (string/lower-case code)
+
+      ;; Everything else via lookup
+      :else
+      (get code->key-name-map code))))
+
+(defn- resolve-key-name
+  "Resolve the key name from a KeyEvent. Tries key-names (keyCode) first,
+   then falls back to code->key-name (native KeyboardEvent.code) when a
+   modifier is held — corrects macOS Option+key corruption and AltGr on Windows."
+  [e]
+  (or (get key-names (str (.-keyCode e)))
+      (when (or (.-altKey e) (.-ctrlKey e) (.-metaKey e))
+        (some-> (gobj/getValueByKeys e "event_" "code")
+                code->key-name))))
+
+(defn- name-with-meta [e resolved-name]
   (let [ctrl (.-ctrlKey e)
         alt (.-altKey e)
         meta (.-metaKey e)
-        shift (.-shiftKey e)
-        keyname (get key-names (str (.-keyCode e)))]
+        shift (.-shiftKey e)]
     ;; cond->> applies bottom-to-top, so list modifiers in reverse
     ;; canonical order (ctrl+alt+meta+shift) to produce correct output
-    (cond->> keyname
+    (cond->> resolved-name
       shift (str "shift+")
       meta (str "meta+")
       alt (str "alt+")
@@ -303,11 +373,11 @@
 
 (defn keyname
   [e]
-  (let [name (get key-names (str (.-keyCode e)))]
+  (let [name (resolve-key-name e)]
     (cond
       (nil? name) nil
       (#{"ctrl" "shift" "alt" "meta" "esc"} name) nil
-      :else (str " " (name-with-meta e)))))
+      :else (str " " (name-with-meta e name)))))
 
 (defn persist-user-shortcut!
   [id binding]
