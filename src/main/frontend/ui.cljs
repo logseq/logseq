@@ -589,6 +589,22 @@
       (first binding)
       (shortcut-utils/decorate-binding binding))))
 
+(defn dropdown-shortcut
+  "Renders a compact shui shortcut for use inside dropdown menu items.
+   Accepts a shortcut config keyword (e.g. :editor/cut) or a raw binding
+   string (e.g. \"shift+click\"). Returns nil for disabled/missing bindings."
+  [shortcut-or-id]
+  (let [binding (if (keyword? shortcut-or-id)
+                  (let [built-in (:binding (get shortcut-config/all-built-in-keyboard-shortcuts shortcut-or-id))
+                        custom   (when (state/custom-shortcuts) (get (state/custom-shortcuts) shortcut-or-id))
+                        b        (or custom built-in)]
+                    (when (and b (not (false? b)))
+                      (if (coll? b) (first b) b)))
+                  shortcut-or-id)]
+    (when binding
+      [:span.ml-auto.pl-2
+       (shui/shortcut binding {:glow? true})])))
+
 (defn loading
   ([] (loading (t :loading)))
   ([content] (loading content nil))

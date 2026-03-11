@@ -15,8 +15,6 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.modules.shortcut.data-helper :as shortcut-dh]
-            [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
@@ -52,8 +50,7 @@
                             (:db/id page)
                             :page)
           x-menu-content (fn []
-                           (let [x-menu-item shui/dropdown-menu-item
-                                 x-menu-shortcut shui/dropdown-menu-shortcut]
+                           (let [x-menu-item shui/dropdown-menu-item]
                              [:<>
                               (when-not recent?
                                 (x-menu-item
@@ -61,16 +58,13 @@
                                   :on-click #(page-handler/<unfavorite-page! (str (:block/uuid page)))}
                                  (ctx-icon "star-off")
                                  (t :page/unfavorite)
-                                 (x-menu-shortcut (when-let [binding (shortcut-dh/shortcut-binding :command/toggle-favorite)]
-                                                    (some-> binding
-                                                            (first)
-                                                            (shortcut-utils/decorate-binding))))))
+                                 (ui/dropdown-shortcut :command/toggle-favorite)))
                               (x-menu-item
                                {:key "open in sidebar"
                                 :on-click open-in-sidebar}
                                (ctx-icon "layout-sidebar-right")
                                (t :content/open-in-sidebar)
-                               (x-menu-shortcut (shortcut-utils/decorate-binding "shift+click")))]))]
+                               (ui/dropdown-shortcut "shift+click"))]))]
 
     ;; TODO: move to standalone component
       [:a.link-item.group

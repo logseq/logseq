@@ -67,16 +67,17 @@
                (shortcut/unlisten-all! true))
            _ (swap! *global-listener-refcount inc)]
        (events/listen key-handler "key" key-handler-fn)
-       (js/setTimeout #(.focus el) 128)
-       #(do (doseq [*t timer-refs]
-              (when-let [timer (rum/deref *t)]
-                (js/clearTimeout timer)))
-            (.removeEventListener el "keydown" bubble-blocker false)
-            (.removeEventListener el "keypress" bubble-blocker false)
-            (.removeEventListener el "keyup" bubble-blocker false)
-            (when (zero? (swap! *global-listener-refcount (fn [n] (max 0 (dec n)))))
-              (shortcut/listen-all!))
-            (.dispose key-handler))))
+       (let [focus-timer (js/setTimeout #(.focus el) 128)]
+         #(do (js/clearTimeout focus-timer)
+              (doseq [*t timer-refs]
+                (when-let [timer (rum/deref *t)]
+                  (js/clearTimeout timer)))
+              (.removeEventListener el "keydown" bubble-blocker false)
+              (.removeEventListener el "keypress" bubble-blocker false)
+              (.removeEventListener el "keyup" bubble-blocker false)
+              (when (zero? (swap! *global-listener-refcount (fn [n] (max 0 (dec n)))))
+                (shortcut/listen-all!))
+              (.dispose key-handler)))))
    []))
 
 (defn- to-vector [v]
@@ -918,19 +919,23 @@
                              (str (name id) " " (dh/get-shortcut-desc (assoc m :id id)))))]))))
 
         result-list-map (or matched-list-map categories-list-map)
+        ;; Deduplicated bindings: shortcuts listed in multiple categories
+        ;; should only be counted/rendered once when flattened.
+        deduped-bindings (into (sorted-map) (mapcat second result-list-map))
         toggle-categories! #(if (= folded-categories all-categories)
                               (set-folded-categories! #{})
                               (set-folded-categories! all-categories))
 
-        pill-counts (count-shortcuts-by-filter result-list-map)
+        pill-counts (count-shortcuts-by-filter [[:all deduped-bindings]])
         visible-count (if (or in-filter? in-keystroke?)
-                        (count-visible-shortcuts result-list-map filter-key in-keystroke? keystroke)
-                        (apply + (map #(count (second %)) result-list-map)))
+                        (count-visible-shortcuts [[:all deduped-bindings]] filter-key in-keystroke? keystroke)
+                        (count deduped-bindings))
         no-results? (and ready? (zero? visible-count))]
 
     (hooks/use-effect!
      (fn []
-       (js/setTimeout #(set-ready! true) 100))
+       (let [t (js/setTimeout #(set-ready! true) 100)]
+         #(js/clearTimeout t)))
      [])
 
     ;; Clean up any open shortcut popovers when this component unmounts
@@ -996,7 +1001,9 @@
 
         (when (and ready? (not no-results?))
           [:ul.list-none.m-0.py-3
-           (for [[c binding-map] result-list-map
+           (for [[c binding-map] (if (or in-filter? in-keystroke?)
+                                   [[:all deduped-bindings]]
+                                   result-list-map)
                  :let [folded? (contains? folded-categories c)]]
              ^{:key (str c)}
              [:<>
@@ -1019,7 +1026,6 @@
                             user-binding (and user-binding (to-vector user-binding))
                             label (shortcut-desc-label id m)
                             cats (classify-shortcut m)
-                            _custom? (contains? cats :Custom)
                             disabled? (contains? cats :Disabled)
                             unset? (contains? cats :Unset)]]
 
