@@ -76,7 +76,7 @@ Auth file contents include the persisted Cognito `id-token`, `access-token`, `re
 
 Verbose logging:
 - `--verbose` enables structured debug logs to stderr for CLI option parsing and db-worker-node API calls.
-- stdout remains reserved for command output; large payloads are truncated in debug previews.
+- `sync download` can stream realtime progress lines to stdout when progress is enabled; debug previews remain truncated.
 
 Timeouts:
 - `--timeout-ms` continues to control request timeout behavior for CLI transport.
@@ -119,7 +119,7 @@ Sync commands:
 - `sync start --graph <name>` - start db-sync websocket client for a graph
 - `sync stop --graph <name>` - stop db-sync client on a graph daemon
 - `sync upload --graph <name>` - upload local graph snapshot to remote
-- `sync download --graph <name>` - download remote graph `<name>` into a same-name local graph directory
+- `sync download --graph <name> [--progress true|false]` - download remote graph `<name>` into a same-name local graph directory
 - `sync remote-graphs [--graph <name>]` - list remote graphs visible to the current login context
 - `sync ensure-keys [--graph <name>]` - ensure user RSA keys for sync/e2ee
 - `sync grant-access --graph <name> --graph-id <uuid> --email <email>` - grant encrypted graph access to a user
@@ -144,6 +144,11 @@ Sync download behavior:
 - If a local graph with the same name already exists, the CLI returns `graph-exists`.
 - If no remote graph with that name exists, the CLI returns `remote-graph-not-found`.
 - `sync download` starts `db-worker-node` in create-empty mode so local startup does not write `db-initial-data` before snapshot import.
+- The final snapshot download/import invoke uses a command-specific long-running timeout (30 minutes by default) rather than the generic short-request timeout path.
+- Progress streaming uses db-worker-node SSE `/v1/events` and shared `:rtc.log/download` events.
+- `--progress` defaults to `true` for human output.
+- For structured output (`--output json|edn`), progress is auto-disabled unless explicitly overridden with `--progress true`.
+- `--progress false` always suppresses progress streaming.
 - If the target graph DB is not empty at download time, the CLI returns `graph-db-not-empty` and aborts before import.
 - For e2ee remote graphs in headless CLI mode, run `logseq login` first and set `e2ee-password` via `sync config set` (or in `--config`) before download.
 
@@ -210,6 +215,7 @@ Output formats:
 - Global `--output <human|json|edn>` applies to all commands
 - Output formatting is controlled via global `--output`, `:output-format` in config, or `LOGSEQ_CLI_OUTPUT`.
 - Human output is plain text. List/search commands render tables with a final `Count: N` line. For list and search subcommands, the ID column uses `:db/id` (not UUID). If `:db/ident` exists, an `IDENT` column is included. `list property` includes a dedicated `TYPE` column. Search table columns are `ID` and `TITLE`. Block titles can include multiple lines; multi-line rows align additional lines under the `TITLE` column. Times such as list `UPDATED-AT`/`CREATED-AT` and `graph info` `Created at` are shown in human-friendly relative form. Errors include error codes and may include a `Hint:` line. Use `--output json|edn` for structured output.
+- `sync download` progress lines are streamed to stdout only when progress is enabled. In `json`/`edn` mode, progress is disabled by default unless `--progress true` is provided.
 - For `list property`, `TYPE` is returned in default output (without `--expand`) for human and structured (`json`/`edn`) formats.
 - `upsert page` and `upsert block` return entity ids in `data.result` for JSON/EDN output, and include ids in human output.
   - Human example:

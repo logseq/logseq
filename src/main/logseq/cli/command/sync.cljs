@@ -12,12 +12,16 @@
   {:graph-id {:desc "Remote graph UUID"}
    :email {:desc "Target user email"}})
 
+(def ^:private sync-download-spec
+  {:progress {:desc "Stream realtime download progress to stdout"
+              :coerce :boolean}})
+
 (def entries
   [(core/command-entry ["sync" "status"] :sync-status "Show db-sync runtime status" {})
    (core/command-entry ["sync" "start"] :sync-start "Start db-sync client" {})
    (core/command-entry ["sync" "stop"] :sync-stop "Stop db-sync client" {})
    (core/command-entry ["sync" "upload"] :sync-upload "Upload current graph snapshot" {})
-   (core/command-entry ["sync" "download"] :sync-download "Download remote graph snapshot" {})
+   (core/command-entry ["sync" "download"] :sync-download "Download remote graph snapshot" sync-download-spec)
    (core/command-entry ["sync" "remote-graphs"] :sync-remote-graphs "List remote graphs" {})
    (core/command-entry ["sync" "ensure-keys"] :sync-ensure-keys "Ensure user RSA keys for sync/e2ee" {})
    (core/command-entry ["sync" "grant-access"] :sync-grant-access "Grant graph access to an email" sync-grant-access-spec)
@@ -40,9 +44,21 @@
 
 (def ^:private sync-start-timeout-ms 10000)
 (def ^:private sync-start-poll-interval-ms 100)
+(def ^:private sync-download-timeout-ms (* 30 60 1000))
+(def ^:private structured-output-formats #{:json :edn})
 
 (def ^:private sync-start-skipped-states
   #{:inactive :stopped})
+
+(defn- print-progress-line!
+  [line]
+  (when (seq (some-> line str string/trim))
+    (println line)))
+
+(defn- sync-download-invoke-config
+  [cfg]
+  (assoc cfg :timeout-ms (max 0 (or (:sync-download-timeout-ms cfg)
+                                    sync-download-timeout-ms))))
 
 (def ^:private sync-download-non-empty-query
   '[:find (count ?e) .
@@ -112,7 +128,9 @@
                 :repo repo
                 :graph (core/repo->graph repo)
                 :allow-missing-graph true
-                :require-missing-graph true}})
+                :require-missing-graph true
+                :progress (:progress options)
+                :progress-explicit? (contains? options :progress)}})
 
     :sync-remote-graphs
     {:ok? true
@@ -314,9 +332,24 @@
       (p/catch (fn [error]
                  (exception->error error {:repo (:repo action)})))))
 
+(defn- sync-download-progress-enabled?
+  [action config]
+  (if (:progress-explicit? action)
+    (true? (:progress action))
+    (not (contains? structured-output-formats (:output-format config)))))
+
+(defn- download-progress-message
+  [graph-id event-type payload]
+  (when (and (= :rtc-log event-type)
+             (map? payload)
+             (= :rtc.log/download (:type payload))
+             (= graph-id (:graph-uuid payload)))
+    (:message payload)))
+
 (defn- execute-sync-download
   [action config]
-  (let [config' (download-config config)]
+  (let [config' (download-config config)
+        progress-enabled? (sync-download-progress-enabled? action config')]
     (-> (p/let [remote-graphs (invoke-global config'
                                              :thread-api/db-sync-list-remote-graphs
                                              [])
@@ -332,8 +365,19 @@
             (p/let [cfg (cli-server/ensure-server! config' (:repo action))
                     _ (transport/invoke cfg :thread-api/set-db-sync-config false [(sync-config config')])
                     _ (ensure-empty-download-db! cfg (:repo action))
-                    result (transport/invoke cfg :thread-api/db-sync-download-graph-by-id false
-                                             [(:repo action) (:graph-id remote-graph) (:graph-e2ee? remote-graph)])]
+                    download-cfg (sync-download-invoke-config cfg)
+                    graph-id (:graph-id remote-graph)
+                    events-sub (when progress-enabled?
+                                 (transport/connect-events!
+                                  download-cfg
+                                  (fn [event-type payload]
+                                    (when-let [message (download-progress-message graph-id event-type payload)]
+                                      (print-progress-line! message)))))
+                    result (-> (transport/invoke download-cfg :thread-api/db-sync-download-graph-by-id false
+                                                 [(:repo action) graph-id (:graph-e2ee? remote-graph)])
+                               (p/finally (fn []
+                                            (when-let [close! (:close! events-sub)]
+                                              (close!)))))]
               {:status :ok
                :data (if (map? result)
                        result

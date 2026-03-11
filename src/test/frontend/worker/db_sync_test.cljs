@@ -1,5 +1,6 @@
 (ns frontend.worker.db-sync-test
   (:require [cljs.test :refer [deftest is testing async use-fixtures]]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.crypt :as crypt]
             [frontend.worker-common.util :as worker-util]
@@ -9,6 +10,7 @@
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.crypt :as sync-crypt]
+            [frontend.worker.sync.log-and-state :as sync-log-and-state]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]
@@ -1284,6 +1286,59 @@
                    (is (= false (:graph-e2ee? result)))
                    (is (= (vec (concat rows-a rows-b))
                           (vec (:rows result)))))
+                 (p/catch (fn [e]
+                            (is false (str "unexpected error: " e))))
+                 (p/finally
+                   (fn []
+                     (set! js/fetch fetch-prev)
+                     (reset! worker-state/*db-sync-config config-prev)
+                     (done))))))))
+
+(deftest download-graph-by-id-emits-shared-download-milestones-test
+  (testing "download emits shared rtc.log/download milestones"
+    (async done
+           (let [fetch-prev js/fetch
+                 config-prev @worker-state/*db-sync-config
+                 logs (atom [])
+                 rows [["addr-1" "content-1" nil]]
+                 payload (#'db-sync/frame-bytes (#'db-sync/encode-snapshot-rows rows))]
+             (reset! worker-state/*db-sync-config {:http-base "https://example.com"
+                                                   :auth-token "token-value"})
+             (set! js/fetch
+                   (fn [url _opts]
+                     (cond
+                       (>= (.indexOf url "/pull") 0)
+                       (js/Promise.resolve #js {:ok true
+                                                :status 200
+                                                :text (fn [] (js/Promise.resolve "{\"type\":\"pull/ok\",\"t\":9,\"txs\":[]}"))})
+
+                       (>= (.indexOf url "/snapshot/stream") 0)
+                       (js/Promise.resolve #js {:ok true
+                                                :status 200
+                                                :headers #js {:get (fn [header]
+                                                                     (when (= header "content-length")
+                                                                       (str (.-byteLength payload))))}
+                                                :arrayBuffer (fn [] (js/Promise.resolve (.-buffer payload)))})
+
+                       :else
+                       (js/Promise.reject (js/Error. (str "unexpected fetch url: " url))))))
+             (-> (p/with-redefs [sync-log-and-state/rtc-log (fn [type payload]
+                                                              (swap! logs conj [type payload])
+                                                              nil)]
+                   (db-sync/download-graph-by-id! test-repo "graph-1" false))
+                 (p/then (fn [result]
+                           (is (= "graph-1" (:graph-id result)))
+                           (is (= 9 (:remote-tx result)))
+                           (is (= false (:graph-e2ee? result)))
+                           (is (= rows (vec (:rows result))))
+                           (let [messages (mapv (fn [[_ payload]] (:message payload)) @logs)]
+                             (is (some #(= "Preparing graph snapshot download" %) messages))
+                             (is (some #(string/includes? % "Start downloading graph snapshot") messages))
+                             (is (some #(= "Graph snapshot downloaded" %) messages)))
+                           (is (every? (fn [[type payload]]
+                                         (and (= :rtc.log/download type)
+                                              (= "graph-1" (:graph-uuid payload))))
+                                       @logs))))
                  (p/catch (fn [e]
                             (is false (str "unexpected error: " e))))
                  (p/finally
