@@ -181,29 +181,38 @@
     #{from-handler-id :shortcut.handler/global-prevent-default}
     #{from-handler-id}))
 
+(defn- handlers-co-active?
+  "Two handler groups conflict (can be active simultaneously) unless one is
+   editing-only and the other is non-editing-only — those are mutually exclusive
+   at runtime."
+  [h1 h2]
+  (let [editing-only     #{:shortcut.handler/editor-global
+                           :shortcut.handler/block-editing-only}
+        non-editing-only #{:shortcut.handler/global-non-editing-only}]
+    (not (or (and (contains? editing-only h1) (contains? non-editing-only h2))
+             (and (contains? non-editing-only h1) (contains? editing-only h2))))))
+
 (defn get-conflicts-by-keys
   ([ks] (get-conflicts-by-keys ks :shortcut.handler/global-prevent-default {:group-global? true}))
   ([ks handler-id] (get-conflicts-by-keys ks handler-id {:group-global? true}))
   ([ks handler-id {:keys [exclude-ids group-global?]}]
    (let [global-handlers #{:shortcut.handler/editor-global
                            :shortcut.handler/global-non-editing-only
-                           :shortcut.handler/global-prevent-default
-                           :shortcut.handler/misc}
+                           :shortcut.handler/global-prevent-default}
          ks-bindings (get-bindings-keys-map)
          handler-ids (should-be-included-to-global-handler handler-id)
          global? (when group-global? (seq (set/intersection global-handlers handler-ids)))]
      (->> (if (string? ks) [ks] ks)
           (map (fn [k]
                  (when-let [k' (shortcut-utils/undecorate-binding k)]
-                   (let [k (shortcut-utils/safe-parse-string-binding k')
-                         k (bean/->clj k)
+                   (let [input-binding (bean/->clj (shortcut-utils/safe-parse-string-binding k'))
 
                          same-leading-key?
                          (fn [[k' _]]
-                           (when (sequential? k)
-                             (or (= k k')
-                                 (and (> (count k') (count k))
-                                      (= (first k) (first k'))))))
+                           (when (sequential? input-binding)
+                             (or (= input-binding k')
+                                 (and (> (count k') (count input-binding))
+                                      (= (first input-binding) (first k'))))))
 
                          into-conflict-refs
                          (fn [[k o]]
@@ -213,7 +222,14 @@
                                                        (not (contains? exclude-ids id))
                                                        (or (= handler-ids #{handler-id'})
                                                            (and (set? handler-ids) (contains? handler-ids handler-id'))
-                                                           (and global? (contains? global-handlers handler-id'))))
+                                                           (and global?
+                                                                (contains? global-handlers handler-id')
+                                                                (every? #(handlers-co-active? % handler-id') handler-ids)
+                                                                ;; For cross-handler conflicts, only exact key
+                                                                ;; matches are blocking. Chord prefix matches
+                                                                ;; (e.g., mod+c vs mod+c mod+s) live on separate
+                                                                ;; handler instances and don't conflict at runtime.
+                                                                (= input-binding k))))
                                                     (assoc r id handler-id')
                                                     r))
                                                 {} refs)]]))]
@@ -244,8 +260,7 @@
   [ks handler-id {:keys [exclude-ids]}]
   (let [global-handlers #{:shortcut.handler/editor-global
                           :shortcut.handler/global-non-editing-only
-                          :shortcut.handler/global-prevent-default
-                          :shortcut.handler/misc}
+                          :shortcut.handler/global-prevent-default}
         ks-bindings (get-bindings-keys-map)
         caller-handlers (should-be-included-to-global-handler handler-id)
         caller-is-global? (seq (set/intersection global-handlers caller-handlers))]
