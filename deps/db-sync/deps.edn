@@ -2,7 +2,7 @@
  :deps
  {org.clojure/clojure                   {:mvn/version "1.11.1"}
   datascript/datascript                 {:git/url "https://github.com/logseq/datascript"
-                                         :sha     "ff5a7d5326e2546f40146e4a489343f557519bc3"}
+                                         :sha     "f91fec561ee2c11d6bf323feae365e9033585411"}
   datascript-transit/datascript-transit {:mvn/version "0.3.0"
                                          :exclusions [datascript/datascript]}
   com.cognitect/transit-cljs            {:mvn/version "0.8.280"}
