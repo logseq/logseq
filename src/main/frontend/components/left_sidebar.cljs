@@ -121,7 +121,7 @@
     (ui/icon (str icon) {:extension? icon-extension? :size 16})
     [:span.flex-1 title]
     (when shortcut
-      [:span.ml-1
+      [:span.ml-1.mr-2.flex.items-center
        (ui/render-keyboard-shortcut
         (ui/keyboard-shortcut-from-config shortcut {:pick-first? true})
         :shortcut-id shortcut)])
