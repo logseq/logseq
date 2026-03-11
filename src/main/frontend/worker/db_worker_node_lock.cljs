@@ -5,8 +5,8 @@
             ["path" :as node-path]
             [clojure.string :as string]
             [frontend.worker-common.util :as worker-util]
-            [frontend.worker.graph-dir :as graph-dir]
             [lambdaisland.glogi :as log]
+            [logseq.common.graph-dir :as graph-dir]
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
             [promesa.core :as p]))
