@@ -1259,6 +1259,14 @@
       (is (false? (:ok? result)))
       (is (= :missing-graph (get-in result [:error :code])))))
 
+  (testing "sync download accepts progress option"
+    (let [disabled (commands/parse-args ["sync" "download" "--graph" "demo" "--progress" "false"])
+          enabled (commands/parse-args ["sync" "download" "--graph" "demo" "--progress" "true"])]
+      (is (true? (:ok? disabled)))
+      (is (= false (get-in disabled [:options :progress])))
+      (is (true? (:ok? enabled)))
+      (is (= true (get-in enabled [:options :progress])))))
+
   (testing "graph import rejects unknown type"
     (let [result (commands/parse-args ["graph" "import"
                                        "--type" "zip"

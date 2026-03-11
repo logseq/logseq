@@ -125,6 +125,98 @@
                      :response response-preview)
           decoded)))))
 
+(defn- decode-event
+  [{:keys [type payload]}]
+  (let [decoded (when (some? payload)
+                  (try
+                    (ldb/read-transit-str payload)
+                    (catch :default _
+                      payload)))]
+    (if (and (vector? decoded)
+             (= 2 (count decoded))
+             (keyword? (first decoded)))
+      [(first decoded) (second decoded)]
+      [(when type (keyword type)) decoded])))
+
+(defn- data-line
+  [event-text]
+  (some (fn [line]
+          (when (string/starts-with? line "data: ")
+            (subs line 6)))
+        (string/split-lines event-text)))
+
+(defn connect-events!
+  [{:keys [base-url]} on-event]
+  (let [handler (or on-event (fn [_event-type _payload] nil))
+        url (js/URL. (str (string/replace (or base-url "") #"/$" "") "/v1/events"))
+        buffer (atom "")
+        *req (atom nil)
+        *res (atom nil)
+        *closed? (atom false)
+        dispatch! (fn [event-text]
+                    (when-let [line (data-line event-text)]
+                      (try
+                        (let [event-map (js->clj (js/JSON.parse line) :keywordize-keys true)
+                              [event-type payload] (decode-event event-map)]
+                          (when (some? event-type)
+                            (handler event-type payload)))
+                        (catch :default e
+                          (log/debug :event :cli.transport/events-parse-failed
+                                     :error e
+                                     :line line)))))
+        consume-chunk! (fn [chunk]
+                         (swap! buffer str (.toString chunk "utf8"))
+                         (loop []
+                           (let [current @buffer
+                                 idx (string/index-of current "\n\n")]
+                             (when (some? idx)
+                               (let [event-text (subs current 0 idx)
+                                     rest-text (subs current (+ idx 2))]
+                                 (reset! buffer rest-text)
+                                 (dispatch! event-text)
+                                 (recur))))))
+        close! (fn []
+                 (reset! *closed? true)
+                 (when-let [^js res @*res]
+                   (try
+                     (.destroy res)
+                     (catch :default _ nil)))
+                 (when-let [^js req @*req]
+                   (try
+                     (.destroy req)
+                     (catch :default _ nil)))
+                 nil)]
+    (try
+      (let [req (.request
+                 (request-module url)
+                 #js {:method "GET"
+                      :hostname (.-hostname url)
+                      :port (request-port url)
+                      :path (str (.-pathname url) (.-search url))
+                      :headers (clj->js {"Accept" "text/event-stream"})}
+                 (fn [^js res]
+                   (reset! *res res)
+                   (.on res "data"
+                        (fn [chunk]
+                          (when-not @*closed?
+                            (consume-chunk! chunk))))
+                   (.on res "error"
+                        (fn [e]
+                          (when-not @*closed?
+                            (log/debug :event :cli.transport/events-stream-error
+                                       :error e))))))]
+        (reset! *req req)
+        (.on req "error"
+             (fn [e]
+               (when-not @*closed?
+                 (log/debug :event :cli.transport/events-request-error
+                            :error e))))
+        (.end req))
+      (catch :default e
+        (log/debug :event :cli.transport/events-connect-failed
+                   :error e)))
+    {:close! close!}))
+
 (defn write-output
   [{:keys [format path data]}]
   (case format
