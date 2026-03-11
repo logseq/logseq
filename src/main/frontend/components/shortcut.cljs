@@ -381,8 +381,10 @@
 (defn- execute-undo!
   "Restore previous bindings for all affected actions."
   [snapshot]
-  (doseq [{:keys [action-id previous-binding]} (:entries snapshot)]
-    (shortcut/persist-user-shortcut! action-id previous-binding))
+  (shortcut/persist-user-shortcuts-batch!
+   (mapv (fn [{:keys [action-id previous-binding]}]
+           [action-id previous-binding])
+         (:entries snapshot)))
   (js/setTimeout #(do (shortcut/refresh!) (refresh-shortcuts-list!)) 50))
 
 (defn- conflict-action-names
@@ -398,6 +400,181 @@
        (distinct)
        (map #(str "\u201c" % "\u201d"))
        (string/join ", ")))
+
+(defn- matches-default-binding?
+  "Check if a binding vector matches the default binding for an action.
+   Uses canonical comparison to handle platform-dependent modifier aliases."
+  [action-id binding-vec]
+  (when-let [{:keys [binding]} (dh/shortcut-item action-id)]
+    (let [default-vec (cond
+                        (string? binding) [binding]
+                        (sequential? binding) (vec binding)
+                        :else nil)
+          canon-set (fn [bs]
+                      (into #{} (comp (filter string?)
+                                      (map shortcut-utils/canonicalize-binding))
+                            bs))]
+      (and (some? default-vec)
+           (= (canon-set default-vec) (canon-set binding-vec))))))
+
+(defn- compute-override-plan
+  "Compute the data needed to reassign a conflicting shortcut binding.
+   Pure function — reads current bindings via dh but performs no mutations.
+
+   Returns nil if conflicts or keystroke are empty, otherwise a map with:
+   :new-binding, :accepted-key, :undo-entries, :conflict-updates, :conflict-names"
+  [action-id conflicts keystroke current-binding]
+  (when (and (seq conflicts) (not (string/blank? keystroke)))
+    (let [accepted-key keystroke
+          new-binding (conj current-binding accepted-key)
+          canonical-accepted (shortcut-utils/canonicalize-binding accepted-key)
+          undo-entries
+          (into [{:action-id action-id :previous-binding current-binding}]
+                (for [[_g kss] conflicts
+                      v (vals kss)
+                      :let [conflicts-ids-map (second v)]
+                      [conflicting-id _handler] conflicts-ids-map]
+                  {:action-id conflicting-id
+                   :previous-binding (dh/shortcut-binding conflicting-id)}))
+          conflict-updates
+          (for [[_g kss] conflicts
+                v (vals kss)
+                :let [conflicts-ids-map (second v)]
+                [conflicting-id _handler] conflicts-ids-map]
+            (let [their-binding (dh/shortcut-binding conflicting-id)
+                  filtered (vec (remove #(= (shortcut-utils/canonicalize-binding %) canonical-accepted)
+                                        their-binding))]
+              {:action-id conflicting-id
+               :new-binding (cond
+                              (empty? filtered) []
+                              (matches-default-binding? conflicting-id filtered) nil
+                              :else filtered)}))]
+      {:new-binding new-binding
+       :accepted-key accepted-key
+       :undo-entries undo-entries
+       :conflict-updates conflict-updates
+       :conflict-names (conflict-action-names conflicts)})))
+
+(defn- compute-reset-plan
+  "Compute conflict-stripping data needed when resetting a shortcut to default.
+   For each key in the default binding, checks if another action currently owns
+   that key and plans to strip it.
+
+   Returns nil if no conflicts, otherwise a map with:
+   :undo-entries, :conflict-updates"
+  [action-id handler-id default-binding current-binding]
+  (let [all-conflicts
+        (for [b default-binding
+              :when (string? b)
+              :let [conflicts (dh/get-conflicts-by-keys b handler-id
+                                                        {:exclude-ids #{action-id} :group-global? true})]
+              :when (seq conflicts)
+              [_g kss] conflicts
+              v (vals kss)
+              :let [conflicts-ids-map (second v)]
+              [conflicting-id _handler] conflicts-ids-map]
+          {:conflicting-id conflicting-id
+           :accepted-key b})
+        ;; Group by conflicting-id, collect all keys to strip
+        conflicts-by-id
+        (reduce (fn [acc {:keys [conflicting-id accepted-key]}]
+                  (update acc conflicting-id (fnil conj #{}) accepted-key))
+                {} all-conflicts)]
+    (when (seq conflicts-by-id)
+      (let [conflict-updates
+            (for [[conflicting-id keys-to-strip] conflicts-by-id]
+              (let [their-binding (dh/shortcut-binding conflicting-id)
+                    canonical-keys (set (map shortcut-utils/canonicalize-binding keys-to-strip))
+                    filtered (vec (remove #(contains? canonical-keys
+                                                      (shortcut-utils/canonicalize-binding %))
+                                          their-binding))]
+                {:action-id conflicting-id
+                 :new-binding (cond
+                                (empty? filtered) []
+                                (matches-default-binding? conflicting-id filtered) nil
+                                :else filtered)}))
+            undo-entries
+            (into [{:action-id action-id :previous-binding current-binding}]
+                  (for [[conflicting-id _] conflicts-by-id]
+                    {:action-id conflicting-id
+                     :previous-binding (dh/shortcut-binding conflicting-id)}))]
+        {:undo-entries undo-entries
+         :conflict-updates conflict-updates}))))
+
+(defn- customize-key-handler
+  "Key handler for the customize shortcut dialog, extracted for testability.
+   ctx is a map of refs, setters, and callbacks — see destructuring below."
+  [{:keys [*rec-state-ref *keystroke-ref *current-binding-ref
+           set-rec-state! set-keystroke! set-key-conflicts! set-current-binding!
+           set-undo-snapshot! persist-binding! cancel-fn! override-fn! close-fn
+           action-id]}
+   ^js e]
+  (.preventDefault e)
+  (let [state (rum/deref *rec-state-ref)
+        key-code (.-keyCode e)
+        is-esc? (= key-code 27)
+        is-backspace? (= key-code 8)
+        is-cmd-enter? (and (= key-code 13)
+                           (or (.-metaKey e) (.-ctrlKey e)))]
+    (cond
+      ;; Esc: never recordable, always cancel/dismiss
+      is-esc?
+      (do
+        (.stopPropagation e)
+        (case state
+          :idle           (close-fn)
+          :accepted       (close-fn)
+          :esc-hint       (close-fn)
+          :removed        (close-fn)
+          :reset          (close-fn)
+          :dismissing     (close-fn)
+          :recording      (do (set-keystroke! "")
+                              (set-key-conflicts! nil)
+                              (set-rec-state! :esc-hint))
+          :conflict-cross (close-fn)
+          :conflict-same  (close-fn)
+          nil))
+
+      ;; Backspace in conflict: remove pending keystroke
+      (and is-backspace? (#{:conflict-cross :conflict-same} state))
+      (cancel-fn!)
+
+      ;; Backspace in idle/accepted: remove last committed binding
+      (and is-backspace?
+           (#{:idle :accepted :removed :reset :dismissing} state)
+           (string/blank? (rum/deref *keystroke-ref)))
+      (let [cur-binding (rum/deref *current-binding-ref)]
+        (when (seq (filter string? cur-binding))
+          (let [new-binding (vec (butlast cur-binding))
+                undo-entries [{:action-id action-id :previous-binding cur-binding}]]
+            (set-current-binding! new-binding)
+            (persist-binding! new-binding)
+            (set-undo-snapshot! {:entries undo-entries})
+            (set-rec-state! :removed))))
+
+      ;; Conflict-cross + Cmd+Enter => override
+      (and is-cmd-enter? (= state :conflict-cross))
+      (override-fn!)
+
+      ;; Conflict-cross + other keys => ignore (dead-end)
+      (= state :conflict-cross)
+      nil
+
+      ;; Any non-recording, non-conflict-cross state + key => start new recording
+      (#{:conflict-same :esc-hint :idle :accepted :removed :reset :dismissing} state)
+      (when-let [kn (shortcut/keyname e)]
+        (set-rec-state! :recording)
+        (set-keystroke! (util/trim-safe kn)))
+
+      ;; Recording + key => accumulate (max 5 keys)
+      (= state :recording)
+      (when-let [kn (shortcut/keyname e)]
+        (let [cur (rum/deref *keystroke-ref)
+              parts (string/split (string/trim cur) #" ")
+              at-limit? (and (seq (first parts)) (>= (count parts) 5))]
+          (when-not at-limit?
+            (set-key-conflicts! nil)
+            (set-keystroke! #(util/trim-safe (str % kn)))))))))
 
 (rum/defc ^:large-vars/cleanup-todo customize-shortcut-dialog-inner
   "user-binding: empty vector is for the unset state, nil is for the default binding"
@@ -443,55 +620,52 @@
 
         reset-fn!
         (fn []
-          (let [undo-entries [{:action-id k :previous-binding current-binding}]]
+          (let [plan (compute-reset-plan k handler-id binding current-binding)
+                undo-entries (or (:undo-entries plan)
+                                 [{:action-id k :previous-binding current-binding}])
+                ;; Batch: conflict stripping + self-reset in one atomic write
+                changes (cond-> [[k nil]]
+                          (:conflict-updates plan)
+                          (into (map (fn [{:keys [action-id new-binding]}]
+                                       [action-id new-binding])
+                                     (:conflict-updates plan))))]
+            (shortcut/persist-user-shortcuts-batch! changes)
             (set-current-binding! binding)
-            (shortcut/persist-user-shortcut! k nil)
-            (js/setTimeout #(do (shortcut/refresh!) (saved-cb)) 50)
+            (js/setTimeout #(do (shortcut/refresh!)
+                                (when (pos? @*global-listener-refcount)
+                                  (shortcut/unlisten-all! true))
+                                (saved-cb)) 50)
             (set-undo-snapshot! {:entries undo-entries})
-            (set-rec-state! :reset)))
+            (set-rec-state! :reset)
+            ;; Auto-close popup after brief visual feedback
+            (js/setTimeout close-fn 300)))
 
         override-fn!
         (fn []
           (let [conflicts (rum/deref *key-conflicts-ref)
                 ks (rum/deref *keystroke-ref)
                 cur-binding (rum/deref *current-binding-ref)]
-            (when (and (seq conflicts) (not (string/blank? ks)))
-              ;; Build undo snapshot BEFORE mutations
-              (let [undo-entries
-                    (into [{:action-id k :previous-binding cur-binding}]
-                          (for [[_g kss] conflicts
-                                v (vals kss)
-                                :let [conflicts-ids-map (second v)]
-                                [conflicting-id _handler] conflicts-ids-map]
-                            {:action-id conflicting-id
-                             :previous-binding (dh/shortcut-binding conflicting-id)}))
-                    accepted-key ks
-                    new-binding (conj cur-binding accepted-key)]
-
-                ;; Remove binding from all conflicting actions + persist
-                (doseq [[_g kss] conflicts
-                        v (vals kss)
-                        :let [conflicts-ids-map (second v)]
-                        [conflicting-id _handler] conflicts-ids-map]
-                  (let [their-binding (dh/shortcut-binding conflicting-id)
-                        canonical-accepted (shortcut-utils/canonicalize-binding accepted-key)
-                        filtered (vec (remove #(= (shortcut-utils/canonicalize-binding %) canonical-accepted)
-                                              their-binding))]
-                    (shortcut/persist-user-shortcut! conflicting-id
-                                                     (if (empty? filtered) [] filtered))))
-
-                ;; Add to current binding + persist
-                (set-current-binding! new-binding)
-                (persist-binding! new-binding)
-
-                ;; Store undo snapshot for inline undo
-                (set-undo-snapshot! {:entries undo-entries})
-
-                ;; Transition to :accepted with reassign info
-                (set-accepted-info! {:key accepted-key :from (conflict-action-names conflicts)})
-                (set-keystroke! "")
-                (set-key-conflicts! nil)
-                (set-rec-state! :accepted)))))]
+            (when-let [{:keys [new-binding accepted-key undo-entries conflict-updates conflict-names]}
+                       (compute-override-plan k conflicts ks cur-binding)]
+              ;; Batch-persist: conflict stripping + own binding in one atomic write
+              (let [binding' (if (= binding new-binding) nil new-binding)
+                    changes (cond-> [[k binding']]
+                              (seq conflict-updates)
+                              (into (map (fn [{:keys [action-id new-binding]}]
+                                           [action-id new-binding])
+                                         conflict-updates)))]
+                (shortcut/persist-user-shortcuts-batch! changes))
+              (set-current-binding! new-binding)
+              (js/setTimeout #(do (shortcut/refresh!)
+                                  (when (pos? @*global-listener-refcount)
+                                    (shortcut/unlisten-all! true))
+                                  (saved-cb)) 50)
+              ;; UI state transitions
+              (set-undo-snapshot! {:entries undo-entries})
+              (set-accepted-info! {:key accepted-key :from conflict-names})
+              (set-keystroke! "")
+              (set-key-conflicts! nil)
+              (set-rec-state! :accepted))))]
 
     ;; Keep refs in sync for stale-closure safety
     (rum/set-ref! *rec-state-ref rec-state)
@@ -574,74 +748,20 @@
     ;; Key handler (mount-only, uses refs for current state)
     (use-scoped-key-handler
      *ref-el
-     (fn [^js e]
-       (.preventDefault e)
-       (let [state (rum/deref *rec-state-ref)
-             key-code (.-keyCode e)
-             is-esc? (= key-code 27)
-             is-backspace? (= key-code 8)
-             is-cmd-enter? (and (= key-code 13)
-                                (or (.-metaKey e) (.-ctrlKey e)))]
-         (cond
-           ;; Esc: never recordable, always cancel/dismiss
-           is-esc?
-           (do
-             ;; Always stop propagation so Esc doesn't close the Settings dialog
-             (.stopPropagation e)
-             (case state
-               :idle           (close-fn)
-               :accepted       (close-fn)
-               :esc-hint       (close-fn)
-               :removed        (close-fn)
-               :reset          (close-fn)
-               :dismissing     (close-fn)
-               :recording      (do (set-keystroke! "")
-                                   (set-key-conflicts! nil)
-                                   (set-rec-state! :esc-hint))
-               :conflict-cross (close-fn)
-               :conflict-same  (close-fn)
-               nil))
-
-           ;; Backspace in conflict: remove pending keystroke
-           (and is-backspace? (#{:conflict-cross :conflict-same} state))
-           (cancel-fn!)
-
-           ;; Backspace in idle/accepted: remove last committed binding
-           (and is-backspace?
-                (#{:idle :accepted :removed :reset :dismissing} state)
-                (string/blank? (rum/deref *keystroke-ref)))
-           (let [cur-binding (rum/deref *current-binding-ref)]
-             (when (seq (filter string? cur-binding))
-               (let [new-binding (vec (butlast cur-binding))
-                     undo-entries [{:action-id k :previous-binding cur-binding}]]
-                 (set-current-binding! new-binding)
-                 (persist-binding! new-binding)
-                 (set-undo-snapshot! {:entries undo-entries})
-                 (set-rec-state! :removed))))
-
-           ;; Conflict-cross + Cmd+Enter => override
-           (and is-cmd-enter? (= state :conflict-cross))
-           (override-fn!)
-
-           ;; Conflict-cross + other keys => ignore (dead-end)
-           (= state :conflict-cross)
-           nil
-
-           ;; Any non-recording, non-conflict-cross state + key => start new recording
-           (#{:conflict-same :esc-hint :idle :accepted :removed :reset :dismissing} state)
-           (when-let [kn (shortcut/keyname e)]
-             (set-rec-state! :recording)
-             (set-keystroke! (util/trim-safe kn)))
-
-           ;; Recording + key => accumulate (max 5 keys)
-           (= state :recording)
-           (when-let [kn (shortcut/keyname e)]
-             (let [cur (rum/deref *keystroke-ref)
-                   parts (string/split (string/trim cur) #" ")
-                   at-limit? (and (seq (first parts)) (>= (count parts) 5))]
-               (when-not at-limit?
-                 (set-key-conflicts! nil)
-                 (set-keystroke! #(util/trim-safe (str % kn)))))))))
+     (partial customize-key-handler
+              {:*rec-state-ref       *rec-state-ref
+               :*keystroke-ref       *keystroke-ref
+               :*current-binding-ref *current-binding-ref
+               :set-rec-state!       set-rec-state!
+               :set-keystroke!       set-keystroke!
+               :set-key-conflicts!   set-key-conflicts!
+               :set-current-binding! set-current-binding!
+               :set-undo-snapshot!   set-undo-snapshot!
+               :persist-binding!     persist-binding!
+               :cancel-fn!           cancel-fn!
+               :override-fn!         override-fn!
+               :close-fn             close-fn
+               :action-id            k})
      [*auto-accept-timer *fade-timer])
 
     ;; Re-focus the popover when rec-state changes and focus has drifted outside.
