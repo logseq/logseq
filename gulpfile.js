@@ -5,7 +5,6 @@ const exec = utils.promisify(cp.exec)
 const path = require('path')
 const gulp = require('gulp')
 const del = require('del')
-const ip = require('ip')
 const replace = require('gulp-replace')
 
 const outputPath = path.join(__dirname, 'static')
