@@ -9,10 +9,11 @@
 
 (deftest unlink-graph-moves-to-unlinked-dir
   (let [graphs-dir (node-helper/create-tmp-dir "unlink-graph")
-        graph-name "test-graph"
+        graph-name "foo/bar"
         repo (str common-config/db-version-prefix graph-name)
-        graph-path (node-path/join graphs-dir graph-name)
-        unlinked-path (node-path/join graphs-dir common-config/unlinked-graphs-dir graph-name)]
+        encoded-graph-dir "foo~2Fbar"
+        graph-path (node-path/join graphs-dir encoded-graph-dir)
+        unlinked-path (node-path/join graphs-dir common-config/unlinked-graphs-dir encoded-graph-dir)]
     (fs/mkdirSync graph-path #js {:recursive true})
     (fs/writeFileSync (node-path/join graph-path "db.sqlite") "test-data")
     (with-redefs [common-graph/get-default-graphs-dir (fn [] graphs-dir)]

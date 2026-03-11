@@ -1,11 +1,7 @@
 (ns frontend.worker.graph-dir
-  "Platform-agnostic graph directory naming helpers."
-  (:require [clojure.string :as string]
-            [logseq.common.config :as common-config]))
+  "Compatibility wrapper around `logseq.common.graph-dir`."
+  (:require [logseq.common.graph-dir :as common-graph-dir]))
 
-(defn repo->graph-dir-key
-  [repo]
-  (when (seq repo)
-    (if (string/starts-with? repo common-config/db-version-prefix)
-      (subs repo (count common-config/db-version-prefix))
-      repo)))
+(def repo->graph-dir-key common-graph-dir/repo->graph-dir-key)
+(def repo->encoded-graph-dir-name common-graph-dir/repo->encoded-graph-dir-name)
+(def decode-graph-dir-name common-graph-dir/decode-graph-dir-name)
