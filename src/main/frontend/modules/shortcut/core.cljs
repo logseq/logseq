@@ -79,12 +79,33 @@
          (doseq [k (dh/shortcut-binding id)]
            (try
              (log/debug :shortcut/register-shortcut {:id id :binding k})
-             (.registerShortcut handler (util/keyname id) (shortcut-utils/undecorate-binding k))
+             ;; Defensively clear stale registration before registering.
+             (let [undec-k (shortcut-utils/undecorate-binding k)]
+               (try (.unregisterShortcut handler undec-k)
+                    (catch :default _))
+               (.registerShortcut handler (util/keyname id) undec-k))
              (catch :default e
-               (log/error :shortcut/register-shortcut {:id      id
-                                                       :binding k
-                                                       :error   e})
-               (notification/show! (string/join " " [id k (.-message e)]) :error false)))))))))
+               (let [chord-prefix? (string/includes? (.-message e) "shortcut: null")]
+                 (if chord-prefix?
+                   ;; Chord-prefix tree clash: expected when a simple key and a
+                   ;; chord starting with that key coexist on the same handler.
+                   ;; The chord becomes dormant — no user notification needed.
+                   (log/debug :shortcut/chord-prefix-clash {:id id :binding k})
+                   ;; Unexpected conflict: log full debug info for investigation.
+                   (do
+                     (let [tree (.-shortcuts_ handler)
+                           undec-k (shortcut-utils/undecorate-binding k)]
+                       (js/console.group "SHORTCUT CONFLICT DEBUG")
+                       (js/console.warn "ID:" (str id))
+                       (js/console.warn "Binding:" k "→" undec-k)
+                       (js/console.warn "Error:" (.-message e))
+                       (js/console.warn "Handler tree keys:" (js/Object.keys tree))
+                       (js/console.warn "Full tree:" (js/JSON.stringify tree js/undefined 2))
+                       (js/console.groupEnd))
+                     (log/error :shortcut/register-shortcut {:id      id
+                                                             :binding k
+                                                             :error   e})
+                     (notification/show! (string/join " " [id k (.-message e)]) :error false))))))))))))
 
 (defn unregister-shortcut!
   "Unregister a shortcut.
