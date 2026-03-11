@@ -80,21 +80,6 @@
          (string/join "\n"))
     title))
 
-(defn- strip-template-properties
-  [block]
-  (cond-> block
-    (:block/title block)
-    (update :block/title remove-template-property-lines)
-
-    (seq (:block/properties block))
-    (update :block/properties #(apply dissoc % template-file-property-names))
-
-    (seq (:block/properties-text-values block))
-    (update :block/properties-text-values #(apply dissoc % template-file-property-names))
-
-    (seq (:block/properties-order block))
-    (update :block/properties-order (fn [props-order] (vec (remove template-file-property-names props-order))))))
-
 (defn- group-block-children-by-parent
   [blocks]
   (reduce (fn [result {parent :block/parent
@@ -142,29 +127,24 @@
      (fn [{:keys [blocks preserve-empty-properties-uuids]} block]
        (if-let [template-name (get-template-name block)]
          (let [block-children (group-block-children-by-parent blocks*)
-               base-block (strip-template-properties block)
-               parent (:block/parent base-block)
-               parent-uuid (get-parent-uuid parent)
+               parent-uuid (get-parent-uuid (:block/parent block))
                content-uuid (when parent-uuid
                               (get content-uuids-by-template parent-uuid))
-               updated-parent (if content-uuid
-                                [:block/uuid content-uuid]
-                                parent)
                cleaned-block' (if content-uuid
-                                (assoc base-block :block/parent updated-parent)
-                                base-block)
+                                (assoc block :block/parent [:block/uuid content-uuid])
+                                block)
                source-preserve-empty-properties-uuids (set (get-block-subtree-uuids block-children (:block/uuid block)))
                template-root-block (-> cleaned-block'
                                        (assoc :block/title template-name)
                                        (update :block/tags (fnil conj []) :logseq.class/Template)
-                                       (dissoc :block/refs
-                                               :block/properties
-                                               :block/properties-text-values
-                                               :block/properties-order))
+                                       (dissoc :block/properties))
                template-content-block (when (template-including-parent? block)
-                                        (-> base-block
+                                        (-> (cond-> block
+                                              (seq (:block/properties block))
+                                              (update :block/properties #(apply dissoc % template-file-property-names)))
+                                            (update :block/title remove-template-property-lines)
                                             (assoc :block/uuid (get content-uuids-by-template (:block/uuid block))
-                                                   :block/parent [:block/uuid (:block/uuid base-block)]
+                                                   :block/parent [:block/uuid (:block/uuid block)]
                                                    :block/order (db-order/gen-key))
                                             (dissoc :db/id)))]
            {:blocks (cond-> blocks
@@ -593,7 +573,8 @@
   "All built-in property file ids as a set of keywords"
   (-> built-in-property-file-to-db-idents keys set
       ;; built-in-properties that map to new properties
-      (set/union #{:filters :query-table :query-properties :query-sort-by :query-sort-desc :hl-stamp :file :file-path})))
+      (set/union #{:filters :query-table :query-properties :query-sort-by :query-sort-desc :hl-stamp :file :file-path})
+      (set/union template-file-property-names)))
 
 ;; TODO: Review whether this should be using :block/title instead of file graph ids
 (def all-built-in-names
@@ -611,7 +592,8 @@
   #{:alias :tags :background-color :heading
     :query-table :query-properties :query-sort-by :query-sort-desc
     :ls-type :hl-type :hl-color :hl-page :hl-stamp :hl-value :file :file-path
-    :logseq.order-list-type :icon :public :exclude-from-graph-view :filters})
+    :logseq.order-list-type :icon :public :exclude-from-graph-view :filters
+    :template :template-including-parent})
 
 (assert (set/subset? file-built-in-property-names all-built-in-property-file-ids)
         "All file-built-in properties are used in db graph")
@@ -814,7 +796,7 @@
    {:keys [import-state user-options] :as options}]
   (let [{:keys [all-idents property-schemas]} import-state
         get-ident' #(get-ident @all-idents %)
-        user-properties (apply dissoc props (concat file-built-in-property-names template-file-property-names))]
+        user-properties (apply dissoc props file-built-in-property-names)]
     (when (seq user-properties)
       (swap! (:block-properties-text-values import-state)
              assoc
@@ -855,7 +837,6 @@
   "Updates page and block properties before their property types are inferred"
   [properties class-related-properties {:keys [preserve-empty-properties?]}]
   (let [dissoced-props (concat ignored-built-in-properties
-                               template-file-property-names
                                ;; TODO: Deal with these dissoced built-in properties
                                [:title :created-at :updated-at]
                                class-related-properties)]
