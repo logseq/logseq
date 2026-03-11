@@ -129,7 +129,7 @@ button.shortcut-feedback-action {
       select-none;
       height: 30px;
       padding: 0 10px;
-      min-width: 0;
+      min-width: 9rem;
       border-radius: 6px;
       border: 1px solid var(--lx-gray-07, var(--ls-quaternary-background-color, var(--rx-gray-07)));
       background-color: var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02)));
