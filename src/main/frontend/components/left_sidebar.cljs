@@ -123,7 +123,8 @@
     (when shortcut
       [:span.ml-1
        (ui/render-keyboard-shortcut
-        (ui/keyboard-shortcut-from-config shortcut {:pick-first? true}))])
+        (ui/keyboard-shortcut-from-config shortcut {:pick-first? true})
+        :shortcut-id shortcut)])
     more]])
 
 (rum/defc sidebar-graphs

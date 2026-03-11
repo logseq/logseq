@@ -312,6 +312,7 @@
          [:button.shortcut-filter-pill
           {:key   (name k)
            :class (when active? "shortcut-filter-pill--active")
+           :aria-pressed (str active?)
            :on-click #(set-filter-key! (when-not (or (= k :All) (= filter-key k)) k))}
           [:span.shortcut-filter-pill-title title]
           [:span.shortcut-filter-pill-count (str " \u00B7 " cnt)]])]
@@ -363,7 +364,8 @@
        {:id popup-id
         :force-popover? true
         :align "start"
-        :on-after-hide #(reset! *active-shortcut-id nil)
+        :on-after-hide #(do (reset! *active-shortcut-id nil)
+                            (when anchor-el (.focus anchor-el)))
         :content-props
         {:class "p-0 w-auto"
          :collision-padding 12
@@ -375,36 +377,6 @@
              (when (.closest target ".shortcut-row.active")
                (.preventDefault e)
                false)))}}))))
-
-(rum/defc shortcut-conflicts-display
-  [_k conflicts-map]
-
-  [:div.cp__shortcut-conflicts-list-wrap
-   (for [[g ks] conflicts-map]
-     ^{:key (str g)}
-     [:section.relative
-      [:h2 (ui/icon "alert-triangle" {:size 15})
-       [:span (t :keymap/conflicts-for-label)]
-       [:code (shortcut-utils/decorate-binding g)]]
-      [:ul
-       (for [v (vals ks)
-             :let [k (first v)
-                   vs (second v)]
-             [id' handler-id] vs
-             :let [m (dh/shortcut-item id')]
-             :when (not (nil? m))]
-         [:li
-          {:key (str id')}
-          [:button.select-none.hover:underline
-           {:on-click (fn [^js e] (open-customize-shortcut-dialog! e id'))
-            :title (str handler-id)
-            :aria-label (dh/get-shortcut-desc m)}
-           [:code.inline-block.mr-1.text-xs
-            (shortcut-utils/decorate-binding k)]
-           [:span
-            (dh/get-shortcut-desc m)
-            (ui/icon "external-link" {:size 18})]
-           [:code [:small (str id')]]]])]])])
 
 (defn- execute-undo!
   "Restore previous bindings for all affected actions."
@@ -649,14 +621,8 @@
            (= state :conflict-cross)
            nil
 
-           ;; Conflict-same / esc-hint + key => start new recording
-           (#{:conflict-same :esc-hint} state)
-           (when-let [kn (shortcut/keyname e)]
-             (set-rec-state! :recording)
-             (set-keystroke! (util/trim-safe kn)))
-
-           ;; Idle / accepted / removed / reset / dismissing + key => start recording
-           (#{:idle :accepted :removed :reset :dismissing} state)
+           ;; Any non-recording, non-conflict-cross state + key => start new recording
+           (#{:conflict-same :esc-hint :idle :accepted :removed :reset :dismissing} state)
            (when-let [kn (shortcut/keyname e)]
              (set-rec-state! :recording)
              (set-keystroke! (util/trim-safe kn)))
@@ -675,7 +641,9 @@
     ;; === V3 LAYOUT ===
     [:div.shortcut-popover
      {:tab-index -1
-      :ref       *ref-el}
+      :ref       *ref-el
+      :role      "dialog"
+      :aria-label action-name}
 
      ;; TITLE
      [:div.shortcut-popover-title action-name]
@@ -717,79 +685,81 @@
       (when (#{:idle :recording :accepted :removed :reset} render-state)
         [:span.shortcut-input-placeholder (t :keymap/press-a-shortcut)])]
 
-     ;; FEEDBACK BANNER (conditional)
-     (let [undo-link
-           (when undo-snapshot
-             [:button.shortcut-feedback-action
-              {:on-click (fn []
-                           (execute-undo! undo-snapshot)
-                           (when-let [own (some #(when (= (:action-id %) k) %) (:entries undo-snapshot))]
-                             (set-current-binding! (:previous-binding own)))
-                           (set-undo-snapshot! nil)
-                           (set-rec-state! :idle))}
-              (t :keymap/undo)])]
-       (case rec-state
-         :conflict-cross
-         [:div.shortcut-feedback.shortcut-feedback--error
-          [:span (t :keymap/used-by)
-           [:span.shortcut-feedback-name (conflict-action-names key-conflicts)]]
-          (ui/tooltip
-           (shui/button {:variant :destructive
-                         :size :xs
-                         :on-click override-fn!}
-                        (t :keymap/reassign))
-           (t :keymap/reassign-tooltip))]
+     ;; FEEDBACK BANNER (conditional) — wrapped in live region for screen readers
+     [:div {:role      (if (#{:conflict-cross :conflict-same} rec-state) "alert" "status")
+            :aria-live (if (#{:conflict-cross :conflict-same} rec-state) "assertive" "polite")}
+      (let [undo-link
+            (when undo-snapshot
+              [:button.shortcut-feedback-action
+               {:on-click (fn []
+                            (execute-undo! undo-snapshot)
+                            (when-let [own (some #(when (= (:action-id %) k) %) (:entries undo-snapshot))]
+                              (set-current-binding! (:previous-binding own)))
+                            (set-undo-snapshot! nil)
+                            (set-rec-state! :idle))}
+               (t :keymap/undo)])]
+        (case rec-state
+          :conflict-cross
+          [:div.shortcut-feedback.shortcut-feedback--error
+           [:span (t :keymap/used-by)
+            [:span.shortcut-feedback-name (conflict-action-names key-conflicts)]]
+           (ui/tooltip
+            (shui/button {:variant :destructive
+                          :size :xs
+                          :on-click override-fn!}
+                         (t :keymap/reassign))
+            (t :keymap/reassign-tooltip))]
 
-         :conflict-same
-         [:div.shortcut-feedback.shortcut-feedback--error
-          [:span (t :keymap/already-bound)]]
+          :conflict-same
+          [:div.shortcut-feedback.shortcut-feedback--error
+           [:span (t :keymap/already-bound)]]
 
-         :accepted
-         (cond
-           (:cross-context? accepted-info)
-           [:div.shortcut-feedback.shortcut-feedback--warning
-            [:span (t :keymap/also-used-for)
-             [:span.shortcut-feedback-name
-              (:cross-action-name accepted-info)]
-             (when-let [ctx (:cross-context-label accepted-info)]
-               (str (t :keymap/in-context) ctx))]]
+          :accepted
+          (cond
+            (:cross-context? accepted-info)
+            [:div.shortcut-feedback.shortcut-feedback--warning
+             [:span (t :keymap/also-used-for)
+              [:span.shortcut-feedback-name
+               (:cross-action-name accepted-info)]
+              (when-let [ctx (:cross-context-label accepted-info)]
+                (str (t :keymap/in-context) ctx))]]
 
-           (:from accepted-info)
-           [:div.shortcut-feedback.shortcut-feedback--success
-            [:span (t :keymap/reassigned-from)
-             [:span.shortcut-feedback-name (:from accepted-info)]]
-            undo-link]
+            (:from accepted-info)
+            [:div.shortcut-feedback.shortcut-feedback--success
+             [:span (t :keymap/reassigned-from)
+              [:span.shortcut-feedback-name (:from accepted-info)]]
+             undo-link]
 
-           :else
-           [:div.shortcut-feedback.shortcut-feedback--success
-            [:span (t :keymap/shortcut-added)]])
+            :else
+            [:div.shortcut-feedback.shortcut-feedback--success
+             [:span (t :keymap/shortcut-added)]])
 
-         :removed
-         [:div.shortcut-feedback.shortcut-feedback--muted
-          [:span (t :keymap/shortcut-removed)]
-          undo-link]
+          :removed
+          [:div.shortcut-feedback.shortcut-feedback--muted
+           [:span (t :keymap/shortcut-removed)]
+           undo-link]
 
-         :reset
-         [:div.shortcut-feedback.shortcut-feedback--muted
-          [:span (t :keymap/reset-to-default)]
-          undo-link]
+          :reset
+          [:div.shortcut-feedback.shortcut-feedback--muted
+           [:span (t :keymap/reset-to-default)]
+           undo-link]
 
-         :esc-hint
-         [:div.shortcut-feedback.shortcut-feedback--muted
-          [:span (t :keymap/esc-is-reserved)]]
+          :esc-hint
+          [:div.shortcut-feedback.shortcut-feedback--muted
+           [:span (t :keymap/esc-is-reserved)]]
 
-         :dismissing
-         (let [prev (rum/deref *prev-rec-state)
-               variant (case prev
-                         (:conflict-cross :conflict-same) "shortcut-feedback--error"
-                         :accepted (if (:cross-context? accepted-info)
-                                     "shortcut-feedback--warning"
-                                     "shortcut-feedback--success")
-                         "shortcut-feedback--muted")]
-           [:div {:class (str "shortcut-feedback " variant " is-dismissing")
-                  :on-animation-end #(set-rec-state! :idle)}])
+          :dismissing
+          (let [prev (rum/deref *prev-rec-state)
+                variant (case prev
+                          (:conflict-cross :conflict-same) "shortcut-feedback--error"
+                          :accepted (if (:cross-context? accepted-info)
+                                      "shortcut-feedback--warning"
+                                      "shortcut-feedback--success")
+                          "shortcut-feedback--muted")]
+            [:div {:class (str "shortcut-feedback " variant " is-dismissing")
+                   :on-animation-end #(set-rec-state! :idle)}])
 
-         nil))
+          nil))]
 
      ;; SEPARATOR + TOOLBAR
      (shui/separator)
@@ -1049,7 +1019,7 @@
                         [:li.shortcut-row.flex.items-start.justify-between.text-sm
                          {:key (str id)
                           :class (when (= active-id id) "active")
-                          :tab-index (when id 0)
+                          :tab-index (when (and id (not disabled?)) 0)
                           :role (when id "button")
                           :aria-disabled (when disabled? "true")
                           :on-click row-action

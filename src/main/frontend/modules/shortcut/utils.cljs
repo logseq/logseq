@@ -1,6 +1,7 @@
 (ns frontend.modules.shortcut.utils
   (:require [clojure.string :as string]
-            [frontend.util :as util])
+            [frontend.util :as util]
+            [lambdaisland.glogi :as log])
   (:import [goog.ui KeyboardShortcutHandler]))
 
 (def ^:private modifier-order
@@ -39,7 +40,7 @@
   (try
     (KeyboardShortcutHandler/parseStringShortcut binding)
     (catch js/Error e
-      (js/console.warn "[shortcuts] parse key error: " e) binding)))
+      (log/warn :shortcut/parse-key-error {:error e :binding binding}) binding)))
 
 (defn mod-key [binding]
   (string/replace binding #"(?i)mod"
