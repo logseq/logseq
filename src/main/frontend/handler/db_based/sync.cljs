@@ -32,94 +32,6 @@
   (or config/db-sync-http-base
       (ws->http-base config/db-sync-ws-url)))
 
-(def ^:private snapshot-text-decoder (js/TextDecoder.))
-
-(defn- ->uint8 [data]
-  (cond
-    (instance? js/Uint8Array data) data
-    (instance? js/ArrayBuffer data) (js/Uint8Array. data)
-    (string? data) (.encode (js/TextEncoder.) data)
-    :else (js/Uint8Array. data)))
-
-(defn- decode-snapshot-rows [payload]
-  (sqlite-util/read-transit-str (.decode snapshot-text-decoder (->uint8 payload))))
-
-(defn- frame-len [^js data offset]
-  (let [view (js/DataView. (.-buffer data) offset 4)]
-    (.getUint32 view 0 false)))
-
-(defn- concat-bytes
-  [^js a ^js b]
-  (cond
-    (nil? a) b
-    (nil? b) a
-    :else
-    (let [out (js/Uint8Array. (+ (.-byteLength a) (.-byteLength b)))]
-      (.set out a 0)
-      (.set out b (.-byteLength a))
-      out)))
-
-(defn- parse-framed-chunk
-  [buffer chunk]
-  (let [data (concat-bytes buffer chunk)
-        total (.-byteLength data)]
-    (loop [offset 0
-           rows []]
-      (if (< (- total offset) 4)
-        {:rows rows
-         :buffer (when (< offset total)
-                   (.slice data offset total))}
-        (let [len (frame-len data offset)
-              next-offset (+ offset 4 len)]
-          (if (<= next-offset total)
-            (let [payload (.slice data (+ offset 4) next-offset)
-                  decoded (decode-snapshot-rows payload)]
-              (recur next-offset (into rows decoded)))
-            {:rows rows
-             :buffer (.slice data offset total)}))))))
-
-(defn- finalize-framed-buffer
-  [buffer]
-  (if (or (nil? buffer) (zero? (.-byteLength buffer)))
-    []
-    (let [{:keys [rows buffer]} (parse-framed-chunk nil buffer)]
-      (if (and (seq rows) (or (nil? buffer) (zero? (.-byteLength buffer))))
-        rows
-        (throw (ex-info "incomplete framed buffer" {:buffer buffer :rows rows}))))))
-
-(defn- gzip-bytes?
-  [^js payload]
-  (and (some? payload)
-       (>= (.-byteLength payload) 2)
-       (= 31 (aget payload 0))
-       (= 139 (aget payload 1))))
-
-(defn- bytes->stream
-  [^js payload]
-  (js/ReadableStream.
-   #js {:start (fn [controller]
-                 (.enqueue controller payload)
-                 (.close controller))}))
-
-(defn- <decompress-gzip-bytes
-  [^js payload]
-  (if (exists? js/DecompressionStream)
-    (p/let [stream (bytes->stream payload)
-            decompressed (.pipeThrough stream (js/DecompressionStream. "gzip"))
-            resp (js/Response. decompressed)
-            buf (.arrayBuffer resp)]
-      (->uint8 buf))
-    (p/rejected (ex-info "gzip decompression not supported"
-                         {:type :db-sync/decompression-not-supported}))))
-
-(defn- <snapshot-response-bytes
-  [^js resp]
-  (p/let [buf (.arrayBuffer resp)
-          payload (->uint8 buf)]
-    (if (gzip-bytes? payload)
-      (<decompress-gzip-bytes payload)
-      payload)))
-
 (defn- auth-headers []
   (when-let [token (state/get-auth-id-token)]
     {"authorization" (str "Bearer " token)}))
@@ -334,53 +246,16 @@
    (<rtc-download-graph! graph-name graph-uuid true))
   ([graph-name graph-uuid graph-e2ee?]
    (state/set-state! :rtc/downloading-graph-uuid graph-uuid)
-   (state/pub-event!
-   [:rtc/log {:type :rtc.log/download
-               :sub-type :download-progress
-               :graph-uuid graph-uuid
-               :message "Preparing graph snapshot download"}])
    (let [graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
-         graph (common-config/canonicalize-db-version-repo graph-name)
-         base (http-base)]
-     (-> (if (and graph-uuid base)
-           (-> (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
-                       pull-resp (fetch-json (str base "/sync/" graph-uuid "/pull")
-                                             {:method "GET"}
-                                             {:response-schema :sync/pull})
-                       remote-tx (:t pull-resp)
-                       _ (when-not (integer? remote-tx)
-                           (throw (ex-info "non-integer remote-tx when downloading graph"
-                                           {:graph graph-name
-                                            :remote-tx remote-tx})))
-                       resp (js/fetch (str base "/sync/" graph-uuid "/snapshot/stream")
-                                      (clj->js (with-auth-headers {:method "GET"})))
-                       total-bytes (when-let [raw (some-> resp .-headers (.get "content-length"))]
-                                     (let [parsed (js/parseInt raw 10)]
-                                       (when-not (js/isNaN parsed) parsed)))
-                       _ (state/pub-event!
-                          [:rtc/log {:type :rtc.log/download
-                                     :sub-type :download-progress
-                                     :graph-uuid graph-uuid
-                                     :message (str "Start downloading graph snapshot, file size: " total-bytes)}])]
-                 (when-not (.-ok resp)
-                   (throw (ex-info "snapshot download failed"
-                                   {:graph graph-name
-                                    :status (.-status resp)})))
-                 (p/let [snapshot-bytes (<snapshot-response-bytes resp)
-                         rows (finalize-framed-buffer snapshot-bytes)]
-                   (state/pub-event!
-                    [:rtc/log {:type :rtc.log/download
-                               :sub-type :download-completed
-                               :graph-uuid graph-uuid
-                               :message "Graph snapshot downloaded"}])
-                   (when (seq rows)
-                     (state/<invoke-db-worker :thread-api/db-sync-import-kvs-rows
-                                              graph rows true graph-uuid remote-tx graph-e2ee?))
-                   (count rows))))
+         graph (common-config/canonicalize-db-version-repo graph-name)]
+     (-> (if (seq graph-uuid)
+           (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)]
+             (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
+                                      graph graph-uuid graph-e2ee?))
            (p/rejected (ex-info "db-sync missing graph info"
                                 {:type :db-sync/invalid-graph
                                  :graph-uuid graph-uuid
-                                 :base base})))
+                                 :base (http-base)})))
          (p/catch (fn [error]
                     (throw error)))
          (p/finally
