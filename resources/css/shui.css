@@ -7,7 +7,7 @@ html[data-theme=light] {
   --accent-foreground: var(--rx-gray-02-hsl);
   --input: var(--rx-gray-05-hsl);
   --secondary: 240 4.8% 95.9%;
-  --kbd-glow-top: rgba(255, 255, 255, 0.65);
+  --kbd-glow-top: transparent;
   --kbd-glow-bottom: rgba(0, 0, 0, 0.10);
 }
 
