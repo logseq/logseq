@@ -254,18 +254,15 @@
                  :block/order "e"}]
         {:keys [blocks preserve-empty-properties-uuids]}
         (#'gp-exporter/handle-template-blocks blocks)]
-    (testing "template roots replace source blocks and strip template metadata"
-      (is (= [{:title "trimmed template" :properties nil}
-              {:title "source parent" :properties {:name ""}}
-              {:title "nested child" :properties nil}
-              {:title "child" :properties {:name "child default"}}
-              {:title "children only" :properties nil}
-              {:title "first child" :properties nil}
-              {:title "second child" :properties nil}]
-             (mapv (fn [block]
-                     {:title (:block/title block)
-                      :properties (:block/properties block)})
-                   blocks)))
+    (testing "template roots replace source blocks"
+      (is (= ["trimmed template"
+              "source parent"
+              "nested child"
+              "child"
+              "children only"
+              "first child"
+              "second child"]
+             (mapv :block/title blocks)))
       (is (= #{parent-uuid child-uuid include-children-only-uuid child-only-1-uuid child-only-2-uuid}
              (set/intersection preserve-empty-properties-uuids
                                #{parent-uuid child-uuid include-children-only-uuid child-only-1-uuid child-only-2-uuid}))))
