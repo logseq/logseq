@@ -28,6 +28,15 @@
       (is (true? (get-in result [:action :allow-missing-graph])))
       (is (true? (get-in result [:action :require-missing-graph])))))
 
+  (testing "sync download action keeps progress option and explicit flag"
+    (let [default-result (sync-command/build-action :sync-download {} [] "logseq_db_demo")
+          explicit-result (sync-command/build-action :sync-download {:progress false} [] "logseq_db_demo")]
+      (is (true? (:ok? default-result)))
+      (is (= false (get-in default-result [:action :progress-explicit?])))
+      (is (true? (:ok? explicit-result)))
+      (is (= false (get-in explicit-result [:action :progress])))
+      (is (= true (get-in explicit-result [:action :progress-explicit?])))))
+
   (testing "sync config set requires name and value"
     (let [missing-both (sync-command/build-action :sync-config-set {} [] nil)
           missing-value (sync-command/build-action :sync-config-set {} ["ws-url"] nil)]
@@ -309,6 +318,133 @@
                      (is (= "logseq_db_demo" (first args))))
                    (is (= [:thread-api/db-sync-download-graph-by-id false ["logseq_db_demo" "remote-graph-id" true]]
                           (nth @invoke-calls 4)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-sync-download-uses-long-timeout-only-for-download-invoke
+  (async done
+         (let [invoke-calls (atom [])]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               transport/invoke (fn [cfg method direct-pass? args]
+                                                  (swap! invoke-calls conj {:method method
+                                                                            :direct-pass? direct-pass?
+                                                                            :args args
+                                                                            :timeout-ms (:timeout-ms cfg)})
+                                                  (case method
+                                                    :thread-api/db-sync-list-remote-graphs
+                                                    (p/resolved [{:graph-id "remote-graph-id"
+                                                                  :graph-name "demo"
+                                                                  :graph-e2ee? false}])
+                                                    :thread-api/q
+                                                    (p/resolved 0)
+                                                    :thread-api/db-sync-download-graph-by-id
+                                                    (p/resolved {:ok true})
+                                                    (p/resolved nil)))]
+                 (p/let [result (execute-with-runtime-auth {:type :sync-download
+                                                            :repo "logseq_db_demo"
+                                                            :graph "demo"}
+                                                           {:base-url "http://example"
+                                                            :data-dir "/tmp"
+                                                            :timeout-ms 10000})
+                         [set-config-before list-remote-graphs set-config-after check-empty-db download]
+                         @invoke-calls]
+                   (is (= :ok (:status result)))
+                   (is (= :thread-api/set-db-sync-config (:method set-config-before)))
+                   (is (= :thread-api/db-sync-list-remote-graphs (:method list-remote-graphs)))
+                   (is (= :thread-api/set-db-sync-config (:method set-config-after)))
+                   (is (= :thread-api/q (:method check-empty-db)))
+                   (is (= :thread-api/db-sync-download-graph-by-id (:method download)))
+                   (is (= 10000 (:timeout-ms set-config-before)))
+                   (is (= 10000 (:timeout-ms list-remote-graphs)))
+                   (is (= 10000 (:timeout-ms set-config-after)))
+                   (is (= 10000 (:timeout-ms check-empty-db)))
+                   (is (= 1800000 (:timeout-ms download)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-sync-download-progress-mode-behavior
+  (async done
+         (let [subscribe-calls (atom [])
+               close-calls (atom 0)
+               printed-lines (atom [])]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               transport/connect-events! (fn [cfg on-event]
+                                                          (swap! subscribe-calls conj {:base-url (:base-url cfg)
+                                                                                       :timeout-ms (:timeout-ms cfg)})
+                                                          (on-event :rtc-log {:type :rtc.log/download
+                                                                              :graph-uuid "remote-graph-id"
+                                                                              :message "Preparing graph snapshot download"})
+                                                          (on-event :rtc-log {:type :rtc.log/download
+                                                                              :graph-uuid "other-graph-id"
+                                                                              :message "should be filtered"})
+                                                          {:close! (fn []
+                                                                     (swap! close-calls inc))})
+                               sync-command/print-progress-line! (fn [line]
+                                                                   (swap! printed-lines conj line)
+                                                                   nil)
+                               transport/invoke (fn [_ method _direct-pass? _args]
+                                                  (case method
+                                                    :thread-api/db-sync-list-remote-graphs
+                                                    (p/resolved [{:graph-id "remote-graph-id"
+                                                                  :graph-name "demo"
+                                                                  :graph-e2ee? false}])
+                                                    :thread-api/q
+                                                    (p/resolved 0)
+                                                    :thread-api/db-sync-download-graph-by-id
+                                                    (p/resolved {:ok true})
+                                                    (p/resolved nil)))]
+                 (p/let [_ (execute-with-runtime-auth {:type :sync-download
+                                                       :repo "logseq_db_demo"
+                                                       :graph "demo"
+                                                       :progress-explicit? false}
+                                                      {:base-url "http://example"
+                                                       :data-dir "/tmp"
+                                                       :output-format nil})
+                         _ (is (= 1 (count @subscribe-calls)))
+                         _ (is (= ["Preparing graph snapshot download"] @printed-lines))
+                         _ (is (= 1 @close-calls))
+                         _ (reset! subscribe-calls [])
+                         _ (reset! printed-lines [])
+                         _ (reset! close-calls 0)
+                         _ (execute-with-runtime-auth {:type :sync-download
+                                                       :repo "logseq_db_demo"
+                                                       :graph "demo"
+                                                       :progress-explicit? false}
+                                                      {:base-url "http://example"
+                                                       :data-dir "/tmp"
+                                                       :output-format :json})
+                         _ (is (= [] @subscribe-calls))
+                         _ (is (= [] @printed-lines))
+                         _ (is (= 0 @close-calls))
+                         _ (execute-with-runtime-auth {:type :sync-download
+                                                       :repo "logseq_db_demo"
+                                                       :graph "demo"
+                                                       :progress true
+                                                       :progress-explicit? true}
+                                                      {:base-url "http://example"
+                                                       :data-dir "/tmp"
+                                                       :output-format :json})
+                         _ (is (= 1 (count @subscribe-calls)))
+                         _ (is (= ["Preparing graph snapshot download"] @printed-lines))
+                         _ (is (= 1 @close-calls))
+                         _ (reset! subscribe-calls [])
+                         _ (reset! printed-lines [])
+                         _ (reset! close-calls 0)
+                         _ (execute-with-runtime-auth {:type :sync-download
+                                                       :repo "logseq_db_demo"
+                                                       :graph "demo"
+                                                       :progress false
+                                                       :progress-explicit? true}
+                                                      {:base-url "http://example"
+                                                       :data-dir "/tmp"
+                                                       :output-format nil})]
+                   (is (= [] @subscribe-calls))
+                   (is (= [] @printed-lines))
+                   (is (= 0 @close-calls))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))

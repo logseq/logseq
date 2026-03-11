@@ -458,9 +458,13 @@
           {:keys [rows graph-id remote-tx graph-e2ee?]}
           (validate-sync-download-result! repo download-result)
           row-count (count rows)
-          _ (when (seq rows)
+          _ (if (seq rows)
               ((@thread-api/*thread-apis :thread-api/db-sync-import-kvs-rows)
-               repo rows true graph-id remote-tx graph-e2ee?))]
+               repo rows true graph-id remote-tx graph-e2ee?)
+              (sync-log-and-state/rtc-log :rtc.log/download
+                                          {:sub-type :download-completed
+                                           :graph-uuid graph-id
+                                           :message "Graph is ready!"}))]
     {:repo repo
      :graph-id graph-id
      :remote-tx remote-tx
@@ -473,9 +477,13 @@
           {:keys [rows graph-id remote-tx graph-e2ee?]}
           (validate-sync-download-result! repo download-result)
           row-count (count rows)
-          _ (when (seq rows)
+          _ (if (seq rows)
               ((@thread-api/*thread-apis :thread-api/db-sync-import-kvs-rows)
-               repo rows true graph-id remote-tx graph-e2ee?))]
+               repo rows true graph-id remote-tx graph-e2ee?)
+              (sync-log-and-state/rtc-log :rtc.log/download
+                                          {:sub-type :download-completed
+                                           :graph-uuid graph-id
+                                           :message "Graph is ready!"}))]
     {:repo repo
      :graph-id graph-id
      :remote-tx remote-tx

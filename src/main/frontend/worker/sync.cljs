@@ -14,6 +14,7 @@
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.const :as rtc-const]
             [frontend.worker.sync.crypt :as sync-crypt]
+            [frontend.worker.sync.log-and-state :as sync-log-and-state]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
@@ -2256,6 +2257,20 @@
             :else
             (<create-remote-graph! repo local-graph-e2ee?)))))))
 
+(defn- download-log!
+  [graph-id sub-type message]
+  (sync-log-and-state/rtc-log :rtc.log/download
+                              {:sub-type sub-type
+                               :graph-uuid graph-id
+                               :message message}))
+
+(defn- response-content-length
+  [^js resp]
+  (when-let [raw (some-> resp .-headers (.get "content-length"))]
+    (let [parsed (js/parseInt raw 10)]
+      (when-not (js/isNaN parsed)
+        parsed))))
+
 (defn- download-graph-with-id!
   [repo graph-id graph-e2ee?]
   (let [base (http-base-url)
@@ -2270,7 +2285,8 @@
       :else
       (do
         (require-auth-token! {:repo repo :field :auth-token})
-        (p/let [pull-resp (fetch-json (str base "/sync/" graph-id "/pull")
+        (p/let [_ (download-log! graph-id :download-progress "Preparing graph snapshot download")
+                pull-resp (fetch-json (str base "/sync/" graph-id "/pull")
                                       {:method "GET"}
                                       {:response-schema :sync/pull})
                 remote-tx (:t pull-resp)
@@ -2280,12 +2296,19 @@
                                                        :value remote-tx}))
                 resp (js/fetch (str base "/sync/" graph-id "/snapshot/stream")
                                (clj->js (with-auth-headers {:method "GET"})))
+                total-bytes (response-content-length resp)
+                _ (download-log! graph-id
+                                 :download-progress
+                                 (if (number? total-bytes)
+                                   (str "Start downloading graph snapshot, file size: " total-bytes)
+                                   "Start downloading graph snapshot"))
                 _ (when-not (.-ok resp)
                     (fail-fast :db-sync/snapshot-download-failed {:repo repo
                                                                   :graph-id graph-id
                                                                   :status (.-status resp)}))
                 payload (<snapshot-response-payload resp)
-                rows (finalize-framed-buffer payload)]
+                rows (finalize-framed-buffer payload)
+                _ (download-log! graph-id :download-completed "Graph snapshot downloaded")]
           {:repo repo
            :graph-id graph-id
            :remote-tx remote-tx
