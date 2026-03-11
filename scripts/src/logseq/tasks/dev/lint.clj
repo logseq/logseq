@@ -61,12 +61,20 @@
 (defn- validate-workers-not-in-frontend
   []
   (let [res (shell {:out :string :continue true}
-                   "grep -r --exclude-dir=worker --exclude-dir=inference_worker" "\\[frontend.worker.*:" "src/main/frontend")
+                   "git grep --untracked --exclude-standard"
+                   "\\[frontend.worker.*:" "--" "src/main/frontend")
         ;; allow reset-file b/c it's only affects tests
         allowed-exceptions #{"src/main/frontend/handler/file_based/file.cljs:            [frontend.worker.file.reset :as file-reset]"}
+        excluded-path-prefixes ["src/main/frontend/worker/"
+                                "src/main/frontend/inference_worker/"]
         invalid-lines (when (= 0 (:exit res))
-                        (remove #(some->> % (contains? allowed-exceptions))
-                                (string/split-lines (:out res))))
+                        (->> (:out res)
+                             string/split-lines
+                             (remove (fn [line]
+                                       (let [path (first (string/split line #":" 2))]
+                                         (or (contains? allowed-exceptions line)
+                                             (some #(string/starts-with? path %)
+                                                   excluded-path-prefixes)))))))
         _ (when (> (:exit res) 1) (System/exit 1))]
     (if (and (= 0 (:exit res)) (seq invalid-lines))
       (do (println "The following worker requires should not be in frontend namespaces:")
