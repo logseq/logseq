@@ -183,6 +183,10 @@ button.shortcut-feedback-action {
     background-color: hsl(var(--background));
   }
 
+  &:not(:has(.th)) > header {
+    background: linear-gradient(to bottom, hsl(var(--background)) calc(100% - 20px), transparent);
+  }
+
   .shortcut-empty-state {
     @apply flex flex-col items-center justify-center gap-2 select-none;
     min-height: calc(60dvh - var(--shortcut-header-h, 120px));
