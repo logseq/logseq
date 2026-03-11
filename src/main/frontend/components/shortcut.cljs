@@ -380,12 +380,31 @@
                (.preventDefault e)
                false)))}}))))
 
+(defn- matches-default-binding?
+  "Check if a binding vector matches the default binding for an action.
+   Uses canonical comparison to handle platform-dependent modifier aliases."
+  [action-id binding-vec]
+  (when-let [{:keys [binding]} (dh/shortcut-item action-id)]
+    (let [default-vec (cond
+                        (string? binding) [binding]
+                        (sequential? binding) (vec binding)
+                        :else nil)
+          canon-set (fn [bs]
+                      (into #{} (comp (filter string?)
+                                      (map shortcut-utils/canonicalize-binding))
+                            bs))]
+      (and (some? default-vec)
+           (= (canon-set default-vec) (canon-set binding-vec))))))
+
 (defn- execute-undo!
   "Restore previous bindings for all affected actions."
   [snapshot]
   (shortcut/persist-user-shortcuts-batch!
    (mapv (fn [{:keys [action-id previous-binding]}]
-           [action-id previous-binding])
+           [action-id (if (and (sequential? previous-binding)
+                               (matches-default-binding? action-id previous-binding))
+                        nil
+                        previous-binding)])
          (:entries snapshot)))
   (js/setTimeout #(do (shortcut/refresh!) (refresh-shortcuts-list!)) 50))
 
@@ -402,22 +421,6 @@
        (distinct)
        (map #(str "\u201c" % "\u201d"))
        (string/join ", ")))
-
-(defn- matches-default-binding?
-  "Check if a binding vector matches the default binding for an action.
-   Uses canonical comparison to handle platform-dependent modifier aliases."
-  [action-id binding-vec]
-  (when-let [{:keys [binding]} (dh/shortcut-item action-id)]
-    (let [default-vec (cond
-                        (string? binding) [binding]
-                        (sequential? binding) (vec binding)
-                        :else nil)
-          canon-set (fn [bs]
-                      (into #{} (comp (filter string?)
-                                      (map shortcut-utils/canonicalize-binding))
-                            bs))]
-      (and (some? default-vec)
-           (= (canon-set default-vec) (canon-set binding-vec))))))
 
 (defn- compute-override-plan
   "Compute the data needed to reassign a conflicting shortcut binding.
