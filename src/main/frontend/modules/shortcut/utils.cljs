@@ -12,7 +12,8 @@
    "cmd"     "meta"
    "command" "meta"
    "opt"     "alt"
-   "option"  "alt"})
+   "option"  "alt"
+   "⌥"       "alt"})
 
 (def ^:private modifier-set
   #{"ctrl" "alt" "meta" "shift"})
@@ -59,12 +60,13 @@
                     ")" "shift+0"
                     "~" "shift+`"
                     "⇧" "shift"
+                    "⌥" "alt"
                     "←" "left"
                     "→" "right"
                     "↑"  "up"
                     "↓"  "down"}]
       (-> binding
-          (string/replace #"[;=-\[\]'\(\)\~\→\←\⇧]" #(get keynames %))
+          (string/replace #"[;=-\[\]'\(\)\~\→\←\⇧⌥]" #(get keynames %))
           (string/replace #"\s+" " ")
           (mod-key)
           (string/lower-case)))))
@@ -80,7 +82,7 @@
     (-> (if (string? binding) binding (string/join "+" binding))
         (string/replace "mod" (if util/mac? "⌘" "ctrl"))
         (string/replace "meta" (if util/mac? "⌘" "⊞ win"))
-        (string/replace "alt" (if util/mac? "opt" "alt"))
+        (string/replace "alt" (if util/mac? "⌥" "alt"))
         (string/replace "shift+/" "?")
         (string/replace "left" "←")
         (string/replace "right" "→")

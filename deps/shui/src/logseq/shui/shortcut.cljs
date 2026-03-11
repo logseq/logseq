@@ -30,7 +30,7 @@
                    ("meta") (if mac? "⌘" "⊞")
                    ("return" "enter" "⏎") "⏎"
                    ("shift" "⇧") "⇧"
-                   ("alt" "option" "opt" "⌥") (if mac? "Opt" "Alt")
+                   ("alt" "option" "opt" "⌥") (if mac? "⌥" "Alt")
                    ("ctrl" "control" "⌃") "Ctrl"
                    ("space" " ") "Space"
                    ("up" "↑") "↑"
@@ -105,7 +105,7 @@
         (-> normalized
             (string/replace #"\bmod\b" (if mac? "meta" "ctrl"))
             (string/replace #"\b(?:cmd|command)\b" "meta")
-            (string/replace #"\b(?:opt|option)\b" "alt")))
+            (string/replace #"(?:\bopt\b|\boption\b|⌥)" "alt")))
 
       (coll? binding)
       (if (and (coll? (first binding)) (> (count binding) 1) (every? coll? binding))
