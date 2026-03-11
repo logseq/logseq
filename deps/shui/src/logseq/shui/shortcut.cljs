@@ -159,9 +159,9 @@
 (def ^:private press-animation-ms 160)
 
 (defn- highlight-row!
-  "Add or remove the row highlight class on the closest .shui-shortcut-row ancestor."
+  "Add or remove the row highlight class on the closest shortcut row ancestor."
   [^js container add?]
-  (when-let [^js row (or (.closest container ".shui-shortcut-row")
+  (when-let [^js row (or (.closest container ".shui-shortcut-row, .shortcut-row")
                          (.-parentElement container))]
     (if add?
       (.add (.-classList row) "shui-shortcut-row--pressed")
