@@ -214,6 +214,11 @@ button.shortcut-feedback-action {
           &.active {
             background-color: var(--lx-gray-05-alpha, var(--rx-gray-05-alpha));
           }
+
+          /* Shortcut keypress highlight — briefly flashes the row when the user presses a shortcut */
+          &.shui-shortcut-row--pressed {
+            background-color: var(--lx-gray-05-alpha, var(--rx-gray-05-alpha));
+          }
         }
 
         &.th {
