@@ -279,6 +279,7 @@ div[data-radix-popper-content-wrapper] {
   box-sizing: border-box;
   white-space: nowrap;
   min-width: 0;
+  transition: transform 140ms ease-out, box-shadow 140ms ease-out;
 }
 
 /* Glow effect for combo and separate keys */
@@ -377,33 +378,52 @@ kbd.shui-shortcut-key,
   color: hsl(var(--primary-foreground));
 }
 
-/* Key press animation */
+/* Key press animation — separate keys: animate individual kbd elements */
 kbd.shui-shortcut-key-pressed,
 .shui-shortcut-key-pressed {
   transform: translateY(1px);
 }
 
-/* Key press animation with glow - preserve glow effect */
-/* Combo keys: animate the container */
-.shui-shortcut-combo.shui-shortcut-glow.shui-shortcut-key-pressed {
-  box-shadow: rgba(255, 255, 255, 0.15) 0px 2px 0px 0px inset, rgba(0, 0, 0, 0.15) 0px 0px 0px 0px inset, 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-/* Separate keys: animate individual keys */
 .shui-shortcut-separate.shui-shortcut-glow kbd.shui-shortcut-key-pressed {
   box-shadow: rgba(255, 255, 255, 0.15) 0px 2px 0px 0px inset, rgba(0, 0, 0, 0.15) 0px 0px 0px 0px inset, 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
-/* Key press animation without glow */
-.shui-shortcut-combo:not(.shui-shortcut-glow) kbd.shui-shortcut-key-pressed,
 .shui-shortcut-separate:not(.shui-shortcut-glow) kbd.shui-shortcut-key-pressed {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
-/* Row highlight animation */
-.shui-shortcut-row--pressed {
-  background-color: rgba(223, 239, 254, 0.1);
-  transition: background-color 160ms ease-out;
+/* Key press animation — combo keys: animate the container (the whole keycap) */
+.shui-shortcut-combo.shui-shortcut-key-pressed {
+  transform: translateY(1px);
+}
+
+.shui-shortcut-combo.shui-shortcut-glow.shui-shortcut-key-pressed {
+  box-shadow: rgba(255, 255, 255, 0.15) 0px 2px 0px 0px inset, rgba(0, 0, 0, 0.15) 0px 0px 0px 0px inset, 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.shui-shortcut-combo:not(.shui-shortcut-glow).shui-shortcut-key-pressed {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Row highlight animation — accent band sweep (only on actual row elements) */
+.shui-shortcut-row.shui-shortcut-row--pressed,
+.shortcut-row.shui-shortcut-row--pressed {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    transparent 35%,
+    rgba(223, 239, 254, 0.08) 50%,
+    transparent 65%,
+    transparent 100%
+  );
+  background-size: 300% 100%;
+  background-repeat: no-repeat;
+  animation: shortcut-row-sweep 700ms ease-out forwards;
+}
+
+@keyframes shortcut-row-sweep {
+  from { background-position: -50% 0; }
+  to   { background-position: 150% 0; }
 }
 
 /* Ensure consistent height for shortcut containers */
@@ -417,14 +437,16 @@ kbd.shui-shortcut-key-pressed,
 @media (prefers-reduced-motion: reduce) {
   kbd.shui-shortcut-key,
   .shui-shortcut-key,
-  .shui-shortcut-row--pressed {
+  .shui-shortcut-combo {
     transition: none;
     transform: none;
     box-shadow: 0 0 0 transparent;
   }
-  
-  .shui-shortcut-row--pressed {
-    background-color: transparent;
+
+  .shui-shortcut-row.shui-shortcut-row--pressed,
+  .shortcut-row.shui-shortcut-row--pressed {
+    animation: none !important;
+    background-image: none !important;
   }
 }
 
