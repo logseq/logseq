@@ -52,11 +52,14 @@
            ;; goog.events.listen in bubble phase). On the same element,
            ;; bubble-phase listeners fire in registration order, so KeyHandler
            ;; processes the key first, then this blocker calls stopPropagation
-           ;; to prevent the event from reaching js/window. preventDefault
-           ;; suppresses browser-native actions (Cmd+F, Cmd+S, etc.).
+           ;; to prevent the event from reaching js/window.  preventDefault
+           ;; is intentionally omitted here — the recording key-handler-fn
+           ;; already calls (.preventDefault e) via the KeyHandler KEY event,
+           ;; and calling it again on the raw keydown would suppress the
+           ;; subsequent keypress that goog.events.KeyHandler may need to
+           ;; resolve character keys.
            bubble-blocker (fn [^js e]
-                            (.stopPropagation e)
-                            (.preventDefault e))
+                            (.stopPropagation e))
            _ (.addEventListener el "keydown" bubble-blocker false)
            _ (.addEventListener el "keypress" bubble-blocker false)
            _ (.addEventListener el "keyup" bubble-blocker false)
@@ -420,6 +423,7 @@
              :when m]
          (dh/get-shortcut-desc m))
        (distinct)
+       (map #(str "\u201c" % "\u201d"))
        (string/join ", ")))
 
 (rum/defc ^:large-vars/cleanup-todo customize-shortcut-dialog-inner
@@ -727,7 +731,7 @@
          :conflict-cross
          [:div.shortcut-feedback.shortcut-feedback--error
           [:span (t :keymap/used-by)
-           [:span.shortcut-feedback-name (str "\u201c" (conflict-action-names key-conflicts) "\u201d")]]
+           [:span.shortcut-feedback-name (conflict-action-names key-conflicts)]]
           (ui/tooltip
            (shui/button {:variant :destructive
                          :size :xs
@@ -745,14 +749,14 @@
            [:div.shortcut-feedback.shortcut-feedback--warning
             [:span (t :keymap/also-used-for)
              [:span.shortcut-feedback-name
-              (str "\u201c" (:cross-action-name accepted-info) "\u201d")]
+              (:cross-action-name accepted-info)]
              (when-let [ctx (:cross-context-label accepted-info)]
                (str (t :keymap/in-context) ctx))]]
 
            (:from accepted-info)
            [:div.shortcut-feedback.shortcut-feedback--success
             [:span (t :keymap/reassigned-from)
-             [:span.shortcut-feedback-name (str "\u201c" (:from accepted-info) "\u201d")]]
+             [:span.shortcut-feedback-name (:from accepted-info)]]
             undo-link]
 
            :else
