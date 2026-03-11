@@ -148,8 +148,9 @@
                           (shui/shortcut-press! b true)
                           (catch :default e
                             (log/warn :shortcut-press-animation-error {:binding b :error e})))))))
-                ;; trigger fn
-                (when dispatch-fn
+                ;; trigger fn — suppress on keymap settings page (animate-only mode)
+                (when (and dispatch-fn
+                           (not (= "keymap" (.. js/document -body -dataset -settingsTab))))
                   (plugin-handler/hook-lifecycle-fn! id dispatch-fn e))))
           install-id (random-uuid)
           data {install-id
