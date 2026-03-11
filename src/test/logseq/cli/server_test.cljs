@@ -48,6 +48,12 @@
         expected (node-path/join data-dir "demo" "db-worker.lock")]
     (is (= expected (cli-server/lock-path data-dir repo)))))
 
+(deftest lock-path-encodes-special-characters-in-graph-dir
+  (let [data-dir "/tmp/logseq-db-worker"
+        repo "logseq_db_foo/bar"
+        expected (node-path/join data-dir "foo~2Fbar" "db-worker.lock")]
+    (is (= expected (cli-server/lock-path data-dir repo)))))
+
 (deftest db-worker-runtime-script-path-defaults-to-packaged-dist-target
   (is (= (node-path/join js/__dirname "../dist/db-worker-node.js")
          (cli-server/db-worker-runtime-script-path))))

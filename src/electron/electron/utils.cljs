@@ -7,6 +7,7 @@
             [electron.configs :as cfgs]
             [electron.logger :as logger]
             [logseq.cli.common.graph :as cli-common-graph]
+            [logseq.common.graph-dir :as graph-dir]
             [logseq.common.config :as common-config]
             [promesa.core :as p]))
 
@@ -244,7 +245,7 @@
              (string/starts-with? graph-name common-config/db-version-prefix))
     (let [repo (common-config/canonicalize-db-version-repo graph-name)]
       (node-path/join (cli-common-graph/get-db-graphs-dir)
-                      (common-config/strip-leading-db-version-prefix repo)))))
+                      (graph-dir/repo->encoded-graph-dir-name repo)))))
 
 (comment
   (defn get-graph-name

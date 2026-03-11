@@ -5,6 +5,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.crypt.Md5]
+            [logseq.common.graph-dir :as common-graph-dir]
             [logseq.common.cognito-config :as cognito-config]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
@@ -252,7 +253,7 @@
   (path/path-join (get-in @state/state [:system/info :home-dir])
                   "logseq"
                   "graphs"
-                  (db-graph-name repo)))
+                  (common-graph-dir/repo->encoded-graph-dir-name repo)))
 
 (defn get-electron-backup-dir
   [repo]
