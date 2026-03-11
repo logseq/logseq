@@ -37,19 +37,23 @@
   (merge global-spec* (or spec {})))
 
 (defn command-entry
-  [cmds command desc spec]
-  (let [spec* (merge-spec spec)]
-    {:cmds cmds
-     :command command
-     :desc desc
-     :spec spec*
-     :restrict true
-     :fn (fn [{:keys [opts args]}]
-           {:command command
-            :cmds cmds
-            :spec spec*
-            :opts opts
-            :args args})}))
+  ([cmds command desc spec]
+   (command-entry cmds command desc spec nil))
+  ([cmds command desc spec {:keys [long-desc]}]
+   (let [spec* (merge-spec spec)]
+     {:cmds cmds
+      :command command
+      :desc desc
+      :long-desc long-desc
+      :spec spec*
+      :restrict true
+      :fn (fn [{:keys [opts args]}]
+            {:command command
+             :cmds cmds
+             :spec spec*
+             :long-desc long-desc
+             :opts opts
+             :args args})})))
 
 (defn- command-usage
   [cmds spec]
@@ -124,16 +128,17 @@
                   "  See `logseq <command> --help`"])))
 
 (defn command-summary
-  [{:keys [cmds spec]}]
+  [{:keys [cmds spec long-desc]}]
   (let [command-spec (apply dissoc spec (keys global-spec*))]
     (string/join "\n"
-                 [(str "Usage: logseq " (command-usage cmds spec))
-                  ""
-                  (str "Global " (style/bold "options") ":")
-                  (format-opts global-spec*)
-                  ""
-                  (str "Command " (style/bold "options") ":")
-                  (format-opts command-spec)])))
+                 (cond-> [(str "Usage: logseq " (command-usage cmds spec))]
+                   (seq long-desc) (conj "" long-desc)
+                   true (conj ""
+                              (str "Global " (style/bold "options") ":")
+                              (format-opts global-spec*)
+                              ""
+                              (str "Command " (style/bold "options") ":")
+                              (format-opts command-spec))))))
 
 (defn normalize-opts
   [opts]
