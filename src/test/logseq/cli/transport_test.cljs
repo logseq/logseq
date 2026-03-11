@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is async testing]]
             [logseq.cli.test-helper :as test-helper]
             [logseq.cli.transport :as transport]
+            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (def ^:private fs (js/require "fs"))
@@ -141,6 +142,45 @@
                    (is (= "ok" result))
                    (is (nil? @auth-header))
                    (p/let [_ (stop!)] true)))
+               (p/then (fn [_] (done)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest test-connect-events-decodes-rtc-log-and-cleans-up
+  (async done
+         (let [received (atom [])
+               client-closed? (atom false)]
+           (-> (p/let [{:keys [url stop!]} (start-server
+                                            (fn [^js req ^js res]
+                                              (if (= "/v1/events" (.-url req))
+                                                (do
+                                                  (.writeHead res 200 #js {"Content-Type" "text/event-stream"
+                                                                           "Cache-Control" "no-cache"
+                                                                           "Connection" "keep-alive"})
+                                                  (let [payload (ldb/write-transit-str {:type :rtc.log/download
+                                                                                        :graph-uuid "graph-1"
+                                                                                        :message "Preparing graph snapshot download"})
+                                                        data (js/JSON.stringify #js {:type "rtc-log"
+                                                                                     :payload payload})]
+                                                    (.write res (str "data: " data "\n\n")))
+                                                  (.on req "close" (fn []
+                                                                     (reset! client-closed? true))))
+                                                (do
+                                                  (.writeHead res 404 #js {"Content-Type" "text/plain"})
+                                                  (.end res "not-found")))))]
+                 (let [{:keys [close!]} (transport/connect-events! {:base-url url}
+                                                                    (fn [event-type payload]
+                                                                      (swap! received conj [event-type payload])))]
+                   (p/let [_ (p/delay 50)
+                           _ (close!)
+                           _ (p/delay 50)]
+                     (is (= [[:rtc-log {:type :rtc.log/download
+                                        :graph-uuid "graph-1"
+                                        :message "Preparing graph snapshot download"}]]
+                            @received))
+                     (is (= true @client-closed?))
+                     (stop!))))
                (p/then (fn [_] (done)))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))
