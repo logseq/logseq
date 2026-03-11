@@ -200,7 +200,7 @@ button.shortcut-feedback-action {
 
         &.shortcut-row {
           @apply rounded-md cursor-pointer select-none py-1 px-2 -mx-1 flex-wrap min-w-0;
-          transition: background-color 100ms ease, opacity 100ms ease;
+          transition: background-color 100ms ease, opacity 100ms ease, box-shadow 100ms ease;
 
           &:hover {
             background-color: var(--lx-gray-04-alpha, var(--rx-gray-04-alpha));
@@ -219,12 +219,24 @@ button.shortcut-feedback-action {
           &.shui-shortcut-row--pressed {
             background-color: var(--lx-gray-05-alpha, var(--rx-gray-05-alpha));
           }
+
+          /* Keyboard navigation focus ring — two levels above hover for clear distinction */
+          &:focus-visible {
+            background-color: var(--lx-gray-06-alpha, var(--rx-gray-06-alpha));
+            box-shadow: inset 0 0 0 2px var(--lx-accent-09, hsl(var(--primary)));
+            outline: none;
+          }
         }
 
         &.th {
           @apply rounded mb-2 sticky cursor-pointer
           select-none active:opacity-80 px-2 py-1 z-[1];
           top: var(--shortcut-header-h, 0px);
+          outline: none;
+
+          &:focus-visible {
+            box-shadow: inset 0 0 0 2px var(--lx-accent-09, hsl(var(--primary)));
+          }
 
           background-color: var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)));
         }
@@ -259,13 +271,13 @@ button.shortcut-feedback-action {
         }
       }
 
-      /* CSS-only hover dimming: dim all rows except hovered */
-      &:hover li.shortcut-row:not(:hover):not(.active) {
+      /* CSS-only hover dimming: dim all rows except hovered, active, or keyboard-focused */
+      &:hover li.shortcut-row:not(:hover):not(.active):not(:focus-visible) {
         opacity: 0.5;
       }
 
-      /* When popover is open: dim non-active rows, but restore on hover */
-      &:has(.active) li.shortcut-row:not(.active) {
+      /* When popover is open: dim non-active rows, but restore on hover or keyboard focus */
+      &:has(.active) li.shortcut-row:not(.active):not(:focus-visible) {
         opacity: 0.5;
 
         &:hover {
