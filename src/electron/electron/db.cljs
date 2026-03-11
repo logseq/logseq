@@ -4,6 +4,7 @@
             ["path" :as node-path]
             [electron.backup-file :as backup-file]
             [logseq.cli.common.graph :as cli-common-graph]
+            [logseq.common.graph-dir :as graph-dir]
             [logseq.db.common.sqlite :as common-sqlite]))
 
 (defn ensure-graphs-dir!
