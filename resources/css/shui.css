@@ -7,6 +7,8 @@ html[data-theme=light] {
   --accent-foreground: var(--rx-gray-02-hsl);
   --input: var(--rx-gray-05-hsl);
   --secondary: 240 4.8% 95.9%;
+  --kbd-glow-top: rgba(255, 255, 255, 0.65);
+  --kbd-glow-bottom: rgba(0, 0, 0, 0.10);
 }
 
 html[data-theme=dark] {
@@ -24,6 +26,8 @@ html[data-theme=dark] {
   --popover: 0 0% 7%;
   --popover-foreground: 0 0 95%;
   --input: 0 0% 16%;
+  --kbd-glow-top: rgba(255, 255, 255, 0.15);
+  --kbd-glow-bottom: rgba(0, 0, 0, 0.25);
 }
 
 html {
@@ -279,20 +283,21 @@ div[data-radix-popper-content-wrapper] {
   box-sizing: border-box;
   white-space: nowrap;
   min-width: 0;
-  transition: transform 140ms ease-out, box-shadow 140ms ease-out;
+  transition: transform 140ms ease-out, box-shadow 140ms ease-out, filter 140ms ease-out;
+  filter: brightness(1);
 }
 
 /* Glow effect for combo and separate keys */
-/* Uses absolute white/black for physical light simulation (top highlight, bottom shadow) */
+/* Top highlight and bottom shadow use theme-aware variables for light/dark visibility */
 /* Combo keys: glow on container (wraps all keys together) */
 .shui-shortcut-combo.shui-shortcut-glow {
-  box-shadow: rgba(255, 255, 255, 0.15) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.15) 0px -1px 0px 0px inset;
+  box-shadow: var(--kbd-glow-top) 0px 1px 0px 0px inset, var(--kbd-glow-bottom) 0px -1px 0px 0px inset;
   border: none;
 }
 
 /* Separate keys: glow on individual keys (not container) */
 .shui-shortcut-separate.shui-shortcut-glow kbd.shui-shortcut-key {
-  box-shadow: rgba(255, 255, 255, 0.15) 0px 1px 0px 0px inset, rgba(0, 0, 0, 0.15) 0px -1px 0px 0px inset;
+  box-shadow: var(--kbd-glow-top) 0px 1px 0px 0px inset, var(--kbd-glow-bottom) 0px -1px 0px 0px inset;
   border: none;
 }
 
@@ -353,8 +358,9 @@ kbd.shui-shortcut-key,
   padding: 2px 4px;
   line-height: 16px;
   min-width: fit-content;
-  transition: transform 140ms ease-out, box-shadow 140ms ease-out;
+  transition: transform 140ms ease-out, box-shadow 140ms ease-out, filter 140ms ease-out;
   box-shadow: 0 0 0 transparent;
+  filter: brightness(1);
 }
 
 /* Keys in separate containers get their own styling */
@@ -382,27 +388,21 @@ kbd.shui-shortcut-key,
 kbd.shui-shortcut-key-pressed,
 .shui-shortcut-key-pressed {
   transform: translateY(1px);
+  filter: brightness(0.92);
 }
 
 .shui-shortcut-separate.shui-shortcut-glow kbd.shui-shortcut-key-pressed {
-  box-shadow: rgba(255, 255, 255, 0.15) 0px 2px 0px 0px inset, rgba(0, 0, 0, 0.15) 0px 0px 0px 0px inset, 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-.shui-shortcut-separate:not(.shui-shortcut-glow) kbd.shui-shortcut-key-pressed {
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--kbd-glow-top) 0px 2px 0px 0px inset, var(--kbd-glow-bottom) 0px -0.5px 0px 0px inset;
 }
 
 /* Key press animation — combo keys: animate the container (the whole keycap) */
 .shui-shortcut-combo.shui-shortcut-key-pressed {
   transform: translateY(1px);
+  filter: brightness(0.92);
 }
 
 .shui-shortcut-combo.shui-shortcut-glow.shui-shortcut-key-pressed {
-  box-shadow: rgba(255, 255, 255, 0.15) 0px 2px 0px 0px inset, rgba(0, 0, 0, 0.15) 0px 0px 0px 0px inset, 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-.shui-shortcut-combo:not(.shui-shortcut-glow).shui-shortcut-key-pressed {
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--kbd-glow-top) 0px 2px 0px 0px inset, var(--kbd-glow-bottom) 0px -0.5px 0px 0px inset;
 }
 
 /* Row highlight animation — accent band sweep (only on actual row elements) */
@@ -440,6 +440,7 @@ kbd.shui-shortcut-key-pressed,
   .shui-shortcut-combo {
     transition: none;
     transform: none;
+    filter: none;
     box-shadow: 0 0 0 transparent;
   }
 

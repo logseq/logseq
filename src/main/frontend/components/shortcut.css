@@ -263,7 +263,7 @@ button.shortcut-feedback-action {
           row-gap: 6px;
           max-width: 55%;
           min-width: 0;
-          overflow: hidden;
+          overflow: visible;
 
           &.disabled {
             @apply opacity-60 cursor-default;
