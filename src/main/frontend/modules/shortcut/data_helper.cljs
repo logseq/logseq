@@ -181,6 +181,17 @@
     #{from-handler-id :shortcut.handler/global-prevent-default}
     #{from-handler-id}))
 
+(defn- binding-prefix-overlap?
+  "Returns true when two parsed bindings share the same full prefix up to the
+   shorter binding, but are not exactly equal."
+  [a b]
+  (and (sequential? a)
+       (sequential? b)
+       (not= a b)
+       (let [prefix-len (min (count a) (count b))]
+         (and (pos? prefix-len)
+              (= (take prefix-len a) (take prefix-len b))))))
+
 (defn- handlers-co-active?
   "Two handler groups conflict (can be active simultaneously) unless one is
    editing-only and the other is non-editing-only — those are mutually exclusive
@@ -202,7 +213,9 @@
                            :shortcut.handler/global-prevent-default
                            :shortcut.handler/misc}
          ks-bindings (get-bindings-keys-map)
-         handler-ids (should-be-included-to-global-handler handler-id)
+         handler-ids (if group-global?
+                       (should-be-included-to-global-handler handler-id)
+                       #{handler-id})
          global? (when group-global? (seq (set/intersection global-handlers handler-ids)))]
      (->> (if (string? ks) [ks] ks)
           (map (fn [k]
@@ -212,28 +225,31 @@
                          same-key?
                          (fn [[k' _]]
                            (when (sequential? input-binding)
-                             (= input-binding k')))
+                             (or (= input-binding k')
+                                 (binding-prefix-overlap? input-binding k'))))
 
                          into-conflict-refs
                          (fn [[k o]]
                            (when-let [{:keys [key refs]} o]
                              [k [key (reduce-kv (fn [r id handler-id']
-                                                  (if (and
-                                                       (not (contains? exclude-ids id))
-                                                       ;; Only exact key matches are blocking conflicts.
-                                                       ;; Chord-prefix overlaps (mod+c vs mod+c mod+s)
-                                                       ;; coexist at runtime on separate handler instances,
-                                                       ;; and stripping them is destructive (chords can't
-                                                       ;; be re-recorded in the UI). Dormant chords
-                                                       ;; auto-restore when the conflicting key is freed.
-                                                       (= input-binding k)
-                                                       (or (= handler-ids #{handler-id'})
-                                                           (and (set? handler-ids) (contains? handler-ids handler-id'))
-                                                           (and global?
-                                                                (contains? global-handlers handler-id')
-                                                                (every? #(handlers-co-active? % handler-id') handler-ids))))
-                                                    (assoc r id handler-id')
-                                                    r))
+                                                  (let [same-handler? (= handler-id handler-id')
+                                                        handler-match?
+                                                        (or same-handler?
+                                                            (and group-global?
+                                                                 (or (= handler-ids #{handler-id'})
+                                                                     (and (set? handler-ids) (contains? handler-ids handler-id'))
+                                                                     (and global?
+                                                                          (contains? global-handlers handler-id')
+                                                                          (every? #(handlers-co-active? % handler-id') handler-ids)))))
+                                                        binding-match?
+                                                        (or (= input-binding k)
+                                                            (and same-handler?
+                                                                 (binding-prefix-overlap? input-binding k)))]
+                                                    (if (and (not (contains? exclude-ids id))
+                                                             handler-match?
+                                                             binding-match?)
+                                                      (assoc r id handler-id')
+                                                      r)))
                                                 {} refs)]]))]
 
                      [k' (->> ks-bindings

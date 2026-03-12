@@ -84,6 +84,14 @@
   (when-not (nil? v)
     (if (sequential? v) (vec v) [v])))
 
+(defn- editable-binding-vec
+  [binding]
+  (cond
+    (false? binding) []
+    (nil? binding) []
+    (sequential? binding) (vec (filter string? binding))
+    :else [binding]))
+
 (declare customize-shortcut-dialog-inner)
 
 (rum/defc keyboard-filter-record-inner
@@ -381,8 +389,9 @@
 (defn- open-customize-shortcut-dialog!
   [^js anchor-el id]
   (when-let [{:keys [binding user-binding] :as m} (dh/shortcut-item id)]
-    (let [binding (to-vector binding)
-          user-binding (and user-binding (to-vector user-binding))
+    (let [binding (editable-binding-vec binding)
+          user-binding (when-not (nil? user-binding)
+                         (editable-binding-vec user-binding))
           popup-id (keyword (str "customize-shortcut-" (name id)))
           label (dh/get-shortcut-desc (assoc m :id id))
           close-fn! #(do (reset! *active-shortcut-id nil)
@@ -423,16 +432,21 @@
    Uses canonical comparison to handle platform-dependent modifier aliases."
   [action-id binding-vec]
   (when-let [{:keys [binding]} (dh/shortcut-item action-id)]
-    (let [default-vec (cond
-                        (string? binding) [binding]
-                        (sequential? binding) (vec binding)
-                        :else nil)
-          canon-set (fn [bs]
-                      (into #{} (comp (filter string?)
-                                      (map shortcut-utils/canonicalize-binding))
-                            bs))]
-      (and (some? default-vec)
-           (= (canon-set default-vec) (canon-set binding-vec))))))
+    (let [canon-set (fn [bs]
+                      (into #{} (map shortcut-utils/canonicalize-binding) (editable-binding-vec bs)))]
+      (= (canon-set binding) (canon-set binding-vec)))))
+
+(defn persisted-binding-value
+  "Returns the value that should be stored for a shortcut customization."
+  [action-id binding-vec]
+  (let [binding-vec (editable-binding-vec binding-vec)]
+    (if (matches-default-binding? action-id binding-vec)
+      nil
+      binding-vec)))
+
+(defn customizable-shortcut-row?
+  [id _disabled?]
+  (boolean id))
 
 (defn- execute-undo!
   "Restore previous bindings for all affected actions."
@@ -625,7 +639,7 @@
   [k action-name binding user-binding {:keys [saved-cb close-fn]}]
   (let [*ref-el (rum/use-ref nil)
         [keystroke set-keystroke!] (rum/use-state "")
-        [current-binding set-current-binding!] (rum/use-state (or user-binding binding))
+        [current-binding set-current-binding!] (rum/use-state (if (nil? user-binding) binding user-binding))
         [key-conflicts set-key-conflicts!] (rum/use-state nil)
         [rec-state set-rec-state!] (rum/use-state :idle)
         [accepted-info set-accepted-info!] (rum/use-state nil)
@@ -646,7 +660,7 @@
 
         persist-binding!
         (fn [new-binding]
-          (let [binding' (if (= binding new-binding) nil new-binding)]
+          (let [binding' (persisted-binding-value k new-binding)]
             (shortcut/persist-user-shortcut! k binding')
             (js/setTimeout #(do (shortcut/refresh!)
                                 ;; refresh! reinstalls global handlers unconditionally.
@@ -692,7 +706,7 @@
             (when-let [{:keys [new-binding accepted-key undo-entries conflict-updates conflict-names]}
                        (compute-override-plan k conflicts ks cur-binding)]
               ;; Batch-persist: conflict stripping + own binding in one atomic write
-              (let [binding' (if (= binding new-binding) nil new-binding)
+              (let [binding' (persisted-binding-value k new-binding)
                     changes (cond-> [[k binding']]
                               (seq conflict-updates)
                               (into (map (fn [{:keys [action-id new-binding]}]
@@ -948,7 +962,7 @@
       [:div.shortcut-toolbar-left
        ;; Reset (only when changed from default)
        (when (and (#{:idle :accepted :removed} render-state)
-                  (not= current-binding binding))
+                  (some? (persisted-binding-value k current-binding)))
          [:button.shortcut-toolbar-action.shortcut-toolbar-reset
           {:on-click reset-fn!}
           (ui/icon "rotate" {:size 12})
@@ -1267,7 +1281,7 @@
                                    (not unset?)
                                    (matches-keystroke? binding user-binding keystroke)))
 
-                      (let [row-action (when (and id (not disabled?))
+                      (let [row-action (when (customizable-shortcut-row? id disabled?)
                                          (fn [^js e]
                                            (if (= active-id id)
                                              (let [popup-id (keyword (str "customize-shortcut-" (name id)))]
@@ -1278,9 +1292,9 @@
                         [:li.shortcut-row.flex.items-start.justify-between.text-sm
                          {:key (str id)
                           :class (when (= active-id id) "active")
-                          :tab-index (when (and id (not disabled?)) -1)
+                          :tab-index (when (customizable-shortcut-row? id disabled?) -1)
                           :role (when id "button")
-                          :aria-disabled (when disabled? "true")
+                          :aria-disabled (when-not (customizable-shortcut-row? id disabled?) "true")
                           :on-click row-action
                           :on-key-down (when row-action
                                          (fn [^js e]
