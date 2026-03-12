@@ -28,6 +28,7 @@
           :shortcut.category/plugins
           :shortcut.category/others))
 
+(def max-key-sequence-length 5)
 (defonce *refresh-sentry (atom 0))
 (defn refresh-shortcuts-list! [] (reset! *refresh-sentry (inc @*refresh-sentry)))
 (defonce *global-listener-refcount (atom 0))
@@ -179,7 +180,7 @@
                    ;; During accumulation, append
                    (let [cur (rum/deref *keystroke-ref)
                          parts (string/split (string/trim cur) #" ")
-                         at-limit? (and (seq (first parts)) (>= (count parts) 5))]
+                         at-limit? (and (seq (first parts)) (>= (count parts) max-key-sequence-length))]
                      (when-not at-limit?
                        (let [new-ks (util/trim-safe (str cur kn))]
                          (set-accumulating! true)
@@ -615,7 +616,7 @@
       (when-let [kn (shortcut/keyname e)]
         (let [cur (rum/deref *keystroke-ref)
               parts (string/split (string/trim cur) #" ")
-              at-limit? (and (seq (first parts)) (>= (count parts) 5))]
+              at-limit? (and (seq (first parts)) (>= (count parts) max-key-sequence-length))]
           (when-not at-limit?
             (set-key-conflicts! nil)
             (set-keystroke! #(util/trim-safe (str % kn)))))))))
