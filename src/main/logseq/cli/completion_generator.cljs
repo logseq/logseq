@@ -346,14 +346,19 @@ _logseq_queries() {
         global-spec (-> table first :spec
                         (select-keys [:help :version :config :graph :data-dir
                                       :timeout-ms :output :verbose]))
-        ;; Generate leaf command functions
+        ;; Collect group names that have subcommands (dispatchers own these)
+        group-set (set (group-commands table))
+        ;; Generate leaf command functions (skip group roots — dispatchers own those)
         leaf-fns (->> groups
-                      (mapcat (fn [[_ entries]]
-                                (mapv (fn [entry]
-                                        (zsh-leaf-function
-                                         (cmd->func-name (:cmds entry))
-                                         (:spec entry)))
-                                      entries)))
+                      (mapcat (fn [[group-name entries]]
+                                (->> entries
+                                     (remove (fn [entry]
+                                               (and (= 1 (count (:cmds entry)))
+                                                    (contains? group-set group-name))))
+                                     (mapv (fn [entry]
+                                             (zsh-leaf-function
+                                              (cmd->func-name (:cmds entry))
+                                              (:spec entry)))))))
                       (string/join "\n"))
         ;; Generate group dispatchers
         group-fns (->> groups
@@ -641,73 +646,119 @@ _logseq_compadd_lines() {
   (let [groups (extract-groups table)]
     (->> (keys groups) sort (string/join " "))))
 
-(defn- bash-context-dependent-prev-cases
-  "Generate context-dependent prev-word cases (e.g., --name means different things
-   in different commands, --sort has different values per list subcommand)."
-  [table]
-  (let [groups (extract-groups table)
-        ;; Find all --name contexts
-        name-cases
+(defn- option-completion-sig
+  "Extract completion-relevant signature from a spec-map entry."
+  [{:keys [coerce values complete]}]
+  {:flag? (= coerce :boolean)
+   :values values
+   :complete complete})
+
+(defn find-varied-option-keys
+  "Find option keys that have different completion behaviors across commands.
+   Returns a set of keyword keys."
+  [table global-keys]
+  (->> table
+       (mapcat (fn [entry]
+                 (for [[k spec-map] (apply dissoc (:spec entry) global-keys)]
+                   [k (option-completion-sig spec-map)])))
+       (group-by first)
+       (keep (fn [[k entries]]
+               (let [sigs (map second entries)]
+                 (when (not (apply = sigs))
+                   k))))
+       set))
+
+(defn- bash-varied-context-branch
+  "Generate an if-branch for a single command context of a varied option."
+  [{:keys [cmds spec-map]}]
+  (let [token (spec->token [:_ spec-map])
+        cmd (first cmds)
+        subcmd (second cmds)
+        condition (if subcmd
+                    (str "[[ \"$__cmd\" == '" cmd "' && \"$__subcmd\" == '" subcmd "' ]]")
+                    (str "[[ \"$__cmd\" == '" cmd "' ]]"))]
+    (case (:type token)
+      :enum
+      (str "      if " condition "; then\n"
+           "        COMPREPLY=( $(compgen -W '" (string/join " " (:values token)) "' -- \"$cur\") )\n"
+           "        return\n"
+           "      fi")
+
+      :dynamic
+      (case (:complete token)
+        :graphs
+        (str "      if " condition "; then\n"
+             "        _logseq_compadd_lines \"$cur\" _logseq_graphs_bash\n"
+             "      fi")
+        :pages
+        (str "      if " condition "; then\n"
+             "        local graph\n"
+             "        graph=\"$(_logseq_current_graph_bash)\"\n"
+             "        [[ -n \"$graph\" ]] && _logseq_compadd_lines \"$cur\" _logseq_pages_bash \"$graph\"\n"
+             "      fi")
+        :queries
+        (str "      if " condition "; then\n"
+             "        local graph\n"
+             "        graph=\"$(_logseq_current_graph_bash)\"\n"
+             "        [[ -n \"$graph\" ]] && _logseq_compadd_lines \"$cur\" _logseq_queries_bash \"$graph\"\n"
+             "      fi")
+        nil)
+
+      :file
+      (str "      if " condition "; then\n"
+           "        COMPREPLY=( $(compgen -f -- \"$cur\") )\n"
+           "        return\n"
+           "      fi")
+
+      :dir
+      (str "      if " condition "; then\n"
+           "        COMPREPLY=( $(compgen -d -- \"$cur\") )\n"
+           "        return\n"
+           "      fi")
+
+      ;; :free and :flag don't need prev-word completion
+      nil)))
+
+(defn- bash-varied-prev-cases
+  "Generate context-dependent case branches for all varied options."
+  [table varied-keys global-keys]
+  (let [contexts
         (->> table
-             (keep (fn [entry]
-                     (let [name-spec (get-in entry [:spec :name])
-                           complete (:complete name-spec)]
-                       (when complete
-                         {:cmds (:cmds entry) :complete complete}))))
-             (mapv (fn [{:keys [cmds complete]}]
-                     (let [cmd (first cmds)
-                           subcmd (second cmds)]
-                       (case complete
-                         :queries
-                         (str "      if [[ \"$__cmd\" == '" cmd "' ]]; then\n"
-                              "        local graph\n"
-                              "        graph=\"$(_logseq_current_graph_bash)\"\n"
-                              "        [[ -n \"$graph\" ]] && _logseq_compadd_lines \"$cur\" _logseq_queries_bash \"$graph\"\n"
-                              "      fi")
-                         :pages
-                         (str "      if [[ \"$__cmd\" == '" cmd "' && \"$__subcmd\" == '" subcmd "' ]]; then\n"
-                              "        local graph\n"
-                              "        graph=\"$(_logseq_current_graph_bash)\"\n"
-                              "        [[ -n \"$graph\" ]] && _logseq_compadd_lines \"$cur\" _logseq_pages_bash \"$graph\"\n"
-                              "      fi")
-                         nil)))))
-        ;; Find all --sort contexts
-        sort-cases
-        (->> table
-             (keep (fn [entry]
-                     (let [sort-spec (get-in entry [:spec :sort])
-                           values (:values sort-spec)]
-                       (when (seq values)
-                         {:cmds (:cmds entry) :values values}))))
-             (mapv (fn [{:keys [cmds values]}]
-                     (let [cmd (first cmds)
-                           subcmd (second cmds)
-                           vals-str (string/join " " values)]
-                       (str "      if [[ \"$__cmd\" == '" cmd "' && \"$__subcmd\" == '" subcmd "' ]]; then\n"
-                            "        COMPREPLY=( $(compgen -W '" vals-str "' -- \"$cur\") )\n"
-                            "        return\n"
-                            "      fi")))))]
-    {:name-cases name-cases
-     :sort-cases sort-cases}))
+             (mapcat (fn [entry]
+                       (for [[k spec-map] (apply dissoc (:spec entry) global-keys)
+                             :when (contains? varied-keys k)]
+                         {:key k :cmds (:cmds entry) :spec-map spec-map})))
+             (group-by :key))]
+    (->> (sort-by first contexts)
+         (keep (fn [[k entries]]
+                 (let [long-opt (bash-option-name k)
+                       branches (->> entries
+                                     (keep bash-varied-context-branch))]
+                   (when (seq branches)
+                     (str "    " long-opt ")\n"
+                          (string/join "\n" branches) "\n"
+                          "      return ;;")))))
+         (string/join "\n\n"))))
 
 (defn- bash-main-function
   "Generate the _logseq() main completion function."
   [table]
-  (let [groups (extract-groups table)
-        global-spec (-> table first :spec
+  (let [global-spec (-> table first :spec
                         (select-keys [:help :version :config :graph :data-dir
                                       :timeout-ms :output :verbose]))
+        global-keys (set (keys global-spec))
+        ;; Find options with conflicting completions across commands
+        varied-keys (find-varied-option-keys table global-keys)
         ;; Collect unique non-context-dependent prev-word cases
-        ;; (skip --name and --sort since they're context-dependent)
         all-specs (->> table (mapcat (fn [entry] (seq (:spec entry)))))
         unique-specs (into {} all-specs)
         tokens (spec->tokens unique-specs)
-        context-free-tokens (remove #(#{:name :sort} (:key %)) tokens)
+        context-free-tokens (remove #(contains? varied-keys (:key %)) tokens)
         prev-cases (->> context-free-tokens
                         (keep bash-prev-completion-case)
                         (string/join "\n\n"))
-        ;; Context-dependent cases
-        {:keys [name-cases sort-cases]} (bash-context-dependent-prev-cases table)
+        ;; Context-dependent cases for varied options
+        varied-cases (bash-varied-prev-cases table varied-keys global-keys)
         ;; Subcommand completion
         subcmd-cases (bash-subcommand-cases table)
         ;; Top-level commands
@@ -724,14 +775,8 @@ _logseq_compadd_lines() {
          "  # --- Option value completion ---\n"
          "  case \"$prev\" in\n"
          prev-cases "\n"
-         "\n"
-         "    --name)\n"
-         (string/join "\n" name-cases) "\n"
-         "      return ;;\n"
-         "\n"
-         "    --sort)\n"
-         (string/join "\n" sort-cases) "\n"
-         "      return ;;\n"
+         (when (seq varied-cases)
+           (str "\n" varied-cases "\n"))
          "  esac\n"
          "\n"
          "  # --- Flag / positional completion ---\n"
