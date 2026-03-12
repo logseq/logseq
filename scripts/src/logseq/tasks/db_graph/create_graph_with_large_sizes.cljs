@@ -11,8 +11,8 @@
 
 (def ^:private target-entities-per-batch 25000)
 (def ^:private max-pages-per-batch 1000)
-(def ^:private min-block-title-length 64)
-(def ^:private max-block-title-length 512)
+(def ^:private min-block-title-length 24)
+(def ^:private max-block-title-length 256)
 (def ^:private block-title-fragment
   "captures project updates, implementation details, follow-up notes, and review context ")
 
