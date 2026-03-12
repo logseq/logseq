@@ -265,8 +265,7 @@ class LSPluginCaller extends EventEmitter {
     )
 
     // clear zombie sandbox
-    const zb = document.querySelector(`#${domId}`)
-    if (zb) zb.parentElement.removeChild(zb)
+    document.querySelector(`#${domId}`)?.remove()
 
     const cnt = document.createElement('div')
     cnt.classList.add('lsp-iframe-sandbox-container')
@@ -292,68 +291,62 @@ class LSPluginCaller extends EventEmitter {
       enableMessageChannel: true,
     })
 
-    let handshake = pt.sendHandshake()
     this._status = 'pending'
 
-    // timeout for handshake
-    let timer
+    const HANDSHAKE_TIMEOUT = 8_000
+    let timer: ReturnType<typeof setTimeout>
 
-    return new Promise((resolve, reject) => {
+    const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
-        reject(new Error(`handshake Timeout`))
         pt.destroy()
-      }, 8 * 1000) // 8 secs
-
-      handshake
-        .then((parentRefChild: ParentAPI) => {
-          this._parent = parentRefChild
-          this._connected = true
-          this.emit('connected')
-
-          parentRefChild.on(LSPMSGFn(pl.id), ({ type, payload }: any) => {
-            debug(`[user -> *host] `, type, payload)
-
-            this._pluginLocal?.emit(type, payload || {})
-            this._pluginLocal?.caller.emit(type, payload || {})
-          })
-
-          this._call = async (...args: any) => {
-            // parent all will get message before handshake
-            parentRefChild.call(LSPMSGFn(pl.id), {
-              type: args[0],
-              payload: Object.assign(args[1] || {}, {
-                $$pid: pl.id,
-              }),
-            })
-          }
-
-          this._callUserModel = async (type, ...payloads: any[]) => {
-            if (type.startsWith(FLAG_AWAIT)) {
-              return await parentRefChild.get(
-                type.replace(FLAG_AWAIT, ''),
-                ...payloads,
-              )
-            } else {
-              parentRefChild.call(type, payloads?.[0])
-            }
-          }
-
-          resolve(null)
-        })
-        .catch((e) => {
-          reject(e)
-        })
-        .finally(() => {
-          clearTimeout(timer)
-        })
+        reject(new Error('handshake Timeout'))
+      }, HANDSHAKE_TIMEOUT)
     })
-      .catch((e) => {
-        debug('[iframe sandbox] error', e)
-        throw e
+
+    try {
+      const parentRefChild = await Promise.race([
+        pt.sendHandshake(),
+        timeout,
+      ]) as ParentAPI
+
+      this._parent = parentRefChild
+      this._connected = true
+      this.emit('connected')
+
+      parentRefChild.on(LSPMSGFn(pl.id), ({ type, payload }: any) => {
+        debug(`[user -> *host] `, type, payload)
+
+        this._pluginLocal?.emit(type, payload || {})
+        this._pluginLocal?.caller.emit(type, payload || {})
       })
-      .finally(() => {
-        this._status = undefined
-      })
+
+      this._call = async (...args: any) => {
+        // parent all will get message before handshake
+        parentRefChild.call(LSPMSGFn(pl.id), {
+          type: args[0],
+          payload: Object.assign(args[1] || {}, {
+            $$pid: pl.id,
+          }),
+        })
+      }
+
+      this._callUserModel = async (type, ...payloads: any[]) => {
+        if (type.startsWith(FLAG_AWAIT)) {
+          return await parentRefChild.get(
+            type.replace(FLAG_AWAIT, ''),
+            ...payloads,
+          )
+        } else {
+          parentRefChild.call(type, payloads?.[0])
+        }
+      }
+    } catch (e) {
+      debug('[iframe sandbox] error', e)
+      throw e
+    } finally {
+      clearTimeout(timer!)
+      this._status = undefined
+    }
   }
 
   async _setupShadowSandbox() {
