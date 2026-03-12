@@ -357,8 +357,9 @@
         alt (.-altKey e)
         meta (.-metaKey e)
         shift (.-shiftKey e)]
-    ;; cond->> applies bottom-to-top, so list modifiers in reverse
-    ;; canonical order (ctrl+alt+meta+shift) to produce correct output
+    ;; cond->> threads top-to-bottom, so list modifiers in reverse
+    ;; canonical order (ctrl+alt+meta+shift) so the first applied modifier
+    ;; ends up innermost in the final key name
     (cond->> resolved-name
       shift (str "shift+")
       meta (str "meta+")
