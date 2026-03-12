@@ -613,17 +613,6 @@ _logseq_compadd_lines() {
 
       nil)))
 
-(defn- bash-prev-cases
-  "Generate all prev-word value completion cases from the table."
-  [table]
-  (let [all-specs (->> table (mapcat (fn [entry] (seq (:spec entry)))))
-        unique-specs (into {} all-specs) ;; last one wins for duplicates
-        tokens (spec->tokens unique-specs)
-        cases (->> tokens
-                   (keep bash-prev-completion-case)
-                   (string/join "\n\n"))]
-    cases))
-
 (defn- bash-subcommand-cases
   "Generate subcommand completion for each group."
   [table]
