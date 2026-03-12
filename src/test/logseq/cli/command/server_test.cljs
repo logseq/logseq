@@ -6,8 +6,7 @@
             [promesa.core :as p]))
 
 (deftest compute-revision-mismatches-uses-exact-string-compare
-  (let [compute-revision-mismatches #'server-command/compute-revision-mismatches
-        mismatch (compute-revision-mismatches
+  (let [mismatch (cli-server/compute-revision-mismatches
                   "cli-rev"
                   [{:repo "graph-a" :revision "cli-rev"}
                    {:repo "graph-b" :revision "cli-rev-dirty"}])]

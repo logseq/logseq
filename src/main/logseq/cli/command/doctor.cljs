@@ -5,6 +5,7 @@
             [logseq.cli.command.core :as core]
             [logseq.cli.data-dir :as data-dir]
             [logseq.cli.server :as cli-server]
+            [logseq.cli.version :as version]
             [promesa.core :as p]))
 
 (def entries
@@ -101,6 +102,7 @@
         (if (seq starting)
           {:ok? true
            :warning? true
+           :servers servers
            :check {:id :running-servers
                    :status :warning
                    :code :doctor-server-not-ready
@@ -112,6 +114,7 @@
                                  (string/join ", " (map :repo starting)))}}
           {:ok? true
            :warning? false
+           :servers servers
            :check {:id :running-servers
                    :status :ok
                    :servers servers
@@ -126,6 +129,37 @@
                           :message (or (.-message e)
                                        "running server check failed")}}))))
 
+(defn- check-server-revision-mismatch
+  [cli-revision servers]
+  (let [revision-mismatch (cli-server/compute-revision-mismatches cli-revision servers)
+        mismatch-servers (mapv (fn [{:keys [repo revision]}]
+                                 {:repo repo
+                                  :graph (core/repo->graph repo)
+                                  :revision revision})
+                               (or (:servers revision-mismatch) []))
+        mismatch-count (count mismatch-servers)]
+    (if (pos? mismatch-count)
+      {:ok? true
+       :warning? true
+       :check {:id :server-revision-mismatch
+               :status :warning
+               :code :doctor-server-revision-mismatch
+               :cli-revision cli-revision
+               :servers mismatch-servers
+               :message (str mismatch-count
+                             " server"
+                             (when (> mismatch-count 1) "s")
+                             " "
+                             (if (= 1 mismatch-count) "uses" "use")
+                             " a different revision than this CLI")}}
+      {:ok? true
+       :warning? false
+       :check {:id :server-revision-mismatch
+               :status :ok
+               :cli-revision cli-revision
+               :servers []
+               :message "All discovered servers match this CLI revision"}})))
+
 (defn execute-doctor
   [action config]
   (p/let [script-check (check-db-worker-script action)]
@@ -138,11 +172,20 @@
           (let [check (:check data-dir-check)
                 checks (conj checks check)]
             (doctor-error checks (:code check) (:message check)))
-          (p/let [server-check (check-running-servers config)
-                  checks (conj checks (:check data-dir-check) (:check server-check))]
+          (p/let [server-check (check-running-servers config)]
             (if-not (:ok? server-check)
-              (let [check (:check server-check)]
+              (let [checks (conj checks (:check data-dir-check) (:check server-check))
+                    check (:check server-check)]
                 (doctor-error checks (:code check) (:message check)))
-              {:status :ok
-               :data {:status (if (:warning? server-check) :warning :ok)
-                      :checks checks}})))))))
+              (let [revision-check (check-server-revision-mismatch (version/revision)
+                                                                   (:servers server-check))
+                    checks (conj checks
+                                 (:check data-dir-check)
+                                 (:check server-check)
+                                 (:check revision-check))]
+                {:status :ok
+                 :data {:status (if (or (:warning? server-check)
+                                        (:warning? revision-check))
+                                  :warning
+                                  :ok)
+                        :checks checks}}))))))))

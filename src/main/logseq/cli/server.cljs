@@ -298,6 +298,18 @@
           :revision (:revision lock)
           :status (if ready :ready :starting)})))))
 
+(defn compute-revision-mismatches
+  [cli-revision servers]
+  (let [mismatch-servers (->> (or servers [])
+                              (filter (fn [{:keys [revision]}]
+                                        (not= cli-revision revision)))
+                              (mapv (fn [{:keys [repo revision]}]
+                                      {:repo repo
+                                       :revision revision})))]
+    (when (seq mismatch-servers)
+      {:cli-revision cli-revision
+       :servers mismatch-servers})))
+
 (defn list-graphs
   [config]
   (let [data-dir (resolve-data-dir config)
