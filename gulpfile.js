@@ -59,6 +59,10 @@ const css = {
 
 const common = {
   clean () {
+    if (!fs.existsSync(outputPath)) {
+      fs.mkdirSync(outputPath, { recursive: true })
+    }
+
     for (const entry of fs.readdirSync(outputPath)) {
       if (staticCleanKeep.has(entry)) continue
       fs.rmSync(path.join(outputPath, entry), {
