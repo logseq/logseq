@@ -236,15 +236,11 @@
   (let [key-elements (map print-shortcut-key keys)
         normalized-binding (normalize-binding binding)
         container-class (str "shui-shortcut-combo" (when glow? " shui-shortcut-glow"))
-        container-attrs {:class container-class
-                         :data-shortcut-binding normalized-binding
-                         :style {:white-space "nowrap"}}
-        container-attrs (if aria-label
-                          (assoc container-attrs :aria-label aria-label)
-                          container-attrs)
-        container-attrs (if aria-hidden?
-                          (assoc container-attrs :aria-hidden "true")
-                          container-attrs)]
+        container-attrs (cond-> {:class container-class
+                                 :data-shortcut-binding normalized-binding
+                                 :style {:white-space "nowrap"}}
+                          aria-label (assoc :aria-label aria-label)
+                          aria-hidden? (assoc :aria-hidden "true"))]
     [:div container-attrs
      (for [[index key-text] (map-indexed vector key-elements)]
        (list
@@ -261,16 +257,12 @@
   (let [key-elements (map print-shortcut-key keys)
         normalized-binding (normalize-binding binding)
         container-class (str "shui-shortcut-separate" (when glow? " shui-shortcut-glow"))
-        container-attrs {:class container-class
-                         :data-shortcut-binding normalized-binding
-                         :style {:white-space "nowrap"
-                                 :gap "4px"}}
-        container-attrs (if aria-label
-                          (assoc container-attrs :aria-label aria-label)
-                          container-attrs)
-        container-attrs (if aria-hidden?
-                          (assoc container-attrs :aria-hidden "true")
-                          container-attrs)]
+        container-attrs (cond-> {:class container-class
+                                 :data-shortcut-binding normalized-binding
+                                 :style {:white-space "nowrap"
+                                         :gap "4px"}}
+                          aria-label (assoc :aria-label aria-label)
+                          aria-hidden? (assoc :aria-hidden "true"))]
     [:div container-attrs
      (for [[index key-text] (map-indexed vector key-elements)]
        [:kbd.shui-shortcut-key
@@ -283,15 +275,11 @@
   [keys binding {:keys [aria-label aria-hidden?]}]
   (let [key-elements (map print-shortcut-key keys)
         normalized-binding (normalize-binding binding)
-        container-attrs {:class "shui-shortcut-compact"
-                         :data-shortcut-binding normalized-binding
-                         :style {:white-space "nowrap"}}
-        container-attrs (if aria-label
-                          (assoc container-attrs :aria-label aria-label)
-                          container-attrs)
-        container-attrs (if aria-hidden?
-                          (assoc container-attrs :aria-hidden "true")
-                          container-attrs)]
+        container-attrs (cond-> {:class "shui-shortcut-compact"
+                                 :data-shortcut-binding normalized-binding
+                                 :style {:white-space "nowrap"}}
+                          aria-label (assoc :aria-label aria-label)
+                          aria-hidden? (assoc :aria-hidden "true"))]
     [:div container-attrs
      (for [[index key-text] (map-indexed vector key-elements)]
        [:span
