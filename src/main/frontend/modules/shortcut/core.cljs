@@ -94,15 +94,6 @@
                    (log/debug :shortcut/chord-prefix-clash {:id id :binding k})
                    ;; Unexpected conflict: log full debug info for investigation.
                    (do
-                     (let [tree (.-shortcuts_ handler)
-                           undec-k (shortcut-utils/undecorate-binding k)]
-                       (js/console.group "SHORTCUT CONFLICT DEBUG")
-                       (js/console.warn "ID:" (str id))
-                       (js/console.warn "Binding:" k "→" undec-k)
-                       (js/console.warn "Error:" (.-message e))
-                       (js/console.warn "Handler tree keys:" (js/Object.keys tree))
-                       (js/console.warn "Full tree:" (js/JSON.stringify tree js/undefined 2))
-                       (js/console.groupEnd))
                      (log/error :shortcut/register-shortcut {:id      id
                                                              :binding k
                                                              :error   e})
