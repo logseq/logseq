@@ -4,7 +4,7 @@
    This interface uses clj data format as input."
   (:require ["comlink" :as Comlink]
             [electron.ipc :as ipc]
-            [frontend.common.thread-api :as thread-api]
+            [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.transact :as db-transact]
@@ -17,6 +17,10 @@
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [promesa.core :as p]))
+
+(def-thread-api :thread-api/input-idle?
+  [repo diff]
+  (state/input-idle? repo :diff diff))
 
 (defn- ask-persist-permission!
   []
