@@ -30,6 +30,7 @@
 (defonce *profile-state (volatile! {}))
 
 (defonce *db-worker (atom nil))
+(defonce *db-worker-thread (atom nil))
 (defonce *db-worker-client-id (atom (storage/get :db-worker-client-id)))
 (defonce *editor-info (atom nil))
 (defonce app-ready-promise (p/deferred))
@@ -60,6 +61,7 @@
   (<invoke-db-worker* qkw true args))
 
 (defonce *infer-worker (atom nil))
+(defonce *infer-worker-port (atom nil))
 
 ;; Stores main application state
 (defonce ^:large-vars/data-var state
@@ -1114,7 +1116,6 @@ Similar to re-frame subscriptions"
   []
   (when (empty? (:sidebar/blocks @state))
     (sidebar-add-block! (get-current-repo) "contents" :contents)))
-
 
 (defn open-right-sidebar!
   []
