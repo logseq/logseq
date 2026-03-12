@@ -38,6 +38,7 @@
             [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db-sync.snapshot :as snapshot]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.order :as db-order]
@@ -55,7 +56,6 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
-            [medley.core :as medley]
             [missionary.core :as m]
             [promesa.core :as p]))
 
@@ -72,6 +72,7 @@
 (def ^:private search-index-build-time-budget-ms 8)
 (def ^:private search-index-build-idle-diff-ms 1000)
 (def ^:private search-index-build-pause-ms 300)
+(def ^:private db-sync-import-batch-size 10000)
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -721,8 +722,37 @@
       (throw (stale-import-ex-info repo graph-id import-id)))
     state))
 
+(defn- import-snapshot-rows-batch!
+  [db aes-key graph-e2ee? rows]
+  (p/let [rows-batch (if graph-e2ee?
+                       (sync-crypt/<decrypt-snapshot-rows-batch aes-key rows)
+                       rows)]
+    (upsert-addr-content! db (rows->sqlite-binds rows-batch))))
+
+(defn- import-snapshot-rows!
+  [db aes-key graph-e2ee? rows]
+  (let [batches (partition-all db-sync-import-batch-size rows)]
+    (p/doseq [batch batches]
+      (import-snapshot-rows-batch! db aes-key graph-e2ee? batch))))
+
+(defn- log-import-progress!
+  [graph-id import-id rows-count]
+  (when (pos? rows-count)
+    (let [{:keys [imported-rows total-rows]}
+          (swap! *import-state
+                 (fn [state]
+                   (if (= import-id (:import-id state))
+                     (update state :imported-rows (fnil + 0) rows-count)
+                     state)))]
+      (rtc-log-and-state/rtc-log :rtc.log/download
+                                 {:sub-type :download-progress
+                                  :graph-uuid graph-id
+                                  :message (if (some? total-rows)
+                                             (str "Importing data " imported-rows "/" total-rows)
+                                             (str "Importing data " imported-rows))}))))
+
 (def-thread-api :thread-api/db-sync-import-prepare
-  [repo reset? graph-id graph-e2ee?]
+  [repo reset? graph-id graph-e2ee? & [total-rows]]
   (let [graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))
         opened-db (atom nil)]
     (-> (p/let [_ (when-let [state @*import-state]
@@ -746,7 +776,10 @@
                                  :graph-e2ee? graph-e2ee?
                                  :graph-id graph-id
                                  :import-id import-id
-                                 :repo repo})
+                                 :imported-rows 0
+                                 :repo repo
+                                 :snapshot-buffer nil
+                                 :total-rows total-rows})
           {:import-id import-id})
         (p/catch (fn [error]
                    (close-import-state! {:db @opened-db})
@@ -755,18 +788,26 @@
 (def-thread-api :thread-api/db-sync-import-rows-chunk
   [rows chunk-idx total-chunks graph-id import-id]
   (-> (p/let [{:keys [db aes-key graph-e2ee?]} (require-import-state! nil graph-id import-id)
-              batches (partition-all 100 rows)]
-        (p/doseq [batch batches]
-          (p/let [rows-batch (if graph-e2ee?
-                               (sync-crypt/<decrypt-snapshot-rows-batch aes-key batch)
-                               batch)]
-            (upsert-addr-content! db (rows->sqlite-binds rows-batch))))
-        (rtc-log-and-state/rtc-log :rtc.log/download
-                                   {:sub-type :download-progress
-                                    :graph-uuid graph-id
-                                    :message (if (some? total-chunks)
-                                               (str "Importing data " (inc chunk-idx) "/" total-chunks)
-                                               (str "Importing data chunk " (inc chunk-idx)))})
+              _ (import-snapshot-rows! db aes-key graph-e2ee? rows)]
+        (log-import-progress! graph-id import-id (count rows))
+        true)
+      (p/catch (fn [error]
+                 (when-not (= :db-sync/stale-import (:type (ex-data error)))
+                   (clear-import-state! import-id))
+                 (throw error)))))
+
+(def-thread-api :thread-api/db-sync-import-framed-chunk
+  [chunk chunk-idx graph-id import-id]
+  (-> (p/let [{:keys [db aes-key graph-e2ee? snapshot-buffer]} (require-import-state! nil graph-id import-id)
+              {:keys [rows buffer]} (snapshot/parse-framed-chunk snapshot-buffer chunk)
+              _ (swap! *import-state
+                       (fn [state]
+                         (if (= import-id (:import-id state))
+                           (assoc state :snapshot-buffer buffer)
+                           state)))
+              _ (when (seq rows)
+                  (import-snapshot-rows! db aes-key graph-e2ee? rows))
+              _ (log-import-progress! graph-id import-id (count rows))]
         true)
       (p/catch (fn [error]
                  (when-not (= :db-sync/stale-import (:type (ex-data error)))
@@ -775,7 +816,12 @@
 
 (def-thread-api :thread-api/db-sync-import-finalize
   [repo graph-id remote-tx import-id]
-  (-> (p/let [{:keys [db]} (require-import-state! repo graph-id import-id)
+  (-> (p/let [{:keys [db aes-key graph-e2ee? snapshot-buffer]} (require-import-state! repo graph-id import-id)
+              rows (when (and snapshot-buffer (pos? (.-byteLength snapshot-buffer)))
+                     (snapshot/finalize-framed-buffer snapshot-buffer))
+              _ (when (seq rows)
+                  (import-snapshot-rows! db aes-key graph-e2ee? rows))
+              _ (log-import-progress! graph-id import-id (count rows))
               _ (.exec db "PRAGMA wal_checkpoint(2)")
               _ (.close db)
               _ (reset! *import-state nil)]
@@ -784,47 +830,6 @@
                  (when-not (= :db-sync/stale-import (:type (ex-data error)))
                    (clear-import-state! import-id))
                  (throw error)))))
-
-;; Keep original API for backward compat (non-mobile use)
-(def-thread-api :thread-api/db-sync-import-kvs-rows
-  [repo rows reset? graph-id remote-tx graph-e2ee?]
-  (let [graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))]
-    (-> (p/let [_ (when reset? (close-db! repo))
-                aes-key (when graph-e2ee?
-                          (sync-crypt/<fetch-graph-aes-key-for-download graph-id))
-                _ (when (and graph-e2ee? (nil? aes-key))
-                    (db-sync/fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
-                db (ensure-db-sync-import-db! repo reset?)
-                batches (medley/indexed (partition-all 100 rows))]
-          (rtc-log-and-state/rtc-log :rtc.log/download
-                                     {:sub-type :download-progress
-                                      :graph-uuid graph-id
-                                      :message (if graph-e2ee?
-                                                 "Start decrypting data"
-                                                 "Start importing data")})
-          ;; sequential batches: low memory
-          (p/doseq [[i batch] batches]
-            (p/let [rows-batch (if graph-e2ee?
-                                 (sync-crypt/<decrypt-snapshot-rows-batch aes-key batch)
-                                 batch)]
-              (upsert-addr-content! db (rows->sqlite-binds rows-batch))
-              (rtc-log-and-state/rtc-log :rtc.log/download
-                                         {:sub-type :download-progress
-                                          :graph-uuid graph-id
-                                          :message (str (if graph-e2ee?
-                                                          "Decrypting data"
-                                                          "Importing data")
-                                                        " "
-                                                        (inc i)
-                                                        "/"
-                                                        (count batches))})))
-          (let [storage (new-sqlite-storage db)
-                conn (common-sqlite/get-storage-conn storage db-schema/schema)
-                datoms (vec (d/datoms @conn :eavt))]
-            (.close db)
-            (import-datoms-to-db! repo graph-id remote-tx datoms)))
-        (p/catch (fn [error]
-                   (throw error))))))
 
 (def-thread-api :thread-api/release-access-handles
   [repo]
