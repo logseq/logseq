@@ -697,7 +697,8 @@
 
 (def-thread-api :thread-api/db-sync-import-prepare
   [repo reset? graph-id graph-e2ee?]
-  (let [graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))]
+  (let [graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))
+        opened-db (atom nil)]
     (-> (p/let [_ (when-let [state @*import-state]
                     (close-import-state! state))
                 _ (reset! *import-state nil)
@@ -709,6 +710,7 @@
                     (db-sync/fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
                 pool (<get-opfs-pool repo)
                 ^js db (new (.-OpfsSAHPoolDb pool) repo-path)
+                _ (reset! opened-db db)
                 _ (common-sqlite/create-kvs-table! db)
                 _ (enable-sqlite-wal-mode! db)
                 _ (when reset? (.exec db "DELETE FROM kvs"))
@@ -721,6 +723,7 @@
                                  :repo repo})
           {:import-id import-id})
         (p/catch (fn [error]
+                   (close-import-state! {:db @opened-db})
                    (throw error))))))
 
 (def-thread-api :thread-api/db-sync-import-rows-chunk
