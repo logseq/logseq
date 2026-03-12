@@ -8,6 +8,7 @@
             [frontend.worker.db-worker-node-lock :as db-lock]
             [frontend.worker.platform.node :as platform-node]
             [frontend.worker.state :as worker-state]
+            [frontend.worker.version :as worker-version]
             [lambdaisland.glogi :as log]
             [logseq.cli.style :as style]
             [logseq.common.config :as common-config]
@@ -54,6 +55,7 @@
           "--owner-source" (recur (subvec args 2) (assoc opts :owner-source (second args)))
           "--log-level" (recur (subvec args 2) (assoc opts :log-level (second args)))
           "--create-empty-db" (recur (subvec args 1) (assoc opts :create-empty-db? true))
+          "--version" (recur (subvec args 1) (assoc opts :version? true))
           "--help" (recur (subvec args 1) (assoc opts :help? true))
           (recur (subvec args 1) opts))))))
 
@@ -287,6 +289,7 @@
   (println (str "  " (style/bold "--repo") " <name>        (required)"))
   (println (str "  " (style/bold "--create-empty-db") "  (start with empty initial datoms)"))
   (println (str "  " (style/bold "--log-level") " <level>  (default info)"))
+  (println (str "  " (style/bold "--version") "            (print build metadata and exit)"))
   (println "  logs: <data-dir>/<graph-dir>/db-worker-node-YYYYMMDD.log (retains 7)"))
 
 (defn- startup-db-opts
@@ -438,10 +441,13 @@
 
 (defn main
   []
-  (let [{:keys [data-dir repo help? owner-source] :as opts}
+  (let [{:keys [data-dir repo help? version? owner-source] :as opts}
         (parse-args (.-argv js/process))]
     (when help?
       (show-help!)
+      (.exit js/process 0))
+    (when version?
+      (println (worker-version/format-version))
       (.exit js/process 0))
     (when-not (seq repo)
       (show-help!)

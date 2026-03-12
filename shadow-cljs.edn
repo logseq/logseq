@@ -89,6 +89,7 @@
   :db-worker-node {:target :node-script
                    :output-to "static/db-worker-node.js"
                    :main frontend.worker.db-worker-node/main
+                   :build-hooks [(shadow.hooks/db-worker-node-metadata-hook "--long --always --dirty")]
                    :compiler-options {:infer-externs :auto
                                       :source-map true
                                       :externs ["datascript/externs.js"
@@ -199,6 +200,8 @@
          :output-to "static/tests.js"
          :closure-defines {frontend.util/NODETEST true
                            logseq.shui.util/NODETEST true
+                           frontend.worker.version/BUILD_TIME "test-worker-build-time"
+                           frontend.worker.version/REVISION "test-worker-revision"
                            logseq.cli.version/BUILD_TIME "test-build-time"
                            logseq.cli.version/REVISION "test-revision"}
          :devtools {:enabled false}

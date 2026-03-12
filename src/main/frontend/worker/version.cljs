@@ -1,5 +1,5 @@
-(ns logseq.cli.version
-  "Build metadata for logseq-cli.")
+(ns frontend.worker.version
+  "Build metadata for db-worker-node.")
 
 (goog-define BUILD_TIME "unknown")
 (goog-define REVISION "dev")

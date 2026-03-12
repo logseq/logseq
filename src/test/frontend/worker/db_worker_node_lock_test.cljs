@@ -5,6 +5,7 @@
             [cljs.test :refer [async deftest is testing]]
             [frontend.test.node-helper :as node-helper]
             [frontend.worker.db-worker-node-lock :as db-lock]
+            [frontend.worker.version :as worker-version]
             [promesa.core :as p]))
 
 (deftest repo-dir-canonicalizes-db-prefixed-repo
@@ -55,6 +56,25 @@
                        (db-lock/remove-lock! path)
                        (done)))))))
 
+(deftest create-lock-persists-revision
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "db-worker-node-lock-revision")
+          repo (str "logseq_db_lock_revision_" (subs (str (random-uuid)) 0 8))
+          path (db-lock/lock-path data-dir repo)]
+      (-> (p/with-redefs [worker-version/revision (fn [] "worker-test-revision")]
+            (p/let [_ (db-lock/create-lock! {:data-dir data-dir
+                                             :repo repo
+                                             :host "127.0.0.1"
+                                             :port 9101
+                                             :owner-source :cli})
+                    lock (db-lock/read-lock path)]
+              (is (= "worker-test-revision" (:revision lock)))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (db-lock/remove-lock! path)
+                       (done)))))))
+
 (deftest read-lock-normalizes-missing-owner-source-to-unknown
   (let [data-dir (node-helper/create-tmp-dir "db-worker-node-lock-legacy-owner")
         repo (str "logseq_db_lock_legacy_" (subs (str (random-uuid)) 0 8))
@@ -68,20 +88,49 @@
     (fs/writeFileSync path (js/JSON.stringify (clj->js legacy-lock)))
     (is (= :unknown (:owner-source (db-lock/read-lock path))))))
 
-(deftest update-lock-preserves-existing-owner-source
+(deftest update-lock-preserves-existing-owner-source-and-revision
   (async done
     (let [data-dir (node-helper/create-tmp-dir "db-worker-node-lock-update-owner")
           repo (str "logseq_db_lock_update_owner_" (subs (str (random-uuid)) 0 8))
           path (db-lock/lock-path data-dir repo)]
-      (-> (p/let [{:keys [lock]} (db-lock/ensure-lock! {:data-dir data-dir
-                                                        :repo repo
-                                                        :host "127.0.0.1"
-                                                        :port 9101
-                                                        :owner-source :cli})
-                  _ (db-lock/update-lock! path (assoc lock :port 9200 :owner-source :electron))
+      (-> (p/with-redefs [worker-version/revision (fn [] "existing-worker-revision")]
+            (p/let [{:keys [lock]} (db-lock/ensure-lock! {:data-dir data-dir
+                                                          :repo repo
+                                                          :host "127.0.0.1"
+                                                          :port 9101
+                                                          :owner-source :cli})
+                    _ (db-lock/update-lock! path (assoc lock
+                                                        :port 9200
+                                                        :owner-source :electron
+                                                        :revision "attempted-new-revision"))
+                    updated (db-lock/read-lock path)]
+              (is (= :cli (:owner-source updated)))
+              (is (= 9200 (:port updated)))
+              (is (= "existing-worker-revision" (:revision updated)))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (db-lock/remove-lock! path)
+                       (done)))))))
+
+(deftest update-lock-keeps-legacy-lock-without-revision-compatible
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "db-worker-node-lock-legacy-revision")
+          repo (str "logseq_db_lock_legacy_revision_" (subs (str (random-uuid)) 0 8))
+          path (db-lock/lock-path data-dir repo)
+          legacy-lock {:repo repo
+                       :pid (.-pid js/process)
+                       :lock-id (str (random-uuid))
+                       :host "127.0.0.1"
+                       :port 9101
+                       :owner-source :unknown
+                       :startedAt (.toISOString (js/Date.))}]
+      (fs/mkdirSync (node-path/dirname path) #js {:recursive true})
+      (fs/writeFileSync path (js/JSON.stringify (clj->js legacy-lock)))
+      (-> (p/let [_ (db-lock/update-lock! path (assoc legacy-lock :port 9202))
                   updated (db-lock/read-lock path)]
-            (is (= :cli (:owner-source updated)))
-            (is (= 9200 (:port updated))))
+            (is (= 9202 (:port updated)))
+            (is (nil? (:revision updated))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally (fn []

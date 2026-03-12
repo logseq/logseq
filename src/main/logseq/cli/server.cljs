@@ -295,6 +295,7 @@
           :port (:port lock)
           :pid (:pid lock)
           :owner-source (lock-owner-source lock)
+          :revision (:revision lock)
           :status (if ready :ready :starting)})))))
 
 (defn list-graphs

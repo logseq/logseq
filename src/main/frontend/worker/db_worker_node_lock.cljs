@@ -5,6 +5,7 @@
             ["path" :as node-path]
             [clojure.string :as string]
             [frontend.worker-common.util :as worker-util]
+            [frontend.worker.version :as worker-version]
             [lambdaisland.glogi :as log]
             [logseq.common.graph-dir :as graph-dir]
             [logseq.common.config :as common-config]
@@ -106,6 +107,7 @@
                      :host host
                      :port port
                      :owner-source (normalize-owner-source owner-source)
+                     :revision (worker-version/revision)
                      :startedAt (.toISOString (js/Date.))}]
            (try
              (fs/writeFileSync fd (js/JSON.stringify (clj->js lock)))
@@ -128,8 +130,11 @@
                          (assoc :pid (:pid existing))
                          (assoc :lock-id (or (:lock-id existing) (:lock-id lock)))
                          (assoc :owner-source (normalize-owner-source (:owner-source existing)))
+                         (assoc :revision (:revision existing))
                          (assoc :startedAt (:startedAt existing)))
-                     (update lock :owner-source normalize-owner-source))]
+                     (-> lock
+                         (update :owner-source normalize-owner-source)
+                         (update :revision #(or % (worker-version/revision)))))]
          (fs/writeFileSync path (js/JSON.stringify (clj->js lock')))
          (resolve lock'))
        (catch :default e

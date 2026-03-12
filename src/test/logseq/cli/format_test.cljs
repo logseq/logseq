@@ -544,8 +544,8 @@
     (is (= ["logseq_db_demo" "my_logseq_db_notes"]
            (get-in parsed [:data :graphs])))))
 
-(deftest test-human-output-server-list-includes-owner
-  (testing "server list shows owner column and value"
+(deftest test-human-output-server-list-includes-owner-and-revision
+  (testing "server list shows owner and revision columns"
     (let [result (format/format-result {:status :ok
                                         :command :server-list
                                         :data {:servers [{:repo "demo-repo"
@@ -553,14 +553,15 @@
                                                           :host "127.0.0.1"
                                                           :port 1234
                                                           :pid 9876
-                                                          :owner-source :cli}]}}
+                                                          :owner-source :cli
+                                                          :revision "worker-revision"}]}}
                                        {:output-format nil})]
-      (is (= (str "GRAPH      STATUS  HOST       PORT  PID   OWNER\n"
-                  "demo-repo  :ready  127.0.0.1  1234  9876  :cli\n"
+      (is (= (str "GRAPH      STATUS  HOST       PORT  PID   OWNER  REVISION\n"
+                  "demo-repo  :ready  127.0.0.1  1234  9876  :cli   worker-revision\n"
                   "Count: 1")
              result))))
 
-  (testing "server list falls back to placeholder when owner is missing"
+  (testing "server list falls back to placeholder when owner or revision is missing"
     (let [result (format/format-result {:status :ok
                                         :command :server-list
                                         :data {:servers [{:repo "demo-repo"
@@ -569,10 +570,32 @@
                                                           :port 1234
                                                           :pid 9876}]}}
                                        {:output-format nil})]
-      (is (= (str "GRAPH      STATUS  HOST       PORT  PID   OWNER\n"
-                  "demo-repo  :ready  127.0.0.1  1234  9876  -\n"
+      (is (= (str "GRAPH      STATUS  HOST       PORT  PID   OWNER  REVISION\n"
+                  "demo-repo  :ready  127.0.0.1  1234  9876  -      -\n"
                   "Count: 1")
-             result)))))
+             result))))
+
+  (testing "server list shows revision mismatch warning in human output only"
+    (let [base-result {:status :ok
+                       :command :server-list
+                       :data {:servers [{:repo "demo-repo"
+                                         :status :ready
+                                         :host "127.0.0.1"
+                                         :port 1234
+                                         :pid 9876
+                                         :owner-source :cli
+                                         :revision "server-revision"}]}
+                       :human {:server-list {:revision-mismatch {:cli-revision "cli-revision"
+                                                                 :servers [{:repo "demo-repo"
+                                                                            :revision "server-revision"}]}}}}
+          human-result (format/format-result base-result {:output-format nil})
+          json-result (format/format-result base-result {:output-format :json})
+          json-parsed (js->clj (js/JSON.parse json-result) :keywordize-keys true)]
+      (is (string/includes? human-result "Warning:"))
+      (is (string/includes? human-result "cli-revision"))
+      (is (string/includes? human-result "demo-repo"))
+      (is (= "server-revision" (get-in json-parsed [:data :servers 0 :revision])))
+      (is (not (string/includes? json-result "Warning:"))))))
 
 (deftest test-human-output-show
   (testing "show renders text payloads directly"
