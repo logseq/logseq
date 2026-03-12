@@ -191,12 +191,27 @@
   (swap! *sqlite-conns dissoc repo)
   (swap! *datascript-conns dissoc repo)
   (swap! *client-ops-conns dissoc repo)
+  (search/clear-fuzzy-search-indice! repo)
   (when db (.close db))
   (when search (.close search))
   (when client-ops (.close client-ops))
   (when-let [^js pool (worker-state/get-opfs-pool repo)]
     (.pauseVfs pool))
   (swap! *opfs-pools dissoc repo))
+
+(defn- <invalidate-search-db!
+  [repo]
+  (if-let [search-db (worker-state/get-sqlite-conn repo :search)]
+    (do
+      (search/truncate-table! search-db)
+      (p/resolved nil))
+    (p/let [^js pool (<get-opfs-pool repo)
+            ^js search-db (new (.-OpfsSAHPoolDb pool) (str "search" repo-path))]
+      (try
+        (search/truncate-table! search-db)
+        (finally
+          (.close search-db)))
+      nil)))
 
 (defn- close-other-dbs!
   [repo]
@@ -625,6 +640,8 @@
 (defn- import-datoms-to-db!
   [repo graph-id remote-tx datoms]
   (-> (p/do!
+       (when-let [search-db (worker-state/get-sqlite-conn repo :search)]
+         (search/truncate-table! search-db))
        (rtc-log-and-state/rtc-log :rtc.log/download
                                   {:sub-type :download-progress
                                    :graph-uuid graph-id
@@ -650,6 +667,7 @@
   [repo reset? graph-id graph-e2ee?]
   (let [graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))]
     (-> (p/let [_ (when reset? (close-db! repo))
+                _ (when reset? (<invalidate-search-db! repo))
                 aes-key (when graph-e2ee?
                           (sync-crypt/<fetch-graph-aes-key-for-download graph-id))
                 _ (when (and graph-e2ee? (nil? aes-key))
