@@ -198,6 +198,7 @@ button.shortcut-feedback-action {
 
     > ul {
       @apply px-4 m-0 py-0;
+      outline: none;
 
       li {
         @apply text-[15px] px-1;
