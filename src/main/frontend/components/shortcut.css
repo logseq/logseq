@@ -545,6 +545,11 @@ button.shortcut-feedback-action {
     to { opacity: 0.3; }
   }
 
+  @keyframes shortcut-row-sweep {
+    from { background-position: 150% 0; }
+    to   { background-position: 150% 0; }
+  }
+
   .shortcut-input-placeholder {
     animation: none;
     -webkit-text-fill-color: unset;
