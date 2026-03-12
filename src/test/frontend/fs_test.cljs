@@ -17,7 +17,7 @@
 
     (->
      (p/do!
-      (fs/create-if-not-exists nil dir some-file "NEW")
+      (fs/create-if-not-exists nil nil some-file "NEW")
       (is (fs-node/existsSync some-file)
           "something.txt created correctly")
       (is (= "NEW"
@@ -36,7 +36,7 @@
 
     (->
      (p/do!
-      (fs/create-if-not-exists nil dir some-file "NEW")
+      (fs/create-if-not-exists nil nil some-file "NEW")
       (is (= "OLD" (str (fs-node/readFileSync some-file)))
           "something.txt has not been touched and old content still exists"))
 
