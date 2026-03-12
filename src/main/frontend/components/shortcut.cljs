@@ -227,12 +227,6 @@
        [:span.shortcut-toolbar-hint
         (t :keymap/hint-close) (shui/shortcut "escape" {:style :compact})]]]]))
 
-(defn- navigable-rows
-  "Query all non-disabled shortcut rows from the <ul>, in DOM order."
-  [^js ul-el]
-  (when ul-el
-    (array-seq (.querySelectorAll ul-el "li.shortcut-row:not([aria-disabled])"))))
-
 (defn- navigable-items
   "Query all navigable items (category headers + non-disabled rows) from the <ul>, in DOM order."
   [^js ul-el]
@@ -361,12 +355,14 @@
       (when (string/blank? q)
         [:div.flex.items-center.gap-2
          [:button.flex.items-center.icon-link
-          {:on-click toggle-categories-fn
+          {:tab-index -1
+           :on-click toggle-categories-fn
            :aria-label "Toggle categories pane"}
           (ui/icon "fold")]
 
          [:button.flex.items-center.icon-link
-          {:on-click refresh-shortcuts-list!
+          {:tab-index -1
+           :on-click refresh-shortcuts-list!
            :aria-label "Refresh all"}
           (ui/icon "refresh")]])]]))
 
@@ -405,13 +401,15 @@
        {:id popup-id
         :force-popover? true
         :align "start"
+        :focus-trigger? false
         :on-after-hide #(do (reset! *active-shortcut-id nil)
                             (when-let [row (some-> anchor-el (.closest "li.shortcut-row"))]
-                              (.focus row)))
+                              (.focus row #js {:focusVisible true})))
         :content-props
         {:class "p-0 w-auto"
          :collision-padding 12
          :onOpenAutoFocus #(.preventDefault %)
+         :onCloseAutoFocus #(.preventDefault %)
          :onEscapeKeyDown (fn [_] false)
          :onPointerDownOutside
          (fn [^js e]
@@ -1155,7 +1153,7 @@
            (rum/set-ref! *rescue-target-ref nil)
            (when (or (nil? (.-activeElement js/document))
                      (identical? (.-activeElement js/document) (.-body js/document)))
-             (.focus target)
+             (.focus target #js {:focusVisible true})
              (scroll-row-into-view! target))))
        [folded-categories])
 
@@ -1175,7 +1173,24 @@
 
         (when (and ready? (not no-results?))
           [:ul.list-none.m-0.py-3
-           {:on-key-down
+           {:tab-index 0
+            :on-focus
+            (fn [^js e]
+              (when (identical? (.-target e) (.-currentTarget e))
+                (let [ul (.-currentTarget e)
+                      from (.-relatedTarget e)]
+                  (if (and from (.contains ul from))
+                    ;; Shift+Tab from inside: exit list backward to last filter pill
+                    (when-let [pill (some-> (.closest ul ".cp__shortcut-page-x")
+                                            (.querySelector ":scope > header")
+                                            (.querySelectorAll ".shortcut-filter-pill")
+                                            array-seq last)]
+                      (.focus pill))
+                    ;; Forward Tab from outside: enter list at first item
+                    (when-let [first-item (first (navigable-items ul))]
+                      (.focus first-item #js {:focusVisible true})
+                      (scroll-row-into-view! first-item))))))
+            :on-key-down
             (fn [^js e]
               (let [key (.-key e)
                     ul-el (.-currentTarget e)
@@ -1199,7 +1214,7 @@
                     (if (nil? next-idx)
                       (some-> (rum/deref *search-ref) (.focus))
                       (when-let [target (nth items next-idx nil)]
-                        (.focus target)
+                        (.focus target #js {:focusVisible true})
                         (scroll-row-into-view! target)))))))}
            (for [[c binding-map] (if (or in-filter? in-keystroke?)
                                    [[:all deduped-bindings]]
@@ -1261,7 +1276,7 @@
                         [:li.shortcut-row.flex.items-start.justify-between.text-sm
                          {:key (str id)
                           :class (when (= active-id id) "active")
-                          :tab-index (when (and id (not disabled?)) 0)
+                          :tab-index (when (and id (not disabled?)) -1)
                           :role (when id "button")
                           :aria-disabled (when disabled? "true")
                           :on-click row-action
