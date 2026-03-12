@@ -324,6 +324,37 @@
       (let [tag (first (filter #(= :remove-tag (:command %)) entries))]
         (is (nil? (get-in tag [:spec :name :complete])))))))
 
+(deftest test-bash-context-dependent-type
+  (let [output (gen/generate-completions "bash" full-table)]
+    (testing "--type completes with edn/sqlite under graph export context"
+      (is (string/includes? output "--type)"))
+      (is (string/includes? output "graph' && \"$__subcmd\" == 'export'"))
+      (is (string/includes? output "compgen -W 'edn sqlite'")))
+    (testing "--type completes with property types under upsert property context"
+      (is (string/includes? output "upsert' && \"$__subcmd\" == 'property'"))
+      (is (string/includes? output "compgen -W 'default number")))
+    (testing "--type does NOT have a context-free case (simple COMPREPLY after --type)"
+      ;; --type should be in context-dependent if-blocks, not a simple case
+      (let [type-section (second (string/split output #"--type\)"))]
+        (is (string/starts-with? (string/trim type-section) "if"))))))
+
+(deftest test-bash-find-varied-option-keys
+  (let [global-spec (-> full-table first :spec
+                        (select-keys [:help :version :config :graph :data-dir
+                                      :timeout-ms :output :verbose]))
+        global-keys (set (keys global-spec))
+        varied (gen/find-varied-option-keys full-table global-keys)]
+    (testing "--type is detected as varied"
+      (is (contains? varied :type)))
+    (testing "--name is detected as varied"
+      (is (contains? varied :name)))
+    (testing "--sort is detected as varied"
+      (is (contains? varied :sort)))
+    (testing "uniform options like --pos are not varied"
+      (is (not (contains? varied :pos))))
+    (testing "uniform options like --cardinality are not varied"
+      (is (not (contains? varied :cardinality))))))
+
 (deftest test-e2e-generated-header
   (testing "zsh output includes do-not-edit header"
     (let [output (gen/generate-completions "zsh" full-table)]
