@@ -12,6 +12,7 @@
             [goog.object :as gobj]
             [logseq.cli.server :as cli-server]
             [logseq.cli.style :as style]
+            [logseq.cli.test-helper :as test-helper]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [promesa.core :as p]))
@@ -276,6 +277,46 @@
                                 "--create-empty-db"])]
     (is (= "logseq_db_parse_args" (:repo result)))
     (is (= true (:create-empty-db? result)))))
+
+(deftest db-worker-node-parse-args-recognizes-version
+  (let [parse-args #'db-worker-node/parse-args
+        result (parse-args #js ["node" "dist/db-worker-node.js"
+                                "--version"])]
+    (is (= true (:version? result)))
+    (is (nil? (:repo result)))))
+
+(deftest db-worker-node-main-version-exits-early-without-repo
+  (async done
+    (let [exit-code* (atom nil)
+          start-called? (atom false)]
+      (-> (test-helper/with-js-property-override
+           js/process
+           "argv"
+           #js ["node" "dist/db-worker-node.js" "--version"]
+           (fn []
+             (test-helper/with-js-property-override
+              js/process
+              "exit"
+              (fn [code]
+                (reset! exit-code* code)
+                (throw (ex-info "process-exit" {:code code})))
+              (fn []
+                (p/with-redefs [db-worker-node/start-daemon! (fn [_]
+                                                               (reset! start-called? true)
+                                                               (p/rejected (ex-info "should-not-start-daemon" {})))]
+                  (p/resolved
+                   (let [output (with-out-str
+                                  (try
+                                    (db-worker-node/main)
+                                    (catch :default e
+                                      (when-not (= "process-exit" (.-message e))
+                                        (throw e)))))]
+                     (is (= 0 @exit-code*))
+                     (is (= false @start-called?))
+                     (is (string/includes? output "Revision:")))))))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
 
 (deftest db-worker-node-owner-source-cli-is-written-into-lock
   (async done
