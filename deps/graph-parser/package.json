@@ -11,7 +11,7 @@
     "sanitize-filename": "1.6.3"
   },
   "scripts": {
-    "test": "nbb-logseq -cp test:../outliner/src -m nextjournal.test-runner",
-    "test-v": "nbb-logseq -cp test:../outliner/src -m logseq.graph-parser.test-runner"
+    "test": "nbb-logseq -cp test -m nextjournal.test-runner",
+    "test-v": "nbb-logseq -cp test -m logseq.graph-parser.test-runner"
   }
 }
