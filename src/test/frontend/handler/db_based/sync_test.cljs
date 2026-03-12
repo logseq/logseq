@@ -163,6 +163,31 @@
                           (is false (str e))
                           (done)))))))
 
+(deftest rtc-start-skips-while-graph-upload-is-active-test
+  (async done
+         (let [worker-prev @state/*db-worker
+               state-prev @state/state
+               calls (atom [])]
+           (reset! state/*db-worker :worker)
+           (swap! state/state assoc
+                  :rtc/uploading? true
+                  :rtc/loading-graphs? false)
+           (-> (p/with-redefs [state/get-rtc-graphs (fn [] [{:url "demo-graph"}])
+                               state/<invoke-db-worker (fn [& args]
+                                                         (swap! calls conj args)
+                                                         (p/resolved :ok))]
+                 (db-sync/<rtc-start! "demo-graph"))
+               (p/then (fn [_]
+                         (is (not-any? #(= :thread-api/db-sync-start (first %)) @calls))
+                         (is (some #(= :thread-api/db-sync-stop (first %)) @calls))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))
+               (p/finally (fn []
+                            (reset! state/*db-worker worker-prev)
+                            (reset! state/state state-prev)))))))
+
 (deftest rtc-download-graph-emits-feedback-before-snapshot-fetch-test
   (let [trace (atom [])
         log-events (atom [])]
