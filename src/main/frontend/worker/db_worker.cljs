@@ -663,10 +663,45 @@
 ;; Chunked import state - held between prepare/chunk/finalize calls
 (defonce ^:private *import-state (atom nil))
 
+(defn- stale-import-ex-info
+  [repo graph-id import-id]
+  (ex-info "stale db sync import"
+           {:type :db-sync/stale-import
+            :repo repo
+            :graph-id graph-id
+            :import-id import-id}))
+
+(defn- close-import-state!
+  [{:keys [db]}]
+  (when db
+    (try
+      (.close db)
+      (catch :default _))))
+
+(defn- clear-import-state!
+  [import-id]
+  (when-let [state @*import-state]
+    (when (= import-id (:import-id state))
+      (close-import-state! state)
+      (reset! *import-state nil))))
+
+(defn- require-import-state!
+  [repo graph-id import-id]
+  (let [state @*import-state]
+    (when-not (and state
+                   (= import-id (:import-id state))
+                   (or (nil? repo) (= repo (:repo state)))
+                   (= graph-id (:graph-id state)))
+      (throw (stale-import-ex-info repo graph-id import-id)))
+    state))
+
 (def-thread-api :thread-api/db-sync-import-prepare
   [repo reset? graph-id graph-e2ee?]
   (let [graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))]
-    (-> (p/let [_ (when reset? (close-db! repo))
+    (-> (p/let [_ (when-let [state @*import-state]
+                    (close-import-state! state))
+                _ (reset! *import-state nil)
+                _ (when reset? (close-db! repo))
                 _ (when reset? (<invalidate-search-db! repo))
                 aes-key (when graph-e2ee?
                           (sync-crypt/<fetch-graph-aes-key-for-download graph-id))
@@ -676,15 +711,21 @@
                 ^js db (new (.-OpfsSAHPoolDb pool) repo-path)
                 _ (common-sqlite/create-kvs-table! db)
                 _ (enable-sqlite-wal-mode! db)
-                _ (when reset? (.exec db "DELETE FROM kvs"))]
-          (reset! *import-state {:db db :aes-key aes-key :graph-e2ee? graph-e2ee?})
-          true)
+                _ (when reset? (.exec db "DELETE FROM kvs"))
+                import-id (str (random-uuid))]
+          (reset! *import-state {:aes-key aes-key
+                                 :db db
+                                 :graph-e2ee? graph-e2ee?
+                                 :graph-id graph-id
+                                 :import-id import-id
+                                 :repo repo})
+          {:import-id import-id})
         (p/catch (fn [error]
                    (throw error))))))
 
 (def-thread-api :thread-api/db-sync-import-rows-chunk
-  [rows chunk-idx total-chunks graph-id]
-  (-> (p/let [{:keys [db aes-key graph-e2ee?]} @*import-state
+  [rows chunk-idx total-chunks graph-id import-id]
+  (-> (p/let [{:keys [db aes-key graph-e2ee?]} (require-import-state! nil graph-id import-id)
               batches (partition-all 100 rows)]
         (p/doseq [batch batches]
           (p/let [rows-batch (if graph-e2ee?
@@ -697,22 +738,20 @@
                                     :message (str "Importing data " (inc chunk-idx) "/" total-chunks)})
         true)
       (p/catch (fn [error]
-                 (when-let [{:keys [db]} @*import-state]
-                   (try (.close db) (catch :default _)))
-                 (reset! *import-state nil)
+                 (when-not (= :db-sync/stale-import (:type (ex-data error)))
+                   (clear-import-state! import-id))
                  (throw error)))))
 
 (def-thread-api :thread-api/db-sync-import-finalize
-  [repo graph-id remote-tx]
-  (-> (p/let [{:keys [db]} @*import-state
+  [repo graph-id remote-tx import-id]
+  (-> (p/let [{:keys [db]} (require-import-state! repo graph-id import-id)
               _ (.exec db "PRAGMA wal_checkpoint(2)")
               _ (.close db)
               _ (reset! *import-state nil)]
         (import-datoms-to-db! repo graph-id remote-tx nil))
       (p/catch (fn [error]
-                 (when-let [{:keys [db]} @*import-state]
-                   (try (.close db) (catch :default _)))
-                 (reset! *import-state nil)
+                 (when-not (= :db-sync/stale-import (:type (ex-data error)))
+                   (clear-import-state! import-id))
                  (throw error)))))
 
 ;; Keep original API for backward compat (non-mobile use)
