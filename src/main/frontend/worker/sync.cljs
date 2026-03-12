@@ -1260,7 +1260,6 @@
   [repo graph-id source-conn aes-key update-progress]
   (p/let [temp (<create-temp-sqlite-conn (d/schema @source-conn))
           datoms (d/datoms @source-conn :eavt)
-          _ (prn :debug :datoms-count (count datoms) :time (js/Date.))
           _ (<process-upload-datoms-in-batches!
              datoms
              {:process-batch-f
