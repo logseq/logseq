@@ -200,14 +200,14 @@
       (is (string/includes? output "_logseq()")))
     (testing "output ends with compdef _logseq logseq"
       (is (string/includes? output "compdef _logseq logseq")))
-    (testing "boolean flags emit bare flag form"
-      (is (re-find #"--verbose\[" output)))
+    (testing "boolean flags emit alias grouping"
+      (is (string/includes? output "'{-v,--verbose}'[")))
     (testing "enum options emit value list form"
-      (is (re-find #"--output=.*\(human json edn\)" output)))
+      (is (string/includes? output "'{-o,--output}'=[Output format. Default: human]:value:(human json edn)'")))
     (testing ":complete :graphs emits _logseq_graphs"
-      (is (re-find #"--graph=.*_logseq_graphs" output)))
+      (is (string/includes? output "'{-g,--graph}'=[Graph name]:value:_logseq_graphs'")))
     (testing ":complete :file emits _files"
-      (is (re-find #"--config=.*_files'" output)))
+      (is (string/includes? output "'{-c,--config}'=[Path to cli.edn (default ~/logseq/cli.edn)]:file:_files'")))
     (testing ":alias emits grouping"
       (is (re-find #"\(-h --help\)" output)))))
 
@@ -218,10 +218,8 @@
     (testing "--sort for list page offers correct values"
       (is (re-find #"--sort=.*\(title created-at updated-at\)" output)))
     (testing "--sort for list tag offers name title"
-      ;; The list tag function should contain (name title)
-      (let [tag-section (second (re-find #"_logseq_list_tag\(\).*?(?=\n_logseq)" output))]
-        ;; Just check globally that name title appears in sort context
-        (is (re-find #"\(name title\)" output))))))
+      ;; Just check globally that name title appears in sort context
+      (is (re-find #"\(name title\)" output)))))
 
 (deftest test-zsh-all-commands-present
   (let [output (gen/generate-completions "zsh" full-table)]
