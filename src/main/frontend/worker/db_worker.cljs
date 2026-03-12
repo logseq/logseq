@@ -47,7 +47,6 @@
             [logseq.db.common.view :as db-view]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
@@ -145,17 +144,6 @@
   [^Object db]
   (.exec db "PRAGMA locking_mode=exclusive")
   (.exec db "PRAGMA journal_mode=WAL"))
-
-(defn- ensure-db-sync-import-db!
-  [repo reset?]
-  (if-let [sqlite @*sqlite]
-    (let [^js DB (.-DB ^js (.-oo1 sqlite))
-          ^js db (new DB ":memory:" "c")]
-      (common-sqlite/create-kvs-table! db)
-      (when reset?
-        (.exec db "delete from kvs"))
-      db)
-    (db-sync/fail-fast :db-sync/missing-field {:repo repo :field :sqlite})))
 
 (defn restore-data-from-addr
   "Update sqlite-cli/restore-data-from-addr when making changes"
@@ -293,26 +281,25 @@
       (let [conn (common-sqlite/get-storage-conn storage db-schema/schema)
             _ (db-fix/check-and-fix-schema! conn)
             _ (when datoms
-                (let [property-eids (into #{}
-                                          (comp (filter (fn [datom]
-                                                          (and (= (:a datom) :db/ident)
-                                                               (db-property/property? (:v datom)))))
-                                                (map :e))
-                                          datoms)
+                (let [ident-eids (into #{}
+                                       (comp (filter (fn [datom]
+                                                       (= (:a datom) :db/ident)))
+                                             (map :e))
+                                       datoms)
                       to-tx (fn [d] [:db/add (:e d) (:a d) (:v d)])
                       batch-size 20000
-                      prop-batches (->> datoms
-                                        (filter #(contains? property-eids (:e %)))
-                                        (map to-tx)
-                                        (partition-all batch-size))
-                      _ (doseq [batch prop-batches]
-                          (d/transact! conn (vec batch) {:initial-db? true}))
-                      non-prop-batches (->> datoms
-                                            (remove #(contains? property-eids (:e %)))
-                                            (map to-tx)
-                                            (partition-all batch-size))]
-                  (doseq [batch non-prop-batches]
-                    (d/transact! conn (vec batch) {:initial-db? true}))))
+                      ident-batches (->> datoms
+                                         (filter #(contains? ident-eids (:e %)))
+                                         (map to-tx)
+                                         (partition-all batch-size))
+                      _ (doseq [batch ident-batches]
+                          (d/transact! conn batch {:initial-db? true}))
+                      non-ident-batches (->> datoms
+                                             (remove #(contains? ident-eids (:e %)))
+                                             (map to-tx)
+                                             (partition-all batch-size))]
+                  (doseq [batch non-ident-batches]
+                    (d/transact! conn batch {:initial-db? true}))))
             client-ops-conn (when-not @*publishing? (common-sqlite/get-storage-conn
                                                      client-ops-storage
                                                      client-op/schema-in-db))
@@ -786,7 +773,7 @@
                    (throw error))))))
 
 (def-thread-api :thread-api/db-sync-import-rows-chunk
-  [rows chunk-idx total-chunks graph-id import-id]
+  [rows graph-id import-id]
   (-> (p/let [{:keys [db aes-key graph-e2ee?]} (require-import-state! nil graph-id import-id)
               _ (import-snapshot-rows! db aes-key graph-e2ee? rows)]
         (log-import-progress! graph-id import-id (count rows))
@@ -797,7 +784,7 @@
                  (throw error)))))
 
 (def-thread-api :thread-api/db-sync-import-framed-chunk
-  [chunk chunk-idx graph-id import-id]
+  [chunk graph-id import-id]
   (-> (p/let [{:keys [db aes-key graph-e2ee? snapshot-buffer]} (require-import-state! nil graph-id import-id)
               {:keys [rows buffer]} (snapshot/parse-framed-chunk snapshot-buffer chunk)
               _ (swap! *import-state
@@ -822,10 +809,19 @@
               _ (when (seq rows)
                   (import-snapshot-rows! db aes-key graph-e2ee? rows))
               _ (log-import-progress! graph-id import-id (count rows))
-              _ (.exec db "PRAGMA wal_checkpoint(2)")
+              datoms (when graph-e2ee?
+                       (let [storage (new-sqlite-storage db)
+                             conn (common-sqlite/get-storage-conn storage db-schema/schema)]
+                         (vec (d/datoms @conn :eavt))))
+              _ (when-not graph-e2ee?
+                  (.exec db "PRAGMA wal_checkpoint(2)"))
               _ (.close db)
+              _ (when graph-e2ee?
+                  (when-let [^js pool (worker-state/get-opfs-pool repo)]
+                    (remove-vfs! pool)
+                    (swap! *opfs-pools dissoc repo)))
               _ (reset! *import-state nil)]
-        (import-datoms-to-db! repo graph-id remote-tx nil))
+        (import-datoms-to-db! repo graph-id remote-tx datoms))
       (p/catch (fn [error]
                  (when-not (= :db-sync/stale-import (:type (ex-data error)))
                    (clear-import-state! import-id))

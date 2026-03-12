@@ -150,32 +150,29 @@
           (if (.-done result)
             {:chunk-count chunk-idx}
             (p/let [chunk (->uint8 (.-value result))
-                    _ (on-chunk chunk chunk-idx)]
+                    _ (on-chunk chunk)]
               (p/recur (inc chunk-idx)))))))
     (p/let [chunk (<snapshot-response-bytes resp)]
       (if (and chunk (pos? (.-byteLength chunk)))
-        (p/let [_ (on-chunk chunk 0)]
+        (p/let [_ (on-chunk chunk)]
           {:chunk-count 1})
         {:chunk-count 0}))))
 
 (defn- <flush-row-batches!
-  [rows batch-size chunk-idx on-batch]
-  (p/loop [remaining rows
-           chunk-idx chunk-idx]
+  [rows batch-size on-batch]
+  (p/loop [remaining rows]
     (if (>= (count remaining) batch-size)
       (let [batch (subvec remaining 0 batch-size)
             rest-rows (subvec remaining batch-size)]
-        (p/let [_ (on-batch batch chunk-idx)]
-          (p/recur rest-rows (inc chunk-idx))))
-      {:chunk-idx chunk-idx
-       :rows remaining})))
+        (p/let [_ (on-batch batch)]
+          (p/recur rest-rows)))
+      remaining)))
 
 (defn- <stream-snapshot-row-batches!
   [^js resp batch-size on-batch]
   (if-let [stream (response-body-stream resp)]
     (let [reader (.getReader stream)]
       (p/loop [buffer nil
-               chunk-idx 0
                pending []]
         (p/let [result (.read reader)]
           (if (.-done result)
@@ -183,18 +180,17 @@
                             (into pending (finalize-framed-buffer buffer))
                             pending)]
               (if (seq pending)
-                (p/let [_ (on-batch pending chunk-idx)]
-                  {:chunk-count (inc chunk-idx)})
-                {:chunk-count chunk-idx}))
+                (p/let [_ (on-batch pending)]
+                  {:chunk-count 1})
+                {:chunk-count 0}))
             (let [{rows :rows next-buffer :buffer} (parse-framed-chunk buffer (->uint8 (.-value result)))
                   pending (into pending rows)]
-              (p/let [{chunk-idx :chunk-idx
-                       pending :rows} (<flush-row-batches! pending batch-size chunk-idx on-batch)]
-                (p/recur next-buffer chunk-idx pending)))))))
+              (p/let [pending (<flush-row-batches! pending batch-size on-batch)]
+                (p/recur next-buffer pending)))))))
     (p/let [snapshot-bytes (<snapshot-response-bytes resp)
             rows (vec (finalize-framed-buffer snapshot-bytes))]
       (if (seq rows)
-        (p/let [_ (on-batch rows 0)]
+        (p/let [_ (on-batch rows)]
           {:chunk-count 1})
         {:chunk-count 0}))))
 
@@ -454,20 +450,19 @@
                    (p/let [_ (if @state/*db-worker
                                (<stream-snapshot-chunks!
                                 resp
-                                (fn [chunk chunk-idx]
+                                (fn [chunk]
                                   (p/let [import-id (ensure-import!)]
                                     (state/<invoke-db-worker-direct-pass :thread-api/db-sync-import-framed-chunk
                                                                          (Comlink/transfer chunk #js [(.-buffer chunk)])
-                                                                         chunk-idx
                                                                          graph-uuid
                                                                          import-id))))
                                (<stream-snapshot-row-batches!
                                 resp
                                 10000
-                                (fn [rows chunk-idx]
+                                (fn [rows]
                                   (p/let [import-id (ensure-import!)]
                                     (state/<invoke-db-worker :thread-api/db-sync-import-rows-chunk
-                                                             rows chunk-idx nil graph-uuid import-id)))))
+                                                             rows graph-uuid import-id)))))
                            _ (state/pub-event!
                               [:rtc/log {:type :rtc.log/download
                                          :sub-type :download-completed

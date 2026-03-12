@@ -241,7 +241,7 @@
                (p/then (fn [_]
                          (is (= 3 (count @import-calls)))
                          (let [[prepare-op graph reset? graph-uuid graph-e2ee?] (first @import-calls)
-                               [chunk-op imported-rows chunk-idx total-chunks chunk-graph-uuid import-id] (second @import-calls)
+                               [chunk-op imported-rows chunk-graph-uuid import-id] (second @import-calls)
                                [finalize-op finalize-graph finalize-graph-uuid remote-tx finalize-import-id] (nth @import-calls 2)]
                            (is (= :thread-api/db-sync-import-prepare prepare-op))
                            (is (string/ends-with? graph "demo-graph"))
@@ -250,8 +250,6 @@
                            (is (= false graph-e2ee?))
                            (is (= :thread-api/db-sync-import-rows-chunk chunk-op))
                            (is (= rows imported-rows))
-                           (is (= 0 chunk-idx))
-                           (is (nil? total-chunks))
                            (is (= "graph-1" chunk-graph-uuid))
                            (is (= "import-1" import-id))
                            (is (= :thread-api/db-sync-import-finalize finalize-op))
@@ -315,7 +313,7 @@
                      (p/finally (fn [] (set! js/fetch original-fetch)))))
                (p/then (fn [_]
                          (is (= 3 (count @import-calls)))
-                         (let [[chunk-op imported-rows _ _ _ import-id] (second @import-calls)]
+                         (let [[chunk-op imported-rows _ import-id] (second @import-calls)]
                            (is (= :thread-api/db-sync-import-rows-chunk chunk-op))
                            (is (= rows imported-rows))
                            (is (= "import-1" import-id)))
@@ -374,7 +372,7 @@
                      (p/finally (fn [] (set! js/fetch original-fetch)))))
                (p/then (fn [_]
                          (is (= 3 (count @import-calls)))
-                         (let [[chunk-op imported-rows _ _ _ import-id] (second @import-calls)]
+                         (let [[chunk-op imported-rows _ import-id] (second @import-calls)]
                            (is (= :thread-api/db-sync-import-rows-chunk chunk-op))
                            (is (= rows imported-rows))
                            (is (= "import-1" import-id)))
