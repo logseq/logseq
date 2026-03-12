@@ -5,6 +5,7 @@ The Logseq CLI is a Node.js program compiled from ClojureScript that connects to
 ## Build the CLI
 
 ```bash
+npm install -g @vercel/ncc
 clojure -M:cljs compile logseq-cli
 yarn db-worker-node:release:bundle
 ```
@@ -108,6 +109,20 @@ Server commands:
 Auth commands:
 - `login` - authenticate this machine and create/update `~/logseq/auth.json`
 - `logout` - remove persisted CLI auth from `~/logseq/auth.json`
+
+Shell completion:
+- `completion <zsh|bash>` - generate shell completion script to stdout
+
+Setup for zsh (add to `~/.zshrc`):
+```bash
+autoload -Uz compinit && compinit
+eval "$(logseq completion zsh)"
+```
+
+Setup for bash (add to `~/.bashrc`):
+```bash
+eval "$(logseq completion bash)"
+```
 
 Server ownership behavior:
 - `server stop` and `server restart` can return `server-owned-by-other` if the daemon was started by another owner source.
