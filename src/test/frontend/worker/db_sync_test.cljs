@@ -1,5 +1,6 @@
 (ns frontend.worker.db-sync-test
   (:require [cljs.test :refer [deftest is testing async]]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.crypt :as crypt]
             [frontend.worker-common.util :as worker-util]
@@ -10,6 +11,7 @@
             [frontend.worker.sync.crypt :as sync-crypt]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
+            [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.test.helper :as db-test]
@@ -986,6 +988,63 @@
                                   :aes-key nil})]
                    (is (= tx-data result)))
                  (p/finally done))))))
+
+(deftest upload-preparation-processes-datoms-in-batches-test
+  (testing "upload preparation should stream work batch by batch instead of sending the full graph at once"
+    (async done
+           (let [datoms [{:e 1 :a :block/title :v "a"}
+                         {:e 2 :a :block/title :v "b"}
+                         {:e 3 :a :block/title :v "c"}
+                         {:e 4 :a :block/title :v "d"}
+                         {:e 5 :a :block/title :v "e"}]
+                 seen-batches (atom [])
+                 progress-calls (atom [])]
+             (-> (p/let [_ (#'db-sync/<process-upload-datoms-in-batches!
+                            datoms
+                            {:batch-size 2
+                             :process-batch-f (fn [batch]
+                                                (swap! seen-batches conj (mapv :e batch))
+                                                (p/resolved nil))
+                             :progress-f (fn [processed total]
+                                           (swap! progress-calls conj [processed total]))})]
+                   (is (= [[1 2] [3 4] [5]] @seen-batches))
+                   (is (= [[2 5] [4 5] [5 5]] @progress-calls)))
+                 (p/finally done))))))
+
+(deftest create-temp-sqlite-db-uses-opfs-pool-test
+  (testing "temp upload db should use an OPFS-backed sqlite db instead of :memory:"
+    (async done
+           (let [opened-paths (atom [])]
+             (with-redefs [db-sync/<get-upload-temp-sqlite-pool
+                           (fn []
+                             (p/resolved
+                              #js {:OpfsSAHPoolDb
+                                   (fn [path]
+                                     (swap! opened-paths conj path)
+                                     #js {:close (fn [] nil)})}))
+                           logseq.db.common.sqlite/create-kvs-table! (fn [_] nil)]
+               (-> (p/let [{:keys [db path]} (#'db-sync/<create-temp-sqlite-db!)]
+                     (is (some? db))
+                     (is (= [path] @opened-paths))
+                     (is (string/includes? path "upload-"))
+                     (is (string/ends-with? path ".sqlite")))
+                   (p/finally done)))))))
+
+(deftest cleanup-temp-sqlite-removes-opfs-file-test
+  (testing "temp upload db cleanup should close the db and remove the temp OPFS file"
+    (async done
+           (let [closed? (atom false)
+                 removed-paths (atom [])]
+             (with-redefs [db-sync/<remove-upload-temp-sqlite-db-file!
+                           (fn [path]
+                             (swap! removed-paths conj path)
+                             (p/resolved nil))]
+               (-> (p/let [_ (#'db-sync/cleanup-temp-sqlite!
+                              {:db #js {:close (fn [] (reset! closed? true))}
+                               :path "/upload-temp.sqlite"})]
+                     (is @closed?)
+                     (is (= ["/upload-temp.sqlite"] @removed-paths)))
+                   (p/finally done)))))))
 
 (deftest ^:long upload-large-title-encrypts-transit-payload-test
   (testing "encrypted large title uploads transit-encoded payload"
