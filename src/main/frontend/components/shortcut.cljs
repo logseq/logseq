@@ -13,7 +13,6 @@
             [goog.events :as events]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]
             [rum.core :as rum])
   (:import [goog.events KeyHandler]))
 
@@ -316,7 +315,7 @@
                                 :onEscapeKeyDown (fn [_] false)
                                 :onPointerDownOutside (fn [_] nil)}})))]
         (if in-keystroke?
-          [:button.shortcut-keystroke-active
+          [:div.shortcut-keystroke-active
            {:on-click open-filter!}
            [:span.shortcut-keystroke-keys
             (ui/icon "keyboard" {:size 14})
@@ -389,7 +388,7 @@
           close-fn! #(do (reset! *active-shortcut-id nil)
                          (shui/popup-hide! popup-id))
           args [id label binding user-binding
-                {:saved-cb (fn [] (-> (p/delay 500) (p/then refresh-shortcuts-list!)))
+                {:saved-cb (fn [] (js/setTimeout refresh-shortcuts-list! 500))
                  :close-fn close-fn!}]]
       ;; Close any previously open shortcut popover
       (when-let [prev-id @*active-shortcut-id]

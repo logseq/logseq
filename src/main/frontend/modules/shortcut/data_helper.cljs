@@ -261,8 +261,10 @@
    Used for non-blocking amber warnings when a key is shared across contexts."
   [ks handler-id {:keys [exclude-ids]}]
   (let [global-handlers #{:shortcut.handler/editor-global
+                          :shortcut.handler/block-editing-only
                           :shortcut.handler/global-non-editing-only
-                          :shortcut.handler/global-prevent-default}
+                          :shortcut.handler/global-prevent-default
+                          :shortcut.handler/misc}
         ks-bindings (get-bindings-keys-map)
         caller-handlers (should-be-included-to-global-handler handler-id)
         caller-is-global? (seq (set/intersection global-handlers caller-handlers))]
