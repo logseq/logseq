@@ -8,6 +8,7 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.client-op :as client-op]
+            [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.log-and-state :as rtc-log-and-state]
             [logseq.db.common.sqlite :as common-sqlite]
             [promesa.core :as p]))
@@ -103,6 +104,12 @@
     (catch :default error
       (p/resolved {:error error}))))
 
+(defn- make-snapshot-rows
+  [n]
+  (mapv (fn [i]
+          [i (str "content-" i) (str "addresses-" i)])
+        (range n)))
+
 (deftest db-sync-import-prepare-replaces-active-import-state-test
   (async done
          (restoring-worker-state
@@ -175,6 +182,62 @@
                                     (is (= 1 (count @upserts)))
                                     (finalize test-repo "graph-1" 42 (:import-id second-import))))
                           (p/then (fn [_] (done))))))
+                  (p/catch (fn [error]
+                             (is false (str error))
+                             (done)))))))))
+
+(deftest db-sync-import-rows-chunk-imports-plain-rows-in-a-single-write-batch-test
+  (async done
+         (restoring-worker-state
+          (fn []
+            (let [closed (atom [])
+                  upserts (atom [])
+                  rows (make-snapshot-rows 250)
+                  prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
+                  rows-chunk (@thread-api/*thread-apis :thread-api/db-sync-import-rows-chunk)]
+              (-> (p/with-redefs [db-worker/<get-opfs-pool (fn [_] (p/resolved (fake-import-pool [:plain] closed)))
+                                  common-sqlite/create-kvs-table! (fn [_] nil)
+                                  db-worker/enable-sqlite-wal-mode! (fn [_] nil)
+                                  db-worker/upsert-addr-content! (fn [db binds]
+                                                                   (swap! upserts conj {:db db :binds binds}))
+                                  rtc-log-and-state/rtc-log (fn [& _] nil)]
+                    (p/let [{:keys [import-id]} (prepare test-repo false "graph-1" false)
+                            _ (rows-chunk rows 0 1 "graph-1" import-id)]
+                      (is (= 1 (count @upserts)))
+                      (is (= (count rows) (count (:binds (first @upserts)))))
+                      (done)))
+                  (p/catch (fn [error]
+                             (is false (str error))
+                             (done)))))))))
+
+(deftest db-sync-import-rows-chunk-imports-encrypted-rows-in-a-single-write-batch-test
+  (async done
+         (restoring-worker-state
+          (fn []
+            (let [closed (atom [])
+                  upserts (atom [])
+                  decrypt-calls (atom [])
+                  rows (make-snapshot-rows 250)
+                  prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
+                  rows-chunk (@thread-api/*thread-apis :thread-api/db-sync-import-rows-chunk)]
+              (-> (p/with-redefs [db-worker/<get-opfs-pool (fn [_] (p/resolved (fake-import-pool [:encrypted] closed)))
+                                  common-sqlite/create-kvs-table! (fn [_] nil)
+                                  db-worker/enable-sqlite-wal-mode! (fn [_] nil)
+                                  sync-crypt/<fetch-graph-aes-key-for-download (fn [_] (p/resolved :aes-key))
+                                  sync-crypt/<decrypt-snapshot-rows-batch (fn [aes-key rows-batch]
+                                                                            (swap! decrypt-calls conj {:aes-key aes-key
+                                                                                                       :rows rows-batch})
+                                                                            (p/resolved rows-batch))
+                                  db-worker/upsert-addr-content! (fn [db binds]
+                                                                   (swap! upserts conj {:db db :binds binds}))
+                                  rtc-log-and-state/rtc-log (fn [& _] nil)]
+                    (p/let [{:keys [import-id]} (prepare test-repo false "graph-1" true)
+                            _ (rows-chunk rows 0 1 "graph-1" import-id)]
+                      (is (= 1 (count @decrypt-calls)))
+                      (is (= rows (:rows (first @decrypt-calls))))
+                      (is (= 1 (count @upserts)))
+                      (is (= (count rows) (count (:binds (first @upserts)))))
+                      (done)))
                   (p/catch (fn [error]
                              (is false (str error))
                              (done)))))))))
