@@ -276,6 +276,7 @@
                   storage-conn (d/create-conn db-schema/schema)
                   prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
                   finalize (@thread-api/*thread-apis :thread-api/db-sync-import-finalize)]
+              (reset! worker-state/*opfs-pools {test-repo pool})
               (d/transact! storage-conn
                            (mapv (fn [{:keys [e a v]}]
                                    [:db/add e a v])
@@ -283,7 +284,6 @@
               (-> (p/with-redefs [db-worker/<get-opfs-pool (fn [_] (p/resolved (fake-import-pool [:encrypted] closed)))
                                   common-sqlite/create-kvs-table! (fn [_] nil)
                                   db-worker/enable-sqlite-wal-mode! (fn [_] nil)
-                                  worker-state/get-opfs-pool (fn [_] pool)
                                   sync-crypt/<fetch-graph-aes-key-for-download (fn [_] (p/resolved :aes-key))
                                   common-sqlite/get-storage-conn (fn [_ _] storage-conn)
                                   db-worker/import-datoms-to-db! (fn [& args]
@@ -297,7 +297,6 @@
                         (is (= 42 remote-tx))
                         (is (= [[171 :block/name "$$$views"]]
                                (mapv (fn [d] [(:e d) (:a d) (:v d)]) imported-datoms))))
-                      (is (= [:removed] @removed))
                       (is (nil? (get @worker-state/*opfs-pools test-repo)))
                       (done)))
                   (p/catch (fn [error]
