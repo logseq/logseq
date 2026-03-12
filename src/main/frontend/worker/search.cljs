@@ -22,6 +22,10 @@
 ;; maybe https://github.com/nalgeon/sqlean/blob/main/docs/fuzzy.md?
 (defonce fuzzy-search-indices (atom {}))
 
+(defn clear-fuzzy-search-indice!
+  [repo]
+  (swap! fuzzy-search-indices dissoc repo))
+
 ;; Configuration for re-ranking
 (def config
   {:keyword-weight 0.9
@@ -597,58 +601,58 @@ DROP TRIGGER IF EXISTS blocks_au;
                           :as option
                           :or {enable-snippet? true}}]
   (m/sp
-   (when-not (string/blank? q)
-     (let [option (assoc option :enable-snippet? enable-snippet?)
-           match-input (get-match-input q)
-           page-count (count (d/datoms @conn :avet :block/name))
-           large-graph? (> page-count 2500)
-           non-match-input (when (<= (count q) 2)
-                             (str "%" (string/replace q #"\s+" "%") "%"))
-           limit (or limit 100)
-           limit-p (or search-limit limit)
+    (when-not (string/blank? q)
+      (let [option (assoc option :enable-snippet? enable-snippet?)
+            match-input (get-match-input q)
+            page-count (count (d/datoms @conn :avet :block/name))
+            large-graph? (> page-count 2500)
+            non-match-input (when (<= (count q) 2)
+                              (str "%" (string/replace q #"\s+" "%") "%"))
+            limit (or limit 100)
+            limit-p (or search-limit limit)
            ;; don't use sqlite snippet function anymore, all snippets will be handled by ensure-highlighted-snippet
-           select "select id, page, title, rank from blocks_fts where "
-           pg-sql (if page "page = ? and" "")
-           match-sql (if (ns-util/namespace-page? q)
-                       (str select pg-sql " title match ? or title match ? order by rank limit ?")
-                       (str select pg-sql " title match ? order by rank limit ?"))
-           non-match-sql (str select pg-sql " title like ? limit ?")
-           matched-result (when-not page-only?
-                            (search-blocks-aux search-db match-sql q match-input page limit-p (ns-util/namespace-page? q)))
-           non-match-result (when (and (not page-only?) non-match-input)
-                              (->> (search-blocks-aux search-db non-match-sql q non-match-input page limit-p)
-                                   (map (fn [result]
-                                          (assoc result :keyword-score (fuzzy/score q (:title result)))))))
+            select "select id, page, title, rank from blocks_fts where "
+            pg-sql (if page "page = ? and" "")
+            match-sql (if (ns-util/namespace-page? q)
+                        (str select pg-sql " title match ? or title match ? order by rank limit ?")
+                        (str select pg-sql " title match ? order by rank limit ?"))
+            non-match-sql (str select pg-sql " title like ? limit ?")
+            matched-result (when-not page-only?
+                             (search-blocks-aux search-db match-sql q match-input page limit-p (ns-util/namespace-page? q)))
+            non-match-result (when (and (not page-only?) non-match-input)
+                               (->> (search-blocks-aux search-db non-match-sql q non-match-input page limit-p)
+                                    (map (fn [result]
+                                           (assoc result :keyword-score (fuzzy/score q (:title result)))))))
             ;; fuzzy is too slow for large graphs
-           fuzzy-result (when-not (or page large-graph?)
-                          (->> (fuzzy-search repo @conn q option)
-                               (map (fn [result]
-                                      (assoc result :keyword-score (fuzzy/score q (:title result)))))))
-           semantic-search-result* (m/? (embedding/task--search repo q 10))
-           semantic-search-result (->> semantic-search-result*
-                                       (map (fn [{:keys [block distance]}]
-                                              (let [page-id (when-let [id (:block/uuid (:block/page block))] (str id))]
-                                                (cond->
-                                                 {:id (str (:block/uuid block))
-                                                  :title (:block/title block)
-                                                  :semantic-score (/ 1.0 (+ 1.0 distance))}
-                                                  page-id
-                                                  (assoc :page page-id))))))
+            fuzzy-result (when-not (or page large-graph?)
+                           (->> (fuzzy-search repo @conn q option)
+                                (map (fn [result]
+                                       (assoc result :keyword-score (fuzzy/score q (:title result)))))))
+            semantic-search-result* (m/? (embedding/task--search repo q 10))
+            semantic-search-result (->> semantic-search-result*
+                                        (map (fn [{:keys [block distance]}]
+                                               (let [page-id (when-let [id (:block/uuid (:block/page block))] (str id))]
+                                                 (cond->
+                                                  {:id (str (:block/uuid block))
+                                                   :title (:block/title block)
+                                                   :semantic-score (/ 1.0 (+ 1.0 distance))}
+                                                   page-id
+                                                   (assoc :page page-id))))))
           ;;  _ (prn :debug "Search results before combine:" enable-snippet? (map :snippet matched-result))
           ;;  _ (doseq [item (concat fuzzy-result matched-result)]
           ;;      (prn :debug :keyword-search-result item))
           ;;  _ (doseq [item semantic-search-result]
           ;;      (prn :debug :semantic-search-item item))
-           combined-result (combine-results @conn (concat fuzzy-result matched-result non-match-result) semantic-search-result)
-           code-class (when code-only?
-                        (d/entity @conn :logseq.class/Code-block))
-           result (->> combined-result
-                       (common-util/distinct-by :id)
-                       (keep #(search-result->block-result conn q code-class option %)))
-           result (cond->> result
-                    search-limit
-                    (take limit))]
-       (common-util/distinct-by :block/uuid result)))))
+            combined-result (combine-results @conn (concat fuzzy-result matched-result non-match-result) semantic-search-result)
+            code-class (when code-only?
+                         (d/entity @conn :logseq.class/Code-block))
+            result (->> combined-result
+                        (common-util/distinct-by :id)
+                        (keep #(search-result->block-result conn q code-class option %)))
+            result (cond->> result
+                     search-limit
+                     (take limit))]
+        (common-util/distinct-by :block/uuid result)))))
 
 (defn truncate-table!
   [db]
