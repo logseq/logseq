@@ -424,8 +424,6 @@
                             :else
                             nil))))
                     tx-data)]
-      (when (seq tx-data')
-        (prn :debug ::revert-built-in-block-updates :tx-data (distinct tx-data')))
       (distinct tx-data'))))
 
 (defn- compute-extra-tx-data
