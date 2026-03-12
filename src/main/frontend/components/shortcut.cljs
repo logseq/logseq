@@ -1229,6 +1229,8 @@
                          (not in-keystroke?))
                 [:li.flex.justify-between.th
                  {:key       (str c)
+                  :role "button"
+                  :aria-expanded (str (not folded?))
                   :tab-index -1
                   :on-click  (fn [^js e]
                                (let [header-el (.-currentTarget e)
