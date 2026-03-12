@@ -269,3 +269,26 @@
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
+
+(deftest list-servers-includes-revision-from-lock
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "cli-server-list-revision")
+               repo (str "logseq_db_list_revision_" (subs (str (random-uuid)) 0 8))
+               lock-file (cli-server/lock-path data-dir repo)
+               lock {:repo repo
+                     :pid (.-pid js/process)
+                     :host "127.0.0.1"
+                     :port 9311
+                     :owner-source :cli
+                     :revision "server-revision"}]
+           (fs/mkdirSync (node-path/dirname lock-file) #js {:recursive true})
+           (fs/writeFileSync lock-file (js/JSON.stringify (clj->js lock)))
+           (-> (p/with-redefs [daemon/ready? (fn [_] (p/resolved true))]
+                 (cli-server/list-servers {:data-dir data-dir}))
+               (p/then (fn [servers]
+                         (is (= 1 (count servers)))
+                         (is (= repo (:repo (first servers))))
+                         (is (= "server-revision" (:revision (first servers))))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))

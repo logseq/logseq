@@ -127,7 +127,9 @@ eval "$(logseq completion bash)"
 Server ownership behavior:
 - `server stop` and `server restart` can return `server-owned-by-other` if the daemon was started by another owner source.
 - `server start` can return `server-start-timeout-orphan` when lock creation times out and orphan matching processes are detected.
-- `server list` human output includes an `OWNER` column, and `server status` / `server list` include owner metadata in structured output (`--output json|edn`).
+- `server list` human output includes both `OWNER` and `REVISION` columns.
+- `server list` prints a compatibility warning in human output when any server revision string is not exactly equal to the local CLI revision string.
+- Structured output (`--output json|edn`) includes per-server `revision` data but does not include human warning text.
 
 Sync commands:
 - `sync status --graph <name>` - show db-sync runtime state for a graph daemon

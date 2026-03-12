@@ -230,18 +230,36 @@
                 graph)])
            graphs))))
 
+(defn- format-server-list-warning
+  [{:keys [cli-revision servers]}]
+  (when (seq servers)
+    (str "Warning: server revision mismatch detected\n"
+         "Local CLI revision: " (normalize-cell cli-revision) "\n"
+         "Mismatched servers:\n"
+         (string/join "\n"
+                      (map (fn [{:keys [repo revision]}]
+                             (str "  - " (normalize-cell repo)
+                                  " (revision: "
+                                  (normalize-cell revision)
+                                  ")"))
+                           servers)))))
+
 (defn- format-server-list
-  [servers]
-  (format-counted-table
-   ["GRAPH" "STATUS" "HOST" "PORT" "PID" "OWNER"]
-   (mapv (fn [server]
-           [(:repo server)
-            (:status server)
-            (:host server)
-            (:port server)
-            (:pid server)
-            (:owner-source server)])
-         (or servers []))))
+  [servers revision-mismatch]
+  (let [table (format-counted-table
+               ["GRAPH" "STATUS" "HOST" "PORT" "PID" "OWNER" "REVISION"]
+               (mapv (fn [server]
+                       [(:repo server)
+                        (:status server)
+                        (:host server)
+                        (:port server)
+                        (:pid server)
+                        (:owner-source server)
+                        (:revision server)])
+                     (or servers [])))]
+    (if-let [warning (format-server-list-warning revision-mismatch)]
+      (str table "\n\n" warning)
+      table)))
 
 (defn- format-query-results
   [result]
@@ -522,7 +540,7 @@
     (string/join "\n" (into [header] check-lines))))
 
 (defn- ->human
-  [{:keys [status data error command context]} {:keys [now-ms graph]}]
+  [{:keys [status data error command context human]} {:keys [now-ms graph]}]
   (let [now-ms (or now-ms (js/Date.now))]
     (case status
       :ok
@@ -531,7 +549,8 @@
         :graph-info (format-graph-info data now-ms)
         (:graph-create :graph-switch :graph-remove :graph-validate)
         (format-graph-action command context)
-        :server-list (format-server-list (:servers data))
+        :server-list (format-server-list (:servers data)
+                                         (get-in human [:server-list :revision-mismatch]))
         :server-status (format-server-status data)
         (:server-start :server-stop :server-restart)
         (format-server-action command data)
