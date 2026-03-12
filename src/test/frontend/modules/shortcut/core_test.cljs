@@ -22,18 +22,20 @@
               (vals) (mapcat #(vals %)) (some #(when (= (first %) (if util/mac? "meta+c" "ctrl+c")) (second %))))
          :misc/copy))
 
-    ;; Chord-prefix overlaps are NOT blocking conflicts — "t" should not
-    ;; find "t n", "t d", etc. since no shortcut has exactly "t" as binding.
-    (is (empty? (->> (dh/get-conflicts-by-keys ["t"])
-                     (vals)
-                     (first)
-                     (vals)
-                     (map first)))
-        "chord-prefix overlaps are not blocking conflicts")
+    ;; A plain leader key in the same handler must block existing chords that
+    ;; start with that leader, otherwise those chords become dormant at runtime.
+    (let [leader-conflicts (->> (dh/get-conflicts-by-keys ["t"])
+                                (vals)
+                                (mapcat vals)
+                                (map first)
+                                (set))]
+      (is (contains? leader-conflicts "t n"))
+      (is (contains? leader-conflicts "t b")))
 
-    ;; mod+c should find :editor/copy (exact match) but NOT :sidebar/clear
-    ;; (chord prefix mod+c mod+c) — chord prefixes coexist at runtime on
-    ;; separate handler instances and should never block assignment.
+    ;; mod+c should find :editor/copy (exact match). Because the keymap dialog
+    ;; checks co-active handlers together, it must also surface same-handler
+    ;; chord-prefix clashes that would otherwise leave chords dormant at
+    ;; runtime.
     (let [conflicts (dh/get-conflicts-by-keys
                      "mod+c" :shortcut.handler/global-prevent-default
                      {:group-global? true})
@@ -43,10 +45,26 @@
                        (set))]
       (is (contains? all-ids :editor/copy)
           "exact match is a blocking conflict")
-      (is (not (contains? all-ids :sidebar/clear))
-          "chord prefix mod+c mod+c is NOT a blocking conflict")
-      (is (not (contains? all-ids :search/re-index))
-          "chord prefix mod+c mod+s is NOT a blocking conflict"))
+      (is (contains? all-ids :sidebar/clear)
+          "same-handler chord prefix mod+c mod+c must block assignment")
+      (is (contains? all-ids :search/re-index)
+          "same-handler chord prefix mod+c mod+s must block assignment"))
+
+    ;; On the SAME handler instance, a simple key and a chord with the same
+    ;; leading stroke cannot coexist. The UI must still block these assignments
+    ;; because runtime registration will otherwise silently leave the chord
+    ;; dormant.
+    (let [same-handler-conflicts (dh/get-conflicts-by-keys
+                                  "mod+c" :shortcut.handler/global-prevent-default
+                                  {:group-global? false})
+          all-ids (->> (vals same-handler-conflicts)
+                       (mapcat vals)
+                       (mapcat #(keys (second %)))
+                       (set))]
+      (is (contains? all-ids :sidebar/clear)
+          "same-handler chord prefix mod+c mod+c must block assignment")
+      (is (contains? all-ids :search/re-index)
+          "same-handler chord prefix mod+c mod+s must block assignment"))
 
     (is (nil? (seq (dh/get-conflicts-by-keys ["g"] :shortcut.handler/cards)))
         "specific handler with the global conflicting key"))
