@@ -1,4 +1,4 @@
-(ns frontend.worker.test-env)
+(ns frontend.worker.a-test-env)
 
 (when-not (exists? js/globalThis.self)
   (set! (.-self js/globalThis) js/globalThis))
