@@ -60,6 +60,10 @@
                       (done))))
    :after test-helper/destroy-test-db!})
 
+(use-fixtures :each
+  {:before (fn []
+             (state/set-current-repo! test-helper/test-db))})
+
 (deftest export-blocks-as-markdown-without-properties
   (are [expect block-uuid-s]
        (= expect
