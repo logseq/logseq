@@ -10,13 +10,8 @@
     (state/<invoke-db-worker :thread-api/search-blocks (state/get-current-repo) q option))
   (rebuild-pages-indice! [_this]
     (state/<invoke-db-worker :thread-api/search-build-pages-indice repo))
-  (rebuild-blocks-indice! [this]
-    (p/let [repo (state/get-current-repo)
-            _ (protocol/truncate-blocks! this)
-            result (state/<invoke-db-worker :thread-api/search-build-blocks-indice repo)
-            blocks result
-            _ (when (seq blocks)
-                (state/<invoke-db-worker :thread-api/search-upsert-blocks repo blocks))]))
+  (rebuild-blocks-indice! [_this]
+    (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker (state/get-current-repo) true))
   (transact-blocks! [_this {:keys [blocks-to-remove-set
                                    blocks-to-add]}]
     (let [repo (state/get-current-repo)]
