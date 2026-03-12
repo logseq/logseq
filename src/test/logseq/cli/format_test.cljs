@@ -811,6 +811,22 @@
                   "[ok] db-worker-script - Found readable file: /tmp/db-worker-node.js\n"
                   "[ok] data-dir - Read/write access confirmed: /tmp/logseq/graphs\n"
                   "[warning] running-servers - 1 server is still starting")
+             result))))
+
+  (testing "doctor includes restart guidance for revision mismatch"
+    (let [result (format/format-result {:status :ok
+                                        :command :doctor
+                                        :data {:status :warning
+                                               :checks [{:id :server-revision-mismatch
+                                                         :status :warning
+                                                         :message "2 servers use a different revision than this CLI"
+                                                         :servers [{:graph "graph-a"}
+                                                                   {:graph "team graph"}]}]}}
+                                       {:output-format nil})]
+      (is (= (str "Doctor: warning\n"
+                  "[warning] server-revision-mismatch - 2 servers use a different revision than this CLI\n"
+                  "  Run: logseq server restart --graph graph-a\n"
+                  "  Run: logseq server restart --graph \"team graph\"")
              result)))))
 
 (deftest test-doctor-json-edn-output
@@ -844,3 +860,36 @@
       (is (= :data-dir-permission (get-in parsed-edn [:error :code])))
       (is (= :data-dir (get-in parsed-edn [:data :checks 1 :id])))
       (is (= :error (get-in parsed-edn [:data :checks 1 :status]))))))
+
+(deftest test-doctor-json-edn-output-includes-revision-mismatch-check
+  (let [payload {:status :warning
+                 :checks [{:id :server-revision-mismatch
+                           :status :warning
+                           :code :doctor-server-revision-mismatch
+                           :cli-revision "cli-rev"
+                           :servers [{:repo "logseq_db_graph-b"
+                                      :graph "logseq_db_graph-b"
+                                      :revision "worker-rev"}]
+                           :message "1 server uses a different revision than this CLI"}]}
+        json-result (format/format-result {:status :ok
+                                           :command :doctor
+                                           :data payload}
+                                          {:output-format :json})
+        edn-result (format/format-result {:status :ok
+                                          :command :doctor
+                                          :data payload}
+                                         {:output-format :edn})
+        parsed-json (js->clj (js/JSON.parse json-result) :keywordize-keys true)
+        parsed-edn (reader/read-string edn-result)]
+    (is (= "ok" (:status parsed-json)))
+    (is (= "warning" (get-in parsed-json [:data :status])))
+    (is (= "server-revision-mismatch" (get-in parsed-json [:data :checks 0 :id])))
+    (is (= "doctor-server-revision-mismatch" (get-in parsed-json [:data :checks 0 :code])))
+    (is (= "graph-b" (get-in parsed-json [:data :checks 0 :servers 0 :repo])))
+    (is (= "graph-b" (get-in parsed-json [:data :checks 0 :servers 0 :graph])))
+    (is (= :ok (:status parsed-edn)))
+    (is (= :warning (get-in parsed-edn [:data :status])))
+    (is (= :server-revision-mismatch (get-in parsed-edn [:data :checks 0 :id])))
+    (is (= :doctor-server-revision-mismatch (get-in parsed-edn [:data :checks 0 :code])))
+    (is (= "graph-b" (get-in parsed-edn [:data :checks 0 :servers 0 :repo])))
+    (is (= "graph-b" (get-in parsed-edn [:data :checks 0 :servers 0 :graph])))))

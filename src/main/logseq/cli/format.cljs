@@ -527,16 +527,32 @@
                "Updated")]
     (str verb " graph " (pr-str graph))))
 
+(defn- quote-cli-arg
+  [value]
+  (let [value (normalize-cell value)]
+    (if (re-find #"\s" value)
+      (str "\"" (string/replace value #"\"" "\\\"") "\"")
+      value)))
+
+(defn- format-doctor-check
+  [{:keys [id status message servers]}]
+  (let [check-line (str "[" (name (or status :unknown))
+                        "] "
+                        (name (or id :unknown))
+                        (when (seq message)
+                          (str " - " message)))]
+    (if (= :server-revision-mismatch id)
+      (let [guidance-lines (mapv (fn [{:keys [graph repo]}]
+                                   (str "  Run: logseq server restart --graph "
+                                        (quote-cli-arg (or graph repo))))
+                                 (or servers []))]
+        (into [check-line] guidance-lines))
+      [check-line])))
+
 (defn- format-doctor
   [status checks]
   (let [header (str "Doctor: " (name (or status :unknown)))
-        check-lines (mapv (fn [{:keys [id status message]}]
-                            (str "[" (name (or status :unknown))
-                                 "] "
-                                 (name (or id :unknown))
-                                 (when (seq message)
-                                   (str " - " message))))
-                          (or checks []))]
+        check-lines (mapcat format-doctor-check (or checks []))]
     (string/join "\n" (into [header] check-lines))))
 
 (defn- ->human
