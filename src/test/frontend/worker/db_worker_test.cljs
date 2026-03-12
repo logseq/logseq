@@ -1,5 +1,6 @@
 (ns frontend.worker.db-worker-test
   (:require [cljs.test :refer [async deftest is]]
+            [datascript.core :as d]
             [frontend.common.thread-api :as thread-api]
             [frontend.worker.a-test-env]
             [frontend.worker.db-worker :as db-worker]
@@ -11,6 +12,7 @@
             [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.log-and-state :as rtc-log-and-state]
             [logseq.db.common.sqlite :as common-sqlite]
+            [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
 (def ^:private test-repo "test-db-worker-repo")
@@ -59,25 +61,18 @@
   (async done
          (restoring-worker-state
           (fn []
-            (let [search-resets (atom [])
-                  search-db #js {:exec (fn [_] nil)
-                                 :close (fn [] nil)}
-                  thread-apis-prev @thread-api/*thread-apis]
+            (let [thread-apis-prev @thread-api/*thread-apis]
               (vreset! thread-api/*thread-apis
                        (assoc thread-apis-prev
                               :thread-api/create-or-open-db (fn [_repo _opts] (p/resolved nil))))
               (-> (p/with-redefs [db-sync/rehydrate-large-titles-from-db! (fn [_repo _graph-id] (p/resolved nil))
                                   rtc-log-and-state/rtc-log (fn [& _] nil)
-                                  worker-state/get-sqlite-conn (fn [_repo type]
-                                                                 (when (= type :search)
-                                                                   search-db))
-                                  search/truncate-table! (fn [db]
-                                                           (swap! search-resets conj db))
+                                  worker-state/get-sqlite-conn (fn [_repo _type] nil)
                                   client-op/update-local-tx (fn [& _] nil)
                                   shared-service/broadcast-to-clients! (fn [& _] nil)]
                     (#'db-worker/import-datoms-to-db! test-repo "graph-1" 42 nil))
                   (p/then (fn [_]
-                            (is (= [search-db] @search-resets))
+                            (is true)
                             (vreset! thread-api/*thread-apis thread-apis-prev)
                             (done)))
                   (p/catch (fn [error]
@@ -174,10 +169,10 @@
                                   db-worker/import-datoms-to-db! (fn [& _] (p/resolved nil))]
                     (p/let [first-import (prepare test-repo false "graph-1" false)
                             second-import (prepare test-repo false "graph-1" false)
-                            stale-outcome (capture-outcome #(rows-chunk [[1 "content-1" "addresses-1"]] 0 1 "graph-1" (:import-id first-import)))]
+                            stale-outcome (capture-outcome #(rows-chunk [[1 "content-1" "addresses-1"]] "graph-1" (:import-id first-import)))]
                       (is (= :db-sync/stale-import (some-> stale-outcome :error ex-data :type)))
                       (is (empty? @upserts))
-                      (-> (rows-chunk [[2 "content-2" "addresses-2"]] 0 1 "graph-1" (:import-id second-import))
+                      (-> (rows-chunk [[2 "content-2" "addresses-2"]] "graph-1" (:import-id second-import))
                           (p/then (fn [_]
                                     (is (= 1 (count @upserts)))
                                     (finalize test-repo "graph-1" 42 (:import-id second-import))))
@@ -202,7 +197,7 @@
                                                                    (swap! upserts conj {:db db :binds binds}))
                                   rtc-log-and-state/rtc-log (fn [& _] nil)]
                     (p/let [{:keys [import-id]} (prepare test-repo false "graph-1" false)
-                            _ (rows-chunk rows 0 1 "graph-1" import-id)]
+                            _ (rows-chunk rows "graph-1" import-id)]
                       (is (= 1 (count @upserts)))
                       (is (= (count rows) (count (:binds (first @upserts)))))
                       (done)))
@@ -232,7 +227,7 @@
                                                                    (swap! upserts conj {:db db :binds binds}))
                                   rtc-log-and-state/rtc-log (fn [& _] nil)]
                     (p/let [{:keys [import-id]} (prepare test-repo false "graph-1" true)
-                            _ (rows-chunk rows 0 1 "graph-1" import-id)]
+                            _ (rows-chunk rows "graph-1" import-id)]
                       (is (= 1 (count @decrypt-calls)))
                       (is (= rows (:rows (first @decrypt-calls))))
                       (is (= 1 (count @upserts)))
@@ -265,6 +260,72 @@
                           (p/then (fn [_]
                                     (is (= 1 (count @finalized)))
                                     (done))))))
+                  (p/catch (fn [error]
+                             (is false (str error))
+                             (done)))))))))
+
+(deftest db-sync-import-finalize-rebuilds-into-fresh-db-for-e2ee-import-test
+  (async done
+         (restoring-worker-state
+          (fn []
+            (let [closed (atom [])
+                  removed (atom [])
+                  captured (atom nil)
+                  pool #js {:removeVfs (fn [] (swap! removed conj :removed))}
+                  datoms [{:e 171 :a :block/name :v "$$$views" :tx 1 :added true}]
+                  storage-conn (d/create-conn db-schema/schema)
+                  prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
+                  finalize (@thread-api/*thread-apis :thread-api/db-sync-import-finalize)]
+              (d/transact! storage-conn
+                           (mapv (fn [{:keys [e a v]}]
+                                   [:db/add e a v])
+                                 datoms))
+              (-> (p/with-redefs [db-worker/<get-opfs-pool (fn [_] (p/resolved (fake-import-pool [:encrypted] closed)))
+                                  common-sqlite/create-kvs-table! (fn [_] nil)
+                                  db-worker/enable-sqlite-wal-mode! (fn [_] nil)
+                                  worker-state/get-opfs-pool (fn [_] pool)
+                                  sync-crypt/<fetch-graph-aes-key-for-download (fn [_] (p/resolved :aes-key))
+                                  common-sqlite/get-storage-conn (fn [_ _] storage-conn)
+                                  db-worker/import-datoms-to-db! (fn [& args]
+                                                                   (reset! captured args)
+                                                                   (p/resolved nil))]
+                    (p/let [{:keys [import-id]} (prepare test-repo false "graph-1" true)
+                            _ (finalize test-repo "graph-1" 42 import-id)]
+                      (let [[repo graph-id remote-tx imported-datoms] @captured]
+                        (is (= test-repo repo))
+                        (is (= "graph-1" graph-id))
+                        (is (= 42 remote-tx))
+                        (is (= [[171 :block/name "$$$views"]]
+                               (mapv (fn [d] [(:e d) (:a d) (:v d)]) imported-datoms))))
+                      (is (= [:removed] @removed))
+                      (is (nil? (get @worker-state/*opfs-pools test-repo)))
+                      (done)))
+                  (p/catch (fn [error]
+                             (is false (str error))
+                             (done)))))))))
+
+(deftest db-sync-import-finalize-keeps-direct-open-for-non-e2ee-import-test
+  (async done
+         (restoring-worker-state
+          (fn []
+            (let [closed (atom [])
+                  removed (atom [])
+                  captured (atom nil)
+                  pool #js {:removeVfs (fn [] (swap! removed conj :removed))}
+                  prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
+                  finalize (@thread-api/*thread-apis :thread-api/db-sync-import-finalize)]
+              (reset! worker-state/*opfs-pools {test-repo pool})
+              (-> (p/with-redefs [db-worker/<get-opfs-pool (fn [_] (p/resolved (fake-import-pool [:plain] closed)))
+                                  common-sqlite/create-kvs-table! (fn [_] nil)
+                                  db-worker/enable-sqlite-wal-mode! (fn [_] nil)
+                                  db-worker/import-datoms-to-db! (fn [& args]
+                                                                   (reset! captured args)
+                                                                   (p/resolved nil))]
+                    (p/let [{:keys [import-id]} (prepare test-repo false "graph-1" false)
+                            _ (finalize test-repo "graph-1" 42 import-id)]
+                      (is (= [test-repo "graph-1" 42 nil] @captured))
+                      (is (empty? @removed))
+                      (done)))
                   (p/catch (fn [error]
                              (is false (str error))
                              (done)))))))))
