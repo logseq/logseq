@@ -48,18 +48,13 @@
   [text]
   (js->clj (js/JSON.parse text) :keywordize-keys true))
 
-(defn- login-url
-  []
-  (js/URL. cognito-config/LOGIN-URL))
-
 (defn- oauth-client-id
   []
   cognito-config/CLI-COGNITO-CLIENT-ID)
 
 (defn- oauth-scope
   []
-  (or (.get (.-searchParams (login-url)) "scope")
-      cognito-config/OAUTH-SCOPE
+  (or cognito-config/OAUTH-SCOPE
       default-scope))
 
 (defn- oauth-domain
