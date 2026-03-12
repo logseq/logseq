@@ -811,17 +811,19 @@
               _ (log-import-progress! graph-id import-id (count rows))
               datoms (when graph-e2ee?
                        (let [storage (new-sqlite-storage db)
-                             conn (common-sqlite/get-storage-conn storage db-schema/schema)]
-                         (vec (d/datoms @conn :eavt))))
+                             conn (common-sqlite/get-storage-conn storage db-schema/schema)
+                             source-db @conn]
+                         (d/datoms source-db :eavt)))
               _ (when-not graph-e2ee?
                   (.exec db "PRAGMA wal_checkpoint(2)"))
+              result (import-datoms-to-db! repo graph-id remote-tx datoms)
               _ (.close db)
               _ (when graph-e2ee?
                   (when-let [^js pool (worker-state/get-opfs-pool repo)]
                     (remove-vfs! pool)
                     (swap! *opfs-pools dissoc repo)))
               _ (reset! *import-state nil)]
-        (import-datoms-to-db! repo graph-id remote-tx datoms))
+        result)
       (p/catch (fn [error]
                  (when-not (= :db-sync/stale-import (:type (ex-data error)))
                    (clear-import-state! import-id))
