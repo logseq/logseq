@@ -1,5 +1,6 @@
 (ns logseq.db-sync.worker.handler.sync
   (:require [clojure.string :as string]
+            [datascript.core :as d]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db-sync.batch :as batch]
@@ -10,6 +11,7 @@
             [logseq.db-sync.worker.http :as http]
             [logseq.db-sync.worker.routes.sync :as sync-routes]
             [logseq.db-sync.worker.ws :as ws]
+            [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
 (def ^:private snapshot-download-batch-size 5000)
@@ -264,7 +266,35 @@
   (let [sql (.-sql self)]
     (ensure-conn! self)
     (let [conn (.-conn self)
-          tx-data (protocol/transit->tx txs)]
+          lookup-id (fn [x]
+                      (when (and (vector? x)
+                                 (= 2 (count x))
+                                 (= :block/uuid (first x)))
+                        (second x)))
+          tx-data* (protocol/transit->tx txs)
+          created-block-uuids (->> tx-data*
+                                   (keep (fn [item]
+                                           (when (and (vector? item)
+                                                      (= :db/add (first item))
+                                                      (>= (count item) 4)
+                                                      (= :block/uuid (nth item 2)))
+                                             (nth item 3))))
+                                   set)
+          missing-lookup-ref? (fn [x]
+                                (when-let [block-uuid (lookup-id x)]
+                                  (and (not (contains? created-block-uuids block-uuid))
+                                       (nil? (d/entity @conn x)))))
+          tx-data (remove (fn [item]
+                            (when (vector? item)
+                              (let [op (first item)
+                                    attr (nth item 2 nil)
+                                    value (when (>= (count item) 4) (nth item 3))]
+                                (or (and (contains? #{:db/add :db/retract :db/retractEntity} op)
+                                         (missing-lookup-ref? (second item)))
+                                    (and (contains? #{:db/add :db/retract} op)
+                                         (contains? db-schema/ref-type-attributes attr)
+                                         (missing-lookup-ref? value))))))
+                          tx-data*)]
       (ldb/transact! conn tx-data {:op :apply-client-tx})
       (let [new-t (storage/get-t sql)]
         ;; FIXME: no need to broadcast if client tx is less than remote tx

@@ -1,6 +1,5 @@
 (ns logseq.db-sync.storage
   (:require [cljs-bean.core :as bean]
-            [clojure.string :as string]
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
             [logseq.db-sync.common :as common]
@@ -70,13 +69,6 @@
              :tx (aget row "tx")})
           rows)))
 
-(defn- delete-addrs! [sql addrs]
-  (when (seq addrs)
-    (let [placeholders (->> addrs (map (constantly "?")) (string/join ","))]
-      (apply common/sql-exec sql
-             (str "delete from kvs where addr in (" placeholders ")")
-             addrs))))
-
 (defn- upsert-addr-content! [sql data]
   (doseq [item data]
     (common/sql-exec sql
@@ -97,7 +89,7 @@
 
 (defn new-sqlite-storage [sql]
   (reify IStorage
-    (-store [_ addr+data-seq delete-addrs]
+    (-store [_ addr+data-seq _delete-addrs]
       (let [data (map
                   (fn [[addr data]]
                     (let [data' (if (map? data) (dissoc data :addresses) data)
@@ -108,7 +100,6 @@
                            "content" (common/write-transit data')
                            "addresses" addresses}))
                   addr+data-seq)]
-        (delete-addrs! sql delete-addrs)
         (upsert-addr-content! sql data)))
     (-restore [_ addr]
       (restore-data-from-addr sql addr))))

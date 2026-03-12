@@ -1,8 +1,13 @@
 (ns logseq.db-sync.worker-handler-sync-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require [cljs.test :refer [async deftest is testing]]
+            [datascript.core :as d]
             [logseq.db-sync.common :as common]
+            [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.storage :as storage]
+            [logseq.db-sync.test-sql :as test-sql]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
+            [logseq.db-sync.worker.ws :as ws]
+            [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
 (defn- empty-sql []
@@ -127,3 +132,22 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))
+
+(deftest tx-batch-drops-stale-lookup-entity-updates-test
+  (testing "stale lookup-ref entity updates should not reject the whole tx batch"
+    (let [sql (test-sql/make-sql)
+          conn (d/create-conn db-schema/schema)
+          self #js {:sql sql
+                    :conn conn
+                    :schema-ready true}
+          missing-uuid (random-uuid)
+          created-uuid (random-uuid)
+          tx-data [[:db/add [:block/uuid missing-uuid] :block/title "stale" 1]
+                   [:db/add [:block/uuid missing-uuid] :block/updated-at 1773188050934 1]
+                   [:db/add "temp-1" :block/uuid created-uuid 2]
+                   [:db/add "temp-1" :block/title "ok" 2]]
+          response (with-redefs [ws/broadcast! (fn [& _] nil)]
+                     (sync-handler/handle-tx-batch! self nil (protocol/tx->transit tx-data) 0))]
+      (is (= "tx/batch/ok" (:type response)))
+      (is (= "ok" (:block/title (d/entity @conn [:block/uuid created-uuid]))))
+      (is (nil? (d/entity @conn [:block/uuid missing-uuid]))))))

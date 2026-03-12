@@ -391,8 +391,10 @@
                               (log/error ::undo-redo-failed e)
                               (clear-history! repo)))))
                 (do
-                  (clear-history! repo)
-                  (if undo? ::empty-undo-stack ::empty-redo-stack))))))))
+                  (log/warn ::undo-redo-skip-conflicted-op
+                            {:undo? undo?
+                             :outliner-op (:outliner-op tx-meta)})
+                  (undo-redo-aux repo undo?))))))))
 
     (when ((if undo? empty-undo-stack? empty-redo-stack?) repo)
       (prn (str "No further " (if undo? "undo" "redo") " information"))

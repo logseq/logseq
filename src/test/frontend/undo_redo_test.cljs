@@ -348,6 +348,33 @@
         (is (= child-uuid (:block/uuid (:block/parent parent))))
         (is (= page-uuid (:block/uuid (:block/parent child))))))))
 
+(deftest undo-skips-conflicted-move-and-keeps-earlier-history-test
+  (testing "undo drops a conflicting move op but still undoes earlier safe ops"
+    (undo-redo/clear-history! test-db)
+    (let [conn (db/get-db test-db false)
+          {:keys [parent-a-uuid parent-b-uuid child-uuid]} (seed-page-two-parents-child!)]
+      (d/transact! conn
+                   [[:db/add [:block/uuid child-uuid] :block/title "local-title"]]
+                   {:outliner-op :save-block
+                    :local-tx? true})
+      (d/transact! conn
+                   [[:db/add [:block/uuid child-uuid] :block/parent [:block/uuid parent-b-uuid]]]
+                   {:outliner-op :move-blocks
+                    :local-tx? true})
+      (d/transact! conn
+                   [[:db/retractEntity [:block/uuid parent-a-uuid]]]
+                   {:outliner-op :delete-blocks
+                    :local-tx? false})
+      (let [undo-result (undo-redo/undo test-db)
+            child (d/entity @conn [:block/uuid child-uuid])]
+        (is (not= :frontend.undo-redo/empty-undo-stack undo-result))
+        (is (= "child" (:block/title child)))
+        (is (= parent-b-uuid
+               (:block/uuid (:block/parent child))))
+        (is (empty? (db-issues @conn))))
+      (is (= :frontend.undo-redo/empty-undo-stack
+             (undo-redo/undo test-db))))))
+
 (deftest undo-validation-fast-path-skips-db-issues-for-non-structural-tx-test
   (testing "undo validation skips db-issues for non-structural tx-data"
     (let [conn (db/get-db test-db false)

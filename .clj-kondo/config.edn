@@ -228,8 +228,10 @@
            clojure.test.check.properties/for-all clojure.core/for
            ;; src/main
            frontend.namespaces/import-vars potemkin/import-vars
-           ;; src/test
+           ;; src/test and deps tests
            frontend.test.helper/deftest-async clojure.test/deftest
+           logseq.graph-parser.test.helper/deftest-async clojure.test/deftest
+           logseq.publishing.test.helper/deftest-async clojure.test/deftest
            frontend.worker.rtc.idb-keyval-mock/with-reset-idb-keyval-mock cljs.test/async
            frontend.react/defc clojure.core/defn
            logseq.common.defkeywords/defkeyword cljs.spec.alpha/def

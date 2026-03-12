@@ -740,6 +740,37 @@
                          vec)]
       (is (empty? sanitized)))))
 
+(deftest apply-remote-batched-create-reuses-tempid-across-batches-test
+  (testing "a remote block create split across batches should still resolve to one valid block"
+    (let [{:keys [conn parent]} (setup-parent-child)
+          parent-uuid (:block/uuid parent)
+          page-uuid (:block/uuid (:block/page parent))
+          remote-uuid (random-uuid)
+          batched-tx-data [[[:db/add -1 :block/uuid remote-uuid]
+                            [:db/add -1 :block/title "remote batched child"]
+                            [:db/add -1 :block/page [:block/uuid page-uuid]]
+                            [:db/add -1 :block/created-at 1760000000000]
+                            [:db/add -1 :block/updated-at 1760000000000]]
+                           [[:db/add -1 :block/parent [:block/uuid parent-uuid]]
+                            [:db/add -1 :block/order "a4"]]]]
+      (with-datascript-conns conn nil
+        (fn []
+          (let [error (try
+                        (#'db-sync/apply-remote-tx! test-repo nil batched-tx-data)
+                        nil
+                        (catch :default e
+                          e))]
+            (is (nil? error)
+                (when error
+                  (str (ex-message error) " " (pr-str (ex-data error)))))
+            (when-not error
+              (let [block (d/entity @conn [:block/uuid remote-uuid])
+                    validation (db-validate/validate-local-db! @conn)]
+                (is (= "remote batched child" (:block/title block)))
+                (is (= (:db/id parent) (:db/id (:block/parent block))))
+                (is (empty? (map :entity (:errors validation)))
+                    (str (:errors validation)))))))))))
+
 (deftest ^:long sanitize-tx-data-drops-numeric-entity-datoms-for-deleted-block-test
   (testing "deleted-block-ids should also drop datoms when entity is numeric id"
     (let [{:keys [conn child1]} (setup-parent-child)
