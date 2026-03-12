@@ -28,6 +28,7 @@
 
 (defonce *repo->latest-remote-tx (atom {}))
 (defonce *start-inflight-target (atom nil))
+(defonce ^:private *upload-temp-opfs-pool (atom nil))
 
 (defn- current-client
   [repo]
@@ -171,7 +172,9 @@
     opts))
 
 (def ^:private max-asset-size (* 100 1024 1024))
-(def ^:private upload-kvs-batch-size 500)
+(def ^:private upload-kvs-batch-size 2000)
+(def ^:private upload-prepare-datoms-batch-size 100000)
+(def ^:private upload-temp-pool-name (worker-util/get-pool-name "upload-temp"))
 (def ^:private snapshot-content-type "application/transit+json")
 (def ^:private snapshot-content-encoding "gzip")
 (def ^:private snapshot-text-encoder (js/TextEncoder.))
@@ -449,29 +452,65 @@
     (-restore [_ addr]
       (restore-data-from-addr db addr))))
 
-(defn- create-temp-sqlite-db
+(defn- <get-upload-temp-sqlite-pool
   []
-  (if-let [sqlite @worker-state/*sqlite]
-    (let [^js DB (.-DB ^js (.-oo1 sqlite))
-          db (new DB ":memory:" "c")]
-      (common-sqlite/create-kvs-table! db)
-      db)
-    (fail-fast :db-sync/missing-field {:field :sqlite})))
+  (if-let [pool @*upload-temp-opfs-pool]
+    (p/resolved pool)
+    (if-let [sqlite @worker-state/*sqlite]
+      (p/let [^js pool (.installOpfsSAHPoolVfs ^js sqlite #js {:name upload-temp-pool-name
+                                                               :initialCapacity 20})]
+        (reset! *upload-temp-opfs-pool pool)
+        pool)
+      (fail-fast :db-sync/missing-field {:field :sqlite}))))
+
+(defn- upload-temp-sqlite-path
+  []
+  (str "/upload-" (random-uuid) ".sqlite"))
+
+(defn- <create-temp-sqlite-db!
+  []
+  (p/let [^js pool (<get-upload-temp-sqlite-pool)
+          capacity (.getCapacity pool)
+          _ (when (zero? capacity)
+              (.unpauseVfs pool))
+          path (upload-temp-sqlite-path)
+          ^js db (new (.-OpfsSAHPoolDb pool) path)]
+    (common-sqlite/create-kvs-table! db)
+    {:db db
+     :path path
+     :pool pool}))
 
 (defn- <create-temp-sqlite-conn
-  [schema datoms]
-  (p/let [db (create-temp-sqlite-db)
-          storage (new-temp-sqlite-storage db)
-          conn (d/conn-from-datoms datoms schema {:storage storage})]
-    {:db db
-     :conn conn}))
+  ([schema]
+   (<create-temp-sqlite-conn schema []))
+  ([schema datoms]
+   (p/let [{:keys [db path pool]} (<create-temp-sqlite-db!)
+           storage (new-temp-sqlite-storage db)
+           conn (d/conn-from-datoms datoms schema {:storage storage})]
+     {:db db
+      :conn conn
+      :path path
+      :pool pool})))
+
+(defn- <remove-upload-temp-sqlite-db-file!
+  [path]
+  (-> (p/let [^js root (.getDirectory js/navigator.storage)
+              ^js dir (.getDirectoryHandle root (str "." upload-temp-pool-name))]
+        (.removeEntry dir (subs path 1)))
+      (p/catch
+       (fn [error]
+         (if (= "NotFoundError" (.-name error))
+           nil
+           (p/rejected error))))))
 
 (defn- cleanup-temp-sqlite!
-  [{:keys [db conn]}]
+  [{:keys [db conn path]}]
   (when conn
     (reset! conn nil))
   (when db
-    (.close db)))
+    (.close db))
+  (when path
+    (<remove-upload-temp-sqlite-db-file! path)))
 
 (defn- require-asset-field
   [repo field value context]
@@ -1169,35 +1208,76 @@
                                      :op :large-title-rehydrate})))
                  items)))))))
 
-(defn- offload-large-titles-in-datoms
+(defn- <offload-large-titles-in-datoms-batch
   [repo graph-id datoms aes-key]
-  (let [needs-offload (filterv (fn [datom]
-                                 (and (= :block/title (:a datom))
-                                      (string? (:v datom))
-                                      (large-title? (:v datom))))
-                               datoms)
-        offload-entities (into #{} (map :e) needs-offload)]
-    (if (empty? needs-offload)
-      (p/resolved datoms)
-      (p/let [offloaded (p/loop [remaining needs-offload
-                                 result {}]
-                          (if (empty? remaining)
-                            result
-                            (let [datom (first remaining)]
-                              (p/let [obj (upload-large-title! repo graph-id (:v datom) aes-key)]
-                                (p/recur (rest remaining)
-                                         (assoc result (:e datom)
-                                                {:placeholder (assoc datom :v "")
-                                                 :obj-datom (assoc datom :a large-title-object-attr :v obj)}))))))]
-        (reduce (fn [acc datom]
-                  (if (contains? offload-entities (:e datom))
-                    (if (= :block/title (:a datom))
-                      (let [{:keys [placeholder obj-datom]} (get offloaded (:e datom))]
-                        (-> acc (conj placeholder) (conj obj-datom)))
-                      (conj acc datom))
-                    (conj acc datom)))
-                []
-                datoms)))))
+  (p/loop [remaining datoms
+           acc []]
+    (if (empty? remaining)
+      acc
+      (let [datom (first remaining)]
+        (if (and (= :block/title (:a datom))
+                 (string? (:v datom))
+                 (large-title? (:v datom)))
+          (p/let [obj (upload-large-title! repo graph-id (:v datom) aes-key)]
+            (p/recur (rest remaining)
+                     (conj acc
+                           (assoc datom :v "")
+                           (assoc datom :a large-title-object-attr :v obj))))
+          (p/recur (rest remaining) (conj acc datom)))))))
+
+(defn- take-upload-datoms-batch
+  [datoms batch-size]
+  (loop [batch (transient [])
+         remaining (seq datoms)
+         n 0]
+    (if (or (nil? remaining) (>= n batch-size))
+      [(persistent! batch) remaining]
+      (recur (conj! batch (first remaining))
+             (next remaining)
+             (inc n)))))
+
+(defn- datom->tx
+  [datom]
+  [:db/add (:e datom) (:a datom) (:v datom)])
+
+(defn- <process-upload-datoms-in-batches!
+  [datoms {:keys [batch-size process-batch-f progress-f]
+           :or {batch-size upload-prepare-datoms-batch-size}}]
+  (let [total-count (count datoms)]
+    (p/loop [remaining (seq datoms)
+             processed 0]
+      (if (seq remaining)
+        (let [[batch remaining'] (take-upload-datoms-batch remaining batch-size)
+              processed' (+ processed (count batch))]
+          (p/let [_ (process-batch-f batch)]
+            (when progress-f
+              (progress-f processed' total-count))
+            (p/let [_ (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))]
+              (p/recur remaining' processed'))))
+        nil))))
+
+(defn- <prepare-upload-temp-sqlite!
+  [repo graph-id source-conn aes-key update-progress]
+  (p/let [temp (<create-temp-sqlite-conn (d/schema @source-conn))
+          datoms (d/datoms @source-conn :eavt)
+          _ (<process-upload-datoms-in-batches!
+             datoms
+             {:process-batch-f
+              (fn [batch]
+                (p/let [datoms* (<offload-large-titles-in-datoms-batch repo graph-id batch aes-key)
+                        encrypted-datoms (if aes-key
+                                           (sync-crypt/<encrypt-datoms aes-key datoms*)
+                                           datoms*)
+                        tx-data (mapv datom->tx encrypted-datoms)]
+                  (d/transact! (:conn temp) tx-data {:initial-db? true})
+                  nil))
+              :progress-f
+              (fn [processed total]
+                (update-progress {:sub-type :upload-progress
+                                  :message (if aes-key
+                                             (str "Encrypting " processed "/" total)
+                                             (str "Preparing " processed "/" total))}))})]
+    temp))
 
 (defn rehydrate-large-titles-from-db!
   [repo graph-id]
@@ -1941,7 +2021,8 @@
   [repo graph-e2ee?]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (ldb/transact! conn [(ldb/kv :logseq.kv/graph-remote? true)
-                         (ldb/kv :logseq.kv/graph-rtc-e2ee? (true? graph-e2ee?))])))
+                         (ldb/kv :logseq.kv/graph-rtc-e2ee? (true? graph-e2ee?))]
+                   {:persist-op? false})))
 
 (defn upload-graph!
   [repo]
@@ -1962,15 +2043,9 @@
                        (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))]
              (set-graph-sync-metadata! repo graph-e2ee?)
              (ensure-client-graph-uuid! repo graph-id)
-             (p/let [datoms (d/datoms @source-conn :eavt)
-                     _ (prn :debug :datoms-count (count datoms) :time (js/Date.))
-                     datoms* (offload-large-titles-in-datoms repo graph-id datoms aes-key)
-                     _ (update-progress {:sub-type :upload-progress
-                                         :message (if graph-e2ee? "Encrypting data" "Preparing data")})
-                     encrypted-datoms (if graph-e2ee?
-                                        (sync-crypt/<encrypt-datoms aes-key datoms*)
-                                        datoms*)
-                     {:keys [db] :as temp} (<create-temp-sqlite-conn (d/schema @source-conn) encrypted-datoms)
+             (p/let [_ (update-progress {:sub-type :upload-progress
+                                         :message (if graph-e2ee? "Encrypting 0/0" "Preparing 0/0")})
+                     {:keys [db] :as temp} (<prepare-upload-temp-sqlite! repo graph-id source-conn aes-key update-progress)
                      total-rows (count-kvs-rows db)]
                (->
                 (p/loop [last-addr -1
@@ -1987,7 +2062,12 @@
                         {:graph-id graph-id})
                       (let [max-addr (apply max (map first rows))
                             rows (normalize-snapshot-rows rows)
-                            upload-url (str base "/sync/" graph-id "/snapshot/upload?reset=" (if first-batch? "true" "false"))]
+                            loaded' (+ loaded (count rows))
+                            finished? (= loaded' total-rows)
+                            upload-url (str base "/sync/" graph-id "/snapshot/upload?reset="
+                                            (if first-batch? "true" "false")
+                                            "&finished="
+                                            (if finished? "true" "false"))]
                         (p/let [{:keys [body encoding]} (<snapshot-upload-body rows)
                                 headers (cond-> {"content-type" snapshot-content-type}
                                           (string? encoding) (assoc "content-encoding" encoding))
@@ -1996,10 +2076,9 @@
                                                :headers headers
                                                :body body}
                                               {:response-schema :sync/snapshot-upload})]
-                          (let [loaded' (+ loaded (count rows))]
-                            (update-progress {:sub-type :upload-progress
-                                              :message (str "Uploading " loaded' "/" total-rows)})
-                            (p/recur max-addr false loaded')))))))
+                          (update-progress {:sub-type :upload-progress
+                                            :message (str "Uploading " loaded' "/" total-rows)})
+                          (p/recur max-addr false loaded'))))))
                 (p/finally
                   (fn []
                     (cleanup-temp-sqlite! temp)))))))

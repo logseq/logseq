@@ -2,6 +2,7 @@
   (:require [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.worker.auth :as auth]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
+            [logseq.db-sync.worker.http :as http]
             [logseq.db-sync.worker.presence :as presence]
             [logseq.db-sync.worker.ws :as ws]))
 
@@ -44,15 +45,17 @@
         (ws/send! ws {:type "error" :message "unknown type"})))))
 
 (defn handle-ws [^js self request]
-  (let [pair (js/WebSocketPair.)
-        client (aget pair 0)
-        server (aget pair 1)
-        state (.-state self)]
-    (.acceptWebSocket state server)
-    (let [token (auth/token-from-request request)
-          claims (auth/unsafe-jwt-claims token)
-          user (presence/claims->user claims)]
-      (when user
-        (presence/add-presence! self server user))
-      (presence/broadcast-online-users! self))
-    (js/Response. nil #js {:status 101 :webSocket client})))
+  (if-not (sync-handler/ready-for-sync? self)
+    (http/error-response "snapshot upload in progress" 409)
+    (let [pair (js/WebSocketPair.)
+          client (aget pair 0)
+          server (aget pair 1)
+          state (.-state self)]
+      (.acceptWebSocket state server)
+      (let [token (auth/token-from-request request)
+            claims (auth/unsafe-jwt-claims token)
+            user (presence/claims->user claims)]
+        (when user
+          (presence/add-presence! self server user))
+        (presence/broadcast-online-users! self))
+      (js/Response. nil #js {:status 101 :webSocket client}))))
