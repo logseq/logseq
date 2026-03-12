@@ -86,6 +86,9 @@
                     (catch :default _))
                (.registerShortcut handler (util/keyname id) undec-k))
              (catch :default e
+               ;; Closure's KeyboardShortcutHandler throws "shortcut: null" when a
+               ;; chord prefix collides with an existing key. Brittle string match;
+               ;; see: google-closure-library goog.ui.KeyboardShortcutHandler.prototype.registerShortcut_
                (let [chord-prefix? (string/includes? (.-message e) "shortcut: null")]
                  (if chord-prefix?
                    ;; Chord-prefix tree clash: expected when a simple key and a

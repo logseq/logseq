@@ -197,6 +197,7 @@
   ([ks handler-id] (get-conflicts-by-keys ks handler-id {:group-global? true}))
   ([ks handler-id {:keys [exclude-ids group-global?]}]
    (let [global-handlers #{:shortcut.handler/editor-global
+                           :shortcut.handler/block-editing-only
                            :shortcut.handler/global-non-editing-only
                            :shortcut.handler/global-prevent-default
                            :shortcut.handler/misc}
@@ -208,12 +209,10 @@
                  (when-let [k' (shortcut-utils/undecorate-binding k)]
                    (let [input-binding (bean/->clj (shortcut-utils/safe-parse-string-binding k'))
 
-                         same-leading-key?
+                         same-key?
                          (fn [[k' _]]
                            (when (sequential? input-binding)
-                             (or (= input-binding k')
-                                 (and (not= (count k') (count input-binding))
-                                      (= (first input-binding) (first k'))))))
+                             (= input-binding k')))
 
                          into-conflict-refs
                          (fn [[k o]]
@@ -238,7 +237,7 @@
                                                 {} refs)]]))]
 
                      [k' (->> ks-bindings
-                              (filterv same-leading-key?)
+                              (filterv same-key?)
                               (mapv into-conflict-refs)
                               (remove #(empty? (second (second %1))))
                               (into {}))]))))
@@ -272,12 +271,10 @@
                 (when-let [k' (shortcut-utils/undecorate-binding k)]
                   (let [k-parsed (bean/->clj (shortcut-utils/safe-parse-string-binding k'))
 
-                        same-leading-key?
+                        same-key?
                         (fn [[k' _]]
                           (when (sequential? k-parsed)
-                            (or (= k-parsed k')
-                                (and (> (count k') (count k-parsed))
-                                     (= (first k-parsed) (first k'))))))
+                            (= k-parsed k')))
 
                         cross-context-ref
                         (fn [[k o]]
@@ -297,7 +294,7 @@
                                        {} refs)]])))]
 
                     [k' (->> ks-bindings
-                             (filterv same-leading-key?)
+                             (filterv same-key?)
                              (mapv cross-context-ref)
                              (remove #(empty? (second (second %))))
                              (into {}))]))))
