@@ -1022,7 +1022,7 @@
                                    (fn [path]
                                      (swap! opened-paths conj path)
                                      #js {:close (fn [] nil)})}))
-                           logseq.db.common.sqlite/create-kvs-table! (fn [_] nil)]
+                           common-sqlite/create-kvs-table! (fn [_] nil)]
                (-> (p/let [{:keys [db path]} (#'db-sync/<create-temp-sqlite-db!)]
                      (is (some? db))
                      (is (= [path] @opened-paths))
