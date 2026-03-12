@@ -297,7 +297,9 @@
                      [2 "content-2" "addresses-2"]]
                framed-bytes (encode-framed-rows rows)
                original-fetch js/fetch
-               stream-url "http://base/sync/graph-1/snapshot/stream"]
+               stream-url "http://base/sync/graph-1/snapshot/stream"
+               worker-prev @state/*db-worker]
+           (reset! state/*db-worker nil)
            (-> (p/let [stream (bytes->stream framed-bytes 3)]
                  (set! js/fetch
                        (fn [url opts]
@@ -344,9 +346,12 @@
                            (is (= "import-1" import-id)))
                          (done)))
                (p/catch (fn [error]
+                          (reset! state/*db-worker worker-prev)
                           (set! js/fetch original-fetch)
                           (is false (str error))
-                          (done)))))))
+                          (done)))
+               (p/finally (fn []
+                            (reset! state/*db-worker worker-prev)))))))
 
 (deftest rtc-download-graph-streams-gzip-snapshot-test
   (async done
@@ -355,7 +360,9 @@
                      [2 "content-2" "addresses-2"]]
                framed-bytes (encode-framed-rows rows)
                original-fetch js/fetch
-               stream-url "http://base/sync/graph-1/snapshot/stream"]
+               stream-url "http://base/sync/graph-1/snapshot/stream"
+               worker-prev @state/*db-worker]
+           (reset! state/*db-worker nil)
            (-> (p/let [gzip-bytes (<gzip-bytes framed-bytes)
                        stream (bytes->stream gzip-bytes 3)]
                  (set! js/fetch
@@ -403,6 +410,9 @@
                            (is (= "import-1" import-id)))
                          (done)))
                (p/catch (fn [error]
+                          (reset! state/*db-worker worker-prev)
                           (set! js/fetch original-fetch)
                           (is false (str error))
-                          (done)))))))
+                          (done)))
+               (p/finally (fn []
+                            (reset! state/*db-worker worker-prev)))))))
