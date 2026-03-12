@@ -188,7 +188,7 @@
                framed-bytes (encode-framed-rows rows)
                original-fetch js/fetch
                stream-url "http://base/sync/graph-1/snapshot/stream"]
-               (-> (p/let [gzip-bytes (<gzip-bytes framed-bytes)]
+           (-> (p/let [gzip-bytes (<gzip-bytes framed-bytes)]
                  (set! js/fetch
                        (fn [url opts]
                          (let [method (or (aget opts "method") "GET")]
@@ -220,7 +220,9 @@
                                                                                  (resolve true))
                                      state/<invoke-db-worker (fn [& args]
                                                                (swap! import-calls conj args)
-                                                               (p/resolved :ok))
+                                                               (if (= :thread-api/db-sync-import-prepare (first args))
+                                                                 (p/resolved {:import-id "import-1"})
+                                                                 (p/resolved :ok)))
                                      state/set-state! (fn [& _] nil)
                                      state/pub-event! (fn [& _] nil)]
                        (db-sync/<rtc-download-graph! "demo-graph" "graph-1" false))
@@ -228,8 +230,8 @@
                (p/then (fn [_]
                          (is (= 3 (count @import-calls)))
                          (let [[prepare-op graph reset? graph-uuid graph-e2ee?] (first @import-calls)
-                               [chunk-op imported-rows chunk-idx total-chunks chunk-graph-uuid] (second @import-calls)
-                               [finalize-op finalize-graph finalize-graph-uuid remote-tx] (nth @import-calls 2)]
+                               [chunk-op imported-rows chunk-idx total-chunks chunk-graph-uuid import-id] (second @import-calls)
+                               [finalize-op finalize-graph finalize-graph-uuid remote-tx finalize-import-id] (nth @import-calls 2)]
                            (is (= :thread-api/db-sync-import-prepare prepare-op))
                            (is (string/ends-with? graph "demo-graph"))
                            (is (= true reset?))
@@ -240,10 +242,12 @@
                            (is (= 0 chunk-idx))
                            (is (= 1 total-chunks))
                            (is (= "graph-1" chunk-graph-uuid))
+                           (is (= "import-1" import-id))
                            (is (= :thread-api/db-sync-import-finalize finalize-op))
                            (is (string/ends-with? finalize-graph "demo-graph"))
                            (is (= "graph-1" finalize-graph-uuid))
-                           (is (= 42 remote-tx)))
+                           (is (= 42 remote-tx))
+                           (is (= "import-1" finalize-import-id)))
                          (is (= [[stream-url "GET"]]
                                 @fetch-calls))
                          (done)))
