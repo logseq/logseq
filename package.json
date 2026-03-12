@@ -21,7 +21,6 @@
         "better-sqlite3": "^12.6.2",
         "cross-env": "^7.0.3",
         "cssnano": "^5.1.13",
-        "del": "^6.0.0",
         "glob": "9.0.0",
         "gulp": "^4.0.2",
         "gulp-postcss": "^10.0.0",
