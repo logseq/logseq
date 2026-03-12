@@ -70,22 +70,10 @@
     {:status :error
      :error (:error result)}))
 
-(defn- compute-revision-mismatches
-  [cli-revision servers]
-  (let [mismatch-servers (->> (or servers [])
-                              (filter (fn [{:keys [revision]}]
-                                        (not= cli-revision revision)))
-                              (mapv (fn [{:keys [repo revision]}]
-                                      {:repo repo
-                                       :revision revision})))]
-    (when (seq mismatch-servers)
-      {:cli-revision cli-revision
-       :servers mismatch-servers})))
-
 (defn execute-list
   [_action config]
   (-> (p/let [servers (cli-server/list-servers config)
-              revision-mismatch (compute-revision-mismatches (version/revision) servers)]
+              revision-mismatch (cli-server/compute-revision-mismatches (version/revision) servers)]
         (cond-> {:status :ok
                  :data {:servers servers}}
           revision-mismatch

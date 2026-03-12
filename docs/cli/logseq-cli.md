@@ -247,12 +247,13 @@ Output formats:
     ```
   - JSON example: `{"status":"ok","data":{"result":[123]}}`
   - EDN example: `{:status :ok, :data {:result [123]}}`
-- `doctor` output includes overall status (`ok`, `warning`, `error`) and per-check rows for `db-worker-script`, `data-dir`, and `running-servers`. For scripting, `--output json|edn` keeps the structured check payload.
-- Common doctor failures:
+- `doctor` output includes overall status (`ok`, `warning`, `error`) and per-check rows for `db-worker-script`, `data-dir`, `running-servers`, and `server-revision-mismatch`. For scripting, `--output json|edn` keeps the structured check payload.
+- Common doctor failures and warnings:
   - `doctor-script-missing`: `db-worker-node.js` runtime target is missing (default target: `dist/db-worker-node.js`; use `doctor --dev-script` to check `static/db-worker-node.js`).
   - `doctor-script-unreadable`: script path exists but is not a readable file.
   - `data-dir-permission`: configured data dir is not readable or writable.
   - `doctor-server-not-ready`: one or more lock-discovered servers are still in `:starting` state (warning).
+  - `doctor-server-revision-mismatch`: one or more discovered servers use a different revision than the local CLI revision (warning). Follow the printed remediation command for each affected graph: `logseq server restart --graph <name>`.
   - If bundled runtime startup fails with missing-module or missing-file errors, rebuild with `yarn db-worker-node:release:bundle` and confirm `dist/db-worker-node.js` exists and every path listed in `dist/db-worker-node-assets.json` is present next to it.
 - `query` human output returns a plain string (the query result rendered via `pr-str`), which is convenient for pipelines like `logseq query ... | xargs logseq show --id`.
 - Built-in named queries currently include `block-search`, `task-search`, `recent-updated`, `list-status`, and `list-priority`. Use `query list` to see the full set for your config.
