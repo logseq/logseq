@@ -81,11 +81,36 @@
                                     (when-not lock
                                       (js/window.location.reload)))))))
 
+(defn stop-db-worker!
+  []
+  (when-let [^js worker @state/*db-worker-thread]
+    (set! (.-onmessage worker) nil)
+    (.terminate worker))
+  (set! (.-fs js/window) nil)
+  (set! (.-pfs js/window) nil)
+  (set! (.-workerThread js/window) nil)
+  (reset! state/*db-worker-thread nil)
+  (reset! state/*db-worker nil))
+
+(defn stop-inference-worker!
+  []
+  (when-let [^js port @state/*infer-worker-port]
+    (set! (.-onmessage port) nil)
+    (.close port))
+  (reset! state/*infer-worker-port nil)
+  (reset! state/*infer-worker nil))
+
+(defn stop-workers!
+  []
+  (stop-inference-worker!)
+  (stop-db-worker!))
+
 (defn start-db-worker!
   []
   (when-not util/node-test?
     (p/do!
      (reload-app-if-old-db-worker-exists)
+     (stop-db-worker!)
      (let [worker-url (if config/publishing? "static/js/db-worker.js" "js/db-worker.js")
            worker (js/Worker.
                    (str worker-url
@@ -109,6 +134,7 @@
                                 result
                                 (ldb/read-transit-str result))))
            t1 (util/time-ms)]
+       (reset! state/*db-worker-thread worker)
        (Comlink/expose #js{"remoteInvoke" thread-api/remote-function} worker)
        (worker-handler/handle-message! worker wrapped-worker)
        (reset! state/*db-worker wrapped-worker)
@@ -141,6 +167,7 @@
 (defn start-inference-worker!
   []
   (when-not util/node-test?
+    (stop-inference-worker!)
     (let [worker-url "js/inference-worker.js"
           ^js worker (js/SharedWorker.
                       (str worker-url
@@ -151,6 +178,7 @@
           wrapped-worker (Comlink/wrap port)
           t1 (util/time-ms)]
       (worker-handler/handle-message! port wrapped-worker)
+      (reset! state/*infer-worker-port port)
       (reset! state/*infer-worker wrapped-worker)
       (p/do!
        (let [embedding-model-name (ldb/get-key-value (db/get-db) :logseq.kv/graph-text-embedding-model-name)]
