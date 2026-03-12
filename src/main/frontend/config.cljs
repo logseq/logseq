@@ -25,7 +25,6 @@
 ;; when it launches (when pro plan launches) it should be removed
 (def ENABLE-SETTINGS-ACCOUNT-TAB false)
 
-(def LOGIN-URL cognito-config/LOGIN-URL)
 (def COGNITO-CLIENT-ID cognito-config/COGNITO-CLIENT-ID)
 (def OAUTH-DOMAIN cognito-config/OAUTH-DOMAIN)
 
