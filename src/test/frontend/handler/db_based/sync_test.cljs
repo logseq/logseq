@@ -35,6 +35,17 @@
       (js/Uint8Array. buf))
     (p/resolved payload)))
 
+(defn- bytes->stream
+  [^js payload chunk-size]
+  (js/ReadableStream.
+   #js {:start (fn [controller]
+                 (loop [offset 0]
+                   (when (< offset (.-byteLength payload))
+                     (.enqueue controller (.slice payload offset (min (+ offset chunk-size)
+                                                                      (.-byteLength payload))))
+                     (recur (+ offset chunk-size))))
+                 (.close controller))}))
+
 (deftest remove-member-request-test
   (async done
          (let [called (atom nil)]
@@ -152,6 +163,31 @@
                           (is false (str e))
                           (done)))))))
 
+(deftest rtc-start-skips-while-graph-upload-is-active-test
+  (async done
+         (let [worker-prev @state/*db-worker
+               state-prev @state/state
+               calls (atom [])]
+           (reset! state/*db-worker :worker)
+           (swap! state/state assoc
+                  :rtc/uploading? true
+                  :rtc/loading-graphs? false)
+           (-> (p/with-redefs [state/get-rtc-graphs (fn [] [{:url "demo-graph"}])
+                               state/<invoke-db-worker (fn [& args]
+                                                         (swap! calls conj args)
+                                                         (p/resolved :ok))]
+                 (db-sync/<rtc-start! "demo-graph"))
+               (p/then (fn [_]
+                         (is (not-any? #(= :thread-api/db-sync-start (first %)) @calls))
+                         (is (some #(= :thread-api/db-sync-stop (first %)) @calls))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))
+               (p/finally (fn []
+                            (reset! state/*db-worker worker-prev)
+                            (reset! state/state state-prev)))))))
+
 (deftest rtc-download-graph-emits-feedback-before-snapshot-fetch-test
   (let [trace (atom [])
         log-events (atom [])]
@@ -220,23 +256,151 @@
                                                                                  (resolve true))
                                      state/<invoke-db-worker (fn [& args]
                                                                (swap! import-calls conj args)
-                                                               (p/resolved :ok))
+                                                               (if (= :thread-api/db-sync-import-prepare (first args))
+                                                                 (p/resolved {:import-id "import-1"})
+                                                                 (p/resolved :ok)))
                                      state/set-state! (fn [& _] nil)
                                      state/pub-event! (fn [& _] nil)]
                        (db-sync/<rtc-download-graph! "demo-graph" "graph-1" false))
                      (p/finally (fn [] (set! js/fetch original-fetch)))))
                (p/then (fn [_]
-                         (is (= 1 (count @import-calls)))
-                         (let [[op graph imported-rows reset? graph-uuid remote-tx graph-e2ee?] (first @import-calls)]
-                           (is (= :thread-api/db-sync-import-kvs-rows op))
+                         (is (= 3 (count @import-calls)))
+                         (let [[prepare-op graph reset? graph-uuid graph-e2ee?] (first @import-calls)
+                               [chunk-op imported-rows chunk-graph-uuid import-id] (second @import-calls)
+                               [finalize-op finalize-graph finalize-graph-uuid remote-tx finalize-import-id] (nth @import-calls 2)]
+                           (is (= :thread-api/db-sync-import-prepare prepare-op))
                            (is (string/ends-with? graph "demo-graph"))
-                           (is (= rows imported-rows))
                            (is (= true reset?))
                            (is (= "graph-1" graph-uuid))
+                           (is (= false graph-e2ee?))
+                           (is (= :thread-api/db-sync-import-rows-chunk chunk-op))
+                           (is (= rows imported-rows))
+                           (is (= "graph-1" chunk-graph-uuid))
+                           (is (= "import-1" import-id))
+                           (is (= :thread-api/db-sync-import-finalize finalize-op))
+                           (is (string/ends-with? finalize-graph "demo-graph"))
+                           (is (= "graph-1" finalize-graph-uuid))
                            (is (= 42 remote-tx))
-                           (is (= false graph-e2ee?)))
+                           (is (= "import-1" finalize-import-id)))
                          (is (= [[stream-url "GET"]]
                                 @fetch-calls))
+                         (done)))
+               (p/catch (fn [error]
+                          (set! js/fetch original-fetch)
+                          (is false (str error))
+                          (done)))))))
+
+(deftest rtc-download-graph-streams-identity-snapshot-test
+  (async done
+         (let [import-calls (atom [])
+               rows [[1 "content-1" "addresses-1"]
+                     [2 "content-2" "addresses-2"]]
+               framed-bytes (encode-framed-rows rows)
+               original-fetch js/fetch
+               stream-url "http://base/sync/graph-1/snapshot/stream"]
+           (-> (p/let [stream (bytes->stream framed-bytes 3)]
+                 (set! js/fetch
+                       (fn [url opts]
+                         (let [method (or (aget opts "method") "GET")]
+                           (cond
+                             (and (= url stream-url) (= method "GET"))
+                             (js/Promise.resolve
+                              #js {:ok true
+                                   :status 200
+                                   :headers #js {:get (fn [header]
+                                                        (case header
+                                                          "content-length" (str (.-byteLength framed-bytes))
+                                                          "content-encoding" "identity"
+                                                          nil))}
+                                   :body stream
+                                   :arrayBuffer (fn [] (throw (js/Error. "arrayBuffer should not be used")))})
+                             :else
+                             (js/Promise.resolve #js {:ok false :status 404})))))
+                 (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                                     db-sync/fetch-json (fn [url _opts _schema]
+                                                          (cond
+                                                            (string/ends-with? url "/pull")
+                                                            (p/resolved {:t 42})
+
+                                                            :else
+                                                            (p/rejected (ex-info "unexpected fetch-json URL"
+                                                                                 {:url url}))))
+                                     user-handler/task--ensure-id&access-token (fn [resolve _reject]
+                                                                                 (resolve true))
+                                     state/<invoke-db-worker (fn [& args]
+                                                               (swap! import-calls conj args)
+                                                               (if (= :thread-api/db-sync-import-prepare (first args))
+                                                                 (p/resolved {:import-id "import-1"})
+                                                                 (p/resolved :ok)))
+                                     state/set-state! (fn [& _] nil)
+                                     state/pub-event! (fn [& _] nil)]
+                       (db-sync/<rtc-download-graph! "demo-graph" "graph-1" false))
+                     (p/finally (fn [] (set! js/fetch original-fetch)))))
+               (p/then (fn [_]
+                         (is (= 3 (count @import-calls)))
+                         (let [[chunk-op imported-rows _ import-id] (second @import-calls)]
+                           (is (= :thread-api/db-sync-import-rows-chunk chunk-op))
+                           (is (= rows imported-rows))
+                           (is (= "import-1" import-id)))
+                         (done)))
+               (p/catch (fn [error]
+                          (set! js/fetch original-fetch)
+                          (is false (str error))
+                          (done)))))))
+
+(deftest rtc-download-graph-streams-gzip-snapshot-test
+  (async done
+         (let [import-calls (atom [])
+               rows [[1 "content-1" "addresses-1"]
+                     [2 "content-2" "addresses-2"]]
+               framed-bytes (encode-framed-rows rows)
+               original-fetch js/fetch
+               stream-url "http://base/sync/graph-1/snapshot/stream"]
+           (-> (p/let [gzip-bytes (<gzip-bytes framed-bytes)
+                       stream (bytes->stream gzip-bytes 3)]
+                 (set! js/fetch
+                       (fn [url opts]
+                         (let [method (or (aget opts "method") "GET")]
+                           (cond
+                             (and (= url stream-url) (= method "GET"))
+                             (js/Promise.resolve
+                              #js {:ok true
+                                   :status 200
+                                   :headers #js {:get (fn [header]
+                                                        (case header
+                                                          "content-length" (str (.-byteLength gzip-bytes))
+                                                          "content-encoding" "gzip"
+                                                          nil))}
+                                   :body stream
+                                   :arrayBuffer (fn [] (throw (js/Error. "arrayBuffer should not be used")))})
+                             :else
+                             (js/Promise.resolve #js {:ok false :status 404})))))
+                 (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                                     db-sync/fetch-json (fn [url _opts _schema]
+                                                          (cond
+                                                            (string/ends-with? url "/pull")
+                                                            (p/resolved {:t 42})
+
+                                                            :else
+                                                            (p/rejected (ex-info "unexpected fetch-json URL"
+                                                                                 {:url url}))))
+                                     user-handler/task--ensure-id&access-token (fn [resolve _reject]
+                                                                                 (resolve true))
+                                     state/<invoke-db-worker (fn [& args]
+                                                               (swap! import-calls conj args)
+                                                               (if (= :thread-api/db-sync-import-prepare (first args))
+                                                                 (p/resolved {:import-id "import-1"})
+                                                                 (p/resolved :ok)))
+                                     state/set-state! (fn [& _] nil)
+                                     state/pub-event! (fn [& _] nil)]
+                       (db-sync/<rtc-download-graph! "demo-graph" "graph-1" false))
+                     (p/finally (fn [] (set! js/fetch original-fetch)))))
+               (p/then (fn [_]
+                         (is (= 3 (count @import-calls)))
+                         (let [[chunk-op imported-rows _ import-id] (second @import-calls)]
+                           (is (= :thread-api/db-sync-import-rows-chunk chunk-op))
+                           (is (= rows imported-rows))
+                           (is (= "import-1" import-id)))
                          (done)))
                (p/catch (fn [error]
                           (set! js/fetch original-fetch)
