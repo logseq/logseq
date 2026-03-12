@@ -271,11 +271,12 @@
 
 (defn- should-start-rtc?
   [repo]
-  (or (graph-in-remote-list? repo)
-      ;; During startup, remote graph list might not be fetched yet.
-      ;; If local DB already has graph UUID, start optimistically to reduce cold-start latency.
-      (and (remote-graphs-unknown?)
-           (graph-has-local-rtc-id? repo))))
+  (and (not (true? (:rtc/uploading? @state/state)))
+       (or (graph-in-remote-list? repo)
+           ;; During startup, remote graph list might not be fetched yet.
+           ;; If local DB already has graph UUID, start optimistically to reduce cold-start latency.
+           (and (remote-graphs-unknown?)
+                (graph-has-local-rtc-id? repo)))))
 
 (defn- normalize-graph-e2ee?
   [graph-e2ee?]

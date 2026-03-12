@@ -2061,7 +2061,12 @@
                         {:graph-id graph-id})
                       (let [max-addr (apply max (map first rows))
                             rows (normalize-snapshot-rows rows)
-                            upload-url (str base "/sync/" graph-id "/snapshot/upload?reset=" (if first-batch? "true" "false"))]
+                            loaded' (+ loaded (count rows))
+                            finished? (= loaded' total-rows)
+                            upload-url (str base "/sync/" graph-id "/snapshot/upload?reset="
+                                            (if first-batch? "true" "false")
+                                            "&finished="
+                                            (if finished? "true" "false"))]
                         (p/let [{:keys [body encoding]} (<snapshot-upload-body rows)
                                 headers (cond-> {"content-type" snapshot-content-type}
                                           (string? encoding) (assoc "content-encoding" encoding))
@@ -2070,10 +2075,9 @@
                                                :headers headers
                                                :body body}
                                               {:response-schema :sync/snapshot-upload})]
-                          (let [loaded' (+ loaded (count rows))]
-                            (update-progress {:sub-type :upload-progress
-                                              :message (str "Uploading " loaded' "/" total-rows)})
-                            (p/recur max-addr false loaded')))))))
+                          (update-progress {:sub-type :upload-progress
+                                            :message (str "Uploading " loaded' "/" total-rows)})
+                          (p/recur max-addr false loaded'))))))
                 (p/finally
                   (fn []
                     (cleanup-temp-sqlite! temp)))))))

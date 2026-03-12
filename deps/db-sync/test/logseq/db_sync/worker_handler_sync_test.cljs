@@ -151,3 +151,17 @@
       (is (= "tx/batch/ok" (:type response)))
       (is (= "ok" (:block/title (d/entity @conn [:block/uuid created-uuid]))))
       (is (nil? (d/entity @conn [:block/uuid missing-uuid]))))))
+
+(deftest tx-batch-rejects-while-snapshot-upload-is-in-progress-test
+  (let [sql (test-sql/make-sql)
+        conn (d/create-conn db-schema/schema)
+        self #js {:sql sql
+                  :conn conn
+                  :schema-ready true}
+        tx-data [[:db/add -1 :block/title "blocked"]]
+        response (with-redefs [storage/get-meta (fn [_ k]
+                                                  (when (= :snapshot-uploading? k)
+                                                    "true"))]
+                   (sync-handler/handle-tx-batch! self nil (protocol/tx->transit tx-data) 0))]
+    (is (= "tx/reject" (:type response)))
+    (is (= "snapshot upload in progress" (:reason response)))))
