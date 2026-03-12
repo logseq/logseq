@@ -4,7 +4,6 @@ const cp = require('child_process')
 const exec = utils.promisify(cp.exec)
 const path = require('path')
 const gulp = require('gulp')
-const del = require('del')
 const replace = require('gulp-replace')
 
 const outputPath = path.join(__dirname, 'static')
@@ -16,6 +15,13 @@ const mobileJsPath = path.join(mobilePath, 'js')
 const sourcePath = path.join(__dirname, 'src/main/frontend')
 const resourceFilePath = path.join(resourcesPath, '**')
 const outputFilePath = path.join(outputPath, '**')
+const staticCleanKeep = new Set([
+  'entitlements.plist',
+  'forge.config.js',
+  'node_modules',
+  'package.json',
+  'yarn.lock',
+])
 
 const css = {
   watchCSS () {
@@ -53,8 +59,16 @@ const css = {
 
 const common = {
   clean () {
-    return del(
-      ['./static/**/*', '!./static/node_modules'])
+    for (const entry of fs.readdirSync(outputPath)) {
+      if (staticCleanKeep.has(entry)) continue
+      fs.rmSync(path.join(outputPath, entry), {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      })
+    }
+    return Promise.resolve()
   },
 
   syncResourceFile () {
