@@ -1,6 +1,7 @@
 (ns frontend.worker.db-worker-test
   (:require [cljs.test :refer [async deftest is]]
             [frontend.common.thread-api :as thread-api]
+            [frontend.worker.a-test-env]
             [frontend.worker.db-worker :as db-worker]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
@@ -8,7 +9,7 @@
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.log-and-state :as rtc-log-and-state]
-            [frontend.worker.test-env]
+            [logseq.db.common.sqlite :as common-sqlite]
             [promesa.core :as p]))
 
 (def ^:private test-repo "test-db-worker-repo")
@@ -80,5 +81,101 @@
                             (done)))
                   (p/catch (fn [error]
                              (vreset! thread-api/*thread-apis thread-apis-prev)
+                             (is false (str error))
+                             (done)))))))))
+
+(defn- fake-import-pool
+  [labels closed]
+  #js {:OpfsSAHPoolDb
+       (let [remaining (atom labels)]
+         (fn [_path]
+           (let [label (first @remaining)
+                 _ (swap! remaining rest)]
+             #js {:exec (fn [_] nil)
+                  :close (fn [] (swap! closed conj label))})))})
+
+(defn- capture-outcome
+  [thunk]
+  (try
+    (-> (thunk)
+        (p/then (fn [value] {:value value}))
+        (p/catch (fn [error] {:error error})))
+    (catch :default error
+      (p/resolved {:error error}))))
+
+(deftest db-sync-import-prepare-replaces-active-import-state-test
+  (async done
+         (restoring-worker-state
+          (fn []
+            (let [closed (atom [])
+                  prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)]
+              (-> (p/with-redefs [db-worker/<get-opfs-pool (fn [_] (p/resolved (fake-import-pool [:first :second] closed)))
+                                  common-sqlite/create-kvs-table! (fn [_] nil)
+                                  db-worker/enable-sqlite-wal-mode! (fn [_] nil)]
+                    (p/let [first-import (prepare test-repo false "graph-1" false)
+                            second-import (prepare test-repo false "graph-1" false)]
+                      (is (map? first-import))
+                      (is (map? second-import))
+                      (is (not= (:import-id first-import) (:import-id second-import)))
+                      (is (= [:first] @closed))))
+                  (p/then (fn [_] (done)))
+                  (p/catch (fn [error]
+                             (is false (str error))
+                             (done)))))))))
+
+(deftest db-sync-import-rows-chunk-rejects-stale-import-id-test
+  (async done
+         (restoring-worker-state
+          (fn []
+            (let [closed (atom [])
+                  upserts (atom [])
+                  prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
+                  rows-chunk (@thread-api/*thread-apis :thread-api/db-sync-import-rows-chunk)
+                  finalize (@thread-api/*thread-apis :thread-api/db-sync-import-finalize)]
+              (-> (p/with-redefs [db-worker/<get-opfs-pool (fn [_] (p/resolved (fake-import-pool [:first :second] closed)))
+                                  common-sqlite/create-kvs-table! (fn [_] nil)
+                                  db-worker/enable-sqlite-wal-mode! (fn [_] nil)
+                                  db-worker/upsert-addr-content! (fn [db binds]
+                                                                   (swap! upserts conj {:db db :binds binds}))
+                                  rtc-log-and-state/rtc-log (fn [& _] nil)
+                                  db-worker/import-datoms-to-db! (fn [& _] (p/resolved nil))]
+                    (p/let [first-import (prepare test-repo false "graph-1" false)
+                            second-import (prepare test-repo false "graph-1" false)
+                            stale-outcome (capture-outcome #(rows-chunk [[1 "content-1" "addresses-1"]] 0 1 "graph-1" (:import-id first-import)))]
+                      (is (= :db-sync/stale-import (some-> stale-outcome :error ex-data :type)))
+                      (is (empty? @upserts))
+                      (-> (rows-chunk [[2 "content-2" "addresses-2"]] 0 1 "graph-1" (:import-id second-import))
+                          (p/then (fn [_]
+                                    (is (= 1 (count @upserts)))
+                                    (finalize test-repo "graph-1" 42 (:import-id second-import))))
+                          (p/then (fn [_] (done))))))
+                  (p/catch (fn [error]
+                             (is false (str error))
+                             (done)))))))))
+
+(deftest db-sync-import-finalize-rejects-stale-import-id-test
+  (async done
+         (restoring-worker-state
+          (fn []
+            (let [closed (atom [])
+                  prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
+                  finalize (@thread-api/*thread-apis :thread-api/db-sync-import-finalize)
+                  finalized (atom [])]
+              (-> (p/with-redefs [db-worker/<get-opfs-pool (fn [_] (p/resolved (fake-import-pool [:first :second] closed)))
+                                  common-sqlite/create-kvs-table! (fn [_] nil)
+                                  db-worker/enable-sqlite-wal-mode! (fn [_] nil)
+                                  db-worker/import-datoms-to-db! (fn [& args]
+                                                                   (swap! finalized conj args)
+                                                                   (p/resolved nil))]
+                    (p/let [first-import (prepare test-repo false "graph-1" false)
+                            second-import (prepare test-repo false "graph-1" false)
+                            stale-outcome (capture-outcome #(finalize test-repo "graph-1" 42 (:import-id first-import)))]
+                      (is (= :db-sync/stale-import (some-> stale-outcome :error ex-data :type)))
+                      (is (empty? @finalized))
+                      (-> (finalize test-repo "graph-1" 42 (:import-id second-import))
+                          (p/then (fn [_]
+                                    (is (= 1 (count @finalized)))
+                                    (done))))))
+                  (p/catch (fn [error]
                              (is false (str error))
                              (done)))))))))
