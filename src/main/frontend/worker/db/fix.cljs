@@ -19,4 +19,5 @@
                                (assoc v :db/ident k))))
                          db-schema/schema))]
     (when (seq diffs)
+      (prn :debug ::check-and-fix-schema! :diffs diffs)
       (d/transact! conn diffs))))
