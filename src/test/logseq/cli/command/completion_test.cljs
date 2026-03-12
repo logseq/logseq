@@ -52,3 +52,13 @@
           action (commands/build-action parsed {})]
       (is (true? (:ok? action)))
       (is (= "bash" (get-in action [:action :shell]))))))
+
+(deftest test-parse-args-completion-validation
+  (testing "completion with no shell arg returns invalid-options error"
+    (let [result (commands/parse-args ["completion"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+  (testing "completion with unsupported shell returns invalid-options error"
+    (let [result (commands/parse-args ["completion" "fish"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code]))))))
