@@ -1194,6 +1194,19 @@ html.is-mac {
 .ls-resize-image {
   @apply flex relative w-fit cursor-pointer;
 
+  &.align-left {
+    margin-right: auto;
+  }
+
+  &.align-center {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  &.align-right {
+    margin-left: auto;
+  }
+
   .handle-left, .handle-right {
     @apply absolute w-[6px] h-[15%] min-h-[30px] bg-black/30 hover:bg-black/70
     top-[50%] left-[5px] rounded-full cursor-col-resize select-none

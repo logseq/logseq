@@ -648,8 +648,12 @@
   [x]
   (and (integer? x) (neg? x)))
 
+(defn- remote-batch-temp-id
+  [temp-id]
+  (str "remote-batch-tempid-" temp-id))
+
 (defn- remap-remote-batch-temp-ids
-  [batch-index tx-data]
+  [tx-data]
   (let [ops #{:db/add :db/retract :db/retractEntity}
         entity-temp-ids (->> tx-data
                              (keep (fn [item]
@@ -661,9 +665,7 @@
                              distinct)
         temp-id-map (when (seq entity-temp-ids)
                       (zipmap entity-temp-ids
-                              (map-indexed (fn [idx _]
-                                             (str "remote-batch-" batch-index "-tempid-" idx))
-                                           entity-temp-ids)))]
+                              (map remote-batch-temp-id entity-temp-ids)))]
     (if (seq temp-id-map)
       (mapv (fn [item]
               (if (and (vector? item)
@@ -731,11 +733,11 @@
 
 (defn- flatten-batched-remote-tx-data
   [tx-data*]
-  (loop [remaining (map-indexed vector tx-data*)
+  (loop [remaining tx-data*
          lookup->temp-id {}
          acc []]
-    (if-let [[batch-index tx-data] (first remaining)]
-      (let [remapped-batch (remap-remote-batch-temp-ids batch-index tx-data)
+    (if-let [tx-data (first remaining)]
+      (let [remapped-batch (remap-remote-batch-temp-ids tx-data)
             lookup->temp-id (merge lookup->temp-id (created-lookup->temp-id remapped-batch))
             resolved-batch (resolve-lookup-refs lookup->temp-id remapped-batch)]
         (recur (rest remaining)

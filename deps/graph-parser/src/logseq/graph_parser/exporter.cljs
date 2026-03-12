@@ -57,6 +57,116 @@
             :block/title new-title
             :block/name (common-util/page-name-sanity-lc new-title)})))
 
+(def template-file-property-names #{:template :template-including-parent})
+
+(defn- get-template-name
+  [block]
+  (let [template-name (get-in block [:block/properties :template])]
+    (when (string? template-name)
+      (not-empty (string/trim template-name)))))
+
+(defn- template-including-parent?
+  [block]
+  (not= false (get-in block [:block/properties :template-including-parent])))
+
+(defn- remove-template-property-lines
+  [title]
+  (if (string? title)
+    (->> (string/split-lines title)
+         (remove (fn [line]
+                   (let [trimmed-line (string/triml line)]
+                     (or (string/starts-with? trimmed-line "template::")
+                         (string/starts-with? trimmed-line "template-including-parent::")))))
+         (string/join "\n"))
+    title))
+
+(defn- group-block-children-by-parent
+  [blocks]
+  (reduce (fn [result {parent :block/parent
+                       child-uuid :block/uuid}]
+            (if (and (vector? parent)
+                     (= :block/uuid (first parent)))
+              (update result (second parent) (fnil conj []) child-uuid)
+              result))
+          {}
+          blocks))
+
+(defn- get-block-subtree-uuids
+  [block-children root-uuid]
+  (loop [queue [root-uuid]
+         result []]
+    (if-let [current-uuid (first queue)]
+      (recur (into (vec (rest queue)) (get block-children current-uuid))
+             (conj result current-uuid))
+      result)))
+
+(defn- get-parent-uuid [parent]
+  (cond
+    (and (vector? parent) (= :block/uuid (first parent)))
+    (second parent)
+    (and (map? parent) (:block/uuid parent))
+    (:block/uuid parent)
+    :else
+    nil))
+
+(defn- handle-template-blocks
+  "Handles creating #Template blocks and their children and calculates
+  :preserve-empty-properties-uuids for use later"
+  [blocks*]
+  (let [include-parent-template-uuids (->> blocks*
+                                           (filter (fn [block]
+                                                     (and (get-template-name block)
+                                                          (template-including-parent? block))))
+                                           (map :block/uuid)
+                                           set)
+        content-uuids-by-template (into {}
+                                        (map (fn [template-uuid]
+                                               [template-uuid (common-uuid/gen-uuid)]))
+                                        include-parent-template-uuids)]
+    (reduce
+     (fn [{:keys [blocks preserve-empty-properties-uuids]} block]
+       (if-let [template-name (get-template-name block)]
+         (let [block-children (group-block-children-by-parent blocks*)
+               parent-uuid (get-parent-uuid (:block/parent block))
+               content-uuid (when parent-uuid
+                              (get content-uuids-by-template parent-uuid))
+               cleaned-block' (if content-uuid
+                                (assoc block :block/parent [:block/uuid content-uuid])
+                                block)
+               source-preserve-empty-properties-uuids (set (get-block-subtree-uuids block-children (:block/uuid block)))
+               template-root-block (-> cleaned-block'
+                                       (assoc :block/title template-name)
+                                       (update :block/tags (fnil conj []) :logseq.class/Template)
+                                       (dissoc :block/properties))
+               template-content-block (when (template-including-parent? block)
+                                        (-> (cond-> block
+                                              (seq (:block/properties block))
+                                              (update :block/properties #(apply dissoc % template-file-property-names)))
+                                            (update :block/title remove-template-property-lines)
+                                            (assoc :block/uuid (get content-uuids-by-template (:block/uuid block))
+                                                   :block/parent [:block/uuid (:block/uuid block)]
+                                                   :block/order (db-order/gen-key))
+                                            (dissoc :db/id)))]
+           {:blocks (cond-> blocks
+                      true
+                      (conj template-root-block)
+                      template-content-block
+                      (conj template-content-block))
+            :preserve-empty-properties-uuids (set/union preserve-empty-properties-uuids
+                                                        source-preserve-empty-properties-uuids
+                                                        (cond-> #{}
+                                                          template-content-block
+                                                          (conj (:block/uuid template-content-block))))})
+         {:blocks (if-let [content-uuid (some->> (get-parent-uuid (:block/parent block))
+                                                 (get content-uuids-by-template))]
+                    (conj blocks
+                          (assoc block :block/parent [:block/uuid content-uuid]))
+                    (conj blocks block))
+          :preserve-empty-properties-uuids preserve-empty-properties-uuids}))
+     {:blocks []
+      :preserve-empty-properties-uuids #{}}
+     blocks*)))
+
 (defn- get-page-uuid [page-names-to-uuids page-name ex-data']
   (or (get @page-names-to-uuids (some-> (if (string/includes? (str page-name) "#")
                                           (string/lower-case (gp-block/sanitize-hashtag-name page-name))
@@ -463,7 +573,8 @@
   "All built-in property file ids as a set of keywords"
   (-> built-in-property-file-to-db-idents keys set
       ;; built-in-properties that map to new properties
-      (set/union #{:filters :query-table :query-properties :query-sort-by :query-sort-desc :hl-stamp :file :file-path})))
+      (set/union #{:filters :query-table :query-properties :query-sort-by :query-sort-desc :hl-stamp :file :file-path})
+      (set/union template-file-property-names)))
 
 ;; TODO: Review whether this should be using :block/title instead of file graph ids
 (def all-built-in-names
@@ -481,7 +592,8 @@
   #{:alias :tags :background-color :heading
     :query-table :query-properties :query-sort-by :query-sort-desc
     :ls-type :hl-type :hl-color :hl-page :hl-stamp :hl-value :file :file-path
-    :logseq.order-list-type :icon :public :exclude-from-graph-view :filters})
+    :logseq.order-list-type :icon :public :exclude-from-graph-view :filters
+    :template :template-including-parent})
 
 (assert (set/subset? file-built-in-property-names all-built-in-property-file-ids)
         "All file-built-in properties are used in db graph")
@@ -693,21 +805,18 @@
                (get-page-uuid page-names-to-uuids ((some-fn ::original-name :block/name) block) {:block block})
                (:block/uuid block))
              properties-text-values))
-    ;; TODO: Add import support for :template. Ignore for now as they cause invalid property types
-    (if (contains? props :template)
-      {}
-      (let [props' (-> (update-built-in-property-values
-                        (select-keys props file-built-in-property-names)
-                        page-names-to-uuids
-                        (select-keys import-state [:ignored-properties :all-idents])
-                        (select-keys block [:block/name :block/title])
-                        (select-keys user-options [:property-classes]))
-                       (merge (update-user-property-values user-properties page-names-to-uuids properties-text-values import-state options)))
-            pvalue-tx-m (->property-value-tx-m block props' #(get-property-schema @property-schemas %) @all-idents)
-            block-properties (-> (merge props' (db-property-build/build-properties-with-ref-values pvalue-tx-m))
-                                 (update-keys get-ident'))]
-        {:block-properties block-properties
-         :pvalues-tx (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))}))))
+    (let [props' (-> (update-built-in-property-values
+                      (select-keys props file-built-in-property-names)
+                      page-names-to-uuids
+                      (select-keys import-state [:ignored-properties :all-idents])
+                      (select-keys block [:block/name :block/title])
+                      (select-keys user-options [:property-classes]))
+                     (merge (update-user-property-values user-properties page-names-to-uuids properties-text-values import-state options)))
+          pvalue-tx-m (->property-value-tx-m block props' #(get-property-schema @property-schemas %) @all-idents)
+          block-properties (-> (merge props' (db-property-build/build-properties-with-ref-values pvalue-tx-m))
+                               (update-keys get-ident'))]
+      {:block-properties block-properties
+       :pvalues-tx (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))})))
 
 (def ignored-built-in-properties
   "Ignore built-in properties that are already imported or not supported in db graphs"
@@ -726,7 +835,7 @@
 
 (defn- pre-update-properties
   "Updates page and block properties before their property types are inferred"
-  [properties class-related-properties]
+  [properties class-related-properties {:keys [preserve-empty-properties?]}]
   (let [dissoced-props (concat ignored-built-in-properties
                                ;; TODO: Deal with these dissoced built-in properties
                                [:title :created-at :updated-at]
@@ -736,8 +845,9 @@
                  (if (not (contains? file-built-in-property-names prop))
                   ;; only update user properties
                    (if (string? val)
-                    ;; Ignore blank values as they were usually generated by templates
-                     (when-not (string/blank? val)
+                    ;; Ignore blank values outside template-related blocks to preserve existing import behavior
+                     (when (or preserve-empty-properties?
+                               (not (string/blank? val)))
                        [prop
                        ;; handle float strings b/c graph-parser doesn't
                         (or (parse-double val) val)])
@@ -757,14 +867,15 @@
     :keys [import-state macros]
     :as options}]
   (-> (if (seq properties)
-        (let [classes-from-properties (->> (select-keys properties property-classes)
+        (let [preserve-empty-properties? (contains? (or (:preserve-empty-property-block-uuids options) #{})
+                                                    (:block/uuid block))
+              classes-from-properties (->> (select-keys properties property-classes)
                                            (mapcat (fn [[_k v]] (if (coll? v) v [v])))
                                            distinct)
-              properties' (pre-update-properties properties (into property-classes property-parent-classes))
-              properties-to-infer (if (:template properties')
-                                    ;; Ignore template properties as they don't consistently have representative property values
-                                    {}
-                                    (apply dissoc properties' file-built-in-property-names))
+              properties' (pre-update-properties properties
+                                                 (into property-classes property-parent-classes)
+                                                 {:preserve-empty-properties? preserve-empty-properties?})
+              properties-to-infer (apply dissoc properties' file-built-in-property-names)
               property-changes
               (->> properties-to-infer
                    (keep (fn [[prop val]]
@@ -944,6 +1055,7 @@
   use in build-block-tx. This walk is only done once for perf reasons"
   [config ast-blocks]
   (let [results (atom {:simple-queries []
+                       :cards []
                        :asset-links []
                        :embeds []
                        :zotero-imported-files {}
@@ -951,9 +1063,9 @@
     (walk/prewalk
      (fn [x]
        (cond
-        (and (vector? x)
-             (= "Link" (first x))
-             (let [path-or-map (second (:url (second x)))]
+         (and (vector? x)
+              (= "Link" (first x))
+              (let [path-or-map (second (:url (second x)))]
                 (cond
                   (string? path-or-map)
                   (or (common-config/local-relative-asset? path-or-map)
@@ -967,19 +1079,23 @@
               (= "Macro" (first x))
               (= "embed" (:name (second x))))
          (swap! results update :embeds conj x)
-        (and (vector? x)
-             (= "Macro" (first x))
-             (= "zotero-imported-file" (:name (second x))))
-        (let [[item-key filename] (:arguments (second x))]
-          (when (and item-key filename)
-            (swap! results update :zotero-imported-files assoc item-key (common-util/safe-read-string filename))))
-        (and (vector? x)
-             (= "Macro" (first x))
-             (= "zotero-linked-file" (:name (second x))))
-        (let [[relative-path] (:arguments (second x))
-              parsed-path (common-util/safe-read-string relative-path)]
-          (when (string? parsed-path)
-            (swap! results update :zotero-linked-files conj parsed-path)))
+         (and (vector? x)
+              (= "Macro" (first x))
+              (= "zotero-imported-file" (:name (second x))))
+         (let [[item-key filename] (:arguments (second x))]
+           (when (and item-key filename)
+             (swap! results update :zotero-imported-files assoc item-key (common-util/safe-read-string filename))))
+         (and (vector? x)
+              (= "Macro" (first x))
+              (= "zotero-linked-file" (:name (second x))))
+         (let [[relative-path] (:arguments (second x))
+               parsed-path (common-util/safe-read-string relative-path)]
+           (when (string? parsed-path)
+             (swap! results update :zotero-linked-files conj parsed-path)))
+         (and (vector? x)
+              (= "Macro" (first x))
+              (= "cards" (:name (second x))))
+         (swap! results update :cards conj x)
          (and (vector? x)
               (= "Macro" (first x))
               (= "query" (:name (second x))))
@@ -989,7 +1105,8 @@
     @results))
 
 (defn- handle-queries
-  "If a block contains a simple or advanced queries, converts block to a #Query node"
+  "If a block contains a simple or advanced queries, converts block to a #Query node. If a block
+   contains a cards query converts to a #Cards node"
   [{:block/keys [title] :as block} db page-names-to-uuids walked-ast-blocks options]
   (if-let [query (some-> (first (:simple-queries walked-ast-blocks))
                          (ast->text (select-keys options [:log-fn]))
@@ -1032,7 +1149,21 @@
                 (assoc :block/collapsed? true)))]
         {:block block'
          :pvalues-tx pvalues-tx'})
-      {:block block})))
+      (if-let [cards-macro (first (:cards walked-ast-blocks))]
+        (if-let [query (some-> cards-macro second :arguments first string/trim not-empty)]
+          (let [props {:logseq.property/query query}
+                {:keys [block-properties pvalues-tx]}
+                (build-properties-and-values props db page-names-to-uuids
+                                             (select-keys block [:block/properties-text-values :block/name :block/title :block/uuid])
+                                             options)
+                block'
+                (-> (update block :block/tags (fnil conj []) :logseq.class/Cards)
+                    (merge block-properties
+                           {:block/title (string/trim (string/replace-first title #"\{\{cards(.*)\}\}" ""))}))]
+            {:block block'
+             :pvalues-tx pvalues-tx})
+          {:block block})
+        {:block block}))))
 
 (defn- handle-block-properties
   "Does everything page properties does and updates a couple of block specific attributes"
@@ -1390,6 +1521,77 @@
             :block/tags [:logseq.class/Quote-block]})
     block))
 
+(defn- handle-math
+  "If a block's entire content is a single displayed math formula, convert to #Math node.
+  Detects blocks whose title is entirely delimited by $$ markers."
+  [block]
+  (let [title (string/trim (:block/title block))]
+    (if (and (string/starts-with? title "$$")
+             (string/ends-with? title "$$")
+             (> (count title) 4)
+             ;; ensure there's no nested $$ pair (i.e. not two separate inline formulas)
+             (not (string/includes? (subs title 2 (- (count title) 2)) "$$")))
+      (let [math-content (string/trim (subs title 2 (- (count title) 2)))]
+        (merge block
+               {:block/title math-content
+                :logseq.property.node/display-type :math
+                :block/tags [:logseq.class/Math-block]}))
+      block)))
+
+(defn- split-title-by-code-fences
+  "Parses a block title string line-by-line, splitting into non-code text parts
+   and code fence segments. All code fences are extracted regardless of whether
+   they have a language tag; :lang is nil when not specified.
+   Returns {:text-parts [...] :code-segs [{:text ... :lang ...}]}."
+  [title]
+  (let [lines (string/split-lines title)]
+    (loop [remaining lines
+           in-code? false
+           lang nil
+           current []
+           text-parts []
+           code-segs []]
+      (if (empty? remaining)
+        {:text-parts (if (seq current)
+                       (conj text-parts (string/join "\n" current))
+                       text-parts)
+         :code-segs code-segs}
+        (let [line (first remaining)
+              trimmed-line (string/trim line)
+              fence-start? (and (not in-code?) (re-matches #"```.*" trimmed-line))
+              fence-end?   (and in-code? (= trimmed-line "```"))]
+          (cond
+            fence-start?
+            (recur (rest remaining) true (not-empty (subs trimmed-line 3)) []
+                   (if (seq current)
+                     (conj text-parts (string/join "\n" current))
+                     text-parts)
+                   code-segs)
+            fence-end?
+            (recur (rest remaining) false nil []
+                   text-parts
+                   (conj code-segs {:text (string/join "\n" current) :lang lang}))
+            :else
+            (recur (rest remaining) in-code? lang (conj current line)
+                   text-parts code-segs)))))))
+
+(defn- build-code-snippet-child-blocks
+  "Builds child block tx maps for extracted code snippets, tagging each as a
+   Code-block with its detected language."
+  [parent-block code-segs]
+  (mapv (fn [{:keys [text lang]}]
+          (cond-> (sqlite-util/block-with-timestamps
+                   {:block/uuid (d/squuid)
+                    :block/title text
+                    :block/parent [:block/uuid (:block/uuid parent-block)]
+                    :block/page (:block/page parent-block)
+                    :block/order (db-order/gen-key)
+                    :block/tags [:logseq.class/Code-block]
+                    :logseq.property.node/display-type :code})
+            lang
+            (assoc :logseq.property.code/lang lang)))
+        code-segs))
+
 (defn- handle-embeds
   "If a block contains page or block embeds, converts block to a :block/link based embed"
   [block page-names-to-uuids {:keys [embeds]} {:keys [log-fn] :or {log-fn prn}}]
@@ -1413,6 +1615,55 @@
         (log-fn :invalid-embed-arguments "Ignore embed because of invalid arguments" :args (:arguments (second embed-node)))
         block))
     block))
+
+(defn- at-least-two?
+  [s substr]
+  (if (empty? substr)
+    false
+    (loop [start 0 cnt 0]
+      (let [idx (string/index-of s substr start)]
+        (cond
+          (>= cnt 2) true
+          (nil? idx) false
+          :else (recur (+ idx (count substr)) (inc cnt)))))))
+
+(defn- handle-code-blocks
+  "Returns a vector of block and optional block children tx. If a block
+  contains code fence(s) i.e. ```, converts block to a #Code node.  If user
+  enables :extract-code-snippets? option, multiple code fences are extracted out
+  of text and put into children blocks in the order they appear"
+  [block' options]
+  (let [title (:block/title block')
+        has-fence? (and (string? title) (at-least-two? title "```"))
+        extract? (get-in options [:user-options :extract-code-snippets?])
+        [final-block code-children-tx]
+        (if has-fence?
+          (let [{:keys [text-parts code-segs]} (split-title-by-code-fences title)
+                pure-single-code? (and (= 1 (count code-segs))
+                                       (every? string/blank? text-parts))
+                has-mixed-content? (and extract?
+                                        (seq code-segs)
+                                        (some #(not (string/blank? %)) text-parts))]
+            (cond
+              pure-single-code?
+              (let [{:keys [text lang]} (first code-segs)]
+                [(cond-> (assoc block'
+                                :block/title text
+                                :block/tags [:logseq.class/Code-block]
+                                :logseq.property.node/display-type :code)
+                   lang (assoc :logseq.property.code/lang lang))
+                 []])
+              has-mixed-content?
+              (let [remaining-title (-> (string/join "\n" text-parts)
+                                        (string/replace #"\n{2,}" "\n")
+                                        string/trim)
+                    updated-block (assoc block' :block/title remaining-title)
+                    code-children (build-code-snippet-child-blocks updated-block code-segs)]
+                [updated-block code-children])
+              :else
+              [block' []]))
+          [block' []])]
+    [final-block code-children-tx]))
 
 (defn- <build-block-tx
   [db block* pre-blocks {:keys [page-names-to-uuids] :as per-file-state}
@@ -1439,14 +1690,16 @@
                      (update-block-tags db (:user-options options) per-file-state (:all-idents import-state))
                      (handle-embeds page-names-to-uuids walked-ast-blocks (select-keys options [:log-fn]))
                      (handle-quotes (select-keys options [:log-fn]))
+                     (handle-math)
                      (update-block-marker options)
                      (update-block-priority options)
                      add-missing-timestamps
                      (dissoc :block/format :block.temp/ast-blocks)
                   ;;  ((fn [x] (prn ::block-out x) x))
                      )]
-    ;; Order matters as previous txs are referenced in block
-    (concat properties-tx deadline-properties-tx asset-blocks-tx [block'])))
+    (let [[final-block code-children-tx] (handle-code-blocks block' options)]
+      ;; Order matters as previous txs are referenced in block
+      (concat properties-tx deadline-properties-tx asset-blocks-tx [final-block] code-children-tx))))
 
 (defn- update-page-alias
   [m page-names-to-uuids]
@@ -1912,7 +2165,7 @@
 * :extract-options - Options map to pass to extract/extract
 * :user-options - User provided options maps that alter how a file is converted to db graph. Current options
    are: :tag-classes (set), :property-classes (set), :property-parent-classes (set), :convert-all-tags? (boolean)
-   and :remove-inline-tags? (boolean)
+   :remove-inline-tags? (boolean), :extract-code-snippets? (boolean)
 * :import-state - useful import state to maintain across files e.g. property schemas or ignored properties
 * :macros - map of macros for use with macro expansion
 * :notify-user - Displays warnings to user without failing the import. Fn receives a map with :msg
@@ -1923,8 +2176,10 @@
                       :as *options}]
   (p/let [options (assoc *options :notify-user notify-user :log-fn log-fn :file file)
           {:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
+          {:keys [blocks preserve-empty-properties-uuids]} (handle-template-blocks blocks)
           tx-options (merge (build-tx-options options)
-                            {:journal-created-ats (build-journal-created-ats pages)})
+                            {:journal-created-ats (build-journal-created-ats pages)
+                             :preserve-empty-property-block-uuids preserve-empty-properties-uuids})
           old-properties (keys @(get-in options [:import-state :property-schemas]))
           ;; Build page and block txs
           {:keys [pages-tx page-properties-tx per-file-state existing-pages]} (build-pages-tx conn pages blocks tx-options)
