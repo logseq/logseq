@@ -276,6 +276,16 @@
            (not (seq (:graph opts))))
       (missing-graph-result summary)
 
+      (and (= command :completion)
+           (let [shell (or (:shell opts) (first args))]
+             (not (#{"zsh" "bash"} shell))))
+      (command-core/invalid-options-result
+       summary
+       (let [shell (or (:shell opts) (first args))]
+         (if (seq shell)
+           (str "unsupported shell: " shell "; expected zsh or bash")
+           "missing shell argument; usage: logseq completion <zsh|bash>")))
+
       :else
       (command-core/ok-result command opts args summary))))
 
