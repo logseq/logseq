@@ -38,7 +38,6 @@
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
-            [react-draggable]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
