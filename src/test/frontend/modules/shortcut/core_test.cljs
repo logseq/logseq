@@ -1,6 +1,5 @@
 (ns frontend.modules.shortcut.core-test
   (:require [cljs.test :refer [deftest is testing]]
-            [clojure.string :as string]
             [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.data-helper :as dh]
             [frontend.util :as util]))

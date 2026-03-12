@@ -56,20 +56,19 @@
                    ("delete") "Delete"
                    ("caps-lock" "capslock") "⇪"
                    (nil) ""
-                   (name key)))
+                   (name key)))]
         ;; If result is a single letter (a-z), uppercase it
         ;; Otherwise, capitalize only if it's a single character (for symbols)
-        final-result (cond
-                       (and (= (count result) 1)
-                            (re-matches #"[a-z]" result))
-                       (string/upper-case result)
+    (cond
+      (and (= (count result) 1)
+           (re-matches #"[a-z]" result))
+      (string/upper-case result)
 
-                       (= (count result) 1)
-                       result
+      (= (count result) 1)
+      result
 
-                       :else
-                       (string/capitalize result))]
-    final-result))
+      :else
+      (string/capitalize result))))
 
 (defn- flatten-keys
   "Recursively flattens nested collections, preserving strings."
@@ -385,13 +384,10 @@
                      :else
                      [(str binding)])
               ;; Use raw-binding if provided, otherwise normalize from binding
-              binding-for-data (if raw-binding
-                                 (if (coll? raw-binding)
-                                   (if (= (count raw-binding) 1)
-                                     (first raw-binding)
-                                     raw-binding)
-                                   raw-binding)
-                                 binding)
+              binding-for-data (cond
+                                 (nil? raw-binding) binding
+                                 (and (coll? raw-binding) (= (count raw-binding) 1)) (first raw-binding)
+                                 :else raw-binding)
               render-fn (case detected-style
                           :combo combo-keys
                           :separate separate-keys
