@@ -151,7 +151,7 @@
         "codemirror": "5.65.18",
         "comlink": "^4.4.1",
         "d3-force": "3.0.0",
-        "dompurify": "2.4.0",
+        "dompurify": "^3.3.3",
         "emoji-mart": "^5.5.2",
         "fs": "0.0.1-security",
         "fs-extra": "^11.3.0",
