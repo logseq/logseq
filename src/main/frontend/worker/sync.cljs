@@ -2021,7 +2021,8 @@
   [repo graph-e2ee?]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (ldb/transact! conn [(ldb/kv :logseq.kv/graph-remote? true)
-                         (ldb/kv :logseq.kv/graph-rtc-e2ee? (true? graph-e2ee?))])))
+                         (ldb/kv :logseq.kv/graph-rtc-e2ee? (true? graph-e2ee?))]
+                   {:persist-op? false})))
 
 (defn upload-graph!
   [repo]

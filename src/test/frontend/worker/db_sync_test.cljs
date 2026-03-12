@@ -179,6 +179,23 @@
              @(:online-users client)))
       (is (= 1 (count @broadcasts))))))
 
+(deftest upload-graph-metadata-write-is-not-persisted-as-local-sync-tx-test
+  (let [captured (atom nil)
+        fake-conn (atom :db)]
+    (with-redefs [worker-state/get-datascript-conn (fn [_repo] fake-conn)
+                  ldb/transact! (fn [conn tx-data tx-meta]
+                                  (reset! captured {:conn conn
+                                                    :tx-data tx-data
+                                                    :tx-meta tx-meta})
+                                  nil)]
+      (#'db-sync/set-graph-sync-metadata! test-repo true))
+    (is (= fake-conn (:conn @captured)))
+    (is (= [{:db/ident :logseq.kv/graph-remote? :kv/value true}
+            {:db/ident :logseq.kv/graph-rtc-e2ee? :kv/value true}]
+           (:tx-data @captured)))
+    (is (= {:persist-op? false}
+           (:tx-meta @captured)))))
+
 (deftest pull-ok-with-older-remote-tx-is-ignored-test
   (testing "pull/ok with remote tx behind local tx does not apply stale tx data"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
