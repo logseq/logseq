@@ -123,6 +123,32 @@
                              (is false (str error))
                              (done)))))))))
 
+(deftest db-sync-import-prepare-cleans-up-failed-setup-test
+  (async done
+         (restoring-worker-state
+          (fn []
+            (let [closed (atom [])
+                  setup-calls (atom 0)
+                  prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)]
+              (-> (p/with-redefs [db-worker/<get-opfs-pool (fn [_] (p/resolved (fake-import-pool [:failed :retry] closed)))
+                                  common-sqlite/create-kvs-table! (fn [_]
+                                                                    (if (zero? @setup-calls)
+                                                                      (do
+                                                                        (swap! setup-calls inc)
+                                                                        (throw (ex-info "setup failed" {})))
+                                                                      nil))
+                                  db-worker/enable-sqlite-wal-mode! (fn [_] nil)]
+                    (p/let [failed-outcome (capture-outcome #(prepare test-repo false "graph-1" false))
+                            retry-import (prepare test-repo false "graph-1" false)]
+                      (is (= "setup failed" (some-> failed-outcome :error ex-message)))
+                      (is (= [:failed] @closed))
+                      (is (map? retry-import))
+                      (is (:import-id retry-import))
+                      (done)))
+                  (p/catch (fn [error]
+                             (is false (str error))
+                             (done)))))))))
+
 (deftest db-sync-import-rows-chunk-rejects-stale-import-id-test
   (async done
          (restoring-worker-state
