@@ -68,12 +68,18 @@
   Bump to force a rebuild when the index format changes."
   1)
 
+(def ^:private search-index-build-batch-size 200)
+(def ^:private search-index-build-time-budget-ms 8)
+(def ^:private search-index-build-idle-diff-ms 1000)
+(def ^:private search-index-build-pause-ms 300)
+
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
 (defonce *datascript-conns worker-state/*datascript-conns)
 (defonce *client-ops-conns worker-state/*client-ops-conns)
 (defonce *opfs-pools worker-state/*opfs-pools)
 (defonce *publishing? (atom false))
+(defonce ^:private *search-index-build-ids (atom {}))
 
 (defn- check-worker-scope!
   []
@@ -191,6 +197,7 @@
   (swap! *sqlite-conns dissoc repo)
   (swap! *datascript-conns dissoc repo)
   (swap! *client-ops-conns dissoc repo)
+  (swap! *search-index-build-ids dissoc repo)
   (search/clear-fuzzy-search-indice! repo)
   (when db (.close db))
   (when search (.close search))
@@ -251,13 +258,13 @@
       [db search-db client-ops-db])))
 
 (defn- gc-sqlite-dbs!
-  "Gc main db weekly and rtc ops db each time when opening it"
+  "Gc main db monthly and rtc ops db each time when opening it"
   [sqlite-db client-ops-db datascript-conn {:keys [full-gc?]}]
   (let [last-gc-at (:kv/value (d/entity @datascript-conn :logseq.kv/graph-last-gc-at))]
     (when (or full-gc?
               (nil? last-gc-at)
               (not (number? last-gc-at))
-              (> (- (common-util/time-ms) last-gc-at) (* 3 24 3600 1000))) ; 3 days ago
+              (> (- (common-util/time-ms) last-gc-at) (* 30 24 3600 1000))) ; 1 month ago
       (log/info :gc-sqlite-dbs "gc current graph")
       (doseq [db (if @*publishing? [sqlite-db] [sqlite-db client-ops-db])]
         (sqlite-gc/gc-kvs-table! db {:full-gc? full-gc?})
@@ -330,14 +337,7 @@
 
           (db-listener/listen-db-changes! repo (get @*datascript-conns repo))
 
-          ;; Build search index if not yet completed (async, batched, yields between batches)
-          (when (and search-db (not @*publishing?))
-            (try
-              (let [version (aget (aget (.exec search-db #js {:sql "PRAGMA user_version" :rowMode "array"}) 0) 0)]
-                (when (not= version search-db-version)
-                  (<build-blocks-fts! search-db conn)))
-              (catch :default e
-                (js/console.error "Search index build error:" e)))))))))
+          nil)))))
 
 (defn- iter->vec [iter']
   (when iter'
@@ -408,6 +408,32 @@
 (defn- get-search-db
   [repo]
   (worker-state/get-sqlite-conn repo :search))
+
+(defn- search-index-version
+  [^js search-db]
+  (aget (aget (.exec search-db #js {:sql "PRAGMA user_version" :rowMode "array"}) 0) 0))
+
+(defn- start-search-index-build!
+  [repo]
+  (let [build-id (str (random-uuid))]
+    (swap! *search-index-build-ids assoc repo build-id)
+    build-id))
+
+(defn- clear-search-index-build!
+  [repo build-id]
+  (swap! *search-index-build-ids
+         (fn [builds]
+           (if (= build-id (get builds repo))
+             (dissoc builds repo)
+             builds))))
+
+(defn- ensure-active-search-index-build!
+  [repo build-id]
+  (when-not (= build-id (get @*search-index-build-ids repo))
+    (throw (ex-info "stale search index build"
+                    {:type :search/stale-index-build
+                     :repo repo
+                     :build-id build-id}))))
 
 (comment
   (def-thread-api :thread-api/get-version
@@ -708,7 +734,7 @@
                           (sync-crypt/<fetch-graph-aes-key-for-download graph-id))
                 _ (when (and graph-e2ee? (nil? aes-key))
                     (db-sync/fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
-                pool (<get-opfs-pool repo)
+                ^js pool (<get-opfs-pool repo)
                 ^js db (new (.-OpfsSAHPoolDb pool) repo-path)
                 _ (reset! opened-db db)
                 _ (common-sqlite/create-kvs-table! db)
@@ -851,39 +877,69 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (search/build-blocks-indice repo @conn)))
 
+(defn- take-block-datoms-batch
+  [datoms batch-size time-budget-ms]
+  (let [deadline (+ (common-util/time-ms) time-budget-ms)]
+    (loop [batch (transient [])
+           remaining (seq datoms)
+           n 0]
+      (if (or (nil? remaining)
+              (>= n batch-size)
+              (and (pos? n) (>= (common-util/time-ms) deadline)))
+        [(persistent! batch) remaining]
+        (recur (conj! batch (first remaining))
+               (next remaining)
+               (inc n))))))
+
+(defn- <wait-for-search-index-idle!
+  [repo build-id]
+  (p/loop []
+    (ensure-active-search-index-build! repo build-id)
+    (p/let [idle? (worker-state/<invoke-main-thread :thread-api/input-idle? repo search-index-build-idle-diff-ms)]
+      (if idle?
+        nil
+        (p/let [_ (js/Promise. (fn [resolve] (js/setTimeout resolve search-index-build-pause-ms)))]
+          (p/recur))))))
+
 (defn- <build-blocks-fts!
   "Build FTS index in batches with yielding. Sets user_version to search-db-version on completion."
-  [search-db conn]
+  [repo search-db conn build-id]
+  (ensure-active-search-index-build! repo build-id)
   (search/truncate-table! search-db)
-  (let [db @conn
-        uuids (mapv :v (d/datoms db :avet :block/uuid))
-        total-count (count uuids)
-        batch-size 1000]
-    (p/loop [i 0]
-      (if (< i total-count)
-        (let [end (min (+ i batch-size) total-count)
-              batch-uuids (subvec uuids i end)
-              indexed (->> batch-uuids
-                           (keep #(d/entity db [:block/uuid %]))
-                           (remove search/hidden-entity?)
-                           (keep search/block->index))]
-          (when (seq indexed)
-            (search/upsert-blocks! search-db (bean/->js indexed)))
-          (p/let [_ (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))]
-            (p/recur end)))
-        (.exec search-db (str "PRAGMA user_version = " search-db-version))))))
+  (let [db @conn]
+    (p/loop [remaining (seq (d/datoms db :avet :block/uuid))]
+      (ensure-active-search-index-build! repo build-id)
+      (p/let [_ (<wait-for-search-index-idle! repo build-id)]
+        (if (seq remaining)
+          (let [[batch remaining'] (take-block-datoms-batch remaining
+                                                            search-index-build-batch-size
+                                                            search-index-build-time-budget-ms)
+                indexed (->> batch
+                             (keep #(d/entity db (:e %)))
+                             (remove search/hidden-entity?)
+                             (keep search/block->index))]
+            (when (seq indexed)
+              (search/upsert-blocks! search-db (bean/->js indexed)))
+            (p/let [_ (js/Promise. (fn [resolve] (js/setTimeout resolve 0)))]
+              (p/recur remaining')))
+          (do
+            (ensure-active-search-index-build! repo build-id)
+            (.exec search-db (str "PRAGMA user_version = " search-db-version))))))))
 
 (def-thread-api :thread-api/search-build-blocks-indice-in-worker
   [repo & [force?]]
   (p/let [search-db (get-search-db repo)]
     (when search-db
-      (let [version (aget (aget (.exec search-db #js {:sql "PRAGMA user_version" :rowMode "array"}) 0) 0)]
+      (let [version (search-index-version search-db)]
         (if (and (= version search-db-version) (not force?))
           version
           (when-let [conn (worker-state/get-datascript-conn repo)]
             (when force?
               (search/build-fuzzy-search-indice repo @conn))
-            (<build-blocks-fts! search-db conn)))))))
+            (let [build-id (start-search-index-build! repo)]
+              (-> (<build-blocks-fts! repo search-db conn build-id)
+                  (p/finally (fn []
+                               (clear-search-index-build! repo build-id)))))))))))
 
 (def-thread-api :thread-api/search-build-pages-indice
   [_repo]
