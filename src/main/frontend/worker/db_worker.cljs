@@ -738,7 +738,9 @@
         (rtc-log-and-state/rtc-log :rtc.log/download
                                    {:sub-type :download-progress
                                     :graph-uuid graph-id
-                                    :message (str "Importing data " (inc chunk-idx) "/" total-chunks)})
+                                    :message (if (some? total-chunks)
+                                               (str "Importing data " (inc chunk-idx) "/" total-chunks)
+                                               (str "Importing data chunk " (inc chunk-idx)))})
         true)
       (p/catch (fn [error]
                  (when-not (= :db-sync/stale-import (:type (ex-data error)))
