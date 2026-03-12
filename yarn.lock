@@ -1493,6 +1493,11 @@
   dependencies:
     "@types/node" "*"
 
+"@types/trusted-types@^2.0.7":
+  version "2.0.7"
+  resolved "https://registry.yarnpkg.com/@types/trusted-types/-/trusted-types-2.0.7.tgz#baccb07a970b91707df3a3e8ba6896c57ead2d11"
+  integrity sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==
+
 "@types/undertaker-registry@*":
   version "1.0.4"
   resolved "https://registry.yarnpkg.com/@types/undertaker-registry/-/undertaker-registry-1.0.4.tgz#2ea4b68abd0b3ad6716ab8ac28734092c1d152c4"
@@ -3598,10 +3603,12 @@ domhandler@^4.2.0, domhandler@^4.3.1:
   dependencies:
     domelementtype "^2.2.0"
 
-dompurify@2.4.0:
-  version "2.4.0"
-  resolved "https://registry.yarnpkg.com/dompurify/-/dompurify-2.4.0.tgz#c9c88390f024c2823332615c9e20a453cf3825dd"
-  integrity sha512-Be9tbQMZds4a3C6xTmz68NlMfeONA//4dOavl/1rNw50E+/QO0KVpbcU0PcaW0nsQxurXls9ZocqFxk8R2mWEA==
+dompurify@^3.3.3:
+  version "3.3.3"
+  resolved "https://registry.yarnpkg.com/dompurify/-/dompurify-3.3.3.tgz#680cae8af3e61320ddf3666a3bc843f7b291b2b6"
+  integrity sha512-Oj6pzI2+RqBfFG+qOaOLbFXLQ90ARpcGG6UePL82bJLtdsa6CYJD7nmiU8MW9nQNOtCHV3lZ/Bzq1X0QYbBZCA==
+  optionalDependencies:
+    "@types/trusted-types" "^2.0.7"
 
 domutils@^1.5.1:
   version "1.7.0"
