@@ -22,15 +22,6 @@
   [payload]
   (transit/read transit-r (.decode text-decoder (->uint8 payload))))
 
-(defn frame-bytes
-  [^js payload]
-  (let [len (.-byteLength payload)
-        out (js/Uint8Array. (+ 4 len))
-        view (js/DataView. (.-buffer out))]
-    (.setUint32 view 0 len false)
-    (.set out payload 4)
-    out))
-
 (defn concat-bytes
   [^js a ^js b]
   (cond

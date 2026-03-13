@@ -40,8 +40,22 @@
   [v]
   (if (false? v) 0 1))
 
+(defn- graph-ready-for-use-sql->bool
+  [v]
+  (cond
+    (nil? v) true
+    (or (= 1 v) (= "1" v)) true
+    (or (= 0 v) (= "0" v)) false
+    :else (true? v)))
+
+(defn- graph-ready-for-use-bool->sql
+  [v]
+  (if (false? v) 0 1))
+
 (def ^:private graph-e2ee-migration-sql
   "alter table graphs add column graph_e2ee INTEGER DEFAULT 1")
+(def ^:private graph-ready-for-use-migration-sql
+  "alter table graphs add column graph_ready_for_use integer default 1")
 
 (defn- duplicate-column-error?
   [error column-name]
@@ -66,6 +80,22 @@
         (p/catch (fn [_]
                    (<run-migration!))))))
 
+(defn- <ensure-graph-ready-for-use-column!
+  [db]
+  (letfn [(<run-migration! []
+            (-> (common/<d1-run db graph-ready-for-use-migration-sql)
+                (p/catch (fn [error]
+                           (if (duplicate-column-error? error "graph_ready_for_use")
+                             nil
+                             (p/rejected error))))))]
+    (-> (p/let [result (common/<d1-all db
+                                       "select name from pragma_table_info('graphs') where name = 'graph_ready_for_use'")
+                rows (common/get-sql-rows result)]
+          (when (empty? rows)
+            (<run-migration!)))
+        (p/catch (fn [_]
+                   (<run-migration!))))))
+
 (defn <index-init! [db]
   (p/do!
    (common/<d1-run db
@@ -75,10 +105,12 @@
                         "user_id TEXT,"
                         "schema_version TEXT,"
                         "graph_e2ee INTEGER DEFAULT 1,"
+                        "graph_ready_for_use INTEGER DEFAULT 1,"
                         "created_at INTEGER,"
                         "updated_at INTEGER"
                         ");"))
    (<ensure-graph-e2ee-column! db)
+   (<ensure-graph-ready-for-use-column! db)
    (common/<d1-run db
                    (str "create table if not exists users ("
                         "id TEXT primary key,"
@@ -123,7 +155,7 @@
 (defn <index-list [db user-id]
   (if (string? user-id)
     (p/let [result (common/<d1-all db
-                                   (str "select g.graph_id, g.graph_name, g.schema_version, g.graph_e2ee, g.created_at, g.updated_at, "
+                                   (str "select g.graph_id, g.graph_name, g.schema_version, g.graph_e2ee, g.graph_ready_for_use, g.created_at, g.updated_at, "
                                         "m.role, m.invited_by "
                                         "from graphs g "
                                         "left join graph_members m on g.graph_id = m.graph_id and m.user_id = ? "
@@ -138,6 +170,7 @@
                :graph-name (aget row "graph_name")
                :schema-version (aget row "schema_version")
                :graph-e2ee? (graph-e2ee-sql->bool (aget row "graph_e2ee"))
+               :graph-ready-for-use? (graph-ready-for-use-sql->bool (aget row "graph_ready_for_use"))
                :role (aget row "role")
                :invited-by (aget row "invited_by")
                :created-at (aget row "created_at")
@@ -145,26 +178,51 @@
             rows))
     []))
 
-(defn <index-upsert! [db graph-id graph-name user-id schema-version graph-e2ee?]
-  (p/let [now (common/now-ms)
-          graph-e2ee? (graph-e2ee-bool->sql graph-e2ee?)
-          result (common/<d1-run db
-                                 (str "insert into graphs (graph_id, graph_name, user_id, schema_version, graph_e2ee, created_at, updated_at) "
-                                      "values (?, ?, ?, ?, ?, ?, ?) "
-                                      "on conflict(graph_id) do update set "
-                                      "graph_name = excluded.graph_name, "
-                                      "user_id = excluded.user_id, "
-                                      "schema_version = excluded.schema_version, "
-                                      "graph_e2ee = excluded.graph_e2ee, "
-                                      "updated_at = excluded.updated_at")
-                                 graph-id
-                                 graph-name
-                                 user-id
-                                 schema-version
-                                 graph-e2ee?
-                                 now
-                                 now)]
-    result))
+(defn <index-upsert!
+  ([db graph-id graph-name user-id schema-version graph-e2ee?]
+   (<index-upsert! db graph-id graph-name user-id schema-version graph-e2ee? true))
+  ([db graph-id graph-name user-id schema-version graph-e2ee? graph-ready-for-use?]
+   (p/let [now (common/now-ms)
+           graph-e2ee? (graph-e2ee-bool->sql graph-e2ee?)
+           graph-ready-for-use? (graph-ready-for-use-bool->sql graph-ready-for-use?)
+           result (common/<d1-run db
+                                  (str "insert into graphs (graph_id, graph_name, user_id, schema_version, graph_e2ee, graph_ready_for_use, created_at, updated_at) "
+                                       "values (?, ?, ?, ?, ?, ?, ?, ?) "
+                                       "on conflict(graph_id) do update set "
+                                       "graph_name = excluded.graph_name, "
+                                       "user_id = excluded.user_id, "
+                                       "schema_version = excluded.schema_version, "
+                                       "graph_e2ee = excluded.graph_e2ee, "
+                                       "graph_ready_for_use = excluded.graph_ready_for_use, "
+                                       "updated_at = excluded.updated_at")
+                                  graph-id
+                                  graph-name
+                                  user-id
+                                  schema-version
+                                  graph-e2ee?
+                                  graph-ready-for-use?
+                                  now
+                                  now)]
+     result)))
+
+(defn <graph-ready-for-use?
+  [db graph-id]
+  (when (string? graph-id)
+    (p/let [result (common/<d1-all db
+                                   "select graph_ready_for_use from graphs where graph_id = ?"
+                                   graph-id)
+            rows (common/get-sql-rows result)
+            row (first rows)]
+      (graph-ready-for-use-sql->bool (some-> row (aget "graph_ready_for_use"))))))
+
+(defn <graph-ready-for-use-set!
+  [db graph-id graph-ready-for-use?]
+  (when (string? graph-id)
+    (common/<d1-run db
+                    "update graphs set graph_ready_for_use = ?, updated_at = ? where graph_id = ?"
+                    (graph-ready-for-use-bool->sql graph-ready-for-use?)
+                    (common/now-ms)
+                    graph-id)))
 
 (defn <index-delete! [db graph-id]
   (p/do!
