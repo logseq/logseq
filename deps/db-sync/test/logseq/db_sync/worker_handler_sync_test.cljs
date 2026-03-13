@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [async deftest is testing]]
             [datascript.core :as d]
             [logseq.db-sync.common :as common]
+            [logseq.db-sync.index :as index]
             [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.snapshot :as snapshot]
             [logseq.db-sync.storage :as storage]
@@ -178,3 +179,48 @@
                    (sync-handler/handle-tx-batch! self nil (protocol/tx->transit tx-data) 0))]
     (is (= "tx/reject" (:type response)))
     (is (= "snapshot upload in progress" (:reason response)))))
+
+(deftest sync-pull-is-blocked-when-graph-is-not-ready-for-use-test
+  (async done
+         (let [self #js {:env #js {"DB" :db}
+                         :sql (empty-sql)}
+               {:keys [request url]} (request-url "/sync/graph-1/pull?graph-id=graph-1&since=0")]
+           (-> (p/with-redefs [index/<graph-ready-for-use? (fn [_db _graph-id]
+                                                             (p/resolved false))]
+                 (p/let [resp (sync-handler/handle {:self self
+                                                    :request request
+                                                    :url url
+                                                    :route {:handler :sync/pull}})
+                         text (.text resp)
+                         body (js->clj (js/JSON.parse text) :keywordize-keys true)]
+                   (is (= 409 (.-status resp)))
+                   (is (= "graph not ready" (:error body)))))
+               (p/then (fn []
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest snapshot-download-is-blocked-when-graph-is-not-ready-for-use-test
+  (async done
+         (let [bucket #js {:put (fn [& _]
+                                  (throw (js/Error. "should-not-upload-snapshot")))}
+               self #js {:env #js {"DB" :db
+                                   "LOGSEQ_SYNC_ASSETS" bucket}
+                         :sql (empty-sql)}
+               {:keys [request url]} (request-url)]
+           (-> (p/with-redefs [index/<graph-ready-for-use? (fn [_db _graph-id]
+                                                             (p/resolved false))]
+                 (p/let [resp (sync-handler/handle {:self self
+                                                    :request request
+                                                    :url url
+                                                    :route {:handler :sync/snapshot-download}})
+                         text (.text resp)
+                         body (js->clj (js/JSON.parse text) :keywordize-keys true)]
+                   (is (= 409 (.-status resp)))
+                   (is (= "graph not ready" (:error body)))))
+               (p/then (fn []
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))

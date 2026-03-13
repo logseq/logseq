@@ -147,3 +147,21 @@
                  (p/catch (fn [error]
                             (is false (str error))
                             (done))))))))
+
+(deftest not-ready-remote-graph-does-not-trigger-download-test
+  (let [events (atom [])
+        links (#'repo/repos-dropdown-links
+               [{:url "logseq_db_demo"
+                 :remote? true
+                 :rtc-graph? true
+                 :GraphName "demo"
+                 :GraphUUID "graph-1"
+                 :GraphSchemaVersion "65"
+                 :graph-ready-for-use? false}]
+               nil
+               nil)
+        on-click (get-in (first links) [:options :on-click])]
+    (with-redefs [state/pub-event! (fn [event]
+                                     (swap! events conj event))]
+      (on-click #js {})
+      (is (empty? @events)))))

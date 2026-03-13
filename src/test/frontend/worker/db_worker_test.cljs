@@ -11,7 +11,6 @@
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.log-and-state :as rtc-log-and-state]
-            [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
