@@ -82,6 +82,55 @@
     (is (= (dh/parse-conflicts-from-binding ["meta+x" "meta+x t" "t r"] "meta+x x")
            ["meta+x"]))))
 
+(deftest test-partition-conflicts-by-type
+  (testing "mod+c partitions into exact and prefix conflicts"
+    (let [conflicts (dh/get-conflicts-by-keys
+                     "mod+c" :shortcut.handler/global-prevent-default
+                     {:group-global? true})
+          {:keys [exact prefix]} (dh/partition-conflicts-by-type conflicts "mod+c")
+          exact-ids (->> (vals exact) (mapcat vals) (mapcat #(keys (second %))) (set))
+          prefix-ids (->> (vals prefix) (mapcat vals) (mapcat #(keys (second %))) (set))]
+      (is (contains? exact-ids :editor/copy)
+          "editor/copy is an exact match for mod+c")
+      (is (contains? prefix-ids :sidebar/clear)
+          "sidebar/clear (mod+c mod+c) is a prefix conflict")
+      (is (contains? prefix-ids :search/re-index)
+          "search/re-index (mod+c mod+s) is a prefix conflict")
+      (is (not (contains? exact-ids :sidebar/clear))
+          "sidebar/clear should NOT be in exact")
+      (is (not (contains? prefix-ids :editor/copy))
+          "editor/copy should NOT be in prefix")))
+
+  (testing "conflict-has-exact? returns true when exact matches exist"
+    (let [conflicts (dh/get-conflicts-by-keys
+                     "mod+c" :shortcut.handler/global-prevent-default
+                     {:group-global? true})]
+      (is (true? (dh/conflict-has-exact? conflicts "mod+c")))))
+
+  (testing "conflict-has-exact? returns false for prefix-only"
+    ;; "t" on global-prevent-default has chord conflicts (t n, t b) but no exact match
+    (let [conflicts (dh/get-conflicts-by-keys
+                     "t" :shortcut.handler/global-prevent-default
+                     {:exclude-ids #{} :group-global? false})]
+      (is (false? (dh/conflict-has-exact? conflicts "t"))))))
+
+(deftest test-cross-handler-prefix-detection
+  (testing "t on global-prevent-default detects cross-handler chord prefix conflicts"
+    ;; With group-global? true, "t" should detect chord conflicts from co-active
+    ;; handlers like global-non-editing-only (which has t d, t t, t r, etc.)
+    (let [conflicts (dh/get-conflicts-by-keys
+                     "t" :shortcut.handler/global-prevent-default
+                     {:exclude-ids #{} :group-global? true})
+          all-keys (->> (vals conflicts) (mapcat vals) (map first) (set))]
+      ;; Same-handler chords (global-prevent-default has t n, t b)
+      (is (contains? all-keys "t n"))
+      (is (contains? all-keys "t b"))
+      ;; Cross-handler chords from co-active global-non-editing-only
+      (is (contains? all-keys "t d")
+          "t d from global-non-editing-only should be detected as cross-handler prefix conflict")
+      (is (contains? all-keys "t r")
+          "t r from global-non-editing-only should be detected as cross-handler prefix conflict"))))
+
 (deftest test-add-reaction-shortcut
   (testing "add reaction shortcut is configured with p r"
     (is (= ["p r"] (dh/shortcut-binding :editor/add-reaction))))

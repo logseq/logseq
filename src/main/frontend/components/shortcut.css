@@ -448,6 +448,10 @@ button.shortcut-feedback-action {
   .shortcut-feedback--success & {
     color: var(--rx-green-11, #16a34a);
   }
+
+  .shortcut-feedback--warning & {
+    color: var(--rx-amber-11, #b45309);
+  }
 }
 
 /* Toolbar */
