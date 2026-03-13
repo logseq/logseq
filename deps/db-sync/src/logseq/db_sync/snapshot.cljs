@@ -4,6 +4,7 @@
 (def ^:private transit-w (transit/writer :json))
 (def ^:private transit-r (transit/reader :json))
 (def ^:private text-decoder (js/TextDecoder.))
+(def ^:private newline-byte 10)
 
 (defn- ->uint8
   [data]
@@ -77,3 +78,55 @@
               (+ total 4 (.-byteLength payload))))
           0
           rows-batches))
+
+(defn- decode-transit
+  [payload]
+  (transit/read transit-r (.decode text-decoder (->uint8 payload))))
+
+(defn encode-datoms-jsonl
+  [datoms]
+  (->uint8
+   (apply str
+          (map (fn [datom]
+                 (str (transit/write transit-w datom) "\n"))
+               datoms))))
+
+(defn- find-newline-offset
+  [^js data start total]
+  (loop [offset start]
+    (cond
+      (>= offset total)
+      nil
+
+      (= newline-byte (aget data offset))
+      offset
+
+      :else
+      (recur (inc offset)))))
+
+(defn parse-datoms-jsonl-chunk
+  [buffer chunk]
+  (let [data (concat-bytes buffer chunk)
+        total (.-byteLength data)]
+    (loop [offset 0
+           datoms []]
+      (let [newline-offset (find-newline-offset data offset total)]
+        (if (number? newline-offset)
+          (let [line (.slice data offset newline-offset)
+                next-offset (inc newline-offset)
+                datoms (if (zero? (.-byteLength line))
+                         datoms
+                         (conj datoms (decode-transit line)))]
+            (recur next-offset datoms))
+          {:datoms datoms
+           :buffer (when (< offset total)
+                     (.slice data offset total))})))))
+
+(defn finalize-datoms-jsonl-buffer
+  [buffer]
+  (if (or (nil? buffer) (zero? (.-byteLength buffer)))
+    []
+    (let [{:keys [datoms buffer]} (parse-datoms-jsonl-chunk nil buffer)]
+      (cond-> datoms
+        (and buffer (pos? (.-byteLength buffer)))
+        (conj (decode-transit buffer))))))

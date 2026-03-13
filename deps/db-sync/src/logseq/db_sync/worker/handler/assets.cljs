@@ -2,7 +2,8 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [logseq.db-sync.common :as common :refer [cors-headers]]
-            [logseq.db-sync.worker.http :as http]))
+            [logseq.db-sync.worker.http :as http]
+            [promesa.core :as p]))
 
 (def ^:private max-asset-size (* 100 1024 1024))
 
@@ -25,6 +26,69 @@
       (.catch (.pipeTo body (.-writable fixed)) (fn [_] nil))
       (.-readable fixed))
     body))
+
+(defn- <body-with-known-length
+  [body size]
+  (cond
+    (nil? body)
+    (p/resolved nil)
+
+    (and (number? size)
+         (exists? js/FixedLengthStream)
+         (fn? (some-> body .-pipeTo)))
+    (p/resolved (maybe-fixed-length-body body size))
+
+    ;; Some runtimes drop content-length for streamed bodies without a fixed-length wrapper.
+    ;; Buffer as a fallback so clients still receive the header.
+    (and (number? size)
+         (fn? (some-> body .-getReader)))
+    (p/let [resp (js/Response. body)
+            buf (.arrayBuffer resp)]
+      buf)
+
+    :else
+    (p/resolved body)))
+
+(defn- handle-get-asset
+  [^js bucket key asset-type]
+  (.then (.get bucket key)
+         (fn [^js obj]
+           (if (nil? obj)
+             (http/error-response "not found" 404)
+             (let [metadata (.-httpMetadata obj)
+                   content-type (or (.-contentType metadata)
+                                    "application/octet-stream")
+                   content-encoding (.-contentEncoding metadata)
+                   cache-control (.-cacheControl metadata)
+                   size (parse-size (or (.-size obj)
+                                        (some-> (.-body obj) .-byteLength)))
+                   content-length (cond
+                                    (number? size) (str size)
+                                    (string? size) size
+                                    :else nil)]
+               (p/let [body (<body-with-known-length (.-body obj) size)
+                       headers (cond-> {"content-type" content-type
+                                        "x-asset-type" asset-type}
+                                 (and (string? content-length)
+                                      (pos? (.-length content-length)))
+                                 (assoc "content-length" content-length)
+                                 (and (string? content-length)
+                                      (pos? (.-length content-length)))
+                                 (assoc "x-asset-size" content-length)
+                                 (and (string? content-encoding)
+                                      (not= content-encoding "null")
+                                      (pos? (.-length content-encoding)))
+                                 (assoc "content-encoding" content-encoding)
+                                 (and (string? cache-control)
+                                      (pos? (.-length cache-control)))
+                                 (assoc "cache-control" cache-control)
+                                 true
+                                 (bean/->js))]
+                 (js/Response. body
+                               #js {:status 200
+                                    :headers (js/Object.assign
+                                              headers
+                                              (cors-headers))})))))))
 
 (defn parse-asset-path [path]
   (let [prefix "/assets/"]
@@ -57,41 +121,7 @@
             (http/error-response "missing assets bucket" 500)
             (case method
               "GET"
-              (.then (.get bucket key)
-                     (fn [^js obj]
-                       (if (nil? obj)
-                         (http/error-response "not found" 404)
-                         (let [metadata (.-httpMetadata obj)
-                               content-type (or (.-contentType metadata)
-                                                "application/octet-stream")
-                               content-encoding (.-contentEncoding metadata)
-                               cache-control (.-cacheControl metadata)
-                               size (parse-size (or (.-size obj)
-                                                    (some-> (.-body obj) .-byteLength)))
-                               content-length (cond
-                                                (number? size) (str size)
-                                                (string? size) size
-                                                :else nil)
-                               body (maybe-fixed-length-body (.-body obj) size)
-                               headers (cond-> {"content-type" content-type
-                                                "x-asset-type" asset-type}
-                                         (and (string? content-length)
-                                              (pos? (.-length content-length)))
-                                         (assoc "content-length" content-length)
-                                         (and (string? content-encoding)
-                                              (not= content-encoding "null")
-                                              (pos? (.-length content-encoding)))
-                                         (assoc "content-encoding" content-encoding)
-                                         (and (string? cache-control)
-                                              (pos? (.-length cache-control)))
-                                         (assoc "cache-control" cache-control)
-                                         true
-                                         (bean/->js))]
-                           (js/Response. body
-                                         #js {:status 200
-                                              :headers (js/Object.assign
-                                                        headers
-                                                        (cors-headers))})))))
+              (handle-get-asset bucket key asset-type)
 
               "PUT"
               (.then (.arrayBuffer request)
