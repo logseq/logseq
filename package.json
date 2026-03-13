@@ -144,7 +144,7 @@
         "@tabler/icons-webfont": "^2.47.0",
         "bignumber.js": "^9.3.1",
         "chokidar": "3.5.1",
-        "chrono-node": "2.2.4",
+        "chrono-node": "2.9.0",
         "codemirror": "5.65.18",
         "comlink": "^4.4.1",
         "d3-force": "3.0.0",
