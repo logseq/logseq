@@ -104,7 +104,7 @@
   #{:doc :docx :xls :xlsx :ppt :pptx :one :pdf :epub})
 
 (def image-formats
-  #{:png :jpg :jpeg :bmp :gif :webp :svg :heic})
+  #{:png :jpg :jpeg :bmp :gif :webp :svg :heic :avif :cr2})
 
 (def audio-formats
   #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
