@@ -971,21 +971,15 @@
                (t :keymap/undo)])]
         (case rec-state
           :conflict-cross
-          [:<>
-           [:div.shortcut-feedback.shortcut-feedback--error
-            [:span (t :keymap/used-by)
-             [:span.shortcut-feedback-name (conflict-action-names (:exact key-conflicts))]]
-            (ui/tooltip
-             (shui/button {:variant :destructive
-                           :size :xs
-                           :on-click override-fn!}
-                          (t :keymap/reassign))
-             (t :keymap/reassign-tooltip))]
-           (when-let [prefix (:prefix key-conflicts)]
-             (let [details (prefix-conflict-details prefix)]
-               (when (seq details)
-                 [:div.shortcut-feedback.shortcut-feedback--warning
-                  (prefix-conflict-label details)])))]
+          [:div.shortcut-feedback.shortcut-feedback--error
+           [:span (t :keymap/used-by)
+            [:span.shortcut-feedback-name (conflict-action-names (:exact key-conflicts))]]
+           (ui/tooltip
+            (shui/button {:variant :destructive
+                          :size :xs
+                          :on-click override-fn!}
+                         (t :keymap/reassign))
+            (t :keymap/reassign-tooltip))]
 
           :conflict-same
           [:div.shortcut-feedback.shortcut-feedback--error
