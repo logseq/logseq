@@ -1958,6 +1958,7 @@
   [repo {:keys [tx-data tx-meta db-after] :as tx-report}]
   (when (and (seq tx-data)
              (not (:rtc-tx? tx-meta))
+             (not (:sync-download-graph? tx-meta))
              (:persist-op? tx-meta true)
              (:kv/value (d/entity db-after :logseq.kv/graph-remote?)))
     (enqueue-local-tx! repo tx-report)

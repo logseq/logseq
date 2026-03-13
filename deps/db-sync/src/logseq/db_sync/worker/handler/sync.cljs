@@ -16,7 +16,7 @@
 
 (def ^:private snapshot-download-batch-size 10000)
 (def ^:private snapshot-cache-control "private, max-age=300")
-(def ^:private snapshot-content-type "application/transit+json")
+(def ^:private snapshot-content-type "application/x-ndjson")
 (def ^:private snapshot-content-encoding "gzip")
 (def ^:private snapshot-uploading-meta-key :snapshot-uploading?)
 ;; 10m
@@ -57,35 +57,6 @@
   (ensure-schema! self)
   (not= "true" (storage/get-meta (.-sql self) snapshot-uploading-meta-key)))
 
-(defn- fetch-kvs-rows
-  [sql after limit]
-  (common/get-sql-rows
-   (common/sql-exec sql
-                    "select addr, content, addresses from kvs where addr > ? order by addr asc limit ?"
-                    after
-                    limit)))
-
-(defn- snapshot-row-count
-  [sql]
-  (let [row (first (common/get-sql-rows
-                    (common/sql-exec sql "select count(*) as total from kvs")))]
-    (cond
-      (array? row)
-      (aget row 0)
-
-      (some? row)
-      (or (aget row "total")
-          (aget row "count(*)")
-          0)
-
-      :else
-      0)))
-
-(defn- snapshot-row->tuple [row]
-  (if (array? row)
-    [(aget row 0) (aget row 1) (aget row 2)]
-    [(aget row "addr") (aget row "content") (aget row "addresses")]))
-
 (defn- import-snapshot-rows!
   [sql table rows]
   (when (seq rows)
@@ -121,9 +92,10 @@
     stream))
 
 (defn- maybe-compress-stream [stream]
-  (if (exists? js/CompressionStream)
-    (.pipeThrough stream (js/CompressionStream. snapshot-content-encoding))
-    stream))
+  (when-not (exists? js/CompressionStream)
+    (throw (ex-info "gzip compression not supported"
+                    {:type :db-sync/compression-not-supported})))
+  (.pipeThrough stream (js/CompressionStream. snapshot-content-encoding)))
 
 (defn- <buffer-stream
   [stream]
@@ -147,25 +119,47 @@
       (.set out b (.-byteLength a))
       out)))
 
+(defn- snapshot-datom->jsonl-datom
+  [datom]
+  {:e (:e datom)
+   :a (:a datom)
+   :v (:v datom)
+   :tx (:tx datom)
+   :added (:added datom)})
+
+(defn- snapshot-datom-count
+  [conn]
+  (count (d/datoms @conn :eavt)))
+
+(defn- snapshot-export-datoms
+  [conn]
+  (let [db @conn
+        schema-version-eid (some-> (d/entity db :logseq.kv/schema-version) :db/id)
+        ident-eids (into #{}
+                         (map :e)
+                         (d/datoms db :avet :db/ident))
+        jsonl-datoms (fn [pred]
+                       (sequence
+                        (comp (filter pred)
+                              (map snapshot-datom->jsonl-datom))
+                        (d/datoms db :eavt)))]
+    (concat (jsonl-datoms #(= schema-version-eid (:e %)))
+            (jsonl-datoms #(and (contains? ident-eids (:e %))
+                                (not= schema-version-eid (:e %))))
+            (jsonl-datoms #(not (contains? ident-eids (:e %)))))))
+
 (defn- snapshot-export-stream [^js self]
-  (let [sql (.-sql self)
-        state (volatile! {:after -1 :done? false})]
+  (ensure-conn! self)
+  (let [remaining (volatile! (seq (snapshot-export-datoms (.-conn self))))]
     (js/ReadableStream.
      #js {:pull (fn [controller]
-                  (p/let [{:keys [after done?]} @state]
-                    (if done?
+                  (let [batch (vec (take snapshot-download-batch-size @remaining))]
+                    (if (empty? batch)
                       (.close controller)
-                      (let [rows (fetch-kvs-rows sql after snapshot-download-batch-size)
-                            rows (mapv snapshot-row->tuple rows)
-                            last-addr (if (seq rows)
-                                        (apply max (map first rows))
-                                        after)
-                            done? (< (count rows) snapshot-download-batch-size)]
-                        (when (seq rows)
-                          (let [payload (snapshot/encode-rows rows)
-                                framed (snapshot/frame-bytes payload)]
-                            (.enqueue controller framed)))
-                        (vswap! state assoc :after last-addr :done? done?)))))})))
+                      (let [remaining' (drop snapshot-download-batch-size @remaining)
+                            payload (snapshot/encode-datoms-jsonl batch)]
+                        (vreset! remaining (seq remaining'))
+                        (.enqueue controller payload)))))})))
 
 (defn- upload-multipart!
   [^js bucket key stream opts]
@@ -202,42 +196,6 @@
           (p/catch (fn [error]
                      (.abort upload)
                      (throw error)))))))
-
-(defn- snapshot-export-length [^js self]
-  (let [sql (.-sql self)]
-    (p/loop [after -1
-             total 0]
-      (let [rows (fetch-kvs-rows sql after snapshot-download-batch-size)]
-        (if (empty? rows)
-          total
-          (let [rows (mapv snapshot-row->tuple rows)
-                payload (snapshot/encode-rows rows)
-                total (+ total 4 (.-byteLength payload))
-                last-addr (apply max (map first rows))
-                done? (< (count rows) snapshot-download-batch-size)]
-            (if done?
-              total
-              (p/recur last-addr total))))))))
-
-(defn- snapshot-export-fixed-length [^js self]
-  (p/let [length (snapshot-export-length self)
-          stream (snapshot-export-stream self)]
-    (if (exists? js/FixedLengthStream)
-      (let [^js fixed (js/FixedLengthStream. length)
-            readable (.-readable fixed)
-            writable (.-writable fixed)
-            reader (.getReader stream)
-            writer (.getWriter writable)]
-        (p/let [_ (p/loop []
-                    (p/let [chunk (.read reader)]
-                      (if (.-done chunk)
-                        (.close writer)
-                        (p/let [_ (.write writer (.-value chunk))]
-                          (p/recur)))))]
-          readable))
-      (p/let [resp (js/Response. stream)
-              buf (.arrayBuffer resp)]
-        buf))))
 
 (declare import-snapshot!)
 (defn- import-snapshot-stream! [^js self stream reset?]
@@ -370,19 +328,17 @@
   (let [graph-id (graph-id-from-request request)]
     (if (not (seq graph-id))
       (http/bad-request "missing graph id")
-      (let [use-compression? (exists? js/CompressionStream)
-            content-encoding (when use-compression? snapshot-content-encoding)
-            row-count (snapshot-row-count (.-sql self))
-            stream (snapshot-export-stream self)
-            stream (if use-compression?
-                     (maybe-compress-stream stream)
-                     stream)]
+      (let [stream (-> (snapshot-export-stream self)
+                       (maybe-compress-stream))
+            conn (or (.-conn self)
+                     (do (ensure-conn! self) (.-conn self)))
+            datom-count (snapshot-datom-count conn)]
         (js/Response. stream
                       #js {:status 200
                            :headers (js/Object.assign
                                      #js {"content-type" snapshot-content-type
-                                          "content-encoding" (or content-encoding "identity")}
-                                     #js {"x-snapshot-row-count" (str row-count)}
+                                          "content-encoding" snapshot-content-encoding}
+                                     #js {"x-snapshot-datom-count" (str datom-count)}
                                      (common/cors-headers))})))))
 
 (defn- handle-sync-snapshot-download
@@ -399,31 +355,24 @@
       :else
       (p/let [snapshot-id (str (random-uuid))
               key (snapshot-key graph-id snapshot-id)
-              use-compression? (exists? js/CompressionStream)
-              content-encoding (when use-compression? snapshot-content-encoding)
-              stream (snapshot-export-stream self)
-              stream (if use-compression?
-                       (maybe-compress-stream stream)
-                       stream)
+              stream (-> (snapshot-export-stream self)
+                         (maybe-compress-stream))
               multipart? (and (some? (.-createMultipartUpload bucket))
                               (fn? (.-createMultipartUpload bucket)))
               opts #js {:httpMetadata #js {:contentType snapshot-content-type
-                                           :contentEncoding content-encoding
+                                           :contentEncoding snapshot-content-encoding
                                            :cacheControl snapshot-cache-control}
                         :customMetadata #js {:purpose "snapshot"
                                              :created-at (str (common/now-ms))}}
               _ (if multipart?
                   (upload-multipart! bucket key stream opts)
-                  (if use-compression?
-                    (p/let [body (<buffer-stream stream)]
-                      (.put bucket key body opts))
-                    (p/let [body (snapshot-export-fixed-length self)]
-                      (.put bucket key body opts))))
+                  (p/let [body (<buffer-stream stream)]
+                    (.put bucket key body opts)))
               url (snapshot-url request graph-id snapshot-id)]
         (http/json-response :sync/snapshot-download {:ok true
                                                      :key key
                                                      :url url
-                                                     :content-encoding content-encoding})))))
+                                                     :content-encoding snapshot-content-encoding})))))
 
 (defn- handle-sync-admin-reset
   [^js self]
