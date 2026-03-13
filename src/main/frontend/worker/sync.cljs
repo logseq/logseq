@@ -2045,7 +2045,7 @@
              (set-graph-sync-metadata! repo graph-e2ee?)
              (ensure-client-graph-uuid! repo graph-id)
              (p/let [_ (update-progress {:sub-type :upload-progress
-                                         :message (if graph-e2ee? "Encrypting 0/0" "Preparing 0/0")})
+                                         :message (if graph-e2ee? "Encrypting..." "Preparing...")})
                      {:keys [db] :as temp} (<prepare-upload-temp-sqlite! repo graph-id source-conn aes-key update-progress)
                      total-rows (count-kvs-rows db)]
                (->

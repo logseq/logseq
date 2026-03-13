@@ -259,21 +259,24 @@
   (let [switch-repos (if-not (nil? current-repo)
                        (remove (fn [repo] (= current-repo (:url repo))) repos) repos) ; exclude current repo
         repo-links (mapv
-                    (fn [{:keys [url remote? graph-e2ee? rtc-graph? GraphName GraphSchemaVersion GraphUUID] :as graph}]
+                    (fn [{:keys [url remote? graph-e2ee? rtc-graph? GraphName GraphSchemaVersion GraphUUID graph-ready-for-use?] :as graph}]
                       (let [repo-url url
                             short-repo-name (text-util/get-graph-name-from-path repo-url)
-                            downloading? (and downloading-graph-id (= GraphUUID downloading-graph-id))]
+                            downloading? (and downloading-graph-id (= GraphUUID downloading-graph-id))
+                            ready-for-use? (not= false graph-ready-for-use?)]
                         (when short-repo-name
                           {:title [:span.flex.items-center.title-wrap short-repo-name
                                    (when remote? [:span.pl-1.flex.items-center
                                                   {:title (str "<" GraphName "> #" GraphUUID)}
                                                   (ui/icon (if graph-e2ee? "lock" "cloud") {:size 18})
+                                                  (when-not ready-for-use?
+                                                    [:span.opacity.text-sm.pl-1 "preparing"])
                                                   (when downloading?
                                                     [:span.opacity.text-sm.pl-1 "downloading"])])]
                            :hover-detail repo-url ;; show full path on hover
                            :options {:on-click
                                      (fn [e]
-                                       (when-not downloading?
+                                       (when (and ready-for-use? (not downloading?))
                                          (when-let [on-click (:on-click opts)]
                                            (on-click e))
                                          (if (and (gobj/get e "shiftKey")
@@ -477,14 +480,10 @@
                            (when cloud?
                              (->
                               (p/do
-                                (state/set-state! :rtc/uploading? true)
-                                (rtc-handler/<rtc-create-graph! repo graph-e2ee?)
-                                (rtc-handler/<get-remote-graphs)
-                                (rtc-flows/trigger-rtc-start repo))
+                                (rtc-handler/<rtc-create-graph-and-start-sync! repo graph-e2ee?))
                               (p/catch (fn [error]
                                          (log/error :create-db-failed error)))
                               (p/finally (fn []
-                                           (state/set-state! :rtc/uploading? false)
                                            (set-creating-db? false)))))
                            (shui/dialog-close!))))))
         submit! (fn submit!

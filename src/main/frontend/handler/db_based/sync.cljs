@@ -1,7 +1,6 @@
 (ns frontend.handler.db-based.sync
   "DB-sync handler based on Cloudflare Durable Objects."
-  (:require ["comlink" :as Comlink]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
@@ -39,24 +38,6 @@
     (instance? js/ArrayBuffer data) (js/Uint8Array. data)
     (string? data) (.encode (js/TextEncoder.) data)
     :else (js/Uint8Array. data)))
-
-(defn- parse-header-int
-  [^js resp header]
-  (when-let [raw (some-> resp .-headers (.get header))]
-    (let [parsed (js/parseInt raw 10)]
-      (when-not (js/isNaN parsed)
-        parsed))))
-
-(defn- concat-bytes
-  [^js a ^js b]
-  (cond
-    (nil? a) b
-    (nil? b) a
-    :else
-    (let [out (js/Uint8Array. (+ (.-byteLength a) (.-byteLength b)))]
-      (.set out a 0)
-      (.set out b (.-byteLength a))
-      out)))
 
 (defn- gzip-bytes?
   [^js payload]
@@ -104,23 +85,6 @@
 
       :else
       (.-body resp))))
-
-(defn- <stream-snapshot-chunks!
-  [^js resp on-chunk]
-  (if-let [stream (response-body-stream resp)]
-    (let [reader (.getReader stream)]
-      (p/loop [chunk-idx 0]
-        (p/let [result (.read reader)]
-          (if (.-done result)
-            {:chunk-count chunk-idx}
-            (p/let [chunk (->uint8 (.-value result))
-                    _ (on-chunk chunk)]
-              (p/recur (inc chunk-idx)))))))
-    (p/let [chunk (<snapshot-response-bytes resp)]
-      (if (and chunk (pos? (.-byteLength chunk)))
-        (p/let [_ (on-chunk chunk)]
-          {:chunk-count 1})
-        {:chunk-count 0}))))
 
 (defn- <flush-datom-batches!
   [datoms batch-size on-batch]
@@ -220,27 +184,21 @@
         coerced))
     body))
 
-(defn- graph-in-remote-list?
+(defn- remote-graph
   [repo]
-  (some #(= repo (:url %)) (state/get-rtc-graphs)))
+  (some #(when (= repo (:url %)) %) (state/get-rtc-graphs)))
 
 (defn- graph-has-local-rtc-id?
   [repo]
   (boolean (some-> (db/get-db repo)
                    ldb/get-graph-rtc-uuid)))
 
-(defn- remote-graphs-unknown?
-  []
-  (not= false (:rtc/loading-graphs? @state/state)))
-
 (defn- should-start-rtc?
   [repo]
   (and (not (true? (:rtc/uploading? @state/state)))
-       (or (graph-in-remote-list? repo)
-           ;; During startup, remote graph list might not be fetched yet.
-           ;; If local DB already has graph UUID, start optimistically to reduce cold-start latency.
-           (and (remote-graphs-unknown?)
-                (graph-has-local-rtc-id? repo)))))
+       (let [graph (remote-graph repo)]
+         (and (some? graph)
+              (not= false (:graph-ready-for-use? graph))))))
 
 (defn- normalize-graph-e2ee?
   [graph-e2ee?]
@@ -318,17 +276,21 @@
 
 (defn <rtc-create-graph!
   ([repo]
-   (<rtc-create-graph! repo true))
+   (<rtc-create-graph! repo true true))
   ([repo graph-e2ee?]
+   (<rtc-create-graph! repo graph-e2ee? true))
+  ([repo graph-e2ee? graph-ready-for-use?]
    (let [schema-version (some-> (ldb/get-graph-schema-version (db/get-db)) :major str)
          graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
+         graph-ready-for-use? (not= false graph-ready-for-use?)
          base (http-base)]
      (if base
        (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
                body (coerce-http-request :graphs/create
                                          {:graph-name (string/replace repo config/db-version-prefix "")
                                           :schema-version schema-version
-                                          :graph-e2ee? graph-e2ee?})
+                                          :graph-e2ee? graph-e2ee?
+                                          :graph-ready-for-use? graph-ready-for-use?})
                result (if (nil? body)
                         (p/rejected (ex-info "db-sync invalid create-graph body"
                                              {:repo repo}))
@@ -453,7 +415,8 @@
                   result (mapv (fn [graph]
                                  (let [graph-e2ee? (if (contains? graph :graph-e2ee?)
                                                      (normalize-graph-e2ee? (:graph-e2ee? graph))
-                                                     true)]
+                                                     true)
+                                       graph-ready-for-use? (not= false (:graph-ready-for-use? graph))]
                                    (merge
                                     {:url (str config/db-version-prefix (:graph-name graph))
                                      :GraphName (:graph-name graph)
@@ -461,9 +424,10 @@
                                      :GraphUUID (:graph-id graph)
                                      :rtc-graph? true
                                      :graph-e2ee? graph-e2ee?
+                                     :graph-ready-for-use? graph-ready-for-use?
                                      :graph<->user-user-type (:role graph)
                                      :graph<->user-grant-by-user (:invited-by graph)}
-                                    (dissoc graph :graph-id :graph-name :schema-version :role :invited-by))))
+                                    (dissoc graph :graph-id :graph-name :schema-version :role :invited-by :graph-ready-for-use?))))
                                graphs)]
             (state/set-state! :rtc/graphs result)
             (repo-handler/refresh-repos!)
@@ -538,10 +502,19 @@
 
 (defn <rtc-upload-graph!
   [repo graph-e2ee?]
-  (p/let [graph-id (<rtc-create-graph! repo graph-e2ee?)]
+  (p/let [graph-id (<rtc-create-graph! repo graph-e2ee? false)]
     (when (nil? graph-id)
       (throw (ex-info "graph id doesn't exist when uploading to server" {:repo repo})))
     (p/do!
      (state/<invoke-db-worker :thread-api/db-sync-upload-graph repo)
+     (<get-remote-graphs)
+     (<rtc-start! repo))))
+
+(defn <rtc-create-graph-and-start-sync!
+  [repo graph-e2ee?]
+  (p/let [graph-id (<rtc-create-graph! repo graph-e2ee? true)]
+    (when (nil? graph-id)
+      (throw (ex-info "graph id doesn't exist when creating remote graph" {:repo repo})))
+    (p/do!
      (<get-remote-graphs)
      (<rtc-start! repo))))

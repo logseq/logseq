@@ -93,14 +93,6 @@
           (swap! *opfs-pools assoc graph pool)
           pool))))
 
-(defn- <create-db-sync-import-pool
-  [repo import-id]
-  (if-let [sqlite @*sqlite]
-    (let [pool-name (worker-util/get-pool-name (str repo "-db-sync-import-" import-id))]
-      (.installOpfsSAHPoolVfs ^js sqlite #js {:name pool-name
-                                              :initialCapacity 20}))
-    (<get-opfs-pool repo)))
-
 (defn- init-sqlite-module!
   []
   (when-not @*sqlite
@@ -136,14 +128,6 @@
      (doseq [item data]
        (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
                       :bind item})))))
-
-(defn- rows->sqlite-binds
-  [rows]
-  (mapv (fn [[addr content addresses]]
-          #js {:$addr addr
-               :$content content
-               :$addresses addresses})
-        rows))
 
 (defn- enable-sqlite-wal-mode!
   [^Object db]
