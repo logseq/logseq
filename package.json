@@ -128,7 +128,7 @@
         "@dnd-kit/sortable": "^7.0.2",
         "@emoji-mart/data": "^1.1.2",
         "@emoji-mart/react": "^1.1.1",
-        "@glidejs/glide": "^3.6.0",
+        "@glidejs/glide": "^3.7.1",
         "@highlightjs/cdn-assets": "10.4.1",
         "@huggingface/transformers": "^3.6.3",
         "@isomorphic-git/lightning-fs": "^4.6.0",
