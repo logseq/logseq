@@ -225,20 +225,33 @@
         (assoc config :auth-token auth-token)))
     (p/resolved config)))
 
+(defn- resolve-sync-config-for-worker!
+  [cfg config]
+  (let [sync-cfg (sync-config config)]
+    (if (seq (:auth-token sync-cfg))
+      (p/resolved sync-cfg)
+      (-> (p/let [current-sync-cfg (transport/invoke cfg :thread-api/get-db-sync-config false [])
+                  auth-token (:auth-token current-sync-cfg)]
+            (if (seq auth-token)
+              (assoc sync-cfg :auth-token auth-token)
+              sync-cfg))
+          (p/catch (fn [_error]
+                     sync-cfg))))))
+
 (defn- invoke-with-repo
   [config repo method args]
-  (let [sync-cfg (sync-config config)]
-    (p/let [cfg (cli-server/ensure-server! config repo)
-            _ (transport/invoke cfg :thread-api/set-db-sync-config false [sync-cfg])
+  (p/let [cfg (cli-server/ensure-server! config repo)
+          sync-cfg (resolve-sync-config-for-worker! cfg config)
+          _ (transport/invoke cfg :thread-api/set-db-sync-config false [sync-cfg])
           result (transport/invoke cfg method false args)]
-      result)))
+    result))
 
 (defn- invoke-global
   [config method args]
-  (let [base-url (:base-url config)
-        sync-cfg (sync-config config)]
+  (let [base-url (:base-url config)]
     (if (seq base-url)
-      (p/let [_ (transport/invoke config :thread-api/set-db-sync-config false [sync-cfg])]
+      (p/let [sync-cfg (resolve-sync-config-for-worker! config config)
+              _ (transport/invoke config :thread-api/set-db-sync-config false [sync-cfg])]
         (transport/invoke config method false args))
       (p/let [repo (or (core/resolve-repo (:graph config))
                        (p/let [graphs (cli-server/list-graphs config)]
@@ -247,6 +260,7 @@
                     (cli-server/ensure-server! config repo)
                     (p/rejected (ex-info "graph name is required"
                                          {:code :missing-graph})))
+              sync-cfg (resolve-sync-config-for-worker! cfg config)
               _ (transport/invoke cfg :thread-api/set-db-sync-config false [sync-cfg])]
         (transport/invoke cfg method false args)))))
 

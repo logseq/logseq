@@ -190,7 +190,7 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
-(deftest test-execute-sync-stop
+(deftest test-execute-sync-stop-preserves-existing-worker-auth-token
   (async done
          (let [ensure-calls (atom [])
                invoke-calls (atom [])]
@@ -199,18 +199,58 @@
                                                            (p/resolved (assoc config :base-url "http://example")))
                                transport/invoke (fn [_ method direct-pass? args]
                                                   (swap! invoke-calls conj [method direct-pass? args])
-                                                  (p/resolved {:ok true}))]
+                                                  (case method
+                                                    :thread-api/get-db-sync-config (p/resolved {:auth-token "worker-token"})
+                                                    :thread-api/db-sync-stop (p/resolved {:ok true})
+                                                    (p/resolved nil)))]
                  (p/let [_ (sync-command/execute {:type :sync-stop
                                                   :repo "logseq_db_demo"}
                                                  {:data-dir "/tmp"})]
                    (is (= [[{:data-dir "/tmp"}
                             "logseq_db_demo"]]
                           @ensure-calls))
-                   (is (= [[:thread-api/set-db-sync-config false [{:ws-url nil
+                   (is (= [[:thread-api/get-db-sync-config false []]
+                           [:thread-api/set-db-sync-config false [{:ws-url nil
                                                                    :http-base nil
-                                                                   :auth-token nil
+                                                                   :auth-token "worker-token"
                                                                    :e2ee-password nil}]]
                            [:thread-api/db-sync-stop false []]]
+                          @invoke-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-sync-status-preserves-existing-worker-auth-token
+  (async done
+         (let [ensure-calls (atom [])
+               invoke-calls (atom [])]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
+                                                           (swap! ensure-calls conj [config repo])
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               transport/invoke (fn [_ method direct-pass? args]
+                                                  (swap! invoke-calls conj [method direct-pass? args])
+                                                  (case method
+                                                    :thread-api/get-db-sync-config (p/resolved {:auth-token "worker-token"})
+                                                    :thread-api/db-sync-status (p/resolved {:repo "logseq_db_demo"
+                                                                                            :ws-state :open
+                                                                                            :pending-local 0
+                                                                                            :pending-asset 0
+                                                                                            :pending-server 0})
+                                                    (p/resolved nil)))]
+                 (p/let [result (sync-command/execute {:type :sync-status
+                                                       :repo "logseq_db_demo"}
+                                                      {:data-dir "/tmp"})]
+                   (is (= :ok (:status result)))
+                   (is (= :open (get-in result [:data :ws-state])))
+                   (is (= [[{:data-dir "/tmp"}
+                            "logseq_db_demo"]]
+                          @ensure-calls))
+                   (is (= [[:thread-api/get-db-sync-config false []]
+                           [:thread-api/set-db-sync-config false [{:ws-url nil
+                                                                   :http-base nil
+                                                                   :auth-token "worker-token"
+                                                                   :e2ee-password nil}]]
+                           [:thread-api/db-sync-status false ["logseq_db_demo"]]]
                           @invoke-calls))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
