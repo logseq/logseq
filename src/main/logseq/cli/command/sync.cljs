@@ -43,7 +43,7 @@
     :sync-grant-access})
 
 (def ^:private sync-start-timeout-ms 10000)
-(def ^:private sync-start-poll-interval-ms 100)
+(def ^:private sync-start-poll-interval-ms 1000)
 (def ^:private sync-download-timeout-ms (* 30 60 1000))
 (def ^:private structured-output-formats #{:json :edn})
 
