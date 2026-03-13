@@ -66,5 +66,4 @@
 
 (defn set-user!
   [id]
-  (Sentry/configureScope (fn [scope]
-                           (.setUser scope #js {:id id}))))
+  (.setUser (Sentry/getCurrentScope) #js {:id id}))
