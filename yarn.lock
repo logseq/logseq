@@ -1272,21 +1272,18 @@
   resolved "https://registry.yarnpkg.com/@tailwindcss/aspect-ratio/-/aspect-ratio-0.4.2.tgz#9ffd52fee8e3c8b20623ff0dcb29e5c21fb0a9ba"
   integrity sha512-8QPrypskfBa7QIMuKHg2TA7BqES6vhBrDLOv8Unb6FcFyd3TjKbc6lcmb9UPQHxfl24sXoJ41ux/H7qQQvfaSQ==
 
-"@tailwindcss/forms@0.5.3":
-  version "0.5.3"
-  resolved "https://registry.yarnpkg.com/@tailwindcss/forms/-/forms-0.5.3.tgz#e4d7989686cbcaf416c53f1523df5225332a86e7"
-  integrity sha512-y5mb86JUoiUgBjY/o6FJSFZSEttfb3Q5gllE4xoKjAAD+vBrnIhE4dViwUuow3va8mpH4s9jyUbUbrRGoRdc2Q==
+"@tailwindcss/forms@0.5.11":
+  version "0.5.11"
+  resolved "https://registry.yarnpkg.com/@tailwindcss/forms/-/forms-0.5.11.tgz#e77039e96fa7b87c3d001a991f77f9418e666700"
+  integrity sha512-h9wegbZDPurxG22xZSoWtdzc41/OlNEUQERNqI/0fOwa2aVlWGu7C35E/x6LDyD3lgtztFSSjKZyuVM0hxhbgA==
   dependencies:
     mini-svg-data-uri "^1.2.3"
 
-"@tailwindcss/typography@0.5.7":
-  version "0.5.7"
-  resolved "https://registry.yarnpkg.com/@tailwindcss/typography/-/typography-0.5.7.tgz#e0b95bea787ee14c5a34a74fc824e6fe86ea8855"
-  integrity sha512-JTTSTrgZfp6Ki4svhPA4mkd9nmQ/j9EfE7SbHJ1cLtthKkpW2OxsFXzSmxbhYbEkfNIyAyhle5p4SYyKRbz/jg==
+"@tailwindcss/typography@0.5.19":
+  version "0.5.19"
+  resolved "https://registry.yarnpkg.com/@tailwindcss/typography/-/typography-0.5.19.tgz#ecb734af2569681eb40932f09f60c2848b909456"
+  integrity sha512-w31dd8HOx3k9vPtcQh5QHP9GwKcgbMp87j58qi6xgiBnFFtKEAgCWnDw4qUT8aHwkCp8bKvb/KGKWWHedP0AAg==
   dependencies:
-    lodash.castarray "^4.4.0"
-    lodash.isplainobject "^4.0.6"
-    lodash.merge "^4.6.2"
     postcss-selector-parser "6.0.10"
 
 "@trapezedev/gradle-parse@7.1.3":
@@ -5792,20 +5789,10 @@ locate-path@^5.0.0:
   dependencies:
     p-locate "^4.1.0"
 
-lodash.castarray@^4.4.0:
-  version "4.4.0"
-  resolved "https://registry.yarnpkg.com/lodash.castarray/-/lodash.castarray-4.4.0.tgz#c02513515e309daddd4c24c60cfddcf5976d9115"
-  integrity sha512-aVx8ztPv7/2ULbArGJ2Y42bG1mEQ5mGjpdvrbJcJFU3TbYybe+QlLS4pst9zV52ymy2in1KpFPiZnAOATxD4+Q==
-
 lodash.ismatch@^4.4.0:
   version "4.4.0"
   resolved "https://registry.yarnpkg.com/lodash.ismatch/-/lodash.ismatch-4.4.0.tgz#756cb5150ca3ba6f11085a78849645f188f85f37"
   integrity sha512-fPMfXjGQEV9Xsq/8MTSgUf255gawYRbjwMyDbcvDhXgV7enSZA0hynz6vMPnpAb5iONEzBHBPsT+0zes5Z301g==
-
-lodash.isplainobject@^4.0.6:
-  version "4.0.6"
-  resolved "https://registry.yarnpkg.com/lodash.isplainobject/-/lodash.isplainobject-4.0.6.tgz#7c526a52d89b45c45cc690b88163be0497f550cb"
-  integrity sha512-oSXzaWypCMHkPC3NvBEaPHf0KsA5mvPrOPgQWDsbg8n7orZ290M0BmC/jgRZ4vcJ6DTAhjrsSYgdsW/F+MFOBA==
 
 lodash.memoize@^4.1.2:
   version "4.1.2"
