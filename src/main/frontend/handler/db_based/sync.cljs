@@ -12,6 +12,7 @@
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db-sync.malli-schema :as db-sync-schema]
+            [logseq.db-sync.snapshot :as snapshot]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
@@ -46,15 +47,6 @@
       (when-not (js/isNaN parsed)
         parsed))))
 
-(def ^:private snapshot-text-decoder (js/TextDecoder.))
-
-(defn- decode-snapshot-rows [payload]
-  (sqlite-util/read-transit-str (.decode snapshot-text-decoder (->uint8 payload))))
-
-(defn- frame-len [^js data offset]
-  (let [view (js/DataView. (.-buffer data) offset 4)]
-    (.getUint32 view 0 false)))
-
 (defn- concat-bytes
   [^js a ^js b]
   (cond
@@ -65,34 +57,6 @@
       (.set out a 0)
       (.set out b (.-byteLength a))
       out)))
-
-(defn- parse-framed-chunk
-  [buffer chunk]
-  (let [data (concat-bytes buffer chunk)
-        total (.-byteLength data)]
-    (loop [offset 0
-           rows []]
-      (if (< (- total offset) 4)
-        {:rows rows
-         :buffer (when (< offset total)
-                   (.slice data offset total))}
-        (let [len (frame-len data offset)
-              next-offset (+ offset 4 len)]
-          (if (<= next-offset total)
-            (let [payload (.slice data (+ offset 4) next-offset)
-                  decoded (decode-snapshot-rows payload)]
-              (recur next-offset (into rows decoded)))
-            {:rows rows
-             :buffer (.slice data offset total)}))))))
-
-(defn- finalize-framed-buffer
-  [buffer]
-  (if (or (nil? buffer) (zero? (.-byteLength buffer)))
-    []
-    (let [{:keys [rows buffer]} (parse-framed-chunk nil buffer)]
-      (if (and (seq rows) (or (nil? buffer) (zero? (.-byteLength buffer))))
-        rows
-        (throw (ex-info "incomplete framed buffer" {:buffer buffer :rows rows}))))))
 
 (defn- gzip-bytes?
   [^js payload]
@@ -158,17 +122,17 @@
           {:chunk-count 1})
         {:chunk-count 0}))))
 
-(defn- <flush-row-batches!
-  [rows batch-size on-batch]
-  (p/loop [remaining rows]
+(defn- <flush-datom-batches!
+  [datoms batch-size on-batch]
+  (p/loop [remaining datoms]
     (if (>= (count remaining) batch-size)
       (let [batch (subvec remaining 0 batch-size)
-            rest-rows (subvec remaining batch-size)]
+            rest-datoms (subvec remaining batch-size)]
         (p/let [_ (on-batch batch)]
-          (p/recur rest-rows)))
+          (p/recur rest-datoms)))
       remaining)))
 
-(defn- <stream-snapshot-row-batches!
+(defn- <stream-snapshot-datom-batches!
   [^js resp batch-size on-batch]
   (if-let [stream (response-body-stream resp)]
     (let [reader (.getReader stream)]
@@ -177,20 +141,20 @@
         (p/let [result (.read reader)]
           (if (.-done result)
             (let [pending (if (and buffer (pos? (.-byteLength buffer)))
-                            (into pending (finalize-framed-buffer buffer))
+                            (into pending (snapshot/finalize-datoms-jsonl-buffer buffer))
                             pending)]
               (if (seq pending)
                 (p/let [_ (on-batch pending)]
                   {:chunk-count 1})
                 {:chunk-count 0}))
-            (let [{rows :rows next-buffer :buffer} (parse-framed-chunk buffer (->uint8 (.-value result)))
-                  pending (into pending rows)]
-              (p/let [pending (<flush-row-batches! pending batch-size on-batch)]
+            (let [{datoms :datoms next-buffer :buffer} (snapshot/parse-datoms-jsonl-chunk buffer (->uint8 (.-value result)))
+                  pending (into pending datoms)]
+              (p/let [pending (<flush-datom-batches! pending batch-size on-batch)]
                 (p/recur next-buffer pending)))))))
     (p/let [snapshot-bytes (<snapshot-response-bytes resp)
-            rows (vec (finalize-framed-buffer snapshot-bytes))]
-      (if (seq rows)
-        (p/let [_ (on-batch rows)]
+            datoms (vec (snapshot/finalize-datoms-jsonl-buffer snapshot-bytes))]
+      (if (seq datoms)
+        (p/let [_ (on-batch datoms)]
           {:chunk-count 1})
         {:chunk-count 0}))))
 
@@ -427,15 +391,16 @@
                            (throw (ex-info "non-integer remote-tx when downloading graph"
                                            {:graph graph-name
                                             :remote-tx remote-tx})))
-                       resp (js/fetch (str base "/sync/" graph-uuid "/snapshot/stream")
+                       snapshot-resp (fetch-json (str base "/sync/" graph-uuid "/snapshot/download")
+                                                 {:method "GET"}
+                                                 {:response-schema :sync/snapshot-download})
+                       resp (js/fetch (:url snapshot-resp)
                                       (clj->js (with-auth-headers {:method "GET"})))
-                       total-rows (parse-header-int resp "x-snapshot-row-count")
                        _ (state/pub-event!
                           [:rtc/log {:type :rtc.log/download
                                      :sub-type :download-progress
                                      :graph-uuid graph-uuid
-                                     :message (str "Start downloading graph snapshot, total rows: "
-                                                   (or total-rows "unknown"))}])]
+                                     :message "Start downloading graph snapshot"}])]
                  (when-not (.-ok resp)
                    (throw (ex-info "snapshot download failed"
                                    {:graph graph-name
@@ -445,25 +410,16 @@
                                         (if-let [import-id @import-id*]
                                           (p/resolved import-id)
                                           (p/let [{:keys [import-id]} (state/<invoke-db-worker :thread-api/db-sync-import-prepare
-                                                                                               graph true graph-uuid graph-e2ee? total-rows)]
+                                                                                               graph true graph-uuid graph-e2ee?)]
                                             (reset! import-id* import-id)
                                             import-id)))]
-                   (p/let [_ (if @state/*db-worker
-                               (<stream-snapshot-chunks!
-                                resp
-                                (fn [chunk]
-                                  (p/let [import-id (ensure-import!)]
-                                    (state/<invoke-db-worker-direct-pass :thread-api/db-sync-import-framed-chunk
-                                                                         (Comlink/transfer chunk #js [(.-buffer chunk)])
-                                                                         graph-uuid
-                                                                         import-id))))
-                               (<stream-snapshot-row-batches!
-                                resp
-                                10000
-                                (fn [rows]
-                                  (p/let [import-id (ensure-import!)]
-                                    (state/<invoke-db-worker :thread-api/db-sync-import-rows-chunk
-                                                             rows graph-uuid import-id)))))
+                   (p/let [_ (<stream-snapshot-datom-batches!
+                              resp
+                              25000
+                              (fn [datoms]
+                                (p/let [import-id (ensure-import!)]
+                                  (state/<invoke-db-worker :thread-api/db-sync-import-datoms-chunk
+                                                           datoms graph-uuid import-id))))
                            _ (state/pub-event!
                               [:rtc/log {:type :rtc.log/download
                                          :sub-type :download-completed

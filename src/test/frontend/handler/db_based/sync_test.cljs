@@ -6,22 +6,11 @@
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
             [logseq.db :as ldb]
-            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db-sync.snapshot :as snapshot]
             [promesa.core :as p]))
 
-(def ^:private test-text-encoder (js/TextEncoder.))
-
-(defn- frame-bytes [^js data]
-  (let [len (.-byteLength data)
-        out (js/Uint8Array. (+ 4 len))
-        view (js/DataView. (.-buffer out))]
-    (.setUint32 view 0 len false)
-    (.set out data 4)
-    out))
-
-(defn- encode-framed-rows [rows]
-  (let [payload (.encode test-text-encoder (sqlite-util/write-transit-str rows))]
-    (frame-bytes payload)))
+(defn- encode-datoms-jsonl [datoms]
+  (snapshot/encode-datoms-jsonl datoms))
 
 (defn- <gzip-bytes [^js payload]
   (if (exists? js/CompressionStream)
@@ -219,18 +208,19 @@
   (async done
          (let [import-calls (atom [])
                fetch-calls (atom [])
-               rows [[1 "content-1" "addresses-1"]
-                     [2 "content-2" "addresses-2"]]
-               framed-bytes (encode-framed-rows rows)
+               datoms [{:e 1 :a :db/ident :v :logseq.class/Page :tx 1 :added true}
+                       {:e 2 :a :block/title :v "hello" :tx 1 :added true}]
+               jsonl-bytes (encode-datoms-jsonl datoms)
                original-fetch js/fetch
-               stream-url "http://base/sync/graph-1/snapshot/stream"]
-           (-> (p/let [gzip-bytes (<gzip-bytes framed-bytes)]
+               download-url "http://base/sync/graph-1/snapshot/download"
+               asset-url "http://base/assets/graph-1/snapshot-1.snapshot"]
+           (-> (p/let [gzip-bytes (<gzip-bytes jsonl-bytes)]
                  (set! js/fetch
                        (fn [url opts]
                          (let [method (or (aget opts "method") "GET")]
                            (swap! fetch-calls conj [url method])
                            (cond
-                             (and (= url stream-url) (= method "GET"))
+                             (and (= url asset-url) (= method "GET"))
                              (js/Promise.resolve
                               #js {:ok true
                                    :status 200
@@ -249,6 +239,12 @@
                                                             (string/ends-with? url "/pull")
                                                             (p/resolved {:t 42})
 
+                                                            (= url download-url)
+                                                            (p/resolved {:ok true
+                                                                         :url asset-url
+                                                                         :key "graph-1/snapshot-1.snapshot"
+                                                                         :content-encoding "gzip"})
+
                                                             :else
                                                             (p/rejected (ex-info "unexpected fetch-json URL"
                                                                                  {:url url}))))
@@ -266,15 +262,15 @@
                (p/then (fn [_]
                          (is (= 3 (count @import-calls)))
                          (let [[prepare-op graph reset? graph-uuid graph-e2ee?] (first @import-calls)
-                               [chunk-op imported-rows chunk-graph-uuid import-id] (second @import-calls)
+                               [chunk-op imported-datoms chunk-graph-uuid import-id] (second @import-calls)
                                [finalize-op finalize-graph finalize-graph-uuid remote-tx finalize-import-id] (nth @import-calls 2)]
                            (is (= :thread-api/db-sync-import-prepare prepare-op))
                            (is (string/ends-with? graph "demo-graph"))
                            (is (= true reset?))
                            (is (= "graph-1" graph-uuid))
                            (is (= false graph-e2ee?))
-                           (is (= :thread-api/db-sync-import-rows-chunk chunk-op))
-                           (is (= rows imported-rows))
+                           (is (= :thread-api/db-sync-import-datoms-chunk chunk-op))
+                           (is (= datoms imported-datoms))
                            (is (= "graph-1" chunk-graph-uuid))
                            (is (= "import-1" import-id))
                            (is (= :thread-api/db-sync-import-finalize finalize-op))
@@ -282,7 +278,7 @@
                            (is (= "graph-1" finalize-graph-uuid))
                            (is (= 42 remote-tx))
                            (is (= "import-1" finalize-import-id)))
-                         (is (= [[stream-url "GET"]]
+                         (is (= [[asset-url "GET"]]
                                 @fetch-calls))
                          (done)))
                (p/catch (fn [error]
@@ -290,86 +286,24 @@
                           (is false (str error))
                           (done)))))))
 
-(deftest rtc-download-graph-streams-identity-snapshot-test
-  (async done
-         (let [import-calls (atom [])
-               rows [[1 "content-1" "addresses-1"]
-                     [2 "content-2" "addresses-2"]]
-               framed-bytes (encode-framed-rows rows)
-               original-fetch js/fetch
-               stream-url "http://base/sync/graph-1/snapshot/stream"
-               worker-prev @state/*db-worker]
-           (reset! state/*db-worker nil)
-           (-> (p/let [stream (bytes->stream framed-bytes 3)]
-                 (set! js/fetch
-                       (fn [url opts]
-                         (let [method (or (aget opts "method") "GET")]
-                           (cond
-                             (and (= url stream-url) (= method "GET"))
-                             (js/Promise.resolve
-                              #js {:ok true
-                                   :status 200
-                                   :headers #js {:get (fn [header]
-                                                        (case header
-                                                          "content-length" (str (.-byteLength framed-bytes))
-                                                          "content-encoding" "identity"
-                                                          nil))}
-                                   :body stream
-                                   :arrayBuffer (fn [] (throw (js/Error. "arrayBuffer should not be used")))})
-                             :else
-                             (js/Promise.resolve #js {:ok false :status 404})))))
-                 (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
-                                     db-sync/fetch-json (fn [url _opts _schema]
-                                                          (cond
-                                                            (string/ends-with? url "/pull")
-                                                            (p/resolved {:t 42})
-
-                                                            :else
-                                                            (p/rejected (ex-info "unexpected fetch-json URL"
-                                                                                 {:url url}))))
-                                     user-handler/task--ensure-id&access-token (fn [resolve _reject]
-                                                                                 (resolve true))
-                                     state/<invoke-db-worker (fn [& args]
-                                                               (swap! import-calls conj args)
-                                                               (if (= :thread-api/db-sync-import-prepare (first args))
-                                                                 (p/resolved {:import-id "import-1"})
-                                                                 (p/resolved :ok)))
-                                     state/set-state! (fn [& _] nil)
-                                     state/pub-event! (fn [& _] nil)]
-                       (db-sync/<rtc-download-graph! "demo-graph" "graph-1" false))
-                     (p/finally (fn [] (set! js/fetch original-fetch)))))
-               (p/then (fn [_]
-                         (is (= 3 (count @import-calls)))
-                         (let [[chunk-op imported-rows _ import-id] (second @import-calls)]
-                           (is (= :thread-api/db-sync-import-rows-chunk chunk-op))
-                           (is (= rows imported-rows))
-                           (is (= "import-1" import-id)))
-                         (done)))
-               (p/catch (fn [error]
-                          (reset! state/*db-worker worker-prev)
-                          (set! js/fetch original-fetch)
-                          (is false (str error))
-                          (done)))
-               (p/finally (fn []
-                            (reset! state/*db-worker worker-prev)))))))
-
 (deftest rtc-download-graph-streams-gzip-snapshot-test
   (async done
          (let [import-calls (atom [])
-               rows [[1 "content-1" "addresses-1"]
-                     [2 "content-2" "addresses-2"]]
-               framed-bytes (encode-framed-rows rows)
+               datoms [{:e 1 :a :db/ident :v :logseq.class/Page :tx 1 :added true}
+                       {:e 2 :a :block/title :v "hello" :tx 1 :added true}]
+               jsonl-bytes (encode-datoms-jsonl datoms)
                original-fetch js/fetch
-               stream-url "http://base/sync/graph-1/snapshot/stream"
+               download-url "http://base/sync/graph-1/snapshot/download"
+               asset-url "http://base/assets/graph-1/snapshot-1.snapshot"
                worker-prev @state/*db-worker]
            (reset! state/*db-worker nil)
-           (-> (p/let [gzip-bytes (<gzip-bytes framed-bytes)
+           (-> (p/let [gzip-bytes (<gzip-bytes jsonl-bytes)
                        stream (bytes->stream gzip-bytes 3)]
                  (set! js/fetch
                        (fn [url opts]
                          (let [method (or (aget opts "method") "GET")]
                            (cond
-                             (and (= url stream-url) (= method "GET"))
+                             (and (= url asset-url) (= method "GET"))
                              (js/Promise.resolve
                               #js {:ok true
                                    :status 200
@@ -388,6 +322,12 @@
                                                             (string/ends-with? url "/pull")
                                                             (p/resolved {:t 42})
 
+                                                            (= url download-url)
+                                                            (p/resolved {:ok true
+                                                                         :url asset-url
+                                                                         :key "graph-1/snapshot-1.snapshot"
+                                                                         :content-encoding "gzip"})
+
                                                             :else
                                                             (p/rejected (ex-info "unexpected fetch-json URL"
                                                                                  {:url url}))))
@@ -404,9 +344,9 @@
                      (p/finally (fn [] (set! js/fetch original-fetch)))))
                (p/then (fn [_]
                          (is (= 3 (count @import-calls)))
-                         (let [[chunk-op imported-rows _ import-id] (second @import-calls)]
-                           (is (= :thread-api/db-sync-import-rows-chunk chunk-op))
-                           (is (= rows imported-rows))
+                         (let [[chunk-op imported-datoms _ import-id] (second @import-calls)]
+                           (is (= :thread-api/db-sync-import-datoms-chunk chunk-op))
+                           (is (= datoms imported-datoms))
                            (is (= "import-1" import-id)))
                          (done)))
                (p/catch (fn [error]

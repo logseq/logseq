@@ -93,9 +93,9 @@
 - `GET /sync/:graph-id/snapshot/download`
   - Build a snapshot file in R2 and return a download URL.
   - Response: `{"ok":true,"key":"<graph-id>/<uuid>.snapshot","url":"<origin>/assets/:graph-id/<uuid>.snapshot","content-encoding":"gzip"}`.
-  - The snapshot file is a framed Transit JSON stream of kvs rows, optionally gzip-compressed.
+  - The snapshot file stored in R2 is a gzip-compressed NDJSON stream of full Datascript datoms. Each line is a Transit JSON datom map: `{e,a,v,tx,added}`.
 - `POST /sync/:graph-id/snapshot/upload?reset=true|false`
-  - Upload a snapshot stream (framed Transit JSON, optionally gzip-compressed). The server imports rows into kvs.
+  - Upload a snapshot stream for bootstrap import. Current upload format remains framed Transit JSON kvs rows, optionally gzip-compressed.
   - Request body: binary stream; headers should include `content-type: application/transit+json` and `content-encoding: gzip` when compressed.
   - Response: `{"ok":true,"count":<n>,"key":"<graph-id>/<uuid>.snapshot"}`.
   - Error response (400): `{"error":"missing body"|"missing graph id"}`.
