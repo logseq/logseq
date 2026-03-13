@@ -20,10 +20,15 @@
    :order {:desc "Sort order. Default: asc"
            :values ["asc" "desc"]}})
 
+(def ^:private list-sort-fields
+  {:list-page #{"title" "id" "ident" "created-at" "updated-at"}
+   :list-tag #{"title" "id" "ident" "created-at" "updated-at"}
+   :list-property #{"title" "id" "ident" "created-at" "updated-at"}})
+
 (def ^:private list-page-spec
   (merge list-common-spec
          {:sort {:desc "Sort field"
-                 :values ["title" "created-at" "updated-at"]}
+                 :values (:list-page list-sort-fields)}
           :include-journal {:desc "Include journal pages"
                             :coerce :boolean}
           :journal-only {:desc "Only journal pages"
@@ -37,7 +42,7 @@
 (def ^:private list-tag-spec
   (merge list-common-spec
          {:sort {:desc "Sort field"
-                 :values ["name" "title"]}
+                 :values (:list-tag list-sort-fields)}
           :include-built-in {:desc "Include built-in tags"
                              :coerce :boolean}
           :with-properties {:desc "Include tag properties"
@@ -49,7 +54,7 @@
 (def ^:private list-property-spec
   (merge list-common-spec
          {:sort {:desc "Sort field"
-                 :values ["name" "title"]}
+                 :values (:list-property list-sort-fields)}
           :include-built-in {:desc "Include built-in properties"
                              :coerce :boolean}
           :with-classes {:desc "Include property classes"
@@ -62,11 +67,6 @@
   [(core/command-entry ["list" "page"] :list-page "List pages" list-page-spec)
    (core/command-entry ["list" "tag"] :list-tag "List tags" list-tag-spec)
    (core/command-entry ["list" "property"] :list-property "List properties" list-property-spec)])
-
-(def ^:private list-sort-fields
-  {:list-page #{"title" "created-at" "updated-at"}
-   :list-tag #{"name" "title"}
-   :list-property #{"name" "title"}})
 
 (defn invalid-options?
   [command opts]

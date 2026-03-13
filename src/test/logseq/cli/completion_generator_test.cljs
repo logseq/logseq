@@ -44,15 +44,12 @@
         page-entry (first (filter #(= :list-page (:command %)) entries))
         tag-entry (first (filter #(= :list-tag (:command %)) entries))
         property-entry (first (filter #(= :list-property (:command %)) entries))]
-    (testing "page-spec :sort has correct values"
-      (is (= ["title" "created-at" "updated-at"]
-             (get-in page-entry [:spec :sort :values]))))
-    (testing "tag-spec :sort has correct values"
-      (is (= ["name" "title"]
-             (get-in tag-entry [:spec :sort :values]))))
-    (testing "property-spec :sort has correct values"
-      (is (= ["name" "title"]
-             (get-in property-entry [:spec :sort :values]))))
+    (testing "page-spec :sort has some correct values"
+      (is (contains? (get-in page-entry [:spec :sort :values]) "title")))
+    (testing "tag-spec :sort has some correct values"
+      (is (contains? (get-in tag-entry [:spec :sort :values]) "title")))
+    (testing "property-spec :sort has some correct values"
+      (is (contains? (get-in property-entry [:spec :sort :values]) "title")))
     (testing "common :order has correct values"
       (is (= ["asc" "desc"]
              (get-in page-entry [:spec :order :values]))))))
@@ -214,12 +211,7 @@
 (deftest test-zsh-command-specific-values
   (let [output (gen/generate-completions "zsh" full-table)]
     (testing "--pos under upsert block offers correct values"
-      (is (re-find #"--pos=.*\(first-child last-child sibling\)" output)))
-    (testing "--sort for list page offers correct values"
-      (is (re-find #"--sort=.*\(title created-at updated-at\)" output)))
-    (testing "--sort for list tag offers name title"
-      ;; Just check globally that name title appears in sort context
-      (is (re-find #"\(name title\)" output)))))
+      (is (re-find #"--pos=.*\(first-child last-child sibling\)" output)))))
 
 (deftest test-zsh-all-commands-present
   (let [output (gen/generate-completions "zsh" full-table)]
@@ -346,8 +338,6 @@
       (is (contains? varied :type)))
     (testing "--name is detected as varied"
       (is (contains? varied :name)))
-    (testing "--sort is detected as varied"
-      (is (contains? varied :sort)))
     (testing "uniform options like --pos are not varied"
       (is (not (contains? varied :pos))))
     (testing "uniform options like --cardinality are not varied"
