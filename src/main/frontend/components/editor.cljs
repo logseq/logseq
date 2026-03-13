@@ -33,7 +33,6 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [react-draggable]
             [rum.core :as rum]))
 
 (defonce no-matched-commands [["No matched commands" [[:editor/move-cursor-to-end]]]])

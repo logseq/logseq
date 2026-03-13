@@ -285,8 +285,8 @@
 
 (deftest-async ^:integration export-docs-graph-with-convert-all-tags
   (p/let [file-graph-dir "test/resources/docs-0.10.12"
-          start-time (cljs.core/system-time)
           _ (docs-graph-helper/clone-docs-repo-if-not-exists file-graph-dir "v0.10.12")
+          start-time (cljs.core/system-time)
           conn (db-test/create-conn)
           _ (db-pipeline/add-listener conn)
           {:keys [import-state]}
