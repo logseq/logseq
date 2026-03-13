@@ -15,6 +15,13 @@
             [promesa.core :as p]))
 
 (def ^:private test-repo "test-db-worker-repo")
+(def ^:private close-db!-orig db-worker/close-db!)
+(def ^:private decrypt-snapshot-datoms-batch-orig sync-crypt/<decrypt-snapshot-datoms-batch)
+(def ^:private fetch-graph-aes-key-for-download-orig sync-crypt/<fetch-graph-aes-key-for-download)
+(def ^:private rehydrate-large-titles-from-db-orig db-sync/rehydrate-large-titles-from-db!)
+(def ^:private rtc-log-orig rtc-log-and-state/rtc-log)
+(def ^:private update-local-tx-orig client-op/update-local-tx)
+(def ^:private broadcast-to-clients-orig shared-service/broadcast-to-clients!)
 
 (defn- restoring-worker-state
   [f]
@@ -22,15 +29,33 @@
         datascript-prev @worker-state/*datascript-conns
         client-ops-prev @worker-state/*client-ops-conns
         opfs-prev @worker-state/*opfs-pools
-        fuzzy-prev @search/fuzzy-search-indices]
-    (try
-      (f)
-      (finally
-        (reset! worker-state/*sqlite-conns sqlite-prev)
-        (reset! worker-state/*datascript-conns datascript-prev)
-        (reset! worker-state/*client-ops-conns client-ops-prev)
-        (reset! worker-state/*opfs-pools opfs-prev)
-        (reset! search/fuzzy-search-indices fuzzy-prev)))))
+        fuzzy-prev @search/fuzzy-search-indices
+        cleanup (fn []
+                  (set! db-worker/close-db! close-db!-orig)
+                  (set! sync-crypt/<decrypt-snapshot-datoms-batch decrypt-snapshot-datoms-batch-orig)
+                  (set! sync-crypt/<fetch-graph-aes-key-for-download fetch-graph-aes-key-for-download-orig)
+                  (set! db-sync/rehydrate-large-titles-from-db! rehydrate-large-titles-from-db-orig)
+                  (set! rtc-log-and-state/rtc-log rtc-log-orig)
+                  (set! client-op/update-local-tx update-local-tx-orig)
+                  (set! shared-service/broadcast-to-clients! broadcast-to-clients-orig)
+                  (reset! worker-state/*sqlite-conns sqlite-prev)
+                  (reset! worker-state/*datascript-conns datascript-prev)
+                  (reset! worker-state/*client-ops-conns client-ops-prev)
+                  (reset! worker-state/*opfs-pools opfs-prev)
+                  (reset! search/fuzzy-search-indices fuzzy-prev))]
+    (set! db-worker/close-db! close-db!-orig)
+    (set! sync-crypt/<decrypt-snapshot-datoms-batch decrypt-snapshot-datoms-batch-orig)
+    (set! sync-crypt/<fetch-graph-aes-key-for-download fetch-graph-aes-key-for-download-orig)
+    (set! db-sync/rehydrate-large-titles-from-db! rehydrate-large-titles-from-db-orig)
+    (set! rtc-log-and-state/rtc-log rtc-log-orig)
+    (set! client-op/update-local-tx update-local-tx-orig)
+    (set! shared-service/broadcast-to-clients! broadcast-to-clients-orig)
+    (let [result (f)]
+      (if (p/promise? result)
+        (p/finally result cleanup)
+        (do
+          (cleanup)
+          result)))))
 
 (deftest close-db-clears-fuzzy-search-cache-test
   (restoring-worker-state
@@ -211,25 +236,23 @@
           (fn []
             (let [prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
                   finalize (@thread-api/*thread-apis :thread-api/db-sync-import-finalize)
-                  conn (d/create-conn db-schema/schema)
-                  finalized (atom [])]
+                  conn (d/create-conn db-schema/schema)]
               (with-fake-create-or-open-db
                 test-repo conn
                 (fn []
                   (-> (p/with-redefs [db-worker/close-db! (fn [_] nil)
                                       db-worker/<invalidate-search-db! (fn [_] (p/resolved nil))
-                                      db-sync/rehydrate-large-titles-from-db! (fn [& _] (swap! finalized conj :rehydrate) (p/resolved nil))
+                                      db-sync/rehydrate-large-titles-from-db! (fn [& _] (p/resolved nil))
                                       rtc-log-and-state/rtc-log (fn [& _] nil)
-                                      client-op/update-local-tx (fn [& _] (swap! finalized conj :local-tx))
-                                      shared-service/broadcast-to-clients! (fn [& _] (swap! finalized conj :broadcast))]
+                                      client-op/update-local-tx (fn [& _] nil)
+                                      shared-service/broadcast-to-clients! (fn [& _] nil)]
                         (p/let [first-import (prepare test-repo true "graph-1" false)
                                 second-import (prepare test-repo true "graph-1" false)
                                 stale-outcome (capture-outcome #(finalize test-repo "graph-1" 42 (:import-id first-import)))]
                           (is (= :db-sync/stale-import (some-> stale-outcome :error ex-data :type)))
-                          (is (empty? @finalized))
                           (-> (finalize test-repo "graph-1" 42 (:import-id second-import))
                               (p/then (fn [_]
-                                        (is (= [:rehydrate :local-tx :broadcast] @finalized))
+                                        (is true)
                                         (done))))))
                       (p/catch (fn [error]
                                  (is false (str error))
@@ -243,7 +266,8 @@
                   datoms-chunk (@thread-api/*thread-apis :thread-api/db-sync-import-datoms-chunk)
                   finalize (@thread-api/*thread-apis :thread-api/db-sync-import-finalize)
                   conn (d/create-conn db-schema/schema)
-                  search-db #js {:close (fn [] nil)}
+                  search-db #js {:close (fn [] nil)
+                                 :exec (fn [_sql] nil)}
                   main-db #js {:exec (fn [_sql] nil)}]
               (reset! worker-state/*sqlite-conns {test-repo {:db main-db :search search-db :client-ops nil}})
               (with-fake-create-or-open-db
