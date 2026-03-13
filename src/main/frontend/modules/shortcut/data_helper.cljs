@@ -243,7 +243,7 @@
                                                                           (every? #(handlers-co-active? % handler-id') handler-ids)))))
                                                         binding-match?
                                                         (or (= input-binding k)
-                                                            (and same-handler?
+                                                            (and handler-match?
                                                                  (binding-prefix-overlap? input-binding k)))]
                                                     (if (and (not (contains? exclude-ids id))
                                                              handler-match?
@@ -328,6 +328,41 @@
              [_ handler-id'] refs]
          (get handler-display-labels handler-id'))
        (first)))
+
+(defn partition-conflicts-by-type
+  "Split a conflicts map into {:exact ... :prefix ...} sub-maps.
+   Exact = inner key equals the parsed input. Prefix = inner key is a prefix overlap."
+  [conflicts-map input-key]
+  (let [input-binding (some-> input-key
+                              shortcut-utils/undecorate-binding
+                              shortcut-utils/safe-parse-string-binding
+                              bean/->clj)]
+    (when (sequential? input-binding)
+      (reduce-kv
+       (fn [acc outer-k inner-map]
+         (let [grouped (group-by (fn [[inner-k _]] (= input-binding inner-k)) inner-map)
+               exact-entries (get grouped true)
+               prefix-entries (get grouped false)]
+           (cond-> acc
+             (seq exact-entries)
+             (assoc-in [:exact outer-k] (into {} exact-entries))
+             (seq prefix-entries)
+             (assoc-in [:prefix outer-k] (into {} prefix-entries)))))
+       {:exact {} :prefix {}}
+       conflicts-map))))
+
+(defn conflict-has-exact?
+  "Returns true if any conflict in the map is an exact match (not just prefix overlap)."
+  [conflicts-map input-key]
+  (let [input-binding (some-> input-key
+                              shortcut-utils/undecorate-binding
+                              shortcut-utils/safe-parse-string-binding
+                              bean/->clj)]
+    (boolean
+     (and (sequential? input-binding)
+          (some (fn [[_ inner-map]]
+                  (some (fn [[inner-k _]] (= input-binding inner-k)) inner-map))
+                conflicts-map)))))
 
 (defn parse-conflicts-from-binding
   [from-binding target]

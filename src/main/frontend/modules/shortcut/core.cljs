@@ -86,10 +86,13 @@
                     (catch :default _))
                (.registerShortcut handler (util/keyname id) undec-k))
              (catch :default e
-               ;; Closure's KeyboardShortcutHandler throws "shortcut: null" when a
-               ;; chord prefix collides with an existing key. Brittle string match;
-               ;; see: google-closure-library goog.ui.KeyboardShortcutHandler.prototype.registerShortcut_
-               (let [chord-prefix? (string/includes? (.-message e) "shortcut: null")]
+               ;; Closure's KeyboardShortcutHandler throws when a chord prefix
+               ;; collides with an existing key (either direction):
+               ;; - "...shortcut: null" when a simple key meets an existing chord prefix
+               ;; - "...shortcut: <id>" when a chord meets an existing simple key
+               ;; see: google-closure-library goog.ui.KeyboardShortcutHandler setShortcut_
+               (let [chord-prefix? (string/includes? (.-message e)
+                                                     "Keyboard shortcut conflicts with existing shortcut")]
                  (if chord-prefix?
                    ;; Chord-prefix tree clash: expected when a simple key and a
                    ;; chord starting with that key coexist on the same handler.
