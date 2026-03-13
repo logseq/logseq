@@ -122,11 +122,6 @@
         candidates* (str candidates*)
         hint (str "\nHint: " hint)))))
 
-(defn- maybe-ident-header
-  [items]
-  (when (some :db/ident items)
-    ["IDENT"]))
-
 (defn- parse-ts
   [value]
   (cond
@@ -154,37 +149,36 @@
         :else (str years "y ago")))
     "-"))
 
-(defn- format-list-row
-  [item include-ident? now-ms]
-  (let [base [(or (:db/id item) (:id item))
-              (or (:title item) (:block/title item) (:name item))]
-        with-ident (cond-> base
-                     include-ident? (conj (:db/ident item)))
-        updated (human-ago (or (:updated-at item) (:block/updated-at item)) now-ms)
-        created (human-ago (or (:created-at item) (:block/created-at item)) now-ms)]
-    (conj with-ident updated created)))
+(defn- items-have-key?
+  [items & ks]
+  (some (fn [item] (some #(contains? item %) ks)) items))
+
+(def ^:private list-columns
+  [["ID"         (fn [item _] (or (:db/id item) (:id item)))           [:db/id :id]]
+   ["TITLE"      (fn [item _] (or (:title item) (:block/title item) (:name item)))  [:title :block/title :name]]
+   ["IDENT"      (fn [item _] (:db/ident item))                       [:db/ident]]
+   ["UPDATED-AT" (fn [item now-ms] (human-ago (or (:updated-at item) (:block/updated-at item)) now-ms)) [:updated-at :block/updated-at]]
+   ["CREATED-AT" (fn [item now-ms] (human-ago (or (:created-at item) (:block/created-at item)) now-ms)) [:created-at :block/created-at]]])
+
+(defn- format-list-dynamic
+  [items now-ms columns]
+  (let [items (or items [])
+        active (filterv (fn [[_ _ ks always?]]
+                          (or always? (apply items-have-key? items ks)))
+                        columns)
+        headers (mapv first active)
+        rows (mapv (fn [item]
+                     (mapv (fn [[_ extractor _]] (extractor item now-ms)) active))
+                   items)]
+    (format-counted-table headers rows)))
 
 (defn- format-list-page
   [items now-ms]
-  (let [items (or items [])
-        include-ident? (boolean (some :db/ident items))
-        headers (into ["ID" "TITLE"]
-                      (concat (or (maybe-ident-header items) [])
-                              ["UPDATED-AT" "CREATED-AT"]))]
-    (format-counted-table
-     headers
-     (mapv #(format-list-row % include-ident? now-ms) items))))
+  (format-list-dynamic items now-ms list-columns))
 
 (defn- format-list-tag
   [items now-ms]
-  (let [items (or items [])
-        include-ident? (boolean (some :db/ident items))
-        headers (into ["ID" "TITLE"]
-                      (concat (or (maybe-ident-header items) [])
-                              ["UPDATED-AT" "CREATED-AT"]))]
-    (format-counted-table
-     headers
-     (mapv #(format-list-row % include-ident? now-ms) items))))
+  (format-list-dynamic items now-ms list-columns))
 
 (defn- normalize-property-type
   [value]
@@ -193,27 +187,17 @@
     (nil? value) "-"
     :else (str value)))
 
-(defn- format-list-property-row
-  [item include-ident? now-ms]
-  (let [base [(or (:db/id item) (:id item))
-              (or (:title item) (:block/title item) (:name item))
-              (normalize-property-type (:logseq.property/type item))]
-        with-ident (cond-> base
-                     include-ident? (conj (:db/ident item)))
-        updated (human-ago (or (:updated-at item) (:block/updated-at item)) now-ms)
-        created (human-ago (or (:created-at item) (:block/created-at item)) now-ms)]
-    (conj with-ident updated created)))
+(def ^:private list-property-columns
+  [["ID"         (fn [item _] (or (:db/id item) (:id item)))           [:db/id :id]]
+   ["TITLE"      (fn [item _] (or (:title item) (:block/title item) (:name item)))  [:title :block/title :name]]
+   ["TYPE"       (fn [item _] (normalize-property-type (:logseq.property/type item))) [:logseq.property/type]]
+   ["IDENT"      (fn [item _] (:db/ident item))                       [:db/ident]]
+   ["UPDATED-AT" (fn [item now-ms] (human-ago (or (:updated-at item) (:block/updated-at item)) now-ms)) [:updated-at :block/updated-at]]
+   ["CREATED-AT" (fn [item now-ms] (human-ago (or (:created-at item) (:block/created-at item)) now-ms)) [:created-at :block/created-at]]])
 
 (defn- format-list-property
   [items now-ms]
-  (let [items (or items [])
-        include-ident? (boolean (some :db/ident items))
-        headers (into ["ID" "TITLE" "TYPE"]
-                      (concat (or (maybe-ident-header items) [])
-                              ["UPDATED-AT" "CREATED-AT"]))]
-    (format-counted-table
-     headers
-     (mapv #(format-list-property-row % include-ident? now-ms) items))))
+  (format-list-dynamic items now-ms list-property-columns))
 
 (defn- format-graph-list
   [graphs current-graph]

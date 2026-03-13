@@ -200,7 +200,7 @@
            :updated-at 1735686000000}
           overrides)))
 
-(deftest test-cli-login-integration
+(deftest ^:long test-cli-login-integration
   (async done
          (let [data-dir (node-helper/create-tmp-dir "cli-login-data")
                cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -237,7 +237,7 @@
                  (p/finally (fn []
                               (done))))))))
 
-(deftest test-cli-logout-integration
+(deftest ^:long test-cli-logout-integration
   (async done
          (let [data-dir (node-helper/create-tmp-dir "cli-logout-data")
                cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -270,7 +270,7 @@
                  (p/finally (fn []
                               (done))))))))
 
-(deftest test-cli-sync-remote-graphs-refreshes-auth-file-and-injects-runtime-token
+(deftest ^:long test-cli-sync-remote-graphs-refreshes-auth-file-and-injects-runtime-token
   (async done
          (let [data-dir (node-helper/create-tmp-dir "cli-sync-auth")
                cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -316,7 +316,7 @@
                  (p/finally (fn []
                               (done))))))))
 
-(deftest test-cli-sync-download-and-start-readiness-with-mocked-sync
+(deftest ^:long test-cli-sync-download-and-start-readiness-with-mocked-sync
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-sync-cli")
                download-repo "sync-download-graph"
@@ -390,7 +390,7 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
-(deftest test-cli-sync-upload-with-mocked-worker-bootstrap
+(deftest ^:long test-cli-sync-upload-with-mocked-worker-bootstrap
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-sync-upload-cli")
                upload-repo "sync-upload-graph"
@@ -432,7 +432,7 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
-(deftest test-cli-sync-upload-followed-by-graph-info-shows-graph-uuid-test
+(deftest ^:long test-cli-sync-upload-followed-by-graph-info-shows-graph-uuid-test
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-sync-upload-info-cli")
                upload-repo "sync-upload-graph-info"
@@ -2204,6 +2204,37 @@
                  (is (string/includes? output "TestPage"))
                  (is (string/includes? output "Count:"))
                  (stop-repo! data-dir cfg-path "human-list-graph")
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest ^:long test-cli-list-page-fields-filter
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker")]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--graph" "fields-graph"] data-dir cfg-path)
+                       _ (run-cli ["upsert" "page" "--page" "FieldTest"] data-dir cfg-path)
+                       all-result (run-cli ["list" "page"] data-dir cfg-path)
+                       all-payload (parse-json-output all-result)
+                       filtered-result (run-cli ["list" "page" "--fields" "title"] data-dir cfg-path)
+                       filtered-payload (parse-json-output filtered-result)
+                       human-filtered-result (run-cli ["list" "page" "--fields" "title" "--output" "human"] data-dir cfg-path)
+                       first-all (first (get-in all-payload [:data :items]))
+                       first-filtered (first (get-in filtered-payload [:data :items]))
+                       _ (stop-repo! data-dir cfg-path "fields-graph")]
+                 (is (= 0 (:exit-code all-result)))
+                 (is (= 0 (:exit-code filtered-result)))
+                 (is (contains? first-all :title))
+                 (is (contains? first-all :updated-at))
+                 (is (contains? first-filtered :title))
+                 (is (not (contains? first-filtered :updated-at))
+                     "--fields title should exclude other fields")
+                 (is (= 0 (:exit-code human-filtered-result)))
+                 (is (string/includes? (:output human-filtered-result) "TITLE"))
+                 (is (not (string/includes? (:output human-filtered-result) "UPDATED-AT"))
+                     "--fields title human output should not show UPDATED-AT column")
                  (done))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))

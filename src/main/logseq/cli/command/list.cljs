@@ -94,23 +94,31 @@
               :options options}}))
 
 (def ^:private list-page-field-map
-  {"title" :block/title
+  {"id" :db/id
+   "ident" :db/ident
+   "title" :block/title
    "uuid" :block/uuid
    "created-at" :block/created-at
    "updated-at" :block/updated-at})
 
 (def ^:private list-tag-field-map
-  {"name" :block/title
+  {"id" :db/id
+   "ident" :db/ident
    "title" :block/title
    "uuid" :block/uuid
+   "created-at" :block/created-at
+   "updated-at" :block/updated-at
    "properties" :logseq.property.class/properties
    "extends" :logseq.property.class/extends
    "description" :logseq.property/description})
 
 (def ^:private list-property-field-map
-  {"name" :block/title
+  {"id" :db/id
+   "ident" :db/ident
    "title" :block/title
    "uuid" :block/uuid
+   "created-at" :block/created-at
+   "updated-at" :block/updated-at
    "classes" :logseq.property/classes
    "type" :logseq.property/type
    "description" :logseq.property/description})
@@ -178,9 +186,7 @@
               fields (parse-field-list (:fields options))
               sorted (apply-sort items (:sort options) order list-page-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
-              final (if (:expand options)
-                      (apply-fields limited fields list-page-field-map)
-                      limited)]
+              final (apply-fields limited fields list-page-field-map)]
         {:status :ok
          :data {:items final}})))
 
@@ -195,9 +201,7 @@
               prepared (mapv #(prepare-tag-item % options) items)
               sorted (apply-sort prepared (:sort options) order list-tag-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
-              final (if (:expand options)
-                      (apply-fields limited fields list-tag-field-map)
-                      limited)]
+              final (apply-fields limited fields list-tag-field-map)]
         {:status :ok
          :data {:items final}})))
 
@@ -212,8 +216,6 @@
               prepared (mapv #(prepare-property-item % options) items)
               sorted (apply-sort prepared (:sort options) order list-property-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
-              final (if (:expand options)
-                      (apply-fields limited fields list-property-field-map)
-                      limited)]
+              final (apply-fields limited fields list-property-field-map)]
         {:status :ok
          :data {:items final}})))
