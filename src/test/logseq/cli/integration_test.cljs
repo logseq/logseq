@@ -384,6 +384,7 @@
                      (pr-str start-payload))
                  (is (contains? #{"open" :open}
                                 (get-in start-payload [:data :ws-state])))
+                 (stop-repo! data-dir cfg-path start-repo)
                  (done))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))
@@ -425,7 +426,8 @@
                                                            :auth-token "runtime-token"
                                                            :e2ee-password nil}]]
                          [:thread-api/db-sync-upload-graph ["logseq_db_sync-upload-graph"]]]
-                        @invoke-calls)))
+                        @invoke-calls))
+                 (stop-repo! data-dir cfg-path upload-repo))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
@@ -477,7 +479,8 @@
                  (is (= "ok" (:status info-payload)))
                  (is (= uploaded-graph-id
                         (get-in info-payload [:data :kv :logseq.kv/graph-uuid])))
-                 (is (= "logseq_db_sync-upload-graph-info" (first q-call))))
+                 (is (= "logseq_db_sync-upload-graph-info" (first q-call)))
+                 (stop-repo! data-dir cfg-path upload-repo))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
@@ -2200,6 +2203,7 @@
                  (is (string/includes? output "TITLE"))
                  (is (string/includes? output "TestPage"))
                  (is (string/includes? output "Count:"))
+                 (stop-repo! data-dir cfg-path "human-list-graph")
                  (done))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))
