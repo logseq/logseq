@@ -247,52 +247,6 @@
      (when shortcut
        [:span.ml-1 (render-keyboard-shortcut shortcut)])]))
 
-(rum/defc dropdown-with-links
-  [content-fn links
-   {:keys [outer-header outer-footer links-header links-footer] :as opts}]
-
-  (dropdown
-   content-fn
-   (fn [{:keys [close-fn]}]
-     (let [links-children
-           (let [links (if (fn? links) (links) links)
-                 links (remove nil? links)]
-             (for [{icon' :icon :keys [options title key hr hover-detail item _as-link?]} links]
-               (let [new-options
-                     (merge options
-                            (cond->
-                             {:title    hover-detail
-                              :on-click (fn [e]
-                                          (when-not (false? (when-let [on-click-fn (:on-click options)]
-                                                              (on-click-fn e)))
-                                            (close-fn)))}
-                              key
-                              (assoc :key key)))
-                     child (if hr
-                             nil
-                             (or item
-                                 [:div.flex.items-center
-                                  (when icon' icon')
-                                  [:div.title-wrap {:style {:margin-right "8px"
-                                                            :margin-left  "4px"}} title]]))]
-                 (if hr
-                   [:hr.menu-separator {:key (or key "dropdown-hr")}]
-                   (rum/with-key
-                     (menu-link new-options child)
-                     title)))))
-
-           wrapper-children
-           [:.menu-links-wrapper
-            (when links-header links-header)
-            links-children
-            (when links-footer links-footer)]]
-
-       (if (or outer-header outer-footer)
-         [:.menu-links-outer
-          outer-header wrapper-children outer-footer]
-         wrapper-children)))
-   opts))
-
 (declare button)
 (rum/defc notification-content
   [state content status uid]
