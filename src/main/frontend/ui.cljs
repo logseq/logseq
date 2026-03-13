@@ -19,8 +19,8 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
-            [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.core :as shortcut]
+            [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.rum :as r]
             [frontend.state :as state]
@@ -209,13 +209,24 @@
           (dropdown-content-wrapper dropdown-state close-fn modal-content modal-class {:z-index z-index}))))]))
 
 ;; `sequence` can be a list of symbols, a list of strings, or a string
-(defn render-keyboard-shortcut [sequence & {:as opts}]
+;; If `shortcut-id` is provided, uses raw binding from shortcut system for data attribute matching
+(defn render-keyboard-shortcut [sequence & {:keys [shortcut-id] :as opts}]
   (let [sequence (if (string? sequence)
                    (-> sequence ;; turn string into sequence
                        (string/trim)
                        (string/lower-case)
                        (string/split #" "))
-                   sequence)]
+                   sequence)
+        ;; Get raw binding for data attribute matching
+        raw-binding (if shortcut-id
+                      (shortcut-dh/shortcut-binding shortcut-id)
+                      (if (and (coll? sequence) (every? string? sequence))
+                        sequence
+                        (if (string? sequence)
+                          [sequence]
+                          sequence)))
+        opts (merge {:aria-hidden? true
+                     :raw-binding raw-binding} opts)]
     [:span.keyboard-shortcut
      (shui/shortcut sequence opts)]))
 
@@ -234,53 +245,7 @@
 
      [:span.flex-1 child]
      (when shortcut
-       [:span.ml-1 (render-keyboard-shortcut shortcut {:interactive? false})])]))
-
-(rum/defc dropdown-with-links
-  [content-fn links
-   {:keys [outer-header outer-footer links-header links-footer] :as opts}]
-
-  (dropdown
-   content-fn
-   (fn [{:keys [close-fn]}]
-     (let [links-children
-           (let [links (if (fn? links) (links) links)
-                 links (remove nil? links)]
-             (for [{icon' :icon :keys [options title key hr hover-detail item _as-link?]} links]
-               (let [new-options
-                     (merge options
-                            (cond->
-                             {:title    hover-detail
-                              :on-click (fn [e]
-                                          (when-not (false? (when-let [on-click-fn (:on-click options)]
-                                                              (on-click-fn e)))
-                                            (close-fn)))}
-                              key
-                              (assoc :key key)))
-                     child (if hr
-                             nil
-                             (or item
-                                 [:div.flex.items-center
-                                  (when icon' icon')
-                                  [:div.title-wrap {:style {:margin-right "8px"
-                                                            :margin-left  "4px"}} title]]))]
-                 (if hr
-                   [:hr.menu-separator {:key (or key "dropdown-hr")}]
-                   (rum/with-key
-                     (menu-link new-options child)
-                     title)))))
-
-           wrapper-children
-           [:.menu-links-wrapper
-            (when links-header links-header)
-            links-children
-            (when links-footer links-footer)]]
-
-       (if (or outer-header outer-footer)
-         [:.menu-links-outer
-          outer-header wrapper-children outer-footer]
-         wrapper-children)))
-   opts))
+       [:span.ml-1 (render-keyboard-shortcut shortcut)])]))
 
 (declare button)
 (rum/defc notification-content
@@ -526,16 +491,15 @@
                                               (if (and (gobj/get e "shiftKey") on-shift-chosen)
                                                 (on-shift-chosen item)
                                                 (on-chosen item e))))}
-                               (if item-render (item-render item chosen?) item)))]]
-
-                       (let [group-name (and (fn? get-group-name) (get-group-name item))]
-                         (if (and group-name (not (contains? @*groups group-name)))
-                           (do
-                             (swap! *groups conj group-name)
-                             [:div
-                              [:div.ui__ac-group-name group-name]
-                              item-cp])
-                           item-cp)))))]
+                               (if item-render (item-render item chosen?) item)))]
+                           group-name (and (fn? get-group-name) (get-group-name item))]
+                       (if (and group-name (not (contains? @*groups group-name)))
+                         (do
+                           (swap! *groups conj group-name)
+                           [:div
+                            [:div.ui__ac-group-name group-name]
+                            item-cp])
+                         item-cp))))]
     [:div#ui__ac {:class class}
      (if (seq matched)
        [:div#ui__ac-inner.hide-scrollbar
@@ -571,12 +535,25 @@
        :aria-hidden "true"}]]]))
 
 (defn keyboard-shortcut-from-config [shortcut-name & {:keys [pick-first?]}]
-  (let [built-in-binding (:binding (get shortcut-config/all-built-in-keyboard-shortcuts shortcut-name))
-        custom-binding  (when (state/custom-shortcuts) (get (state/custom-shortcuts) shortcut-name))
-        binding         (or custom-binding built-in-binding)]
-    (if (and pick-first? (coll? binding))
-      (first binding)
-      (shortcut-utils/decorate-binding binding))))
+  (let [binding (shortcut-dh/shortcut-binding shortcut-name)]
+    (cond
+      (or (nil? binding) (false? binding)) nil
+      (and pick-first? (coll? binding))    (first binding)
+      :else (shortcut-utils/decorate-binding binding))))
+
+(defn dropdown-shortcut
+  "Renders a compact shui shortcut for use inside dropdown menu items.
+   Accepts a shortcut config keyword (e.g. :editor/cut) or a raw binding
+   string (e.g. \"shift+click\"). Returns nil for disabled/missing bindings."
+  [shortcut-or-id]
+  (let [binding (if (keyword? shortcut-or-id)
+                  (let [b (shortcut-dh/shortcut-binding shortcut-or-id)]
+                    (when (and b (not (false? b)))
+                      (first b)))
+                  shortcut-or-id)]
+    (when binding
+      [:span.ml-auto.pl-2
+       (shui/shortcut binding {:glow? true})])))
 
 (defn loading
   ([] (loading (t :loading)))

@@ -162,16 +162,9 @@
  :help/title-usage "Bedienung"
 
  :keymap/all "Alle"
- :keymap/conflicts-for-label "Tastenbelegung-Konflikte für"
  :keymap/custom "Benutzerdefiniert"
- :keymap/customize-for-label "Tastaturkürzel anpassen"
  :keymap/disabled "Deaktiviert"
  :keymap/keystroke-filter "Tastenkombination-Filter"
- :keymap/keystroke-record-desc "Drücke eine beliebige Tastenfolge um Tastaturkürzel zu filtern"
- :keymap/keystroke-record-setup-label "Drücke eine beliebige Tastenfolge um ein Tastaturkürzel zu setzen"
- :keymap/restore-to-default "Auf Standard-Werte zurücksetzen"
- :keymap/search "Suche"
- :keymap/total "Tastaturkürzel gesamt"
  :keymap/unset "Nicht gesetzt"
 
  :left-side-bar/assets "Anlagen"
