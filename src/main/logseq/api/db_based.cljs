@@ -96,7 +96,10 @@
                                                      :reset-property-values (:reset-property-values opts)}))
        (editor-handler/save-block! repo
                                    (sdk-utils/uuid-or-throw-error block-uuid) content
-                                   (dissoc opts :properties))))))
+                                   (dissoc opts :properties))
+        ;; update editing block content if the block is currently being edited
+        (when (= block-uuid (some-> (state/get-edit-block) :block/uuid))
+          (state/set-edit-content! content))))))
 
 (defn get-property
   [k]
