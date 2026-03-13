@@ -61,16 +61,40 @@
   [^js self graph-id]
   (if-not (snapshot-upload-finished? self)
     (p/resolved false)
-    (if-let [db (some-> self .-env .-DB)]
+    (if-let [db (some-> self .-env (aget "DB"))]
       (p/let [graph-ready-for-use? (index/<graph-ready-for-use? db graph-id)]
         (not= false graph-ready-for-use?))
       (p/resolved true))))
 
 (defn- <set-graph-ready-for-use!
   [^js self graph-id graph-ready-for-use?]
-  (if-let [db (some-> self .-env .-DB)]
-    (index/<graph-ready-for-use-set! db graph-id graph-ready-for-use?)
-    (p/resolved nil)))
+  (if-let [db (some-> self .-env (aget "DB"))]
+    (p/let [result (index/<graph-ready-for-use-set! db graph-id graph-ready-for-use?)
+            meta (some-> result (aget "meta"))
+            rows-affected (or (some-> meta (aget "changes"))
+                              (some-> meta (aget "rows_written"))
+                              (some-> result (aget "changes"))
+                              (some-> result (aget "rows_written")))]
+      (when (or (nil? result)
+                (false? (some-> result (aget "success"))))
+        (throw (ex-info "failed to persist graph_ready_for_use"
+                        {:type :db-sync/graph-ready-for-use-set-failed
+                         :graph-id graph-id
+                         :graph-ready-for-use? graph-ready-for-use?
+                         :result result})))
+      (when (and (number? rows-affected)
+                 (<= rows-affected 0))
+        (throw (ex-info "graph_ready_for_use update affected no rows"
+                        {:type :db-sync/graph-ready-for-use-set-no-rows
+                         :graph-id graph-id
+                         :graph-ready-for-use? graph-ready-for-use?
+                         :rows-affected rows-affected
+                         :result result})))
+      result)
+    (p/rejected (ex-info "missing DB binding for graph_ready_for_use update"
+                         {:type :db-sync/missing-db-binding
+                          :graph-id graph-id
+                          :graph-ready-for-use? graph-ready-for-use?}))))
 
 (defn- import-snapshot-rows!
   [sql table rows]
