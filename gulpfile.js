@@ -88,7 +88,7 @@ const common = {
         'node_modules/html2canvas/dist/html2canvas.min.js',
         'node_modules/interactjs/dist/interact.min.js',
         'node_modules/photoswipe/dist/umd/*.js',
-        'node_modules/marked/marked.min.js',
+        'node_modules/marked/lib/marked.umd.js',
         'node_modules/@highlightjs/cdn-assets/highlight.min.js',
         'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
         'packages/ui/dist/ui.js',
@@ -131,7 +131,7 @@ const common = {
       () => gulp.src([
         'node_modules/katex/dist/katex.min.js',
         'node_modules/katex/dist/contrib/mhchem.min.js',
-        'node_modules/marked/marked.min.js',
+        'node_modules/marked/lib/marked.umd.js',
         'node_modules/@highlightjs/cdn-assets/highlight.min.js',
         'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
         'node_modules/react/umd/react.production.min.js',
