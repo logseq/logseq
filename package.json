@@ -33,7 +33,7 @@
         "postcss-import-ext-glob": "2.0.1",
         "postcss-nested": "6.0.0",
         "process": "^0.11.10",
-        "semver": "7.5.2",
+        "semver": "7.7.4",
         "shadow-cljs": "2.28.23",
         "source-map-loader": "^5.0.0",
         "stylelint": "^13.8.0",
