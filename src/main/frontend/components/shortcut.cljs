@@ -94,25 +94,106 @@
 
 (declare customize-shortcut-dialog-inner)
 
+(defn- keyboard-filter-remove-last-keystroke
+  [keystroke]
+  (when-not (string/blank? keystroke)
+    (let [parts (string/split keystroke #" ")
+          remaining (string/join " " (butlast parts))]
+      (when-not (string/blank? remaining)
+        remaining))))
+
+(defn- keyboard-filter-at-limit?
+  [keystroke]
+  (let [parts (string/split (string/trim keystroke) #" ")]
+    (and (seq (first parts))
+         (>= (count parts) max-key-sequence-length))))
+
+(defn- handle-keyboard-filter-record-key!
+  [^js e close-fn clear! commit! set-keystroke! set-accumulating! start-commit-timer!
+   *committed-ref *keystroke-ref *commit-timer]
+  (.preventDefault e)
+  (let [key-code (.-keyCode e)
+        is-esc? (= key-code 27)
+        is-backspace? (= key-code 8)
+        has-modifier? (or (.-metaKey e) (.-ctrlKey e) (.-altKey e))]
+    (cond
+      is-esc?
+      (do (.stopPropagation e)
+          (close-fn))
+
+      (and is-backspace? (not (rum/deref *committed-ref)))
+      (if-let [remaining (keyboard-filter-remove-last-keystroke (rum/deref *keystroke-ref))]
+        (do (set-keystroke! remaining)
+            (start-commit-timer! remaining))
+        (clear!))
+
+      is-backspace?
+      (clear!)
+
+      :else
+      (when-let [kn (some-> (shortcut/keyname e) util/trim-safe)]
+        (if has-modifier?
+          (do (when-let [timer (rum/deref *commit-timer)]
+                (js/clearTimeout timer))
+              (commit! kn))
+          (if (rum/deref *committed-ref)
+            (do (rum/set-ref! *committed-ref false)
+                (set-accumulating! true)
+                (set-keystroke! kn)
+                (start-commit-timer! kn))
+            (let [current-keystroke (rum/deref *keystroke-ref)]
+              (when-not (keyboard-filter-at-limit? current-keystroke)
+                (let [new-keystroke (util/trim-safe (str current-keystroke kn))]
+                  (set-accumulating! true)
+                  (set-keystroke! new-keystroke)
+                  (start-commit-timer! new-keystroke))))))))))
+
+(defn- keyboard-filter-record-view
+  [*ref-el keystroke accumulating? clear!]
+  (let [has-keystroke? (not (string/blank? keystroke))]
+    [:div.shortcut-filter-popover
+     {:tab-index -1
+      :ref       *ref-el}
+     [:div.shortcut-popover-title (t :keymap/keystroke-filter)]
+     [:div.shortcut-input-field
+      (when has-keystroke?
+        [:div {:class (str "shortcut-input-binding"
+                           (when accumulating? " shortcut-input-binding--pending"))}
+         (shui/shortcut keystroke)
+         [:button.shortcut-binding-remove
+          {:on-click (fn [^js e]
+                       (.stopPropagation e)
+                       (clear!))
+           :aria-label "Remove filter"}
+          (ui/icon "x" {:size 12})]])
+      (when-not has-keystroke?
+        [:span.shortcut-input-placeholder (t :keymap/press-keys-to-filter)])]
+     (shui/separator)
+     [:div.shortcut-toolbar
+      [:div
+       (when has-keystroke?
+         [:button.shortcut-toolbar-action.shortcut-toolbar-reset
+          {:on-click clear!}
+          (ui/icon "rotate" {:size 12})
+          [:span (t :keymap/clear)]])]
+      [:div.flex.items-center
+       (when has-keystroke?
+         [:span.shortcut-toolbar-hint
+          (t :keymap/hint-remove) (shui/shortcut "backspace" {:style :compact})])
+       [:span.shortcut-toolbar-hint
+        (t :keymap/hint-close) (shui/shortcut "escape" {:style :compact})]]]]))
+
 (rum/defc keyboard-filter-record-inner
   [initial-keystroke parent-set-keystroke! close-fn]
-
   (let [*ref-el (rum/use-ref nil)
-        ;; Local keystroke state (popup renders outside parent React tree)
         [keystroke set-local-keystroke!] (rum/use-state initial-keystroke)
-        ;; Wrapper that updates both local state and parent filter
         set-keystroke! (fn [ks]
                          (set-local-keystroke! ks)
                          (parent-set-keystroke! ks))
-        ;; accumulating? = dashed border while still typing a sequence
         [accumulating? set-accumulating!] (rum/use-state false)
         *commit-timer (rum/use-ref nil)
-        ;; committed-ref: after 400ms or modifier combo, next plain key starts fresh
         *committed-ref (rum/use-ref (not (string/blank? keystroke)))
         *keystroke-ref (rum/use-ref keystroke)
-
-        has-keystroke? (not (string/blank? keystroke))
-
         commit!
         (fn [ks]
           (set-keystroke! ks)
@@ -133,107 +214,21 @@
             (js/clearTimeout timer))
           (let [timer (js/setTimeout #(commit! ks) 400)]
             (rum/set-ref! *commit-timer timer)))]
-
-    ;; Keep ref in sync
     (rum/set-ref! *keystroke-ref keystroke)
-
-    ;; Scoped key handler on the popup element
     (use-scoped-key-handler
      *ref-el
-     (fn [^js e]
-       (.preventDefault e)
-       (let [key-code (.-keyCode e)
-             is-esc? (= key-code 27)
-             is-backspace? (= key-code 8)
-             has-modifier? (or (.-metaKey e) (.-ctrlKey e) (.-altKey e))]
-         (cond
-           ;; Esc: close the popup
-           is-esc?
-           (do (.stopPropagation e)
-               (close-fn))
-
-           ;; Backspace during accumulation: remove last key from sequence
-           (and is-backspace? (not (rum/deref *committed-ref)))
-           (let [ks (rum/deref *keystroke-ref)
-                 parts (when-not (string/blank? ks)
-                         (string/split ks #" "))
-                 remaining (when (seq parts)
-                             (string/join " " (butlast parts)))]
-             (if (or (string/blank? remaining) (nil? remaining))
-               (clear!)
-               (do (set-keystroke! remaining)
-                   (start-commit-timer! remaining))))
-
-           ;; Backspace after commit: clear the whole chip
-           is-backspace?
-           (clear!)
-
-           ;; Any other key
-           :else
-           (when-let [kn (shortcut/keyname e)]
-             (let [kn-trimmed (util/trim-safe kn)]
-               (if has-modifier?
-                 ;; Modifier combo: commit immediately, replace everything
-                 (do (when-let [timer (rum/deref *commit-timer)]
-                       (js/clearTimeout timer))
-                     (commit! kn-trimmed))
-                 ;; Plain key: accumulate or start fresh
-                 (if (rum/deref *committed-ref)
-                   ;; After a committed chip, start fresh
-                   (do (rum/set-ref! *committed-ref false)
-                       (set-accumulating! true)
-                       (set-keystroke! kn-trimmed)
-                       (start-commit-timer! kn-trimmed))
-                   ;; During accumulation, append
-                   (let [cur (rum/deref *keystroke-ref)
-                         parts (string/split (string/trim cur) #" ")
-                         at-limit? (and (seq (first parts)) (>= (count parts) max-key-sequence-length))]
-                     (when-not at-limit?
-                       (let [new-ks (util/trim-safe (str cur kn))]
-                         (set-accumulating! true)
-                         (set-keystroke! new-ks)
-                         (start-commit-timer! new-ks)))))))))))
+     #(handle-keyboard-filter-record-key! %
+                                          close-fn
+                                          clear!
+                                          commit!
+                                          set-keystroke!
+                                          set-accumulating!
+                                          start-commit-timer!
+                                          *committed-ref
+                                          *keystroke-ref
+                                          *commit-timer)
      [*commit-timer])
-
-    [:div.shortcut-filter-popover
-     {:tab-index -1
-      :ref       *ref-el}
-
-     ;; TITLE
-     [:div.shortcut-popover-title (t :keymap/keystroke-filter)]
-
-     ;; INPUT FIELD
-     [:div.shortcut-input-field
-      ;; Filter chip (pending or committed)
-      (when has-keystroke?
-        [:div {:class (str "shortcut-input-binding"
-                           (when accumulating? " shortcut-input-binding--pending"))}
-         (shui/shortcut keystroke)
-         [:button.shortcut-binding-remove
-          {:on-click (fn [^js e]
-                       (.stopPropagation e)
-                       (clear!))
-           :aria-label "Remove filter"}
-          (ui/icon "x" {:size 12})]])
-      ;; Placeholder
-      (when-not has-keystroke?
-        [:span.shortcut-input-placeholder (t :keymap/press-keys-to-filter)])]
-
-     ;; SEPARATOR + TOOLBAR
-     (shui/separator)
-     [:div.shortcut-toolbar
-      [:div
-       (when has-keystroke?
-         [:button.shortcut-toolbar-action.shortcut-toolbar-reset
-          {:on-click clear!}
-          (ui/icon "rotate" {:size 12})
-          [:span (t :keymap/clear)]])]
-      [:div.flex.items-center
-       (when has-keystroke?
-         [:span.shortcut-toolbar-hint
-          (t :keymap/hint-remove) (shui/shortcut "backspace" {:style :compact})])
-       [:span.shortcut-toolbar-hint
-        (t :keymap/hint-close) (shui/shortcut "escape" {:style :compact})]]]]))
+    (keyboard-filter-record-view *ref-el keystroke accumulating? clear!)))
 
 (defn- navigable-items
   "Query all navigable items (category headers + non-disabled rows) from the <ul>, in DOM order."
@@ -258,121 +253,134 @@
           below? (.scrollBy scroll-parent #js {:top (- (.-bottom row-rect) (.-bottom container-rect) -4)
                                                :behavior "instant"}))))))
 
+(def ^:private pane-filter-keys [:All :Custom :Unset :Disabled])
+
+(defn- pane-filter-title
+  [k]
+  (case k
+    :All (t :keymap/all)
+    :Custom (t :keymap/custom)
+    :Unset (t :keymap/unset)
+    :Disabled (t :keymap/disabled)
+    (name k)))
+
+(defn- pane-search-input
+  [q set-q! set-keystroke! *search-ref]
+  [:span.search-input-wrap
+   [:span.search-icon (ui/icon "search" {:size 15})]
+   [:input.form-input.is-small
+    {:placeholder (t :keymap/search-placeholder)
+     :ref         *search-ref
+     :value       (or q "")
+     :auto-focus  true
+     :on-key-down (fn [^js e]
+                    (let [kc (.-keyCode e)]
+                      (cond
+                        (= kc 27)
+                        (do (util/stop e)
+                            (if (string/blank? q)
+                              (some-> (rum/deref *search-ref) (.blur))
+                              (set-q! "")))
+
+                        (= kc 40)
+                        (when-let [row (some-> (rum/deref *search-ref)
+                                               (.closest ".cp__shortcut-page-x")
+                                               (.querySelector "ul li.shortcut-row:not([aria-disabled])"))]
+                          (.preventDefault e)
+                          (.focus row)
+                          (scroll-row-into-view! row)))))
+     :on-change   #(let [v (util/evalue %)]
+                     (when-not (string/blank? v)
+                       (set-keystroke! ""))
+                     (set-q! v))}]
+   (when-not (string/blank? q)
+     [:button.x
+      {:on-click (fn []
+                   (set-q! "")
+                   (js/setTimeout #(some-> (rum/deref *search-ref) (.focus)) 50))
+       :aria-label "Clear search"}
+      (ui/icon "x" {:size 12})])])
+
+(defn- open-keystroke-filter!
+  [^js e keystroke set-q! set-keystroke!]
+  (let [filter-popup-id :shortcut-keystroke-filter
+        anchor-el (.-currentTarget e)]
+    (set-q! "")
+    (shui/popup-show!
+     anchor-el
+     (fn [_]
+       (keyboard-filter-record-inner
+        keystroke set-keystroke!
+        #(shui/popup-hide! filter-popup-id)))
+     {:id filter-popup-id
+      :force-popover? true
+      :align "end"
+      :on-after-hide #(when anchor-el (.focus anchor-el))
+      :content-props
+      {:class "shortcut-filter-popover-content p-0 w-auto"
+       :collision-padding 12
+       :onOpenAutoFocus #(.preventDefault %)
+       :onEscapeKeyDown (fn [_] false)
+       :onPointerDownOutside (fn [_] nil)}})))
+
+(defn- pane-keystroke-filter-control
+  [keystroke set-q! set-keystroke!]
+  (let [open-filter! #(open-keystroke-filter! % keystroke set-q! set-keystroke!)]
+    (if (string/blank? keystroke)
+      [:button.shortcut-keystroke-inactive
+       {:on-click open-filter!}
+       (ui/icon "keyboard" {:size 14})
+       [:span (t :keymap/search-by-keys)]]
+      [:div.shortcut-keystroke-active
+       {:on-click open-filter!}
+       [:span.shortcut-keystroke-keys
+        (ui/icon "keyboard" {:size 14})
+        (shui/shortcut keystroke)]
+       [:button.shortcut-keystroke-clear
+        {:on-click (fn [^js e]
+                     (.stopPropagation e)
+                     (set-keystroke! ""))
+         :aria-label "Clear keystroke filter"}
+        (ui/icon "x" {:size 12})]])))
+
+(defn- pane-filter-pills
+  [filter-key set-filter-key! pill-counts]
+  [:div.shortcut-filter-pills
+   (for [k pane-filter-keys
+         :let [active? (or (and (= k :All) (nil? filter-key))
+                           (= filter-key k))]]
+     [:button.shortcut-filter-pill
+      {:key          (name k)
+       :class        (when active? "shortcut-filter-pill--active")
+       :aria-pressed (str active?)
+       :on-click     #(set-filter-key! (when-not (or (= k :All) (= filter-key k)) k))}
+      [:span.shortcut-filter-pill-title (pane-filter-title k)]
+      [:span.shortcut-filter-pill-count (str " \u00B7 " (get pill-counts k 0))]])])
+
+(defn- pane-secondary-actions
+  [q toggle-categories-fn]
+  (when (string/blank? q)
+    [:div.flex.items-center.gap-2
+     [:button.flex.items-center.icon-link
+      {:tab-index -1
+       :on-click toggle-categories-fn
+       :aria-label "Toggle categories pane"}
+      (ui/icon "fold")]
+     [:button.flex.items-center.icon-link
+      {:tab-index -1
+       :on-click refresh-shortcuts-list!
+       :aria-label "Refresh all"}
+      (ui/icon "refresh")]]))
+
 (rum/defc pane-controls
   [q set-q! filter-key set-filter-key! keystroke set-keystroke! toggle-categories-fn pill-counts *search-ref]
-  (let [in-keystroke? (not (string/blank? keystroke))]
-    [:div.cp__shortcut-page-x-pane-controls
-
-     ;; Row 1: search + keystroke button
-     [:div.shortcut-toolbar-row
-      [:span.search-input-wrap
-       [:span.search-icon (ui/icon "search" {:size 15})]
-       [:input.form-input.is-small
-        {:placeholder (t :keymap/search-placeholder)
-         :ref         *search-ref
-         :value       (or q "")
-         :auto-focus  true
-         :on-key-down (fn [^js e]
-                        (let [kc (.-keyCode e)]
-                          (cond
-                            (= kc 27) ;; Escape
-                            (do (util/stop e)
-                                (if (string/blank? q)
-                                  (some-> (rum/deref *search-ref) (.blur))
-                                  (set-q! "")))
-
-                            (= kc 40) ;; ArrowDown → focus first navigable row
-                            (when-let [row (some-> (rum/deref *search-ref)
-                                                   (.closest ".cp__shortcut-page-x")
-                                                   (.querySelector "ul li.shortcut-row:not([aria-disabled])"))]
-                              (.preventDefault e)
-                              (.focus row)
-                              (scroll-row-into-view! row)))))
-         :on-change   #(let [v (util/evalue %)]
-                         (when-not (string/blank? v)
-                           (set-keystroke! ""))
-                         (set-q! v))}]
-
-       (when-not (string/blank? q)
-         [:button.x
-          {:on-click (fn []
-                       (set-q! "")
-                       (js/setTimeout #(some-> (rum/deref *search-ref) (.focus)) 50))
-           :aria-label "Clear search"}
-          (ui/icon "x" {:size 12})])]
-
-      ;; keystroke filter button
-      (let [filter-popup-id :shortcut-keystroke-filter
-            open-filter! (fn [^js e]
-                           (let [anchor-el (.-currentTarget e)]
-                             (set-q! "")
-                             (shui/popup-show!
-                              anchor-el
-                              (fn [_]
-                                (keyboard-filter-record-inner
-                                 keystroke set-keystroke!
-                                 #(shui/popup-hide! filter-popup-id)))
-                              {:id filter-popup-id
-                               :force-popover? true
-                               :align "end"
-                               :on-after-hide #(when anchor-el (.focus anchor-el))
-                               :content-props
-                               {:class "shortcut-filter-popover-content p-0 w-auto"
-                                :collision-padding 12
-                                :onOpenAutoFocus #(.preventDefault %)
-                                :onEscapeKeyDown (fn [_] false)
-                                :onPointerDownOutside (fn [_] nil)}})))]
-        (if in-keystroke?
-          [:div.shortcut-keystroke-active
-           {:on-click open-filter!}
-           [:span.shortcut-keystroke-keys
-            (ui/icon "keyboard" {:size 14})
-            (shui/shortcut keystroke)]
-           [:button.shortcut-keystroke-clear
-            {:on-click (fn [^js e]
-                         (.stopPropagation e)
-                         (set-keystroke! ""))
-             :aria-label "Clear keystroke filter"}
-            (ui/icon "x" {:size 12})]]
-          [:button.shortcut-keystroke-inactive
-           {:on-click open-filter!}
-           (ui/icon "keyboard" {:size 14})
-           [:span (t :keymap/search-by-keys)]]))]
-
-     ;; Row 2: filter pills + fold + refresh
-     [:div.shortcut-pills-row
-      [:div.shortcut-filter-pills
-       (for [k [:All :Custom :Unset :Disabled]
-             :let [active? (or (and (= k :All) (nil? filter-key))
-                               (= filter-key k))
-                   cnt (get pill-counts k 0)
-                   title (case k
-                           :All (t :keymap/all)
-                           :Custom (t :keymap/custom)
-                           :Unset (t :keymap/unset)
-                           :Disabled (t :keymap/disabled)
-                           (name k))]]
-         [:button.shortcut-filter-pill
-          {:key   (name k)
-           :class (when active? "shortcut-filter-pill--active")
-           :aria-pressed (str active?)
-           :on-click #(set-filter-key! (when-not (or (= k :All) (= filter-key k)) k))}
-          [:span.shortcut-filter-pill-title title]
-          [:span.shortcut-filter-pill-count (str " \u00B7 " cnt)]])]
-
-      (when (string/blank? q)
-        [:div.flex.items-center.gap-2
-         [:button.flex.items-center.icon-link
-          {:tab-index -1
-           :on-click toggle-categories-fn
-           :aria-label "Toggle categories pane"}
-          (ui/icon "fold")]
-
-         [:button.flex.items-center.icon-link
-          {:tab-index -1
-           :on-click refresh-shortcuts-list!
-           :aria-label "Refresh all"}
-          (ui/icon "refresh")]])]]))
+  [:div.cp__shortcut-page-x-pane-controls
+   [:div.shortcut-toolbar-row
+    (pane-search-input q set-q! set-keystroke! *search-ref)
+    (pane-keystroke-filter-control keystroke set-q! set-keystroke!)]
+   [:div.shortcut-pills-row
+    (pane-filter-pills filter-key set-filter-key! pill-counts)
+    (pane-secondary-actions q toggle-categories-fn)]])
 
 (rum/defc shortcut-desc-label
   [id binding-map]
