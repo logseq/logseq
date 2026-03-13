@@ -4,7 +4,7 @@
             ["path" :as node-path]
             [clojure.edn :as edn]
             [clojure.string :as string]
-            [clojure.test :refer [is use-fixtures testing deftest]]
+            [clojure.test :refer [is testing deftest]]
             [frontend.fs :as fs]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]
@@ -15,9 +15,6 @@
             [frontend.test.node-helper :as test-node-helper]
             [malli.generator :as mg]
             [promesa.core :as p]))
-
-;; For tests that call fs/readFile
-(use-fixtures :once node-fixtures/redef-get-fs)
 
 (defn- create-global-config-dir
   []
@@ -35,6 +32,8 @@
   (fs-node/rmdirSync (node-path/dirname config-dir)))
 
 (deftest-async add-or-update-plugin
+  {:before (node-fixtures/setup-get-fs!)
+   :after (node-fixtures/restore-get-fs!)}
   (let [dir (create-global-config-dir)
         plugin-to-add {:id :foo :repo "some-user/foo" :version "v0.9.0"}
         body (pr-str (mg/generate plugin-config-schema/Plugins-edn {:size 10}))]
@@ -50,6 +49,8 @@
        (p/finally #(delete-global-config-dir dir))))))
 
 (deftest-async remove-plugin
+  {:before (node-fixtures/setup-get-fs!)
+   :after (node-fixtures/restore-get-fs!)}
   (let [dir (create-global-config-dir)
         ;; use seed to consistently generate 5 plugins
         ;; if we want more randomness we could look into gen/such-that
@@ -68,6 +69,8 @@
        (p/finally #(delete-global-config-dir dir))))))
 
 (deftest-async open-replace-plugins-modal-malformed-edn
+  {:before (node-fixtures/setup-get-fs!)
+   :after (node-fixtures/restore-get-fs!)}
   (let [dir (create-global-config-dir)
         error-message (atom nil)]
     (fs-node/writeFileSync (plugin-config-handler/plugin-config-path) "{:id {}")
@@ -82,6 +85,8 @@
        (p/finally #(delete-global-config-dir dir))))))
 
 (deftest-async open-replace-plugins-modal-invalid-edn
+  {:before (node-fixtures/setup-get-fs!)
+   :after (node-fixtures/restore-get-fs!)}
   (let [dir (create-global-config-dir)
         error-message (atom nil)]
     ;; Missing a couple plugin keys

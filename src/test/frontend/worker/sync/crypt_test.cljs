@@ -5,6 +5,8 @@
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
+(def ^:private decrypt-snapshot-datoms-batch-orig sync-crypt/<decrypt-snapshot-datoms-batch)
+
 (defn- <encrypt-text-for-snapshot
   [aes-key value]
   (p/let [encrypted (crypt/<encrypt-text aes-key (ldb/write-transit-str value))]
@@ -13,6 +15,7 @@
 ;; bb dev:test -v frontend.worker.sync.crypt-test works, however bb dev:lint-and-test failed
 (deftest decrypt-snapshot-datoms-test
   (async done
+         (set! sync-crypt/<decrypt-snapshot-datoms-batch decrypt-snapshot-datoms-batch-orig)
          (-> (p/let [aes-key (crypt/<generate-aes-key)
                      encrypted-title (<encrypt-text-for-snapshot aes-key "Title")
                      encrypted-name (<encrypt-text-for-snapshot aes-key "name")
