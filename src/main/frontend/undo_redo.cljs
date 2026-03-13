@@ -330,7 +330,6 @@
       (assert-reversed-tx-safe! conn reversed-tx-data)
       reversed-tx-data)
     (catch :default e
-      (prn :debug :undo-redo :error (:error (ex-data e)))
       (when-not (contains? #{:block-moved-or-target-deleted
                              :block-children-exists
                              :block-parent-missing}
@@ -397,7 +396,6 @@
                   (undo-redo-aux repo undo?))))))))
 
     (when ((if undo? empty-undo-stack? empty-redo-stack?) repo)
-      (prn (str "No further " (if undo? "undo" "redo") " information"))
       (if undo? ::empty-undo-stack ::empty-redo-stack))))
 
 (defn undo

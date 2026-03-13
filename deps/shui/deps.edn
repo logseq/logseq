@@ -7,4 +7,4 @@
                                          :sha     "5d672bf84ed944414b9f61eeb83808ead7be9127"}
 
   medley/medley                         {:mvn/version "1.4.0"}
-  cljs-bean/cljs-bean                   {:mvn/version "1.5.0"}}}
+  cljs-bean/cljs-bean                   {:mvn/version "1.9.0"}}}

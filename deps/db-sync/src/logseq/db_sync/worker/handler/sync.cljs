@@ -14,10 +14,11 @@
             [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
-(def ^:private snapshot-download-batch-size 5000)
+(def ^:private snapshot-download-batch-size 10000)
 (def ^:private snapshot-cache-control "private, max-age=300")
 (def ^:private snapshot-content-type "application/transit+json")
 (def ^:private snapshot-content-encoding "gzip")
+(def ^:private snapshot-uploading-meta-key :snapshot-uploading?)
 ;; 10m
 (def ^:private snapshot-multipart-part-size (* 10 1024 1024))
 
@@ -51,6 +52,11 @@
   (ensure-schema! self)
   (storage/get-t (.-sql self)))
 
+(defn ready-for-sync? [^js self]
+
+  (ensure-schema! self)
+  (not= "true" (storage/get-meta (.-sql self) snapshot-uploading-meta-key)))
+
 (defn- fetch-kvs-rows
   [sql after limit]
   (common/get-sql-rows
@@ -58,6 +64,22 @@
                     "select addr, content, addresses from kvs where addr > ? order by addr asc limit ?"
                     after
                     limit)))
+
+(defn- snapshot-row-count
+  [sql]
+  (let [row (first (common/get-sql-rows
+                    (common/sql-exec sql "select count(*) as total from kvs")))]
+    (cond
+      (array? row)
+      (aget row 0)
+
+      (some? row)
+      (or (aget row "total")
+          (aget row "count(*)")
+          0)
+
+      :else
+      0)))
 
 (defn- snapshot-row->tuple [row]
   (if (array? row)
@@ -259,6 +281,7 @@
   (let [sql (.-sql self)]
     (ensure-schema! self)
     (when reset?
+      (set! (.-conn self) nil)
       (reset-import! sql))
     (import-snapshot-rows! sql "kvs" rows)))
 
@@ -304,6 +327,11 @@
 (defn handle-tx-batch! [^js self sender txs t-before]
   (let [current-t (t-now self)]
     (cond
+      (not (ready-for-sync? self))
+      {:type "tx/reject"
+       :reason "snapshot upload in progress"
+       :t current-t}
+
       (or (not (number? t-before)) (neg? t-before))
       {:type "tx/reject"
        :reason "invalid t-before"}
@@ -344,6 +372,7 @@
       (http/bad-request "missing graph id")
       (let [use-compression? (exists? js/CompressionStream)
             content-encoding (when use-compression? snapshot-content-encoding)
+            row-count (snapshot-row-count (.-sql self))
             stream (snapshot-export-stream self)
             stream (if use-compression?
                      (maybe-compress-stream stream)
@@ -353,6 +382,7 @@
                            :headers (js/Object.assign
                                      #js {"content-type" snapshot-content-type
                                           "content-encoding" (or content-encoding "identity")}
+                                     #js {"x-snapshot-row-count" (str row-count)}
                                      (common/cors-headers))})))))
 
 (defn- handle-sync-snapshot-download
@@ -427,11 +457,17 @@
     true
     (not (contains? #{"false" "0"} value))))
 
+(defn- parse-finished-param
+  [value]
+  (contains? #{"true" "1"} value))
+
 (defn- handle-sync-snapshot-upload
   [^js self request url]
   (let [graph-id (graph-id-from-request request)
         reset-param (.get (.-searchParams url) "reset")
         reset? (parse-reset-param reset-param)
+        finished-param (.get (.-searchParams url) "finished")
+        finished? (parse-finished-param finished-param)
         req-encoding (.get (.-headers request) "content-encoding")]
     (cond
       (not (seq graph-id))
@@ -446,8 +482,13 @@
         (if (and (= encoding snapshot-content-encoding)
                  (not (exists? js/DecompressionStream)))
           (http/error-response "gzip not supported" 500)
-          (p/let [stream (maybe-decompress-stream stream encoding)
-                  count (import-snapshot-stream! self stream reset?)]
+          (p/let [_ (ensure-schema! self)
+                  _ (when reset?
+                      (storage/set-meta! (.-sql self) snapshot-uploading-meta-key true))
+                  stream (maybe-decompress-stream stream encoding)
+                  count (import-snapshot-stream! self stream reset?)
+                  _ (when finished?
+                      (storage/set-meta! (.-sql self) snapshot-uploading-meta-key false))]
             (http/json-response :sync/snapshot-upload {:ok true
                                                        :count count})))))))
 

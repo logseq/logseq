@@ -17,13 +17,3 @@
 
 (defn tx->transit [tx-data]
   (common/write-transit tx-data))
-
-(defn datoms->wire [datoms]
-  (->> datoms
-       (map (fn [d]
-              {:e (:e d)
-               :a (:a d)
-               :v (:v d)
-               :tx (:tx d)
-               :added (:added d)}))
-       (vec)))
