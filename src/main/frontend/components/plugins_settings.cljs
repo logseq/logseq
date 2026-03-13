@@ -3,6 +3,7 @@
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.security :as security]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.functions :refer [debounce]]
@@ -10,17 +11,10 @@
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
 
-(defn- dom-purify
-  [html opts]
-  (try
-    (js-invoke js/DOMPurify "sanitize" html (bean/->js opts))
-    (catch js/Error e
-      (js/console.warn e) html)))
-
 (rum/defc html-content
   [html]
   [:div.html-content.pl-1.flex-1.text-sm
-   {:dangerouslySetInnerHTML {:__html (dom-purify html nil)}}])
+   {:dangerouslySetInnerHTML {:__html (security/sanitize-html html)}}])
 
 (rum/defc edit-settings-file
   [pid {:keys [class edit-mode set-edit-mode!]}]

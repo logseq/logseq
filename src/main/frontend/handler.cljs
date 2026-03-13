@@ -179,6 +179,8 @@
                         nil)))))))
 
 (defn stop! []
+  (db-browser/stop-workers!)
+  (reset! vector-search-flows/*infer-worker-ready false)
   (prn "stop!"))
 
 (defn quit-and-install-new-version!

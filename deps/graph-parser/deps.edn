@@ -4,7 +4,7 @@
  {com.andrewmcveigh/cljs-time {:git/url "https://github.com/logseq/cljs-time" ;; fork
                                :sha     "5704fbf48d3478eedcf24d458c8964b3c2fd59a9"}
   funcool/promesa             {:mvn/version "11.0.678"}
-  cljs-bean/cljs-bean         {:mvn/version "1.5.0"}
+  cljs-bean/cljs-bean         {:mvn/version "1.9.0"}
 
   ;; Any other deps should be added here and to nbb.edn
   borkdude/rewrite-edn {:mvn/version "0.4.9"}

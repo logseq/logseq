@@ -32,6 +32,25 @@
   [platform]
   (:storage platform))
 
+(defn install-storage-pool
+  [platform sqlite pool-name]
+  (if-let [f (get-in platform [:storage :install-opfs-pool])]
+    (f sqlite pool-name)
+    (throw (ex-info "platform storage/install-opfs-pool missing"
+                    {:pool-name pool-name}))))
+
+(defn resolve-db-path
+  [platform repo pool path]
+  (if-let [f (get-in platform [:storage :resolve-db-path])]
+    (f repo pool path)
+    path))
+
+(defn remove-storage-pool!
+  [platform pool]
+  (if-let [f (get-in platform [:storage :remove-vfs!])]
+    (f pool)
+    nil))
+
 (defn kv-get
   [platform k]
   (if-let [f (get-in platform [:kv :get])]
