@@ -57,27 +57,27 @@
         (println :debug :db-gc "There's no garbage data that's need to be collected.")))))
 
 (defn- get-unused-addresses-node-version
-  [^js db]
-  (let [schema (let [^js stmt (.prepare db "select content from kvs where addr = ?")
-                     content (.-content (.get stmt 0))]
+  [^object db]
+  (let [schema (let [^object stmt (.prepare db "select content from kvs where addr = ?")
+                     content (.-content (.get ^object stmt 0))]
                  (sqlite-util/transit-read content))
         internal-addrs (set [0 1 (:eavt schema) (:avet schema) (:aevt schema)])
-        non-refed-addrs (let [^js stmt (.prepare db get-non-refed-addrs-sql)]
-                          (->> (.all ^object stmt)
+        non-refed-addrs (let [^object stmt (.prepare db get-non-refed-addrs-sql)]
+                          (->> (.all stmt)
                                bean/->clj
                                (map :addr)
                                (set)))]
     (set/difference non-refed-addrs internal-addrs)))
 
 (defn- get-unused-addresses-node-walk-version
-  [^js db]
-  (let [schema (let [^js stmt (.prepare db "select content from kvs where addr = ?")
-                     content (.-content (.get stmt 0))]
+  [^object db]
+  (let [schema (let [^object stmt (.prepare db "select content from kvs where addr = ?")
+                     content (.-content (.get ^object stmt 0))]
                  (sqlite-util/transit-read content))
         set-addresses #{(:eavt schema) (:avet schema) (:aevt schema)}
         internal-addresses (conj set-addresses 0 1)
-        parent->children (let [^js stmt (.prepare db "select addr, addresses from kvs")]
-                           (->> (.all ^object stmt)
+        parent->children (let [^object stmt (.prepare db "select addr, addresses from kvs")]
+                           (->> (.all stmt)
                                 bean/->clj
                                 (map (fn [{:keys [addr addresses]}]
                                        [addr (bean/->clj (js/JSON.parse addresses))]))
@@ -95,18 +95,18 @@
   (let [unused-addresses (if walk?
                            (get-unused-addresses-node-walk-version db)
                            (get-unused-addresses-node-version db))
-        addrs-count (let [^js stmt (.prepare db "select count(*) as c from kvs")]
+        addrs-count (let [^object stmt (.prepare db "select count(*) as c from kvs")]
                       (.-c (.get stmt)))]
     (println :debug "addrs total count: " addrs-count)
     (if (seq unused-addresses)
       (do
         (println :debug :db-gc :unused-addresses-count (count unused-addresses))
-        (let [^js stmt (.prepare db "Delete from kvs where addr = ?")
+        (let [^object stmt (.prepare db "Delete from kvs where addr = ?")
               delete (.transaction
                       db
                       (fn [addrs]
                         (doseq [addr addrs]
-                          (.run stmt addr))))]
+                          (.run ^object stmt addr))))]
           (delete (bean/->js unused-addresses))
           (when-not walk?
             (gc-kvs-table-node-version! db false))))

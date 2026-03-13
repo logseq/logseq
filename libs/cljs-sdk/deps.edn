@@ -1,6 +1,6 @@
 {:paths ["src" "test"]
  :deps {org.clojure/clojurescript {:mvn/version "1.12.42"}
-        cljs-bean/cljs-bean       {:mvn/version "1.5.0"}}
+        cljs-bean/cljs-bean       {:mvn/version "1.9.0"}}
 
  :npm-deps {"@logseq/libs" "0.2.3"}
 

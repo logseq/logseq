@@ -5,7 +5,7 @@
   ;; datascript/datascript                 {:local/root "../../../../datascript"}
   datascript-transit/datascript-transit {:mvn/version "0.3.0"
                                          :exclusions [datascript/datascript]}
-  cljs-bean/cljs-bean         {:mvn/version "1.5.0"}
+  cljs-bean/cljs-bean         {:mvn/version "1.9.0"}
   com.cognitect/transit-cljs   {:mvn/version "0.8.280"}
   org.flatland/ordered         {:mvn/version "1.15.11"}
 

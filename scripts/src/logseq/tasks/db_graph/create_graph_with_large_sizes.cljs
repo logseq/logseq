@@ -9,9 +9,12 @@
             [nbb.classpath :as cp]
             [nbb.core :as nbb]))
 
-(def ^:private default-block-title "Block")
 (def ^:private target-entities-per-batch 25000)
 (def ^:private max-pages-per-batch 1000)
+(def ^:private min-block-title-length 24)
+(def ^:private max-block-title-length 256)
+(def ^:private block-title-fragment
+  "captures project updates, implementation details, follow-up notes, and review context ")
 
 (defn- parse-long-option
   [value]
@@ -29,8 +32,19 @@
       (max 1)
       (min max-pages-per-batch)))
 
+(defn- build-block-title
+  [page-idx block-idx]
+  (let [target-length (+ min-block-title-length
+                         (mod (+ (* page-idx 17) (* block-idx 31))
+                              (inc (- max-block-title-length min-block-title-length))))
+        prefix (str "Page " page-idx " block " block-idx " summary ")
+        raw-title (str prefix
+                       (apply str (repeat (inc (quot target-length (count block-title-fragment)))
+                                          block-title-fragment)))]
+    (subs raw-title 0 target-length)))
+
 (defn- build-blocks
-  [blocks-per-page next-id]
+  [page-idx blocks-per-page next-id]
   (loop [block-idx 0
          blocks (transient [])]
     (if (= block-idx blocks-per-page)
@@ -38,7 +52,7 @@
       (recur (inc block-idx)
              (conj! blocks
                     {:block/uuid (next-id)
-                     :block/title default-block-title})))))
+                     :block/title (build-block-title page-idx block-idx)})))))
 
 (defn build-page-and-blocks-batch
   ([start-idx page-count blocks-per-page]
@@ -52,7 +66,7 @@
               (conj! pages-and-blocks
                      {:page {:block/uuid (next-id)
                              :block/title (str "Page-" (+ start-idx page-idx))}
-                      :blocks (build-blocks blocks-per-page next-id)}))))))
+                      :blocks (build-blocks (+ start-idx page-idx) blocks-per-page next-id)}))))))
 
 (defn page-and-block-batches
   ([{:keys [pages blocks batch-pages]}]
