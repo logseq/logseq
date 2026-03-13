@@ -5,6 +5,7 @@
             [logseq.db :as ldb]
             [logseq.db-sync.batch :as batch]
             [logseq.db-sync.common :as common]
+            [logseq.db-sync.index :as index]
             [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.snapshot :as snapshot]
             [logseq.db-sync.storage :as storage]
@@ -52,10 +53,24 @@
   (ensure-schema! self)
   (storage/get-t (.-sql self)))
 
-(defn ready-for-sync? [^js self]
-
+(defn snapshot-upload-finished? [^js self]
   (ensure-schema! self)
   (not= "true" (storage/get-meta (.-sql self) snapshot-uploading-meta-key)))
+
+(defn <ready-for-sync?
+  [^js self graph-id]
+  (if-not (snapshot-upload-finished? self)
+    (p/resolved false)
+    (if-let [db (some-> self .-env .-DB)]
+      (p/let [graph-ready-for-use? (index/<graph-ready-for-use? db graph-id)]
+        (not= false graph-ready-for-use?))
+      (p/resolved true))))
+
+(defn- <set-graph-ready-for-use!
+  [^js self graph-id graph-ready-for-use?]
+  (if-let [db (some-> self .-env .-DB)]
+    (index/<graph-ready-for-use-set! db graph-id graph-ready-for-use?)
+    (p/resolved nil)))
 
 (defn- import-snapshot-rows!
   [sql table rows]
@@ -72,7 +87,7 @@
   (common/sql-exec sql "delete from sync_meta")
   (storage/set-t! sql 0))
 
-(defn- graph-id-from-request [request]
+(defn graph-id-from-request [request]
   (let [header-id (.get (.-headers request) "x-graph-id")
         url (js/URL. (.-url request))
         param-id (.get (.-searchParams url) "graph-id")]
@@ -285,7 +300,7 @@
 (defn handle-tx-batch! [^js self sender txs t-before]
   (let [current-t (t-now self)]
     (cond
-      (not (ready-for-sync? self))
+      (not (snapshot-upload-finished? self))
       {:type "tx/reject"
        :reason "snapshot upload in progress"
        :t current-t}
@@ -318,10 +333,14 @@
 (defn- handle-sync-pull
   [^js self ^js url]
   (let [raw-since (.get (.-searchParams url) "since")
-        since (if (some? raw-since) (parse-int raw-since) 0)]
+        since (if (some? raw-since) (parse-int raw-since) 0)
+        graph-id (.get (.-searchParams url) "graph-id")]
     (if (or (and (some? raw-since) (not (number? since))) (neg? since))
       (http/bad-request "invalid since")
-      (http/json-response :sync/pull (pull-response self since)))))
+      (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
+        (if-not ready-for-sync?
+          (http/error-response "graph not ready" 409)
+          (http/json-response :sync/pull (pull-response self since)))))))
 
 (defn- handle-sync-snapshot-stream
   [^js self request]
@@ -353,26 +372,29 @@
       (http/error-response "missing assets bucket" 500)
 
       :else
-      (p/let [snapshot-id (str (random-uuid))
-              key (snapshot-key graph-id snapshot-id)
-              stream (-> (snapshot-export-stream self)
-                         (maybe-compress-stream))
-              multipart? (and (some? (.-createMultipartUpload bucket))
-                              (fn? (.-createMultipartUpload bucket)))
-              opts #js {:httpMetadata #js {:contentType snapshot-content-type
-                                           :contentEncoding snapshot-content-encoding
-                                           :cacheControl snapshot-cache-control}
-                        :customMetadata #js {:purpose "snapshot"
-                                             :created-at (str (common/now-ms))}}
-              _ (if multipart?
-                  (upload-multipart! bucket key stream opts)
-                  (p/let [body (<buffer-stream stream)]
-                    (.put bucket key body opts)))
-              url (snapshot-url request graph-id snapshot-id)]
-        (http/json-response :sync/snapshot-download {:ok true
-                                                     :key key
-                                                     :url url
-                                                     :content-encoding snapshot-content-encoding})))))
+      (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
+        (if-not ready-for-sync?
+          (http/error-response "graph not ready" 409)
+          (p/let [snapshot-id (str (random-uuid))
+                  key (snapshot-key graph-id snapshot-id)
+                  stream (-> (snapshot-export-stream self)
+                             (maybe-compress-stream))
+                  multipart? (and (some? (.-createMultipartUpload bucket))
+                                  (fn? (.-createMultipartUpload bucket)))
+                  opts #js {:httpMetadata #js {:contentType snapshot-content-type
+                                               :contentEncoding snapshot-content-encoding
+                                               :cacheControl snapshot-cache-control}
+                            :customMetadata #js {:purpose "snapshot"
+                                                 :created-at (str (common/now-ms))}}
+                  _ (if multipart?
+                      (upload-multipart! bucket key stream opts)
+                      (p/let [body (<buffer-stream stream)]
+                        (.put bucket key body opts)))
+                  url (snapshot-url request graph-id snapshot-id)]
+            (http/json-response :sync/snapshot-download {:ok true
+                                                         :key key
+                                                         :url url
+                                                         :content-encoding snapshot-content-encoding})))))))
 
 (defn- handle-sync-admin-reset
   [^js self]
@@ -391,13 +413,17 @@
            (if (nil? result)
              (http/bad-request "missing body")
              (let [body (js->clj result :keywordize-keys true)
-                   body (http/coerce-http-request :sync/tx-batch body)]
+                   body (http/coerce-http-request :sync/tx-batch body)
+                   graph-id (graph-id-from-request request)]
                (if (nil? body)
                  (http/bad-request "invalid tx")
                  (let [{:keys [txs t-before]} body
                        t-before (parse-int t-before)]
                    (if (string? txs)
-                     (http/json-response :sync/tx-batch (handle-tx-batch! self nil txs t-before))
+                     (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
+                       (if-not ready-for-sync?
+                         (http/error-response "graph not ready" 409)
+                         (http/json-response :sync/tx-batch (handle-tx-batch! self nil txs t-before))))
                      (http/bad-request "invalid tx")))))))))
 
 (defn- parse-reset-param
@@ -434,10 +460,14 @@
           (p/let [_ (ensure-schema! self)
                   _ (when reset?
                       (storage/set-meta! (.-sql self) snapshot-uploading-meta-key true))
+                  _ (when reset?
+                      (<set-graph-ready-for-use! self graph-id false))
                   stream (maybe-decompress-stream stream encoding)
                   count (import-snapshot-stream! self stream reset?)
                   _ (when finished?
-                      (storage/set-meta! (.-sql self) snapshot-uploading-meta-key false))]
+                      (storage/set-meta! (.-sql self) snapshot-uploading-meta-key false))
+                  _ (when finished?
+                      (<set-graph-ready-for-use! self graph-id true))]
             (http/json-response :sync/snapshot-upload {:ok true
                                                        :count count})))))))
 

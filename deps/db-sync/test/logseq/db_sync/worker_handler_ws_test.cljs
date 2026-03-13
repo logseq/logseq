@@ -1,10 +1,11 @@
 (ns logseq.db-sync.worker-handler-ws-test
-  (:require [cljs.test :refer [deftest is]]
+  (:require [cljs.test :refer [async deftest is]]
             [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
             [logseq.db-sync.worker.handler.ws :as ws-handler]
             [logseq.db-sync.worker.presence :as presence]
-            [logseq.db-sync.worker.ws :as ws]))
+            [logseq.db-sync.worker.ws :as ws]
+            [promesa.core :as p]))
 
 (deftest presence-message-broadcast-excludes-source-client-test
   (let [source-ws #js {:readyState 1}
@@ -28,18 +29,24 @@
            (mapv :msg @send-events)))))
 
 (deftest websocket-connection-is-rejected-while-snapshot-upload-is-in-progress-test
-  (let [accepted (atom [])
-        presence-events (atom [])
-        self #js {:state #js {:acceptWebSocket (fn [socket]
-                                                 (swap! accepted conj socket))}}
-        request (js/Request. "http://localhost/sync/graph-1/ws?graph-id=graph-1"
-                             #js {:method "GET"})
-        response (with-redefs [sync-handler/ready-for-sync? (fn [_] false)
+  (async done
+         (let [accepted (atom [])
+               presence-events (atom [])
+               self #js {:state #js {:acceptWebSocket (fn [socket]
+                                                        (swap! accepted conj socket))}}
+               request (js/Request. "http://localhost/sync/graph-1/ws?graph-id=graph-1"
+                                    #js {:method "GET"})]
+           (-> (p/with-redefs [sync-handler/<ready-for-sync? (fn [_ _] (p/resolved false))
                                presence/add-presence! (fn [& _]
                                                         (swap! presence-events conj :add))
                                presence/broadcast-online-users! (fn [& _]
                                                                   (swap! presence-events conj :broadcast))]
-                   (ws-handler/handle-ws self request))]
-    (is (= 409 (.-status response)))
-    (is (empty? @accepted))
-    (is (empty? @presence-events))))
+                 (ws-handler/handle-ws self request))
+               (p/then (fn [response]
+                         (is (= 409 (.-status response)))
+                         (is (empty? @accepted))
+                         (is (empty? @presence-events))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))

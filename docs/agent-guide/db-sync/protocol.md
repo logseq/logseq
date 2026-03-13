@@ -52,9 +52,10 @@
 
 ### Graphs (index DO)
 - `GET /graphs`
-  - List graphs the user owns. Response: `{"graphs":[{graph-id, graph-name, schema-version?, created-at, updated-at}...]}`.
+  - List graphs the user owns. Response: `{"graphs":[{graph-id, graph-name, schema-version?, graph-ready-for-use?, created-at, updated-at}...]}`.
 - `POST /graphs`
-  - Create graph. Body: `{"graph-name":"...","schema-version":"<major>"}` (schema-version optional). Response: `{"graph-id":"..."}`.
+  - Create graph. Body: `{"graph-name":"...","schema-version":"<major>"}` (schema-version optional). Response: `{"graph-id":"...","graph-ready-for-use?":false}`.
+  - `graph-ready-for-use?` is persisted in the D1 `graphs` row. Existing graphs default to `true`; bootstrap uploads flip it to `false` until the final snapshot upload request completes.
 - `GET /graphs/:graph-id/access`
   - Access check. Response: `{"ok":true}`, `401` (unauthorized), `403` (forbidden), or `404` (not found).
 - `GET /graphs/:graph-id/members`
@@ -86,13 +87,16 @@
 - `GET /sync/:graph-id/pull?since=<t>`
   - Same as WS pull. Response: `{"type":"pull/ok","t":<t>,"txs":[{"t":<t>,"tx":"<tx-transit>"}...]}`.
   - Error response (400): `{"error":"invalid since"}`.
+  - Error response (409): `{"error":"graph not ready"}` when bootstrap upload/import has not finished.
 - `POST /sync/:graph-id/tx/batch`
   - Same as WS tx/batch. Body: `{"t-before":<t>,"txs":["<tx-transit>", ...]}`.
   - Response: `{"type":"tx/batch/ok","t":<t>}` or `{"type":"tx/reject","reason":...}`.
   - Error response (400): `{"error":"missing body"|"invalid tx"}`.
+  - Error response (409): `{"error":"graph not ready"}` when bootstrap upload/import has not finished.
 - `GET /sync/:graph-id/snapshot/download`
   - Build a snapshot file in R2 and return a download URL.
   - Response: `{"ok":true,"key":"<graph-id>/<uuid>.snapshot","url":"<origin>/assets/:graph-id/<uuid>.snapshot","content-encoding":"gzip"}`.
+  - Error response (409): `{"error":"graph not ready"}` when bootstrap upload/import has not finished.
   - The snapshot file stored in R2 is a gzip-compressed NDJSON stream of full Datascript datoms. Each line is a Transit JSON datom map: `{e,a,v,tx,added}`.
 - `POST /sync/:graph-id/snapshot/upload?reset=true|false`
   - Upload a snapshot stream for bootstrap import. Current upload format remains framed Transit JSON kvs rows, optionally gzip-compressed.
