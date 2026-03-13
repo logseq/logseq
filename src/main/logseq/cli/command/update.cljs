@@ -22,7 +22,14 @@
         has-update-properties? (seq (some-> (:update-properties opts) string/trim))
         has-remove-tags? (seq (some-> (:remove-tags opts) string/trim))
         has-remove-properties? (seq (some-> (:remove-properties opts) string/trim))
-        has-updates? (or has-update-tags? has-update-properties? has-remove-tags? has-remove-properties?)]
+        has-status? (seq (some-> (:status opts) string/trim))
+        has-content? (contains? opts :content)
+        has-updates? (or has-update-tags?
+                         has-update-properties?
+                         has-remove-tags?
+                         has-remove-properties?
+                         has-status?
+                         has-content?)]
     (cond
       (and (seq pos) (not (contains? update-positions pos)))
       (str "invalid pos: " (:pos opts))
@@ -134,6 +141,12 @@
           target-uuid (some-> (:target-uuid options) string/trim)
           page-name (some-> (:target-page options) string/trim)
           pos (some-> (:pos options) string/trim string/lower-case)
+          status-provided? (contains? options :status)
+          status-text (some-> (:status options) string/trim)
+          status (when (seq status-text)
+                   (add-command/normalize-status status-text))
+          content-provided? (contains? options :content)
+          content (:content options)
           update-tags-result (add-command/parse-tags-option (:update-tags options))
           update-properties-result (add-command/parse-properties-option
                                     (:update-properties options)
@@ -144,10 +157,19 @@
                                     {:allow-non-built-in? true})
           update-tags (:value update-tags-result)
           update-properties (:value update-properties-result)
+          update-properties (merge (cond-> {}
+                                     status
+                                     (assoc :logseq.property/status status))
+                                   (or update-properties {}))
           remove-tags (:value remove-tags-result)
           remove-properties (:value remove-properties-result)
           has-target? (or (some? target-id) (seq target-uuid) (seq page-name))
-          has-updates? (or (seq update-tags) (seq update-properties) (seq remove-tags) (seq remove-properties))
+          has-updates? (or (seq update-tags)
+                           (seq update-properties)
+                           (seq remove-tags)
+                           (seq remove-properties)
+                           status-provided?
+                           content-provided?)
           source-label (cond
                          (seq uuid) uuid
                          (some? id) (str id)
@@ -162,6 +184,11 @@
         {:ok? false
          :error {:code :missing-source
                  :message "source block is required"}}
+
+        (and status-provided? (not status))
+        {:ok? false
+         :error {:code :invalid-options
+                 :message (str "invalid status: " (:status options))}}
 
         (and (not has-target?) (not has-updates?))
         {:ok? false
@@ -182,21 +209,22 @@
 
         :else
         {:ok? true
-         :action {:type :update-block
-                  :repo repo
-                  :graph (core/repo->graph repo)
-                  :id id
-                  :uuid uuid
-                  :target-id target-id
-                  :target-uuid target-uuid
-                  :target-page page-name
-                  :pos (when has-target? (or pos "first-child"))
-                  :update-tags update-tags
-                  :update-properties update-properties
-                  :remove-tags remove-tags
-                  :remove-properties remove-properties
-                  :source source-label
-                  :target target-label}}))))
+         :action (cond-> {:type :update-block
+                          :repo repo
+                          :graph (core/repo->graph repo)
+                          :id id
+                          :uuid uuid
+                          :target-id target-id
+                          :target-uuid target-uuid
+                          :target-page page-name
+                          :pos (when has-target? (or pos "first-child"))
+                          :update-tags update-tags
+                          :update-properties update-properties
+                          :remove-tags remove-tags
+                          :remove-properties remove-properties
+                          :source source-label
+                          :target target-label}
+                   content-provided? (assoc :content content))}))))
 
 (defn execute-update
   [action config]
@@ -217,12 +245,17 @@
                                  {:allow-non-built-in? true})
               block-id (:db/id source)
               block-ids [block-id]
+              content-provided? (contains? action :content)
+              content (:content action)
               update-tag-ids (when (seq update-tags)
                                (->> update-tags (map :db/id) (remove nil?) vec))
               remove-tag-ids (when (seq remove-tags)
                                (->> remove-tags (map :db/id) (remove nil?) vec))
               ops (cond-> []
-                    target (conj [:move-blocks [[(:db/id source)] (:db/id target) opts]]))
+                    content-provided?
+                    (conj [:save-block [{:db/id block-id :block/title content} {}]])
+                    target
+                    (conj [:move-blocks [[(:db/id source)] (:db/id target) opts]]))
               ops (cond-> ops
                     (seq remove-tag-ids)
                     (into (map (fn [tag-id]
