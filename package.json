@@ -142,7 +142,6 @@
         "@sqlite.org/sqlite-wasm": "^3.50.3-build1",
         "@tabler/icons-react": "^2.47.0",
         "@tabler/icons-webfont": "^2.47.0",
-        "@tippyjs/react": "4.2.5",
         "bignumber.js": "^9.0.2",
         "chokidar": "3.5.1",
         "chrono-node": "2.2.4",
