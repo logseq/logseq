@@ -312,12 +312,10 @@
 (defmethod events/handle :user/logout [[_]]
   (login/sign-out!))
 
-(defmethod events/handle :user/login [[_ host-ui?]]
-  (if (or host-ui? (not util/electron?))
-    (js/window.open config/LOGIN-URL)
-    (if (mobile-util/native-platform?)
-      (route-handler/redirect! {:to :user-login})
-      (login/open-login-modal!))))
+(defmethod events/handle :user/login [[_]]
+  (if (mobile-util/native-platform?)
+    (route-handler/redirect! {:to :user-login})
+    (login/open-login-modal!)))
 
 (defmethod events/handle :asset/dialog-edit-external-url [[_ asset-block pdf-current]]
   (shui/dialog-open!
