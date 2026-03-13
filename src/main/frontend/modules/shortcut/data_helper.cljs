@@ -243,7 +243,7 @@
                                                                           (every? #(handlers-co-active? % handler-id') handler-ids)))))
                                                         binding-match?
                                                         (or (= input-binding k)
-                                                            (and handler-match?
+                                                            (and same-handler?
                                                                  (binding-prefix-overlap? input-binding k)))]
                                                     (if (and (not (contains? exclude-ids id))
                                                              handler-match?
