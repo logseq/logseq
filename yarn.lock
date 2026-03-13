@@ -450,17 +450,17 @@
   resolved "https://registry.yarnpkg.com/@highlightjs/cdn-assets/-/cdn-assets-10.4.1.tgz#261bc7a391cd22e86e19ba809a9b997ca37f1514"
   integrity sha512-dJ6ZNFZ0TIatflV7h+5S6swUrc+hfivRgylKCcUk4+sb2Gi7uj5rSSv3x0p/fwIpyYlrKhxA2LqtdVBZ1Evk5Q==
 
-"@huggingface/jinja@^0.5.1":
-  version "0.5.1"
-  resolved "https://registry.yarnpkg.com/@huggingface/jinja/-/jinja-0.5.1.tgz#081d334ddcf6237f65561ae3d665bb713a8ff74f"
-  integrity sha512-yUZLld4lrM9iFxHCwFQ7D1HW2MWMwSbeB7WzWqFYDWK+rEb+WldkLdAJxUPOmgICMHZLzZGVcVjFh3w/YGubng==
+"@huggingface/jinja@^0.5.3":
+  version "0.5.6"
+  resolved "https://registry.yarnpkg.com/@huggingface/jinja/-/jinja-0.5.6.tgz#965c7deb19d67fe091eb99a212e7edd4dc79a2cd"
+  integrity sha512-MyMWyLnjqo+KRJYSH7oWNbsOn5onuIvfXYPcc0WOGxU0eHUV7oAYUoQTl2BMdu7ml+ea/bu11UM+EshbeHwtIA==
 
-"@huggingface/transformers@^3.6.3":
-  version "3.7.1"
-  resolved "https://registry.yarnpkg.com/@huggingface/transformers/-/transformers-3.7.1.tgz#9501f9bd0ccde8cd7dd6621f9aaee3182b5e39fb"
-  integrity sha512-z14yXkm7G/FKGM8Y24NLDbrSP/kbn62byKNYF04pZ6pidTVpucqRSderQgpfQWoMVrhOKmrZs29G3yQ1R28sIA==
+"@huggingface/transformers@^3.8.1":
+  version "3.8.1"
+  resolved "https://registry.yarnpkg.com/@huggingface/transformers/-/transformers-3.8.1.tgz#317da003865322396796173223eeaaf0f9723f0a"
+  integrity sha512-tsTk4zVjImqdqjS8/AOZg2yNLd1z9S5v+7oUPpXaasDRwEDhB+xnglK1k5cad26lL5/ZIaeREgWWy0bs9y9pPA==
   dependencies:
-    "@huggingface/jinja" "^0.5.1"
+    "@huggingface/jinja" "^0.5.3"
     onnxruntime-node "1.21.0"
     onnxruntime-web "1.22.0-dev.20250409-89f8206ba4"
     sharp "^0.34.1"
