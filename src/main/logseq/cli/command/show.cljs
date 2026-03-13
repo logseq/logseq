@@ -672,6 +672,17 @@
                         (sort-children (get parent->children parent-id)))))]
     (build root-id 1)))
 
+(defn- entity-id-only?
+  [entity]
+  (and (map? entity)
+       (contains? entity :db/id)
+       (= #{:db/id} (set (keys entity)))))
+
+(defn- missing-show-entity?
+  [entity]
+  (or (nil? entity)
+      (entity-id-only? entity)))
+
 (defn- fetch-tree
   [config {:keys [repo id page level] :as opts}]
   (let [max-depth (or level 10)
@@ -684,16 +695,17 @@
                                               {:block/page [:db/id :block/title]}
                                               {:block/tags [:db/id :block/name :block/title :block/uuid]}] id])]
         (p/let [entity (attach-user-properties-to-entity config repo entity)]
-        (if-let [page-id (get-in entity [:block/page :db/id])]
-          (p/let [blocks (fetch-blocks-for-page config repo page-id)
-                  children (build-tree blocks (:db/id entity) max-depth)]
-            {:root (assoc entity :block/children children)})
-          (if (:db/id entity)
-            (p/let [blocks (fetch-blocks-for-page config repo (:db/id entity))
-                    children (build-tree blocks (:db/id entity) max-depth)]
-              {:root (assoc entity :block/children children)})
-            (throw (ex-info "block not found" {:code :block-not-found})))))
-        )
+          (if (missing-show-entity? entity)
+            (throw (ex-info "entity not found" {:code :entity-not-found}))
+            (if-let [page-id (get-in entity [:block/page :db/id])]
+              (p/let [blocks (fetch-blocks-for-page config repo page-id)
+                      children (build-tree blocks (:db/id entity) max-depth)]
+                {:root (assoc entity :block/children children)})
+              (if-let [entity-id (:db/id entity)]
+                (p/let [blocks (fetch-blocks-for-page config repo entity-id)
+                        children (build-tree blocks entity-id max-depth)]
+                  {:root (assoc entity :block/children children)})
+                (throw (ex-info "entity not found" {:code :entity-not-found})))))))
 
       (seq uuid-str)
       (if-not (common-util/uuid-string? uuid-str)
@@ -713,16 +725,17 @@
                                                   {:block/tags [:db/id :block/name :block/title :block/uuid]}]
                                             [:block/uuid uuid-str]]))]
           (p/let [entity (attach-user-properties-to-entity config repo entity)]
-          (if-let [page-id (get-in entity [:block/page :db/id])]
-            (p/let [blocks (fetch-blocks-for-page config repo page-id)
-                    children (build-tree blocks (:db/id entity) max-depth)]
-              {:root (assoc entity :block/children children)})
-            (if (:db/id entity)
-              (p/let [blocks (fetch-blocks-for-page config repo (:db/id entity))
-                      children (build-tree blocks (:db/id entity) max-depth)]
-                {:root (assoc entity :block/children children)})
-              (throw (ex-info "block not found" {:code :block-not-found}))))))
-          )
+            (if (missing-show-entity? entity)
+              (throw (ex-info "entity not found" {:code :entity-not-found}))
+              (if-let [page-id (get-in entity [:block/page :db/id])]
+                (p/let [blocks (fetch-blocks-for-page config repo page-id)
+                        children (build-tree blocks (:db/id entity) max-depth)]
+                  {:root (assoc entity :block/children children)})
+                (if-let [entity-id (:db/id entity)]
+                  (p/let [blocks (fetch-blocks-for-page config repo entity-id)
+                          children (build-tree blocks entity-id max-depth)]
+                    {:root (assoc entity :block/children children)})
+                  (throw (ex-info "entity not found" {:code :entity-not-found}))))))))
 
       (seq page)
       (p/let [page-entity (transport/invoke config :thread-api/pull false
@@ -864,9 +877,10 @@
   (let [data (ex-data error)
         code (:code data)
         message (or (:message data) (.-message error) (str error))]
-    (if (= code :block-not-found)
-      (str "Block " id " not found")
-      (str "Block " id ": " message))))
+    (if (or (= code :block-not-found)
+            (= code :entity-not-found))
+      (str "Entity " id " not found")
+      (str "Entity " id ": " message))))
 
 (defn- multi-id-error-entry
   [id error]

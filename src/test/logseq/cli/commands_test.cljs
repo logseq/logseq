@@ -803,6 +803,25 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest test-show-id-only-entity-is-not-found
+  (async done
+         (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                             transport/invoke (fn [_ method _ _]
+                                                (case method
+                                                  :thread-api/pull (p/resolved {:db/id 212})
+                                                  :thread-api/q (p/resolved [])
+                                                  :thread-api/get-block-refs (p/resolved [])
+                                                  (p/resolved nil)))]
+               (show-command/execute-show {:type :show
+                                           :repo "demo"
+                                           :id 212}
+                                          {:output-format :json}))
+             (p/then (fn [_]
+                       (is false "expected execute-show to reject for id-only entity")))
+             (p/catch (fn [e]
+                        (is (= :entity-not-found (:code (ex-data e))))))
+             (p/finally done))))
+
 (deftest test-tree->text-uuid-ref-recursion-limit
   (testing "show tree text limits uuid ref replacement depth"
     (let [tree->text #'show-command/tree->text
