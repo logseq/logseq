@@ -5,7 +5,6 @@
             [clojure.string :as string]
             [dommy.core :as d]
             [frontend.common.missionary :as c.m]
-            [frontend.components.block :as component-block]
             [frontend.components.export :as export]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.plugins :as plugins]
@@ -14,6 +13,7 @@
             [frontend.components.server :as server]
             [frontend.components.settings :as settings]
             [frontend.components.svg :as svg]
+            [frontend.components.tabs :as tabs]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -29,7 +29,6 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.version :refer [version]]
-            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -333,20 +332,6 @@
   (when (state/sub :ui/toggle-highlight-recent-blocks?)
     (recent-slider-inner)))
 
-(rum/defc block-breadcrumb
-  [page-name]
-  (when-let [page (when (and page-name (common-util/uuid-string? page-name))
-                    (db/entity [:block/uuid (uuid page-name)]))]
-    ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
-    (when (and (if config/publishing? (not (state/sub :db/restoring?)) true)
-               (ldb/page? page) (:block/parent page))
-      [:div.ls-block-breadcrumb
-       [:div.text-sm
-        (component-block/breadcrumb {}
-                                    (state/get-current-repo)
-                                    (:block/uuid page)
-                                    {:header? true})]])))
-
 (rum/defc semantic-search-progressing
   [repo]
   (let [[vec-search-state set-vec-search-state] (hooks/use-state nil)
@@ -413,10 +398,10 @@
                                 (state/set-left-sidebar-open! false))
                               (state/pub-event! [:go/search]))}
               (ui/icon "search" {:size ui/icon-size})])))]]
+     
+     (tabs/tab-bar)
 
-     [:div.r.flex.drag-region.justify-between.items-center.gap-2.overflow-x-hidden.w-full
-      [:div.flex.flex-1
-       (block-breadcrumb (state/get-current-page))]
+     [:div.r.flex.drag-region.items-center.gap-2
       [:div.flex.items-center
        (when (and current-repo
                   (ldb/get-graph-rtc-uuid (db/get-db))

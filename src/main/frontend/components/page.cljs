@@ -30,6 +30,7 @@
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.property :as property-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mixins :as mixins]
@@ -235,7 +236,17 @@
   [page]
   [:div.ls-page-title-actions
    [:div.flex.flex-row.items-center.gap-2
-    (when-not (:logseq.property/icon (db/entity (:db/id page)))
+    (if (:logseq.property/icon (db/entity (:db/id page)))
+      (shui/button
+       {:variant :ghost
+        :size :sm
+        :class "px-2 py-0 h-6 text-xs text-muted-foreground"
+        :on-click (fn [_e]
+                    (property-handler/set-block-property!
+                     (:block/uuid page)
+                     :logseq.property/icon
+                     nil))}
+       "Remove icon")
       (shui/button
        {:variant :ghost
         :size :sm

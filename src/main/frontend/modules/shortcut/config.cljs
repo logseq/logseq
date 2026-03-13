@@ -19,6 +19,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
+            [frontend.handler.tabs :as tabs-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.window :as window-handler]
             [frontend.modules.shortcut.before :as m]
@@ -442,9 +443,45 @@
                                              :inactive (not (util/electron?))
                                              :fn       #(page-handler/copy-page-url)}
 
-   :window/close                            {:binding  "mod+w"
-                                             :inactive (not (util/electron?))
+   :window/close                            {:binding  []
+                                             :inactive true
                                              :fn       window-handler/close!}
+
+   :tab/close-active                        {:binding "mod+w"
+                                             :fn      tabs-handler/close-active-tab!}
+
+   :tab/switch-to-1                         {:binding "mod+1"
+                                             :fn      #(tabs-handler/switch-to-tab-by-index! 1)}
+
+   :tab/switch-to-2                         {:binding "mod+2"
+                                             :fn      #(tabs-handler/switch-to-tab-by-index! 2)}
+
+   :tab/switch-to-3                         {:binding "mod+3"
+                                             :fn      #(tabs-handler/switch-to-tab-by-index! 3)}
+
+   :tab/switch-to-4                         {:binding "mod+4"
+                                             :fn      #(tabs-handler/switch-to-tab-by-index! 4)}
+
+   :tab/switch-to-5                         {:binding "mod+5"
+                                             :fn      #(tabs-handler/switch-to-tab-by-index! 5)}
+
+   :tab/switch-to-6                         {:binding "mod+6"
+                                             :fn      #(tabs-handler/switch-to-tab-by-index! 6)}
+
+   :tab/switch-to-7                         {:binding "mod+7"
+                                             :fn      #(tabs-handler/switch-to-tab-by-index! 7)}
+
+   :tab/switch-to-8                         {:binding "mod+8"
+                                             :fn      #(tabs-handler/switch-to-tab-by-index! 8)}
+
+   :tab/switch-to-last                      {:binding "mod+9"
+                                             :fn      #(tabs-handler/switch-to-tab-by-index! 9)}
+
+   :tab/switch-to-prev                      {:binding "mod+shift+open-square-bracket"
+                                             :fn      tabs-handler/switch-to-prev-tab!}
+
+   :tab/switch-to-next                      {:binding "mod+shift+close-square-bracket"
+                                             :fn      tabs-handler/switch-to-next-tab!}
 
    :ui/toggle-wide-mode                     {:binding "t w"
                                              :fn      ui-handler/toggle-wide-mode!}
@@ -662,7 +699,19 @@
           :publish/open-dialog
           :command-palette/toggle
           :editor/add-property
-          :window/close])
+          :window/close
+          :tab/close-active
+          :tab/switch-to-1
+          :tab/switch-to-2
+          :tab/switch-to-3
+          :tab/switch-to-4
+          :tab/switch-to-5
+          :tab/switch-to-6
+          :tab/switch-to-7
+          :tab/switch-to-8
+          :tab/switch-to-last
+          :tab/switch-to-prev
+          :tab/switch-to-next])
         (with-meta {:before m/prevent-default-behavior}))
 
     :shortcut.handler/global-non-editing-only
@@ -774,7 +823,19 @@
      :go/tomorrow
      :go/next-journal
      :go/prev-journal
-     :go/keyboard-shortcuts]
+     :go/keyboard-shortcuts
+     :tab/switch-to-1
+     :tab/switch-to-2
+     :tab/switch-to-3
+     :tab/switch-to-4
+     :tab/switch-to-5
+     :tab/switch-to-6
+     :tab/switch-to-7
+     :tab/switch-to-8
+     :tab/switch-to-last
+     :tab/switch-to-prev
+     :tab/switch-to-next
+     :tab/close-active]
 
     :shortcut.category/block-editing
     [:editor/backspace
