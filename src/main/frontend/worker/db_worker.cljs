@@ -903,6 +903,9 @@
               (search/build-fuzzy-search-indice repo @conn))
             (let [build-id (start-search-index-build! repo)]
               (-> (<build-blocks-fts! repo search-db conn build-id)
+                  (p/catch (fn [error]
+                             (when-not (= :search/stale-index-build (:type (ex-data error)))
+                               (throw error))))
                   (p/finally (fn []
                                (clear-search-index-build! repo build-id)))))))))))
 

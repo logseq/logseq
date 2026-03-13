@@ -14,12 +14,19 @@
   (and (string? s)
        (string/starts-with? s common-config/file-version-prefix)))
 
+(defn- upload-temp-graph?
+  [graph-name]
+  (let [graph-name (some-> graph-name str string/lower-case)]
+    (or (= "upload-temp" graph-name)
+        (= (str (string/lower-case config/db-version-prefix) "upload-temp") graph-name))))
+
 (defn get-all-graphs
   []
   (p/let [repos (persist-db/<list-db)
           repos' (->> repos
                       (remove (fn [{:keys [name]}]
-                                (local-file-based-graph? name)))
+                                (or (local-file-based-graph? name)
+                                    (upload-temp-graph? name))))
                       (map
                        (fn [{:keys [name] :as repo}]
                          (assoc repo :name
@@ -29,7 +36,8 @@
      (concat
       repos'
       (map (fn [repo-name] {:name repo-name})
-           (some-> electron-disk-graphs bean/->clj))))))
+           (remove upload-temp-graph?
+                   (some-> electron-disk-graphs bean/->clj)))))))
 
 (defn delete-graph!
   [graph]
