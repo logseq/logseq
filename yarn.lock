@@ -1394,10 +1394,10 @@
     "@types/picomatch" "*"
     "@types/streamx" "*"
 
-"@types/gulp@^4.0.7":
-  version "4.0.17"
-  resolved "https://registry.yarnpkg.com/@types/gulp/-/gulp-4.0.17.tgz#b314c3762d08d8d69b7c0b86f78d069bafd65009"
-  integrity sha512-+pKQynu2C/HS16kgmDlAicjtFYP8kaa86eE9P0Ae7GB5W29we/E2TIdbOWtEZD5XkpY+jr8fyqfwO6SWZecLpQ==
+"@types/gulp@^4.0.18":
+  version "4.0.18"
+  resolved "https://registry.yarnpkg.com/@types/gulp/-/gulp-4.0.18.tgz#2dd43f432452f10412ef2479d44e4d4f0c8f53f6"
+  integrity sha512-IqkYa4sXkwH2uwqO2aXYOoAisJpLX13BPaS6lmEAoG4BbgOay3qqGQFsT9LMSSQVMQlEKU7wTUW0sPV46V0olw==
   dependencies:
     "@types/node" "*"
     "@types/undertaker" ">=1.2.6"
