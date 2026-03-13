@@ -34,6 +34,7 @@
             [logseq.common.graph-dir :as graph-dir]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db-sync.snapshot :as snapshot]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.order :as db-order]
@@ -61,6 +62,9 @@
 (defonce *opfs-pools worker-state/*opfs-pools)
 (defonce *publishing? (atom false))
 (defonce ^:private *node-pools (atom {}))
+(defonce ^:private *import-state (atom nil))
+
+(def ^:private db-sync-import-batch-size 10000)
 
 (defn- node-runtime?
   []
@@ -205,6 +209,7 @@
   (swap! *sqlite-conns dissoc repo)
   (swap! *datascript-conns dissoc repo)
   (swap! *client-ops-conns dissoc repo)
+  (search/clear-fuzzy-search-indice! repo)
   (when db (.close db))
   (when search (.close search))
   (when client-ops (.close client-ops))
@@ -697,6 +702,164 @@
    (p/catch (fn [error]
               (js/console.error error)))))
 
+(defn- ->uint8
+  [data]
+  (cond
+    (instance? js/Uint8Array data) data
+    (instance? js/ArrayBuffer data) (js/Uint8Array. data)
+    (string? data) (.encode (js/TextEncoder.) data)
+    :else (js/Uint8Array. data)))
+
+(defn- stale-import-ex-info
+  [repo graph-id import-id]
+  (ex-info "stale db sync import"
+           {:type :db-sync/stale-import
+            :repo repo
+            :graph-id graph-id
+            :import-id import-id}))
+
+(defn- close-import-state!
+  [{:keys [db]}]
+  (when db
+    (try
+      (.close db)
+      (catch :default _))))
+
+(defn- clear-import-state!
+  [import-id]
+  (when-let [state @*import-state]
+    (when (= import-id (:import-id state))
+      (close-import-state! state)
+      (reset! *import-state nil))))
+
+(defn- require-import-state!
+  [repo graph-id import-id]
+  (let [state @*import-state]
+    (when-not (and state
+                   (= import-id (:import-id state))
+                   (or (nil? repo) (= repo (:repo state)))
+                   (= graph-id (:graph-id state)))
+      (throw (stale-import-ex-info repo graph-id import-id)))
+    state))
+
+(defn- import-snapshot-rows-batch!
+  [db aes-key graph-e2ee? rows]
+  (p/let [rows-batch (if graph-e2ee?
+                       (sync-crypt/<decrypt-snapshot-rows-batch aes-key rows)
+                       rows)]
+    (upsert-addr-content! db (rows->sqlite-binds rows-batch))))
+
+(defn- import-snapshot-rows!
+  [db aes-key graph-e2ee? rows]
+  (let [batches (partition-all db-sync-import-batch-size rows)]
+    (p/doseq [batch batches]
+      (import-snapshot-rows-batch! db aes-key graph-e2ee? batch))))
+
+(defn- log-import-progress!
+  [graph-id import-id rows-count]
+  (when (pos? rows-count)
+    (let [state (swap! *import-state
+                       (fn [curr]
+                         (if (= import-id (:import-id curr))
+                           (update curr :imported-rows (fnil + 0) rows-count)
+                           curr)))
+          {:keys [imported-rows total-rows]} state]
+      (when (= import-id (:import-id state))
+        (sync-log-and-state/rtc-log :rtc.log/download
+                                    {:sub-type :download-progress
+                                     :graph-uuid graph-id
+                                     :message (if (some? total-rows)
+                                                (str "Importing data " imported-rows "/" total-rows)
+                                                (str "Importing data " imported-rows))})))))
+
+(def-thread-api :thread-api/db-sync-import-prepare
+  [repo reset? graph-id graph-e2ee? & [total-rows]]
+  (let [graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))
+        opened-db (atom nil)]
+    (-> (p/let [_ (when-let [state @*import-state]
+                    (close-import-state! state))
+                _ (reset! *import-state nil)
+                _ (when reset?
+                    (close-db! repo))
+                aes-key (when graph-e2ee?
+                          (sync-crypt/<fetch-graph-aes-key-for-download graph-id))
+                _ (when (and graph-e2ee? (nil? aes-key))
+                    (db-sync/fail-fast :db-sync/missing-field {:repo repo
+                                                               :field :aes-key}))
+                db (ensure-db-sync-import-db! repo false)
+                _ (reset! opened-db db)
+                import-id (str (random-uuid))]
+          (sync-log-and-state/rtc-log :rtc.log/download
+                                      {:sub-type :download-progress
+                                       :graph-uuid graph-id
+                                       :message (if graph-e2ee?
+                                                  "Start decrypting data"
+                                                  "Start importing data")})
+          (reset! *import-state {:aes-key aes-key
+                                 :db db
+                                 :graph-e2ee? graph-e2ee?
+                                 :graph-id graph-id
+                                 :import-id import-id
+                                 :imported-rows 0
+                                 :repo repo
+                                 :snapshot-buffer nil
+                                 :total-rows total-rows})
+          {:import-id import-id})
+        (p/catch
+         (fn [error]
+           (close-import-state! {:db @opened-db})
+           (throw error))))))
+
+(def-thread-api :thread-api/db-sync-import-rows-chunk
+  [rows graph-id import-id]
+  (-> (p/let [{:keys [db aes-key graph-e2ee?]} (require-import-state! nil graph-id import-id)
+              _ (import-snapshot-rows! db aes-key graph-e2ee? rows)]
+        (log-import-progress! graph-id import-id (count rows))
+        true)
+      (p/catch
+       (fn [error]
+         (when-not (= :db-sync/stale-import (:type (ex-data error)))
+           (clear-import-state! import-id))
+         (throw error)))))
+
+(def-thread-api :thread-api/db-sync-import-framed-chunk
+  [chunk graph-id import-id]
+  (-> (p/let [{:keys [db aes-key graph-e2ee? snapshot-buffer]} (require-import-state! nil graph-id import-id)
+              {:keys [rows buffer]} (snapshot/parse-framed-chunk snapshot-buffer (->uint8 chunk))
+              _ (swap! *import-state
+                       (fn [state]
+                         (if (= import-id (:import-id state))
+                           (assoc state :snapshot-buffer buffer)
+                           state)))
+              _ (when (seq rows)
+                  (import-snapshot-rows! db aes-key graph-e2ee? rows))]
+        (log-import-progress! graph-id import-id (count rows))
+        true)
+      (p/catch
+       (fn [error]
+         (when-not (= :db-sync/stale-import (:type (ex-data error)))
+           (clear-import-state! import-id))
+         (throw error)))))
+
+(def-thread-api :thread-api/db-sync-import-finalize
+  [repo graph-id remote-tx import-id]
+  (-> (p/let [{:keys [db aes-key graph-e2ee? snapshot-buffer]} (require-import-state! repo graph-id import-id)
+              rows (when (and snapshot-buffer (pos? (.-byteLength snapshot-buffer)))
+                     (snapshot/finalize-framed-buffer snapshot-buffer))
+              _ (when (seq rows)
+                  (import-snapshot-rows! db aes-key graph-e2ee? rows))
+              _ (log-import-progress! graph-id import-id (count rows))
+              storage (new-sqlite-storage db)
+              conn (common-sqlite/get-storage-conn storage db-schema/schema)
+              datoms (vec (d/datoms @conn :eavt))
+              _ (clear-import-state! import-id)]
+        (import-datoms-to-db! repo graph-id remote-tx datoms))
+      (p/catch
+       (fn [error]
+         (when-not (= :db-sync/stale-import (:type (ex-data error)))
+           (clear-import-state! import-id))
+         (throw error)))))
+
 (def-thread-api :thread-api/db-sync-import-kvs-rows
   [repo rows reset? graph-id remote-tx graph-e2ee?]
   (let [graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))]
@@ -809,6 +972,18 @@
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (search/build-blocks-indice repo @conn)))
+
+(def-thread-api :thread-api/search-build-blocks-indice-in-worker
+  [repo & [force?]]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (when force?
+      (search/build-fuzzy-search-indice repo @conn))
+    (when-let [search-db (get-search-db repo)]
+      (search/truncate-table! search-db)
+      (let [blocks (search/build-blocks-indice repo @conn)]
+        (when (seq blocks)
+          (search/upsert-blocks! search-db (bean/->js blocks)))
+        (count blocks)))))
 
 (def-thread-api :thread-api/search-build-pages-indice
   [_repo]
