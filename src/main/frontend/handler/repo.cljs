@@ -76,13 +76,15 @@
 (defn get-repos
   []
   (p/let [dbs (db-persist/get-all-graphs)]
-    (map (fn [db]
-           (let [graph-name (:name db)]
-             {:url graph-name
-              :metadata (:metadata db)
-              :root (config/get-local-dir graph-name)
-              :nfs? true}))
-         dbs)))
+    (->> dbs
+         (remove (fn [{:keys [name]}]
+                   (= "upload-temp" (some-> name str string/lower-case))))
+         (map (fn [db]
+                (let [graph-name (:name db)]
+                  {:url graph-name
+                   :metadata (:metadata db)
+                   :root (config/get-local-dir graph-name)
+                   :nfs? true}))))))
 
 (defn combine-local-&-remote-graphs
   [local-repos remote-repos]
