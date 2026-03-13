@@ -15,7 +15,7 @@
         "@tailwindcss/aspect-ratio": "0.4.2",
         "@tailwindcss/forms": "0.5.11",
         "@tailwindcss/typography": "0.5.19",
-        "@types/gulp": "^4.0.7",
+        "@types/gulp": "^4.0.18",
         "autoprefixer": "^10.4.27",
         "better-sqlite3": "^12.6.2",
         "cross-env": "^10.1.0",
