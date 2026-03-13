@@ -420,6 +420,8 @@
  :keymap/hint-close "Close "
  :keymap/hint-cancel "Cancel "
  :keymap/hint-reassign "Reassign "
+ :keymap/deactivates-chord "Deactivates "
+ :keymap/deactivates-chords "Deactivates {1} chord shortcuts"
 
  :window/minimize "Minimize"
  :window/maximize "Maximize"

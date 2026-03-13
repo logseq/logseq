@@ -474,6 +474,25 @@
        (map #(str "\u201c" % "\u201d"))
        (string/join ", ")))
 
+(defn- conflict-action-count
+  "Count distinct conflicting action IDs in a conflicts map."
+  [key-conflicts]
+  (->> (for [[_g ks] key-conflicts
+             v (vals ks)
+             :let [conflicts-ids-map (second v)]
+             [id' _handler] conflicts-ids-map]
+         id')
+       (distinct)
+       (count)))
+
+(defn- prefix-conflict-label
+  "Render hiccup for a prefix-conflict amber banner.
+   Shows action names (emphasized) for n≤3, count for n≥4."
+  [names n]
+  (if (<= n 3)
+    [:<> (t :keymap/deactivates-chord) [:span.shortcut-feedback-name names]]
+    (t :keymap/deactivates-chords (str n))))
+
 (defn- compute-override-plan
   "Compute the data needed to reassign a conflicting shortcut binding.
    Pure function — reads current bindings via dh but performs no mutations.
@@ -523,8 +542,9 @@
   (let [all-conflicts
         (for [b default-binding
               :when (string? b)
-              :let [conflicts (dh/get-conflicts-by-keys b handler-id
-                                                        {:exclude-ids #{action-id} :group-global? true})]
+              :let [raw-conflicts (dh/get-conflicts-by-keys b handler-id
+                                                            {:exclude-ids #{action-id} :group-global? true})
+                    conflicts (:exact (dh/partition-conflicts-by-type raw-conflicts b))]
               :when (seq conflicts)
               [_g kss] conflicts
               v (vals kss)
@@ -701,10 +721,12 @@
         override-fn!
         (fn []
           (let [conflicts (rum/deref *key-conflicts-ref)
+                prefix-map (:prefix conflicts)
+                exact-map (:exact conflicts)
                 ks (rum/deref *keystroke-ref)
                 cur-binding (rum/deref *current-binding-ref)]
             (when-let [{:keys [new-binding accepted-key undo-entries conflict-updates conflict-names]}
-                       (compute-override-plan k conflicts ks cur-binding)]
+                       (compute-override-plan k exact-map ks cur-binding)]
               ;; Batch-persist: conflict stripping + own binding in one atomic write
               (let [binding' (persisted-binding-value k new-binding)
                     changes (cond-> [[k binding']]
@@ -720,7 +742,11 @@
                                   (saved-cb)) 50)
               ;; UI state transitions
               (set-undo-snapshot! {:entries undo-entries})
-              (set-accepted-info! {:key accepted-key :from conflict-names})
+              (let [prefix-names (when (seq prefix-map) (conflict-action-names prefix-map))
+                    prefix-count (when (seq prefix-map) (conflict-action-count prefix-map))]
+                (set-accepted-info! (cond-> {:key accepted-key :from conflict-names}
+                                      prefix-names (assoc :prefix-chord-names prefix-names
+                                                          :prefix-count prefix-count))))
               (set-keystroke! "")
               (set-key-conflicts! nil)
               (set-rec-state! :accepted))))]
@@ -766,10 +792,29 @@
                                     ;; Clean accept — no conflicts anywhere
                                     (set-accepted-info! {:key accepted-key :from nil}))
                                   (set-rec-state! :accepted))
-                                ;; Same-context conflicts — blocking red state
-                                (do
-                                  (set-key-conflicts! conflicts-map)
-                                  (set-rec-state! :conflict-cross)))))))
+                                ;; Has conflicts — partition into exact vs prefix
+                                (let [{:keys [exact prefix]} (dh/partition-conflicts-by-type conflicts-map keystroke)]
+                                  (if (seq exact)
+                                    ;; Exact conflicts present — blocking red state (may also have prefix)
+                                    (do
+                                      (set-key-conflicts! {:exact exact :prefix prefix})
+                                      (set-rec-state! :conflict-cross))
+                                    ;; Prefix-only — auto-save with amber warning
+                                    (let [accepted-key keystroke
+                                          new-binding (conj cur-binding accepted-key)
+                                          prefix-names (conflict-action-names prefix)
+                                          prefix-count (conflict-action-count prefix)]
+                                      (set-undo-snapshot! {:entries [{:action-id k :previous-binding cur-binding}]})
+                                      (set-current-binding! new-binding)
+                                      (set-keystroke! "")
+                                      (set-key-conflicts! nil)
+                                      (persist-binding! new-binding)
+                                      (set-accepted-info! {:key accepted-key
+                                                           :from nil
+                                                           :prefix-conflicts? true
+                                                           :prefix-chord-names prefix-names
+                                                           :prefix-count prefix-count})
+                                      (set-rec-state! :accepted)))))))))
                       400)]
            (rum/set-ref! *auto-accept-timer timer)))
        #(when-let [timer (rum/deref *auto-accept-timer)]
@@ -790,9 +835,11 @@
        (when (#{:conflict-same :esc-hint :accepted :removed :reset} rec-state)
          (let [ms (case rec-state
                     :esc-hint 2000
-                    :accepted (if (:cross-context? accepted-info)
-                                6000
-                                (if (:from accepted-info) 6000 2500))
+                    :accepted (cond
+                                (:cross-context? accepted-info) 6000
+                                (:prefix-conflicts? accepted-info) 6000
+                                (:from accepted-info) 6000
+                                :else 2500)
                     (:removed :reset) 6000
                     3500)
                timer (js/setTimeout
@@ -895,15 +942,21 @@
                (t :keymap/undo)])]
         (case rec-state
           :conflict-cross
-          [:div.shortcut-feedback.shortcut-feedback--error
-           [:span (t :keymap/used-by)
-            [:span.shortcut-feedback-name (conflict-action-names key-conflicts)]]
-           (ui/tooltip
-            (shui/button {:variant :destructive
-                          :size :xs
-                          :on-click override-fn!}
-                         (t :keymap/reassign))
-            (t :keymap/reassign-tooltip))]
+          [:<>
+           [:div.shortcut-feedback.shortcut-feedback--error
+            [:span (t :keymap/used-by)
+             [:span.shortcut-feedback-name (conflict-action-names (:exact key-conflicts))]]
+            (ui/tooltip
+             (shui/button {:variant :destructive
+                           :size :xs
+                           :on-click override-fn!}
+                          (t :keymap/reassign))
+             (t :keymap/reassign-tooltip))]
+           (when-let [prefix (:prefix key-conflicts)]
+             (let [n (conflict-action-count prefix)]
+               (when (pos? n)
+                 [:div.shortcut-feedback.shortcut-feedback--warning
+                  [:span (prefix-conflict-label (conflict-action-names prefix) n)]])))]
 
           :conflict-same
           [:div.shortcut-feedback.shortcut-feedback--error
@@ -919,11 +972,28 @@
               (when-let [ctx (:cross-context-label accepted-info)]
                 (str (t :keymap/in-context) ctx))]]
 
-            (:from accepted-info)
-            [:div.shortcut-feedback.shortcut-feedback--success
-             [:span (t :keymap/reassigned-from)
-              [:span.shortcut-feedback-name (:from accepted-info)]]
+            (:prefix-conflicts? accepted-info)
+            [:div.shortcut-feedback.shortcut-feedback--warning
+             [:span (prefix-conflict-label (:prefix-chord-names accepted-info)
+                                           (:prefix-count accepted-info))]
              undo-link]
+
+            (:from accepted-info)
+            (if (:prefix-chord-names accepted-info)
+              ;; Post-reassign with prefix info (mixed case)
+              [:<>
+               [:div.shortcut-feedback.shortcut-feedback--success
+                [:span (t :keymap/reassigned-from)
+                 [:span.shortcut-feedback-name (:from accepted-info)]]
+                undo-link]
+               [:div.shortcut-feedback.shortcut-feedback--warning
+                [:span (prefix-conflict-label (:prefix-chord-names accepted-info)
+                                              (:prefix-count accepted-info))]]]
+              ;; Pure reassign, no prefix
+              [:div.shortcut-feedback.shortcut-feedback--success
+               [:span (t :keymap/reassigned-from)
+                [:span.shortcut-feedback-name (:from accepted-info)]]
+               undo-link])
 
             :else
             [:div.shortcut-feedback.shortcut-feedback--success
@@ -947,9 +1017,10 @@
           (let [prev (rum/deref *prev-rec-state)
                 variant (case prev
                           (:conflict-cross :conflict-same) "shortcut-feedback--error"
-                          :accepted (if (:cross-context? accepted-info)
-                                      "shortcut-feedback--warning"
-                                      "shortcut-feedback--success")
+                          :accepted (cond
+                                      (:cross-context? accepted-info) "shortcut-feedback--warning"
+                                      (:prefix-conflicts? accepted-info) "shortcut-feedback--warning"
+                                      :else "shortcut-feedback--success")
                           "shortcut-feedback--muted")]
             [:div {:class (str "shortcut-feedback " variant " is-dismissing")
                    :on-animation-end #(set-rec-state! :idle)}])
