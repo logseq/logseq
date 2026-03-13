@@ -4048,7 +4048,7 @@ fast-fifo@^1.2.0, fast-fifo@^1.3.2:
   resolved "https://registry.yarnpkg.com/fast-fifo/-/fast-fifo-1.3.2.tgz#286e31de96eb96d38a97899815740ba2a4f3640c"
   integrity sha512-/d9sfos4yxzpwkDkuN7k2SqFKtYNmCTzgfEpz82x34IM9/zc8KGxQoXg1liNC/izpRM/MBdt44Nmx41ZWqk+FQ==
 
-fast-glob@^3.2.4, fast-glob@^3.2.5, fast-glob@^3.2.9, fast-glob@^3.3.0:
+fast-glob@^3.2.12, fast-glob@^3.2.5, fast-glob@^3.2.9, fast-glob@^3.3.0:
   version "3.3.3"
   resolved "https://registry.yarnpkg.com/fast-glob/-/fast-glob-3.3.3.tgz#d06d585ce8dba90a16b0505c543c3ccfb3aeb818"
   integrity sha512-7MptL8U0cqcFdzIzwOTHoilX9x5BrNqye7Z/LuC7kCMRio1EMSyqRK3BEAUD7sXRq4iT4AzTVuZdhgQ2TCvYLg==
@@ -4064,10 +4064,10 @@ fast-levenshtein@^1.0.0:
   resolved "https://registry.yarnpkg.com/fast-levenshtein/-/fast-levenshtein-1.1.4.tgz#e6a754cc8f15e58987aa9cbd27af66fd6f4e5af9"
   integrity sha512-Ia0sQNrMPXXkqVFt6w6M1n1oKo3NfKs+mvaV811Jwir7vAk9a6PVV9VPYf6X3BU97QiLEmuW3uXH9u87zDFfdw==
 
-fast-sort@^2.2.0:
-  version "2.2.0"
-  resolved "https://registry.yarnpkg.com/fast-sort/-/fast-sort-2.2.0.tgz#20903763531fbcbb41c9df5ab1bf5f2cefc8476a"
-  integrity sha512-W7zqnn2zsYoQA87FKmYtgOsbJohOrh7XrtZrCVHN5XZKqTBTv5UG+rSS3+iWbg/nepRQUOu+wnas8BwtK8kiCg==
+fast-sort@^3.2.0:
+  version "3.4.1"
+  resolved "https://registry.yarnpkg.com/fast-sort/-/fast-sort-3.4.1.tgz#837e1abaafdc6c6c077b632913a7ec2dda283cb6"
+  integrity sha512-76uvGPsF6So53sZAqenP9UVT3p5l7cyTHkLWVCMinh41Y8NDrK1IYXJgaBMfc1gk7nJiSRZp676kddFG2Aa5+A==
 
 fast-text-encoding@^1.0.0:
   version "1.0.6"
@@ -7278,14 +7278,14 @@ postcss-html@^0.36.0:
   dependencies:
     htmlparser2 "^3.10.0"
 
-postcss-import-ext-glob@2.0.1:
-  version "2.0.1"
-  resolved "https://registry.yarnpkg.com/postcss-import-ext-glob/-/postcss-import-ext-glob-2.0.1.tgz#9e22f9fc9722f7e7206fde77d594e93f6c57163e"
-  integrity sha512-cCvzsZBPuhLCOAfkPeBnJ31uz5azlAjNb5Aug1f2nlomgZK+WD7Uwfrk+epFU9PI20rsMAineDUK4Ty+jEQHcg==
+postcss-import-ext-glob@2.1.1:
+  version "2.1.1"
+  resolved "https://registry.yarnpkg.com/postcss-import-ext-glob/-/postcss-import-ext-glob-2.1.1.tgz#327b83525a39ad186f9b828035ccf61f8ab57081"
+  integrity sha512-qd4ELOx2G0hyjgtmLnf/fSVJXXPhkcxcxhLT1y1mAnk53JYbMLoGg+AFtnJowOSvnv4CvjPAzpLpAcfWeofP5g==
   dependencies:
-    fast-glob "^3.2.4"
-    fast-sort "^2.2.0"
-    postcss-value-parser "^4.1.0"
+    fast-glob "^3.2.12"
+    fast-sort "^3.2.0"
+    postcss-value-parser "^4.2.0"
 
 postcss-import@15.0.0:
   version "15.0.0"
