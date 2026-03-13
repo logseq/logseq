@@ -164,20 +164,16 @@
     (some? limit) (->> (take limit) vec)))
 
 (defn- prepare-tag-item
-  [item {:keys [expand with-properties with-extends]}]
-  (if expand
-    (cond-> item
-      (not with-properties) (dissoc :logseq.property.class/properties)
-      (not with-extends) (dissoc :logseq.property.class/extends))
-    item))
+  [item {:keys [with-properties with-extends]}]
+  (cond-> item
+    (not with-properties) (dissoc :logseq.property.class/properties)
+    (not with-extends) (dissoc :logseq.property.class/extends)))
 
 (defn- prepare-property-item
-  [item {:keys [expand with-classes with-type]}]
-  (if expand
-    (cond-> item
-      (not with-classes) (dissoc :logseq.property/classes)
-      (not with-type) (dissoc :logseq.property/type))
-    item))
+  [item {:keys [with-classes with-type]}]
+  (cond-> item
+    (not with-classes) (dissoc :logseq.property/classes)
+    (not with-type) (dissoc :logseq.property/type)))
 
 (defn- apply-user-only
   [options]
