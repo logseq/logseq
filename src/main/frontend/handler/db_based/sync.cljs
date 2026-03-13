@@ -1,6 +1,7 @@
 (ns frontend.handler.db-based.sync
   "DB-sync handler based on Cloudflare Durable Objects."
-  (:require [clojure.string :as string]
+  (:require ["comlink" :as Comlink]
+            [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
@@ -31,14 +32,21 @@
   (or config/db-sync-http-base
       (ws->http-base config/db-sync-ws-url)))
 
-(def ^:private snapshot-text-decoder (js/TextDecoder.))
-
 (defn- ->uint8 [data]
   (cond
     (instance? js/Uint8Array data) data
     (instance? js/ArrayBuffer data) (js/Uint8Array. data)
     (string? data) (.encode (js/TextEncoder.) data)
     :else (js/Uint8Array. data)))
+
+(defn- parse-header-int
+  [^js resp header]
+  (when-let [raw (some-> resp .-headers (.get header))]
+    (let [parsed (js/parseInt raw 10)]
+      (when-not (js/isNaN parsed)
+        parsed))))
+
+(def ^:private snapshot-text-decoder (js/TextDecoder.))
 
 (defn- decode-snapshot-rows [payload]
   (sqlite-util/read-transit-str (.decode snapshot-text-decoder (->uint8 payload))))
@@ -114,10 +122,77 @@
 (defn- <snapshot-response-bytes
   [^js resp]
   (p/let [buf (.arrayBuffer resp)
-          payload (->uint8 buf)]
-    (if (gzip-bytes? payload)
-      (<decompress-gzip-bytes payload)
-      payload)))
+          chunk (->uint8 buf)]
+    (if (gzip-bytes? chunk)
+      (<decompress-gzip-bytes chunk)
+      chunk)))
+
+(defn- response-body-stream
+  [^js resp]
+  (let [encoding (some-> resp .-headers (.get "content-encoding"))]
+    (cond
+      (nil? (.-body resp))
+      nil
+
+      (= "gzip" encoding)
+      (when (exists? js/DecompressionStream)
+        (.pipeThrough (.-body resp) (js/DecompressionStream. "gzip")))
+
+      :else
+      (.-body resp))))
+
+(defn- <stream-snapshot-chunks!
+  [^js resp on-chunk]
+  (if-let [stream (response-body-stream resp)]
+    (let [reader (.getReader stream)]
+      (p/loop [chunk-idx 0]
+        (p/let [result (.read reader)]
+          (if (.-done result)
+            {:chunk-count chunk-idx}
+            (p/let [chunk (->uint8 (.-value result))
+                    _ (on-chunk chunk)]
+              (p/recur (inc chunk-idx)))))))
+    (p/let [chunk (<snapshot-response-bytes resp)]
+      (if (and chunk (pos? (.-byteLength chunk)))
+        (p/let [_ (on-chunk chunk)]
+          {:chunk-count 1})
+        {:chunk-count 0}))))
+
+(defn- <flush-row-batches!
+  [rows batch-size on-batch]
+  (p/loop [remaining rows]
+    (if (>= (count remaining) batch-size)
+      (let [batch (subvec remaining 0 batch-size)
+            rest-rows (subvec remaining batch-size)]
+        (p/let [_ (on-batch batch)]
+          (p/recur rest-rows)))
+      remaining)))
+
+(defn- <stream-snapshot-row-batches!
+  [^js resp batch-size on-batch]
+  (if-let [stream (response-body-stream resp)]
+    (let [reader (.getReader stream)]
+      (p/loop [buffer nil
+               pending []]
+        (p/let [result (.read reader)]
+          (if (.-done result)
+            (let [pending (if (and buffer (pos? (.-byteLength buffer)))
+                            (into pending (finalize-framed-buffer buffer))
+                            pending)]
+              (if (seq pending)
+                (p/let [_ (on-batch pending)]
+                  {:chunk-count 1})
+                {:chunk-count 0}))
+            (let [{rows :rows next-buffer :buffer} (parse-framed-chunk buffer (->uint8 (.-value result)))
+                  pending (into pending rows)]
+              (p/let [pending (<flush-row-batches! pending batch-size on-batch)]
+                (p/recur next-buffer pending)))))))
+    (p/let [snapshot-bytes (<snapshot-response-bytes resp)
+            rows (vec (finalize-framed-buffer snapshot-bytes))]
+      (if (seq rows)
+        (p/let [_ (on-batch rows)]
+          {:chunk-count 1})
+        {:chunk-count 0}))))
 
 (defn- auth-headers []
   (when-let [token (state/get-auth-id-token)]
@@ -196,11 +271,12 @@
 
 (defn- should-start-rtc?
   [repo]
-  (or (graph-in-remote-list? repo)
-      ;; During startup, remote graph list might not be fetched yet.
-      ;; If local DB already has graph UUID, start optimistically to reduce cold-start latency.
-      (and (remote-graphs-unknown?)
-           (graph-has-local-rtc-id? repo))))
+  (and (not (true? (:rtc/uploading? @state/state)))
+       (or (graph-in-remote-list? repo)
+           ;; During startup, remote graph list might not be fetched yet.
+           ;; If local DB already has graph UUID, start optimistically to reduce cold-start latency.
+           (and (remote-graphs-unknown?)
+                (graph-has-local-rtc-id? repo)))))
 
 (defn- normalize-graph-e2ee?
   [graph-e2ee?]
@@ -353,29 +429,50 @@
                                             :remote-tx remote-tx})))
                        resp (js/fetch (str base "/sync/" graph-uuid "/snapshot/stream")
                                       (clj->js (with-auth-headers {:method "GET"})))
-                       total-bytes (when-let [raw (some-> resp .-headers (.get "content-length"))]
-                                     (let [parsed (js/parseInt raw 10)]
-                                       (when-not (js/isNaN parsed) parsed)))
+                       total-rows (parse-header-int resp "x-snapshot-row-count")
                        _ (state/pub-event!
                           [:rtc/log {:type :rtc.log/download
                                      :sub-type :download-progress
                                      :graph-uuid graph-uuid
-                                     :message (str "Start downloading graph snapshot, file size: " total-bytes)}])]
+                                     :message (str "Start downloading graph snapshot, total rows: "
+                                                   (or total-rows "unknown"))}])]
                  (when-not (.-ok resp)
                    (throw (ex-info "snapshot download failed"
                                    {:graph graph-name
                                     :status (.-status resp)})))
-                 (p/let [snapshot-bytes (<snapshot-response-bytes resp)
-                         rows (finalize-framed-buffer snapshot-bytes)]
-                   (state/pub-event!
-                    [:rtc/log {:type :rtc.log/download
-                               :sub-type :download-completed
-                               :graph-uuid graph-uuid
-                               :message "Graph snapshot downloaded"}])
-                   (when (seq rows)
-                     (state/<invoke-db-worker :thread-api/db-sync-import-kvs-rows
-                                              graph rows true graph-uuid remote-tx graph-e2ee?))
-                   (count rows))))
+                 (let [import-id* (atom nil)
+                       ensure-import! (fn []
+                                        (if-let [import-id @import-id*]
+                                          (p/resolved import-id)
+                                          (p/let [{:keys [import-id]} (state/<invoke-db-worker :thread-api/db-sync-import-prepare
+                                                                                               graph true graph-uuid graph-e2ee? total-rows)]
+                                            (reset! import-id* import-id)
+                                            import-id)))]
+                   (p/let [_ (if @state/*db-worker
+                               (<stream-snapshot-chunks!
+                                resp
+                                (fn [chunk]
+                                  (p/let [import-id (ensure-import!)]
+                                    (state/<invoke-db-worker-direct-pass :thread-api/db-sync-import-framed-chunk
+                                                                         (Comlink/transfer chunk #js [(.-buffer chunk)])
+                                                                         graph-uuid
+                                                                         import-id))))
+                               (<stream-snapshot-row-batches!
+                                resp
+                                10000
+                                (fn [rows]
+                                  (p/let [import-id (ensure-import!)]
+                                    (state/<invoke-db-worker :thread-api/db-sync-import-rows-chunk
+                                                             rows graph-uuid import-id)))))
+                           _ (state/pub-event!
+                              [:rtc/log {:type :rtc.log/download
+                                         :sub-type :download-completed
+                                         :graph-uuid graph-uuid
+                                         :message "Graph snapshot downloaded"}])
+                           _ (when-let [import-id @import-id*]
+                               (state/<invoke-db-worker :thread-api/db-sync-import-finalize
+                                                        graph graph-uuid remote-tx import-id))]
+                     true))))
            (p/rejected (ex-info "db-sync missing graph info"
                                 {:type :db-sync/invalid-graph
                                  :graph-uuid graph-uuid

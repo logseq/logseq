@@ -81,7 +81,6 @@
         (or (nil? handler-keys)
             (contains? (set handler-keys) :sync-db-to-main-thread))]
     (d/unlisten! conn ::listen-db-changes!)
-    (prn :listen-db-changes! (keys handlers) :repo repo)
     (let [*batch-all-txs (volatile! [])
           get-batch-txs #(->> @*batch-all-txs
                               (sort-by :tx)

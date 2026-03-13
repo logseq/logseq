@@ -41,6 +41,7 @@
             [frontend.modules.shortcut.core :as st]
             [frontend.persist-db :as persist-db]
             [frontend.quick-capture :as quick-capture]
+            [frontend.search.plugin :as search-plugin]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]
@@ -53,6 +54,30 @@
 ;; TODO: should we move all events here?
 
 (defmulti handle first)
+
+(defonce ^:private *search-index-build-timeout (atom nil))
+
+(defn- schedule-search-index-build!
+  [repo]
+  (when-let [timeout-id @*search-index-build-timeout]
+    (js/clearTimeout timeout-id))
+  (reset! *search-index-build-timeout
+          (js/setTimeout
+           (fn []
+             (cond
+               (not= repo (state/get-current-repo))
+               (reset! *search-index-build-timeout nil)
+
+               (state/input-idle? repo :diff 5000)
+               (do
+                 (reset! *search-index-build-timeout nil)
+                 (-> (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo)
+                     (p/catch (fn [error]
+                                (js/console.error "Search index build error:" error)))))
+
+               :else
+               (schedule-search-index-build! repo)))
+           1000)))
 
 (defmethod handle :init/commands [_]
   (page-handler/init-commands!))
@@ -79,8 +104,13 @@
      (repo-handler/refresh-repos!)
      (p/do!
       (p/delay 5000)
-      ;; TODO: search should be lazy computed
-      (search-handler/rebuild-indices!)))))
+      (p/let [repo (state/get-current-repo)
+              _ (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo)]
+        (search-handler/rebuild-embeddings! repo)
+        (when state/lsp-enabled?
+          (doseq [service (state/get-all-plugin-services-with-type :search)]
+            (search-plugin/call-service! service "search:rebuildPagesIndice" {})
+            (search-plugin/call-service! service "search:rebuildBlocksIndice" {}))))))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
   (let [switch-promise
@@ -199,6 +229,8 @@
 (defmethod handle :graph/restored [[_ graph]]
   (when graph (assets-handler/ensure-assets-dir! graph))
   (state/pub-event! [:graph/sync-context])
+  (when graph
+    (schedule-search-index-build! graph))
   (export/auto-db-backup! graph)
   (rtc-flows/trigger-rtc-start graph)
   (fsrs/update-due-cards-count)
