@@ -37,9 +37,9 @@
          #_((fn [x] (prn :prop-keys (distinct (mapcat keys x))) x))
          (map (fn [e]
                 (if expand
-                  (cond-> (into {} e)
+                  (cond-> (assoc (into {} e) :db/id (:db/id e))
                     true
-                    (dissoc e :block/tags :block/order :block/refs :block/name :db/index
+                    (dissoc :block/tags :block/order :block/refs :block/name :db/index
                             :logseq.property.embedding/hnsw-label-updated-at :logseq.property/default-value)
                     true
                     (update :block/uuid str)
@@ -62,9 +62,9 @@
                         (ldb/built-in? e))))
          (map (fn [e]
                 (if expand
-                  (cond-> (into {} e)
+                  (cond-> (assoc (into {} e) :db/id (:db/id e))
                     true
-                    (dissoc e :block/tags :block/order :block/refs :block/name
+                    (dissoc :block/tags :block/order :block/refs :block/name
                             :logseq.property.embedding/hnsw-label-updated-at)
                     true
                     (update :block/uuid str)
@@ -147,10 +147,11 @@
                         (<= (:block/updated-at e 0) updated-after-ms))))
          (map (fn [e]
                 (if expand
-                  (-> e
-                      ;; Until there are options to limit pages, return minimal info to avoid
-                      ;; exceeding max payload size
-                      (select-keys [:db/id :db/ident :block/uuid :block/title :block/created-at :block/updated-at])
+                  ;; Until there are options to limit pages, return minimal info to avoid
+                  ;; exceeding max payload size
+                  (-> (select-keys e [:block/uuid :block/title :block/created-at :block/updated-at])
+                      (assoc :db/id (:db/id e))
+                      (cond-> (:db/ident e) (assoc :db/ident (:db/ident e)))
                       (update :block/uuid str))
                   (minimal-list-item e)))))))
 
