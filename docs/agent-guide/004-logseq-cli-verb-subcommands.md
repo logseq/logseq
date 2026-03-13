@@ -79,7 +79,7 @@ List page options:
 | --include-hidden | Include hidden pages | Requires a flag to bypass entity-util/hidden? filtering. |
 | --updated-after ISO8601 | Filter by updated-at | Compare to :block/updated-at. |
 | --created-after ISO8601 | Filter by created-at | Compare to :block/created-at. |
-| --fields FIELD,FIELD | Select output fields | Applies when --expand is true. |
+| --fields FIELD,FIELD | Select output fields | |
 
 List tag options:
 
@@ -88,7 +88,7 @@ List tag options:
 | --include-built-in | Include built-in classes | Built-in tags are currently included by default, clarify behavior. |
 | --with-properties | Include class properties | Uses :logseq.property.class/properties when expanded. |
 | --with-extends | Include class extends | Uses :logseq.property.class/extends when expanded. |
-| --fields FIELD,FIELD | Select output fields | Applies when --expand is true. |
+| --fields FIELD,FIELD | Select output fields | |
 
 List property options:
 
@@ -97,7 +97,7 @@ List property options:
 | --include-built-in | Include built-in properties | Built-in properties are currently included by default, clarify behavior. |
 | --with-classes | Include property classes | Uses :logseq.property/classes when expanded. |
 | --with-type | Include property type | Uses :logseq.property/type when expanded. |
-| --fields FIELD,FIELD | Select output fields | Applies when --expand is true. |
+| --fields FIELD,FIELD | Select output fields | |
 
 List block is removed to avoid overlap with search.
 
