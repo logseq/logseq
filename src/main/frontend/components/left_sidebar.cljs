@@ -25,7 +25,6 @@
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [react-draggable]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
