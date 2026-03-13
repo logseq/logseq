@@ -118,8 +118,9 @@
 
 (defn list-pages
   "Main fn for ListPages tool"
-  [db {:keys [expand include-hidden include-journal journal-only created-after updated-after] :as options}]
+  [db {:keys [expand include-hidden include-built-in include-journal journal-only created-after updated-after] :as options}]
   (let [include-hidden? (boolean include-hidden)
+        include-built-in? (if (contains? options :include-built-in) include-built-in true)
         include-journal? (if (contains? options :include-journal) include-journal true)
         journal-only? (boolean journal-only)
         created-after-ms (parse-time created-after)
@@ -129,6 +130,9 @@
          (remove (fn [e]
                    (and (not include-hidden?)
                         (entity-util/hidden? e))))
+         (remove (fn [e]
+                   (and (not include-built-in?)
+                        (ldb/built-in? e))))
          (remove (fn [e]
                    (let [is-journal? (ldb/journal? e)]
                      (cond
