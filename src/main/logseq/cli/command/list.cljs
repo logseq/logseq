@@ -9,6 +9,9 @@
 (def ^:private list-common-spec
   {:expand {:desc "Include expanded metadata"
             :coerce :boolean}
+   :user-only {:desc "Exclude built-in entities"
+               :alias :u
+               :coerce :boolean}
    :limit {:desc "Limit results"
            :coerce :long}
    :offset {:desc "Offset results"
@@ -176,10 +179,15 @@
       (not with-type) (dissoc :logseq.property/type))
     item))
 
+(defn- apply-user-only
+  [options]
+  (cond-> options
+    (:user-only options) (assoc :include-built-in false)))
+
 (defn execute-list-page
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              options (:options action)
+              options (apply-user-only (:options action))
               items (transport/invoke cfg :thread-api/api-list-pages false
                                       [(:repo action) options])
               order (or (:order options) "asc")
@@ -193,7 +201,7 @@
 (defn execute-list-tag
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              options (:options action)
+              options (apply-user-only (:options action))
               items (transport/invoke cfg :thread-api/api-list-tags false
                                       [(:repo action) options])
               order (or (:order options) "asc")
@@ -208,7 +216,7 @@
 (defn execute-list-property
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              options (:options action)
+              options (apply-user-only (:options action))
               items (transport/invoke cfg :thread-api/api-list-properties false
                                       [(:repo action) options])
               order (or (:order options) "asc")
