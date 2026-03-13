@@ -114,22 +114,24 @@
                      {:exclude-ids #{} :group-global? false})]
       (is (false? (dh/conflict-has-exact? conflicts "t"))))))
 
-(deftest test-cross-handler-prefix-detection
-  (testing "t on global-prevent-default detects cross-handler chord prefix conflicts"
-    ;; With group-global? true, "t" should detect chord conflicts from co-active
-    ;; handlers like global-non-editing-only (which has t d, t t, t r, etc.)
+(deftest test-same-handler-prefix-detection
+  (testing "prefix conflicts are only detected within the same handler"
+    ;; Prefix overlaps only cause chord dormancy on the SAME Closure handler
+    ;; instance. Cross-handler prefixes work fine because each handler has
+    ;; its own independent key tree and state machine.
     (let [conflicts (dh/get-conflicts-by-keys
                      "t" :shortcut.handler/global-prevent-default
                      {:exclude-ids #{} :group-global? true})
           all-keys (->> (vals conflicts) (mapcat vals) (map first) (set))]
-      ;; Same-handler chords (global-prevent-default has t n, t b)
+      ;; Same-handler chords (global-prevent-default has t n, t b) — detected
       (is (contains? all-keys "t n"))
       (is (contains? all-keys "t b"))
-      ;; Cross-handler chords from co-active global-non-editing-only
-      (is (contains? all-keys "t d")
-          "t d from global-non-editing-only should be detected as cross-handler prefix conflict")
-      (is (contains? all-keys "t r")
-          "t r from global-non-editing-only should be detected as cross-handler prefix conflict"))))
+      ;; Cross-handler chords from global-non-editing-only — NOT detected
+      ;; because they're on a different handler and still work at runtime
+      (is (not (contains? all-keys "t d"))
+          "t d from global-non-editing-only should NOT be detected (cross-handler)")
+      (is (not (contains? all-keys "t r"))
+          "t r from global-non-editing-only should NOT be detected (cross-handler)"))))
 
 (deftest test-add-reaction-shortcut
   (testing "add reaction shortcut is configured with p r"
