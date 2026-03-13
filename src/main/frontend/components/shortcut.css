@@ -454,6 +454,32 @@ button.shortcut-feedback-action {
   }
 }
 
+/* Compact keycaps in amber warning banner */
+.shortcut-feedback--warning .shui-shortcut-compact {
+  color: var(--rx-amber-12, #451a03);
+}
+
+/* Chord stroke grouping for prefix-conflict keycaps */
+.prefix-chord {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Vertical list of prefix-conflict items (n=2-3) */
+.prefix-conflict-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.prefix-conflict-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* Toolbar */
 .shortcut-toolbar {
   @apply flex items-center justify-between px-4 py-1.5 text-xs select-none;
