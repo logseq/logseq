@@ -20,11 +20,11 @@
                  :complete :pages}
    :pos {:desc "Position. Default: create=last-child, update=first-child"
          :values ["first-child" "last-child" "sibling"]}
-   :content {:desc "Block content for create mode"}
+   :content {:desc "Block content (create inserts; update rewrites source block content)"}
    :blocks {:desc "EDN vector of blocks for create mode"}
    :blocks-file {:desc "EDN file of blocks for create mode"
                  :complete :file}
-   :status {:desc "Task status"
+   :status {:desc "Task status (create/update)"
             :values ["todo" "doing" "done" "now" "later" "wait" "waiting"
                      "backlog" "canceled" "cancelled" "in-review" "in-progress"]}
    :update-tags {:desc "Tags to add/update (EDN vector)"}

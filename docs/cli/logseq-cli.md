@@ -182,7 +182,8 @@ Inspect and edit commands:
 - `upsert block --content <text> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - create blocks; defaults to today’s journal page if no target is given
 - `upsert block --blocks <edn> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks via EDN vector
 - `upsert block --blocks-file <path> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks from an EDN file
-- `upsert block --id <id>|--uuid <uuid> [--target-id <id>|--target-uuid <uuid>|--target-page <name>] [--pos first-child|last-child|sibling] [--update-tags <edn-vector>] [--update-properties <edn-map>] [--remove-tags <edn-vector>] [--remove-properties <edn-vector>]` - update and/or move a block
+- `upsert block --id <id>|--uuid <uuid> [--content <text>] [--status <status>] [--target-id <id>|--target-uuid <uuid>|--target-page <name>] [--pos first-child|last-child|sibling] [--update-tags <edn-vector>] [--update-properties <edn-map>] [--remove-tags <edn-vector>] [--remove-properties <edn-vector>]` - update and/or move a block
+  - When both `--status` and `--update-properties` set `:logseq.property/status`, the value from `--update-properties` takes precedence.
 - `upsert page --page <name> [--update-tags <edn-vector>] [--update-properties <edn-map>] [--remove-tags <edn-vector>] [--remove-properties <edn-vector>]` - create (or update by page name) a page
 - `upsert page --id <id> [--update-tags <edn-vector>] [--update-properties <edn-map>] [--remove-tags <edn-vector>] [--remove-properties <edn-vector>]` - update a page by id (cannot be combined with `--page`)
 - `upsert tag --name <name>` - create or upsert a tag by name

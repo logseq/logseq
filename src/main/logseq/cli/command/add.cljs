@@ -57,7 +57,7 @@
    "in progress" :logseq.property/status.doing
    "inprogress" :logseq.property/status.doing})
 
-(defn- normalize-status
+(defn normalize-status
   [value]
   (let [text (some-> value string/trim)
         parsed (when (and (seq text) (string/starts-with? text ":"))

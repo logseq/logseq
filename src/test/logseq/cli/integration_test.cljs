@@ -2043,6 +2043,54 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
+(deftest ^:long test-cli-upsert-block-update-content-and-status
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-update-content-status")]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (run-cli ["graph" "create" "--graph" "update-content-status-graph"] data-dir cfg-path)
+                       _ (run-cli ["--graph" "update-content-status-graph" "upsert" "page" "--page" "Tasks"] data-dir cfg-path)
+                       create-result (run-cli ["--graph" "update-content-status-graph"
+                                               "upsert" "block"
+                                               "--target-page" "Tasks"
+                                               "--content" "Task Seed"
+                                               "--status" "todo"]
+                                              data-dir cfg-path)
+                       create-payload (parse-json-output create-result)
+                       block-id (first-result-id create-payload)
+                       update-result (run-cli ["--graph" "update-content-status-graph"
+                                               "upsert" "block"
+                                               "--id" (str block-id)
+                                               "--content" "Task Updated"
+                                               "--status" "done"]
+                                              data-dir cfg-path)
+                       update-payload (parse-json-output update-result)
+                       _ (p/delay 100)
+                       query-title-result (run-cli ["--graph" "update-content-status-graph"
+                                                    "query"
+                                                    "--query" "[:find ?title . :in $ ?id :where [?id :block/title ?title]]"
+                                                    "--inputs" (pr-str [block-id])]
+                                                   data-dir cfg-path)
+                       query-title-payload (parse-json-output query-title-result)
+                       query-status-result (run-cli ["--graph" "update-content-status-graph"
+                                                     "query"
+                                                     "--query" "[:find ?ident . :in $ ?id :where [?id :logseq.property/status ?status] [?status :db/ident ?ident]]"
+                                                     "--inputs" (pr-str [block-id])]
+                                                    data-dir cfg-path)
+                       query-status-payload (parse-json-output query-status-result)
+                       stop-result (run-cli ["server" "stop" "--graph" "update-content-status-graph"] data-dir cfg-path)
+                       stop-payload (parse-json-output stop-result)]
+                 (is (= "ok" (:status create-payload)))
+                 (is (some? block-id))
+                 (is (= "ok" (:status update-payload)))
+                 (is (= "Task Updated" (get-in query-title-payload [:data :result])))
+                 (is (string/includes? (str (get-in query-status-payload [:data :result])) "status.done"))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
 (deftest ^:long test-cli-add-block-pos-ordering
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-add-pos")]

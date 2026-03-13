@@ -1029,6 +1029,22 @@
       (is (= :upsert-block (:command result)))
       (is (= "abc" (get-in result [:options :uuid])))))
 
+  (testing "upsert block update mode accepts status-only updates"
+    (let [result (commands/parse-args ["upsert" "block" "--id" "1"
+                                       "--status" "done"])]
+      (is (true? (:ok? result)))
+      (is (= :upsert-block (:command result)))
+      (is (= 1 (get-in result [:options :id])))
+      (is (= "done" (get-in result [:options :status])))))
+
+  (testing "upsert block update mode accepts content-only updates"
+    (let [result (commands/parse-args ["upsert" "block" "--id" "1"
+                                       "--content" "updated text"])]
+      (is (true? (:ok? result)))
+      (is (= :upsert-block (:command result)))
+      (is (= 1 (get-in result [:options :id])))
+      (is (= "updated text" (get-in result [:options :content])))))
+
   (testing "upsert block forces update mode when id and content are both provided"
     (let [result (commands/parse-args ["upsert" "block"
                                        "--id" "1"
@@ -1623,6 +1639,44 @@
       (is (= :upsert-block (get-in result [:action :type])))
       (is (= ["TagA"] (get-in result [:action :update-tags])))))
 
+  (testing "update accepts status-only updates"
+    (let [parsed {:ok? true
+                  :command :upsert-block
+                  :options {:id 1 :status "in-progress"}}
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :upsert-block (get-in result [:action :type])))
+      (is (= :logseq.property/status.doing
+             (get-in result [:action :update-properties :logseq.property/status])))))
+
+  (testing "update accepts content-only updates"
+    (let [parsed {:ok? true
+                  :command :upsert-block
+                  :options {:id 1 :content "updated text"}}
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :upsert-block (get-in result [:action :type])))
+      (is (= "updated text" (get-in result [:action :content])))))
+
+  (testing "update rejects invalid status"
+    (let [parsed {:ok? true
+                  :command :upsert-block
+                  :options {:id 1 :status "invalid-status"}}
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "update properties status takes precedence over --status"
+    (let [parsed {:ok? true
+                  :command :upsert-block
+                  :options {:id 1
+                            :status "doing"
+                            :update-properties "{:logseq.property/status :logseq.property/status.done}"}}
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :logseq.property/status.done
+             (get-in result [:action :update-properties :logseq.property/status])))))
+
   (testing "update rejects invalid update tags"
     (let [parsed {:ok? true
                   :command :upsert-block
@@ -2200,9 +2254,11 @@
          (let [ops* (atom nil)
                calls* (atom [])
                action {:type :upsert-block :mode :update :repo "demo" :id 1 :target-id 2 :pos "last-child"
+                       :content "Updated heading"
                        :update-tags [:tag/new]
                        :remove-tags [:tag/old]
-                       :update-properties {:logseq.property/deadline "2026-01-25T12:00:00Z"}
+                       :update-properties {:logseq.property/deadline "2026-01-25T12:00:00Z"
+                                           :logseq.property/status :logseq.property/status.done}
                        :remove-properties [:logseq.property/publishing-public?]}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
@@ -2226,11 +2282,13 @@
                                                     (throw (ex-info "unexpected invoke" {:method method :calls @calls*}))))]
                  (p/let [result (commands/execute action {})]
                    (is (= :ok (:status result)))
-                   (is (= [[:move-blocks [[1] 2 {:sibling? false :bottom? true}]]
+                   (is (= [[:save-block [{:db/id 1 :block/title "Updated heading"} {}]]
+                           [:move-blocks [[1] 2 {:sibling? false :bottom? true}]]
                            [:batch-delete-property-value [[1] :block/tags 202]]
                            [:batch-remove-property [[1] :logseq.property/publishing-public?]]
                            [:batch-set-property [[1] :block/tags 101 {}]]
-                           [:batch-set-property [[1] :logseq.property/deadline "2026-01-25T12:00:00Z" {}]]]
+                           [:batch-set-property [[1] :logseq.property/deadline "2026-01-25T12:00:00Z" {}]]
+                           [:batch-set-property [[1] :logseq.property/status :logseq.property/status.done {}]]]
                           @ops*))))
                (p/catch (fn [e] (is false (str "unexpected error: " e " calls: " @calls*))))
                (p/finally done)))))
