@@ -199,20 +199,101 @@
   [items now-ms]
   (format-list-dynamic items now-ms list-property-columns))
 
+(defn- quote-posix-shell
+  [value]
+  (str "'" (string/replace (normalize-cell value) #"'" "'\"'\"'") "'"))
+
+(defn- posix-join
+  [base leaf]
+  (let [base (normalize-cell base)
+        leaf (normalize-cell leaf)
+        base (string/replace base #"/+$" "")
+        leaf (string/replace leaf #"^/+" "")]
+    (if (seq base)
+      (str base "/" leaf)
+      leaf)))
+
+(defn- graph-list-item->entry
+  [item]
+  (if (string? item)
+    {:kind :canonical
+     :graph-name item}
+    item))
+
+(defn- legacy-graph-item?
+  [{:keys [kind]}]
+  (contains? #{:legacy :legacy-undecodable} kind))
+
+(defn- format-legacy-warning-lines
+  [legacy-item data-dir]
+  (let [{:keys [kind legacy-dir legacy-graph-name target-graph-dir conflict?]} legacy-item
+        legacy-dir (or legacy-dir "-")]
+    (case kind
+      :legacy
+      (cond
+        conflict?
+        [(str "Warning: target directory already exists for legacy graph '"
+              (normalize-cell legacy-graph-name)
+              "'.")
+         "Please rename manually after resolving the conflict."]
+
+        (and (seq legacy-graph-name)
+             (seq target-graph-dir))
+        (let [source-path (if (seq data-dir)
+                            (posix-join data-dir legacy-dir)
+                            legacy-dir)
+              target-path (if (seq data-dir)
+                            (posix-join data-dir target-graph-dir)
+                            target-graph-dir)]
+          ["Rename suggestion:"
+           (str "  mv "
+                (quote-posix-shell source-path)
+                " "
+                (quote-posix-shell target-path))])
+
+        :else
+        [(str "Warning: cannot derive graph name for legacy dir '"
+              (normalize-cell legacy-dir)
+              "'; rename command is not available.")])
+
+      :legacy-undecodable
+      [(str "Warning: cannot derive graph name for legacy dir '"
+            (normalize-cell legacy-dir)
+            "'; rename command is not available.")]
+
+      [])))
+
 (defn- format-graph-list
-  [graphs current-graph]
-  (let [graphs (or graphs [])
+  [{:keys [graphs graph-items]} {:keys [current-graph data-dir]}]
+  (let [graph-items (->> (or graph-items graphs [])
+                         (mapv graph-list-item->entry))
+        graph-names (mapv (fn [{:keys [kind graph-name legacy-graph-name legacy-dir]}]
+                            (case kind
+                              :canonical graph-name
+                              :legacy (or legacy-graph-name legacy-dir)
+                              :legacy-undecodable legacy-dir
+                              (or graph-name legacy-graph-name legacy-dir)))
+                          graph-items)
         has-current? (and (seq current-graph)
-                          (some #(= % current-graph) graphs))]
-    (format-counted-table
-     nil
-     (mapv (fn [graph]
-             [(if has-current?
-                (if (= graph current-graph)
-                  (str "* " graph)
-                  (str "  " graph))
-                graph)])
-           graphs))))
+                          (some #(= % current-graph) graph-names))
+        rows (mapv (fn [item graph-name]
+                     (let [legacy? (legacy-graph-item? item)
+                           display-name (str graph-name (when legacy? " [legacy]"))
+                           selected? (= graph-name current-graph)]
+                       [(if has-current?
+                          (if selected?
+                            (str "* " display-name)
+                            (str "  " display-name))
+                          display-name)]))
+                   graph-items
+                   graph-names)
+        base-output (format-counted-table nil rows)
+        legacy-items (filterv legacy-graph-item? graph-items)]
+    (if (seq legacy-items)
+      (let [warning-lines (vec (concat [(str "Warning: " (count legacy-items) " legacy graph directories detected.")]
+                                       (mapcat #(format-legacy-warning-lines % data-dir) legacy-items)))]
+        (str base-output "\n\n" (string/join "\n" warning-lines)))
+      base-output)))
 
 (defn- format-server-list-warning
   [{:keys [cli-revision servers]}]
@@ -540,12 +621,13 @@
     (string/join "\n" (into [header] check-lines))))
 
 (defn- ->human
-  [{:keys [status data error command context human]} {:keys [now-ms graph]}]
+  [{:keys [status data error command context human]} {:keys [now-ms graph data-dir]}]
   (let [now-ms (or now-ms (js/Date.now))]
     (case status
       :ok
       (case command
-        :graph-list (format-graph-list (:graphs data) graph)
+        :graph-list (format-graph-list data {:current-graph graph
+                                             :data-dir data-dir})
         :graph-info (format-graph-info data now-ms)
         (:graph-create :graph-switch :graph-remove :graph-validate)
         (format-graph-action command context)

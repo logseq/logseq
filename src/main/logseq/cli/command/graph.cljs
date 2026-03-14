@@ -158,12 +158,36 @@
               :allow-missing-graph true
               :require-missing-graph true}}))
 
+(defn- graph-item->graph-name
+  [item]
+  (case (:kind item)
+    :canonical (:graph-name item)
+    :legacy (or (:legacy-graph-name item)
+                (:legacy-dir item))
+    :legacy-undecodable (:legacy-dir item)
+    nil))
+
 (defn execute-graph-list
   [_action config]
-  (let [graphs (->> (cli-server/list-graphs config)
-                    (mapv core/repo->graph))]
-    {:status :ok
-     :data {:graphs graphs}}))
+  (let [graph-items (->> (cli-server/list-graph-items config)
+                         (mapv (fn [item]
+                                 (if (string? item)
+                                   {:kind :canonical
+                                    :graph-name item
+                                    :graph-dir item}
+                                   item)))
+                         vec)
+        graphs (->> graph-items
+                    (keep graph-item->graph-name)
+                    (mapv core/repo->graph))
+        legacy-count (->> graph-items
+                          (filter (fn [{:keys [kind]}]
+                                    (contains? #{:legacy :legacy-undecodable} kind)))
+                          count)]
+    (cond-> {:status :ok
+             :data {:graphs graphs
+                    :graph-items graph-items}}
+      (pos? legacy-count) (assoc :human {:graph-list {:legacy-count legacy-count}}))))
 
 (defn- format-validation-errors
   [errors]
