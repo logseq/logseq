@@ -34,7 +34,7 @@
     "electron-window-state": "5.0.3",
     "extract-zip": "2.0.1",
     "fastify": "5.6.0",
-    "fs-extra": "^11.3.0",
+    "fs-extra": "^11.3.4",
     "https-proxy-agent": "7.0.2",
     "node-fetch": "2.6.7",
     "open": "7.3.1",

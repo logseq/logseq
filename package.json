@@ -151,7 +151,7 @@
         "dompurify": "^3.3.3",
         "emoji-mart": "^5.5.2",
         "fs": "0.0.1-security",
-        "fs-extra": "^11.3.0",
+        "fs-extra": "^11.3.4",
         "fuse.js": "7.1.0",
         "grapheme-splitter": "1.0.4",
         "graphology": "0.20.0",
