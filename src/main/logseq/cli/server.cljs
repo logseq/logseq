@@ -7,6 +7,7 @@
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
+            [logseq.common.graph-dir :as graph-dir]
             [logseq.db-worker.daemon :as daemon]
             [promesa.core :as p]))
 
@@ -310,7 +311,64 @@
       {:cli-revision cli-revision
        :servers mismatch-servers})))
 
-(defn list-graphs
+(def ^:private legacy-token-pattern #"(?:\+\+|\+3A\+|%)")
+
+(defn- ignored-graph-dir?
+  [graph-name]
+  (or (= graph-name common-config/unlinked-graphs-dir)
+      (string/starts-with? graph-name common-config/file-version-prefix)))
+
+(defn- legacy-derivation-signal?
+  [dir-name]
+  (and (string? dir-name)
+       (re-find legacy-token-pattern dir-name)))
+
+(defn- decode-legacy-graph-name
+  [legacy-dir]
+  (some-> (graph-dir/decode-legacy-graph-dir-name legacy-dir)
+          (#(when-not (ignored-graph-dir? %) %))))
+
+(defn- canonical-dir-name?
+  [dir-name graph-name]
+  (= dir-name (graph-dir/graph-dir-key->encoded-dir-name graph-name)))
+
+(defn- classify-graph-dir
+  [data-dir dir-name]
+  (when-not (ignored-graph-dir? dir-name)
+    (let [decoded-canonical (db-lock/decode-canonical-graph-dir-key dir-name)
+          canonical? (and (seq decoded-canonical)
+                          (not (ignored-graph-dir? decoded-canonical))
+                          (canonical-dir-name? dir-name decoded-canonical))
+          legacy-graph-name (or (when (and (seq decoded-canonical)
+                                           (not canonical?))
+                                  decoded-canonical)
+                                (decode-legacy-graph-name dir-name))]
+      (cond
+        canonical?
+        {:kind :canonical
+         :graph-name decoded-canonical
+         :graph-dir dir-name}
+
+        (seq legacy-graph-name)
+        (let [target-graph-dir (graph-dir/graph-dir-key->encoded-dir-name legacy-graph-name)
+              conflict? (and (seq target-graph-dir)
+                             (not= target-graph-dir dir-name)
+                             (fs/existsSync (node-path/join data-dir target-graph-dir)))]
+          {:kind :legacy
+           :legacy-dir dir-name
+           :legacy-graph-name legacy-graph-name
+           :target-graph-dir target-graph-dir
+           :conflict? conflict?})
+
+        (legacy-derivation-signal? dir-name)
+        {:kind :legacy-undecodable
+         :legacy-dir dir-name
+         :reason :graph-name-not-derivable}
+
+        :else
+        nil))))
+
+(defn list-graph-items
   [config]
   (let [data-dir (resolve-data-dir config)
         entries (when (fs/existsSync data-dir)
@@ -318,9 +376,14 @@
     (->> entries
          (filter #(.isDirectory ^js %))
          (map (fn [^js dirent]
-                (db-lock/decode-canonical-graph-dir-key (.-name dirent))))
+                (classify-graph-dir data-dir (.-name dirent))))
          (filter some?)
-         (remove (fn [s]
-                   (or (= s common-config/unlinked-graphs-dir)
-                       (string/starts-with? s common-config/file-version-prefix))))
          (vec))))
+
+(defn list-graphs
+  [config]
+  (->> (list-graph-items config)
+       (keep (fn [{:keys [kind graph-name]}]
+               (when (= :canonical kind)
+                 graph-name)))
+       (vec)))

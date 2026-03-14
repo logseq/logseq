@@ -499,6 +499,78 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
+(deftest ^:long test-cli-graph-list-legacy-dir-rename-guidance
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-legacy-graph-list")]
+           (fs/mkdirSync (node-path/join data-dir "alpha") #js {:recursive true})
+           (fs/mkdirSync (node-path/join data-dir "legacy++name") #js {:recursive true})
+           (fs/mkdirSync (node-path/join data-dir "bad%ZZname") #js {:recursive true})
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       json-result (run-cli ["graph" "list" "--output" "json"] data-dir cfg-path)
+                       json-payload (parse-json-output json-result)
+                       graph-items (get-in json-payload [:data :graph-items])
+                       kinds (set (map :kind graph-items))
+                       human-result (run-cli ["graph" "list" "--output" "human"] data-dir cfg-path)
+                       human-output (:output human-result)]
+                 (is (= 0 (:exit-code json-result)))
+                 (is (= "ok" (:status json-payload)))
+                 (is (= #{"alpha" "legacy/name" "bad%ZZname"}
+                        (set (get-in json-payload [:data :graphs]))))
+                 (is (= #{"canonical" "legacy" "legacy-undecodable"} kinds))
+                 (is (string/includes? human-output "legacy/name [legacy]"))
+                 (is (string/includes? human-output "bad%ZZname [legacy]"))
+                 (is (string/includes? human-output "Warning: 2 legacy graph directories detected."))
+                 (is (string/includes? human-output "mv '"))
+                 (is (string/includes? human-output "/legacy++name' '"))
+                 (is (string/includes? human-output "/legacy~2Fname'"))
+                 (is (string/includes? human-output "Warning: cannot derive graph name for legacy dir 'bad%ZZname'; rename command is not available."))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest ^:long test-cli-graph-list-legacy-conflict-warning
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-legacy-graph-conflict")]
+           (fs/mkdirSync (node-path/join data-dir "legacy++name") #js {:recursive true})
+           (fs/mkdirSync (node-path/join data-dir "legacy~2Fname") #js {:recursive true})
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       human-result (run-cli ["graph" "list" "--output" "human"] data-dir cfg-path)
+                       human-output (:output human-result)]
+                 (is (= 0 (:exit-code human-result)))
+                 (is (string/includes? human-output "legacy/name [legacy]"))
+                 (is (string/includes? human-output "Warning: target directory already exists for legacy graph 'legacy/name'."))
+                 (is (string/includes? human-output "Please rename manually after resolving the conflict."))
+                 (is (not (string/includes? human-output "legacy++name' '/")))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest ^:long test-cli-graph-list-percent-legacy-is-marked
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-percent-legacy")]
+           (fs/mkdirSync (node-path/join data-dir "yy~20y") #js {:recursive true})
+           (fs/mkdirSync (node-path/join data-dir "yy%20y") #js {:recursive true})
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       json-result (run-cli ["graph" "list" "--output" "json"] data-dir cfg-path)
+                       json-payload (parse-json-output json-result)
+                       graph-items (get-in json-payload [:data :graph-items])
+                       kinds (set (map :kind graph-items))
+                       human-result (run-cli ["graph" "list" "--output" "human"] data-dir cfg-path)
+                       human-output (:output human-result)]
+                 (is (= 0 (:exit-code json-result)))
+                 (is (= "ok" (:status json-payload)))
+                 (is (= #{"canonical" "legacy"} kinds))
+                 (is (= 1 (count (filter #(= "yy~20y" (:graph-dir %)) graph-items))))
+                 (is (= 1 (count (filter #(= "yy%20y" (:legacy-dir %)) graph-items))))
+                 (is (string/includes? human-output "yy y [legacy]"))
+                 (is (string/includes? human-output "Warning: 1 legacy graph directories detected."))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
 (deftest ^:long test-cli-data-dir-permission-error
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-readonly")]

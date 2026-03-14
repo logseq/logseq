@@ -82,7 +82,58 @@
                   "* beta\n"
                   "  gamma\n"
                   "Count: 3")
-             result)))))
+             result))))
+
+  (testing "graph list marks legacy entries and prints rename guidance"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-list
+                                        :data {:graphs ["alpha" "legacy/name" "mystery"]
+                                               :graph-items [{:kind :canonical
+                                                              :graph-name "alpha"
+                                                              :graph-dir "alpha"}
+                                                             {:kind :legacy
+                                                              :legacy-dir "legacy++name"
+                                                              :legacy-graph-name "legacy/name"
+                                                              :target-graph-dir "legacy~2Fname"
+                                                              :conflict? false}
+                                                             {:kind :legacy-undecodable
+                                                              :legacy-dir "mystery"
+                                                              :reason :undecodable}]}}
+                                       {:output-format nil
+                                        :graph "legacy/name"
+                                        :data-dir "/tmp/graphs"})]
+      (is (string/includes? result "* legacy/name [legacy]"))
+      (is (string/includes? result "mystery [legacy]"))
+      (is (string/includes? result "Warning: 2 legacy graph directories detected."))
+      (is (string/includes? result "mv '/tmp/graphs/legacy++name' '/tmp/graphs/legacy~2Fname'"))
+      (is (string/includes? result "Warning: cannot derive graph name for legacy dir 'mystery'; rename command is not available."))))
+
+  (testing "graph list conflict warning does not print mv command"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-list
+                                        :data {:graphs ["legacy/name"]
+                                               :graph-items [{:kind :legacy
+                                                              :legacy-dir "legacy++name"
+                                                              :legacy-graph-name "legacy/name"
+                                                              :target-graph-dir "legacy~2Fname"
+                                                              :conflict? true}]}}
+                                       {:output-format nil
+                                        :data-dir "/tmp/graphs"})]
+      (is (string/includes? result "Warning: target directory already exists for legacy graph 'legacy/name'."))
+      (is (not (string/includes? result "mv '/tmp/graphs/legacy++name' '/tmp/graphs/legacy~2Fname'")))))
+
+  (testing "graph list rename command uses POSIX single-quote escaping"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-list
+                                        :data {:graphs ["weird'name"]
+                                               :graph-items [{:kind :legacy
+                                                              :legacy-dir "weird'++name"
+                                                              :legacy-graph-name "weird'/name"
+                                                              :target-graph-dir "weird~27~2Fname"
+                                                              :conflict? false}]}}
+                                       {:output-format nil
+                                        :data-dir "/tmp/graphs"})]
+      (is (string/includes? result "mv '/tmp/graphs/weird'\"'\"'++name' '/tmp/graphs/weird~27~2Fname'")))))
 
 (deftest test-human-output-list-page
   (testing "list page renders a table with count"
