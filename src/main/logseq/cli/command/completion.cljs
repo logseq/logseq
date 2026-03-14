@@ -26,4 +26,6 @@
   [(core/command-entry ["completion"] :completion
                        "Generate shell completion script"
                        completion-spec
-                       {:long-desc long-desc})])
+                       {:long-desc long-desc
+                        :examples ["logseq completion zsh"
+                                   "logseq completion bash"]})])

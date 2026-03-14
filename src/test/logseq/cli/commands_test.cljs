@@ -114,7 +114,7 @@
       (is (string/includes? plain-summary "Global options:"))
       (is (string/includes? plain-summary "Command options:")))))
 
-(deftest test-parse-args-help
+(deftest test-parse-args-help-groups
   (testing "graph group shows subcommands"
     (let [result (binding [style/*color-enabled?* true]
                    (commands/parse-args ["graph"]))
@@ -156,35 +156,6 @@
       (is (contains-bold? summary "upsert tag"))
       (is (contains-bold? summary "upsert property"))))
 
-  (testing "remove block command shows help"
-    (let [result (binding [style/*color-enabled?* true]
-                   (commands/parse-args ["remove" "block" "--help"]))
-          summary (:summary result)
-          plain-summary (strip-ansi summary)]
-      (is (true? (:help? result)))
-      (is (string/includes? plain-summary "Usage: logseq remove block"))
-      (is (string/includes? plain-summary "Command options:"))
-      (is (contains-bold? summary "--id"))
-      (is (contains-bold? summary "--uuid"))))
-
-  (testing "upsert block command shows help"
-    (let [result (binding [style/*color-enabled?* true]
-                   (commands/parse-args ["upsert" "block" "--help"]))
-          summary (:summary result)
-          plain-summary (strip-ansi summary)]
-      (is (true? (:help? result)))
-      (is (string/includes? plain-summary "Usage: logseq upsert block"))
-      (is (string/includes? plain-summary "Command options:"))
-      (is (contains-bold? summary "--id"))
-      (is (contains-bold? summary "--uuid"))
-      (is (contains-bold? summary "--content"))
-      (is (contains-bold? summary "--target-id"))
-      (is (contains-bold? summary "--target-uuid"))
-      (is (contains-bold? summary "--update-tags"))
-      (is (contains-bold? summary "--update-properties"))
-      (is (contains-bold? summary "--remove-tags"))
-      (is (contains-bold? summary "--remove-properties"))))
-
   (testing "server group shows subcommands"
     (let [result (binding [style/*color-enabled?* true]
                    (commands/parse-args ["server"]))
@@ -213,6 +184,49 @@
           lines (command-lines summary)]
       (is (seq lines))
       (is (every? #(not (string/includes? % "[options]")) lines)))))
+
+(deftest test-parse-args-help-command-examples
+  (testing "remove block command shows help"
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["remove" "block" "--help"]))
+          summary (:summary result)
+          plain-summary (strip-ansi summary)]
+      (is (true? (:help? result)))
+      (is (string/includes? plain-summary "Usage: logseq remove block"))
+      (is (string/includes? plain-summary "Command options:"))
+      (is (string/includes? plain-summary "Examples:"))
+      (is (string/includes? plain-summary "logseq remove block --graph my-graph --id 123"))
+      (is (contains-bold? summary "--id"))
+      (is (contains-bold? summary "--uuid"))))
+
+  (testing "sync config set help limits examples to five lines"
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["sync" "config" "set" "--help"]))
+          plain-summary (strip-ansi (:summary result))]
+      (is (true? (:help? result)))
+      (is (string/includes? plain-summary "Examples:"))
+      (is (string/includes? plain-summary "logseq sync config set ws-url wss://sync.logseq.com"))
+      (is (string/includes? plain-summary "logseq sync config set http-base http://localhost:8080"))
+      (is (not (string/includes? plain-summary "logseq sync config set ws-url wss://example.com/socket")))))
+
+  (testing "upsert block command shows help"
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["upsert" "block" "--help"]))
+          summary (:summary result)
+          plain-summary (strip-ansi summary)]
+      (is (true? (:help? result)))
+      (is (string/includes? plain-summary "Usage: logseq upsert block"))
+      (is (string/includes? plain-summary "Command options:"))
+      (is (string/includes? plain-summary "Examples:"))
+      (is (contains-bold? summary "--id"))
+      (is (contains-bold? summary "--uuid"))
+      (is (contains-bold? summary "--content"))
+      (is (contains-bold? summary "--target-id"))
+      (is (contains-bold? summary "--target-uuid"))
+      (is (contains-bold? summary "--update-tags"))
+      (is (contains-bold? summary "--update-properties"))
+      (is (contains-bold? summary "--remove-tags"))
+      (is (contains-bold? summary "--remove-properties")))))
 
 (deftest test-parse-args-group-help-flags
   (testing "all groups show group help with -h and --help"
@@ -243,7 +257,8 @@
       (is (true? (:help? result)))
       (is (string/includes? plain-summary "Usage: logseq login"))
       (is (string/includes? plain-summary "Global options:"))
-      (is (string/includes? plain-summary "Command options:"))))
+      (is (string/includes? plain-summary "Command options:"))
+      (is (not (string/includes? plain-summary "Examples:")))))
 
   (testing "logout command shows help"
     (let [result (binding [style/*color-enabled?* true]
@@ -253,7 +268,8 @@
       (is (true? (:help? result)))
       (is (string/includes? plain-summary "Usage: logseq logout"))
       (is (string/includes? plain-summary "Global options:"))
-      (is (string/includes? plain-summary "Command options:")))))
+      (is (string/includes? plain-summary "Command options:"))
+      (is (not (string/includes? plain-summary "Examples:"))))))
 
 (deftest test-parse-args-help-sync-group
   (testing "sync group shows subcommands"

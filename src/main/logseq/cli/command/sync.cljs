@@ -17,17 +17,32 @@
               :coerce :boolean}})
 
 (def entries
-  [(core/command-entry ["sync" "status"] :sync-status "Show db-sync runtime status" {})
-   (core/command-entry ["sync" "start"] :sync-start "Start db-sync client" {})
-   (core/command-entry ["sync" "stop"] :sync-stop "Stop db-sync client" {})
-   (core/command-entry ["sync" "upload"] :sync-upload "Upload current graph snapshot" {})
-   (core/command-entry ["sync" "download"] :sync-download "Download remote graph snapshot" sync-download-spec)
+  [(core/command-entry ["sync" "status"] :sync-status "Show db-sync runtime status" {}
+                       {:examples ["logseq sync status --graph my-graph"]})
+   (core/command-entry ["sync" "start"] :sync-start "Start db-sync client" {}
+                       {:examples ["logseq sync start --graph my-graph"]})
+   (core/command-entry ["sync" "stop"] :sync-stop "Stop db-sync client" {}
+                       {:examples ["logseq sync stop --graph my-graph"]})
+   (core/command-entry ["sync" "upload"] :sync-upload "Upload current graph snapshot" {}
+                       {:examples ["logseq sync upload --graph my-graph"]})
+   (core/command-entry ["sync" "download"] :sync-download "Download remote graph snapshot" sync-download-spec
+                       {:examples ["logseq sync download --graph my-graph"
+                                   "logseq sync download --graph my-graph --progress"]})
    (core/command-entry ["sync" "remote-graphs"] :sync-remote-graphs "List remote graphs" {})
    (core/command-entry ["sync" "ensure-keys"] :sync-ensure-keys "Ensure user RSA keys for sync/e2ee" {})
-   (core/command-entry ["sync" "grant-access"] :sync-grant-access "Grant graph access to an email" sync-grant-access-spec)
-   (core/command-entry ["sync" "config" "set"] :sync-config-set "Set sync config key" {})
-   (core/command-entry ["sync" "config" "get"] :sync-config-get "Get sync config key" {})
-   (core/command-entry ["sync" "config" "unset"] :sync-config-unset "Unset sync config key" {})])
+   (core/command-entry ["sync" "grant-access"] :sync-grant-access "Grant graph access to an email" sync-grant-access-spec
+                       {:examples ["logseq sync grant-access --graph my-graph --graph-id 8b6ecdd0-1fab-4a9f-b3fb-3069c5f76e95 --email teammate@example.com"]})
+   (core/command-entry ["sync" "config" "set"] :sync-config-set "Set sync config key" {}
+                       {:examples ["logseq sync config set ws-url wss://sync.logseq.com"
+                                   "logseq sync config set http-base https://api.logseq.com"
+                                   "logseq sync config set e2ee-password my-secret"
+                                   "logseq sync config set ws-url ws://localhost:12315"
+                                   "logseq sync config set http-base http://localhost:8080"
+                                   "logseq sync config set ws-url wss://example.com/socket"]})
+   (core/command-entry ["sync" "config" "get"] :sync-config-get "Get sync config key" {}
+                       {:examples ["logseq sync config get ws-url"]})
+   (core/command-entry ["sync" "config" "unset"] :sync-config-unset "Unset sync config key" {}
+                       {:examples ["logseq sync config unset ws-url"]})])
 
 (def ^:private config-key-map
   {"ws-url" :ws-url

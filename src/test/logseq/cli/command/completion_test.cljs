@@ -14,7 +14,12 @@
     (let [entry (first completion-command/entries)]
       (is (some? (:long-desc entry)))
       (is (string/includes? (:long-desc entry) "autoload -Uz compinit"))
-      (is (string/includes? (:long-desc entry) "eval \"$(logseq completion zsh)\"")))))
+      (is (string/includes? (:long-desc entry) "eval \"$(logseq completion zsh)\""))))
+  (testing "completion entry has examples metadata"
+    (let [entry (first completion-command/entries)]
+      (is (= ["logseq completion zsh"
+              "logseq completion bash"]
+             (:examples entry))))))
 
 (deftest test-parse-args-completion-shell
   (testing "parse-args recognizes completion --shell zsh"
@@ -27,12 +32,14 @@
       (is (= :completion (:command result))))))
 
 (deftest test-parse-args-completion-help
-  (testing "parse-args completion --help returns help with setup instructions"
+  (testing "parse-args completion --help returns help with setup instructions and examples"
     (let [result (commands/parse-args ["completion" "--help"])]
       (is (false? (:ok? result)))
       (is (true? (:help? result)))
       (is (string/includes? (:summary result) "autoload -Uz compinit"))
-      (is (string/includes? (:summary result) "eval \"$(logseq completion bash)\"")))))
+      (is (string/includes? (:summary result) "eval \"$(logseq completion bash)\""))
+      (is (string/includes? (:summary result) "Examples:"))
+      (is (string/includes? (:summary result) "logseq completion zsh")))))
 
 (deftest test-build-action-completion
   (testing "build-action for :completion returns correct action"
