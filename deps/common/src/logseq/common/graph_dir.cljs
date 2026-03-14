@@ -21,6 +21,22 @@
         (catch :default _
           nil)))))
 
+(def ^:private legacy-dir-pattern #"(?:\+\+|\+3A\+|%)")
+
+(defn decode-legacy-graph-dir-name
+  [dir-name]
+  (when (and (string? dir-name)
+             (re-find legacy-dir-pattern dir-name))
+    (let [compat-name (-> dir-name
+                          (string/replace "+3A+" ":")
+                          (string/replace "++" "/"))]
+      (try
+        (let [decoded (js/decodeURIComponent compat-name)]
+          (when (seq decoded)
+            decoded))
+        (catch :default _
+          nil)))))
+
 (defn repo->graph-dir-key
   [repo]
   (when (seq repo)

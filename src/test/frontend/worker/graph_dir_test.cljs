@@ -22,3 +22,16 @@
   (testing "legacy graph-dir encodings are not accepted"
     (is (nil? (graph-dir/decode-graph-dir-name "foo++bar")))
     (is (nil? (graph-dir/decode-graph-dir-name "a+3A+b")))))
+
+(deftest decode-legacy-graph-dir-name-derives-only-legacy-compatible-names
+  (testing "legacy token encoding decodes into graph name"
+    (is (= "foo/bar"
+           (graph-dir/decode-legacy-graph-dir-name "foo++bar")))
+    (is (= "a:b"
+           (graph-dir/decode-legacy-graph-dir-name "a+3A+b"))))
+  (testing "legacy uri-encoded names decode when valid"
+    (is (= "space name"
+           (graph-dir/decode-legacy-graph-dir-name "space%20name"))))
+  (testing "invalid or canonical names are ignored"
+    (is (nil? (graph-dir/decode-legacy-graph-dir-name "foo~2Fbar")))
+    (is (nil? (graph-dir/decode-legacy-graph-dir-name "bad%ZZname")))))
