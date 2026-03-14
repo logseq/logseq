@@ -291,6 +291,26 @@
 
 ;; CLI error handling is in logseq.cli.command.core.
 
+(def ^:private group-commands
+  (->> table
+       (map :cmds)
+       (group-by first)
+       (keep (fn [[group cmds]]
+               (when (some #(> (count %) 1) cmds)
+                 group)))
+       set))
+
+(def ^:private help-flags
+  #{"-h" "--help"})
+
+(defn- group-help-invocation?
+  [args]
+  (let [group (first args)
+        trailing-args (rest args)]
+    (and (contains? group-commands group)
+         (or (empty? trailing-args)
+             (every? help-flags trailing-args)))))
+
 (defn parse-args
   [raw-args]
   (let [summary (command-core/top-level-summary table)
@@ -303,7 +323,7 @@
       (empty? args)
       (command-core/help-result summary)
 
-      (and (= 1 (count args)) (#{"graph" "server" "list" "upsert" "remove" "query" "sync"} (first args)))
+      (group-help-invocation? args)
       (command-core/help-result (command-core/group-summary (first args) table))
 
       :else
@@ -318,7 +338,9 @@
           (let [{:keys [cause] :as data} (ex-data e)]
             (cond
               (= cause :input-exhausted)
-              (command-core/help-result summary)
+              (if (group-help-invocation? args)
+                (command-core/help-result (command-core/group-summary (first args) table))
+                (command-core/help-result summary))
 
               (= cause :no-match)
               (command-core/unknown-command-result summary (str "unknown command: " (unknown-command-message data)))
