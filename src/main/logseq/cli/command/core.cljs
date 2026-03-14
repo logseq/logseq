@@ -39,12 +39,13 @@
 (defn command-entry
   ([cmds command desc spec]
    (command-entry cmds command desc spec nil))
-  ([cmds command desc spec {:keys [long-desc]}]
+  ([cmds command desc spec {:keys [long-desc examples]}]
    (let [spec* (merge-spec spec)]
      {:cmds cmds
       :command command
       :desc desc
       :long-desc long-desc
+      :examples examples
       :spec spec*
       :restrict true
       :fn (fn [{:keys [opts args]}]
@@ -52,6 +53,7 @@
              :cmds cmds
              :spec spec*
              :long-desc long-desc
+             :examples examples
              :opts opts
              :args args})})))
 
@@ -127,9 +129,21 @@
                   (str "Command " (style/bold "options") ":")
                   "  See `logseq <command> --help`"])))
 
+(defn- format-examples
+  [examples]
+  (->> examples
+       (keep (fn [example]
+               (let [line (some-> example str string/trim)]
+                 (when (seq line)
+                   line))))
+       (take 5)
+       (map #(str "  " %))
+       (string/join "\n")))
+
 (defn command-summary
-  [{:keys [cmds spec long-desc]}]
-  (let [command-spec (apply dissoc spec (keys global-spec*))]
+  [{:keys [cmds spec long-desc examples]}]
+  (let [command-spec (apply dissoc spec (keys global-spec*))
+        formatted-examples (format-examples examples)]
     (string/join "\n"
                  (cond-> [(str "Usage: logseq " (command-usage cmds spec))]
                    (seq long-desc) (conj "" long-desc)
@@ -138,7 +152,10 @@
                               (format-opts global-spec*)
                               ""
                               (str "Command " (style/bold "options") ":")
-                              (format-opts command-spec))))))
+                              (format-opts command-spec))
+                   (seq formatted-examples) (conj ""
+                                                  (str (style/bold "Examples") ":")
+                                                  formatted-examples)))))
 
 (defn normalize-opts
   [opts]
