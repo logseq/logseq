@@ -2478,12 +2478,52 @@
 
 (deftest test-execute-graph-list-strips-db-prefix
   (async done
-         (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["logseq_db_demo"
-                                                             "logseq_db_logseq_db_other"
-                                                             "my_logseq_db_notes"])]
+         (-> (p/with-redefs [cli-server/list-graph-items (fn [_] [{:kind :canonical
+                                                                   :graph-name "logseq_db_demo"
+                                                                   :graph-dir "logseq_db_demo"}
+                                                                  {:kind :canonical
+                                                                   :graph-name "logseq_db_logseq_db_other"
+                                                                   :graph-dir "logseq_db_logseq_db_other"}
+                                                                  {:kind :canonical
+                                                                   :graph-name "my_logseq_db_notes"
+                                                                   :graph-dir "my_logseq_db_notes"}])]
                (p/let [result (commands/execute {:type :graph-list} {})]
                  (is (= :ok (:status result)))
                  (is (= ["demo" "logseq_db_other" "my_logseq_db_notes"]
                         (get-in result [:data :graphs])))))
+             (p/catch (fn [e] (is false (str "unexpected error: " e))))
+             (p/finally done))))
+
+(deftest test-execute-graph-list-includes-legacy-metadata
+  (async done
+         (-> (p/with-redefs [cli-server/list-graph-items (fn [_]
+                                                           [{:kind :canonical
+                                                             :graph-name "alpha"
+                                                             :graph-dir "alpha"}
+                                                            {:kind :legacy
+                                                             :legacy-dir "legacy++name"
+                                                             :legacy-graph-name "legacy/name"
+                                                             :target-graph-dir "legacy~2Fname"
+                                                             :conflict? false}
+                                                            {:kind :legacy-undecodable
+                                                             :legacy-dir "mystery"
+                                                             :reason :undecodable}])]
+               (p/let [result (commands/execute {:type :graph-list} {:data-dir "/tmp/graphs"})]
+                 (is (= :ok (:status result)))
+                 (is (= ["alpha" "legacy/name" "mystery"]
+                        (get-in result [:data :graphs])))
+                 (is (= [{:kind :canonical
+                          :graph-name "alpha"
+                          :graph-dir "alpha"}
+                         {:kind :legacy
+                          :legacy-dir "legacy++name"
+                          :legacy-graph-name "legacy/name"
+                          :target-graph-dir "legacy~2Fname"
+                          :conflict? false}
+                         {:kind :legacy-undecodable
+                          :legacy-dir "mystery"
+                          :reason :undecodable}]
+                        (get-in result [:data :graph-items])))
+                 (is (= 2 (get-in result [:human :graph-list :legacy-count])))))
              (p/catch (fn [e] (is false (str "unexpected error: " e))))
              (p/finally done))))
