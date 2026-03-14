@@ -214,6 +214,26 @@
       (is (seq lines))
       (is (every? #(not (string/includes? % "[options]")) lines)))))
 
+(deftest test-parse-args-group-help-flags
+  (testing "all groups show group help with -h and --help"
+    (doseq [group ["graph" "server" "list" "upsert" "remove" "query" "sync"]
+            help-flag ["-h" "--help"]]
+      (let [result (binding [style/*color-enabled?* true]
+                     (commands/parse-args [group help-flag]))
+            plain-summary (strip-ansi (:summary result))]
+        (is (true? (:help? result)))
+        (is (string/includes? plain-summary (str "Usage: logseq " group " <subcommand> [options]"))))))
+
+  (testing "upsert block command short help flag shows command help"
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["upsert" "block" "-h"]))
+          plain-summary (strip-ansi (:summary result))]
+      (is (true? (:help? result)))
+      (is (string/includes? plain-summary "Usage: logseq upsert block"))
+      (is (not (string/includes? plain-summary "Usage: logseq upsert <subcommand> [options]")))))
+
+  )
+
 (deftest test-parse-args-help-auth-commands
   (testing "login command shows help"
     (let [result (binding [style/*color-enabled?* true]
