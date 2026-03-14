@@ -296,10 +296,10 @@
     tslib "^2.8.1"
     xml2js "^0.6.2"
 
-"@capacitor/clipboard@^7.0.2":
-  version "7.0.2"
-  resolved "https://registry.yarnpkg.com/@capacitor/clipboard/-/clipboard-7.0.2.tgz#fe9ea01032581f68feda79c19304c5f82e1995f1"
-  integrity sha512-Cm37cNPvSzuao3HlcrQT18py5WUfKdaNWBHFuQcubBzBuKhqtAC9P6xZ2d0ucPFdxvsEOgO7mjs2BWIpaKqpgg==
+"@capacitor/clipboard@^7.0.4":
+  version "7.0.4"
+  resolved "https://registry.yarnpkg.com/@capacitor/clipboard/-/clipboard-7.0.4.tgz#d91c0abc53c56ecc3b1690cae8aeb2fbe0060b8d"
+  integrity sha512-+kiTRFjwD5UiWRg/m1JA/0Z0DDdsZLa25MLqI1e3MUi3yNZIwVZV5Oj6v4O0gxmpoBxf5A1L1v3weq+vWOBUuQ==
 
 "@capacitor/core@7.2.0":
   version "7.2.0"
@@ -315,15 +315,15 @@
   dependencies:
     tslib "^2.1.0"
 
-"@capacitor/device@^7.0.2":
-  version "7.0.2"
-  resolved "https://registry.yarnpkg.com/@capacitor/device/-/device-7.0.2.tgz#406bde129d3fcf55f0de0b691509535e2a00e315"
-  integrity sha512-OMGMBjLbh7ApaqW1oOJIV73iyrFK/T5v2MzuQYq3GLT+jnGvCuj/y82Ofq2Fz9/hlJ2fukztPwG1K80jyk0i6w==
+"@capacitor/device@^7.0.4":
+  version "7.0.4"
+  resolved "https://registry.yarnpkg.com/@capacitor/device/-/device-7.0.4.tgz#9b368dcbe2ad57b30808c6d3cadf09ffbb311db5"
+  integrity sha512-hbdKIcXO5f6HB/TD1uf6XHtkbg4C5AlMIA0xIgN9CaK561009OT9i3A62eHreRzOB5Ea7qi0VPHMB7HdFD4BTQ==
 
-"@capacitor/dialog@^7.0.2":
-  version "7.0.2"
-  resolved "https://registry.yarnpkg.com/@capacitor/dialog/-/dialog-7.0.2.tgz#ff0b50a0fd4d9792fd6e47dcf28e2cee49c41568"
-  integrity sha512-2lRMKEdBV/2LMCwHbC5a03jiU4tdlIN4hXAqmQMxnaa7CAVLfk/vEE+vxA5mpnI/pzoXF/QDQEUXJUd10hbcKA==
+"@capacitor/dialog@^7.0.4":
+  version "7.0.4"
+  resolved "https://registry.yarnpkg.com/@capacitor/dialog/-/dialog-7.0.4.tgz#c61dc9e65ddcabcfdd7867799bcb1cbe637e9260"
+  integrity sha512-7W41dohW/vGmLIpqmrvUmhznyFjXK/UPXDU2PHRjV91JbukUSUXdYsvrUPgYW/Nph+SQXyLIv/9GmQFPpLpo/Q==
 
 "@capacitor/filesystem@7.0.1":
   version "7.0.1"
@@ -350,10 +350,10 @@
   resolved "https://registry.yarnpkg.com/@capacitor/keyboard/-/keyboard-7.0.1.tgz#edf212528cd1587494ceb1d260868c1a9540aed1"
   integrity sha512-Gi064vOARMac+x9/DmEFeywN9oAETMf3OYsMuYm9gA8SvdsDJ3QJqMoFnSEIORYXe21Jzt2SIEdLlpT65P/b2g==
 
-"@capacitor/network@^7.0.1":
-  version "7.0.1"
-  resolved "https://registry.yarnpkg.com/@capacitor/network/-/network-7.0.1.tgz#8241ce6b6b5bbddc3157e218f31dd4ec04f1c4f0"
-  integrity sha512-jKyhTUqegKHjHKkK8e3t0TgwAYpKb3ocYpZkJrB3uXL5figkG06UEhQE4Cp25Dfb4LIjDxTSDLLsDEteKarmyg==
+"@capacitor/network@^7.0.4":
+  version "7.0.4"
+  resolved "https://registry.yarnpkg.com/@capacitor/network/-/network-7.0.4.tgz#5b2b51fad872b4b45546e24b0606441b58d01551"
+  integrity sha512-fNhN3968AQWMnzasPJ0B8e+nyk7+R6V9PWIBQWSQRHrKndDgWRHpxkjEzJPgnJr3EjnKLjbwO+UYy+EwBlGs3A==
 
 "@capacitor/share@7.0.1":
   version "7.0.1"
@@ -370,10 +370,10 @@
   resolved "https://registry.yarnpkg.com/@capacitor/status-bar/-/status-bar-7.0.1.tgz#6bd3769ef35158c961ff2a6b571c03e9bce55809"
   integrity sha512-iDv3mXYo9CdxYRVwt3/pRyuk25p7Sn4GfaS/zMZyVIqTzsvKLCIIH3GdKK+ta+nsNcAVpCw/t5jFEBt1D18ctA==
 
-"@capgo/capacitor-navigation-bar@^7.1.32":
-  version "7.1.32"
-  resolved "https://registry.yarnpkg.com/@capgo/capacitor-navigation-bar/-/capacitor-navigation-bar-7.1.32.tgz#937902665c1602bc653e9344538cfc3abc525062"
-  integrity sha512-bigqO8GD1qiyoGdMPCDXOmthhjEAokW0P4Aq+1ejWAKzy4tge44r2vThuTV+W75sPWFiNXdt8tB+iSQImN1row==
+"@capgo/capacitor-navigation-bar@^7.3.18":
+  version "7.3.18"
+  resolved "https://registry.yarnpkg.com/@capgo/capacitor-navigation-bar/-/capacitor-navigation-bar-7.3.18.tgz#6ac061dcca25ede445f53ff4d9d31ccc9a51e886"
+  integrity sha512-FMeesHKfjPHbw6+AoF8gBMpdMAVNqdRQy1r3z4NyQSv9HIRBVbxqQ6twOemTOq3FNSI1s1niJ7bIwo0Ysc6+PQ==
 
 "@cspotcode/source-map-support@^0.8.0":
   version "0.8.1"
