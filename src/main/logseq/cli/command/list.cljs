@@ -64,9 +64,13 @@
           :fields {:desc "Select output fields (comma separated)"}}))
 
 (def entries
-  [(core/command-entry ["list" "page"] :list-page "List pages" list-page-spec)
-   (core/command-entry ["list" "tag"] :list-tag "List tags" list-tag-spec)
-   (core/command-entry ["list" "property"] :list-property "List properties" list-property-spec)])
+  [(core/command-entry ["list" "page"] :list-page "List pages" list-page-spec
+                       {:examples ["logseq list page --graph my-graph"
+                                   "logseq list page --graph my-graph --journal-only --limit 20"]})
+   (core/command-entry ["list" "tag"] :list-tag "List tags" list-tag-spec
+                       {:examples ["logseq list tag --graph my-graph --with-properties"]})
+   (core/command-entry ["list" "property"] :list-property "List properties" list-property-spec
+                       {:examples ["logseq list property --graph my-graph --with-type"]})])
 
 (defn invalid-options?
   [command opts]

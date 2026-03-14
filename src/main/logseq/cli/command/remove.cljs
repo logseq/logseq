@@ -22,10 +22,15 @@
    :name {:desc "Entity name"}})
 
 (def entries
-  [(core/command-entry ["remove" "block"] :remove-block "Remove blocks" remove-block-spec)
-   (core/command-entry ["remove" "page"] :remove-page "Remove page" remove-page-spec)
-   (core/command-entry ["remove" "tag"] :remove-tag "Remove tag" remove-entity-spec)
-   (core/command-entry ["remove" "property"] :remove-property "Remove property" remove-entity-spec)])
+  [(core/command-entry ["remove" "block"] :remove-block "Remove blocks" remove-block-spec
+                       {:examples ["logseq remove block --graph my-graph --id 123"
+                                   "logseq remove block --graph my-graph --uuid 7f0f4bb3-2e48-4b46-ae0f-18f52ef0f8be"]})
+   (core/command-entry ["remove" "page"] :remove-page "Remove page" remove-page-spec
+                       {:examples ["logseq remove page --graph my-graph --name Home"]})
+   (core/command-entry ["remove" "tag"] :remove-tag "Remove tag" remove-entity-spec
+                       {:examples ["logseq remove tag --graph my-graph --name project"]})
+   (core/command-entry ["remove" "property"] :remove-property "Remove property" remove-entity-spec
+                       {:examples ["logseq remove property --graph my-graph --name status"]})])
 
 (defn invalid-options?
   [command opts]

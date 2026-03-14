@@ -13,7 +13,8 @@
                        :doctor
                        "Run runtime diagnostics"
                        {:dev-script {:desc "Check static/db-worker-node.js instead of bundled dist runtime"
-                                     :coerce :boolean}})])
+                                     :coerce :boolean}}
+                       {:examples ["logseq doctor --dev-script"]})])
 
 (defn build-action
   ([]
