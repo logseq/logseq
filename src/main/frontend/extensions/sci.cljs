@@ -8,7 +8,8 @@
             [frontend.util :as util]
             [goog.dom]
             [goog.object]
-            [goog.string]))
+            [goog.string]
+            [lambdaisland.glogi :as log]))
 
 ;; Helper fns for eval-string
 ;; ==========================
@@ -24,6 +25,25 @@
     (throw (ex-info "Api function does not exist" {:fn fn-name})))
   (apply js-invoke (aget js/window.logseq "api") fn-name args))
 
+(def ^:private default-user-namespace
+  {'sum sum
+   'average average
+   'parseFloat js/parseFloat
+   'isNaN js/isNaN
+   'log js/console.log
+   'pprint util/pp-str
+   ;; Provide to all evals as it useful in most contexts
+   'call-api call-api})
+
+(defn- normalize-sci-options
+  [options]
+  (let [namespaces (or (:namespaces options) {})
+        user-namespace (or (get namespaces 'user) (:bindings options))]
+    (-> options
+        (dissoc :bindings)
+        (assoc :namespaces
+               (assoc namespaces 'user (merge default-user-namespace user-namespace))))))
+
 ;; Public fns
 ;; ==========
 (defn eval-string
@@ -32,19 +52,9 @@
    (eval-string s {}))
   ([s options]
    (try
-     (sci/eval-string s (merge-with merge
-                                    {:bindings {'sum sum
-                                                'average average
-                                                'parseFloat js/parseFloat
-                                                'isNaN js/isNaN
-                                                'log js/console.log
-                                                'pprint util/pp-str
-                                                ;; Provide to all evals as it useful in most contexts
-                                                'call-api call-api}}
-                                    options))
+     (sci/eval-string s (normalize-sci-options options))
      (catch :default e
-       (println "Query: sci eval failed:")
-       (js/console.error e)))))
+       (log/error :sci-eval-failed e)))))
 
 (defn call-fn
   [f & args]
