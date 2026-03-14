@@ -22,7 +22,9 @@
            :coerce :long}})
 
 (def entries
-  [(core/command-entry ["show"] :show "Show tree" show-spec)])
+  [(core/command-entry ["show"] :show "Show tree" show-spec
+                       {:examples ["logseq show --graph my-graph --page Home"
+                                   "logseq show --graph my-graph --id 123 --level 3"]})])
 
 (def ^:private multi-id-delimiter "\n================================================================\n")
 

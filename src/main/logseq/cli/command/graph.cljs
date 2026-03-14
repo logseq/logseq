@@ -28,13 +28,21 @@
 
 (def entries
   [(core/command-entry ["graph" "list"] :graph-list "List graphs" {})
-   (core/command-entry ["graph" "create"] :graph-create "Create graph" {})
-   (core/command-entry ["graph" "switch"] :graph-switch "Switch current graph" {})
-   (core/command-entry ["graph" "remove"] :graph-remove "Remove graph" {})
-   (core/command-entry ["graph" "validate"] :graph-validate "Validate graph" graph-validate-spec)
-   (core/command-entry ["graph" "info"] :graph-info "Graph metadata" {})
-   (core/command-entry ["graph" "export"] :graph-export "Export graph" graph-export-spec)
-   (core/command-entry ["graph" "import"] :graph-import "Import graph" graph-import-spec)])
+   (core/command-entry ["graph" "create"] :graph-create "Create graph" {}
+                       {:examples ["logseq graph create --graph my-graph"]})
+   (core/command-entry ["graph" "switch"] :graph-switch "Switch current graph" {}
+                       {:examples ["logseq graph switch --graph my-graph"]})
+   (core/command-entry ["graph" "remove"] :graph-remove "Remove graph" {}
+                       {:examples ["logseq graph remove --graph my-graph"]})
+   (core/command-entry ["graph" "validate"] :graph-validate "Validate graph" graph-validate-spec
+                       {:examples ["logseq graph validate --graph my-graph"
+                                   "logseq graph validate --graph my-graph --fix"]})
+   (core/command-entry ["graph" "info"] :graph-info "Graph metadata" {}
+                       {:examples ["logseq graph info --graph my-graph"]})
+   (core/command-entry ["graph" "export"] :graph-export "Export graph" graph-export-spec
+                       {:examples ["logseq graph export --graph my-graph --type edn --file /tmp/my-graph.edn"]})
+   (core/command-entry ["graph" "import"] :graph-import "Import graph" graph-import-spec
+                       {:examples ["logseq graph import --graph my-graph --type edn --input /tmp/my-graph.edn"]})])
 
 (def ^:private import-export-types*
   #{"edn" "sqlite"})
