@@ -129,7 +129,7 @@
         "@emoji-mart/data": "^1.2.1",
         "@emoji-mart/react": "^1.1.1",
         "@glidejs/glide": "^3.7.1",
-        "@highlightjs/cdn-assets": "10.4.1",
+        "@highlightjs/cdn-assets": "11.11.1",
         "@huggingface/transformers": "^3.8.1",
         "@isomorphic-git/lightning-fs": "^4.6.2",
         "@js-joda/core": "3.2.0",
