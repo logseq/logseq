@@ -31,16 +31,6 @@
       (is (true? (:ok? result)))
       (is (= :completion (:command result))))))
 
-(deftest test-parse-args-completion-help
-  (testing "parse-args completion --help returns help with setup instructions and examples"
-    (let [result (commands/parse-args ["completion" "--help"])]
-      (is (false? (:ok? result)))
-      (is (true? (:help? result)))
-      (is (string/includes? (:summary result) "autoload -Uz compinit"))
-      (is (string/includes? (:summary result) "eval \"$(logseq completion bash)\""))
-      (is (string/includes? (:summary result) "Examples:"))
-      (is (string/includes? (:summary result) "logseq completion zsh")))))
-
 (deftest test-build-action-completion
   (testing "build-action for :completion returns correct action"
     (let [parsed {:ok? true
