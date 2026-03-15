@@ -20,13 +20,13 @@
     "deploy-staging": "export SENTRY_RELEASE=$(git rev-parse HEAD) && yarn clean && yarn release && yarn sentry:sourcemaps && cd ./worker && wrangler deploy --env staging"
   },
   "dependencies": {
-    "@sentry/cloudflare": "^10.38.0",
-    "@sentry/node": "^10.38.0",
+    "@sentry/cloudflare": "^10.43.0",
+    "@sentry/node": "^10.43.0",
     "better-sqlite3": "^12.6.2",
     "shadow-cljs": "^3.3.4",
     "ws": "^8.18.3"
   },
   "devDependencies": {
-    "@sentry/cli": "^3.1.0"
+    "@sentry/cli": "^3.3.3"
   }
 }
