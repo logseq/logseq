@@ -157,7 +157,7 @@
         "graphology": "0.26.0",
         "hnswlib-wasm": "^0.8.2",
         "html2canvas": "^1.4.1",
-        "inter-ui": "^3.19.3",
+        "inter-ui": "^4.1.1",
         "interactjs": "^1.10.27",
         "jszip": "3.10.1",
         "katex": "^0.16.38",
