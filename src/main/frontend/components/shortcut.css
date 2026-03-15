@@ -1,30 +1,59 @@
-.cp__shortcut {
-  &-table-wrap {
-    @apply relative;
-
-    a.fold {
-      @apply absolute right-0 top-0 w-full pt-3 pr-3
-      pb-3 flex items-center justify-end select-none;
-
-      &:active {
-        @apply bg-white/50 opacity-60;
-      }
-    }
-  }
+/* Reset button styles for interactive elements changed from <a> to <button> */
+.cp__shortcut-page-x button.shortcut-binding-remove,
+.cp__shortcut-page-x button.shortcut-toolbar-action,
+.cp__shortcut-page-x button.shortcut-keystroke-clear,
+.cp__shortcut-page-x button.icon-link,
+.cp__shortcut-page-x button.x,
+.shortcut-popover button.shortcut-binding-remove,
+.shortcut-popover button.shortcut-toolbar-action,
+.shortcut-filter-popover button.shortcut-binding-remove,
+.shortcut-filter-popover button.shortcut-toolbar-action,
+button.shortcut-feedback-action {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
 }
 
 .cp__shortcut-page-x {
-  @apply relative;
+  @apply relative w-full max-w-full;
 
   &-pane-controls {
-    @apply flex space-x-3 absolute top-[-4px] right-4 items-center;
+    @apply flex flex-col gap-2;
+
+    .shortcut-toolbar-row {
+      @apply flex flex-wrap gap-3 items-center;
+    }
 
     .search-input-wrap {
-      @apply pr-1 relative;
+      @apply relative flex-1 min-w-0;
 
-      a.x {
-        @apply flex items-center absolute right-1 top-0 py-[7px] px-1 opacity-60
-        hover:opacity-90;
+      .search-icon {
+        @apply absolute left-2 flex items-center opacity-40 pointer-events-none;
+        top: 50%;
+        transform: translateY(-50%);
+      }
+
+      input.form-input {
+        @apply w-full pl-7 pr-7 text-sm mt-0;
+        border-radius: 6px;
+
+        &:focus {
+          @apply outline-none border-gray-04 ring-2 ring-ring ring-offset-2;
+          --tw-ring-offset-color: var(--lx-gray-01, var(--ls-primary-background-color, var(--rx-gray-01)));
+        }
+      }
+
+      .x {
+        @apply flex items-center absolute right-1 px-1 cursor-pointer;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--lx-gray-09, var(--rx-gray-09));
+
+        &:hover {
+          color: var(--lx-gray-12, var(--rx-gray-12));
+        }
       }
     }
 
@@ -33,122 +62,513 @@
     }
 
     a.icon-link {
-      @apply opacity-80 hover:opacity-100 active:opacity-40 select-none;
+      @apply hover:opacity-80 active:opacity-40 select-none;
 
-      color: var(--ls-secondary-text-color);
+      color: var(--lx-gray-09, var(--color-level-6, var(--rx-gray-09)));
     }
 
-    .keyboard-filter {
-      .dropdown-wrapper {
-        @apply shadow-lg w-[18rem];
+    .shortcut-pills-row {
+      @apply flex items-center justify-between gap-2;
+    }
+
+    .shortcut-filter-pills {
+      @apply flex items-center gap-1 flex-wrap;
+    }
+
+    .shortcut-filter-pill {
+      @apply text-xs px-2 py-0.5 rounded-full cursor-pointer select-none
+      border;
+      color: var(--lx-gray-09, var(--rx-gray-09));
+      background-color: transparent;
+      border-color: var(--lx-gray-06, var(--ls-quaternary-background-color, var(--rx-gray-06)));
+      transition: all 100ms ease;
+
+      &:hover {
+        background-color: var(--lx-gray-05-alpha, var(--rx-gray-05-alpha));
+        color: var(--lx-gray-12, var(--rx-gray-12));
       }
 
-      .keyboard-filter-record {
-        > h2 {
-          @apply flex items-center justify-between px-1.5 py-1;
+      &-title {
+        font-weight: 400;
+      }
 
-          background-color: var(--ls-secondary-background-color);
+      &-count {
+        font-weight: 400;
+        opacity: 0.6;
+      }
 
-          > strong {
-            @apply text-[12px] opacity-80;
+      &--active {
+        background-color: var(--lx-gray-06-alpha, var(--rx-gray-06-alpha));
+        border-color: transparent;
+        color: var(--lx-gray-12, var(--rx-gray-12));
 
-            font-weight: 400;
-          }
+        .shortcut-filter-pill-title {
+          font-weight: 500;
         }
       }
     }
+
+    .shortcut-keystroke-inactive,
+    .shortcut-keystroke-active {
+      @apply flex items-center gap-1.5 text-sm cursor-pointer
+      select-none;
+      height: 30px;
+      padding: 0 10px;
+      min-width: 9rem;
+      border-radius: 6px;
+      border: 1px solid var(--lx-gray-07, var(--ls-quaternary-background-color, var(--rx-gray-07)));
+      background-color: var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02)));
+      color: var(--lx-gray-12, var(--rx-gray-12));
+      transition: background-color 150ms ease;
+      outline: none;
+
+      &:hover {
+        background-color: var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)));
+      }
+
+      &:focus-visible {
+        @apply ring-2 ring-ring ring-offset-2;
+        --tw-ring-offset-color: var(--lx-gray-01, var(--ls-primary-background-color, var(--rx-gray-01)));
+      }
+    }
+
+    .shortcut-keystroke-active {
+      max-width: 50%;
+
+      .shui-shortcut-key {
+        animation: shortcut-badge-in 150ms ease-out;
+      }
+    }
+
+    .shortcut-keystroke-keys {
+      @apply flex items-center gap-1.5;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      mask-image: linear-gradient(to right, black 80%, transparent);
+      -webkit-mask-image: linear-gradient(to right, black 80%, transparent);
+    }
+
+    .shortcut-keystroke-clear {
+      @apply flex items-center cursor-pointer;
+      color: var(--lx-gray-09, var(--rx-gray-09));
+      margin-left: auto;
+
+      &:hover {
+        color: var(--lx-gray-12, var(--rx-gray-12));
+      }
+    }
+
   }
 
   > header {
-    @apply px-4 pb-4 pt-2;
+    @apply px-4 flex flex-col gap-2 sticky top-0 z-10;
+    padding-top: 20px;
+    padding-bottom: 5px;
+    background-color: hsl(var(--background));
+  }
 
-    > h2 {
-      @apply relative top-[-6px];
-    }
+  &:not(:has(.th)) > header {
+    background: linear-gradient(to bottom, hsl(var(--background)) calc(100% - 20px), transparent);
+  }
+
+  .shortcut-empty-state {
+    @apply flex flex-col items-center justify-center gap-2 select-none;
+    min-height: calc(60dvh - var(--shortcut-header-h, 120px));
+    color: var(--lx-gray-09, var(--rx-gray-09));
   }
 
   > article {
-    @apply relative pb-4 overflow-y-auto;
-
-    max-height: calc(70vh - 100px);
-    overflow-y: overlay;
+    @apply relative pb-4 w-full;
 
     > ul {
       @apply px-4 m-0 py-0;
+      outline: none;
 
       li {
         @apply text-[15px] px-1;
 
-        &.th {
-          @apply rounded mb-2 sticky top-0 cursor-pointer
-          select-none active:opacity-80 px-2 py-1 z-[1];
+        &.shortcut-row {
+          @apply rounded-md cursor-pointer select-none py-1 px-2 -mx-1 flex-wrap min-w-0;
+          transition: background-color 100ms ease, opacity 100ms ease, box-shadow 100ms ease;
 
-          background-color: var(--ls-tertiary-background-color);
+          &:hover {
+            background-color: var(--lx-gray-04-alpha, var(--rx-gray-04-alpha));
+          }
+
+          &:active {
+            @apply opacity-80;
+          }
+
+          /* Active row (popover open) — stronger than hover so it stays visible */
+          &.active {
+            background-color: var(--lx-gray-05-alpha, var(--rx-gray-05-alpha));
+          }
+
+          /* Shortcut keypress shimmer — accent band sweeps left-to-right across the row */
+          &.shui-shortcut-row--pressed {
+            background-image: linear-gradient(
+              90deg,
+              transparent 0%,
+              transparent 35%,
+              color-mix(in srgb, var(--lx-accent-09, hsl(var(--primary))) 10%, transparent) 50%,
+              transparent 65%,
+              transparent 100%
+            );
+            background-size: 300% 100%;
+            background-repeat: no-repeat;
+            animation: shortcut-row-sweep 700ms ease-out forwards;
+          }
+
+          /* Keyboard navigation focus ring — two levels above hover for clear distinction */
+          &:focus-visible {
+            background-color: var(--lx-gray-06-alpha, var(--rx-gray-06-alpha));
+            box-shadow: inset 0 0 0 2px var(--lx-accent-09, hsl(var(--primary)));
+            outline: none;
+          }
+        }
+
+        &.th {
+          @apply rounded mb-2 sticky cursor-pointer
+          select-none active:opacity-80 px-2 py-1 z-[1];
+          top: var(--shortcut-header-h, 0px);
+          outline: none;
+
+          &:focus-visible {
+            box-shadow: inset 0 0 0 2px var(--lx-accent-09, hsl(var(--primary)));
+          }
+
+          background-color: var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)));
         }
 
         .label-wrap {
           @apply flex flex-1;
+          min-width: 60px;
         }
 
         .action-wrap {
-          @apply flex space-x-2 items-center flex-nowrap
-          select-none active:opacity-70;
+          @apply flex items-center flex-wrap justify-end
+          select-none;
+          column-gap: 16px;
+          row-gap: 6px;
+          max-width: 55%;
+          min-width: 0;
+          overflow: visible;
 
           &.disabled {
             @apply opacity-60 cursor-default;
           }
+
+          .shortcut-status-label {
+            @apply text-xs whitespace-nowrap;
+            opacity: 0.5;
+            padding-top: 2px;
+
+            &:not(:only-child) {
+              margin-right: -8px;
+            }
+          }
+        }
+      }
+
+      /* CSS-only hover dimming: dim all rows except hovered, active, or keyboard-focused */
+      &:hover li.shortcut-row:not(:hover):not(.active):not(:focus-visible) {
+        opacity: 0.5;
+      }
+
+      /* When popover is open: dim non-active rows, but restore on hover or keyboard focus */
+      &:has(.active) li.shortcut-row:not(.active):not(:focus-visible) {
+        opacity: 0.5;
+
+        &:hover {
+          opacity: 0.85;
         }
       }
     }
   }
 
-  &-record-dialog-inner {
-    @apply py-[28px] m-[-30px] px-[20px];
+}
 
-    h1 {
-      @apply relative top-[-8px];
+@keyframes shortcut-row-sweep {
+  from { background-position: -50% 0; }
+  to   { background-position: 150% 0; }
+}
+
+/* === V3 SHORTCUT POPOVER === */
+.shortcut-popover {
+  @apply flex flex-col;
+  width: 340px;
+
+  &:focus, &:focus-within { outline: none; }
+
+  > [data-orientation] {
+    @apply mt-0;
+  }
+}
+
+/* === KEYSTROKE FILTER POPOVER === */
+.shortcut-filter-popover {
+  @apply flex flex-col;
+  width: 288px;
+
+  &:focus, &:focus-within { outline: none; }
+
+  > [data-orientation] {
+    @apply mt-0;
+  }
+}
+
+.shortcut-popover-title {
+  @apply px-4 font-medium text-xs select-none;
+  padding-top: 16px;
+  padding-bottom: 2px;
+  color: var(--lx-gray-11, var(--rx-gray-11));
+}
+
+/* Input field — borderless, content sits directly on popover surface */
+.shortcut-input-field {
+  @apply px-4 pt-2 pb-3 flex flex-wrap items-center;
+  column-gap: 12px;
+  row-gap: 6px;
+  min-height: 40px;
+}
+
+.shortcut-input-placeholder {
+  @apply text-sm select-none;
+  color: var(--lx-gray-11, var(--rx-gray-11));
+  opacity: 0.75;
+  background: linear-gradient(
+    90deg,
+    currentColor 0%,
+    currentColor 40%,
+    var(--lx-gray-12, var(--rx-gray-12)) 50%,
+    currentColor 60%,
+    currentColor 100%
+  );
+  background-size: 250% 100%;
+  background-position: 100% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shortcut-shimmer 4s ease-in-out infinite;
+  animation-delay: 1s;
+}
+
+/* Each binding grouped in a subtle container */
+.shortcut-input-binding {
+  @apply inline-flex items-center flex-wrap rounded-md p-1;
+  gap: 4px;
+  background-color: var(--lx-gray-04-alpha, var(--rx-gray-04-alpha));
+  max-width: 100%;
+
+  .shortcut-binding-remove {
+    @apply flex items-center cursor-pointer select-none;
+    color: var(--lx-gray-10, var(--rx-gray-10));
+
+    &:hover {
+      color: var(--lx-gray-12, var(--rx-gray-12));
     }
+  }
+}
 
-    &:active, &:focus, &:focus-within {
-      outline: burlywood hidden medium;
+/* Allow long separate-key sequences to wrap inside the binding */
+.shortcut-input-binding .shui-shortcut-separate {
+  flex-wrap: wrap;
+  white-space: normal;
+}
+
+/* Uncommitted binding: dashed key borders */
+.shortcut-input-binding--pending .shui-shortcut-key {
+  border-style: dashed;
+}
+
+/* Conflict state: tint the binding container red, keys stay normal */
+.shortcut-input-field.conflict .shortcut-input-binding--pending {
+  background-color: var(--rx-red-06-alpha, rgb(239 68 68 / 0.2));
+
+  .shortcut-binding-remove {
+    color: var(--rx-red-11);
+
+    &:hover {
+      color: var(--rx-red-12);
     }
+  }
+}
 
-    .shortcuts-keys-wrap {
-      @apply flex items-center my-4 flex-wrap;
+/* Keep combo overflow hidden in conflict */
+.shortcut-input-field.conflict .shortcut-input-binding--pending .shui-shortcut-combo {
+  overflow: hidden;
+}
 
-      .shortcut-record-control {
-        @apply flex space-x-1 items-center select-none
-        rounded border-[2px] py-[2px] px-[2px];
-      }
+/* Feedback banner */
+.shortcut-feedback {
+  @apply flex items-center justify-between gap-2 px-4 py-2 text-xs;
+  animation: shortcut-fade-in 200ms ease-out;
 
-      .keyboard-shortcut {
-        > code {
-          @apply relative select-none tracking-wider;
+  &--error {
+    color: var(--rx-red-11, #dc2626);
+    background-color: var(--rx-red-03-alpha, rgb(239 68 68 / 0.08));
+  }
+  &--success {
+    color: var(--rx-green-11, #16a34a);
+    background-color: var(--rx-green-03-alpha, rgb(34 197 94 / 0.08));
+  }
+  &--warning {
+    color: var(--rx-amber-11, #b45309);
+    background-color: var(--rx-amber-03-alpha, hsla(44, 100%, 50%, 0.1));
+  }
+  &--muted {
+    color: var(--lx-gray-09, var(--rx-gray-09));
+    background-color: var(--lx-gray-03-alpha, var(--rx-gray-03-alpha));
+  }
+}
 
-          a.x {
-            @apply hidden absolute right-[-8px] top-[-6px] h-[16px] w-[16px]
-            rounded-full bg-red-700 text-white leading-none items-center
-            justify-center cursor-pointer opacity-90  hover:opacity-100;
-          }
+.shortcut-feedback-name {
+  @apply font-medium;
+  color: var(--rx-red-12, #991b1b);
 
-          &:hover a.x {
-            @apply flex;
-          }
-        }
-      }
-    }
+  .shortcut-feedback--success & {
+    color: var(--rx-green-12, #166534);
+  }
 
-    &.keypressed {
-      .shortcut-record-control {
-        @apply pt-0
-      }
-    }
+  .shortcut-feedback--warning & {
+    color: var(--rx-amber-12, #451a03);
+  }
+}
 
-    .action-btns {
-      .keyboard-shortcut code {
-        @apply rounded-[3px];
-      }
-    }
+.shortcut-feedback-action {
+  @apply cursor-pointer font-medium whitespace-nowrap;
+  color: var(--rx-red-11, #dc2626);
+  &:hover { text-decoration: underline; }
+
+  .shortcut-feedback--muted & {
+    color: var(--lx-gray-11, var(--rx-gray-11));
+  }
+
+  .shortcut-feedback--success & {
+    color: var(--rx-green-11, #16a34a);
+  }
+
+  .shortcut-feedback--warning & {
+    color: var(--rx-amber-11, #b45309);
+  }
+}
+
+/* Compact keycaps in amber warning banner */
+.shortcut-feedback--warning .shui-shortcut-compact {
+  color: var(--rx-amber-12, #451a03);
+}
+
+/* Chord stroke grouping for prefix-conflict keycaps */
+.prefix-chord {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Vertical list of prefix-conflict items (n=2-3) */
+.prefix-conflict-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.prefix-conflict-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Toolbar */
+.shortcut-toolbar {
+  @apply flex items-center justify-between px-4 py-1.5 text-xs select-none;
+  color: var(--lx-gray-08, var(--rx-gray-08));
+  margin-top: auto;
+}
+
+.shortcut-toolbar button.shortcut-toolbar-action {
+  gap: 4px;
+  &:hover {
+    color: var(--lx-gray-12, var(--rx-gray-12));
+    text-decoration: underline;
+  }
+}
+
+.shortcut-toolbar button.shortcut-toolbar-reset {
+  color: var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary) / 0.8)));
+  &:hover {
+    color: var(--lx-accent-12, var(--ls-link-text-hover-color, hsl(var(--primary))));
+  }
+}
+
+.shortcut-toolbar-hint {
+  @apply ml-3;
+  color: var(--lx-gray-11, var(--rx-gray-11));
+}
+
+/* Animations */
+@keyframes shortcut-badge-in {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes shortcut-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shortcut-fade-out {
+  from { opacity: 1; max-height: 40px; padding-top: 8px; padding-bottom: 8px; }
+  to   { opacity: 0; max-height: 0;    padding-top: 0;   padding-bottom: 0; }
+}
+
+.shortcut-feedback.is-dismissing {
+  animation: shortcut-fade-out 200ms ease-in forwards;
+  overflow: hidden;
+}
+
+@keyframes shortcut-auto-fade {
+  0% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0.3; }
+}
+
+@keyframes shortcut-shimmer {
+  0%, 30% { background-position: 100% 0; }
+  70%, 100% { background-position: -50% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes shortcut-badge-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes shortcut-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes shortcut-fade-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+
+  @keyframes shortcut-auto-fade {
+    from { opacity: 1; }
+    to { opacity: 0.3; }
+  }
+
+  @keyframes shortcut-row-sweep {
+    from { background-position: 150% 0; }
+    to   { background-position: 150% 0; }
+  }
+
+  .shortcut-input-placeholder {
+    animation: none;
+    -webkit-text-fill-color: unset;
+    background: none;
   }
 }
 
@@ -170,7 +590,7 @@
 
 .sidebar-item .cp__shortcut-page-x {
   padding: 12px 0 0 0;
-  background-color: var(--color-level-2);
+  background-color: var(--color-level-2, var(--lx-gray-02, var(--rx-gray-02)));
 }
 
 .sidebar-item article {

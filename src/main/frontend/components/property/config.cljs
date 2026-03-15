@@ -337,9 +337,10 @@
                                        :button-opts {:title "Set Icon"}})
      [:strong {:on-click (fn [^js e]
                            (shui/popup-show! (.-target e)
-                                             (fn [] (choice-base-edit-form property block owner-block))
-                                             {:id :ls-base-edit-form
-                                              :align "start"}))}
+                             (fn [] (choice-base-edit-form property block owner-block))
+                             {:id :ls-base-edit-form
+                              :align "start"}))
+               :title value}
       value]
      (shui/dropdown-menu
       (shui/dropdown-menu-trigger
@@ -391,8 +392,8 @@
           {:key "delete"
            :class "del"
            :on-click delete-choice!}
-          (ui/icon "x" {:class "scale-90 pr-1 opacity-80"})
-          "Delete"))))]))
+           [:span.w-full.text-red-rx-09.opacity-90.flex.items-center.hover:opacity-100
+            (ui/icon "x" {:class "scale-90 pr-1"}) "Delete"]))))]))
 
 (rum/defc add-existing-values
   [property values {:keys [toggle-fn]}]
