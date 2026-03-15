@@ -104,11 +104,11 @@
                    event
                    :else [0 0])]
     (some-> @*target (d/set-attr! "data-popup-active" (if (keyword? id) (name id) (str id))))
-    (let [on-before-hide (fn []
+    (let [on-before-hide (fn [^js e]
                            (when-let [^js trigger (and (not (false? focus-trigger?))
                                                        (some-> @*target (.closest "[tabindex='0']")))]
                              (js/setTimeout #(.focus trigger) 16))
-                           (some-> on-before-hide (apply [])))]
+                           (some-> on-before-hide (apply [e])))]
       (upsert-popup!
        (merge opts
               {:id id :target (deref *target)
@@ -127,14 +127,14 @@
   ([] (when-let [id (some-> (get-popups) (last) :id)] (hide! id 0)))
   ([id] (hide! id 0 {}))
   ([id delay] (hide! id delay {}))
-  ([id delay {:keys [_all?]}]
+  ([id delay {:keys [_all? ^js event]}]
    (when-let [popup (get-popup id)]
      (let [config (last popup)
            target (:target config)
            f (fn []
                (detach-popup! id)
                (some-> (:on-after-hide config) (apply [])))]
-       (when (not (false? (some-> (:on-before-hide config) (apply []))))
+       (when (not (false? (some-> (:on-before-hide config) (apply [event]))))
          (some-> target (d/remove-attr! "data-popup-active"))
          (if (and (number? delay) (> delay 0))
            (js/setTimeout f delay)
@@ -166,10 +166,10 @@
                           (and (not as-mask?) auto-side?) (assoc :side (auto-side-fn)))
           handle-key-escape! (fn [^js e]
                                (when-not (false? (some-> content-props (:onEscapeKeyDown) (apply [e])))
-                                 (hide! id 1)))
+                                 (hide! id 1 {:event e})))
           handle-pointer-outside! (fn [^js e]
                                     (when-not (false? (some-> content-props (:onPointerDownOutside) (apply [e])))
-                                      (hide! id 1)))]
+                                      (hide! id 1 {:event e})))]
       (popup-root
        (merge root-props {:open open?})
        (popup-trigger
