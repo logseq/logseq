@@ -487,6 +487,11 @@ export interface IAppProxy {
     params?: Record<string, any>,
     query?: Record<string, any>
   ) => void
+  getCurrentRoute: () => Promise<{
+    path: string
+    parameters: Record<string, any>
+    template: string
+  }>
 
   // templates
   getTemplate: (name: string) => Promise<BlockEntity | null>

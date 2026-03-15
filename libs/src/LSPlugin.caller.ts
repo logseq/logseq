@@ -2,7 +2,7 @@ import Debug from 'debug'
 import { Postmate, Model, ParentAPI, ChildAPI } from './postmate'
 import EventEmitter from 'eventemitter3'
 import { PluginLocal } from './LSPlugin.core'
-import { deferred, IS_DEV } from './helpers'
+import { deferred, IS_DEV } from './common'
 import { LSPluginShadowFrame } from './LSPlugin.shadow'
 
 const debug = Debug('LSPlugin:caller')
@@ -19,6 +19,9 @@ export const LSPMSG_READY = '#lspmsg#ready#'
 export const LSPMSGFn = (id: string) => `${LSPMSG}${id}`
 export const AWAIT_LSPMSGFn = (id: string) => `${FLAG_AWAIT}${id}`
 
+const HEAD_BAR_HEIGHT = 45
+const MAX_LAYOUT_PERCENT = 99
+
 /**
  * Call between core and user
  */
@@ -32,11 +35,12 @@ class LSPluginCaller extends EventEmitter {
 
   private _status?: 'pending' | 'timeout'
   private _userModel: any = {}
+  private _syncGCTimer: any = null
 
   private _call?: (
     type: string,
     payload: any,
-    actor?: DeferredActor
+    actor?: DeferredActor,
   ) => Promise<any>
   private _callUserModel?: (type: string, ...payloads: any[]) => Promise<any>
 
@@ -70,13 +74,12 @@ class LSPluginCaller extends EventEmitter {
     const caller = this
     const isShadowMode = this._pluginLocal != null
 
-    let syncGCTimer: any = 0
     let syncTag = 0
     const syncActors = new Map<number, DeferredActor>()
     const readyDeferred = deferred(1000 * 60)
 
     const model: any = this._extendUserModel({
-      [LSPMSG_READY]: async (baseInfo) => {
+      [LSPMSG_READY]: async (baseInfo: any) => {
         // dynamically setup common msg handler
         model[LSPMSGFn(baseInfo?.pid)] = ({
           type,
@@ -106,7 +109,7 @@ class LSPluginCaller extends EventEmitter {
       [LSPMSG]: async ({ ns, type, payload }: any) => {
         debug(
           `[host (async) -> *user] ${this._debugTag} ns=${ns} type=${type}`,
-          payload
+          payload,
         )
 
         if (ns && ns.startsWith('hook')) {
@@ -149,8 +152,8 @@ class LSPluginCaller extends EventEmitter {
     this._status = 'pending'
 
     await handshake
-      .then((refParent: ChildAPI) => {
-        this._child = refParent
+      .then((childRefParent: ChildAPI) => {
+        this._child = childRefParent
         this._connected = true
 
         this._call = async (type, payload = {}, actor) => {
@@ -163,7 +166,7 @@ class LSPluginCaller extends EventEmitter {
             debug(`async call #${tag}`)
           }
 
-          refParent.emit(LSPMSGFn(model.baseInfo.id), { type, payload })
+          childRefParent.emit(LSPMSGFn(model.baseInfo.id), { type, payload })
 
           return actor?.promise as Promise<any>
         }
@@ -172,12 +175,12 @@ class LSPluginCaller extends EventEmitter {
           try {
             model[type](payload)
           } catch (e) {
-            debug(`[model method] #${type} not existed`)
+            debug(`call user model(${type}) not exist. #${this._debugTag}`)
           }
         }
 
         // actors GC
-        syncGCTimer = setInterval(() => {
+        this._syncGCTimer = setInterval(() => {
           if (syncActors.size > 100) {
             for (const [k, v] of syncActors) {
               if (v.settled) {
@@ -215,6 +218,40 @@ class LSPluginCaller extends EventEmitter {
     return this._callUserModel?.apply(this, [type, ...args])
   }
 
+  /**
+   * Converts a raw pixel position to a percentage or pixel CSS value,
+   * clamping the value to [minValue, MAX_LAYOUT_PERCENT%].
+   */
+  private _calcLayoutPosition(
+    value: number,
+    viewportSize: number | undefined,
+    minValue: number = 0,
+  ): string {
+    const clamped = Math.max(value, minValue)
+    if (typeof viewportSize === 'number') {
+      return `${Math.min((clamped * 100) / viewportSize, MAX_LAYOUT_PERCENT)}%`
+    }
+    return `${clamped}px`
+  }
+
+  /**
+   * Restores persisted layout data onto the container element.
+   */
+  private async _applyContainerLayout(cnt: HTMLDivElement): Promise<void> {
+    const mainLayoutInfo = (await this._pluginLocal?._loadLayoutsData())?.$$0
+    if (!mainLayoutInfo) return
+
+    const { width, height, left, top, vw, vh } = mainLayoutInfo
+
+    cnt.dataset.inited_layout = 'true'
+    Object.assign(cnt.style, {
+      width: `${width}px`,
+      height: `${height}px`,
+      left: this._calcLayoutPosition(left, vw),
+      top: this._calcLayoutPosition(top, vh, HEAD_BAR_HEIGHT),
+    })
+  }
+
   // run in host
   async _setupIframeSandbox() {
     const pl = this._pluginLocal!
@@ -224,45 +261,19 @@ class LSPluginCaller extends EventEmitter {
 
     url.searchParams.set(
       `__v__`,
-      IS_DEV ? Date.now().toString() : pl.options.version
+      IS_DEV ? Date.now().toString() : pl.options.version,
     )
 
     // clear zombie sandbox
-    const zb = document.querySelector(`#${domId}`)
-    if (zb) zb.parentElement.removeChild(zb)
+    document.querySelector(`#${domId}`)?.remove()
 
     const cnt = document.createElement('div')
     cnt.classList.add('lsp-iframe-sandbox-container')
     cnt.id = domId
     cnt.dataset.pid = id
 
-    // TODO: apply any container layout data
     try {
-      const mainLayoutInfo = (await this._pluginLocal._loadLayoutsData())?.$$0
-      if (mainLayoutInfo) {
-        cnt.dataset.inited_layout = 'true'
-        let { width, height, left, top, vw, vh } = mainLayoutInfo
-
-        left = Math.max(left, 0)
-        left =
-          typeof vw === 'number'
-            ? `${Math.min((left * 100) / vw, 99)}%`
-            : `${left}px`
-
-        // 45 is height of headbar
-        top = Math.max(top, 45)
-        top =
-          typeof vh === 'number'
-            ? `${Math.min((top * 100) / vh, 99)}%`
-            : `${top}px`
-
-        Object.assign(cnt.style, {
-          width: width + 'px',
-          height: height + 'px',
-          left,
-          top,
-        })
-      }
+      await this._applyContainerLayout(cnt)
     } catch (e) {
       console.error('[Restore Layout Error]', e)
     }
@@ -276,70 +287,66 @@ class LSPluginCaller extends EventEmitter {
       classListArray: ['lsp-iframe-sandbox'],
       model: { baseInfo: JSON.parse(JSON.stringify(pl.toJSON())) },
       allow: pl.options.allow,
+      // for optimized postmate message
+      enableMessageChannel: true,
     })
 
-    let handshake = pt.sendHandshake()
     this._status = 'pending'
 
-    // timeout for handshake
-    let timer
+    const HANDSHAKE_TIMEOUT = 8_000
+    let timer: ReturnType<typeof setTimeout>
 
-    return new Promise((resolve, reject) => {
+    const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
-        reject(new Error(`handshake Timeout`))
         pt.destroy()
-      }, 8 * 1000) // 8 secs
-
-      handshake
-        .then((refChild: ParentAPI) => {
-          this._parent = refChild
-          this._connected = true
-          this.emit('connected')
-
-          refChild.on(LSPMSGFn(pl.id), ({ type, payload }: any) => {
-            debug(`[user -> *host] `, type, payload)
-
-            this._pluginLocal?.emit(type, payload || {})
-            this._pluginLocal?.caller.emit(type, payload || {})
-          })
-
-          this._call = async (...args: any) => {
-            // parent all will get message before handshake
-            refChild.call(LSPMSGFn(pl.id), {
-              type: args[0],
-              payload: Object.assign(args[1] || {}, {
-                $$pid: pl.id,
-              }),
-            })
-          }
-
-          this._callUserModel = async (type, ...payloads: any[]) => {
-            if (type.startsWith(FLAG_AWAIT)) {
-              return await refChild.get(
-                type.replace(FLAG_AWAIT, ''),
-                ...payloads
-              )
-            } else {
-              refChild.call(type, payloads?.[0])
-            }
-          }
-
-          resolve(null)
-        })
-        .catch((e) => {
-          reject(e)
-        })
-        .finally(() => {
-          clearTimeout(timer)
-        })
+        reject(new Error('handshake Timeout'))
+      }, HANDSHAKE_TIMEOUT)
     })
-      .catch((e) => {
-        debug('[iframe sandbox] error', e)
-        throw e
+
+    try {
+      const parentRefChild = await Promise.race([
+        pt.sendHandshake(),
+        timeout,
+      ]) as ParentAPI
+
+      this._parent = parentRefChild
+      this._connected = true
+      this.emit('connected')
+
+      parentRefChild.on(LSPMSGFn(pl.id), ({ type, payload }: any) => {
+        debug(`[user -> *host] `, type, payload)
+
+        this._pluginLocal?.emit(type, payload || {})
+        this._pluginLocal?.caller.emit(type, payload || {})
       })
-      .finally(() => {
-        this._status = undefined
-      })
+
+      this._call = async (...args: any) => {
+        // parent all will get message before handshake
+        parentRefChild.call(LSPMSGFn(pl.id), {
+          type: args[0],
+          payload: Object.assign(args[1] || {}, {
+            $$pid: pl.id,
+          }),
+        })
+      }
+
+      this._callUserModel = async (type, ...payloads: any[]) => {
+        if (type.startsWith(FLAG_AWAIT)) {
+          return await parentRefChild.get(
+            type.replace(FLAG_AWAIT, ''),
+            ...payloads,
+          )
+        } else {
+          parentRefChild.call(type, payloads?.[0])
+        }
+      }
+    } catch (e) {
+      debug('[iframe sandbox] error', e)
+      throw e
+    } finally {
+      clearTimeout(timer!)
+      this._status = undefined
+    }
   }
 
   async _setupShadowSandbox() {
@@ -362,7 +369,7 @@ class LSPluginCaller extends EventEmitter {
           type,
           Object.assign(payload, {
             $$pid: pl.id,
-          })
+          }),
         )
 
         return actor?.promise
@@ -418,7 +425,7 @@ class LSPluginCaller extends EventEmitter {
     let root: HTMLElement = null
     if (this._parent) {
       root = this._getSandboxIframeContainer()
-      await this._parent.destroy()
+      this._parent.destroy()
     }
 
     if (this._shadow) {
@@ -426,8 +433,16 @@ class LSPluginCaller extends EventEmitter {
       this._shadow.destroy()
     }
 
-    root?.parentNode.removeChild(root)
+    root?.parentNode?.removeChild(root)
+
+    // clear GC timer
+    if (this._syncGCTimer) {
+      clearInterval(this._syncGCTimer)
+      this._syncGCTimer = null
+    }
   }
 }
 
-export { LSPluginCaller }
+export {
+  LSPluginCaller
+}

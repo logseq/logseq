@@ -172,3 +172,14 @@
       (if-let [page-name (and page? (:name params))]
         (route-handler/redirect-to-page! page-name {:anchor (:anchor query) :push false})
         (rfe/replace-state k params query)))))
+
+(def get_current_route
+  (fn []
+    (some-> (state/get-route-match)
+            (dissoc :data)
+            (bean/->js))))
+
+(def reset_debug_log_db
+  (fn []
+    (when-let [repo (state/get-current-repo)]
+      (state/<invoke-db-worker-direct-pass :thread-api/reset-debug-log-db repo))))

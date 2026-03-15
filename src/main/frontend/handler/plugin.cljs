@@ -495,6 +495,24 @@
   (create-local-renderer-getter
    :daemon-renderers *daemon-renderer-providers true))
 
+(defonce *hosted-renderer-providers (atom #{}))
+(def register-hosted-renderer
+  ;; [pid key payload]
+  (create-local-renderer-register
+   :hosted-renderers *hosted-renderer-providers))
+(def get-hosted-renderers
+  ;; [key]
+  (create-local-renderer-getter
+   :hosted-renderers *hosted-renderer-providers true))
+
+(defn resolve-hosted-render
+  [pid key type]
+  (some->> (get-hosted-renderers)
+           (medley/find-first #(and (some-> (:pid %) (name) (= pid))
+                                    (or (some-> (:key %) (name) (= key))
+                                        (some-> (:key %) (str) (string/includes? (str "." key))))
+                                    (some->> type (name) (= (:type %)))))))
+
 (defn select-a-plugin-theme
   [pid]
   (when-let [themes (get (group-by :pid (:plugin/installed-themes @state/state)) pid)]
