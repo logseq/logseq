@@ -5032,10 +5032,10 @@ ini@^4.1.1:
   resolved "https://registry.yarnpkg.com/ini/-/ini-4.1.3.tgz#4c359675a6071a46985eb39b14e4a2c0ec98a795"
   integrity sha512-X7rqawQBvfdjS10YU1y1YVreA3SsLrW9dX2CewP2EbBJM4ypVNLDkO5y04gejPwKIY9lR+7r9gn3rFPt/kmWFg==
 
-inter-ui@^3.19.3:
-  version "3.19.3"
-  resolved "https://registry.yarnpkg.com/inter-ui/-/inter-ui-3.19.3.tgz#cf4b4b6d30de8d5463e2462588654b325206488c"
-  integrity sha512-5FG9fjuYOXocIfjzcCBhICL5cpvwEetseL3FU6tP3d6Bn7g8wODhB+I9RNGRTizCT7CUG4GOK54OPxqq3msQgg==
+inter-ui@^4.1.1:
+  version "4.1.1"
+  resolved "https://registry.yarnpkg.com/inter-ui/-/inter-ui-4.1.1.tgz#8d7e800259caeb4293167564ddc2b12dbf2ba59d"
+  integrity sha512-451h0J29HyOmA+JXgSi/6M12tL7ZCZ8arYKZUXiOXTJpJbAKqJvFh3k5SiV3x7tKe0C0KyrKUUiQIvvZ2PQDcA==
 
 interactjs@^1.10.27:
   version "1.10.27"

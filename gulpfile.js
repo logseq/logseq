@@ -122,8 +122,8 @@ const common = {
       () => gulp.src([
         'node_modules/inter-ui/inter.css',
       ]).pipe(gulp.dest(path.join(outputPath, 'css'))),
-      () => gulp.src('node_modules/inter-ui/Inter (web)/*.*').
-        pipe(gulp.dest(path.join(outputPath, 'css', 'Inter (web)'))),
+      () => gulp.src('node_modules/inter-ui/web/*.*').
+        pipe(gulp.dest(path.join(outputPath, 'css', 'web'))),
       () => gulp.src([
         'node_modules/@tabler/icons-webfont/fonts/**',
         'node_modules/katex/dist/fonts/*.woff2',
@@ -147,8 +147,8 @@ const common = {
       () => gulp.src([
         'node_modules/inter-ui/inter.css',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'css'))),
-      () => gulp.src('node_modules/inter-ui/Inter (web)/*.*').
-        pipe(gulp.dest(path.join(outputPath, 'mobile', 'css', 'Inter (web)'))),
+      () => gulp.src('node_modules/inter-ui/web/*.*').
+        pipe(gulp.dest(path.join(outputPath, 'mobile', 'css', 'web'))),
       () => gulp.src([
         'node_modules/@tabler/icons-webfont/fonts/**',
         'node_modules/katex/dist/fonts/*.woff2',
