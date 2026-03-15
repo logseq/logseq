@@ -365,10 +365,13 @@
  ;; - insert-today?   Insert the capture at the end of today's journal page (boolean).
  ;; - redirect-page?  Redirect to the quick capture page after capturing (boolean).
  ;; - default-page    The default page to capture to if insert-today? is false (string).
+ ;; - prettify-url?   Whether urls to YouTube or X should be wrapped with {{video ...}} or {{twitter ...}}
  ;; :quick-capture-options
  ;; {:insert-today? false           ;; Default value: true
  ;;  :redirect-page? false          ;; Default value: false
- ;;  :default-page "quick capture"} ;; Default page: "quick capture"
+ ;;  :default-page "quick capture"  ;; Default page: "quick capture"
+ ;;  :prettify-url? true}           ;; Default value: true
+
 
  ;; File sync options
  ;; Ignore these files when syncing, regexp is supported.
