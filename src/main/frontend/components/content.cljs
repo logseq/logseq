@@ -44,6 +44,27 @@
                     #(editor-handler/batch-set-heading! (state/get-selection-block-ids) true)
                     #(editor-handler/batch-remove-heading! (state/get-selection-block-ids)))
 
+   (shui/dropdown-menu-sub
+    (shui/dropdown-menu-sub-trigger
+     (t :context-menu/set-icon))
+    (shui/dropdown-menu-sub-content
+     [:div.p-1
+      (icon-component/icon-search
+       {:on-chosen (fn [_e icon]
+                     (let [block-ids (state/get-selection-block-ids)]
+                       (if icon
+                         (property-handler/batch-set-block-property!
+                          block-ids
+                          :logseq.property/icon
+                          (select-keys icon [:type :id :color]))
+                         (property-handler/batch-remove-block-property!
+                          block-ids
+                          :logseq.property/icon)))
+                     (state/hide-custom-context-menu!)
+                     (shui/popup-hide!))
+        :del-btn? true
+        :icon-value nil})]))
+
    (shui/dropdown-menu-separator)
 
    (shui/dropdown-menu-item
@@ -165,6 +186,27 @@
             :default-tab :emoji
             :show-used? true
             :icon-value nil})]))
+
+       (shui/dropdown-menu-sub
+        (shui/dropdown-menu-sub-trigger
+         (t :context-menu/set-icon))
+        (shui/dropdown-menu-sub-content
+         [:div.p-1
+          (let [icon-value (:logseq.property/icon block)]
+            (icon-component/icon-search
+             {:on-chosen (fn [_e icon]
+                           (if icon
+                             (property-handler/set-block-property!
+                              block-id
+                              :logseq.property/icon
+                              (select-keys icon [:type :id :color]))
+                             (property-handler/remove-block-property!
+                              block-id
+                              :logseq.property/icon))
+                           (state/hide-custom-context-menu!)
+                           (shui/popup-hide!))
+              :del-btn? (boolean icon-value)
+              :icon-value icon-value}))]))
 
        (shui/dropdown-menu-separator)
 
