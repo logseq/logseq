@@ -13,7 +13,7 @@
     "@logseq/nbb-logseq": "github:logseq/nbb-logseq#feat-db-v33",
     "@modelcontextprotocol/sdk": "^1.17.5",
     "better-sqlite3": "^12.6.2",
-    "fastify": "5.6.0",
+    "fastify": "5.8.2",
     "fs-extra": "^11.3.4",
     "jszip": "3.10.1",
     "mldoc": "^1.5.9",
