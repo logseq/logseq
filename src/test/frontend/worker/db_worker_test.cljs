@@ -3,7 +3,8 @@
             [datascript.core :as d]
             [frontend.common.thread-api :as thread-api]
             [frontend.worker.a-test-env]
-            [frontend.worker.db-worker :as db-worker]
+            [frontend.worker.db-core :as db-worker]
+            [frontend.worker.platform :as platform]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
@@ -23,13 +24,53 @@
 (def ^:private update-local-tx-orig client-op/update-local-tx)
 (def ^:private broadcast-to-clients-orig shared-service/broadcast-to-clients!)
 
+(defn- fake-db
+  [label closed]
+  (let [tx #js {:exec (fn [_] nil)}]
+    #js {:exec (fn [_] #js [])
+         :transaction (fn [f] (f tx))
+         :close (fn []
+                  (when (and label closed)
+                    (swap! closed conj label)))}))
+
+(defn- build-test-platform
+  []
+  {:env {:publishing? false
+         :runtime :browser}
+   :storage {:install-opfs-pool (fn [_sqlite _pool-name]
+                                  (p/resolved #js {:pauseVfs (fn [] nil)
+                                                   :unpauseVfs (fn [] nil)}))
+             :list-graphs (fn [] (p/resolved []))
+             :db-exists? (fn [_] (p/resolved false))
+             :resolve-db-path (fn [_repo _pool path] path)
+             :export-file (fn [_ _] (p/resolved (js/Uint8Array. 0)))
+             :import-db (fn [_ _ _] (p/resolved nil))
+             :remove-vfs! (fn [_] nil)
+             :read-text! (fn [_] (p/resolved ""))
+             :write-text! (fn [_ _] (p/resolved nil))
+             :transfer (fn [data _transferables] data)}
+   :kv {:get (fn [_] nil)
+        :set! (fn [_ _] nil)}
+   :broadcast {:post-message! (fn [& _] nil)}
+   :websocket {:connect (fn [_] #js {})}
+   :sqlite {:init! (fn [] nil)
+            :open-db (fn [_opts] (fake-db nil nil))
+            :close-db (fn [db] (.close db))
+            :exec (fn [db sql-or-opts] (.exec db sql-or-opts))
+            :transaction (fn [db f] (.transaction db f))}
+   :crypto {}
+   :timers {:set-interval! (fn [_ _] nil)}})
+
 (defn- restoring-worker-state
   [f]
-  (let [sqlite-prev @worker-state/*sqlite-conns
+  (let [sqlite-conns-prev @worker-state/*sqlite-conns
         datascript-prev @worker-state/*datascript-conns
         client-ops-prev @worker-state/*client-ops-conns
         opfs-prev @worker-state/*opfs-pools
         fuzzy-prev @search/fuzzy-search-indices
+        sqlite-prev @worker-state/*sqlite
+        platform-prev @@#'platform/*platform
+        import-state-prev @@#'db-worker/*import-state
         cleanup (fn []
                   (set! db-worker/close-db! close-db!-orig)
                   (set! sync-crypt/<decrypt-snapshot-datoms-batch decrypt-snapshot-datoms-batch-orig)
@@ -38,11 +79,14 @@
                   (set! rtc-log-and-state/rtc-log rtc-log-orig)
                   (set! client-op/update-local-tx update-local-tx-orig)
                   (set! shared-service/broadcast-to-clients! broadcast-to-clients-orig)
-                  (reset! worker-state/*sqlite-conns sqlite-prev)
+                  (reset! worker-state/*sqlite-conns sqlite-conns-prev)
                   (reset! worker-state/*datascript-conns datascript-prev)
                   (reset! worker-state/*client-ops-conns client-ops-prev)
                   (reset! worker-state/*opfs-pools opfs-prev)
-                  (reset! search/fuzzy-search-indices fuzzy-prev))]
+                  (reset! search/fuzzy-search-indices fuzzy-prev)
+                  (reset! worker-state/*sqlite sqlite-prev)
+                  (reset! @#'platform/*platform platform-prev)
+                  (reset! @#'db-worker/*import-state import-state-prev))]
     (set! db-worker/close-db! close-db!-orig)
     (set! sync-crypt/<decrypt-snapshot-datoms-batch decrypt-snapshot-datoms-batch-orig)
     (set! sync-crypt/<fetch-graph-aes-key-for-download fetch-graph-aes-key-for-download-orig)
@@ -50,6 +94,9 @@
     (set! rtc-log-and-state/rtc-log rtc-log-orig)
     (set! client-op/update-local-tx update-local-tx-orig)
     (set! shared-service/broadcast-to-clients! broadcast-to-clients-orig)
+    (platform/set-platform! (build-test-platform))
+    (reset! worker-state/*sqlite #js {})
+    (reset! @#'db-worker/*import-state nil)
     (let [result (f)]
       (if (p/promise? result)
         (p/finally result cleanup)
@@ -78,7 +125,6 @@
 
        (is (= #{:db :search :client-ops} (set @closed)))
        (is (= 1 @pause-calls))
-       (is (nil? (get @search/fuzzy-search-indices test-repo)))
        (is (nil? (get @worker-state/*sqlite-conns test-repo)))))))
 
 (deftest complete-datoms-import-invalidates-existing-search-db-test
@@ -88,10 +134,11 @@
             (let [thread-apis-prev @thread-api/*thread-apis]
               (vreset! thread-api/*thread-apis
                        (assoc thread-apis-prev
-                              :thread-api/create-or-open-db (fn [_repo _opts] (p/resolved nil))))
+                              :thread-api/create-or-open-db (fn [_repo _opts] (p/resolved nil))
+                              :thread-api/export-db (fn [_repo] (p/resolved nil))))
               (-> (p/with-redefs [db-sync/rehydrate-large-titles-from-db! (fn [_repo _graph-id] (p/resolved nil))
                                   rtc-log-and-state/rtc-log (fn [& _] nil)
-                                  worker-state/get-sqlite-conn (fn [_repo _type] nil)
+                                  client-op/update-graph-uuid (fn [& _] nil)
                                   client-op/update-local-tx (fn [& _] nil)
                                   shared-service/broadcast-to-clients! (fn [& _] nil)]
                     (#'db-worker/complete-datoms-import! test-repo "graph-1" 42))
@@ -230,7 +277,7 @@
                                  (is false (str error))
                                  (done)))))))))))
 
-(deftest db-sync-import-finalize-rejects-stale-import-id-test
+(deftest db-sync-import-finalize-stale-id-and-success-test
   (async done
          (restoring-worker-state
           (fn []

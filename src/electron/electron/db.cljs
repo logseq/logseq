@@ -4,7 +4,7 @@
             ["path" :as node-path]
             [electron.backup-file :as backup-file]
             [logseq.cli.common.graph :as cli-common-graph]
-            [logseq.common.config :as common-config]
+            [logseq.common.graph-dir :as graph-dir]
             [logseq.db.common.sqlite :as common-sqlite]))
 
 (defn ensure-graphs-dir!
@@ -14,11 +14,13 @@
 (defn ensure-graph-dir!
   [db-name]
   (ensure-graphs-dir!)
-  (let [graph-dir (node-path/join (cli-common-graph/get-db-graphs-dir) (common-sqlite/sanitize-db-name db-name))]
+  (let [graph-dir (node-path/join (cli-common-graph/get-db-graphs-dir)
+                                  (graph-dir/repo->encoded-graph-dir-name db-name))]
     (fs/ensureDirSync graph-dir)
     graph-dir))
 
 (defn get-db
+  "Legacy compatibility path for Electron OPFS import bootstrap."
   [db-name]
   (let [_ (ensure-graph-dir! db-name)
         [_db-name db-path] (common-sqlite/get-db-full-path (cli-common-graph/get-db-graphs-dir) db-name)]
@@ -26,8 +28,10 @@
       (fs/readFileSync db-path))))
 
 (defn save-db!
+  "Legacy compatibility path for Electron OPFS export."
   [db-name data]
-  (let [[db-name db-path] (common-sqlite/get-db-full-path (cli-common-graph/get-db-graphs-dir) db-name)
+  (let [_ (ensure-graph-dir! db-name)
+        [db-name db-path] (common-sqlite/get-db-full-path (cli-common-graph/get-db-graphs-dir) db-name)
         old-data (get-db db-name)
         backups-path (common-sqlite/get-db-backups-path (cli-common-graph/get-db-graphs-dir) db-name)]
     (when old-data
@@ -38,17 +42,3 @@
                                 :truncate-daily? true
                                 :keep-versions 12}))
     (fs/writeFileSync db-path data)))
-
-(defn unlink-graph!
-  [repo]
-  (let [db-name (common-sqlite/sanitize-db-name repo)
-        path (node-path/join (cli-common-graph/get-db-graphs-dir) db-name)
-        unlinked (node-path/join (cli-common-graph/get-db-graphs-dir) common-config/unlinked-graphs-dir)
-        new-path (node-path/join unlinked db-name)
-        new-path-exists? (fs/existsSync new-path)
-        new-path' (if new-path-exists?
-                    (node-path/join unlinked (str db-name "-" (random-uuid)))
-                    new-path)]
-    (when (fs/existsSync path)
-      (fs/ensureDirSync unlinked)
-      (fs/moveSync path new-path'))))

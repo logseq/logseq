@@ -7,7 +7,8 @@
             [electron.configs :as cfgs]
             [electron.logger :as logger]
             [logseq.cli.common.graph :as cli-common-graph]
-            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.common.graph-dir :as graph-dir]
+            [logseq.common.config :as common-config]
             [promesa.core :as p]))
 
 (defonce *win (atom nil)) ;; The main window
@@ -240,14 +241,17 @@
 (defn get-graph-dir
   "required by all internal state in the electron section"
   [graph-name]
-  (when (string/starts-with? graph-name sqlite-util/db-version-prefix)
-    (node-path/join (cli-common-graph/get-db-graphs-dir) (string/replace-first graph-name sqlite-util/db-version-prefix ""))))
+  (when (and (string? graph-name)
+             (string/starts-with? graph-name common-config/db-version-prefix))
+    (let [repo (common-config/canonicalize-db-version-repo graph-name)]
+      (node-path/join (cli-common-graph/get-db-graphs-dir)
+                      (graph-dir/repo->encoded-graph-dir-name repo)))))
 
 (comment
   (defn get-graph-name
     "Reverse `get-graph-dir`"
     [graph-dir]
-    (str sqlite-util/db-version-prefix (node-path/basename graph-dir))))
+    (str common-config/db-version-prefix (node-path/basename graph-dir))))
 
 (defn decode-protected-assets-schema-path
   [schema-path]

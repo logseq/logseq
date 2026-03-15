@@ -8,17 +8,21 @@
             [frontend.common.crypt :as crypt]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.handler.page :as worker-page]
+            [frontend.worker.platform :as platform]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.const :as rtc-const]
             [frontend.worker.sync.crypt :as sync-crypt]
+            [frontend.worker.sync.log-and-state :as sync-log-and-state]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db-sync.cycle :as sync-cycle]
             [logseq.db-sync.malli-schema :as db-sync-schema]
             [logseq.db-sync.order :as sync-order]
+            [logseq.db-sync.snapshot :as snapshot]
             [logseq.db.common.normalize :as db-normalize]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -28,7 +32,6 @@
 
 (defonce *repo->latest-remote-tx (atom {}))
 (defonce *start-inflight-target (atom nil))
-(defonce ^:private *upload-temp-opfs-pool (atom nil))
 
 (defn- current-client
   [repo]
@@ -56,6 +59,24 @@
        :local-tx local-tx
        :remote-tx remote-tx
        :graph-uuid graph-uuid})))
+
+(defn status
+  [repo]
+  (let [client (current-client repo)
+        counts (or (sync-counts repo) {})
+        ws-url (:ws-url @worker-state/*db-sync-config)
+        ws-state (or (some-> client :ws-state deref)
+                     (if (seq ws-url) :stopped :inactive))
+        last-error (some-> client :last-sync-error deref)]
+    {:repo repo
+     :graph-id (or (:graph-id client) (:graph-uuid counts))
+     :ws-state ws-state
+     :pending-local (or (:pending-local counts) 0)
+     :pending-asset (or (:pending-asset counts) 0)
+     :pending-server (or (:pending-server counts) 0)
+     :local-tx (:local-tx counts)
+     :remote-tx (:remote-tx counts)
+     :last-error last-error}))
 
 (defn- normalize-online-users
   [users]
@@ -132,8 +153,21 @@
                      :else ws-url)]
           (string/replace base #"/sync/%s$" "")))))
 
+(defn- cli-node-owner?
+  []
+  (try
+    (let [env (:env (platform/current))]
+      (and (= :node (:runtime env))
+           (= :cli (:owner-source env))))
+    (catch :default _
+      false)))
+
 (defn- auth-token []
-  (worker-state/get-id-token))
+  (let [configured-token (:auth-token @worker-state/*db-sync-config)]
+    (if (cli-node-owner?)
+      configured-token
+      (or (worker-state/get-id-token)
+          configured-token))))
 
 (defn- id-token-expired?
   [token]
@@ -149,7 +183,8 @@
 (defn- <resolve-ws-token
   []
   (let [token (auth-token)]
-    (if (id-token-expired? token)
+    (if (and (not (cli-node-owner?))
+             (id-token-expired? token))
       (p/let [resp (worker-state/<invoke-main-thread :thread-api/ensure-id&access-token)
               refreshed-token (:id-token resp)]
         (when (string? refreshed-token)
@@ -158,7 +193,7 @@
       (p/resolved token))))
 
 (defn- get-user-uuid []
-  (some-> (worker-state/get-id-token)
+  (some-> (auth-token)
           worker-util/parse-jwt
           :sub))
 
@@ -176,7 +211,6 @@
 (def ^:private upload-prepare-datoms-batch-size 100000)
 (def ^:private upload-temp-pool-name (worker-util/get-pool-name "upload-temp"))
 (def ^:private snapshot-content-type "application/transit+json")
-(def ^:private snapshot-content-encoding "gzip")
 (def ^:private snapshot-text-encoder (js/TextEncoder.))
 (def ^:private reconnect-base-delay-ms 1000)
 (def ^:private reconnect-max-delay-ms 30000)
@@ -232,15 +266,34 @@
        (string? (:asset-type value))))
 
 (defn- get-graph-id [repo]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [db @conn
-          graph-uuid (ldb/get-graph-rtc-uuid db)]
-      (when graph-uuid
-        (str graph-uuid)))))
+  (or (when-let [conn (worker-state/get-datascript-conn repo)]
+        (let [db @conn
+              graph-uuid (ldb/get-graph-rtc-uuid db)]
+          (when graph-uuid
+            (str graph-uuid))))
+      (some-> (client-op/get-graph-uuid repo) str)))
 
 (defn- ensure-client-graph-uuid! [repo graph-id]
   (when (seq graph-id)
     (client-op/update-graph-uuid repo graph-id)))
+
+(declare list-remote-graphs!)
+
+(defn- <resolve-start-graph-id
+  [repo]
+  (if-let [graph-id (get-graph-id repo)]
+    (p/resolved graph-id)
+    (let [target-graph-name (some-> repo common-config/strip-leading-db-version-prefix)]
+      (if-not (seq target-graph-name)
+        (p/resolved nil)
+        (p/let [remote-graphs (list-remote-graphs!)
+                remote-graph-id (some (fn [{:keys [graph-name graph-id]}]
+                                        (when (= target-graph-name graph-name)
+                                          graph-id))
+                                      remote-graphs)]
+          (when (seq remote-graph-id)
+            (ensure-client-graph-uuid! repo remote-graph-id)
+            remote-graph-id))))))
 
 (defn- ready-state [ws]
   (.-readyState ws))
@@ -295,12 +348,25 @@
     (catch :default e
       (fail-fast :db-sync/response-parse-failed (assoc context :error e)))))
 
+(defn- coerce-http-request [schema-key body]
+  (if-let [coercer (get db-sync-schema/http-request-coercers schema-key)]
+    (let [coerced (coerce coercer body {:schema schema-key :dir :request})]
+      (when-not (= coerced invalid-coerce)
+        coerced))
+    body))
+
 (defn- coerce-http-response [schema-key body]
   (if-let [coercer (get db-sync-schema/http-response-coercers schema-key)]
     (let [coerced (coerce coercer body {:schema schema-key :dir :response})]
       (when-not (= coerced invalid-coerce)
         coerced))
     body))
+
+(defn- normalize-graph-e2ee?
+  [graph-e2ee?]
+  (if (nil? graph-e2ee?)
+    true
+    (true? graph-e2ee?)))
 
 (defn- reconnect-delay-ms [attempt]
   (let [exp (js/Math.pow 2 attempt)
@@ -333,6 +399,33 @@
     (if-let [coerced (coerce-ws-client-message message)]
       (.send ws (js/JSON.stringify (clj->js coerced)))
       (log/error :db-sync/ws-request-invalid {:message message}))))
+
+(defn- ex-message->code
+  [message]
+  (when (and (string? message)
+             (re-matches #"[a-zA-Z0-9._/\-]+" message))
+    (keyword message)))
+
+(defn- error->diagnostic
+  [error]
+  (let [data (or (ex-data error) {})
+        code (or (:code data)
+                 (ex-message->code (ex-message error))
+                 :exception)]
+    {:code code
+     :message (or (ex-message error) (str error))
+     :at (common-util/time-ms)
+     :data (when (seq data) data)}))
+
+(defn- set-last-sync-error!
+  [client error]
+  (when-let [*last-error (:last-sync-error client)]
+    (reset! *last-error (error->diagnostic error))))
+
+(defn- clear-last-sync-error!
+  [client]
+  (when-let [*last-error (:last-sync-error client)]
+    (reset! *last-error nil)))
 
 (defn update-presence!
   [editing-block-uuid]
@@ -385,10 +478,9 @@
     (catch :default _
       nil)))
 
-(defn- fetch-json
-  [url opts {:keys [response-schema error-schema] :or {error-schema :error}}]
-  (p/let [resp (js/fetch url (clj->js (with-auth-headers opts)))
-          text (.text resp)
+(defn- parse-json-response-body
+  [resp url response-schema error-schema]
+  (p/let [text (.text resp)
           data (when (seq text) (js/JSON.parse text))]
     (if (.-ok resp)
       (let [body (js->clj data :keywordize-keys true)
@@ -409,6 +501,107 @@
                         {:status (.-status resp)
                          :url url
                          :body body}))))))
+
+(defn- fetch-json
+  [url opts {:keys [response-schema error-schema] :or {error-schema :error}}]
+  (p/let [resp (js/fetch url (clj->js (with-auth-headers opts)))]
+    (parse-json-response-body resp url response-schema error-schema)))
+
+(defn- require-auth-token!
+  [context]
+  (when-not (seq (auth-token))
+    (fail-fast :db-sync/missing-field (assoc context :field :auth-token))))
+
+(defn- ->uint8
+  [payload]
+  (cond
+    (instance? js/Uint8Array payload) payload
+    (instance? js/ArrayBuffer payload) (js/Uint8Array. payload)
+    (string? payload) (.encode text-encoder payload)
+    :else (js/Uint8Array. payload)))
+
+(defn- gzip-payload?
+  [^js payload]
+  (and (some? payload)
+       (>= (.-byteLength payload) 2)
+       (= 31 (aget payload 0))
+       (= 139 (aget payload 1))))
+
+(defn- payload->stream
+  [^js payload]
+  (js/ReadableStream.
+   #js {:start (fn [controller]
+                 (.enqueue controller payload)
+                 (.close controller))}))
+
+(defn- <decompress-gzip-payload
+  [^js payload]
+  (if (exists? js/DecompressionStream)
+    (p/let [stream (payload->stream payload)
+            decompressed (.pipeThrough stream (js/DecompressionStream. "gzip"))
+            resp (js/Response. decompressed)
+            array-buffer (.arrayBuffer resp)]
+      (->uint8 array-buffer))
+    (p/rejected (ex-info "gzip decompression not supported"
+                         {:type :db-sync/decompression-not-supported}))))
+
+(defn- <snapshot-response-bytes
+  [^js resp]
+  (p/let [array-buffer (.arrayBuffer resp)
+          payload (->uint8 array-buffer)]
+    (if (gzip-payload? payload)
+      (<decompress-gzip-payload payload)
+      payload)))
+
+(defn- response-body-stream
+  [^js resp]
+  (let [encoding (some-> resp .-headers (.get "content-encoding"))]
+    (cond
+      (nil? (.-body resp))
+      nil
+
+      (= "gzip" encoding)
+      (when (exists? js/DecompressionStream)
+        (.pipeThrough (.-body resp) (js/DecompressionStream. "gzip")))
+
+      :else
+      (.-body resp))))
+
+(defn- <flush-datom-batches!
+  [datoms batch-size on-batch]
+  (p/loop [remaining datoms]
+    (if (>= (count remaining) batch-size)
+      (let [batch (subvec remaining 0 batch-size)
+            rest-datoms (subvec remaining batch-size)]
+        (p/let [_ (on-batch batch)]
+          (p/recur rest-datoms)))
+      remaining)))
+
+(defn- <stream-snapshot-datom-batches!
+  [^js resp batch-size on-batch]
+  (if-let [stream (response-body-stream resp)]
+    (let [reader (.getReader stream)]
+      (p/loop [buffer nil
+               pending []]
+        (p/let [result (.read reader)]
+          (if (.-done result)
+            (let [pending (if (and buffer (pos? (.-byteLength buffer)))
+                            (into pending (snapshot/finalize-datoms-jsonl-buffer buffer))
+                            pending)]
+              (if (seq pending)
+                (p/let [_ (on-batch pending)]
+                  {:chunk-count 1})
+                {:chunk-count 0}))
+            (let [{datoms :datoms next-buffer :buffer} (snapshot/parse-datoms-jsonl-chunk buffer (->uint8 (.-value result)))
+                  pending (into pending datoms)]
+              (p/let [pending (<flush-datom-batches! pending batch-size on-batch)]
+                (p/recur next-buffer pending)))))))
+    (p/let [snapshot-bytes (<snapshot-response-bytes resp)
+            datoms (vec (snapshot/finalize-datoms-jsonl-buffer snapshot-bytes))]
+      (if (seq datoms)
+        (p/let [_ (on-batch datoms)]
+          {:chunk-count 1})
+        {:chunk-count 0}))))
 
 (defn- upsert-addr-content!
   [^js db data]
@@ -452,65 +645,41 @@
     (-restore [_ addr]
       (restore-data-from-addr db addr))))
 
-(defn- <get-upload-temp-sqlite-pool
-  []
-  (if-let [pool @*upload-temp-opfs-pool]
-    (p/resolved pool)
-    (if-let [sqlite @worker-state/*sqlite]
-      (p/let [^js pool (.installOpfsSAHPoolVfs ^js sqlite #js {:name upload-temp-pool-name
-                                                               :initialCapacity 20})]
-        (reset! *upload-temp-opfs-pool pool)
-        pool)
-      (fail-fast :db-sync/missing-field {:field :sqlite}))))
-
-(defn- upload-temp-sqlite-path
-  []
-  (str "/upload-" (random-uuid) ".sqlite"))
-
 (defn- <create-temp-sqlite-db!
   []
-  (p/let [^js pool (<get-upload-temp-sqlite-pool)
-          capacity (.getCapacity pool)
-          _ (when (zero? capacity)
-              (.unpauseVfs pool))
-          path (upload-temp-sqlite-path)
-          ^js db (new (.-OpfsSAHPoolDb pool) path)]
-    (common-sqlite/create-kvs-table! db)
-    {:db db
-     :path path
-     :pool pool}))
+  (if-let [sqlite @worker-state/*sqlite]
+    (let [current-platform (platform/current)]
+      (p/let [pool (platform/install-storage-pool current-platform sqlite upload-temp-pool-name)
+              path (platform/resolve-db-path current-platform upload-temp-pool-name pool "/upload.sqlite")
+              db (platform/sqlite-open current-platform
+                                       {:sqlite sqlite
+                                        :pool pool
+                                        :path path
+                                        :mode "c"})]
+        (common-sqlite/create-kvs-table! db)
+        {:db db
+         :pool pool}))
+    (fail-fast :db-sync/missing-field {:field :sqlite})))
 
 (defn- <create-temp-sqlite-conn
   ([schema]
    (<create-temp-sqlite-conn schema []))
   ([schema datoms]
-   (p/let [{:keys [db path pool]} (<create-temp-sqlite-db!)
+   (p/let [{:keys [db pool]} (<create-temp-sqlite-db!)
            storage (new-temp-sqlite-storage db)
            conn (d/conn-from-datoms datoms schema {:storage storage})]
      {:db db
       :conn conn
-      :path path
       :pool pool})))
 
-(defn- <remove-upload-temp-sqlite-db-file!
-  [path]
-  (-> (p/let [^js root (.getDirectory js/navigator.storage)
-              ^js dir (.getDirectoryHandle root (str "." upload-temp-pool-name))]
-        (.removeEntry dir (subs path 1)))
-      (p/catch
-       (fn [error]
-         (if (= "NotFoundError" (.-name error))
-           nil
-           (p/rejected error))))))
-
 (defn- cleanup-temp-sqlite!
-  [{:keys [db conn path]}]
+  [{:keys [db conn pool]}]
   (when conn
     (reset! conn nil))
   (when db
     (.close db))
-  (when path
-    (<remove-upload-temp-sqlite-db-file! path)))
+  (when pool
+    (platform/remove-storage-pool! (platform/current) pool)))
 
 (defn- require-asset-field
   [repo field value context]
@@ -1087,6 +1256,7 @@
                 :send-queue (atom (p/resolved nil))
                 :asset-queue (atom (p/resolved nil))
                 :inflight (atom [])
+                :last-sync-error (atom nil)
                 :reconnect (atom {:attempt 0 :timer nil})
                 :stale-kill-timer (atom nil)
                 :last-ws-message-ts (atom (common-util/time-ms))
@@ -1724,6 +1894,7 @@
         "tx/batch/ok" (do
                         (require-non-negative remote-tx {:repo repo :type "tx/batch/ok"})
                         (client-op/update-local-tx repo remote-tx)
+                        (clear-last-sync-error! client)
                         (broadcast-rtc-state! client)
                         (remove-pending-txs! repo @(:inflight client))
                         (reset! (:inflight client) [])
@@ -1736,24 +1907,36 @@
                           txs-data (mapv (fn [data]
                                            (parse-transit (:tx data) {:repo repo :type "pull/ok"}))
                                          txs)]
-                      (when (seq txs-data)
-                        (p/let [graph-e2ee? (sync-crypt/graph-e2ee? repo)
-                                aes-key (sync-crypt/<ensure-graph-aes-key repo (:graph-id client))
-                                _ (when (and graph-e2ee? (nil? aes-key))
-                                    (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
-                                tx-batches (if aes-key
-                                             (p/all (mapv (fn [tx-data]
-                                                            (sync-crypt/<decrypt-tx-data aes-key tx-data))
-                                                          txs-data))
-                                             (p/resolved txs-data))]
-                          (try
-                            (apply-remote-tx! repo client tx-batches)
-                            (catch :default e
-                              (log/error ::apply-remote-tx e)
-                              (throw e)))
-                          (client-op/update-local-tx repo remote-tx)
-                          (broadcast-rtc-state! client)
-                          (flush-pending! repo client)))))
+                      (-> (if (seq txs-data)
+                            (p/let [graph-e2ee? (sync-crypt/graph-e2ee? repo)
+                                    aes-key (sync-crypt/<ensure-graph-aes-key repo (:graph-id client))
+                                    _ (when (and graph-e2ee? (nil? aes-key))
+                                        (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
+                                    tx-batches (if aes-key
+                                                 (p/all (mapv (fn [tx-data]
+                                                                (sync-crypt/<decrypt-tx-data aes-key tx-data))
+                                                              txs-data))
+                                                 (p/resolved txs-data))]
+                              (try
+                                (apply-remote-tx! repo client tx-batches)
+                                (catch :default e
+                                  (log/error ::apply-remote-tx e)
+                                  (throw e))))
+                            (p/resolved nil))
+                          (p/then (fn [_]
+                                    (client-op/update-local-tx repo remote-tx)
+                                    (clear-last-sync-error! client)
+                                    (broadcast-rtc-state! client)
+                                    (flush-pending! repo client)))
+                          (p/catch (fn [error]
+                                     (set-last-sync-error! client error)
+                                     (log/error :db-sync/pull-ok-failed
+                                                {:repo repo
+                                                 :local-tx local-tx
+                                                 :remote-tx remote-tx
+                                                 :tx-count (count txs-data)
+                                                 :error error
+                                                 :error-data (ex-data error)}))))))
         "changed" (do
                     (require-non-negative remote-tx {:repo repo :type "changed"})
                     (broadcast-rtc-state! client)
@@ -1863,7 +2046,8 @@
     (stop-client! client))
   ;; use cache token for faster websocket connection
   (when-let [token' (or token (auth-token))]
-    (let [ws (js/WebSocket. (append-token url token'))
+    (let [ws (platform/websocket-connect (platform/current)
+                                         (append-token url token'))
           updated (assoc client :ws ws)]
       (attach-ws-handlers! repo updated ws url)
       (set! (.-onopen ws)
@@ -1871,6 +2055,7 @@
               (reset-reconnect! updated)
               (touch-last-ws-message! updated)
               (set-ws-state! updated :open)
+              (clear-last-sync-error! updated)
               (send! ws {:type "hello" :client repo})
               (enqueue-asset-sync! repo updated)))
       (close-stale-ws-loop updated ws))))
@@ -1893,43 +2078,47 @@
 
 (defn start!
   [repo]
-  (let [base (ws-base-url)
-        graph-id (get-graph-id repo)
-        start-target [repo graph-id]
-        inflight-target @*start-inflight-target
-        current @worker-state/*db-sync-client]
-    (cond
-      (not (and (string? base) (seq base) (seq graph-id)))
+  (let [base (ws-base-url)]
+    (if-not (and (string? base) (seq base))
       (do
-        (log/info :db-sync/start-skipped {:repo repo :graph-id graph-id :base base})
+        (log/info :db-sync/start-skipped {:repo repo :graph-id (get-graph-id repo) :base base})
         (p/resolved nil))
+      (p/let [graph-id (<resolve-start-graph-id repo)]
+        (let [start-target [repo graph-id]
+              inflight-target @*start-inflight-target
+              current @worker-state/*db-sync-client]
+          (cond
+            (not (seq graph-id))
+            (do
+              (log/info :db-sync/start-skipped {:repo repo :graph-id graph-id :base base})
+              (p/resolved nil))
 
-      (= start-target inflight-target)
-      (p/resolved nil)
+            (= start-target inflight-target)
+            (p/resolved nil)
 
-      (active-client-for? current repo graph-id)
-      (do
-        (broadcast-rtc-state! current)
-        (p/resolved nil))
+            (active-client-for? current repo graph-id)
+            (do
+              (broadcast-rtc-state! current)
+              (p/resolved nil))
 
-      :else
-      (do
-        (reset! *start-inflight-target start-target)
-        (->
-         (p/do!
-          (stop!)
-          (p/let [client (ensure-client-state! repo)
-                  url (format-ws-url base graph-id)
-                  _ (ensure-client-graph-uuid! repo graph-id)
-                  connected (assoc client :graph-id graph-id)
-                  token (<resolve-ws-token)
-                  connected (connect! repo connected url token)]
-            (reset! worker-state/*db-sync-client connected)
-            nil))
-         (p/finally
-           (fn []
-             (when (= start-target @*start-inflight-target)
-               (reset! *start-inflight-target nil)))))))))
+            :else
+            (do
+              (reset! *start-inflight-target start-target)
+              (->
+               (p/do!
+                (stop!)
+                (p/let [client (ensure-client-state! repo)
+                        url (format-ws-url base graph-id)
+                        _ (ensure-client-graph-uuid! repo graph-id)
+                        connected (assoc client :graph-id graph-id)
+                        token (<resolve-ws-token)
+                        connected (connect! repo connected url token)]
+                  (reset! worker-state/*db-sync-client connected)
+                  nil))
+               (p/finally
+                 (fn []
+                   (when (= start-target @*start-inflight-target)
+                     (reset! *start-inflight-target nil))))))))))))
 
 (defn enqueue-local-tx!
   [repo {:keys [tx-meta tx-data db-after db-before]}]
@@ -1979,8 +2168,21 @@
                         first)]
     (first (bean/->clj result))))
 
+(defn- normalize-snapshot-row-value [value]
+  (cond
+    (nil? value) nil
+    (string? value) value
+    (number? value) value
+    (boolean? value) value
+    (= "bigint" (js* "typeof ~{}" value)) (str value)
+    (instance? js/Uint8Array value) (.decode text-decoder value)
+    (instance? js/ArrayBuffer value) (.decode text-decoder (js/Uint8Array. value))
+    :else (str value)))
+
 (defn- normalize-snapshot-rows [rows]
-  (mapv (fn [row] (vec row)) (array-seq rows)))
+  (mapv (fn [row]
+          (mapv normalize-snapshot-row-value (vec row)))
+        (array-seq rows)))
 
 (defn- encode-snapshot-rows [rows]
   (.encode snapshot-text-encoder (sqlite-util/write-transit-str rows)))
@@ -1993,99 +2195,272 @@
     (.set out data 4)
     out))
 
-(defn- maybe-compress-stream [stream]
-  (if (exists? js/CompressionStream)
-    (.pipeThrough stream (js/CompressionStream. "gzip"))
-    stream))
-
-(defn- <buffer-stream
-  [stream]
-  (p/let [resp (js/Response. stream)
-          buf (.arrayBuffer resp)]
-    buf))
-
 (defn- <snapshot-upload-body
   [rows]
-  (let [frame (frame-bytes (encode-snapshot-rows rows))
-        stream (js/ReadableStream.
-                #js {:start (fn [controller]
-                              (.enqueue controller frame)
-                              (.close controller))})
-        use-compression? (exists? js/CompressionStream)
-        body (if use-compression? (maybe-compress-stream stream) stream)]
-    (if use-compression?
-      (p/let [buf (<buffer-stream body)]
-        {:body buf :encoding snapshot-content-encoding})
-      (p/resolved {:body frame :encoding nil}))))
+  (let [frame (frame-bytes (encode-snapshot-rows rows))]
+    (p/resolved {:body frame :encoding nil})))
+
+(defn- graph-id->uuid
+  [repo graph-id]
+  (when-not (seq graph-id)
+    (fail-fast :db-sync/missing-field {:repo repo :field :graph-id}))
+  (try
+    (uuid graph-id)
+    (catch :default e
+      (fail-fast :db-sync/invalid-field {:repo repo
+                                         :field :graph-id
+                                         :value graph-id
+                                         :error e}))))
 
 (defn- set-graph-sync-metadata!
-  [repo graph-e2ee?]
+  [repo graph-id graph-e2ee?]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (ldb/transact! conn [(ldb/kv :logseq.kv/graph-remote? true)
+    (ldb/transact! conn [(ldb/kv :logseq.kv/graph-uuid (graph-id->uuid repo graph-id))
+                         (ldb/kv :logseq.kv/graph-remote? true)
                          (ldb/kv :logseq.kv/graph-rtc-e2ee? (true? graph-e2ee?))]
                    {:persist-op? false})))
 
+(defn- persist-upload-graph-identity!
+  [repo graph-id graph-e2ee?]
+  (let [graph-id (some-> graph-id str)
+        graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)]
+    (when-not (seq graph-id)
+      (fail-fast :db-sync/missing-field {:repo repo :field :graph-id}))
+    (set-graph-sync-metadata! repo graph-id graph-e2ee?)
+    (ensure-client-graph-uuid! repo graph-id)
+    {:graph-id graph-id
+     :graph-e2ee? graph-e2ee?}))
+
+(defn list-remote-graphs!
+  []
+  (let [base (http-base-url)]
+    (if-not (seq base)
+      (p/resolved [])
+      (do
+        (require-auth-token! {:op :list-remote-graphs})
+        (p/let [resp (fetch-json (str base "/graphs")
+                                 {:method "GET"}
+                                 {:response-schema :graphs/list})]
+          (vec (or (:graphs resp) [])))))))
+
+(defn- <create-remote-graph!
+  [repo graph-e2ee?]
+  (let [base (http-base-url)
+        graph-name (some-> repo common-config/strip-leading-db-version-prefix)
+        schema-version (some-> (worker-state/get-datascript-conn repo)
+                               deref
+                               ldb/get-graph-schema-version
+                               :major
+                               str)
+        graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)]
+    (cond
+      (not (seq base))
+      (fail-fast :db-sync/missing-field {:repo repo :field :http-base})
+
+      (not (seq graph-name))
+      (fail-fast :db-sync/missing-field {:repo repo :field :graph-name})
+
+      :else
+      (do
+        (require-auth-token! {:repo repo :field :auth-token})
+        (p/let [body (coerce-http-request :graphs/create
+                                          {:graph-name graph-name
+                                           :schema-version schema-version
+                                           :graph-e2ee? graph-e2ee?})
+                _ (when (nil? body)
+                    (fail-fast :db-sync/invalid-field {:repo repo
+                                                       :field :create-graph-body}))
+                result (fetch-json (str base "/graphs")
+                                   {:method "POST"
+                                    :headers {"content-type" "application/json"}
+                                    :body (js/JSON.stringify (clj->js body))}
+                                   {:response-schema :graphs/create})
+                graph-id (:graph-id result)
+                graph-e2ee? (normalize-graph-e2ee? (if (contains? result :graph-e2ee?)
+                                                     (:graph-e2ee? result)
+                                                     graph-e2ee?))]
+          (when-not (seq graph-id)
+            (fail-fast :db-sync/missing-field {:repo repo
+                                               :field :graph-id
+                                               :op :create-graph}))
+          (persist-upload-graph-identity! repo graph-id graph-e2ee?))))))
+
+(defn- <ensure-upload-graph-identity!
+  [repo]
+  (if-let [graph-id (get-graph-id repo)]
+    (p/resolved (persist-upload-graph-identity! repo graph-id
+                                                (normalize-graph-e2ee? (sync-crypt/graph-e2ee? repo))))
+    (let [target-graph-name (some-> repo common-config/strip-leading-db-version-prefix)
+          local-graph-e2ee? (normalize-graph-e2ee? (sync-crypt/graph-e2ee? repo))]
+      (if-not (seq target-graph-name)
+        (fail-fast :db-sync/missing-field {:repo repo :field :graph-name})
+        (p/let [remote-graphs (list-remote-graphs!)
+                matching-graphs (filterv (fn [{:keys [graph-name]}]
+                                           (= target-graph-name graph-name))
+                                         remote-graphs)]
+          (cond
+            (> (count matching-graphs) 1)
+            (fail-fast :db-sync/ambiguous-graph-match {:repo repo
+                                                       :graph-name target-graph-name
+                                                       :match-count (count matching-graphs)})
+
+            (= 1 (count matching-graphs))
+            (let [{:keys [graph-id graph-e2ee?]} (first matching-graphs)]
+              (persist-upload-graph-identity! repo graph-id (if (contains? (first matching-graphs) :graph-e2ee?)
+                                                              graph-e2ee?
+                                                              local-graph-e2ee?)))
+
+            :else
+            (<create-remote-graph! repo local-graph-e2ee?)))))))
+
+(defn- download-log!
+  [graph-id sub-type message]
+  (sync-log-and-state/rtc-log :rtc.log/download
+                              {:sub-type sub-type
+                               :graph-uuid graph-id
+                               :message message}))
+
+(defn- response-content-length
+  [^js resp]
+  (when-let [raw (some-> resp .-headers (.get "content-length"))]
+    (let [parsed (js/parseInt raw 10)]
+      (when-not (js/isNaN parsed)
+        parsed))))
+
+(defn- download-graph-with-id!
+  ([repo graph-id graph-e2ee?]
+   (download-graph-with-id! repo graph-id graph-e2ee? {}))
+  ([repo graph-id graph-e2ee? {:keys [batch-size on-datoms-batch]
+                               :or {batch-size 25000}}]
+   (let [base (http-base-url)
+         graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))]
+     (cond
+       (not (seq base))
+       (fail-fast :db-sync/missing-field {:repo repo :field :http-base})
+
+       (not (seq graph-id))
+       (fail-fast :db-sync/missing-field {:repo repo :field :graph-id})
+
+       :else
+       (do
+         (require-auth-token! {:repo repo :field :auth-token})
+         (p/let [_ (download-log! graph-id :download-progress "Preparing graph snapshot download")
+                 pull-resp (fetch-json (str base "/sync/" graph-id "/pull")
+                                       {:method "GET"}
+                                       {:response-schema :sync/pull})
+                 remote-tx (:t pull-resp)
+                 _ (when-not (integer? remote-tx)
+                     (fail-fast :db-sync/invalid-field {:repo repo
+                                                        :field :remote-tx
+                                                        :value remote-tx}))
+                 snapshot-resp (fetch-json (str base "/sync/" graph-id "/snapshot/download")
+                                           {:method "GET"}
+                                           {:response-schema :sync/snapshot-download})
+                 snapshot-url (:url snapshot-resp)
+                 _ (when-not (seq snapshot-url)
+                     (fail-fast :db-sync/missing-field {:repo repo
+                                                        :graph-id graph-id
+                                                        :field :snapshot-url}))
+                 resp (js/fetch snapshot-url
+                                (clj->js (with-auth-headers {:method "GET"})))
+                 total-bytes (response-content-length resp)
+                 _ (download-log! graph-id
+                                  :download-progress
+                                  (if (number? total-bytes)
+                                    (str "Start downloading graph snapshot, file size: " total-bytes)
+                                    "Start downloading graph snapshot"))
+                 _ (when-not (.-ok resp)
+                     (fail-fast :db-sync/snapshot-download-failed {:repo repo
+                                                                   :graph-id graph-id
+                                                                   :status (.-status resp)}))
+                 collect-datoms? (nil? on-datoms-batch)
+                 datoms* (atom [])
+                 datom-count* (atom 0)
+                 on-datoms-batch* (fn [datoms]
+                                    (swap! datom-count* + (count datoms))
+                                    (if collect-datoms?
+                                      (do
+                                        (swap! datoms* into datoms)
+                                        (p/resolved nil))
+                                      (on-datoms-batch datoms)))
+                 _ (<stream-snapshot-datom-batches! resp batch-size on-datoms-batch*)
+                 _ (download-log! graph-id :download-completed "Graph snapshot downloaded")]
+           (cond-> {:repo repo
+                    :graph-id graph-id
+                    :remote-tx remote-tx
+                    :graph-e2ee? graph-e2ee?
+                    :datom-count @datom-count*}
+             collect-datoms?
+             (assoc :datoms @datoms*))))))))
+
+(defn download-graph!
+  [repo]
+  (let [graph-id (get-graph-id repo)
+        graph-e2ee?-raw (sync-crypt/graph-e2ee? repo)
+        graph-e2ee? (if (nil? graph-e2ee?-raw) true (true? graph-e2ee?-raw))]
+    (download-graph-with-id! repo graph-id graph-e2ee?)))
+
+(defn download-graph-by-id!
+  ([repo graph-id graph-e2ee?]
+   (download-graph-with-id! repo graph-id graph-e2ee?))
+  ([repo graph-id graph-e2ee? opts]
+   (download-graph-with-id! repo graph-id graph-e2ee? opts)))
+
 (defn upload-graph!
   [repo]
-  (->
-   (let [base (http-base-url)
-         graph-id (get-graph-id repo)
-         update-progress (fn [payload]
-                           (worker-util/post-message :rtc-log
-                                                     (merge {:type :rtc.log/upload
-                                                             :graph-uuid graph-id}
-                                                            payload)))]
-     (if (and (seq base) (seq graph-id))
-       (if-let [source-conn (worker-state/get-datascript-conn repo)]
-         (let [graph-e2ee? (true? (sync-crypt/graph-e2ee? repo))]
-           (p/let [aes-key (when graph-e2ee?
-                             (sync-crypt/<ensure-graph-aes-key repo graph-id))
-                   _ (when (and graph-e2ee? (nil? aes-key))
-                       (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))]
-             (set-graph-sync-metadata! repo graph-e2ee?)
-             (ensure-client-graph-uuid! repo graph-id)
-             (p/let [_ (update-progress {:sub-type :upload-progress
-                                         :message (if graph-e2ee? "Encrypting..." "Preparing...")})
-                     {:keys [db] :as temp} (<prepare-upload-temp-sqlite! repo graph-id source-conn aes-key update-progress)
-                     total-rows (count-kvs-rows db)]
-               (->
-                (p/loop [last-addr -1
-                         first-batch? true
-                         loaded 0]
-                  (let [rows (fetch-kvs-rows db last-addr upload-kvs-batch-size)]
-                    (if (empty? rows)
-                      (do
-                        (client-op/remove-local-tx repo)
-                        (client-op/update-local-tx repo 0)
-                        (client-op/add-all-exists-asset-as-ops repo)
-                        (update-progress {:sub-type :upload-completed
-                                          :message "Graph upload finished!"})
-                        {:graph-id graph-id})
-                      (let [max-addr (apply max (map first rows))
-                            rows (normalize-snapshot-rows rows)
-                            loaded' (+ loaded (count rows))
-                            finished? (= loaded' total-rows)
-                            upload-url (str base "/sync/" graph-id "/snapshot/upload?reset="
-                                            (if first-batch? "true" "false")
-                                            "&finished="
-                                            (if finished? "true" "false"))]
-                        (p/let [{:keys [body encoding]} (<snapshot-upload-body rows)
-                                headers (cond-> {"content-type" snapshot-content-type}
-                                          (string? encoding) (assoc "content-encoding" encoding))
-                                _ (fetch-json upload-url
-                                              {:method "POST"
-                                               :headers headers
-                                               :body body}
-                                              {:response-schema :sync/snapshot-upload})]
-                          (update-progress {:sub-type :upload-progress
-                                            :message (str "Uploading " loaded' "/" total-rows)})
-                          (p/recur max-addr false loaded'))))))
-                (p/finally
-                  (fn []
-                    (cleanup-temp-sqlite! temp)))))))
-         (p/rejected (ex-info "db-sync missing datascript conn"
-                              {:repo repo :graph-id graph-id})))
-       (p/rejected (ex-info "db-sync missing upload info"
-                            {:repo repo :base base :graph-id graph-id}))))
-   (p/catch (fn [error]
-              (js/console.error error)))))
+  (let [base (http-base-url)]
+    (if-not (seq base)
+      (p/rejected (ex-info "db-sync missing upload info"
+                           {:repo repo :base base :graph-id nil}))
+      (if-let [source-conn (worker-state/get-datascript-conn repo)]
+        (p/let [{:keys [graph-id graph-e2ee?]} (<ensure-upload-graph-identity! repo)
+                aes-key (when graph-e2ee?
+                          (sync-crypt/<ensure-graph-aes-key repo graph-id))
+                _ (when (and graph-e2ee? (nil? aes-key))
+                    (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
+                update-progress (fn [payload]
+                                  (worker-util/post-message :rtc-log
+                                                            (merge {:type :rtc.log/upload
+                                                                    :graph-uuid graph-id}
+                                                                   payload)))
+                _ (update-progress {:sub-type :upload-progress
+                                    :message (if graph-e2ee? "Encrypting 0/0" "Preparing 0/0")})
+                {:keys [db] :as temp} (<prepare-upload-temp-sqlite! repo graph-id source-conn aes-key update-progress)
+                total-rows (count-kvs-rows db)]
+          (->
+           (p/loop [last-addr -1
+                    first-batch? true
+                    loaded 0]
+             (let [rows (fetch-kvs-rows db last-addr upload-kvs-batch-size)]
+               (if (empty? rows)
+                 (do
+                   (client-op/remove-local-tx repo)
+                   (client-op/update-local-tx repo 0)
+                   (client-op/add-all-exists-asset-as-ops repo)
+                   (update-progress {:sub-type :upload-completed
+                                     :message "Graph upload finished!"})
+                   {:graph-id graph-id})
+                 (let [max-addr (apply max (map first rows))
+                       rows (normalize-snapshot-rows rows)
+                       loaded' (+ loaded (count rows))
+                       finished? (= loaded' total-rows)
+                       upload-url (str base "/sync/" graph-id "/snapshot/upload?reset="
+                                       (if first-batch? "true" "false")
+                                       "&finished="
+                                       (if finished? "true" "false"))]
+                   (p/let [{:keys [body encoding]} (<snapshot-upload-body rows)
+                           headers (cond-> {"content-type" snapshot-content-type}
+                                     (string? encoding) (assoc "content-encoding" encoding))
+                           _ (fetch-json upload-url
+                                         {:method "POST"
+                                          :headers headers
+                                          :body body}
+                                         {:response-schema :sync/snapshot-upload})]
+                     (update-progress {:sub-type :upload-progress
+                                       :message (str "Uploading " loaded' "/" total-rows)})
+                     (p/recur max-addr false loaded'))))))
+           (p/finally
+             (fn []
+               (cleanup-temp-sqlite! temp)))))
+        (p/rejected (ex-info "db-sync missing datascript conn"
+                             {:repo repo}))))))

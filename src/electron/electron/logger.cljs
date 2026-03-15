@@ -1,7 +1,7 @@
 (ns electron.logger
   "Electron logger, do not depends other libs"
-  (:require ["electron-log" :as logger]))
-
+  (:require ["electron-log" :as logger]
+            [lambdaisland.glogi :as log]))
 
 (defn- transform-args [args]
   (map #(cond
@@ -11,7 +11,6 @@
           :else
           %)
        args))
-
 
 (defn debug
   [& args]
@@ -29,3 +28,13 @@
   [& args]
   (apply (.-error logger) (transform-args args)))
 
+(log/add-handler (fn [{:keys [level message exception]}]
+                   (let [f (case level
+                             :warn
+                             warn
+                             :error
+                             error
+                             :debug
+                             debug
+                             info)]
+                     (f message exception))))

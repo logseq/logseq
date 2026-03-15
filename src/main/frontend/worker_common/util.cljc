@@ -6,8 +6,9 @@
                      [goog.crypt.base64 :as base64]
                      [goog.crypt.Hmac]
                      [goog.crypt.Sha256]
+                     [logseq.common.graph-dir :as common-graph-dir]
                      [logseq.db :as ldb]
-                     [logseq.db.common.sqlite :as common-sqlite])))
+                     [logseq.db.sqlite.util :as sqlite-util])))
 
 ;; Copied from https://github.com/tonsky/datascript-todo
 #?(:clj
@@ -28,12 +29,25 @@
    (do
      (defn post-message
        [type data & {:keys [port]}]
-       (when-let [worker (or port js/self)]
+       (when-let [worker (or port (when (exists? js/self) js/self))]
          (.postMessage worker (ldb/write-transit-str [type data]))))
+
+     (defn encode-graph-dir-name
+       [graph-name]
+       (common-graph-dir/encode-graph-dir-name graph-name))
+
+     (defn decode-graph-dir-name
+       [dir-name]
+       (common-graph-dir/decode-graph-dir-name dir-name))
 
      (defn get-pool-name
        [graph-name]
-       (str "logseq-pool-" (common-sqlite/sanitize-db-name graph-name)))
+       (str "logseq-pool-"
+            (-> graph-name
+                (string/replace sqlite-util/db-version-prefix "")
+                (string/replace "/" "_")
+                (string/replace "\\" "_")
+                (string/replace ":" "_"))))
 
      (defn- decode-username
        [username]
