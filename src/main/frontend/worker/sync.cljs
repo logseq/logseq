@@ -22,6 +22,7 @@
             [logseq.db-sync.cycle :as sync-cycle]
             [logseq.db-sync.malli-schema :as db-sync-schema]
             [logseq.db-sync.order :as sync-order]
+            [logseq.db-sync.snapshot :as snapshot]
             [logseq.db.common.normalize :as db-normalize]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -519,56 +520,6 @@
     (string? payload) (.encode text-encoder payload)
     :else (js/Uint8Array. payload)))
 
-(defn- decode-snapshot-rows
-  [payload]
-  (sqlite-util/read-transit-str (.decode text-decoder (->uint8 payload))))
-
-(defn- frame-len
-  [^js payload offset]
-  (let [view (js/DataView. (.-buffer payload) offset 4)]
-    (.getUint32 view 0 false)))
-
-(defn- concat-payload
-  [^js a ^js b]
-  (cond
-    (nil? a) b
-    (nil? b) a
-    :else
-    (let [combined (js/Uint8Array. (+ (.-byteLength a) (.-byteLength b)))]
-      (.set combined a 0)
-      (.set combined b (.-byteLength a))
-      combined)))
-
-(defn- parse-framed-chunk
-  [buffer chunk]
-  (let [payload (concat-payload buffer chunk)
-        total (.-byteLength payload)]
-    (loop [offset 0
-           rows []]
-      (if (< (- total offset) 4)
-        {:rows rows
-         :buffer (when (< offset total)
-                   (.slice payload offset total))}
-        (let [len (frame-len payload offset)
-              next-offset (+ offset 4 len)]
-          (if (<= next-offset total)
-            (let [frame-payload (.slice payload (+ offset 4) next-offset)
-                  decoded (decode-snapshot-rows frame-payload)]
-              (recur next-offset (into rows decoded)))
-            {:rows rows
-             :buffer (.slice payload offset total)}))))))
-
-(defn- finalize-framed-buffer
-  [buffer]
-  (if (or (nil? buffer) (zero? (.-byteLength buffer)))
-    []
-    (let [{:keys [rows buffer]} (parse-framed-chunk nil buffer)]
-      (if (and (seq rows) (or (nil? buffer) (zero? (.-byteLength buffer))))
-        rows
-        (fail-fast :db-sync/incomplete-snapshot-frame
-                   {:rows (count rows)
-                    :remaining-buffer-bytes (some-> buffer .-byteLength)})))))
-
 (defn- gzip-payload?
   [^js payload]
   (and (some? payload)
@@ -594,13 +545,63 @@
     (p/rejected (ex-info "gzip decompression not supported"
                          {:type :db-sync/decompression-not-supported}))))
 
-(defn- <snapshot-response-payload
+(defn- <snapshot-response-bytes
   [^js resp]
   (p/let [array-buffer (.arrayBuffer resp)
           payload (->uint8 array-buffer)]
     (if (gzip-payload? payload)
       (<decompress-gzip-payload payload)
       payload)))
+
+(defn- response-body-stream
+  [^js resp]
+  (let [encoding (some-> resp .-headers (.get "content-encoding"))]
+    (cond
+      (nil? (.-body resp))
+      nil
+
+      (= "gzip" encoding)
+      (when (exists? js/DecompressionStream)
+        (.pipeThrough (.-body resp) (js/DecompressionStream. "gzip")))
+
+      :else
+      (.-body resp))))
+
+(defn- <flush-datom-batches!
+  [datoms batch-size on-batch]
+  (p/loop [remaining datoms]
+    (if (>= (count remaining) batch-size)
+      (let [batch (subvec remaining 0 batch-size)
+            rest-datoms (subvec remaining batch-size)]
+        (p/let [_ (on-batch batch)]
+          (p/recur rest-datoms)))
+      remaining)))
+
+(defn- <stream-snapshot-datom-batches!
+  [^js resp batch-size on-batch]
+  (if-let [stream (response-body-stream resp)]
+    (let [reader (.getReader stream)]
+      (p/loop [buffer nil
+               pending []]
+        (p/let [result (.read reader)]
+          (if (.-done result)
+            (let [pending (if (and buffer (pos? (.-byteLength buffer)))
+                            (into pending (snapshot/finalize-datoms-jsonl-buffer buffer))
+                            pending)]
+              (if (seq pending)
+                (p/let [_ (on-batch pending)]
+                  {:chunk-count 1})
+                {:chunk-count 0}))
+            (let [{datoms :datoms next-buffer :buffer} (snapshot/parse-datoms-jsonl-chunk buffer (->uint8 (.-value result)))
+                  pending (into pending datoms)]
+              (p/let [pending (<flush-datom-batches! pending batch-size on-batch)]
+                (p/recur next-buffer pending)))))))
+    (p/let [snapshot-bytes (<snapshot-response-bytes resp)
+            datoms (vec (snapshot/finalize-datoms-jsonl-buffer snapshot-bytes))]
+      (if (seq datoms)
+        (p/let [_ (on-batch datoms)]
+          {:chunk-count 1})
+        {:chunk-count 0}))))
 
 (defn- upsert-addr-content!
   [^js db data]
@@ -2327,48 +2328,70 @@
         parsed))))
 
 (defn- download-graph-with-id!
-  [repo graph-id graph-e2ee?]
-  (let [base (http-base-url)
-        graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))]
-    (cond
-      (not (seq base))
-      (fail-fast :db-sync/missing-field {:repo repo :field :http-base})
+  ([repo graph-id graph-e2ee?]
+   (download-graph-with-id! repo graph-id graph-e2ee? {}))
+  ([repo graph-id graph-e2ee? {:keys [batch-size on-datoms-batch]
+                               :or {batch-size 25000}}]
+   (let [base (http-base-url)
+         graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))]
+     (cond
+       (not (seq base))
+       (fail-fast :db-sync/missing-field {:repo repo :field :http-base})
 
-      (not (seq graph-id))
-      (fail-fast :db-sync/missing-field {:repo repo :field :graph-id})
+       (not (seq graph-id))
+       (fail-fast :db-sync/missing-field {:repo repo :field :graph-id})
 
-      :else
-      (do
-        (require-auth-token! {:repo repo :field :auth-token})
-        (p/let [_ (download-log! graph-id :download-progress "Preparing graph snapshot download")
-                pull-resp (fetch-json (str base "/sync/" graph-id "/pull")
-                                      {:method "GET"}
-                                      {:response-schema :sync/pull})
-                remote-tx (:t pull-resp)
-                _ (when-not (integer? remote-tx)
-                    (fail-fast :db-sync/invalid-field {:repo repo
-                                                       :field :remote-tx
-                                                       :value remote-tx}))
-                resp (js/fetch (str base "/sync/" graph-id "/snapshot/stream")
-                               (clj->js (with-auth-headers {:method "GET"})))
-                total-bytes (response-content-length resp)
-                _ (download-log! graph-id
-                                 :download-progress
-                                 (if (number? total-bytes)
-                                   (str "Start downloading graph snapshot, file size: " total-bytes)
-                                   "Start downloading graph snapshot"))
-                _ (when-not (.-ok resp)
-                    (fail-fast :db-sync/snapshot-download-failed {:repo repo
-                                                                  :graph-id graph-id
-                                                                  :status (.-status resp)}))
-                payload (<snapshot-response-payload resp)
-                rows (finalize-framed-buffer payload)
-                _ (download-log! graph-id :download-completed "Graph snapshot downloaded")]
-          {:repo repo
-           :graph-id graph-id
-           :remote-tx remote-tx
-           :graph-e2ee? graph-e2ee?
-           :rows rows})))))
+       :else
+       (do
+         (require-auth-token! {:repo repo :field :auth-token})
+         (p/let [_ (download-log! graph-id :download-progress "Preparing graph snapshot download")
+                 pull-resp (fetch-json (str base "/sync/" graph-id "/pull")
+                                       {:method "GET"}
+                                       {:response-schema :sync/pull})
+                 remote-tx (:t pull-resp)
+                 _ (when-not (integer? remote-tx)
+                     (fail-fast :db-sync/invalid-field {:repo repo
+                                                        :field :remote-tx
+                                                        :value remote-tx}))
+                 snapshot-resp (fetch-json (str base "/sync/" graph-id "/snapshot/download")
+                                           {:method "GET"}
+                                           {:response-schema :sync/snapshot-download})
+                 snapshot-url (:url snapshot-resp)
+                 _ (when-not (seq snapshot-url)
+                     (fail-fast :db-sync/missing-field {:repo repo
+                                                        :graph-id graph-id
+                                                        :field :snapshot-url}))
+                 resp (js/fetch snapshot-url
+                                (clj->js (with-auth-headers {:method "GET"})))
+                 total-bytes (response-content-length resp)
+                 _ (download-log! graph-id
+                                  :download-progress
+                                  (if (number? total-bytes)
+                                    (str "Start downloading graph snapshot, file size: " total-bytes)
+                                    "Start downloading graph snapshot"))
+                 _ (when-not (.-ok resp)
+                     (fail-fast :db-sync/snapshot-download-failed {:repo repo
+                                                                   :graph-id graph-id
+                                                                   :status (.-status resp)}))
+                 collect-datoms? (nil? on-datoms-batch)
+                 datoms* (atom [])
+                 datom-count* (atom 0)
+                 on-datoms-batch* (fn [datoms]
+                                    (swap! datom-count* + (count datoms))
+                                    (if collect-datoms?
+                                      (do
+                                        (swap! datoms* into datoms)
+                                        (p/resolved nil))
+                                      (on-datoms-batch datoms)))
+                 _ (<stream-snapshot-datom-batches! resp batch-size on-datoms-batch*)
+                 _ (download-log! graph-id :download-completed "Graph snapshot downloaded")]
+           (cond-> {:repo repo
+                    :graph-id graph-id
+                    :remote-tx remote-tx
+                    :graph-e2ee? graph-e2ee?
+                    :datom-count @datom-count*}
+             collect-datoms?
+             (assoc :datoms @datoms*))))))))
 
 (defn download-graph!
   [repo]
@@ -2378,8 +2401,10 @@
     (download-graph-with-id! repo graph-id graph-e2ee?)))
 
 (defn download-graph-by-id!
-  [repo graph-id graph-e2ee?]
-  (download-graph-with-id! repo graph-id graph-e2ee?))
+  ([repo graph-id graph-e2ee?]
+   (download-graph-with-id! repo graph-id graph-e2ee?))
+  ([repo graph-id graph-e2ee? opts]
+   (download-graph-with-id! repo graph-id graph-e2ee? opts)))
 
 (defn upload-graph!
   [repo]
