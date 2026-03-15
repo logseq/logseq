@@ -475,7 +475,10 @@ should be done through this fn in order to get global config and config defaults
    "MMM do, yyyy"))
 
 (defn custom-shortcuts []
-  (merge (storage/get :ls-shortcuts)
+  (merge (try (storage/get :ls-shortcuts)
+              (catch :default e
+                (prn :shortcut/storage-read-error e)
+                nil))
          (:shortcuts (get-config))))
 
 (defn get-commands

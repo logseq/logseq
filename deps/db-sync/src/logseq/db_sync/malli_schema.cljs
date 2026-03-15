@@ -107,6 +107,7 @@
    [:graph-name :string]
    [:schema-version {:optional true} [:maybe :string]]
    [:graph-e2ee? {:optional true} :boolean]
+   [:graph-ready-for-use? {:optional true} :boolean]
    [:role {:optional true} [:maybe graph-member-role-schema]]
    [:invited-by {:optional true} [:maybe :string]]
    [:created-at :int]
@@ -134,12 +135,14 @@
   [:map
    [:graph-name :string]
    [:schema-version {:optional true} [:maybe :string]]
-   [:graph-e2ee? {:optional true} :boolean]])
+   [:graph-e2ee? {:optional true} :boolean]
+   [:graph-ready-for-use? {:optional true} :boolean]])
 
 (def graph-create-response-schema
   [:map
    [:graph-id :string]
-   [:graph-e2ee? {:optional true} :boolean]])
+   [:graph-e2ee? {:optional true} :boolean]
+   [:graph-ready-for-use? {:optional true} :boolean]])
 
 (def graph-access-response-schema http-ok-response-schema)
 

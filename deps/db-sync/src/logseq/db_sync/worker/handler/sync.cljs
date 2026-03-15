@@ -5,6 +5,7 @@
             [logseq.db :as ldb]
             [logseq.db-sync.batch :as batch]
             [logseq.db-sync.common :as common]
+            [logseq.db-sync.index :as index]
             [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.snapshot :as snapshot]
             [logseq.db-sync.storage :as storage]
@@ -16,7 +17,7 @@
 
 (def ^:private snapshot-download-batch-size 10000)
 (def ^:private snapshot-cache-control "private, max-age=300")
-(def ^:private snapshot-content-type "application/transit+json")
+(def ^:private snapshot-content-type "application/x-ndjson")
 (def ^:private snapshot-content-encoding "gzip")
 (def ^:private snapshot-uploading-meta-key :snapshot-uploading?)
 ;; 10m
@@ -52,39 +53,48 @@
   (ensure-schema! self)
   (storage/get-t (.-sql self)))
 
-(defn ready-for-sync? [^js self]
-
+(defn snapshot-upload-finished? [^js self]
   (ensure-schema! self)
   (not= "true" (storage/get-meta (.-sql self) snapshot-uploading-meta-key)))
 
-(defn- fetch-kvs-rows
-  [sql after limit]
-  (common/get-sql-rows
-   (common/sql-exec sql
-                    "select addr, content, addresses from kvs where addr > ? order by addr asc limit ?"
-                    after
-                    limit)))
+(defn <ready-for-sync?
+  [^js self graph-id]
+  (if-not (snapshot-upload-finished? self)
+    (p/resolved false)
+    (if-let [db (some-> self .-env (aget "DB"))]
+      (p/let [graph-ready-for-use? (index/<graph-ready-for-use? db graph-id)]
+        (not= false graph-ready-for-use?))
+      (p/resolved true))))
 
-(defn- snapshot-row-count
-  [sql]
-  (let [row (first (common/get-sql-rows
-                    (common/sql-exec sql "select count(*) as total from kvs")))]
-    (cond
-      (array? row)
-      (aget row 0)
-
-      (some? row)
-      (or (aget row "total")
-          (aget row "count(*)")
-          0)
-
-      :else
-      0)))
-
-(defn- snapshot-row->tuple [row]
-  (if (array? row)
-    [(aget row 0) (aget row 1) (aget row 2)]
-    [(aget row "addr") (aget row "content") (aget row "addresses")]))
+(defn- <set-graph-ready-for-use!
+  [^js self graph-id graph-ready-for-use?]
+  (if-let [db (some-> self .-env (aget "DB"))]
+    (p/let [result (index/<graph-ready-for-use-set! db graph-id graph-ready-for-use?)
+            meta (some-> result (aget "meta"))
+            rows-affected (or (some-> meta (aget "changes"))
+                              (some-> meta (aget "rows_written"))
+                              (some-> result (aget "changes"))
+                              (some-> result (aget "rows_written")))]
+      (when (or (nil? result)
+                (false? (some-> result (aget "success"))))
+        (throw (ex-info "failed to persist graph_ready_for_use"
+                        {:type :db-sync/graph-ready-for-use-set-failed
+                         :graph-id graph-id
+                         :graph-ready-for-use? graph-ready-for-use?
+                         :result result})))
+      (when (and (number? rows-affected)
+                 (<= rows-affected 0))
+        (throw (ex-info "graph_ready_for_use update affected no rows"
+                        {:type :db-sync/graph-ready-for-use-set-no-rows
+                         :graph-id graph-id
+                         :graph-ready-for-use? graph-ready-for-use?
+                         :rows-affected rows-affected
+                         :result result})))
+      result)
+    (p/rejected (ex-info "missing DB binding for graph_ready_for_use update"
+                         {:type :db-sync/missing-db-binding
+                          :graph-id graph-id
+                          :graph-ready-for-use? graph-ready-for-use?}))))
 
 (defn- import-snapshot-rows!
   [sql table rows]
@@ -101,7 +111,7 @@
   (common/sql-exec sql "delete from sync_meta")
   (storage/set-t! sql 0))
 
-(defn- graph-id-from-request [request]
+(defn graph-id-from-request [request]
   (let [header-id (.get (.-headers request) "x-graph-id")
         url (js/URL. (.-url request))
         param-id (.get (.-searchParams url) "graph-id")]
@@ -121,9 +131,10 @@
     stream))
 
 (defn- maybe-compress-stream [stream]
-  (if (exists? js/CompressionStream)
-    (.pipeThrough stream (js/CompressionStream. snapshot-content-encoding))
-    stream))
+  (when-not (exists? js/CompressionStream)
+    (throw (ex-info "gzip compression not supported"
+                    {:type :db-sync/compression-not-supported})))
+  (.pipeThrough stream (js/CompressionStream. snapshot-content-encoding)))
 
 (defn- <buffer-stream
   [stream]
@@ -147,25 +158,47 @@
       (.set out b (.-byteLength a))
       out)))
 
+(defn- snapshot-datom->jsonl-datom
+  [datom]
+  {:e (:e datom)
+   :a (:a datom)
+   :v (:v datom)
+   :tx (:tx datom)
+   :added (:added datom)})
+
+(defn- snapshot-datom-count
+  [conn]
+  (count (d/datoms @conn :eavt)))
+
+(defn- snapshot-export-datoms
+  [conn]
+  (let [db @conn
+        schema-version-eid (some-> (d/entity db :logseq.kv/schema-version) :db/id)
+        ident-eids (into #{}
+                         (map :e)
+                         (d/datoms db :avet :db/ident))
+        jsonl-datoms (fn [pred]
+                       (sequence
+                        (comp (filter pred)
+                              (map snapshot-datom->jsonl-datom))
+                        (d/datoms db :eavt)))]
+    (concat (jsonl-datoms #(= schema-version-eid (:e %)))
+            (jsonl-datoms #(and (contains? ident-eids (:e %))
+                                (not= schema-version-eid (:e %))))
+            (jsonl-datoms #(not (contains? ident-eids (:e %)))))))
+
 (defn- snapshot-export-stream [^js self]
-  (let [sql (.-sql self)
-        state (volatile! {:after -1 :done? false})]
+  (ensure-conn! self)
+  (let [remaining (volatile! (seq (snapshot-export-datoms (.-conn self))))]
     (js/ReadableStream.
      #js {:pull (fn [controller]
-                  (p/let [{:keys [after done?]} @state]
-                    (if done?
+                  (let [batch (vec (take snapshot-download-batch-size @remaining))]
+                    (if (empty? batch)
                       (.close controller)
-                      (let [rows (fetch-kvs-rows sql after snapshot-download-batch-size)
-                            rows (mapv snapshot-row->tuple rows)
-                            last-addr (if (seq rows)
-                                        (apply max (map first rows))
-                                        after)
-                            done? (< (count rows) snapshot-download-batch-size)]
-                        (when (seq rows)
-                          (let [payload (snapshot/encode-rows rows)
-                                framed (snapshot/frame-bytes payload)]
-                            (.enqueue controller framed)))
-                        (vswap! state assoc :after last-addr :done? done?)))))})))
+                      (let [remaining' (drop snapshot-download-batch-size @remaining)
+                            payload (snapshot/encode-datoms-jsonl batch)]
+                        (vreset! remaining (seq remaining'))
+                        (.enqueue controller payload)))))})))
 
 (defn- upload-multipart!
   [^js bucket key stream opts]
@@ -202,42 +235,6 @@
           (p/catch (fn [error]
                      (.abort upload)
                      (throw error)))))))
-
-(defn- snapshot-export-length [^js self]
-  (let [sql (.-sql self)]
-    (p/loop [after -1
-             total 0]
-      (let [rows (fetch-kvs-rows sql after snapshot-download-batch-size)]
-        (if (empty? rows)
-          total
-          (let [rows (mapv snapshot-row->tuple rows)
-                payload (snapshot/encode-rows rows)
-                total (+ total 4 (.-byteLength payload))
-                last-addr (apply max (map first rows))
-                done? (< (count rows) snapshot-download-batch-size)]
-            (if done?
-              total
-              (p/recur last-addr total))))))))
-
-(defn- snapshot-export-fixed-length [^js self]
-  (p/let [length (snapshot-export-length self)
-          stream (snapshot-export-stream self)]
-    (if (exists? js/FixedLengthStream)
-      (let [^js fixed (js/FixedLengthStream. length)
-            readable (.-readable fixed)
-            writable (.-writable fixed)
-            reader (.getReader stream)
-            writer (.getWriter writable)]
-        (p/let [_ (p/loop []
-                    (p/let [chunk (.read reader)]
-                      (if (.-done chunk)
-                        (.close writer)
-                        (p/let [_ (.write writer (.-value chunk))]
-                          (p/recur)))))]
-          readable))
-      (p/let [resp (js/Response. stream)
-              buf (.arrayBuffer resp)]
-        buf))))
 
 (declare import-snapshot!)
 (defn- import-snapshot-stream! [^js self stream reset?]
@@ -327,7 +324,7 @@
 (defn handle-tx-batch! [^js self sender txs t-before]
   (let [current-t (t-now self)]
     (cond
-      (not (ready-for-sync? self))
+      (not (snapshot-upload-finished? self))
       {:type "tx/reject"
        :reason "snapshot upload in progress"
        :t current-t}
@@ -360,29 +357,31 @@
 (defn- handle-sync-pull
   [^js self ^js url]
   (let [raw-since (.get (.-searchParams url) "since")
-        since (if (some? raw-since) (parse-int raw-since) 0)]
+        since (if (some? raw-since) (parse-int raw-since) 0)
+        graph-id (.get (.-searchParams url) "graph-id")]
     (if (or (and (some? raw-since) (not (number? since))) (neg? since))
       (http/bad-request "invalid since")
-      (http/json-response :sync/pull (pull-response self since)))))
+      (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
+        (if-not ready-for-sync?
+          (http/error-response "graph not ready" 409)
+          (http/json-response :sync/pull (pull-response self since)))))))
 
 (defn- handle-sync-snapshot-stream
   [^js self request]
   (let [graph-id (graph-id-from-request request)]
     (if (not (seq graph-id))
       (http/bad-request "missing graph id")
-      (let [use-compression? (exists? js/CompressionStream)
-            content-encoding (when use-compression? snapshot-content-encoding)
-            row-count (snapshot-row-count (.-sql self))
-            stream (snapshot-export-stream self)
-            stream (if use-compression?
-                     (maybe-compress-stream stream)
-                     stream)]
+      (let [stream (-> (snapshot-export-stream self)
+                       (maybe-compress-stream))
+            conn (or (.-conn self)
+                     (do (ensure-conn! self) (.-conn self)))
+            datom-count (snapshot-datom-count conn)]
         (js/Response. stream
                       #js {:status 200
                            :headers (js/Object.assign
                                      #js {"content-type" snapshot-content-type
-                                          "content-encoding" (or content-encoding "identity")}
-                                     #js {"x-snapshot-row-count" (str row-count)}
+                                          "content-encoding" snapshot-content-encoding}
+                                     #js {"x-snapshot-datom-count" (str datom-count)}
                                      (common/cors-headers))})))))
 
 (defn- handle-sync-snapshot-download
@@ -397,33 +396,29 @@
       (http/error-response "missing assets bucket" 500)
 
       :else
-      (p/let [snapshot-id (str (random-uuid))
-              key (snapshot-key graph-id snapshot-id)
-              use-compression? (exists? js/CompressionStream)
-              content-encoding (when use-compression? snapshot-content-encoding)
-              stream (snapshot-export-stream self)
-              stream (if use-compression?
-                       (maybe-compress-stream stream)
-                       stream)
-              multipart? (and (some? (.-createMultipartUpload bucket))
-                              (fn? (.-createMultipartUpload bucket)))
-              opts #js {:httpMetadata #js {:contentType snapshot-content-type
-                                           :contentEncoding content-encoding
-                                           :cacheControl snapshot-cache-control}
-                        :customMetadata #js {:purpose "snapshot"
-                                             :created-at (str (common/now-ms))}}
-              _ (if multipart?
-                  (upload-multipart! bucket key stream opts)
-                  (if use-compression?
-                    (p/let [body (<buffer-stream stream)]
-                      (.put bucket key body opts))
-                    (p/let [body (snapshot-export-fixed-length self)]
-                      (.put bucket key body opts))))
-              url (snapshot-url request graph-id snapshot-id)]
-        (http/json-response :sync/snapshot-download {:ok true
-                                                     :key key
-                                                     :url url
-                                                     :content-encoding content-encoding})))))
+      (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
+        (if-not ready-for-sync?
+          (http/error-response "graph not ready" 409)
+          (p/let [snapshot-id (str (random-uuid))
+                  key (snapshot-key graph-id snapshot-id)
+                  stream (-> (snapshot-export-stream self)
+                             (maybe-compress-stream))
+                  multipart? (and (some? (.-createMultipartUpload bucket))
+                                  (fn? (.-createMultipartUpload bucket)))
+                  opts #js {:httpMetadata #js {:contentType snapshot-content-type
+                                               :contentEncoding snapshot-content-encoding
+                                               :cacheControl snapshot-cache-control}
+                            :customMetadata #js {:purpose "snapshot"
+                                                 :created-at (str (common/now-ms))}}
+                  _ (if multipart?
+                      (upload-multipart! bucket key stream opts)
+                      (p/let [body (<buffer-stream stream)]
+                        (.put bucket key body opts)))
+                  url (snapshot-url request graph-id snapshot-id)]
+            (http/json-response :sync/snapshot-download {:ok true
+                                                         :key key
+                                                         :url url
+                                                         :content-encoding snapshot-content-encoding})))))))
 
 (defn- handle-sync-admin-reset
   [^js self]
@@ -442,13 +437,17 @@
            (if (nil? result)
              (http/bad-request "missing body")
              (let [body (js->clj result :keywordize-keys true)
-                   body (http/coerce-http-request :sync/tx-batch body)]
+                   body (http/coerce-http-request :sync/tx-batch body)
+                   graph-id (graph-id-from-request request)]
                (if (nil? body)
                  (http/bad-request "invalid tx")
                  (let [{:keys [txs t-before]} body
                        t-before (parse-int t-before)]
                    (if (string? txs)
-                     (http/json-response :sync/tx-batch (handle-tx-batch! self nil txs t-before))
+                     (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
+                       (if-not ready-for-sync?
+                         (http/error-response "graph not ready" 409)
+                         (http/json-response :sync/tx-batch (handle-tx-batch! self nil txs t-before))))
                      (http/bad-request "invalid tx")))))))))
 
 (defn- parse-reset-param
@@ -485,10 +484,14 @@
           (p/let [_ (ensure-schema! self)
                   _ (when reset?
                       (storage/set-meta! (.-sql self) snapshot-uploading-meta-key true))
+                  _ (when reset?
+                      (<set-graph-ready-for-use! self graph-id false))
                   stream (maybe-decompress-stream stream encoding)
                   count (import-snapshot-stream! self stream reset?)
                   _ (when finished?
-                      (storage/set-meta! (.-sql self) snapshot-uploading-meta-key false))]
+                      (storage/set-meta! (.-sql self) snapshot-uploading-meta-key false))
+                  _ (when finished?
+                      (<set-graph-ready-for-use! self graph-id true))]
             (http/json-response :sync/snapshot-upload {:ok true
                                                        :count count})))))))
 

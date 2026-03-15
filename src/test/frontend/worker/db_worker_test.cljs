@@ -12,11 +12,17 @@
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.log-and-state :as rtc-log-and-state]
-            [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
 (def ^:private test-repo "test-db-worker-repo")
+(def ^:private close-db!-orig db-worker/close-db!)
+(def ^:private decrypt-snapshot-datoms-batch-orig sync-crypt/<decrypt-snapshot-datoms-batch)
+(def ^:private fetch-graph-aes-key-for-download-orig sync-crypt/<fetch-graph-aes-key-for-download)
+(def ^:private rehydrate-large-titles-from-db-orig db-sync/rehydrate-large-titles-from-db!)
+(def ^:private rtc-log-orig rtc-log-and-state/rtc-log)
+(def ^:private update-local-tx-orig client-op/update-local-tx)
+(def ^:private broadcast-to-clients-orig shared-service/broadcast-to-clients!)
 
 (defn- fake-db
   [label closed]
@@ -64,44 +70,39 @@
         fuzzy-prev @search/fuzzy-search-indices
         sqlite-prev @worker-state/*sqlite
         platform-prev @@#'platform/*platform
-        import-state-prev @@#'db-worker/*import-state]
-    (try
-      (platform/set-platform! (build-test-platform))
-      (reset! worker-state/*sqlite #js {})
-      (reset! @#'db-worker/*import-state nil)
-      (f)
-      (finally
-        (reset! worker-state/*sqlite-conns sqlite-conns-prev)
-        (reset! worker-state/*datascript-conns datascript-prev)
-        (reset! worker-state/*client-ops-conns client-ops-prev)
-        (reset! worker-state/*opfs-pools opfs-prev)
-        (reset! search/fuzzy-search-indices fuzzy-prev)
-        (reset! worker-state/*sqlite sqlite-prev)
-        (reset! @#'platform/*platform platform-prev)
-        (reset! @#'db-worker/*import-state import-state-prev)))))
-
-(defn- capture-outcome
-  [thunk]
-  (try
-    (-> (thunk)
-        (p/then (fn [value] {:value value}))
-        (p/catch (fn [error] {:error error})))
-    (catch :default error
-      (p/resolved {:error error}))))
-
-(defn- make-snapshot-rows
-  [n]
-  (mapv (fn [i]
-          [i (str "content-" i) (str "addresses-" i)])
-        (range n)))
-
-(defn- import-db-factory
-  [labels closed]
-  (let [remaining (atom labels)]
-    (fn [_repo _reset?]
-      (let [label (first @remaining)]
-        (swap! remaining rest)
-        (p/resolved (fake-db label closed))))))
+        import-state-prev @@#'db-worker/*import-state
+        cleanup (fn []
+                  (set! db-worker/close-db! close-db!-orig)
+                  (set! sync-crypt/<decrypt-snapshot-datoms-batch decrypt-snapshot-datoms-batch-orig)
+                  (set! sync-crypt/<fetch-graph-aes-key-for-download fetch-graph-aes-key-for-download-orig)
+                  (set! db-sync/rehydrate-large-titles-from-db! rehydrate-large-titles-from-db-orig)
+                  (set! rtc-log-and-state/rtc-log rtc-log-orig)
+                  (set! client-op/update-local-tx update-local-tx-orig)
+                  (set! shared-service/broadcast-to-clients! broadcast-to-clients-orig)
+                  (reset! worker-state/*sqlite-conns sqlite-conns-prev)
+                  (reset! worker-state/*datascript-conns datascript-prev)
+                  (reset! worker-state/*client-ops-conns client-ops-prev)
+                  (reset! worker-state/*opfs-pools opfs-prev)
+                  (reset! search/fuzzy-search-indices fuzzy-prev)
+                  (reset! worker-state/*sqlite sqlite-prev)
+                  (reset! @#'platform/*platform platform-prev)
+                  (reset! @#'db-worker/*import-state import-state-prev))]
+    (set! db-worker/close-db! close-db!-orig)
+    (set! sync-crypt/<decrypt-snapshot-datoms-batch decrypt-snapshot-datoms-batch-orig)
+    (set! sync-crypt/<fetch-graph-aes-key-for-download fetch-graph-aes-key-for-download-orig)
+    (set! db-sync/rehydrate-large-titles-from-db! rehydrate-large-titles-from-db-orig)
+    (set! rtc-log-and-state/rtc-log rtc-log-orig)
+    (set! client-op/update-local-tx update-local-tx-orig)
+    (set! shared-service/broadcast-to-clients! broadcast-to-clients-orig)
+    (platform/set-platform! (build-test-platform))
+    (reset! worker-state/*sqlite #js {})
+    (reset! @#'db-worker/*import-state nil)
+    (let [result (f)]
+      (if (p/promise? result)
+        (p/finally result cleanup)
+        (do
+          (cleanup)
+          result)))))
 
 (deftest close-db-clears-fuzzy-search-cache-test
   (restoring-worker-state
@@ -126,7 +127,7 @@
        (is (= 1 @pause-calls))
        (is (nil? (get @worker-state/*sqlite-conns test-repo)))))))
 
-(deftest import-datoms-to-db-happy-path-test
+(deftest complete-datoms-import-invalidates-existing-search-db-test
   (async done
          (restoring-worker-state
           (fn []
@@ -140,7 +141,7 @@
                                   client-op/update-graph-uuid (fn [& _] nil)
                                   client-op/update-local-tx (fn [& _] nil)
                                   shared-service/broadcast-to-clients! (fn [& _] nil)]
-                    (#'db-worker/import-datoms-to-db! test-repo "graph-1" 42 nil))
+                    (#'db-worker/complete-datoms-import! test-repo "graph-1" 42))
                   (p/then (fn [_]
                             (is true)
                             (vreset! thread-api/*thread-apis thread-apis-prev)
@@ -150,134 +151,187 @@
                              (is false (str error))
                              (done)))))))))
 
+(defn- capture-outcome
+  [thunk]
+  (try
+    (-> (thunk)
+        (p/then (fn [value] {:value value}))
+        (p/catch (fn [error] {:error error})))
+    (catch :default error
+      (p/resolved {:error error}))))
+
+(defn- with-fake-create-or-open-db
+  [repo conn f]
+  (let [thread-apis-prev @thread-api/*thread-apis]
+    (vreset! thread-api/*thread-apis
+             (assoc thread-apis-prev
+                    :thread-api/create-or-open-db
+                    (fn [_repo _opts]
+                      (swap! worker-state/*datascript-conns assoc repo conn)
+                      (p/resolved nil))))
+    (-> (f)
+        (p/finally (fn []
+                     (vreset! thread-api/*thread-apis thread-apis-prev))))))
+
+(def sample-datoms
+  [{:e 1 :a :db/ident :v :logseq.class/Page :tx 1 :added true}
+   {:e 2 :a :block/title :v "hello" :tx 1 :added true}])
+
 (deftest db-sync-import-prepare-replaces-active-import-state-test
   (async done
          (restoring-worker-state
           (fn []
-            (let [closed (atom [])
-                  prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)]
-              (-> (p/with-redefs [db-worker/ensure-db-sync-import-db! (import-db-factory [:first :second] closed)
-                                  rtc-log-and-state/rtc-log (fn [& _] nil)]
-                    (p/let [first-import (prepare test-repo false "graph-1" false)
-                            second-import (prepare test-repo false "graph-1" false)]
-                      (is (map? first-import))
-                      (is (map? second-import))
-                      (is (not= (:import-id first-import) (:import-id second-import)))
-                      (is (= [:first] @closed))))
-                  (p/then (fn [_] (done)))
-                  (p/catch (fn [error]
-                             (is false (str error))
-                             (done)))))))))
+            (let [prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
+                  conn-a (d/create-conn db-schema/schema)
+                  conn-b (d/create-conn db-schema/schema)]
+              (with-fake-create-or-open-db
+                test-repo conn-a
+                (fn []
+                  (-> (p/with-redefs [db-worker/close-db! (fn [_] nil)
+                                      db-worker/<invalidate-search-db! (fn [_] (p/resolved nil))]
+                        (p/let [first-import (prepare test-repo true "graph-1" false)
+                                _ (swap! worker-state/*datascript-conns assoc test-repo conn-b)
+                                second-import (prepare test-repo true "graph-1" false)]
+                          (is (map? first-import))
+                          (is (map? second-import))
+                          (is (not= (:import-id first-import) (:import-id second-import)))))
+                      (p/then (fn [_] (done)))
+                      (p/catch (fn [error]
+                                 (is false (str error))
+                                 (done)))))))))))
 
-(deftest db-sync-import-prepare-cleans-up-failed-setup-test
+(deftest db-sync-import-datoms-chunk-rejects-stale-import-id-test
   (async done
          (restoring-worker-state
           (fn []
-            (let [closed (atom [])
-                  log-calls (atom 0)
-                  prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)]
-              (-> (p/with-redefs [db-worker/ensure-db-sync-import-db! (import-db-factory [:failed :retry] closed)
-                                  rtc-log-and-state/rtc-log (fn [& _]
-                                                              (when (zero? @log-calls)
-                                                                (swap! log-calls inc)
-                                                                (throw (ex-info "setup failed" {}))))]
-                    (p/let [failed-outcome (capture-outcome #(prepare test-repo false "graph-1" false))
-                            retry-import (prepare test-repo false "graph-1" false)]
-                      (is (= "setup failed" (some-> failed-outcome :error ex-message)))
-                      (is (= [:failed] @closed))
-                      (is (map? retry-import))
-                      (is (:import-id retry-import))
-                      (done)))
-                  (p/catch (fn [error]
-                             (is false (str error))
-                             (done)))))))))
+            (let [prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
+                  datoms-chunk (@thread-api/*thread-apis :thread-api/db-sync-import-datoms-chunk)
+                  conn (d/create-conn db-schema/schema)]
+              (with-fake-create-or-open-db
+                test-repo conn
+                (fn []
+                  (-> (p/with-redefs [db-worker/close-db! (fn [_] nil)
+                                      db-worker/<invalidate-search-db! (fn [_] (p/resolved nil))
+                                      rtc-log-and-state/rtc-log (fn [& _] nil)]
+                        (p/let [first-import (prepare test-repo true "graph-1" false)
+                                second-import (prepare test-repo true "graph-1" false)
+                                stale-outcome (capture-outcome #(datoms-chunk sample-datoms "graph-1" (:import-id first-import)))]
+                          (is (= :db-sync/stale-import (some-> stale-outcome :error ex-data :type)))
+                          (is (nil? (d/entity @conn 2)))
+                          (-> (datoms-chunk sample-datoms "graph-1" (:import-id second-import))
+                              (p/then (fn [_]
+                                        (is (= "hello" (:block/title (d/entity @conn 2))))
+                                        (done))))))
+                      (p/catch (fn [error]
+                                 (is false (str error))
+                                 (done)))))))))))
 
-(deftest db-sync-import-rows-chunk-stale-id-and-plain-import-test
+(deftest db-sync-import-datoms-chunk-imports-plain-datoms-to-active-db-test
   (async done
          (restoring-worker-state
           (fn []
-            (let [closed (atom [])
-                  upserts (atom [])
-                  prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
-                  rows-chunk (@thread-api/*thread-apis :thread-api/db-sync-import-rows-chunk)]
-              (-> (p/with-redefs [db-worker/ensure-db-sync-import-db! (import-db-factory [:first :second] closed)
-                                  db-worker/upsert-addr-content! (fn [db binds]
-                                                                   (swap! upserts conj {:db db :binds binds}))
-                                  rtc-log-and-state/rtc-log (fn [& _] nil)]
-                    (p/let [first-import (prepare test-repo false "graph-1" false)
-                            second-import (prepare test-repo false "graph-1" false)
-                            stale-outcome (capture-outcome #(rows-chunk [[1 "content-1" "addresses-1"]]
-                                                                         "graph-1"
-                                                                         (:import-id first-import)))
-                            _ (rows-chunk [[2 "content-2" "addresses-2"]]
-                                          "graph-1"
-                                          (:import-id second-import))]
-                      (is (= :db-sync/stale-import (some-> stale-outcome :error ex-data :type)))
-                      (is (= 1 (count @upserts)))
-                      (done)))
-                  (p/catch (fn [error]
-                             (is false (str error))
-                             (done)))))))))
+            (let [prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
+                  datoms-chunk (@thread-api/*thread-apis :thread-api/db-sync-import-datoms-chunk)
+                  conn (d/create-conn db-schema/schema)]
+              (with-fake-create-or-open-db
+                test-repo conn
+                (fn []
+                  (-> (p/with-redefs [db-worker/close-db! (fn [_] nil)
+                                      db-worker/<invalidate-search-db! (fn [_] (p/resolved nil))
+                                      rtc-log-and-state/rtc-log (fn [& _] nil)]
+                        (p/let [{:keys [import-id]} (prepare test-repo true "graph-1" false)
+                                _ (datoms-chunk sample-datoms "graph-1" import-id)]
+                          (is (= :logseq.class/Page (:db/ident (d/entity @conn 1))))
+                          (is (= "hello" (:block/title (d/entity @conn 2))))
+                          (done)))
+                      (p/catch (fn [error]
+                                 (is false (str error))
+                                 (done)))))))))))
 
-(deftest db-sync-import-rows-chunk-imports-encrypted-rows-test
+(deftest db-sync-import-datoms-chunk-imports-encrypted-datoms-to-active-db-test
   (async done
          (restoring-worker-state
           (fn []
-            (let [closed (atom [])
-                  upserts (atom [])
-                  decrypt-calls (atom [])
-                  rows (make-snapshot-rows 250)
-                  prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
-                  rows-chunk (@thread-api/*thread-apis :thread-api/db-sync-import-rows-chunk)]
-              (-> (p/with-redefs [db-worker/ensure-db-sync-import-db! (import-db-factory [:encrypted] closed)
-                                  sync-crypt/<fetch-graph-aes-key-for-download (fn [_] (p/resolved :aes-key))
-                                  sync-crypt/<decrypt-snapshot-rows-batch (fn [aes-key rows-batch]
-                                                                            (swap! decrypt-calls conj {:aes-key aes-key
-                                                                                                       :rows rows-batch})
-                                                                            (p/resolved rows-batch))
-                                  db-worker/upsert-addr-content! (fn [db binds]
-                                                                   (swap! upserts conj {:db db :binds binds}))
-                                  rtc-log-and-state/rtc-log (fn [& _] nil)]
-                    (p/let [{:keys [import-id]} (prepare test-repo false "graph-1" true)
-                            _ (rows-chunk rows "graph-1" import-id)]
-                      (is (= 1 (count @decrypt-calls)))
-                      (is (= rows (:rows (first @decrypt-calls))))
-                      (is (= 1 (count @upserts)))
-                      (is (= (count rows) (count (:binds (first @upserts)))))
-                      (done)))
-                  (p/catch (fn [error]
-                             (is false (str error))
-                             (done)))))))))
+            (let [prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
+                  datoms-chunk (@thread-api/*thread-apis :thread-api/db-sync-import-datoms-chunk)
+                  conn (d/create-conn db-schema/schema)
+                  decrypt-calls (atom [])]
+              (with-fake-create-or-open-db
+                test-repo conn
+                (fn []
+                  (-> (p/with-redefs [db-worker/close-db! (fn [_] nil)
+                                      db-worker/<invalidate-search-db! (fn [_] (p/resolved nil))
+                                      rtc-log-and-state/rtc-log (fn [& _] nil)
+                                      sync-crypt/<fetch-graph-aes-key-for-download (fn [_] (p/resolved :aes-key))
+                                      sync-crypt/<decrypt-snapshot-datoms-batch (fn [aes-key datoms]
+                                                                                  (swap! decrypt-calls conj {:aes-key aes-key
+                                                                                                             :datoms datoms})
+                                                                                  (p/resolved datoms))]
+                        (p/let [{:keys [import-id]} (prepare test-repo true "graph-1" true)
+                                _ (datoms-chunk sample-datoms "graph-1" import-id)]
+                          (is (= 1 (count @decrypt-calls)))
+                          (is (= sample-datoms (:datoms (first @decrypt-calls))))
+                          (is (= "hello" (:block/title (d/entity @conn 2))))
+                          (done)))
+                      (p/catch (fn [error]
+                                 (is false (str error))
+                                 (done)))))))))))
 
 (deftest db-sync-import-finalize-stale-id-and-success-test
   (async done
          (restoring-worker-state
           (fn []
-            (let [closed (atom [])
-                  prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
+            (let [prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
                   finalize (@thread-api/*thread-apis :thread-api/db-sync-import-finalize)
-                  finalized (atom [])
-                  storage-conn (d/create-conn db-schema/schema)]
-              (d/transact! storage-conn [[:db/add 171 :block/name "$$$views"]])
-              (-> (p/with-redefs [db-worker/ensure-db-sync-import-db! (import-db-factory [:first :second] closed)
-                                  common-sqlite/get-storage-conn (fn [_ _] storage-conn)
-                                  db-worker/import-datoms-to-db! (fn [& args]
-                                                                   (swap! finalized conj args)
-                                                                   (p/resolved nil))
-                                  rtc-log-and-state/rtc-log (fn [& _] nil)]
-                    (p/let [first-import (prepare test-repo false "graph-1" false)
-                            second-import (prepare test-repo false "graph-1" false)
-                            stale-outcome (capture-outcome #(finalize test-repo "graph-1" 42 (:import-id first-import)))
-                            _ (finalize test-repo "graph-1" 42 (:import-id second-import))]
-                      (is (= :db-sync/stale-import (some-> stale-outcome :error ex-data :type)))
-                      (is (= 1 (count @finalized)))
-                      (let [[repo graph-id remote-tx imported-datoms] (first @finalized)]
-                        (is (= test-repo repo))
-                        (is (= "graph-1" graph-id))
-                        (is (= 42 remote-tx))
-                        (is (= [[171 :block/name "$$$views"]]
-                               (mapv (fn [datom] [(:e datom) (:a datom) (:v datom)]) imported-datoms))))
-                      (done)))
-                  (p/catch (fn [error]
-                             (is false (str error))
-                             (done)))))))))
+                  conn (d/create-conn db-schema/schema)]
+              (with-fake-create-or-open-db
+                test-repo conn
+                (fn []
+                  (-> (p/with-redefs [db-worker/close-db! (fn [_] nil)
+                                      db-worker/<invalidate-search-db! (fn [_] (p/resolved nil))
+                                      db-sync/rehydrate-large-titles-from-db! (fn [& _] (p/resolved nil))
+                                      rtc-log-and-state/rtc-log (fn [& _] nil)
+                                      client-op/update-local-tx (fn [& _] nil)
+                                      shared-service/broadcast-to-clients! (fn [& _] nil)]
+                        (p/let [first-import (prepare test-repo true "graph-1" false)
+                                second-import (prepare test-repo true "graph-1" false)
+                                stale-outcome (capture-outcome #(finalize test-repo "graph-1" 42 (:import-id first-import)))]
+                          (is (= :db-sync/stale-import (some-> stale-outcome :error ex-data :type)))
+                          (-> (finalize test-repo "graph-1" 42 (:import-id second-import))
+                              (p/then (fn [_]
+                                        (is true)
+                                        (done))))))
+                      (p/catch (fn [error]
+                                 (is false (str error))
+                                 (done)))))))))))
+
+(deftest db-sync-import-finalize-completes-active-db-import-test
+  (async done
+         (restoring-worker-state
+          (fn []
+            (let [prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
+                  datoms-chunk (@thread-api/*thread-apis :thread-api/db-sync-import-datoms-chunk)
+                  finalize (@thread-api/*thread-apis :thread-api/db-sync-import-finalize)
+                  conn (d/create-conn db-schema/schema)
+                  search-db #js {:close (fn [] nil)
+                                 :exec (fn [_sql] nil)}
+                  main-db #js {:exec (fn [_sql] nil)}]
+              (reset! worker-state/*sqlite-conns {test-repo {:db main-db :search search-db :client-ops nil}})
+              (with-fake-create-or-open-db
+                test-repo conn
+                (fn []
+                  (-> (p/with-redefs [db-worker/close-db! (fn [_] nil)
+                                      db-worker/<invalidate-search-db! (fn [_] (p/resolved nil))
+                                      db-sync/rehydrate-large-titles-from-db! (fn [& _] (p/resolved nil))
+                                      rtc-log-and-state/rtc-log (fn [& _] nil)
+                                      client-op/update-local-tx (fn [& _] nil)
+                                      shared-service/broadcast-to-clients! (fn [& _] nil)]
+                        (p/let [{:keys [import-id]} (prepare test-repo true "graph-1" false)
+                                _ (datoms-chunk sample-datoms "graph-1" import-id)
+                                _ (finalize test-repo "graph-1" 42 import-id)]
+                          (is (= :logseq.class/Page (:db/ident (d/entity @conn 1))))
+                          (is (= "hello" (:block/title (d/entity @conn 2))))
+                          (done)))
+                      (p/catch (fn [error]
+                                 (is false (str error))
+                                 (done)))))))))))
