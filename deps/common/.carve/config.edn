@@ -10,5 +10,6 @@
                   logseq.common.util.macro
                   logseq.common.cognito-config
                   logseq.common.config
-                  logseq.common.defkeywords]
+                  logseq.common.defkeywords
+                  logseq.common.graph-dir]
  :report {:format :ignore}}
