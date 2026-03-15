@@ -1246,14 +1246,11 @@
                      (reset! worker-state/*db-sync-config config-prev)
                      (done))))))))
 
-(deftest download-graph-by-id-fails-on-incomplete-snapshot-frame-test
-  (testing "snapshot download rejects incomplete framed payload"
+(deftest download-graph-by-id-fails-when-snapshot-download-url-missing-test
+  (testing "snapshot download rejects missing snapshot url"
     (async done
            (let [fetch-prev js/fetch
-                 config-prev @worker-state/*db-sync-config
-                 rows [["addr-1" "content-1" nil]]
-                 frame (#'db-sync/frame-bytes (#'db-sync/encode-snapshot-rows rows))
-                 truncated (.slice frame 0 (dec (.-byteLength frame)))]
+                 config-prev @worker-state/*db-sync-config]
              (reset! worker-state/*db-sync-config {:http-base "https://example.com"
                                                    :auth-token "token-value"})
              (set! js/fetch
@@ -1264,36 +1261,35 @@
                                                 :status 200
                                                 :text (fn [] (js/Promise.resolve "{\"type\":\"pull/ok\",\"t\":7,\"txs\":[]}"))})
 
-                       (>= (.indexOf url "/snapshot/stream") 0)
+                       (>= (.indexOf url "/snapshot/download") 0)
                        (js/Promise.resolve #js {:ok true
                                                 :status 200
-                                                :arrayBuffer (fn [] (js/Promise.resolve (.-buffer truncated)))})
+                                                :text (fn [] (js/Promise.resolve "{\"ok\":true,\"key\":\"graph-1/snapshot-1.snapshot\",\"url\":\"\"}"))})
 
                        :else
                        (js/Promise.reject (js/Error. (str "unexpected fetch url: " url))))))
              (-> (p/let [_ (db-sync/download-graph-by-id! test-repo "graph-1" false)]
-                   (is false "expected incomplete frame failure"))
+                   (is false "expected missing snapshot url failure"))
                  (p/catch (fn [e]
-                            (is (= "incomplete-snapshot-frame" (ex-message e)))))
+                            (is (= "missing-field" (ex-message e)))
+                            (is (= :snapshot-url (get-in (ex-data e) [:field])))))
                  (p/finally
                    (fn []
                      (set! js/fetch fetch-prev)
                      (reset! worker-state/*db-sync-config config-prev)
                      (done))))))))
 
-(deftest download-graph-by-id-preserves-framed-row-batches-test
-  (testing "snapshot download merges complete frames without truncating rows"
+(deftest download-graph-by-id-parses-jsonl-datoms-test
+  (testing "snapshot download parses ndjson transit datoms"
     (async done
            (let [fetch-prev js/fetch
                  config-prev @worker-state/*db-sync-config
-                 rows-a [["addr-1" "content-1" nil]
-                         ["addr-2" "content-2" nil]]
-                 rows-b [["addr-3" "content-3" nil]]
-                 frame-a (#'db-sync/frame-bytes (#'db-sync/encode-snapshot-rows rows-a))
-                 frame-b (#'db-sync/frame-bytes (#'db-sync/encode-snapshot-rows rows-b))
-                 payload (js/Uint8Array. (+ (.-byteLength frame-a) (.-byteLength frame-b)))]
-             (.set payload frame-a 0)
-             (.set payload frame-b (.-byteLength frame-a))
+                 asset-url "https://example.com/assets/graph-1.snapshot"
+                 datoms [{:e 1 :a :db/ident :v :logseq.class/Page :tx 1 :added true}
+                         {:e 2 :a :block/title :v "hello" :tx 1 :added true}]
+                 payload-str (str (sqlite-util/write-transit-str (first datoms)) "\n"
+                                  (sqlite-util/write-transit-str (second datoms)) "\n")
+                 payload (.encode (js/TextEncoder.) payload-str)]
              (reset! worker-state/*db-sync-config {:http-base "https://example.com"
                                                    :auth-token "token-value"})
              (set! js/fetch
@@ -1304,7 +1300,12 @@
                                                 :status 200
                                                 :text (fn [] (js/Promise.resolve "{\"type\":\"pull/ok\",\"t\":7,\"txs\":[]}"))})
 
-                       (>= (.indexOf url "/snapshot/stream") 0)
+                       (>= (.indexOf url "/snapshot/download") 0)
+                       (js/Promise.resolve #js {:ok true
+                                                :status 200
+                                                :text (fn [] (js/Promise.resolve (str "{\"ok\":true,\"key\":\"graph-1/snapshot-1.snapshot\",\"url\":\"" asset-url "\"}")))})
+
+                       (= url asset-url)
                        (js/Promise.resolve #js {:ok true
                                                 :status 200
                                                 :arrayBuffer (fn [] (js/Promise.resolve (.-buffer payload)))})
@@ -1315,8 +1316,8 @@
                    (is (= "graph-1" (:graph-id result)))
                    (is (= 7 (:remote-tx result)))
                    (is (= false (:graph-e2ee? result)))
-                   (is (= (vec (concat rows-a rows-b))
-                          (vec (:rows result)))))
+                   (is (= 2 (:datom-count result)))
+                   (is (= datoms (vec (:datoms result)))))
                  (p/catch (fn [e]
                             (is false (str "unexpected error: " e))))
                  (p/finally
@@ -1331,8 +1332,9 @@
            (let [fetch-prev js/fetch
                  config-prev @worker-state/*db-sync-config
                  logs (atom [])
-                 rows [["addr-1" "content-1" nil]]
-                 payload (#'db-sync/frame-bytes (#'db-sync/encode-snapshot-rows rows))]
+                 asset-url "https://example.com/assets/graph-1.snapshot"
+                 payload-str (str (sqlite-util/write-transit-str {:e 1 :a :db/ident :v :logseq.class/Page :tx 1 :added true}) "\n")
+                 payload (.encode (js/TextEncoder.) payload-str)]
              (reset! worker-state/*db-sync-config {:http-base "https://example.com"
                                                    :auth-token "token-value"})
              (set! js/fetch
@@ -1343,7 +1345,12 @@
                                                 :status 200
                                                 :text (fn [] (js/Promise.resolve "{\"type\":\"pull/ok\",\"t\":9,\"txs\":[]}"))})
 
-                       (>= (.indexOf url "/snapshot/stream") 0)
+                       (>= (.indexOf url "/snapshot/download") 0)
+                       (js/Promise.resolve #js {:ok true
+                                                :status 200
+                                                :text (fn [] (js/Promise.resolve (str "{\"ok\":true,\"key\":\"graph-1/snapshot-1.snapshot\",\"url\":\"" asset-url "\"}")))})
+
+                       (= url asset-url)
                        (js/Promise.resolve #js {:ok true
                                                 :status 200
                                                 :headers #js {:get (fn [header]
@@ -1361,7 +1368,7 @@
                            (is (= "graph-1" (:graph-id result)))
                            (is (= 9 (:remote-tx result)))
                            (is (= false (:graph-e2ee? result)))
-                           (is (= rows (vec (:rows result))))
+                           (is (= 1 (:datom-count result)))
                            (let [messages (mapv (fn [[_ payload]] (:message payload)) @logs)]
                              (is (some #(= "Preparing graph snapshot download" %) messages))
                              (is (some #(string/includes? % "Start downloading graph snapshot") messages))

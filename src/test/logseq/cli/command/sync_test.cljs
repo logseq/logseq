@@ -590,9 +590,10 @@
                                                   :thread-api/q
                                                   (p/resolved 0)
                                                   :thread-api/db-sync-download-graph-by-id
-                                                  (p/rejected (ex-info "db-sync/incomplete-snapshot-frame"
-                                                                       {:code :db-sync/incomplete-snapshot-frame
-                                                                        :graph-id "remote-graph-id"}))
+                                                  (p/rejected (ex-info "db-sync/snapshot-download-failed"
+                                                                       {:code :db-sync/snapshot-download-failed
+                                                                        :graph-id "remote-graph-id"
+                                                                        :status 500}))
                                                   (p/resolved nil)))]
                (p/let [result (execute-with-runtime-auth {:type :sync-download
                                                      :repo "logseq_db_demo"
@@ -600,7 +601,7 @@
                                                     {:base-url "http://example"
                                                      :data-dir "/tmp"})]
                  (is (= :error (:status result)))
-                 (is (= :db-sync/incomplete-snapshot-frame (get-in result [:error :code])))))
+                 (is (= :db-sync/snapshot-download-failed (get-in result [:error :code])))))
              (p/catch (fn [e]
                         (is false (str "unexpected error: " e))))
              (p/finally done))))
