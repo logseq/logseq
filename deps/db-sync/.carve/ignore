@@ -22,3 +22,5 @@ logseq.db-sync.snapshot/framed-length
 logseq.db-sync.worker/worker
 ;; debugging
 logseq.db-sync.worker.timing/summary
+;; API
+logseq.db-sync.snapshot/finalize-datoms-jsonl-buffer
