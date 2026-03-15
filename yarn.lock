@@ -1227,10 +1227,10 @@
     "@sentry/core" "8.55.0"
     hoist-non-react-statics "^3.3.2"
 
-"@sqlite.org/sqlite-wasm@^3.50.3-build1":
-  version "3.50.3-build1"
-  resolved "https://registry.yarnpkg.com/@sqlite.org/sqlite-wasm/-/sqlite-wasm-3.50.3-build1.tgz#684e2c767e7c315bb5cd178d7dfb50d1a4b6d5ce"
-  integrity sha512-NU+I7KJ5kpMZNyZtJ9hOLlhQHJAA3fJhtkE7kf3C0SlGg4ayz6AkqxcaDcR4qOsrz1XP2+yM1yORaLCt55XDQg==
+"@sqlite.org/sqlite-wasm@^3.51.2-build7":
+  version "3.51.2-build7"
+  resolved "https://registry.yarnpkg.com/@sqlite.org/sqlite-wasm/-/sqlite-wasm-3.51.2-build7.tgz#1e1b047808207c6b3023b684297f8ad8405b2e7f"
+  integrity sha512-11GK8eeFTP4pLCDdFZTwxeQ57bjghDo7JLNw1li+jmhXDr01lUcee2A+Rn6BJhPBU29oqf3OPBXfZtWDzoNCww==
 
 "@stylelint/postcss-css-in-js@^0.37.2":
   version "0.37.3"
@@ -4668,13 +4668,12 @@ grapheme-splitter@1.0.4:
   resolved "https://registry.yarnpkg.com/grapheme-splitter/-/grapheme-splitter-1.0.4.tgz#9cf3a665c6247479896834af35cf1dbb4400767e"
   integrity sha512-bzh50DW9kTPM00T8y4o8vQg89Di9oLJVLW/KaOGIXJWP/iqCN6WKYkbNOF04vFLJhwcpYUh9ydh/+5vpOqV4YQ==
 
-graphology@0.20.0:
-  version "0.20.0"
-  resolved "https://registry.yarnpkg.com/graphology/-/graphology-0.20.0.tgz#e29f7a1448852dfc7195646241f336b10127997a"
-  integrity sha512-h5mJWgZXpuZQzBAMWhVIOluGNIYUP043eh7BHcecRWhSkD4eiZAh+uM4XX2rGL1vig9XQ3JVYl9gmK+ajy+JPA==
+graphology@0.26.0:
+  version "0.26.0"
+  resolved "https://registry.yarnpkg.com/graphology/-/graphology-0.26.0.tgz#7f866a831feaa364af750f141a7bf40489533336"
+  integrity sha512-8SSImzgUUYC89Z042s+0r/vMibY7GX/Emz4LDO5e7jYXhuoWfHISPFJYjpRLUSJGq6UQ6xlenvX1p/hJdfXuXg==
   dependencies:
     events "^3.3.0"
-    obliterator "^1.6.1"
 
 guid-typescript@^1.0.9:
   version "1.0.9"
@@ -6572,11 +6571,6 @@ object.reduce@^1.0.0:
   dependencies:
     for-own "^1.0.0"
     make-iterator "^1.0.0"
-
-obliterator@^1.6.1:
-  version "1.6.1"
-  resolved "https://registry.yarnpkg.com/obliterator/-/obliterator-1.6.1.tgz#dea03e8ab821f6c4d96a299e17aef6a3af994ef3"
-  integrity sha512-9WXswnqINnnhOG/5SLimUlzuU1hFJUc8zkwyD59Sd+dPOMf05PmnYG/d6Q7HZ+KmgkZJa1PxRso6QdM3sTNHig==
 
 once@^1.3.0, once@^1.3.1, once@^1.3.2, once@^1.4.0:
   version "1.4.0"
@@ -9547,7 +9541,7 @@ urix@^0.1.0:
   resolved "https://registry.yarnpkg.com/urix/-/urix-0.1.0.tgz#da937f7a62e21fec1fd18d49b35c2935067a6c72"
   integrity sha512-Am1ousAhSLBeB9cG/7k7r2R0zj50uDRlZHPGbazid5s9rlF1F/QKYObEKSIunSjIOkJZqwRRLpvewjEkM7pSqg==
 
-url@^0.11.0:
+url@^0.11.0, url@^0.11.4:
   version "0.11.4"
   resolved "https://registry.yarnpkg.com/url/-/url-0.11.4.tgz#adca77b3562d56b72746e76b330b7f27b6721f3c"
   integrity sha512-oCwdVC7mTuWiPyjLUz/COz5TLk6wgp0RCsN+wHZ2Ekneac9w8uuV0njcbbie2ME+Vs+d6duwmYuR3HgQXs1fOg==

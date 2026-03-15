@@ -92,7 +92,7 @@ const common = {
         'node_modules/@highlightjs/cdn-assets/highlight.min.js',
         'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
         'packages/ui/dist/ui.js',
-        'node_modules/@sqlite.org/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
+        'node_modules/@sqlite.org/sqlite-wasm/dist/sqlite3.wasm',
         'node_modules/react/umd/react.production.min.js',
         'node_modules/react/umd/react.development.js',
         'node_modules/react-dom/umd/react-dom.production.min.js',
@@ -142,7 +142,7 @@ const common = {
         'node_modules/interactjs/dist/interact.min.js',
         'node_modules/photoswipe/dist/umd/*.js',
         'packages/ui/dist/ui.js',
-        'node_modules/@sqlite.org/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
+        'node_modules/@sqlite.org/sqlite-wasm/dist/sqlite3.wasm',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'js'))),
       () => gulp.src([
         'node_modules/inter-ui/inter.css',
