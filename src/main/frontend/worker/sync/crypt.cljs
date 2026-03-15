@@ -566,6 +566,16 @@
   [aes-key rows-batch]
   (p/all (map #(<decrypt-snapshot-row aes-key %) rows-batch)))
 
+(defn <decrypt-snapshot-datoms-batch
+  [aes-key datoms]
+  (p/all
+   (map (fn [{:keys [a v] :as datom}]
+          (if (contains? sync-const/encrypt-attr-set a)
+            (p/let [v' (<decrypt-text-value aes-key v)]
+              (assoc datom :v v'))
+            (p/resolved datom)))
+        datoms)))
+
 (defn <encrypt-datoms
   ([aes-key datoms]
    (<encrypt-datoms aes-key datoms nil))

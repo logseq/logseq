@@ -59,7 +59,6 @@
             [frontend.mobile.intent :as mobile-intent]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
-            [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.reaction :as reaction]
             [frontend.security :as security]
             [frontend.state :as state]
@@ -2345,12 +2344,12 @@
                                  {:key "Go to tag"
                                   :on-click #(route-handler/redirect-to-page! (:block/uuid tag))}
                                  (str "Go to #" (:block/title tag))
-                                 (shui/dropdown-menu-shortcut (shortcut-utils/decorate-binding "mod+click")))
+                                 (ui/dropdown-shortcut "mod+click"))
                                 (shui/dropdown-menu-item
                                  {:key "Open tag in sidebar"
                                   :on-click #(state/sidebar-add-block! (state/get-current-repo) (:db/id tag) :page)}
                                  "Open in sidebar"
-                                 (shui/dropdown-menu-shortcut (shortcut-utils/decorate-binding "shift+click")))
+                                 (ui/dropdown-shortcut "shift+click"))
                                 (when-not (ldb/private-tags (:db/ident tag))
                                   (shui/dropdown-menu-item
                                    {:key "Remove tag"

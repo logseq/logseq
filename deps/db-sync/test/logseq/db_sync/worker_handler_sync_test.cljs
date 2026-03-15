@@ -2,7 +2,9 @@
   (:require [cljs.test :refer [async deftest is testing]]
             [datascript.core :as d]
             [logseq.db-sync.common :as common]
+            [logseq.db-sync.index :as index]
             [logseq.db-sync.protocol :as protocol]
+            [logseq.db-sync.snapshot :as snapshot]
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.test-sql :as test-sql]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
@@ -31,11 +33,19 @@
                bucket #js {:put (fn [key body opts]
                                   (reset! put-call {:key key :body body :opts opts})
                                   (js/Promise.resolve #js {:ok true}))}
+               conn (d/create-conn db-schema/schema)
                self #js {:env #js {:LOGSEQ_SYNC_ASSETS bucket}
+                         :conn conn
+                         :schema-ready true
                          :sql (empty-sql)}
                {:keys [request url]} (request-url)
                original-compression-stream (.-CompressionStream js/globalThis)
                restore! #(aset js/globalThis "CompressionStream" original-compression-stream)]
+           (d/transact! conn [{:db/ident :logseq.class/Page
+                               :block/title "Page"}
+                              {:db/ident :logseq.kv/schema-version
+                               :kv/value {:major 65 :minor 23}}
+                              {:db/id 2 :block/title "hello"}])
            (aset js/globalThis
                  "CompressionStream"
                  (passthrough-compression-stream-constructor))
@@ -45,10 +55,22 @@
                                                   :route {:handler :sync/snapshot-download}})
                        text (.text resp)
                        body (js->clj (js/JSON.parse text) :keywordize-keys true)
-                       http-metadata (aget (:opts @put-call) "httpMetadata")]
+                       http-metadata (aget (:opts @put-call) "httpMetadata")
+                       payload (js/Uint8Array. (:body @put-call))
+                       {:keys [datoms]} (snapshot/parse-datoms-jsonl-chunk nil payload)]
                  (is (= 200 (.-status resp)))
                  (is (= "gzip" (:content-encoding body)))
-                 (is (= "gzip" (aget http-metadata "contentEncoding"))))
+                 (is (= "gzip" (aget http-metadata "contentEncoding")))
+                 (is (= "application/x-ndjson" (aget http-metadata "contentType")))
+                 (is (= 5 (count datoms)))
+                 (is (= [:logseq.kv/schema-version
+                         :logseq.kv/schema-version
+                         :logseq.kv/schema-version
+                         :logseq.class/Page
+                         :logseq.class/Page]
+                        (mapv (fn [{:keys [e]}]
+                                (:db/ident (d/entity @conn e)))
+                              datoms))))
                (p/then (fn []
                          (restore!)
                          (done)))
@@ -57,49 +79,41 @@
                           (is false (str error))
                           (done)))))))
 
-(deftest snapshot-download-falls-back-to-uncompressed-when-compression-unsupported-test
+(deftest snapshot-download-stream-route-returns-jsonl-datoms-test
   (async done
-         (let [put-call (atom nil)
-               bucket #js {:put (fn [key body opts]
-                                  (reset! put-call {:key key :body body :opts opts})
-                                  (js/Promise.resolve #js {:ok true}))}
-               self #js {:env #js {:LOGSEQ_SYNC_ASSETS bucket}
+         (let [conn (d/create-conn db-schema/schema)
+               self #js {:env #js {}
+                         :conn conn
+                         :schema-ready true
                          :sql (empty-sql)}
-               {:keys [request url]} (request-url)
+               {:keys [request]} (request-url "/sync/graph-1/snapshot/stream?graph-id=graph-1")
                original-compression-stream (.-CompressionStream js/globalThis)
                restore! #(aset js/globalThis "CompressionStream" original-compression-stream)]
-           (aset js/globalThis "CompressionStream" js/undefined)
-           (-> (p/let [resp (sync-handler/handle {:self self
-                                                  :request request
-                                                  :url url
-                                                  :route {:handler :sync/snapshot-download}})
-                       text (.text resp)
-                       body (js->clj (js/JSON.parse text) :keywordize-keys true)
-                       http-metadata (aget (:opts @put-call) "httpMetadata")]
+           (d/transact! conn [{:db/ident :logseq.class/Page
+                               :block/title "Page"}
+                              {:db/ident :logseq.kv/schema-version
+                               :kv/value {:major 65 :minor 23}}
+                              {:db/id 2 :block/title "hello"}])
+           (aset js/globalThis
+                 "CompressionStream"
+                 (passthrough-compression-stream-constructor))
+           (-> (p/let [resp (sync-handler/handle-http self request)
+                       encoding (.get (.-headers resp) "content-encoding")
+                       content-type (.get (.-headers resp) "content-type")
+                       buf (.arrayBuffer resp)
+                       payload (js/Uint8Array. buf)
+                       datoms (snapshot/finalize-datoms-jsonl-buffer payload)]
                  (is (= 200 (.-status resp)))
-                 (is (nil? (:content-encoding body)))
-                 (is (nil? (aget http-metadata "contentEncoding"))))
+                 (is (= "gzip" encoding))
+                 (is (= "application/x-ndjson" content-type))
+                 (is (= 5 (count datoms)))
+                 (is (= :logseq.kv/schema-version
+                        (:db/ident (d/entity @conn (:e (first datoms)))))))
                (p/then (fn []
                          (restore!)
                          (done)))
                (p/catch (fn [error]
                           (restore!)
-                          (is false (str error))
-                          (done)))))))
-
-(deftest snapshot-stream-route-works-via-handle-http-test
-  (async done
-         (let [self #js {:env #js {}
-                         :sql (empty-sql)}
-               {:keys [request]} (request-url "/sync/graph-1/snapshot/stream?graph-id=graph-1")]
-           (-> (p/let [resp (sync-handler/handle-http self request)
-                       encoding (.get (.-headers resp) "content-encoding")]
-                 (is (= 200 (.-status resp)))
-                 (is (= "application/transit+json" (.get (.-headers resp) "content-type")))
-                 (is (contains? #{"gzip" "identity"} encoding)))
-               (p/then (fn []
-                         (done)))
-               (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))
 
@@ -165,3 +179,48 @@
                    (sync-handler/handle-tx-batch! self nil (protocol/tx->transit tx-data) 0))]
     (is (= "tx/reject" (:type response)))
     (is (= "snapshot upload in progress" (:reason response)))))
+
+(deftest sync-pull-is-blocked-when-graph-is-not-ready-for-use-test
+  (async done
+         (let [self #js {:env #js {"DB" :db}
+                         :sql (empty-sql)}
+               {:keys [request url]} (request-url "/sync/graph-1/pull?graph-id=graph-1&since=0")]
+           (-> (p/with-redefs [index/<graph-ready-for-use? (fn [_db _graph-id]
+                                                             (p/resolved false))]
+                 (p/let [resp (sync-handler/handle {:self self
+                                                    :request request
+                                                    :url url
+                                                    :route {:handler :sync/pull}})
+                         text (.text resp)
+                         body (js->clj (js/JSON.parse text) :keywordize-keys true)]
+                   (is (= 409 (.-status resp)))
+                   (is (= "graph not ready" (:error body)))))
+               (p/then (fn []
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest snapshot-download-is-blocked-when-graph-is-not-ready-for-use-test
+  (async done
+         (let [bucket #js {:put (fn [& _]
+                                  (throw (js/Error. "should-not-upload-snapshot")))}
+               self #js {:env #js {"DB" :db
+                                   "LOGSEQ_SYNC_ASSETS" bucket}
+                         :sql (empty-sql)}
+               {:keys [request url]} (request-url)]
+           (-> (p/with-redefs [index/<graph-ready-for-use? (fn [_db _graph-id]
+                                                             (p/resolved false))]
+                 (p/let [resp (sync-handler/handle {:self self
+                                                    :request request
+                                                    :url url
+                                                    :route {:handler :sync/snapshot-download}})
+                         text (.text resp)
+                         body (js->clj (js/JSON.parse text) :keywordize-keys true)]
+                   (is (= 409 (.-status resp)))
+                   (is (= "graph not ready" (:error body)))))
+               (p/then (fn []
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
