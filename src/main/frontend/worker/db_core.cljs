@@ -462,11 +462,15 @@
   (db-sync/upload-graph! repo))
 
 (defn- validate-sync-download-result!
-  [repo {:keys [rows graph-id remote-tx] :as result}]
-  (when-not (sequential? rows)
+  [repo {:keys [datoms datom-count graph-id remote-tx] :as result}]
+  (when-not (sequential? datoms)
     (db-sync/fail-fast :db-sync/invalid-field {:repo repo
-                                               :field :rows
-                                               :value rows}))
+                                               :field :datoms
+                                               :value datoms}))
+  (when-not (integer? datom-count)
+    (db-sync/fail-fast :db-sync/invalid-field {:repo repo
+                                               :field :datom-count
+                                               :value datom-count}))
   (when-not (and (string? graph-id) (seq graph-id))
     (db-sync/fail-fast :db-sync/invalid-field {:repo repo
                                                :field :graph-id
@@ -477,43 +481,46 @@
                                                :value remote-tx}))
   result)
 
+(defn- import-downloaded-datoms!
+  [repo graph-id remote-tx graph-e2ee? datoms]
+  (if (seq datoms)
+    (p/let [{:keys [import-id]} ((@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
+                                 repo true graph-id graph-e2ee? (count datoms))
+            _ ((@thread-api/*thread-apis :thread-api/db-sync-import-datoms-chunk)
+               datoms graph-id import-id)
+            _ ((@thread-api/*thread-apis :thread-api/db-sync-import-finalize)
+               repo graph-id remote-tx import-id)]
+      true)
+    (do
+      (sync-log-and-state/rtc-log :rtc.log/download
+                                  {:sub-type :download-completed
+                                   :graph-uuid graph-id
+                                   :message "Graph is ready!"})
+      (p/resolved true))))
+
 (def-thread-api :thread-api/db-sync-download-graph
   [repo]
   (p/let [download-result (db-sync/download-graph! repo)
-          {:keys [rows graph-id remote-tx graph-e2ee?]}
+          {:keys [datoms datom-count graph-id remote-tx graph-e2ee?]}
           (validate-sync-download-result! repo download-result)
-          row-count (count rows)
-          _ (if (seq rows)
-              ((@thread-api/*thread-apis :thread-api/db-sync-import-kvs-rows)
-               repo rows true graph-id remote-tx graph-e2ee?)
-              (sync-log-and-state/rtc-log :rtc.log/download
-                                          {:sub-type :download-completed
-                                           :graph-uuid graph-id
-                                           :message "Graph is ready!"}))]
+          _ (import-downloaded-datoms! repo graph-id remote-tx graph-e2ee? datoms)]
     {:repo repo
      :graph-id graph-id
      :remote-tx remote-tx
      :graph-e2ee? graph-e2ee?
-     :row-count row-count}))
+     :row-count datom-count}))
 
 (def-thread-api :thread-api/db-sync-download-graph-by-id
   [repo graph-id graph-e2ee?]
   (p/let [download-result (db-sync/download-graph-by-id! repo graph-id graph-e2ee?)
-          {:keys [rows graph-id remote-tx graph-e2ee?]}
+          {:keys [datoms datom-count graph-id remote-tx graph-e2ee?]}
           (validate-sync-download-result! repo download-result)
-          row-count (count rows)
-          _ (if (seq rows)
-              ((@thread-api/*thread-apis :thread-api/db-sync-import-kvs-rows)
-               repo rows true graph-id remote-tx graph-e2ee?)
-              (sync-log-and-state/rtc-log :rtc.log/download
-                                          {:sub-type :download-completed
-                                           :graph-uuid graph-id
-                                           :message "Graph is ready!"}))]
+          _ (import-downloaded-datoms! repo graph-id remote-tx graph-e2ee? datoms)]
     {:repo repo
      :graph-id graph-id
      :remote-tx remote-tx
      :graph-e2ee? graph-e2ee?
-     :row-count row-count}))
+     :row-count datom-count}))
 
 (def-thread-api :thread-api/set-infer-worker-proxy
   [infer-worker-proxy]
