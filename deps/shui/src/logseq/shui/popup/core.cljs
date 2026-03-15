@@ -105,10 +105,10 @@
                    :else [0 0])]
     (some-> @*target (d/set-attr! "data-popup-active" (if (keyword? id) (name id) (str id))))
     (let [on-before-hide (fn []
-                           (some-> on-after-hide (apply nil))
                            (when-let [^js trigger (and (not (false? focus-trigger?))
                                                        (some-> @*target (.closest "[tabindex='0']")))]
-                             (js/setTimeout #(.focus trigger) 16)))]
+                             (js/setTimeout #(.focus trigger) 16))
+                           (some-> on-before-hide (apply [])))]
       (upsert-popup!
        (merge opts
               {:id id :target (deref *target)
@@ -134,11 +134,11 @@
            f (fn []
                (detach-popup! id)
                (some-> (:on-after-hide config) (apply [])))]
-       (some-> (:on-before-hide config) (apply []))
-       (some-> target (d/remove-attr! "data-popup-active"))
-       (if (and (number? delay) (> delay 0))
-         (js/setTimeout f delay)
-         (f))))))
+       (when (not (false? (some-> (:on-before-hide config) (apply []))))
+         (some-> target (d/remove-attr! "data-popup-active"))
+         (if (and (number? delay) (> delay 0))
+           (js/setTimeout f delay)
+           (f)))))))
 
 (defn hide-all!
   []
