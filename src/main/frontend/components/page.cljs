@@ -594,6 +594,8 @@
 (defonce *link-dist (atom 70))
 (defonce *charge-strength (atom -600))
 (defonce *charge-range (atom 600))
+(defonce *cached-graph-data
+  (atom nil))
 
 (rum/defcs simulation-switch < rum/reactive
   [state]
@@ -890,13 +892,19 @@
 
 (rum/defc graph-aux
   [settings forcesettings theme search-graph-filters]
-  (let [[graph set-graph!] (hooks/use-state nil)]
+  (let [cache-key [theme settings]
+        cached    @*cached-graph-data
+        ;; Seed from cache on remount if key matches; nil otherwise (first visit
+        ;; or settings changed). React useState only reads this on mount.
+        init-val  (when (= (:key cached) cache-key) (:data cached))
+        [graph set-graph!] (hooks/use-state init-val)]
     (hooks/use-effect!
      (fn []
        (p/let [result (state/<invoke-db-worker :thread-api/build-graph (state/get-current-repo)
                                                (assoc settings
                                                       :type :global
                                                       :theme theme))]
+         (reset! *cached-graph-data {:data result :key cache-key})
          (set-graph! result)))
      [theme settings])
     (when graph
