@@ -81,11 +81,11 @@
       :else
       nil)))
 
-(defn ^:api page-or-object?-helper
+(defn ^:api block-referenceable-by-property?
+  "Returns true if the argument is a block and it can be referenced by properties (most blocks can be)"
   [block]
   (and (de/entity? block)
-       (or (ldb/page? block)
-           (ldb/object? block))
+       (ldb/normal-block? block)
        ;; Don't allow :default property value objects to reference their
        ;; parent block as they are dependent on their block for display
        ;; and look weirdly recursive - https://github.com/logseq/db-test/issues/36
@@ -93,7 +93,7 @@
 
 (defn db-rebuild-block-refs
   "Rebuild block refs for DB graphs, should returns ids"
-  [db block & {:keys [page-or-object?-memoized]}]
+  [db block]
   (let [block-db-id (:db/id block)
         ;; explicit lookup in order to be nbb compatible
         properties (->
@@ -106,14 +106,13 @@
                                (remove private-built-in-props)
                                (keep (fn [ident]
                                        (:db/id (d/entity db ident)))))
-        page-or-object? (or page-or-object?-memoized page-or-object?-helper)
         property-value-refs (->> properties
                                  (mapcat (fn [[property v]]
                                            (cond
-                                             (and (coll? v) (every? page-or-object? v))
+                                             (and (coll? v) (every? block-referenceable-by-property? v))
                                              (map :db/id v)
 
-                                             (page-or-object? v)
+                                             (block-referenceable-by-property? v)
                                              [(:db/id v)]
 
                                              :else

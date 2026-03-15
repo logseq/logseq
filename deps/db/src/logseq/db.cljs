@@ -220,6 +220,7 @@
 (def journal? entity-util/journal?)
 (def hidden? entity-util/hidden?)
 (def object? entity-util/object?)
+(def normal-block? entity-util/normal-block?)
 (def asset? entity-util/asset?)
 (def public-built-in-property? db-property/public-built-in-property?)
 (def get-entity-types entity-util/get-entity-types)

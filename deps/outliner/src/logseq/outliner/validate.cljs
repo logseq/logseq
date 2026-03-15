@@ -8,7 +8,6 @@
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]))
 
 (defn ^:api validate-page-title-characters
@@ -111,13 +110,13 @@
    - Property names are unique with user properties being allowed to have the same name as built-in ones
    - Class names are unique regardless of their extends or if they're built-in"
   [db new-title entity]
-  (when (entity-util/page? entity)
+  (when (ldb/page? entity)
     (validate-unique-for-page db new-title entity)))
 
 (defn ^:api validate-disallow-page-with-journal-name
   "Validates a non-journal page renamed to journal format"
   [new-title entity]
-  (when (and (entity-util/page? entity) (not (entity-util/journal? entity))
+  (when (and (ldb/page? entity) (not (ldb/journal? entity))
              (common-date/normalize-date new-title nil))
     (throw (ex-info "Page can't be renamed to a journal"
                     {:type :notification
@@ -125,8 +124,9 @@
                                :type :warning}}))))
 
 (defn validate-block-title
-  "Validates a block title when it has changed for a entity-util/page? or tagged node"
+  "Validates a block title when it has changed for a ldb/page? or tagged node"
   [db new-title existing-block-entity]
+  ;; TODO: this function doesnt do anything for objects (tagged nodes), it only validates pages (maybe it shouldnt validate objects at all?, look at https://github.com/logseq/logseq/pull/12407)
   (validate-unique-by-name-and-tags db new-title existing-block-entity)
   (validate-disallow-page-with-journal-name new-title existing-block-entity))
 
@@ -249,7 +249,7 @@
                                 :type :error
                                 :entity (into {} entity)
                                 :property :block/tags}}))
-              (some entity-util/page? (:block/_parent entity))
+              (some ldb/page? (:block/_parent entity))
               (throw (ex-info "This page cannot be converted to a block"
                               {:type :notification
                                :payload
@@ -270,7 +270,7 @@
 
           ;; Only allow block to be page when its parent is a page to guard against invalid pages
           ;; in property values or pages being created with blocks as namespace parents
-          (when (or (not (entity-util/page? (:block/parent block)))
+          (when (or (not (ldb/page? (:block/parent block)))
                     (:logseq.property/created-from-property block))
             (let [message (if (:logseq.property/created-from-property block)
                             "Can't convert property value to page."
