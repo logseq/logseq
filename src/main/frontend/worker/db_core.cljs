@@ -230,6 +230,26 @@
   (let [{:keys [db search client-ops debug-log]} (get @*sqlite-conns repo)]
     (close-db-aux! repo db search client-ops debug-log)))
 
+(defn- <invalidate-search-db!
+  [repo]
+  (if-let [search-db (worker-state/get-sqlite-conn repo :search)]
+    (do
+      (search/truncate-table! search-db)
+      (p/resolved nil))
+    (when-not @*publishing?
+      (p/let [pool (<get-opfs-pool repo)
+              search-path (resolve-db-path repo pool (str "search" repo-path))
+              search-db (platform/sqlite-open (platform/current)
+                                              {:sqlite @*sqlite
+                                               :pool pool
+                                               :path search-path
+                                               :mode "c"})]
+        (try
+          (search/truncate-table! search-db)
+          (finally
+            (.close search-db)))
+        nil))))
+
 (defn reset-db!
   [repo db-transit-str]
   (when-let [conn (get @*datascript-conns repo)]
@@ -702,6 +722,27 @@
    (p/catch (fn [error]
               (js/console.error error)))))
 
+(defn- complete-datoms-import!
+  [repo graph-id remote-tx]
+  (-> (p/do!
+       (when-let [search-db (worker-state/get-sqlite-conn repo :search)]
+         (search/truncate-table! search-db))
+       (sync-log-and-state/rtc-log :rtc.log/download
+                                   {:sub-type :download-progress
+                                    :graph-uuid graph-id
+                                    :message "Saving data to DB"})
+       (db-sync/rehydrate-large-titles-from-db! repo graph-id)
+       (sync-log-and-state/rtc-log :rtc.log/download
+                                   {:sub-type :download-completed
+                                    :graph-uuid graph-id
+                                    :message "Graph is ready!"})
+       (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
+         (.exec db "PRAGMA wal_checkpoint(2)"))
+       (client-op/update-local-tx repo remote-tx)
+       (shared-service/broadcast-to-clients! :add-repo {:repo repo}))
+      (p/catch (fn [error]
+                 (js/console.error error)))))
+
 (defn- ->uint8
   [data]
   (cond
@@ -742,6 +783,45 @@
       (throw (stale-import-ex-info repo graph-id import-id)))
     state))
 
+(defn- datom->tx
+  [{:keys [e a v]}]
+  [:db/add e a v])
+
+(defn- import-datoms-batch!
+  [conn aes-key graph-e2ee? datoms]
+  (p/let [datoms-batch (if graph-e2ee?
+                         (sync-crypt/<decrypt-snapshot-datoms-batch aes-key datoms)
+                         datoms)
+          ident-tx-data (into [] (comp (filter #(= :db/ident (:a %)))
+                                       (map datom->tx))
+                              datoms-batch)
+          regular-tx-data (into [] (comp (remove #(= :db/ident (:a %)))
+                                         (map datom->tx))
+                                datoms-batch)
+          tx-data (into ident-tx-data regular-tx-data)]
+    (when (seq tx-data)
+      (d/transact! conn tx-data {:sync-download-graph? true}))))
+
+(defn- <ensure-datoms-import-conn!
+  [repo graph-id import-id]
+  (p/let [{:keys [conn]} (require-import-state! repo graph-id import-id)]
+    (if conn
+      conn
+      (p/let [_ ((@thread-api/*thread-apis :thread-api/create-or-open-db)
+                 repo
+                 {:close-other-db? true
+                  :datoms []})
+              conn (worker-state/get-datascript-conn repo)
+              _ (when-not conn
+                  (db-sync/fail-fast :db-sync/missing-field {:repo repo
+                                                             :field :datascript-conn}))]
+        (swap! *import-state
+               (fn [state]
+                 (if (= import-id (:import-id state))
+                   (assoc state :conn conn)
+                   state)))
+        conn))))
+
 (defn- import-snapshot-rows-batch!
   [db aes-key graph-e2ee? rows]
   (p/let [rows-batch (if graph-e2ee?
@@ -772,6 +852,23 @@
                                                 (str "Importing data " imported-rows "/" total-rows)
                                                 (str "Importing data " imported-rows))})))))
 
+(defn- log-datoms-import-progress!
+  [graph-id import-id datoms-count]
+  (when (pos? datoms-count)
+    (let [state (swap! *import-state
+                       (fn [curr]
+                         (if (= import-id (:import-id curr))
+                           (update curr :imported-datoms (fnil + 0) datoms-count)
+                           curr)))
+          {:keys [imported-datoms total-datoms]} state]
+      (when (= import-id (:import-id state))
+        (sync-log-and-state/rtc-log :rtc.log/download
+                                    {:sub-type :download-progress
+                                     :graph-uuid graph-id
+                                     :message (if (some? total-datoms)
+                                                (str "Importing data " imported-datoms "/" total-datoms)
+                                                (str "Importing data " imported-datoms))})))))
+
 (def-thread-api :thread-api/db-sync-import-prepare
   [repo reset? graph-id graph-e2ee? & [total-rows]]
   (let [graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))
@@ -781,6 +878,8 @@
                 _ (reset! *import-state nil)
                 _ (when reset?
                     (close-db! repo))
+                _ (when reset?
+                    (<invalidate-search-db! repo))
                 aes-key (when graph-e2ee?
                           (sync-crypt/<fetch-graph-aes-key-for-download graph-id))
                 _ (when (and graph-e2ee? (nil? aes-key))
@@ -800,9 +899,11 @@
                                  :graph-e2ee? graph-e2ee?
                                  :graph-id graph-id
                                  :import-id import-id
+                                 :imported-datoms 0
                                  :imported-rows 0
                                  :repo repo
                                  :snapshot-buffer nil
+                                 :total-datoms total-rows
                                  :total-rows total-rows})
           {:import-id import-id})
         (p/catch
@@ -815,6 +916,19 @@
   (-> (p/let [{:keys [db aes-key graph-e2ee?]} (require-import-state! nil graph-id import-id)
               _ (import-snapshot-rows! db aes-key graph-e2ee? rows)]
         (log-import-progress! graph-id import-id (count rows))
+        true)
+      (p/catch
+       (fn [error]
+         (when-not (= :db-sync/stale-import (:type (ex-data error)))
+           (clear-import-state! import-id))
+         (throw error)))))
+
+(def-thread-api :thread-api/db-sync-import-datoms-chunk
+  [datoms graph-id import-id]
+  (-> (p/let [{:keys [repo aes-key graph-e2ee?]} (require-import-state! nil graph-id import-id)
+              conn (<ensure-datoms-import-conn! repo graph-id import-id)
+              _ (import-datoms-batch! conn aes-key graph-e2ee? datoms)]
+        (log-datoms-import-progress! graph-id import-id (count datoms))
         true)
       (p/catch
        (fn [error]
@@ -843,17 +957,21 @@
 
 (def-thread-api :thread-api/db-sync-import-finalize
   [repo graph-id remote-tx import-id]
-  (-> (p/let [{:keys [db aes-key graph-e2ee? snapshot-buffer]} (require-import-state! repo graph-id import-id)
-              rows (when (and snapshot-buffer (pos? (.-byteLength snapshot-buffer)))
-                     (snapshot/finalize-framed-buffer snapshot-buffer))
-              _ (when (seq rows)
-                  (import-snapshot-rows! db aes-key graph-e2ee? rows))
-              _ (log-import-progress! graph-id import-id (count rows))
-              storage (new-sqlite-storage db)
-              conn (common-sqlite/get-storage-conn storage db-schema/schema)
-              datoms (vec (d/datoms @conn :eavt))
-              _ (clear-import-state! import-id)]
-        (import-datoms-to-db! repo graph-id remote-tx datoms))
+  (-> (p/let [{:keys [db aes-key graph-e2ee? snapshot-buffer conn]} (require-import-state! repo graph-id import-id)]
+        (if conn
+          (p/let [result (complete-datoms-import! repo graph-id remote-tx)
+                  _ (clear-import-state! import-id)]
+            result)
+          (p/let [rows (when (and snapshot-buffer (pos? (.-byteLength snapshot-buffer)))
+                         (snapshot/finalize-framed-buffer snapshot-buffer))
+                  _ (when (seq rows)
+                      (import-snapshot-rows! db aes-key graph-e2ee? rows))
+                  _ (log-import-progress! graph-id import-id (count rows))
+                  storage (new-sqlite-storage db)
+                  conn (common-sqlite/get-storage-conn storage db-schema/schema)
+                  datoms (vec (d/datoms @conn :eavt))
+                  _ (clear-import-state! import-id)]
+            (import-datoms-to-db! repo graph-id remote-tx datoms))))
       (p/catch
        (fn [error]
          (when-not (= :db-sync/stale-import (:type (ex-data error)))
