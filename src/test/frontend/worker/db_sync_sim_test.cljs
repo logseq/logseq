@@ -89,7 +89,7 @@
 
 (declare op-runs assert-synced-attrs! assert-no-invalid-tx!)
 
-(deftest ^:long rng-uuid-deterministic-test
+(deftest rng-uuid-deterministic-test
   (testing "rng-uuid produces stable sequences for the same seed"
     (let [rng-a (make-rng 42)
           rng-b (make-rng 42)
@@ -100,7 +100,7 @@
       (is (= seq-a seq-b))
       (is (not= seq-a seq-c)))))
 
-(deftest ^:long invalid-tx-repro-callback-test
+(deftest invalid-tx-repro-callback-test
   (testing "invalid tx callback captures sim repro payload"
     (let [seed 7
           history (atom [{:type :op :op :create-page}])
@@ -251,6 +251,7 @@
   (let [txs (mapcat :tx pending)]
     (->> txs
          (db-normalize/remove-retract-entity-ref @conn)
+         (#'db-sync/drop-missing-created-block-datoms @conn)
          (#'db-sync/drop-missing-block-ref-datoms @conn)
          distinct
          vec)))
@@ -264,7 +265,7 @@
       (when (< local-tx server-t)
         (let [txs (server-pull server local-tx)]
           ;; (prn :debug :apply-remote-tx :repo repo
-          ;;      :tx tx)
+          ;;      :txs txs)
           (#'db-sync/apply-remote-tx! repo client txs)
           (client-op/update-local-tx repo server-t)
           (reset! progress? true)))
@@ -528,7 +529,8 @@
                                   (d/entity db [:block/uuid uuid])))
                               [base-uuid]))
         parent (rand-nth! rng (vec parents))]
-    (when (and block parent (not= (:block/uuid block) (:block/uuid parent)))
+    (when (and block parent
+               (not= (:block/uuid block) (:block/uuid parent)))
       (move-block! conn block parent)
       {:op :move-block
        :uuid (:block/uuid block)
@@ -939,18 +941,18 @@
    {:name :delete-block :weight 4 :f op-delete-block!}
    {:name :update-title :weight 8 :f op-update-title!}])
 
-(deftest ^:long cut-paste-op-registered-in-sim-op-table-test
+(deftest cut-paste-op-registered-in-sim-op-table-test
   (testing "sim op-table includes cut-paste op for random sync stress"
     (is (contains? (set (map :name op-table))
                    :cut-paste-block-with-child))))
 
-(deftest ^:long undo-redo-ops-registered-in-sim-op-table-test
+(deftest undo-redo-ops-registered-in-sim-op-table-test
   (testing "sim op-table includes undo/redo ops for random sync stress"
     (let [registered (set (map :name op-table))]
       (is (contains? registered :undo))
       (is (contains? registered :redo)))))
 
-(deftest ^:long core-outliner-ops-registered-in-sim-op-table-test
+(deftest core-outliner-ops-registered-in-sim-op-table-test
   (testing "sim op-table includes core logseq.outliner.op operations"
     (let [registered (set (map :name op-table))
           required #{:save-block
@@ -1236,7 +1238,7 @@
               (finally
                 (restore)))))))))
 
-(deftest ^:long two-clients-rebase-keeps-local-title-after-reverse-tx-test
+(deftest two-clients-rebase-keeps-local-title-after-reverse-tx-test
   (testing "two clients keep local title after reverse tx with newer tx id"
     (let [base-uuid (uuid "11111111-1111-1111-1111-111111111111")
           block-uuid (uuid "22222222-2222-2222-2222-222222222222")
@@ -1335,6 +1337,104 @@
                 (is (empty? issues-b) (str "db B issues " (pr-str issues-b)))
                 (assert-synced-attrs! seed history attrs-a attrs-b attrs-b)
                 (assert-no-invalid-tx! seed history repro))
+              (finally
+                (restore)))))))))
+
+(deftest two-clients-rebase-repairs-descendant-page-after-remote-subtree-move-test
+  (testing "rebase repairs descendant page after a remote subtree move"
+    (let [seed 20260316
+          base-uuid (uuid "41111111-1111-1111-1111-111111111111")
+          target-page-uuid (uuid "42222222-2222-2222-2222-222222222222")
+          moved-parent-uuid (uuid "43333333-3333-3333-3333-333333333333")
+          subtree-root-uuid (uuid "44444444-4444-4444-4444-444444444444")
+          local-child-uuid (uuid "45555555-5555-5555-5555-555555555555")
+          local-grandchild-uuid (uuid "46666666-6666-6666-6666-666666666666")
+          conn-a (db-test/create-conn)
+          conn-b (db-test/create-conn)
+          ops-a (d/create-conn client-op/schema-in-db)
+          ops-b (d/create-conn client-op/schema-in-db)
+          client-a (make-client repo-a)
+          client-b (make-client repo-b)
+          server (make-server)
+          history (atom [])]
+      (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}
+                        repo-b {:conn conn-b :ops-conn ops-b}}
+        (fn []
+          (let [{:keys [repro restore]} (install-invalid-tx-repro! seed history)]
+            (try
+              (reset! db-sync/*repo->latest-remote-tx {})
+              (client-op/update-local-tx repo-a 0)
+              (client-op/update-local-tx repo-b 0)
+              (record-meta! history {:seed seed
+                                     :base-uuid base-uuid
+                                     :target-page-uuid target-page-uuid
+                                     :moved-parent-uuid moved-parent-uuid
+                                     :subtree-root-uuid subtree-root-uuid})
+
+              (ensure-base-page! conn-a base-uuid)
+              (let [base-a (d/entity @conn-a [:block/uuid base-uuid])]
+                (create-page! conn-a "Target Page" target-page-uuid)
+                (create-block! conn-a base-a "moved-parent" moved-parent-uuid)
+                (let [moved-parent-a (d/entity @conn-a [:block/uuid moved-parent-uuid])]
+                  (create-block! conn-a moved-parent-a "subtree-root" subtree-root-uuid)))
+
+              (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                        {:repo repo-b :conn conn-b :client client-b :online? true}]
+                                30)
+
+              (move-block! conn-a
+                           {:block/uuid moved-parent-uuid}
+                           {:block/uuid target-page-uuid})
+              (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                        {:repo repo-b :conn conn-b :client client-b :online? false}]
+                                30)
+
+              (let [subtree-root-b (d/entity @conn-b [:block/uuid subtree-root-uuid])]
+                (create-block! conn-b subtree-root-b "local-child" local-child-uuid)
+                (let [local-child-b (d/entity @conn-b [:block/uuid local-child-uuid])]
+                  (create-block! conn-b local-child-b "local-grandchild" local-grandchild-uuid)))
+
+              (let [rounds (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                                     {:repo repo-b :conn conn-b :client client-b :online? true}]
+                                             60)
+                    local-child-a (d/entity @conn-a [:block/uuid local-child-uuid])
+                    local-child-b (d/entity @conn-b [:block/uuid local-child-uuid])
+                    local-grandchild-a (d/entity @conn-a [:block/uuid local-grandchild-uuid])
+                    local-grandchild-b (d/entity @conn-b [:block/uuid local-grandchild-uuid])
+                    issues-a (db-issues @conn-a)
+                    issues-b (db-issues @conn-b)
+                    attrs-a (block-attr-map @conn-a)
+                    attrs-b (block-attr-map @conn-b)
+                    descendants-on-target-page?
+                    (every?
+                     true?
+                     [(= target-page-uuid (:block/uuid (:block/page local-child-a)))
+                      (= target-page-uuid (:block/uuid (:block/page local-child-b)))
+                      (= target-page-uuid (:block/uuid (:block/page local-grandchild-a)))
+                      (= target-page-uuid (:block/uuid (:block/page local-grandchild-b)))])]
+                (is (< rounds 60) (str "sync did not become idle rounds=" rounds))
+                (is (some? local-child-a))
+                (is (some? local-child-b))
+                (is (some? local-grandchild-a))
+                (is (some? local-grandchild-b))
+                (is (= target-page-uuid (:block/uuid (:block/page local-child-a))))
+                (is (= target-page-uuid (:block/uuid (:block/page local-child-b))))
+                (is (= target-page-uuid (:block/uuid (:block/page local-grandchild-a))))
+                (is (= target-page-uuid (:block/uuid (:block/page local-grandchild-b))))
+                (is (empty? issues-a) (str "db A issues " (pr-str issues-a)))
+                (is (empty? issues-b) (str "db B issues " (pr-str issues-b)))
+                (assert-synced-attrs! seed history attrs-a attrs-b attrs-b)
+                (when descendants-on-target-page?
+                  (delete-page! conn-b target-page-uuid)
+                  (let [post-delete-rounds (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                                                     {:repo repo-b :conn conn-b :client client-b :online? true}]
+                                                             60)
+                        post-delete-issues-a (db-issues @conn-a)
+                        post-delete-issues-b (db-issues @conn-b)]
+                    (is (< post-delete-rounds 60) (str "post-delete sync did not become idle rounds=" post-delete-rounds))
+                    (is (empty? post-delete-issues-a) (str "post-delete db A issues " (pr-str post-delete-issues-a)))
+                    (is (empty? post-delete-issues-b) (str "post-delete db B issues " (pr-str post-delete-issues-b)))
+                    (assert-no-invalid-tx! seed history repro))))
               (finally
                 (restore)))))))))
 
@@ -1437,7 +1537,7 @@
               (finally
                 (restore)))))))))
 
-(deftest ^:long two-clients-cut-paste-random-sim-test
+(deftest two-clients-cut-paste-random-sim-test
   (testing "db-sync convergence under random cut-paste with child operations"
     (let [seed (or (env-seed) default-seed)
           rng (make-rng seed)
