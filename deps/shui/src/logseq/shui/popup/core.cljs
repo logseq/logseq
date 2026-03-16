@@ -34,6 +34,7 @@
 (defonce ^:private *popups (atom []))
 (defonce ^:private *id (atom 0))
 (defonce ^:private gen-id #(reset! *id (inc @*id)))
+(def *opened-sub-menus (atom #{}))
 
 (defn get-popup
   [id]

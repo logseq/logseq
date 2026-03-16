@@ -353,7 +353,10 @@
     (shui/button {:size :sm
                   :ref *el
                   :class "color-picker"
-                  :on-click (fn [^js e] (shui/popup-show! (.-target e) content-fn {:content-props {:side-offset 6}}))
+                  :on-click (fn [^js e]
+                              (shui/popup-show! (.-target e) content-fn
+                                                {:id :icons-color-picker
+                                                 :content-props {:side-offset 6}}))
                   :variant :outline}
                  [:strong {:style {:color (or color "inherit")}}
                   (shui/tabler-icon "palette")])))

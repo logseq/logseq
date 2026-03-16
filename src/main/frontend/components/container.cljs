@@ -291,11 +291,11 @@
                               (shui/popup-show! e
                                                 (fn [{:keys [id]}]
                                                   [:div {:on-click (fn [^js e]
-                                                                     (let [target (some-> e .-detail .-originalEvent .-target)
-                                                                           input? (util/input? target)
-                                                                           popup? (.closest target "[data-radix-popper-content-wrapper]")]
-                                                                       (when (not (or input? popup?))
-                                                                         (shui/popup-hide! id))))
+                                                                     (when-let [target (.-target e)]
+                                                                       (let [input? (util/input? target)
+                                                                             popup? (.closest target "[data-radix-popper-content-wrapper]")]
+                                                                         (when (not (or input? popup?))
+                                                                           (shui/popup-hide! id)))))
                                                          :data-keep-selection true}
                                                    content])
                                                 (merge
