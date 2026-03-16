@@ -24,7 +24,7 @@
     "@sentry/node": "^10.43.0",
     "better-sqlite3": "^12.6.2",
     "shadow-cljs": "^3.3.4",
-    "ws": "^8.18.3"
+    "ws": "^8.19.0"
   },
   "devDependencies": {
     "@sentry/cli": "^3.3.3"
