@@ -356,7 +356,6 @@
                                      undo?
                                      reverse)
                   tx-meta' (-> tx-meta
-                               (dissoc :batch-tx/batch-tx-mode?)
                                (assoc
                                 :gen-undo-ops? false
                                 :undo? undo?
