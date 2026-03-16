@@ -14,10 +14,10 @@
 (deftest tx-log-test
   (let [sql (test-sql/make-sql)]
     (storage/init-schema! sql)
-    (storage/append-tx! sql 1 "tx-1" 100)
-    (storage/append-tx! sql 2 "tx-2" 200)
-    (storage/append-tx! sql 3 "tx-3" 300)
+    (storage/append-tx! sql 1 "tx-1" 100 :save-block)
+    (storage/append-tx! sql 2 "tx-2" 200 :move-blocks)
+    (storage/append-tx! sql 3 "tx-3" 300 nil)
     (let [result (storage/fetch-tx-since sql 1)]
-      (is (= [{:t 2 :tx "tx-2"}
-              {:t 3 :tx "tx-3"}]
+      (is (= [{:t 2 :tx "tx-2" :outliner-op :move-blocks}
+              {:t 3 :tx "tx-3" :outliner-op nil}]
              result)))))

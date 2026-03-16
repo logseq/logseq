@@ -282,40 +282,51 @@
       (reset-import! sql))
     (import-snapshot-rows! sql "kvs" rows)))
 
-(defn- apply-tx! [^js self sender txs]
+(defn- sanitize-client-tx-data
+  [conn txs]
+  (let [lookup-id (fn [x]
+                    (when (and (vector? x)
+                               (= 2 (count x))
+                               (= :block/uuid (first x)))
+                      (second x)))
+        tx-data* (protocol/transit->tx txs)
+        created-block-uuids (->> tx-data*
+                                 (keep (fn [item]
+                                         (when (and (vector? item)
+                                                    (= :db/add (first item))
+                                                    (>= (count item) 4)
+                                                    (= :block/uuid (nth item 2)))
+                                           (nth item 3))))
+                                 set)
+        missing-lookup-ref? (fn [x]
+                              (when-let [block-uuid (lookup-id x)]
+                                (and (not (contains? created-block-uuids block-uuid))
+                                     (nil? (d/entity @conn x)))))]
+    (remove (fn [item]
+              (when (vector? item)
+                (let [op (first item)
+                      attr (nth item 2 nil)
+                      value (when (>= (count item) 4) (nth item 3))]
+                  (or (and (contains? #{:db/add :db/retract :db/retractEntity} op)
+                           (missing-lookup-ref? (second item)))
+                      (and (contains? #{:db/add :db/retract} op)
+                           (contains? db-schema/ref-type-attributes attr)
+                           (missing-lookup-ref? value))))))
+            tx-data*)))
+
+(defn- apply-tx-entry!
+  [conn {:keys [tx outliner-op]}]
+  (let [tx-data (sanitize-client-tx-data conn tx)]
+    (when (seq tx-data)
+      (ldb/transact! conn tx-data (cond-> {:op :apply-client-tx}
+                                    outliner-op (assoc :outliner-op outliner-op))))))
+
+(defn- apply-tx! [^js self sender tx-entries]
   (let [sql (.-sql self)]
     (ensure-conn! self)
-    (let [conn (.-conn self)
-          lookup-id (fn [x]
-                      (when (and (vector? x)
-                                 (= 2 (count x))
-                                 (= :block/uuid (first x)))
-                        (second x)))
-          tx-data* (protocol/transit->tx txs)
-          created-block-uuids (->> tx-data*
-                                   (keep (fn [item]
-                                           (when (and (vector? item)
-                                                      (= :db/add (first item))
-                                                      (>= (count item) 4)
-                                                      (= :block/uuid (nth item 2)))
-                                             (nth item 3))))
-                                   set)
-          missing-lookup-ref? (fn [x]
-                                (when-let [block-uuid (lookup-id x)]
-                                  (and (not (contains? created-block-uuids block-uuid))
-                                       (nil? (d/entity @conn x)))))
-          tx-data (remove (fn [item]
-                            (when (vector? item)
-                              (let [op (first item)
-                                    attr (nth item 2 nil)
-                                    value (when (>= (count item) 4) (nth item 3))]
-                                (or (and (contains? #{:db/add :db/retract :db/retractEntity} op)
-                                         (missing-lookup-ref? (second item)))
-                                    (and (contains? #{:db/add :db/retract} op)
-                                         (contains? db-schema/ref-type-attributes attr)
-                                         (missing-lookup-ref? value))))))
-                          tx-data*)]
-      (ldb/transact! conn tx-data {:op :apply-client-tx})
+    (let [conn (.-conn self)]
+      (doseq [tx-entry tx-entries]
+        (apply-tx-entry! conn tx-entry))
       (let [new-t (storage/get-t sql)]
         ;; FIXME: no need to broadcast if client tx is less than remote tx
         (ws/broadcast! self sender {:type "changed" :t new-t})
@@ -339,7 +350,7 @@
        :t current-t}
 
       :else
-      (if txs
+      (if (seq txs)
         (try
           (let [new-t (apply-tx! self sender txs)]
             (if (and (map? new-t) (= "tx/reject" (:type new-t)))
@@ -457,7 +468,7 @@
                  (http/bad-request "invalid tx")
                  (let [{:keys [txs t-before]} body
                        t-before (parse-int t-before)]
-                   (if (string? txs)
+                   (if (sequential? txs)
                      (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
                        (if-not ready-for-sync?
                          (http/error-response "graph not ready" 409)
