@@ -150,7 +150,7 @@
 (deftest tx-batch-drops-stale-lookup-entity-updates-test
   (testing "stale lookup-ref entity updates should not reject the whole tx batch"
     (let [sql (test-sql/make-sql)
-          conn (d/create-conn db-schema/schema)
+          conn (storage/open-conn sql)
           self #js {:sql sql
                     :conn conn
                     :schema-ready true}
@@ -160,11 +160,17 @@
                    [:db/add [:block/uuid missing-uuid] :block/updated-at 1773188050934 1]
                    [:db/add "temp-1" :block/uuid created-uuid 2]
                    [:db/add "temp-1" :block/title "ok" 2]]
+          tx-entry {:tx (protocol/tx->transit tx-data)
+                    :outliner-op :save-block}
           response (with-redefs [ws/broadcast! (fn [& _] nil)]
-                     (sync-handler/handle-tx-batch! self nil (protocol/tx->transit tx-data) 0))]
+                     (sync-handler/handle-tx-batch! self nil [tx-entry] 0))]
       (is (= "tx/batch/ok" (:type response)))
       (is (= "ok" (:block/title (d/entity @conn [:block/uuid created-uuid]))))
-      (is (nil? (d/entity @conn [:block/uuid missing-uuid]))))))
+      (is (nil? (d/entity @conn [:block/uuid missing-uuid])))
+      (let [pull-response (sync-handler/pull-response self 0)
+            tx-log-entry (first (:txs pull-response))]
+        (is (= "pull/ok" (:type pull-response)))
+        (is (= :save-block (:outliner-op tx-log-entry)))))))
 
 (deftest tx-batch-rejects-while-snapshot-upload-is-in-progress-test
   (let [sql (test-sql/make-sql)
@@ -173,10 +179,12 @@
                   :conn conn
                   :schema-ready true}
         tx-data [[:db/add -1 :block/title "blocked"]]
+        tx-entry {:tx (protocol/tx->transit tx-data)
+                  :outliner-op :save-block}
         response (with-redefs [storage/get-meta (fn [_ k]
                                                   (when (= :snapshot-uploading? k)
                                                     "true"))]
-                   (sync-handler/handle-tx-batch! self nil (protocol/tx->transit tx-data) 0))]
+                   (sync-handler/handle-tx-batch! self nil [tx-entry] 0))]
     (is (= "tx/reject" (:type response)))
     (is (= "snapshot upload in progress" (:reason response)))))
 

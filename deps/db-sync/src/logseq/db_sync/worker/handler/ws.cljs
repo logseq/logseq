@@ -39,7 +39,7 @@
         "tx/batch"
         (let [txs (:txs message)
               t-before (sync-handler/parse-int (:t-before message))]
-          (if (string? txs)
+          (if (sequential? txs)
             (ws/send! ws (sync-handler/handle-tx-batch! self ws txs t-before))
             (ws/send! ws {:type "tx/reject" :reason "invalid tx"})))
 

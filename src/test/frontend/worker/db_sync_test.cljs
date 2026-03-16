@@ -314,6 +314,7 @@
           (let [pending (#'db-sync/pending-txs test-repo)
                 txs (mapcat :tx pending)]
             (is (seq pending))
+            (is (= :toggle-reaction (:outliner-op (first pending))))
             (is (some (fn [tx]
                         (and (vector? tx)
                              (= :db/add (first tx))
@@ -759,8 +760,8 @@
                          vec)]
       (is (empty? sanitized)))))
 
-(deftest apply-remote-batched-create-reuses-tempid-across-batches-test
-  (testing "a remote block create split across batches should still resolve to one valid block"
+(deftest apply-remote-batched-create-reusing-tempid-across-batches-is-rejected-test
+  (testing "cross-batch tempid reuse is unsupported and should fail fast"
     (let [{:keys [conn parent]} (setup-parent-child)
           parent-uuid (:block/uuid parent)
           page-uuid (:block/uuid (:block/page parent))
@@ -779,16 +780,8 @@
                         nil
                         (catch :default e
                           e))]
-            (is (nil? error)
-                (when error
-                  (str (ex-message error) " " (pr-str (ex-data error)))))
-            (when-not error
-              (let [block (d/entity @conn [:block/uuid remote-uuid])
-                    validation (db-validate/validate-local-db! @conn)]
-                (is (= "remote batched child" (:block/title block)))
-                (is (= (:db/id parent) (:db/id (:block/parent block))))
-                (is (empty? (map :entity (:errors validation)))
-                    (str (:errors validation)))))))))))
+            (is (some? error))
+            (is (nil? (d/entity @conn [:block/uuid remote-uuid])))))))))
 
 (deftest ^:long sanitize-tx-data-drops-numeric-entity-datoms-for-deleted-block-test
   (testing "deleted-block-ids should also drop datoms when entity is numeric id"

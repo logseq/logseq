@@ -41,6 +41,7 @@
    :db-sync/checksum {:db/index true}
    :db-sync/tx-id {:db/unique :db.unique/identity}
    :db-sync/created-at {:db/index true}
+   :db-sync/outliner-op {}
    :db-sync/tx-data {}
    :db-sync/normalized-tx-data {}
    :db-sync/reversed-tx-data {}})
