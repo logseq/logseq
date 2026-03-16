@@ -7,7 +7,7 @@
   cljs-bean/cljs-bean         {:mvn/version "1.9.0"}
 
   ;; Any other deps should be added here and to nbb.edn
-  borkdude/rewrite-edn {:mvn/version "0.4.9"}
+  borkdude/rewrite-edn        {:mvn/version "0.5.9"}
   logseq/db                   {:local/root "../db"}
   logseq/common               {:local/root "../common"}
   ;; stubbed via logseq.common.log

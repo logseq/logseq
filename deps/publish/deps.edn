@@ -13,7 +13,7 @@
   logseq/common                         {:local/root "../common"}
   logseq/graph-parser                   {:local/root "../graph-parser"}
   logseq/db                             {:local/root "../db"}
-  missionary/missionary                 {:mvn/version "b.46"}
+  missionary/missionary                 {:mvn/version "b.47"}
   com.cognitect/transit-cljs            {:mvn/version "0.8.280"}
   hiccups/hiccups                       {:mvn/version "0.3.0"}}
  :aliases
