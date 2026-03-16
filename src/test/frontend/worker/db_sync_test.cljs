@@ -654,6 +654,138 @@
              [[:db/add (:db/id child1) :block/title "same"]])
             (is (= 0 (count (#'db-sync/pending-txs test-repo))))))))))
 
+(deftest rebase-later-tx-for-new-block-uses-lookup-ref-test
+  (testing "rebased tx after creating a block should use lookup ref instead of stale tempid"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+      (with-redefs [db-sync/enqueue-local-tx!
+                    (let [orig db-sync/enqueue-local-tx!]
+                      (fn [repo tx-report]
+                        (when-not (:rtc-tx? (:tx-meta tx-report))
+                          (orig repo tx-report))))]
+        (with-datascript-conns conn client-ops-conn
+          (fn []
+            (outliner-core/insert-blocks! conn [{:block/title "temp for lookup"}] parent {:sibling? false})
+            (let [block (db-test/find-block-by-content @conn "temp for lookup")
+                  block-uuid (:block/uuid block)]
+              (outliner-core/save-block! conn {:block/uuid block-uuid
+                                               :block/title "temp for lookup updated"})
+              (is (= 2 (count (#'db-sync/pending-txs test-repo))))
+              (#'db-sync/apply-remote-tx!
+               test-repo
+               nil
+               [[:db/add (:db/id parent) :block/title "parent remote"]])
+              (let [pending (#'db-sync/pending-txs test-repo)
+                    save-block-tx (some (fn [{:keys [outliner-op tx]}]
+                                          (when (= :save-block outliner-op)
+                                            tx))
+                                        pending)]
+                (is (= 2 (count pending)))
+                (is (some #(= [:db/add [:block/uuid block-uuid] :block/title "temp for lookup updated"]
+                              %)
+                          (mapv (fn [[op e a v _t]]
+                                  [op e a v])
+                                save-block-tx)))
+                (is (not-any? string?
+                              (keep second save-block-tx)))))))))))
+
+(deftest rebase-order-fix-for-new-blocks-does-not-keep-string-tempids-test
+  (testing "rebased order-fix tx should not keep string tempids for newly created blocks"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          page-uuid (:block/uuid (:block/page parent))
+          remote-uuid-1 (random-uuid)
+          remote-uuid-2 (random-uuid)]
+      (with-redefs [db-sync/enqueue-local-tx!
+                    (let [orig db-sync/enqueue-local-tx!]
+                      (fn [repo tx-report]
+                        (when-not (:rtc-tx? (:tx-meta tx-report))
+                          (orig repo tx-report))))]
+        (with-datascript-conns conn client-ops-conn
+          (fn []
+            (outliner-core/insert-blocks! conn [{:block/title "local 1"
+                                                 :block/uuid (random-uuid)}
+                                                {:block/title "local 2"
+                                                 :block/uuid (random-uuid)}]
+                                          parent
+                                          {:sibling? true})
+            (let [local1 (db-test/find-block-by-content @conn "local 1")
+                  local2 (db-test/find-block-by-content @conn "local 2")]
+              (#'db-sync/apply-remote-tx!
+               test-repo
+               nil
+               [[:db/add -1 :block/uuid remote-uuid-1]
+                [:db/add -1 :block/title "remote 1"]
+                [:db/add -1 :block/parent [:block/uuid page-uuid]]
+                [:db/add -1 :block/page [:block/uuid page-uuid]]
+                [:db/add -1 :block/order (:block/order local1)]
+                [:db/add -1 :block/updated-at 1768308019312]
+                [:db/add -1 :block/created-at 1768308019312]
+                [:db/add -2 :block/uuid remote-uuid-2]
+                [:db/add -2 :block/title "remote 2"]
+                [:db/add -2 :block/parent [:block/uuid page-uuid]]
+                [:db/add -2 :block/page [:block/uuid page-uuid]]
+                [:db/add -2 :block/order (:block/order local2)]
+                [:db/add -2 :block/updated-at 1768308019312]
+                [:db/add -2 :block/created-at 1768308019312]])
+              (let [pending (#'db-sync/pending-txs test-repo)
+                    rtc-rebase-tx (some (fn [{:keys [outliner-op tx]}]
+                                          (when (= :rtc-rebase outliner-op)
+                                            tx))
+                                        pending)]
+                (is (seq rtc-rebase-tx))
+                (is (not-any? string?
+                              (keep second rtc-rebase-tx)))))))))))
+
+(deftest rebase-reverse-old-rtc-rebase-tx-rewrites-string-tempids-test
+  (testing "reverse should rewrite old persisted rtc-rebase tx string tempids to lookup refs"
+    (let [{:keys [conn client-ops-conn parent child1 child2]} (setup-parent-child)
+          legacy-1-uuid (:block/uuid child1)
+          legacy-2-uuid (:block/uuid child2)]
+      (d/transact! conn [[:db/add (:db/id child1) :block/order "a4V"]
+                         [:db/add (:db/id child2) :block/order "a7"]])
+      (let [captured (atom nil)]
+        (with-redefs [ldb/transact! (fn [_conn tx-data _tx-meta]
+                                      (reset! captured tx-data)
+                                      nil)]
+          (#'db-sync/reverse-local-txs!
+           conn
+           [{:tx-id (random-uuid)
+             :outliner-op :rtc-rebase
+             :reversed-tx [[:db/add [:block/uuid legacy-1-uuid] :block/order "a4" 1]
+                           [:db/retract (str legacy-1-uuid) :block/order "a4V" 1]
+                           [:db/add [:block/uuid legacy-2-uuid] :block/order "a5" 1]
+                           [:db/retract (str legacy-2-uuid) :block/order "a7" 1]]}]
+           {:rtc-tx? true}))
+        (is (some #(= [:db/retract [:block/uuid legacy-1-uuid] :block/order "a4V" 1] %)
+                  @captured))
+        (is (some #(= [:db/retract [:block/uuid legacy-2-uuid] :block/order "a7" 1] %)
+                  @captured))
+        (is (not-any? string?
+                      (keep second @captured)))))))
+
+(deftest pending-txs-rewrite-old-string-tempids-test
+  (testing "pending tx rows loaded from client ops rewrite legacy string tempids to lookup refs"
+    (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
+          child1-uuid (:block/uuid child1)
+          child2-uuid (:block/uuid child2)
+          child2-order (:block/order child2)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (ldb/transact! client-ops-conn
+                         [{:db-sync/tx-id (random-uuid)
+                           :db-sync/normalized-tx-data [[:db/add (str child1-uuid) :block/title "8" 1]
+                                                        [:db/add (str child2-uuid) :block/order "a7" 1]]
+                           :db-sync/reversed-tx-data [[:db/add (str child1-uuid) :block/title "child 1" 1]
+                                                      [:db/add (str child2-uuid) :block/order child2-order 1]]
+                           :db-sync/outliner-op :rtc-rebase
+                           :db-sync/created-at (.now js/Date)}])
+          (let [{:keys [tx reversed-tx]} (first (#'db-sync/pending-txs test-repo))]
+            (is (some #(= [:db/add [:block/uuid child1-uuid] :block/title "8" 1] %) tx))
+            (is (some #(= [:db/add [:block/uuid child2-uuid] :block/order "a7" 1] %) tx))
+            (is (some #(= [:db/add [:block/uuid child1-uuid] :block/title "child 1" 1] %) reversed-tx))
+            (is (some #(= [:db/add [:block/uuid child2-uuid] :block/order child2-order 1] %) reversed-tx))
+            (is (not-any? string? (keep second tx)))
+            (is (not-any? string? (keep second reversed-tx)))))))))
+
 (deftest rebase-preserves-title-when-reversed-tx-ids-change-test
   (testing "rebase keeps local title when reverse tx gets a new tx id"
     (let [conn (db-test/create-conn-with-blocks
