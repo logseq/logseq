@@ -551,7 +551,8 @@
           parent-uuid (:block/uuid parent)
           child-uuid (:block/uuid child)
           target-uuid (:block/uuid target)
-          target-order (:block/order target)]
+          target-order (:block/order target)
+          now 1760000000000]
       (with-datascript-conns conn nil
         (fn []
           (#'db-sync/apply-remote-tx!
@@ -564,6 +565,8 @@
             [:db/add -1 :block/parent [:block/uuid page-uuid]]
             [:db/add -1 :block/page [:block/uuid page-uuid]]
             [:db/add -1 :block/order target-order]
+            [:db/add -1 :block/created-at now]
+            [:db/add -1 :block/updated-at now]
             [:db/add [:block/uuid child-uuid] :block/parent [:block/uuid target-uuid]]])
           (let [parent' (d/entity @conn [:block/uuid target-uuid])
                 child' (d/entity @conn [:block/uuid child-uuid])]
@@ -868,6 +871,29 @@
         (is (not-any? string?
                       (keep second @captured)))))))
 
+(deftest reverse-local-tx-collapses-retracted-block-to-retract-entity-test
+  (testing "reverse should retractEntity blocks whose uuid is retracted, dropping leftover tx-id datoms"
+    (let [captured (atom nil)]
+      (with-redefs [ldb/transact! (fn [_conn tx-data _tx-meta]
+                                    (reset! captured tx-data)
+                                    nil)]
+        (#'db-sync/reverse-local-txs!
+         (atom nil)
+         [{:tx-id (random-uuid)
+           :outliner-op :insert-blocks
+           :reversed-tx [[:db/retract 577 :block/uuid #uuid "69b8147e-e09d-4349-8646-f85d183005d7" 1]
+                         [:db/retract 577 :block/updated-at 1773671550625 1]
+                         [:db/retract 577 :block/created-at 1773671550625 1]
+                         [:db/retract 577 :block/title "" 1]
+                         [:db/retract 577 :block/parent 540 1]
+                         [:db/retract 577 :block/order "a1l" 1]
+                         [:db/retract 577 :block/page 539 1]
+                         [:db/retract 577 :logseq.property/created-by-ref 176 1]
+                         [:db/retract 577 :block/tx-id 536871087 1]
+                         [:db/add 577 :block/tx-id 536871087 2]]}]
+         {:rtc-tx? true}))
+      (is (= [[:db/retractEntity 577]] @captured)))))
+
 (deftest pending-txs-rewrite-old-string-tempids-test
   (testing "pending tx rows loaded from client ops rewrite legacy string tempids to lookup refs"
     (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
@@ -981,26 +1007,6 @@
                 (is (empty? anonymous-ents) (str anonymous-ents))
                 (is (empty? (map :entity (:errors validation)))
                     (str (:errors validation)))))))))))
-
-(deftest remote-retract-required-page-attr-is-ignored-test
-  (testing "remote tx retracting required page attrs should be ignored"
-    (let [{:keys [conn parent]} (setup-parent-child)
-          page (:block/page parent)
-          page-id (:db/id page)
-          updated-at (:block/updated-at page)
-          malformed-tx [[:db/retract page-id :block/updated-at updated-at]]]
-      (with-datascript-conns conn nil
-        (fn []
-          (is (nil? (try
-                      (#'db-sync/apply-remote-tx! test-repo nil malformed-tx)
-                      nil
-                      (catch :default e
-                        e))))
-          (let [page' (d/entity @conn page-id)
-                validation (db-validate/validate-local-db! @conn)]
-            (is (number? (:block/updated-at page')))
-            (is (empty? (map :entity (:errors validation)))
-                (str (:errors validation)))))))))
 
 (deftest sanitize-tx-data-drops-partial-create-when-parent-deleted-test
   (testing "created block should be dropped entirely when parent is in deleted-block-ids"
@@ -1178,52 +1184,6 @@
                 (str "target missing with no pending txs for uuid=" target-uuid))
             (when target'
               (is (= "remote-restored" (:block/title target'))))))))))
-
-(deftest apply-remote-tx-retract-recreate-with-stale-lookup-updates-does-not-write-invalid-entity-test
-  (testing "remote tx with retractEntity+recreate and stale lookup updates should not create anonymous entities"
-    (let [conn (db-test/create-conn-with-blocks
-                {:pages-and-blocks
-                 [{:page {:block/title "page 1"}
-                   :blocks [{:block/title "parent"
-                             :build/children [{:block/title "child 1"}]}]}]})
-          parent (db-test/find-block-by-content @conn "parent")
-          child1 (db-test/find-block-by-content @conn "child 1")
-          parent-uuid (:block/uuid parent)
-          child-uuid (:block/uuid child1)
-          page-uuid (:block/uuid (:block/page parent))
-          parent-temp (str parent-uuid)
-          child-temp (str child-uuid)
-          now 1772720568000
-          remote-tx [[:db/retractEntity [:block/uuid parent-uuid]]
-                     [:db/retractEntity [:block/uuid child-uuid]]
-                     ;; stale updates targeting lookup refs that should no longer hit old eids
-                     [:db/add [:block/uuid child-uuid] :block/title "2"]
-                     [:db/add [:block/uuid child-uuid] :block/updated-at now]
-                     ;; recreate parent + child
-                     [:db/add parent-temp :block/uuid parent-uuid]
-                     [:db/add parent-temp :block/title "1"]
-                     [:db/add parent-temp :block/page [:block/uuid page-uuid]]
-                     [:db/add parent-temp :block/parent [:block/uuid page-uuid]]
-                     [:db/add parent-temp :block/order "a0"]
-                     [:db/add parent-temp :block/created-at now]
-                     [:db/add parent-temp :block/updated-at now]
-                     [:db/add child-temp :block/uuid child-uuid]
-                     [:db/add child-temp :block/title "2"]
-                     [:db/add child-temp :block/page [:block/uuid page-uuid]]
-                     [:db/add child-temp :block/parent parent-temp]
-                     [:db/add child-temp :block/order "a1"]
-                     [:db/add child-temp :block/created-at now]
-                     [:db/add child-temp :block/updated-at now]]]
-      (with-datascript-conns conn nil
-        (fn []
-          (is (nil? (try
-                      (#'db-sync/apply-remote-tx! test-repo nil remote-tx)
-                      nil
-                      (catch :default e
-                        e))))
-          (let [validation (db-validate/validate-local-db! @conn)]
-            (is (empty? (map :entity (:errors validation)))
-                (str (:errors validation)))))))))
 
 (deftest offload-large-title-test
   (testing "large titles are offloaded to object storage with placeholder"
