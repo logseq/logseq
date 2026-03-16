@@ -208,7 +208,6 @@
         ;; transact tx-data to `conn` and validate db
         (let [tx-data' (->>
                         tx-data
-                        remove-conflict-datoms
                         (db-normalize/replace-attr-retract-with-retract-entity temp-after-db))]
           (transact! conn tx-data' tx-meta))))))
 
