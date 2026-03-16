@@ -11,7 +11,7 @@
   "license": "MIT",
   "dependencies": {
     "@logseq/nbb-logseq": "github:logseq/nbb-logseq#feat-db-v33",
-    "@modelcontextprotocol/sdk": "^1.17.5",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "better-sqlite3": "^12.6.2",
     "fastify": "5.8.2",
     "fs-extra": "^11.3.4",
