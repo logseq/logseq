@@ -4,7 +4,7 @@
   "private": true,
   "devDependencies": {
     "@logseq/nbb-logseq": "github:logseq/nbb-logseq#feat-db-v33",
-    "fs-extra": "^11.3.0"
+    "fs-extra": "^11.3.4"
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2"
