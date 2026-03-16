@@ -267,7 +267,10 @@
         (let [txs (server-pull server local-tx)]
           ;; (prn :debug :apply-remote-tx :repo repo
           ;;      :txs txs)
-          (#'db-sync/apply-remote-tx! repo client txs)
+          (#'db-sync/apply-remote-txs! repo client
+                                       (mapv (fn [tx-data]
+                                               {:tx-data tx-data})
+                                             txs))
           (client-op/update-local-tx repo server-t)
           (reset! progress? true)))
       (let [pending (#'db-sync/pending-txs repo)

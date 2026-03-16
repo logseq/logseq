@@ -647,33 +647,57 @@
              (= :block/uuid (first x)))
     (second x)))
 
+(defn- created-block-uuid-entry
+  [item]
+  (when (and (vector? item)
+             (= :db/add (first item))
+             (>= (count item) 4)
+             (= :block/uuid (nth item 2)))
+    [(second item) (nth item 3)]))
+
 (defn- created-block-uuids
   [tx-data]
   (->> tx-data
-       (keep (fn [item]
-               (when (and (vector? item)
-                          (= :db/add (first item))
-                          (>= (count item) 4)
-                          (= :block/uuid (nth item 2)))
-                 (nth item 3))))
+       (keep created-block-uuid-entry)
+       (map second)
        set))
 
 (defn- created-block-uuid-by-entity-id
   [tx-data]
   (->> tx-data
-       (keep (fn [item]
-               (when (and (vector? item)
-                          (= :db/add (first item))
-                          (>= (count item) 4)
-                          (= :block/uuid (nth item 2)))
-                 [(second item) (nth item 3)])))
+       (keep created-block-uuid-entry)
        (into {})))
+
+(defn- created-block-context
+  [tx-data]
+  (let [uuid-by-entity-id (created-block-uuid-by-entity-id tx-data)]
+    {:uuid-by-entity-id uuid-by-entity-id
+     :uuids (set (vals uuid-by-entity-id))}))
+
+(defn- tx-created-block-uuid
+  [{:keys [uuid-by-entity-id uuids]} entity-id]
+  (or (get uuid-by-entity-id entity-id)
+      (let [lookup-id (get-lookup-id entity-id)]
+        (when (contains? uuids lookup-id)
+          lookup-id))))
+
+(defn- add-datom-ref-block-uuids
+  [item]
+  (when (and (vector? item)
+             (= :db/add (first item)))
+    (cond-> []
+      (get-lookup-id (second item))
+      (conj (get-lookup-id (second item)))
+
+      (and (>= (count item) 4)
+           (get-lookup-id (nth item 3)))
+      (conj (get-lookup-id (nth item 3))))))
 
 (defn- drop-missing-created-block-datoms
   [db tx-data]
   (if db
-    (let [created-uuid-by-entity-id (created-block-uuid-by-entity-id tx-data)
-          missing-created-uuids (->> (vals created-uuid-by-entity-id)
+    (let [{:keys [uuid-by-entity-id]} (created-block-context tx-data)
+          missing-created-uuids (->> (vals uuid-by-entity-id)
                                      (remove #(d/entity db [:block/uuid %]))
                                      set)]
       (if (seq missing-created-uuids)
@@ -682,7 +706,7 @@
                     (let [entity-lookup-id (get-lookup-id (second item))
                           value-lookup-id (when (>= (count item) 4)
                                             (get-lookup-id (nth item 3)))
-                          created-uuid (or (get created-uuid-by-entity-id (second item))
+                          created-uuid (or (get uuid-by-entity-id (second item))
                                            entity-lookup-id)]
                       (or (contains? missing-created-uuids created-uuid)
                           (contains? missing-created-uuids entity-lookup-id)
@@ -696,28 +720,12 @@
    (drop-missing-block-ref-datoms db tx-data #{}))
   ([db tx-data deleted-block-ids]
    (if db
-     (let [created-uuid-by-entity-id (created-block-uuid-by-entity-id tx-data)
-           created-uuids (set (vals created-uuid-by-entity-id))
-           created-block-uuid (fn [entity-id]
-                                (or (get created-uuid-by-entity-id entity-id)
-                                    (let [lookup-id (get-lookup-id entity-id)]
-                                      (when (contains? created-uuids lookup-id)
-                                        lookup-id))))
-           add-datom-ref-block-uuids (fn [item]
-                                       (when (and (vector? item)
-                                                  (= :db/add (first item)))
-                                         (cond-> []
-                                           (get-lookup-id (second item))
-                                           (conj (get-lookup-id (second item)))
-
-                                           (and (>= (count item) 4)
-                                                (get-lookup-id (nth item 3)))
-                                           (conj (get-lookup-id (nth item 3))))))
+     (let [created-context (created-block-context tx-data)
            ref-invalid? (fn [broken-block-uuids block-uuid]
                           (and block-uuid
                                (or (contains? deleted-block-ids block-uuid)
                                    (contains? broken-block-uuids block-uuid)
-                                   (and (not (contains? created-uuids block-uuid))
+                                   (and (not (contains? (:uuids created-context) block-uuid))
                                         (nil? (d/entity db [:block/uuid block-uuid]))))))
            add-datom-invalid-ref? (fn [broken-block-uuids item]
                                     (some (partial ref-invalid? broken-block-uuids)
@@ -728,7 +736,7 @@
                                                                                (when (and (vector? item)
                                                                                           (= :db/add (first item))
                                                                                           (add-datom-invalid-ref? broken-block-uuids item))
-                                                                                 (created-block-uuid (second item)))))
+                                                                                 (tx-created-block-uuid created-context (second item)))))
                                                                        (into broken-block-uuids))]
                                       (if (= broken-block-uuids next-broken-block-uuids)
                                         broken-block-uuids
@@ -736,7 +744,7 @@
        (remove (fn [item]
                  (when (vector? item)
                    (let [op (first item)
-                         block-uuid (created-block-uuid (second item))]
+                         block-uuid (tx-created-block-uuid created-context (second item))]
                      (or (and (= :db/add op)
                               (add-datom-invalid-ref? broken-new-block-uuids item))
                          (contains? broken-new-block-uuids block-uuid)))))
@@ -823,12 +831,6 @@
   [x]
   (or (and (integer? x) (neg? x))
       (string? x)))
-
-(defn- batched-remote-tx-data?
-  [tx-data*]
-  (and (seq tx-data*)
-       (sequential? (first tx-data*))
-       (sequential? (first (first tx-data*)))))
 
 (defn- rewrite-remote-retract-lookup-datoms
   "When a remote batch retracts a block by lookup ref and later recreates the
@@ -1602,6 +1604,23 @@
        (keep identity)
        vec))
 
+(defn- normalize-rebased-pending-tx
+  [{:keys [db-before db-after tx-data remote-tx-data-set keep-local-retract-entity?]}]
+  (let [normalized (->> tx-data
+                        (normalize-tx-data db-after db-before)
+                        (replace-string-block-tempids-with-lookups db-before)
+                        (remove (fn [[op _e a]]
+                                  (and (= op :db/retract)
+                                       (contains? #{:block/updated-at :block/created-at :block/title} a)))))
+        normalized-tx-data (->> normalized
+                                (db-normalize/replace-attr-retract-with-retract-entity-v2 db-after)
+                                (remove (fn [item]
+                                          (and (contains? remote-tx-data-set item)
+                                               (not (keep-local-retract-entity? item)))))
+                                (drop-missing-block-ref-datoms db-after))]
+    {:normalized-tx-data normalized-tx-data
+     :reversed-datoms (reverse-normalized-tx-data normalized-tx-data)}))
+
 (defn- delete-nodes!
   [temp-conn deleted-nodes tx-meta]
   (when (seq deleted-nodes)
@@ -1675,27 +1694,6 @@
                                                         rebase-tx-report
                                                         cycle-tx-report])
                                       tx-meta)))
-
-(defn get-reverse-tx-data
-  [local-txs]
-  (let [tx-data (->> local-txs
-                     reverse
-                     (mapcat :reversed-tx)
-                     drop-non-retractable-attr-datoms)
-        retract-block-ids (->> (keep (fn [[op e a _v _t]]
-                                       (when (and (= op :db/retract) (= :block/uuid a))
-                                         e)) tx-data)
-                               set)
-        tx-data' (if (seq retract-block-ids)
-                   (remove (fn [[_op e _a v]]
-                             (or (contains? retract-block-ids e)
-                                 (contains? retract-block-ids v)))
-                           tx-data)
-                   tx-data)]
-
-    (->>
-     tx-data'
-     (concat (map (fn [id] [:db/retractEntity id]) retract-block-ids)))))
 
 (defn- apply-remote-tx-with-local-changes!
   [{:keys [conn local-txs remote-txs temp-tx-meta *remote-tx-report *reversed-tx-report *rebased-pending-txs *temp-after-db]}]
@@ -1823,19 +1821,13 @@
                                      (:db-after @*reversed-tx-report))
                       db-after' (or db-after
                                     final-db-after)
-                      normalized (->> tx-data
-                                      (normalize-tx-data db-after' db-before')
-                                      (replace-string-block-tempids-with-lookups db-before')
-                                      (remove (fn [[op _e a]]
-                                                (and (= op :db/retract)
-                                                     (contains? #{:block/updated-at :block/created-at :block/title} a)))))
-                      normalized-tx-data (->> normalized
-                                              (db-normalize/replace-attr-retract-with-retract-entity-v2 db-after')
-                                              (remove (fn [item]
-                                                        (and (contains? remote-tx-data-set item)
-                                                             (not (keep-local-retract-entity? item)))))
-                                              (drop-missing-block-ref-datoms db-after'))
-                      reversed-datoms (reverse-normalized-tx-data normalized-tx-data)]
+                      {:keys [normalized-tx-data reversed-datoms]}
+                      (normalize-rebased-pending-tx
+                       {:db-before db-before'
+                        :db-after db-after'
+                        :tx-data tx-data
+                        :remote-tx-data-set remote-tx-data-set
+                        :keep-local-retract-entity? keep-local-retract-entity?})]
                   (when (seq normalized-tx-data)
                     (persist-local-tx! repo normalized-tx-data
                                        reversed-datoms
@@ -1858,11 +1850,8 @@
     (fail-fast :db-sync/missing-db {:repo repo :op :apply-remote-txs})))
 
 (defn apply-remote-tx!
-  [repo client tx-data*]
-  (let [remote-txs (if (batched-remote-tx-data? tx-data*)
-                     (mapv (fn [tx-data] {:tx-data tx-data}) tx-data*)
-                     [{:tx-data tx-data*}])]
-    (apply-remote-txs! repo client remote-txs)))
+  [repo client tx-data]
+  (apply-remote-txs! repo client [{:tx-data tx-data}]))
 
 (defn- handle-message! [repo client raw]
   (let [message (-> raw parse-message coerce-ws-server-message)]
