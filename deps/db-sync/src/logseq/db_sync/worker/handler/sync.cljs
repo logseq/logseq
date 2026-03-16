@@ -321,16 +321,32 @@
       (ldb/transact! conn tx-data (cond-> {:op :apply-client-tx}
                                     outliner-op (assoc :outliner-op outliner-op))))))
 
+(defn- db-transact-failed-response
+  [sql tx-entry]
+  {:type "tx/reject"
+   :reason "db transact failed"
+   :t (storage/get-t sql)
+   :data (common/write-transit tx-entry)})
+
 (defn- apply-tx! [^js self sender tx-entries]
   (let [sql (.-sql self)]
     (ensure-conn! self)
     (let [conn (.-conn self)]
-      (doseq [tx-entry tx-entries]
-        (apply-tx-entry! conn tx-entry))
-      (let [new-t (storage/get-t sql)]
-        ;; FIXME: no need to broadcast if client tx is less than remote tx
-        (ws/broadcast! self sender {:type "changed" :t new-t})
-        new-t))))
+      (loop [remaining tx-entries]
+        (if-let [tx-entry (first remaining)]
+          (let [result (try
+                         (apply-tx-entry! conn tx-entry)
+                         ::ok
+                         (catch :default e
+                           (log/error :db-sync/transact-failed e)
+                           (db-transact-failed-response sql tx-entry)))]
+            (if (= ::ok result)
+              (recur (next remaining))
+              result))
+          (let [new-t (storage/get-t sql)]
+            ;; FIXME: no need to broadcast if client tx is less than remote tx
+            (ws/broadcast! self sender {:type "changed" :t new-t})
+            new-t))))))
 
 (defn handle-tx-batch! [^js self sender txs t-before]
   (let [current-t (t-now self)]
@@ -361,7 +377,7 @@
             (log/error :db-sync/transact-failed e)
             {:type "tx/reject"
              :reason "db transact failed"
-             :t current-t}))
+             :t (t-now self)}))
         {:type "tx/reject"
          :reason "empty tx data"}))))
 
