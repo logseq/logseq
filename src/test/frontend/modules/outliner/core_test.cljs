@@ -167,10 +167,10 @@
                                  [(get-block 3)] (get-block 14)
                                  {:sibling? true}))
     (is (= [6 9] (get-children 2)))
-    (is (= [13 14 3 15] (get-children 12))))
+    (is (= [13 14 3 15] (get-children 12)))))
 
-  (deftest test-move-block-as-first-child
-    (testing "
+(deftest test-move-block-as-first-child
+  (testing "
   Move 3 as first child of 12.
 
   [1 [[2 [[6 [[7 [[8]]]]]
@@ -183,14 +183,14 @@
            [15]]]
       [16 [[17]]]]]
    "
-      (transact-tree! tree)
-      (outliner-tx/transact!
-       (transact-opts)
-       (outliner-core/move-blocks! (db/get-db test-db false)
-                                   [(get-block 3)] (get-block 12)
-                                   {:sibling? false}))
-      (is (= [6 9] (get-children 2)))
-      (is (= [3 13 14 15] (get-children 12))))))
+    (transact-tree! tree)
+    (outliner-tx/transact!
+     (transact-opts)
+     (outliner-core/move-blocks! (db/get-db test-db false)
+                                 [(get-block 3)] (get-block 12)
+                                 {:sibling? false}))
+    (is (= [6 9] (get-children 2)))
+    (is (= [3 13 14 15] (get-children 12)))))
 
 (deftest test-move-child-as-first-sibling
   (testing "Move 3 as sibling of 2."
