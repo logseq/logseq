@@ -4,6 +4,7 @@
             [datascript.core :as d]
             [frontend.common.crypt :as crypt]
             [frontend.worker-common.util :as worker-util]
+            [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
@@ -11,6 +12,7 @@
             [frontend.worker.sync.crypt :as sync-crypt]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
+            [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -204,6 +206,7 @@
           raw-message (js/JSON.stringify
                        (clj->js {:type "pull/ok"
                                  :t 4
+                                 :checksum "ignored"
                                  :txs [{:t 4 :tx stale-tx}]}))
           latest-prev @db-sync/*repo->latest-remote-tx
           client {:repo test-repo
@@ -230,13 +233,18 @@
                  parent-id (:db/id parent)
                  new-tx (sqlite-util/write-transit-str [[:db/add parent-id :block/title "remote-new-title"]])
                  stale-tx (sqlite-util/write-transit-str [[:db/add parent-id :block/title "stale-title"]])
+                 new-checksum (-> (d/with @conn [[:db/add parent-id :block/title "remote-new-title"]])
+                                  :db-after
+                                  sync-checksum/recompute-checksum)
                  raw-new (js/JSON.stringify
                           (clj->js {:type "pull/ok"
                                     :t 2
+                                    :checksum new-checksum
                                     :txs [{:t 2 :tx new-tx}]}))
                  raw-stale (js/JSON.stringify
                             (clj->js {:type "pull/ok"
                                       :t 1
+                                      :checksum "ignored"
                                       :txs [{:t 1 :tx stale-tx}]}))
                  latest-prev @db-sync/*repo->latest-remote-tx
                  client {:repo test-repo
@@ -280,52 +288,159 @@
               (is (= "db transact failed" (:reason data)))
               (is (= rejected-tx (:data data))))))))))
 
-(deftest pull-ok-batched-txs-preserve-tempid-boundaries-test
-  (testing "pull/ok applies tx batches without cross-tx tempid collisions"
+(deftest hello-checksum-mismatch-fails-fast-test
+  (testing "hello with matching t but mismatched checksum fails fast"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          latest-prev @db-sync/*repo->latest-remote-tx
+          raw-message (js/JSON.stringify
+                       (clj->js {:type "hello"
+                                 :t 0
+                                 :checksum "bad-checksum"}))
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (reset! db-sync/*repo->latest-remote-tx {})
+          (with-redefs [db-sync/flush-pending! (fn [& _] nil)
+                        db-sync/enqueue-asset-sync! (fn [& _] nil)]
+            (try
+              (#'db-sync/handle-message! test-repo client raw-message)
+              (catch :default error
+                (let [data (ex-data error)]
+                  (is (= :db-sync/checksum-mismatch (:type data)))
+                  (is (= "bad-checksum" (:remote-checksum data)))))
+              (finally
+                (reset! db-sync/*repo->latest-remote-tx latest-prev)))))))))
+
+(deftest hello-checksum-mismatch-fails-fast-for-e2ee-test
+  (testing "e2ee graphs still verify checksum"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          latest-prev @db-sync/*repo->latest-remote-tx
+          raw-message (js/JSON.stringify
+                       (clj->js {:type "hello"
+                                 :t 0
+                                 :checksum "bad-checksum"}))
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (reset! db-sync/*repo->latest-remote-tx {})
+          (with-redefs [db-sync/flush-pending! (fn [& _] nil)
+                        db-sync/enqueue-asset-sync! (fn [& _] nil)
+                        sync-crypt/graph-e2ee? (constantly true)]
+            (try
+              (#'db-sync/handle-message! test-repo client raw-message)
+              (catch :default error
+                (let [data (ex-data error)]
+                  (is (= :db-sync/checksum-mismatch (:type data)))
+                  (is (= "bad-checksum" (:remote-checksum data)))))
+              (finally
+                (reset! db-sync/*repo->latest-remote-tx latest-prev)))))))))
+
+(deftest hello-without-checksum-is-accepted-test
+  (testing "legacy hello without checksum is accepted"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          latest-prev @db-sync/*repo->latest-remote-tx
+          raw-message (js/JSON.stringify
+                       (clj->js {:type "hello"
+                                 :t 0}))
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (reset! db-sync/*repo->latest-remote-tx {})
+          (with-redefs [db-sync/flush-pending! (fn [& _] nil)
+                        db-sync/enqueue-asset-sync! (fn [& _] nil)]
+            (#'db-sync/handle-message! test-repo client raw-message)
+            (is (= 0 (get @db-sync/*repo->latest-remote-tx test-repo)))
+            (reset! db-sync/*repo->latest-remote-tx latest-prev)))))))
+
+(deftest pull-ok-without-checksum-is-accepted-test
+  (testing "legacy pull/ok without checksum is accepted"
     (async done
            (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
-                 page-uuid (:block/uuid (:block/page parent))
-                 block-uuid-a (random-uuid)
-                 block-uuid-b (random-uuid)
-                 now 1760000000000
-                 tx-a (sqlite-util/write-transit-str
-                       [[:db/add -1 :block/uuid block-uuid-a]
-                        [:db/add -1 :block/title "remote-a"]
-                        [:db/add -1 :block/parent [:block/uuid page-uuid]]
-                        [:db/add -1 :block/page [:block/uuid page-uuid]]
-                        [:db/add -1 :block/order 1]
-                        [:db/add -1 :block/updated-at now]
-                        [:db/add -1 :block/created-at now]])
-                 tx-b (sqlite-util/write-transit-str
-                       [[:db/add -1 :block/uuid block-uuid-b]
-                        [:db/add -1 :block/title "remote-b"]
-                        [:db/add -1 :block/parent [:block/uuid page-uuid]]
-                        [:db/add -1 :block/page [:block/uuid page-uuid]]
-                        [:db/add -1 :block/order 2]
-                        [:db/add -1 :block/updated-at now]
-                        [:db/add -1 :block/created-at now]])
+                 parent-id (:db/id parent)
+                 new-tx (sqlite-util/write-transit-str [[:db/add parent-id :block/title "remote-new-title"]])
                  raw-message (js/JSON.stringify
                               (clj->js {:type "pull/ok"
                                         :t 2
-                                        :txs [{:t 1 :tx tx-a}
-                                              {:t 2 :tx tx-b}]}))
+                                        :txs [{:t 2 :tx new-tx}]}))
                  latest-prev @db-sync/*repo->latest-remote-tx
                  client {:repo test-repo
                          :graph-id "graph-1"
                          :inflight (atom [])
                          :online-users (atom [])
                          :ws-state (atom :open)}]
+             (reset! db-sync/*repo->latest-remote-tx {})
              (with-datascript-conns conn client-ops-conn
                (fn []
-                 (reset! db-sync/*repo->latest-remote-tx {})
-                 (-> (p/let [_ (client-op/update-local-tx test-repo 0)
-                             _ (#'db-sync/handle-message! test-repo client raw-message)]
-                       ;; TODO(db-sync): re-enable after batched pull tempid-boundary behavior is stabilized.
-                       #_(is (= "remote-a" (:block/title (d/entity @conn [:block/uuid block-uuid-a]))))
-                       #_(is (= "remote-b" (:block/title (d/entity @conn [:block/uuid block-uuid-b])))))
+                 (-> (p/let [_ (#'db-sync/handle-message! test-repo client raw-message)
+                             parent' (d/entity @conn parent-id)]
+                       (is (= "remote-new-title" (:block/title parent')))
+                       (is (= 2 (client-op/get-local-tx test-repo))))
                      (p/finally (fn []
                                   (reset! db-sync/*repo->latest-remote-tx latest-prev)
                                   (done))))))))))
+
+(deftest pull-ok-batched-txs-preserve-tempid-boundaries-test
+  (testing "pull/ok applies tx batches without cross-tx tempid collisions"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          page-uuid (:block/uuid (:block/page parent))
+          block-uuid-a (random-uuid)
+          block-uuid-b (random-uuid)
+          now 1760000000000
+          tx-a [[:db/add -1 :block/uuid block-uuid-a]
+                [:db/add -1 :block/title "remote-a"]
+                [:db/add -1 :block/parent [:block/uuid page-uuid]]
+                [:db/add -1 :block/page [:block/uuid page-uuid]]
+                [:db/add -1 :block/order 1]
+                [:db/add -1 :block/updated-at now]
+                [:db/add -1 :block/created-at now]]
+          tx-b [[:db/add -1 :block/uuid block-uuid-b]
+                [:db/add -1 :block/title "remote-b"]
+                [:db/add -1 :block/parent [:block/uuid page-uuid]]
+                [:db/add -1 :block/page [:block/uuid page-uuid]]
+                [:db/add -1 :block/order 2]
+                [:db/add -1 :block/updated-at now]
+                [:db/add -1 :block/created-at now]]]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (is (nil? (try
+                      (#'db-sync/apply-remote-tx! test-repo nil [tx-a tx-b])
+                      nil
+                      (catch :default e
+                        e)))))))))
+
+(deftest local-checksum-matches-recompute-after-post-pipeline-update-test
+  (testing "stored checksum matches recompute when updated from post-pipeline tx report"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (let [page-id (:db/id (:block/page parent))
+                parent-id (:db/id parent)
+                block-uuid (random-uuid)
+                now 1773661308002
+                tx-report* (d/with @conn [[:db/add -1 :block/uuid block-uuid]
+                                          [:db/add -1 :block/title "Checksum Block"]
+                                          [:db/add -1 :block/parent parent-id]
+                                          [:db/add -1 :block/page page-id]
+                                          [:db/add -1 :block/order "a0"]
+                                          [:db/add -1 :block/created-at now]
+                                          [:db/add -1 :block/updated-at now]]
+                                   {:outliner-op :insert-blocks})
+                tx-report (worker-pipeline/transact-pipeline tx-report*)]
+            (db-sync/update-local-sync-checksum! test-repo tx-report)
+            (is (= (client-op/get-local-checksum test-repo)
+                   (sync-checksum/recompute-checksum (:db-after tx-report))))))))))
 
 (deftest reaction-add-enqueues-pending-sync-tx-test
   (testing "adding a reaction should enqueue tx for db-sync"
@@ -737,7 +852,7 @@
 
 (deftest rebase-reverse-old-rtc-rebase-tx-rewrites-string-tempids-test
   (testing "reverse should rewrite old persisted rtc-rebase tx string tempids to lookup refs"
-    (let [{:keys [conn client-ops-conn parent child1 child2]} (setup-parent-child)
+    (let [{:keys [conn child1 child2]} (setup-parent-child)
           legacy-1-uuid (:block/uuid child1)
           legacy-2-uuid (:block/uuid child2)]
       (d/transact! conn [[:db/add (:db/id child1) :block/order "a4V"]
@@ -1141,6 +1256,8 @@
                             {:asset-uuid "title-1"
                              :asset-type "txt"}]]
                           result)))
+                 (p/catch (fn [e]
+                            (is false (str e))))
                  (p/finally done))))))
 
 (deftest offload-small-title-test
@@ -1156,6 +1273,8 @@
                                   :upload-fn upload-fn
                                   :aes-key nil})]
                    (is (= tx-data result)))
+                 (p/catch (fn [e]
+                            (is false (str e))))
                  (p/finally done))))))
 
 (deftest upload-preparation-processes-datoms-in-batches-test
