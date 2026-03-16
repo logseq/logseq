@@ -294,7 +294,8 @@
                                     :else
                                     nil)))))
            (.on app' "before-quit" (fn [_e]
-                                     (reset! win/*quitting? true)))
+                                     (reset! win/*quitting? true)
+                                     (handler/stop-all-db-workers!)))
 
            (.on app' "activate" #(when @*win (.show win)))))))
 
@@ -326,6 +327,7 @@
 
       (.on app "window-all-closed" (fn []
                                      (logger/debug "window-all-closed" "Quitting...")
+                                     (handler/stop-all-db-workers!)
                                      (.quit app)))
       (on-app-ready! app))))
 

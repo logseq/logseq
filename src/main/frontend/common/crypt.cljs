@@ -175,7 +175,8 @@
   "Decrypts an AES key with a private key."
   [private-key encrypted-aes-key-data]
   (assert (and (instance? js/CryptoKey private-key)
-               (instance? js/Uint8Array encrypted-aes-key-data)))
+               (instance? js/Uint8Array encrypted-aes-key-data))
+          [private-key encrypted-aes-key-data])
   (->
    (p/let [encrypted-aes-key (js/Uint8Array. encrypted-aes-key-data)
            decrypted-key-data (.decrypt subtle

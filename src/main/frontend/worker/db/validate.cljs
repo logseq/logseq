@@ -220,12 +220,13 @@
                  {:fix-db? true})))
 
 (defn validate-db
-  [conn]
-  (fix-extends-cardinality! conn)
-  (fix-icon-wrong-type! conn)
-  (db-migrate/ensure-built-in-data-exists! conn)
-  (fix-non-closed-values! conn)
-  (fix-num-prefix-db-idents! conn)
+  [conn {:keys [fix] :or {fix true}}]
+  (when fix
+    (fix-extends-cardinality! conn)
+    (fix-icon-wrong-type! conn)
+    (db-migrate/ensure-built-in-data-exists! conn)
+    (fix-non-closed-values! conn)
+    (fix-num-prefix-db-idents! conn))
 
   (let [db @conn
         {:keys [errors datom-count entities]} (db-validate/validate-db! db)
@@ -238,12 +239,15 @@
 
     (if errors
       (do
-        (fix-invalid-blocks! conn errors)
+        (when fix
+          (fix-invalid-blocks! conn errors))
         (shared-service/broadcast-to-clients! :log [:db-invalid :error
                                                     {:msg "Validation errors"
                                                      :errors errors}])
         (shared-service/broadcast-to-clients! :notification
-                                              [(str "Validation detected " (count errors) " invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed.")
+                                              [(str "Validation detected " (count errors) " invalid block(s). These blocks may be buggy."
+                                                    (when fix
+                                                      " Attempting to fix invalid blocks. Run validation again to see if they were fixed."))
                                                :warning false]))
 
       (shared-service/broadcast-to-clients! :notification

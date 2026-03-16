@@ -70,7 +70,7 @@
   dev:cli
   {:doc "Run CLI with current deps/db code. Commands with JS deps are not usable e.g. mcp-server"
    :task (apply shell {:dir "deps/db"}
-                "yarn nbb-logseq -cp src:../cli/src:../graph-parser/src:../outliner/src -m logseq.cli" *command-line-args*)}
+                "yarn -s nbb-logseq -cp src:../cli/src:../graph-parser/src:../outliner/src -m logseq.cli" *command-line-args*)}
   dev:query
   {:doc "Query a DB graph's datascript db"
    :requires ([babashka.fs :as fs])
@@ -181,6 +181,12 @@
 
   dev:gen-malli-kondo-config
   logseq.tasks.dev/gen-malli-kondo-config
+
+  dev:db-worker-node
+  {:doc "Compile and start db-worker-node (pass-through args forwarded to node)"
+   :task (do
+           (shell "clojure" "-M:cljs" "compile" "db-worker-node")
+           (apply shell "node" "./static/db-worker-node.js" *command-line-args*))}
 
   lint:dev
   logseq.tasks.dev.lint/dev
