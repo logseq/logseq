@@ -65,6 +65,46 @@
 (def ^:private sync-start-skipped-states
   #{:inactive :stopped})
 
+(def ^:private sync-config-defaults
+  {:ws-url "wss://api.logseq.io/sync/%s"
+   :http-base "https://api.logseq.io"})
+
+(def ^:private required-sync-config-keys-by-action
+  {:sync-start [:ws-url]
+   :sync-upload [:http-base]
+   :sync-download [:http-base]
+   :sync-grant-access [:http-base :e2ee-password]})
+
+(defn- config-value-present?
+  [value]
+  (cond
+    (string? value) (not (string/blank? value))
+    :else (some? value)))
+
+(defn- effective-sync-config-value
+  [config key]
+  (let [sentinel ::missing
+        value (get config key sentinel)]
+    (if (= sentinel value)
+      (get sync-config-defaults key)
+      value)))
+
+(defn- missing-required-sync-config-keys
+  [action-type config]
+  (->> (get required-sync-config-keys-by-action action-type)
+       (remove (fn [key]
+                 (config-value-present? (effective-sync-config-value config key))))
+       vec))
+
+(defn- missing-sync-config-error
+  [action-type missing-keys]
+  {:status :error
+   :error {:code :missing-sync-config
+           :message (str "missing required sync config for " (name action-type)
+                         ": " (string/join ", " (map name missing-keys)))
+           :action action-type
+           :missing-keys missing-keys}})
+
 (defn- print-progress-line!
   [line]
   (when (seq (some-> line str string/trim))
@@ -391,26 +431,33 @@
              :error {:code :remote-graph-not-found
                      :message (str "remote graph not found: " (:graph action))
                      :graph (:graph action)}}
-            (p/let [cfg (cli-server/ensure-server! config' (:repo action))
-                    _ (transport/invoke cfg :thread-api/set-db-sync-config false [(sync-config config')])
-                    _ (ensure-empty-download-db! cfg (:repo action))
-                    download-cfg (sync-download-invoke-config cfg)
-                    graph-id (:graph-id remote-graph)
-                    events-sub (when progress-enabled?
-                                 (transport/connect-events!
-                                  download-cfg
-                                  (fn [event-type payload]
-                                    (when-let [message (download-progress-message graph-id event-type payload)]
-                                      (print-progress-line! message)))))
-                    result (-> (transport/invoke download-cfg :thread-api/db-sync-download-graph-by-id false
-                                                 [(:repo action) graph-id (:graph-e2ee? remote-graph)])
-                               (p/finally (fn []
-                                            (when-let [close! (:close! events-sub)]
-                                              (close!)))))]
-              {:status :ok
-               :data (if (map? result)
-                       result
-                       {:result result})})))
+            (let [missing-keys (when (true? (:graph-e2ee? remote-graph))
+                                 (->> [:e2ee-password]
+                                      (remove (fn [key]
+                                                (config-value-present? (effective-sync-config-value config' key))))
+                                      vec))]
+              (if (seq missing-keys)
+                (missing-sync-config-error :sync-download missing-keys)
+                (p/let [cfg (cli-server/ensure-server! config' (:repo action))
+                        _ (transport/invoke cfg :thread-api/set-db-sync-config false [(sync-config config')])
+                        _ (ensure-empty-download-db! cfg (:repo action))
+                        download-cfg (sync-download-invoke-config cfg)
+                        graph-id (:graph-id remote-graph)
+                        events-sub (when progress-enabled?
+                                     (transport/connect-events!
+                                      download-cfg
+                                      (fn [event-type payload]
+                                        (when-let [message (download-progress-message graph-id event-type payload)]
+                                          (print-progress-line! message)))))
+                        result (-> (transport/invoke download-cfg :thread-api/db-sync-download-graph-by-id false
+                                                     [(:repo action) graph-id (:graph-e2ee? remote-graph)])
+                                   (p/finally (fn []
+                                                (when-let [close! (:close! events-sub)]
+                                                  (close!)))))]
+                  {:status :ok
+                   :data (if (map? result)
+                           result
+                           {:result result})})))))
         (p/catch (fn [error]
                    (exception->error error {:repo (:repo action)
                                             :graph (:graph action)}))))))
@@ -427,11 +474,14 @@
 
     :sync-start
     (-> (p/let [config' (resolve-runtime-config! action config)
-                _ (invoke-with-repo config' (:repo action)
-                                    :thread-api/db-sync-start
-                                    [(:repo action)])
-                result (wait-sync-start-ready config' (:repo action) action)]
-          result)
+                missing-keys (missing-required-sync-config-keys (:type action) config')]
+          (if (seq missing-keys)
+            (missing-sync-config-error (:type action) missing-keys)
+            (p/let [_ (invoke-with-repo config' (:repo action)
+                                        :thread-api/db-sync-start
+                                        [(:repo action)])
+                    result (wait-sync-start-ready config' (:repo action) action)]
+              result)))
         (p/catch (fn [error]
                    (exception->error error {:repo (:repo action)}))))
 
@@ -443,14 +493,20 @@
        :data {:result result}})
 
     :sync-upload
-    (-> (p/let [config' (resolve-runtime-config! action config)]
-          (execute-sync-upload action config'))
+    (-> (p/let [config' (resolve-runtime-config! action config)
+                missing-keys (missing-required-sync-config-keys (:type action) config')]
+          (if (seq missing-keys)
+            (missing-sync-config-error (:type action) missing-keys)
+            (execute-sync-upload action config')))
         (p/catch (fn [error]
                    (exception->error error {:repo (:repo action)}))))
 
     :sync-download
-    (-> (p/let [config' (resolve-runtime-config! action config)]
-          (execute-sync-download action config'))
+    (-> (p/let [config' (resolve-runtime-config! action config)
+                missing-keys (missing-required-sync-config-keys (:type action) config')]
+          (if (seq missing-keys)
+            (missing-sync-config-error (:type action) missing-keys)
+            (execute-sync-download action config')))
         (p/catch (fn [error]
                    (exception->error error {:repo (:repo action)
                                             :graph (:graph action)}))))
@@ -473,11 +529,14 @@
 
     :sync-grant-access
     (-> (p/let [config' (resolve-runtime-config! action config)
-                result (invoke-with-repo config' (:repo action)
-                                         :thread-api/db-sync-grant-graph-access
-                                         [(:repo action) (:graph-id action) (:email action)])]
-          {:status :ok
-           :data {:result result}})
+                missing-keys (missing-required-sync-config-keys (:type action) config')]
+          (if (seq missing-keys)
+            (missing-sync-config-error (:type action) missing-keys)
+            (p/let [result (invoke-with-repo config' (:repo action)
+                                             :thread-api/db-sync-grant-graph-access
+                                             [(:repo action) (:graph-id action) (:email action)])]
+              {:status :ok
+               :data {:result result}})))
         (p/catch (fn [error]
                    (exception->error error {:repo (:repo action)
                                             :graph-id (:graph-id action)

@@ -132,28 +132,121 @@
 
 (deftest test-execute-sync-start-missing-ws-url-is-error
   (async done
-         (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
-                                                         (p/resolved (assoc config :base-url "http://example")))
-                             transport/invoke (fn [_ method _direct-pass? _args]
-                                                (case method
-                                                  :thread-api/db-sync-status
-                                                  (p/resolved {:repo "logseq_db_demo"
-                                                               :ws-state :inactive
-                                                               :pending-local 0
-                                                               :pending-asset 0
-                                                               :pending-server 0})
-                                                  (p/resolved {:ok true})))]
-               (p/let [result (execute-with-runtime-auth {:type :sync-start
-                                                     :repo "logseq_db_demo"
-                                                     :wait-timeout-ms 20
-                                                     :wait-poll-interval-ms 0}
-                                                    {:data-dir "/tmp"})]
-                 (is (= :error (:status result)))
-                 (is (= :sync-start-skipped (get-in result [:error :code])))
-                 (is (= :inactive (get-in result [:error :ws-state])))))
-             (p/catch (fn [e]
-                        (is false (str "unexpected error: " e))))
-             (p/finally done))))
+         (let [ensure-calls (atom [])
+               invoke-calls (atom [])]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
+                                                           (swap! ensure-calls conj [config repo])
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               transport/invoke (fn [_ method direct-pass? args]
+                                                  (swap! invoke-calls conj [method direct-pass? args])
+                                                  (p/resolved {:ok true}))]
+                 (p/let [result (sync-command/execute {:type :sync-start
+                                                       :repo "logseq_db_demo"}
+                                                      {:data-dir "/tmp"
+                                                       :ws-url ""
+                                                       :auth-token "runtime-token"})]
+                   (is (= :error (:status result)))
+                   (is (= :missing-sync-config (get-in result [:error :code])))
+                   (is (= :sync-start (get-in result [:error :action])))
+                   (is (= [:ws-url] (get-in result [:error :missing-keys])))
+                   (is (= [] @ensure-calls))
+                   (is (= [] @invoke-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-sync-upload-missing-http-base-is-error
+  (async done
+         (let [ensure-calls (atom [])
+               invoke-calls (atom [])]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
+                                                           (swap! ensure-calls conj [config repo])
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               transport/invoke (fn [_ method direct-pass? args]
+                                                  (swap! invoke-calls conj [method direct-pass? args])
+                                                  (p/resolved {:ok true}))]
+                 (p/let [result (sync-command/execute {:type :sync-upload
+                                                       :repo "logseq_db_demo"}
+                                                      {:data-dir "/tmp"
+                                                       :http-base ""
+                                                       :auth-token "runtime-token"})]
+                   (is (= :error (:status result)))
+                   (is (= :missing-sync-config (get-in result [:error :code])))
+                   (is (= :sync-upload (get-in result [:error :action])))
+                   (is (= [:http-base] (get-in result [:error :missing-keys])))
+                   (is (= [] @ensure-calls))
+                   (is (= [] @invoke-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-sync-download-missing-http-base-is-error
+  (async done
+         (let [ensure-calls (atom [])
+               invoke-calls (atom [])]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
+                                                           (swap! ensure-calls conj [config repo])
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               transport/invoke (fn [_ method direct-pass? args]
+                                                  (swap! invoke-calls conj [method direct-pass? args])
+                                                  (p/resolved []))]
+                 (p/let [result (sync-command/execute {:type :sync-download
+                                                       :repo "logseq_db_demo"
+                                                       :graph "demo"}
+                                                      {:base-url "http://example"
+                                                       :data-dir "/tmp"
+                                                       :http-base ""
+                                                       :auth-token "runtime-token"})]
+                   (is (= :error (:status result)))
+                   (is (= :missing-sync-config (get-in result [:error :code])))
+                   (is (= :sync-download (get-in result [:error :action])))
+                   (is (= [:http-base] (get-in result [:error :missing-keys])))
+                   (is (= [] @ensure-calls))
+                   (is (= [] @invoke-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-sync-download-missing-e2ee-password-for-e2ee-graph-is-error
+  (async done
+         (let [ensure-calls (atom [])
+               invoke-calls (atom [])]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
+                                                           (swap! ensure-calls conj [config repo])
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               transport/invoke (fn [_ method direct-pass? args]
+                                                  (swap! invoke-calls conj [method direct-pass? args])
+                                                  (case method
+                                                    :thread-api/set-db-sync-config
+                                                    (p/resolved nil)
+
+                                                    :thread-api/db-sync-list-remote-graphs
+                                                    (p/resolved [{:graph-id "remote-graph-id"
+                                                                  :graph-name "demo"
+                                                                  :graph-e2ee? true}])
+
+                                                    :thread-api/db-sync-download-graph-by-id
+                                                    (p/resolved {:ok true})
+
+                                                    (p/resolved nil)))]
+                 (p/let [result (sync-command/execute {:type :sync-download
+                                                       :repo "logseq_db_demo"
+                                                       :graph "demo"}
+                                                      {:base-url "http://example"
+                                                       :data-dir "/tmp"
+                                                       :http-base "https://api.logseq.io"
+                                                       :auth-token "runtime-token"})]
+                   (is (= :error (:status result)))
+                   (is (= :missing-sync-config (get-in result [:error :code])))
+                   (is (= :sync-download (get-in result [:error :action])))
+                   (is (= [:e2ee-password] (get-in result [:error :missing-keys])))
+                   (is (= [] @ensure-calls))
+                   (is (not-any? (fn [[method _ _]]
+                                   (= :thread-api/db-sync-download-graph-by-id method))
+                                 @invoke-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
 (deftest test-execute-sync-start-runtime-error-after-open
   (async done
@@ -333,24 +426,26 @@
                                                   :repo "logseq_db_demo"
                                                   :graph "demo"}
                                                  {:base-url "http://example"
-                                                  :data-dir "/tmp"})]
+                                                  :data-dir "/tmp"
+                                                  :e2ee-password "pw"})]
                    (is (= [[{:base-url "http://example"
                              :create-empty-db? true
                              :data-dir "/tmp"
+                             :e2ee-password "pw"
                              :auth-token "runtime-token"}
                             "logseq_db_demo"]]
                           @ensure-calls))
                    (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
                                                                   :http-base nil
                                                                   :auth-token "runtime-token"
-                                                                  :e2ee-password nil}]]
+                                                                  :e2ee-password "pw"}]]
                           (nth @invoke-calls 0)))
                    (is (= [:thread-api/db-sync-list-remote-graphs false []]
                           (nth @invoke-calls 1)))
                    (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
                                                                   :http-base nil
                                                                   :auth-token "runtime-token"
-                                                                  :e2ee-password nil}]]
+                                                                  :e2ee-password "pw"}]]
                           (nth @invoke-calls 2)))
                    (let [[method direct-pass? args] (nth @invoke-calls 3)]
                      (is (= :thread-api/q method))
@@ -599,7 +694,8 @@
                                                      :repo "logseq_db_demo"
                                                      :graph "demo"}
                                                     {:base-url "http://example"
-                                                     :data-dir "/tmp"})]
+                                                     :data-dir "/tmp"
+                                                     :e2ee-password "pw"})]
                  (is (= :error (:status result)))
                  (is (= :db-sync/snapshot-download-failed (get-in result [:error :code])))))
              (p/catch (fn [e]
@@ -628,7 +724,8 @@
                  (p/let [result (execute-with-runtime-auth {:type :sync-download
                                                        :repo "logseq_db_demo"
                                                        :graph "demo"}
-                                                      {:data-dir "/tmp"})]
+                                                      {:data-dir "/tmp"
+                                                       :e2ee-password "pw"})]
                    (is (= :error (:status result)))
                    (is (= :graph-db-not-empty (get-in result [:error :code])))
                    (is (= "logseq_db_demo" (get-in result [:error :repo])))
@@ -722,6 +819,32 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest test-execute-sync-grant-access-missing-e2ee-password-is-error
+  (async done
+         (let [ensure-calls (atom [])
+               invoke-calls (atom [])]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config repo]
+                                                           (swap! ensure-calls conj [config repo])
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               transport/invoke (fn [_ method direct-pass? args]
+                                                  (swap! invoke-calls conj [method direct-pass? args])
+                                                  (p/resolved {:ok true}))]
+                 (p/let [result (sync-command/execute {:type :sync-grant-access
+                                                       :repo "logseq_db_demo"
+                                                       :graph-id "graph-uuid"
+                                                       :email "user@example.com"}
+                                                      {:data-dir "/tmp"
+                                                       :auth-token "runtime-token"})]
+                   (is (= :error (:status result)))
+                   (is (= :missing-sync-config (get-in result [:error :code])))
+                   (is (= :sync-grant-access (get-in result [:error :action])))
+                   (is (= [:e2ee-password] (get-in result [:error :missing-keys])))
+                   (is (= [] @ensure-calls))
+                   (is (= [] @invoke-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest test-execute-sync-grant-access
   (async done
          (let [ensure-calls (atom [])
@@ -736,15 +859,17 @@
                                                   :repo "logseq_db_demo"
                                                   :graph-id "graph-uuid"
                                                   :email "user@example.com"}
-                                                 {:data-dir "/tmp"})]
+                                                 {:data-dir "/tmp"
+                                                  :e2ee-password "pw"})]
                    (is (= [[{:data-dir "/tmp"
+                             :e2ee-password "pw"
                              :auth-token "runtime-token"}
                             "logseq_db_demo"]]
                           @ensure-calls))
                    (is (= [[:thread-api/set-db-sync-config false [{:ws-url nil
                                                                    :http-base nil
                                                                    :auth-token "runtime-token"
-                                                                   :e2ee-password nil}]]
+                                                                   :e2ee-password "pw"}]]
                            [:thread-api/db-sync-grant-graph-access false ["logseq_db_demo" "graph-uuid" "user@example.com"]]]
                           @invoke-calls))))
                (p/catch (fn [e]

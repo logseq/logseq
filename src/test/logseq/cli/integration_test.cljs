@@ -324,7 +324,7 @@
                invoke-calls (atom [])
                status-calls (atom 0)]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
-                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json :e2ee-password \"pw\"}")
                        create-result (run-cli ["graph" "create" "--graph" start-repo] data-dir cfg-path)
                        create-payload (parse-json-output-safe create-result "graph create")
                        _ (is (= 0 (:exit-code create-result)))
@@ -421,8 +421,8 @@
                  (is (= 0 (:exit-code upload-result)))
                  (is (= "ok" (:status upload-payload)))
                  (is (= "created-graph-id" (get-in upload-payload [:data :graph-id])))
-                 (is (= [[:thread-api/set-db-sync-config [{:ws-url nil
-                                                           :http-base nil
+                 (is (= [[:thread-api/set-db-sync-config [{:ws-url "wss://api.logseq.io/sync/%s"
+                                                           :http-base "https://api.logseq.io"
                                                            :auth-token "runtime-token"
                                                            :e2ee-password nil}]]
                          [:thread-api/db-sync-upload-graph ["logseq_db_sync-upload-graph"]]]
