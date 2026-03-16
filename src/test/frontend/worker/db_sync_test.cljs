@@ -256,6 +256,30 @@
                                   (reset! db-sync/*repo->latest-remote-tx latest-prev)
                                   (done))))))))))
 
+(deftest tx-reject-db-transact-failed-surfaces-rejected-tx-test
+  (testing "tx/reject with db transact failed includes parsed rejected tx for debugging"
+    (let [rejected-tx {:tx (sqlite-util/write-transit-str [[:db/add [:block/uuid (random-uuid)] :block/title "bad"]])
+                       :outliner-op :save-block}
+          raw-message (js/JSON.stringify
+                       (clj->js {:type "tx/reject"
+                                 :reason "db transact failed"
+                                 :t 3
+                                 :data (sqlite-util/write-transit-str rejected-tx)}))
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}]
+      (with-redefs [client-op/get-local-tx (constantly 0)]
+        (try
+          (#'db-sync/handle-message! test-repo client raw-message)
+          (is false "expected tx/reject to fail-fast with rejected tx details")
+          (catch :default error
+            (let [data (ex-data error)]
+              (is (= :db-sync/tx-rejected (:type data)))
+              (is (= "db transact failed" (:reason data)))
+              (is (= rejected-tx (:data data))))))))))
+
 (deftest pull-ok-batched-txs-preserve-tempid-boundaries-test
   (testing "pull/ok applies tx batches without cross-tx tempid collisions"
     (async done

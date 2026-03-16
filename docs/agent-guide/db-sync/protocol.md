@@ -34,6 +34,8 @@
   - Client tx is based on stale t.
 - `{"type":"tx/reject","reason":"cycle","data":"<transit {:attr <kw> :server-values ...}>"}`
   - Cycle detected with server values.
+- `{"type":"tx/reject","reason":"db transact failed","t":<t>,"data":"<transit {:tx \"<tx-transit>\" :outliner-op ...}>"}`
+  - Server-side transact/validation failed for one tx entry in the batch; `data` echoes the rejected tx entry for debugging.
 - `{"type":"tx/reject","reason":"empty tx data"|"invalid tx"|"invalid t-before"}`
   - Invalid batch.
 - `{"type":"pong"}`

@@ -188,6 +188,30 @@
     (is (= "tx/reject" (:type response)))
     (is (= "snapshot upload in progress" (:reason response)))))
 
+(deftest tx-batch-rejects-with-the-exact-failed-tx-entry-test
+  (testing "db transact failure replies with the specific rejected tx entry"
+    (let [sql (test-sql/make-sql)
+          conn (d/create-conn db-schema/schema)
+          self #js {:sql sql
+                    :conn conn
+                    :schema-ready true}
+          tx-entry-1 {:tx (protocol/tx->transit [[:db/add -1 :block/title "ok"]])
+                      :outliner-op :save-block}
+          tx-entry-2 {:tx (protocol/tx->transit [[:db/add -2 :block/title "bad"]])
+                      :outliner-op :save-block}
+          apply-calls (atom 0)
+          response (with-redefs [ws/broadcast! (fn [& _] nil)
+                                 sync-handler/apply-tx-entry! (fn [_conn tx-entry]
+                                                                (swap! apply-calls inc)
+                                                                (when (= 2 @apply-calls)
+                                                                  (throw (ex-info "DB write failed with invalid data"
+                                                                                  {:tx-entry tx-entry}))))]
+                     (sync-handler/handle-tx-batch! self nil [tx-entry-1 tx-entry-2] 0))]
+      (is (= "tx/reject" (:type response)))
+      (is (= "db transact failed" (:reason response)))
+      (is (= 0 (:t response)))
+      (is (= tx-entry-2 (common/read-transit (:data response)))))))
+
 (deftest sync-pull-is-blocked-when-graph-is-not-ready-for-use-test
   (async done
          (let [self #js {:env #js {"DB" :db}

@@ -1823,8 +1823,19 @@
                         "stale"
                         (send! (:ws client) {:type "pull" :since local-tx})
 
-                        (fail-fast :db-sync/invalid-field
-                                   {:repo repo :type "tx/reject" :reason reason})))
+                        (let [data (when-let [raw-data (:data message)]
+                                     (parse-transit raw-data
+                                                    {:repo repo
+                                                     :type "tx/reject"
+                                                     :reason reason
+                                                     :field :data}))]
+                          (fail-fast :db-sync/tx-rejected
+                                     (cond-> {:type :db-sync/tx-rejected
+                                              :repo repo
+                                              :message-type "tx/reject"
+                                              :reason reason}
+                                       (contains? message :t) (assoc :t remote-tx)
+                                       (some? data) (assoc :data data))))))
         (fail-fast :db-sync/invalid-field
                    {:repo repo :type (:type message)})))))
 
