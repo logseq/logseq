@@ -53,6 +53,10 @@
   (ensure-schema! self)
   (storage/get-t (.-sql self)))
 
+(defn current-checksum [^js self]
+  (ensure-conn! self)
+  (storage/get-checksum (.-sql self)))
+
 (defn snapshot-upload-finished? [^js self]
   (ensure-schema! self)
   (not= "true" (storage/get-meta (.-sql self) snapshot-uploading-meta-key)))
@@ -269,10 +273,11 @@
 (defn pull-response [^js self since]
   (let [sql (.-sql self)
         txs (storage/fetch-tx-since sql since)
-        response {:type "pull/ok"
-                  :t (t-now self)
-                  :txs txs}]
-    response))
+        checksum (current-checksum self)]
+    (cond-> {:type "pull/ok"
+             :t (t-now self)
+             :txs txs}
+      (string? checksum) (assoc :checksum checksum))))
 
 (defn- import-snapshot! [^js self rows reset?]
   (let [sql (.-sql self)]
@@ -371,8 +376,10 @@
           (let [new-t (apply-tx! self sender txs)]
             (if (and (map? new-t) (= "tx/reject" (:type new-t)))
               new-t
-              {:type "tx/batch/ok"
-               :t new-t}))
+              (let [checksum (current-checksum self)]
+                (cond-> {:type "tx/batch/ok"
+                         :t new-t}
+                  (string? checksum) (assoc :checksum checksum)))))
           (catch :default e
             (log/error :db-sync/transact-failed e)
             {:type "tx/reject"
