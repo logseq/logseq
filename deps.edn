@@ -9,31 +9,31 @@
   ;; datascript/datascript                 {:local/root "../../datascript"}
 
   datascript-transit/datascript-transit {:mvn/version "0.3.0"}
-  borkdude/rewrite-edn                  {:mvn/version "0.4.9"}
+  borkdude/rewrite-edn                  {:mvn/version "0.5.9"}
   funcool/promesa                       {:mvn/version "11.0.678"}
   medley/medley                         {:mvn/version "1.4.0"}
   metosin/reitit-frontend               {:mvn/version "0.10.1"}
   cljs-bean/cljs-bean                   {:mvn/version "1.9.0"}
   prismatic/dommy                       {:mvn/version "1.1.0"}
-  org.clojure/core.match                {:mvn/version "1.0.0"}
+  org.clojure/core.match                {:mvn/version "1.1.0"}
   com.andrewmcveigh/cljs-time           {:git/url "https://github.com/logseq/cljs-time" ;; fork
                                          :sha     "5704fbf48d3478eedcf24d458c8964b3c2fd59a9"}
   ;; TODO: delete cljs-drag-n-drop and use dnd-kit
   cljs-drag-n-drop/cljs-drag-n-drop     {:mvn/version "0.1.0"}
-  cljs-http/cljs-http                   {:mvn/version "0.1.48"}
+  cljs-http/cljs-http                   {:mvn/version "0.1.49"}
   org.babashka/sci                      {:mvn/version "0.12.51"}
-  org.clj-commons/hickory               {:mvn/version "0.7.3"}
+  org.clj-commons/hickory               {:mvn/version "0.7.7"}
   hiccups/hiccups                       {:mvn/version "0.3.0"}
   tongue/tongue                         {:mvn/version "0.4.4"}
-  org.clojure/core.async                {:mvn/version "1.6.673"}
+  org.clojure/core.async                {:mvn/version "1.8.741"}
   thheller/shadow-cljs                  {:mvn/version "2.28.23"}
   expound/expound                       {:mvn/version "0.9.0"}
   com.lambdaisland/glogi                {:git/url "https://github.com/lambdaisland/glogi"
                                          :git/sha "30328a045141717aadbbb693465aed55f0904976"}
   camel-snake-kebab/camel-snake-kebab   {:mvn/version "0.4.3"}
-  instaparse/instaparse                 {:mvn/version "1.4.10"}
+  instaparse/instaparse                 {:mvn/version "1.5.0"}
   org.clojars.mmb90/cljs-cache          {:mvn/version "0.1.4"}
-  fipp/fipp                             {:mvn/version "0.6.26"}
+  fipp/fipp                             {:mvn/version "0.6.29"}
   logseq/common                         {:local/root "deps/common"}
   logseq/graph-parser                   {:local/root "deps/graph-parser"}
   logseq/outliner                       {:local/root "deps/outliner"}
@@ -41,13 +41,13 @@
   logseq/publishing                     {:local/root "deps/publishing"}
   logseq/cli                            {:local/root "deps/cli"}
   logseq/shui                           {:local/root "deps/shui"}
-  metosin/malli                         {:mvn/version "0.16.1"}
+  metosin/malli                         {:mvn/version "0.20.1"}
   com.cognitect/transit-cljs            {:mvn/version "0.8.280"}
-  missionary/missionary                 {:mvn/version "b.46"}
+  missionary/missionary                 {:mvn/version "b.47"}
 
   io.github.open-spaced-repetition/cljc-fsrs {:git/sha "eeef3520df664e51c3d0ba2031ec2ba071635442"
                                               :git/url "https://github.com/open-spaced-repetition/cljc-fsrs"}
-  tick/tick                              {:mvn/version "0.7.5"}
+  tick/tick                              {:mvn/version "1.0"}
   io.github.rcmerci/cljs-http-missionary {:git/url "https://github.com/RCmerci/cljs-http-missionary"
                                           :git/sha "d61ce7e29186de021a2a453a8cee68efb5a88440"}
 
@@ -71,7 +71,7 @@
 
            :bench {:extra-paths ["src/bench/"]
                    :extra-deps {olical/cljs-test-runner {:mvn/version "3.8.0"}
-                                fipp/fipp {:mvn/version "0.6.26"}}
+                                fipp/fipp {:mvn/version "0.6.29"}}
                    :main-opts ["-m" "cljs-test-runner.main" "-d" "src/bench" "-n" "frontend.benchmark-test-runner"]}
 
            ;; Use :replace-deps for tools. See https://github.com/clj-kondo/clj-kondo/issues/1536#issuecomment-1013006889
