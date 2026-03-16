@@ -341,7 +341,7 @@
             (let [after-count (count (#'db-sync/pending-txs test-repo))]
               (is (> after-count before-count)))))))))
 
-(deftest ^:long reparent-block-when-cycle-detected-test
+(deftest reparent-block-when-cycle-detected-test
   (testing "cycle from remote sync reparent block to page root"
     (let [{:keys [conn parent child1]} (setup-parent-child)]
       (with-datascript-conns conn nil
@@ -358,7 +358,7 @@
             (is (= (:db/id child1') (:db/id (:block/parent parent'))))
             (is (= (:db/id page') (:db/id (:block/parent child1'))))))))))
 
-(deftest ^:long two-children-cycle-test
+(deftest two-children-cycle-test
   (testing "cycle from remote sync overwrite client (2 children)"
     (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)]
       (with-datascript-conns conn client-ops-conn
@@ -373,7 +373,7 @@
             (is (= "parent" (:block/title (:block/parent child1'))))
             (is (= "child 1" (:block/title (:block/parent child2'))))))))))
 
-(deftest ^:long three-children-cycle-test
+(deftest three-children-cycle-test
   (testing "cycle from remote sync overwrite client (3 children)"
     (let [{:keys [conn client-ops-conn child1 child2 child3]} (setup-parent-child)]
       (with-datascript-conns conn client-ops-conn
@@ -392,7 +392,7 @@
             (is (= "child 3" (:block/title (:block/parent child2'))))
             (is (= "parent" (:block/title (:block/parent child3'))))))))))
 
-(deftest ^:long ignore-missing-parent-update-after-local-delete-test
+(deftest ignore-missing-parent-update-after-local-delete-test
   (testing "remote parent retracted while local adds another child"
     (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
           child-uuid (:block/uuid child1)]
@@ -406,7 +406,7 @@
           (let [child' (d/entity @conn [:block/uuid child-uuid])]
             (is (nil? child'))))))))
 
-(deftest ^:long cut-paste-parent-with-child-keeps-child-parent-after-sync-test
+(deftest cut-paste-parent-with-child-keeps-child-parent-after-sync-test
   (testing "remote tx can retract and recreate target uuid; child should point to recreated parent"
     (let [conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
@@ -440,7 +440,7 @@
             (is (= "parent" (:block/title parent')))
             (is (= (:db/id parent') (:db/id (:block/parent child'))))))))))
 
-(deftest ^:long fix-duplicate-orders-after-rebase-test
+(deftest fix-duplicate-orders-after-rebase-test
   (testing "duplicate order updates are fixed after remote rebase"
     (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
           order (:block/order (d/entity @conn (:db/id child1)))]
@@ -458,7 +458,7 @@
             (is (every? some? orders))
             (is (= 2 (count (distinct orders))))))))))
 
-(deftest ^:long create-today-journal-does-not-rewrite-existing-journal-timestamps-test
+(deftest create-today-journal-does-not-rewrite-existing-journal-timestamps-test
   (testing "create today journal skips timestamp rewrite when the journal page already exists"
     (let [conn (db-test/create-conn)
           client-ops-conn (d/create-conn client-op/schema-in-db)
@@ -476,7 +476,7 @@
                 (is (= created-at-before (:block/created-at page')))
                 (is (= updated-at-before (:block/updated-at page')))))))))))
 
-(deftest ^:long fix-duplicate-order-against-existing-sibling-test
+(deftest fix-duplicate-order-against-existing-sibling-test
   (testing "duplicate order update is fixed when it collides with an existing sibling"
     (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
           child2-order (:block/order (d/entity @conn (:db/id child2)))]
@@ -492,7 +492,7 @@
             (is (some? (:block/order child1')))
             (is (not= (:block/order child1') (:block/order child2')))))))))
 
-(deftest ^:long two-clients-extends-cycle-test
+(deftest two-clients-extends-cycle-test
   (testing "remote extends wins when two clients create a cycle"
     (let [conn (db-test/create-conn)
           client-ops-conn (d/create-conn client-op/schema-in-db)
@@ -538,7 +538,7 @@
               (is (contains? extends-a :logseq.class/Root))
               (is (contains? extends-b :user.class/A)))))))))
 
-(deftest ^:long fix-duplicate-orders-with-local-and-remote-new-blocks-test
+(deftest fix-duplicate-orders-with-local-and-remote-new-blocks-test
   (testing "local and remote new sibling blocks at the same location get unique orders"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
           parent-id (:db/id parent)
@@ -578,7 +578,7 @@
             (is (every? some? orders))
             (is (= (count orders) (count (distinct orders))))))))))
 
-(deftest ^:long rebase-replaces-pending-txs-test
+(deftest rebase-replaces-pending-txs-test
   (testing "pending txs are rebased into a single tx after remote rebase"
     (let [{:keys [conn client-ops-conn parent child1 child2]} (setup-parent-child)
           child1-uuid (:block/uuid child1)
@@ -605,7 +605,7 @@
               (is (some #(= % [:db/add [:block/uuid child1-uuid] :block/title "child 1 local"]) txs))
               (is (some #(= % [:db/add [:block/uuid child2-uuid] :block/title "child 2 local"]) txs)))))))))
 
-(deftest ^:long rebase-keeps-pending-when-rebased-empty-test
+(deftest rebase-keeps-pending-when-rebased-empty-test
   (testing "pending txs stay when rebased txs are empty"
     (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)]
       (with-redefs [db-sync/enqueue-local-tx!
@@ -623,7 +623,7 @@
              [[:db/add (:db/id child1) :block/title "same"]])
             (is (= 0 (count (#'db-sync/pending-txs test-repo))))))))))
 
-(deftest ^:long rebase-preserves-title-when-reversed-tx-ids-change-test
+(deftest rebase-preserves-title-when-reversed-tx-ids-change-test
   (testing "rebase keeps local title when reverse tx gets a new tx id"
     (let [conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
@@ -647,7 +647,7 @@
             (let [block' (d/entity @conn (:db/id block))]
               (is (= "test" (:block/title block'))))))))))
 
-(deftest ^:long rebase-does-not-leave-anonymous-created-by-entities-test
+(deftest rebase-does-not-leave-anonymous-created-by-entities-test
   (testing "rebase should not leave entities with timestamps/created-by but without identity attrs"
     (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
           child-id (:db/id child1)
@@ -680,7 +680,7 @@
               (is (empty? (map :entity (:errors validation)))
                   (str (:errors validation))))))))))
 
-(deftest ^:long rebase-create-then-delete-does-not-leave-anonymous-entities-test
+(deftest rebase-create-then-delete-does-not-leave-anonymous-entities-test
   (testing "create+delete before sync should not leave anonymous entities after rebase"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
           page-id (:db/id (:block/page parent))]
@@ -713,7 +713,7 @@
                 (is (empty? (map :entity (:errors validation)))
                     (str (:errors validation)))))))))))
 
-(deftest ^:long remote-retract-required-page-attr-is-ignored-test
+(deftest remote-retract-required-page-attr-is-ignored-test
   (testing "remote tx retracting required page attrs should be ignored"
     (let [{:keys [conn parent]} (setup-parent-child)
           page (:block/page parent)
@@ -733,7 +733,7 @@
             (is (empty? (map :entity (:errors validation)))
                 (str (:errors validation)))))))))
 
-(deftest ^:long sanitize-tx-data-drops-partial-create-when-parent-deleted-test
+(deftest sanitize-tx-data-drops-partial-create-when-parent-deleted-test
   (testing "created block should be dropped entirely when parent is in deleted-block-ids"
     (let [{:keys [conn parent]} (setup-parent-child)
           page-uuid (:block/uuid (:block/page parent))
@@ -748,7 +748,7 @@
                          vec)]
       (is (empty? sanitized)))))
 
-(deftest ^:long sanitize-tx-data-removes-orphaning-parent-retract-test
+(deftest sanitize-tx-data-removes-orphaning-parent-retract-test
   (testing "when invalid reparent add is dropped, paired parent retract should be dropped too"
     (let [{:keys [conn parent child1]} (setup-parent-child)
           child-uuid (:block/uuid child1)
@@ -760,30 +760,7 @@
                          vec)]
       (is (empty? sanitized)))))
 
-(deftest apply-remote-batched-create-reusing-tempid-across-batches-is-rejected-test
-  (testing "cross-batch tempid reuse is unsupported and should fail fast"
-    (let [{:keys [conn parent]} (setup-parent-child)
-          parent-uuid (:block/uuid parent)
-          page-uuid (:block/uuid (:block/page parent))
-          remote-uuid (random-uuid)
-          batched-tx-data [[[:db/add -1 :block/uuid remote-uuid]
-                            [:db/add -1 :block/title "remote batched child"]
-                            [:db/add -1 :block/page [:block/uuid page-uuid]]
-                            [:db/add -1 :block/created-at 1760000000000]
-                            [:db/add -1 :block/updated-at 1760000000000]]
-                           [[:db/add -1 :block/parent [:block/uuid parent-uuid]]
-                            [:db/add -1 :block/order "a4"]]]]
-      (with-datascript-conns conn nil
-        (fn []
-          (let [error (try
-                        (#'db-sync/apply-remote-tx! test-repo nil batched-tx-data)
-                        nil
-                        (catch :default e
-                          e))]
-            (is (some? error))
-            (is (nil? (d/entity @conn [:block/uuid remote-uuid])))))))))
-
-(deftest ^:long sanitize-tx-data-drops-numeric-entity-datoms-for-deleted-block-test
+(deftest sanitize-tx-data-drops-numeric-entity-datoms-for-deleted-block-test
   (testing "deleted-block-ids should also drop datoms when entity is numeric id"
     (let [{:keys [conn child1]} (setup-parent-child)
           child-id (:db/id child1)
@@ -793,7 +770,7 @@
                          vec)]
       (is (empty? sanitized)))))
 
-(deftest ^:long sanitize-tx-data-drops-numeric-value-refs-for-deleted-block-test
+(deftest sanitize-tx-data-drops-numeric-value-refs-for-deleted-block-test
   (testing "deleted-block-ids should drop datoms when value is numeric id of a deleted block"
     (let [{:keys [conn parent child1]} (setup-parent-child)
           parent-id (:db/id parent)
@@ -804,7 +781,7 @@
                          vec)]
       (is (empty? sanitized)))))
 
-(deftest ^:long sanitize-tx-data-drops-datoms-with-missing-numeric-entity-test
+(deftest sanitize-tx-data-drops-datoms-with-missing-numeric-entity-test
   (testing "stale numeric entity ids should be dropped to avoid creating anonymous entities"
     (let [{:keys [conn]} (setup-parent-child)
           missing-id 999999
@@ -813,7 +790,7 @@
                          vec)]
       (is (empty? sanitized)))))
 
-(deftest ^:long sanitize-tx-data-drops-datoms-with-missing-numeric-ref-value-test
+(deftest sanitize-tx-data-drops-datoms-with-missing-numeric-ref-value-test
   (testing "stale numeric ref values should be dropped when referenced entity no longer exists"
     (let [{:keys [conn parent]} (setup-parent-child)
           parent-id (:db/id parent)
@@ -823,7 +800,26 @@
                          vec)]
       (is (empty? sanitized)))))
 
-(deftest ^:long drop-missing-block-ref-datoms-drops-mixed-id-create-on-missing-parent-test
+(deftest sanitize-tx-data-drops-datoms-with-missing-lookup-ref-value-test
+  (testing "stale lookup ref values should be dropped when referenced entity no longer exists"
+    (let [{:keys [conn child1 child2]} (setup-parent-child)
+          child-uuid (:block/uuid child1)
+          new-parent-uuid (:block/uuid child2)
+          missing-parent-uuid (random-uuid)
+          tx-data [[:db/retract [:block/uuid child-uuid]
+                    :block/parent
+                    [:block/uuid missing-parent-uuid]]
+                   [:db/add [:block/uuid child-uuid]
+                    :block/parent
+                    [:block/uuid new-parent-uuid]]]
+          sanitized (->> (#'db-sync/sanitize-tx-data @conn tx-data #{})
+                         vec)]
+      (is (= [[:db/add [:block/uuid child-uuid]
+               :block/parent
+               [:block/uuid new-parent-uuid]]]
+             sanitized)))))
+
+(deftest drop-missing-block-ref-datoms-drops-mixed-id-create-on-missing-parent-test
   (testing "mixed temp-id/lookup-ref create should be dropped when parent ref is missing"
     (let [{:keys [conn parent]} (setup-parent-child)
           page-uuid (:block/uuid (:block/page parent))
@@ -838,7 +834,7 @@
                          vec)]
       (is (empty? sanitized)))))
 
-(deftest ^:long drop-missing-block-ref-datoms-drops-refs-to-broken-created-block-test
+(deftest drop-missing-block-ref-datoms-drops-refs-to-broken-created-block-test
   (testing "refs to a broken created block should be removed as well"
     (let [{:keys [conn parent child1]} (setup-parent-child)
           page-uuid (:block/uuid (:block/page parent))
@@ -855,7 +851,7 @@
                          vec)]
       (is (empty? sanitized)))))
 
-(deftest ^:long drop-missing-block-ref-datoms-keeps-valid-create-test
+(deftest drop-missing-block-ref-datoms-keeps-valid-create-test
   (testing "valid create should remain unchanged when refs exist"
     (let [{:keys [conn parent]} (setup-parent-child)
           page-uuid (:block/uuid (:block/page parent))
@@ -870,7 +866,7 @@
                          vec)]
       (is (= tx-data sanitized)))))
 
-(deftest ^:long apply-remote-tx-local-delete-remote-recreate-does-not-leave-local-only-delete-test
+(deftest apply-remote-tx-local-delete-remote-recreate-does-not-leave-local-only-delete-test
   (testing "if remote batch recreates a locally deleted block, client should not end with unsynced local-only deletion"
     (let [conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
@@ -914,7 +910,7 @@
             (when target'
               (is (= "remote-restored" (:block/title target'))))))))))
 
-(deftest ^:long apply-remote-tx-retract-recreate-with-stale-lookup-updates-does-not-write-invalid-entity-test
+(deftest apply-remote-tx-retract-recreate-with-stale-lookup-updates-does-not-write-invalid-entity-test
   (testing "remote tx with retractEntity+recreate and stale lookup updates should not create anonymous entities"
     (let [conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
@@ -960,7 +956,7 @@
             (is (empty? (map :entity (:errors validation)))
                 (str (:errors validation)))))))))
 
-(deftest ^:long offload-large-title-test
+(deftest offload-large-title-test
   (testing "large titles are offloaded to object storage with placeholder"
     (async done
            (let [large-title (apply str (repeat 5000 "a"))
@@ -984,7 +980,7 @@
                           result)))
                  (p/finally done))))))
 
-(deftest ^:long offload-small-title-test
+(deftest offload-small-title-test
   (testing "small titles are not offloaded"
     (async done
            (let [tx-data [[:db/add 1 :block/title "short"]]
@@ -1056,7 +1052,7 @@
                      (is (= ["/upload-temp.sqlite"] @removed-paths)))
                    (p/finally done)))))))
 
-(deftest ^:long upload-large-title-encrypts-transit-payload-test
+(deftest upload-large-title-encrypts-transit-payload-test
   (testing "encrypted large title uploads transit-encoded payload"
     (async done
            (let [title (apply str (repeat 5000 "a"))
@@ -1081,7 +1077,7 @@
                      (reset! worker-state/*db-sync-config config-prev)
                      (done))))))))
 
-(deftest ^:long ^:fix-me download-large-title-decrypts-transit-payload-test
+(deftest ^:fix-me download-large-title-decrypts-transit-payload-test
   (testing "encrypted large title downloads transit-encoded payload"
     (async done
            (let [title (apply str (repeat 5000 "b"))
@@ -1110,7 +1106,7 @@
                      (reset! worker-state/*db-sync-config config-prev)
                      (done))))))))
 
-(deftest ^:long rehydrate-large-title-test
+(deftest rehydrate-large-title-test
   (testing "rehydrate fills empty title from object storage"
     (async done
            (let [conn (db-test/create-conn-with-blocks

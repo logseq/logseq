@@ -67,10 +67,10 @@
                                                         (:e datom))) tx-data)
                                       ;; Mark block embedding to be computed
                                     (map (fn [id] [:db/add id :logseq.property.embedding/hnsw-label-updated-at 0])))
-        tx-data (concat remove-old-hnsw-tx-data mark-embedding-tx-data)]
+        tx-data' (concat remove-old-hnsw-tx-data mark-embedding-tx-data)]
     (when (seq tx-data)
-      (ldb/transact! conn tx-data {:skip-validate-db? true
-                                   :mark-embedding? true}))))
+      (ldb/transact! conn tx-data' {:skip-validate-db? true
+                                    :mark-embedding? true}))))
 
 (defn listen-db-changes!
   [repo conn & {:keys [handler-keys]}]
@@ -85,7 +85,7 @@
                (fn listen-db-changes!-inner
                  [{:keys [tx-data tx-meta] :as tx-report}]
                  (remove-old-embeddings-and-reset-new-updates! conn tx-data tx-meta)
-                 (when (seq tx-data)
+                 (when (and (seq tx-data) (not (:mark-embedding? tx-meta)))
                    (let [tx-report' (if sync-db-to-main-thread?
                                       (sync-db-to-main-thread repo conn tx-report)
                                       tx-report)
