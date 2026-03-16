@@ -1416,7 +1416,8 @@
                  :op op
                  :local-tx-index (inc index)
                  :local-tx-count (count local-txs))
-    (:tx-id local-tx) (assoc :local-tx-id (:tx-id local-tx))))
+    (:tx-id local-tx) (assoc :local-tx-id (:tx-id local-tx))
+    (:outliner-op local-tx) (assoc :outliner-op (:outliner-op local-tx))))
 
 (defn- prepare-remote-tx-data
   [db tx-data]
@@ -1584,7 +1585,7 @@
      (concat (map (fn [id] [:db/retractEntity id]) retract-block-ids)))))
 
 (defn- apply-remote-tx-with-local-changes!
-  [{:keys [conn local-txs remote-txs temp-tx-meta *remote-tx-report *reversed-tx-report *rebase-tx-data *temp-after-db]}]
+  [{:keys [conn local-txs remote-txs temp-tx-meta *remote-tx-report *reversed-tx-report *rebased-pending-txs *temp-after-db]}]
   (let [batch-tx-meta {:rtc-tx? true
                        :with-local-changes? true}]
     (ldb/transact-with-temp-conn!
@@ -1634,7 +1635,8 @@
          (delete-nodes! temp-conn deleted-nodes (assoc tx-meta :op :delete-blocks))))
      {:listen-db (fn [{:keys [tx-meta tx-data]}]
                    (when-not (contains? #{:reverse :transact-remote-tx-data} (:op tx-meta))
-                     (swap! *rebase-tx-data into tx-data)))})))
+                     (swap! *rebased-pending-txs conj {:tx-data tx-data
+                                                       :tx-meta tx-meta})))})))
 
 (defn- apply-remote-tx-without-local-changes!
   [{:keys [conn remote-txs temp-tx-meta]}]
@@ -1668,7 +1670,7 @@
           has-local-changes? (seq local-txs)
           *remote-tx-report (atom nil)
           *reversed-tx-report (atom nil)
-          *rebase-tx-data (atom [])
+          *rebased-pending-txs (atom [])
           *temp-after-db (atom nil)
           remote-tx-data* (mapcat :tx-data remote-txs)
           remote-created-block-uuids (created-block-uuids remote-tx-data*)
@@ -1681,16 +1683,16 @@
                          :temp-tx-meta temp-tx-meta
                          :*remote-tx-report *remote-tx-report
                          :*reversed-tx-report *reversed-tx-report
-                         :*rebase-tx-data *rebase-tx-data
+                         :*rebased-pending-txs *rebased-pending-txs
                          :*temp-after-db *temp-after-db}
           tx-report (if has-local-changes?
                       (apply-remote-tx-with-local-changes! apply-context)
                       (apply-remote-tx-without-local-changes! apply-context))
           remote-tx-report @*remote-tx-report]
       (when has-local-changes?
-        (let [rebased-tx-data (seq @*rebase-tx-data)
+        (let [rebased-pending-txs (seq @*rebased-pending-txs)
               persisted-rebased? (atom false)]
-          (when rebased-tx-data
+          (when rebased-pending-txs
             (let [remote-tx-data-set (set remote-tx-data*)
                   keep-local-retract-entity?
                   (fn [item]
@@ -1698,27 +1700,30 @@
                          (= :db/retractEntity (first item))
                          (contains? remote-created-block-uuids
                                     (get-lookup-id (second item)))))
-                  normalized (->> rebased-tx-data
-                                  (normalize-tx-data (or @*temp-after-db
-                                                         (:db-after tx-report))
-                                                     (or (:db-after remote-tx-report)
-                                                         (:db-after @*reversed-tx-report)))
-                                  (remove (fn [[op _e a]]
-                                            (and (= op :db/retract)
-                                                 (contains? #{:block/updated-at :block/created-at :block/title} a)))))
-                  normalized-tx-data (->> normalized
-                                          (db-normalize/replace-attr-retract-with-retract-entity-v2
-                                           (or @*temp-after-db
-                                               (:db-after tx-report)))
-                                          (remove (fn [item]
-                                                    (and (contains? remote-tx-data-set item)
-                                                         (not (keep-local-retract-entity? item)))))
-                                          (drop-missing-block-ref-datoms (:db-after tx-report)))
-                  reversed-datoms (reverse-normalized-tx-data normalized-tx-data)]
-              (when (seq normalized-tx-data)
-                (persist-local-tx! repo normalized-tx-data reversed-datoms {:outliner-op :rtc-rebase})
-                (reset! persisted-rebased? true))))
-          (when (or (nil? rebased-tx-data) @persisted-rebased?)
+                  db-after (or @*temp-after-db
+                               (:db-after tx-report))
+                  db-before (or (:db-after remote-tx-report)
+                                (:db-after @*reversed-tx-report))]
+              (doseq [{:keys [tx-data tx-meta]} rebased-pending-txs]
+                (let [normalized (->> tx-data
+                                      (normalize-tx-data db-after db-before)
+                                      (remove (fn [[op _e a]]
+                                                (and (= op :db/retract)
+                                                     (contains? #{:block/updated-at :block/created-at :block/title} a)))))
+                      normalized-tx-data (->> normalized
+                                              (db-normalize/replace-attr-retract-with-retract-entity-v2 db-after)
+                                              (remove (fn [item]
+                                                        (and (contains? remote-tx-data-set item)
+                                                             (not (keep-local-retract-entity? item)))))
+                                              (drop-missing-block-ref-datoms (:db-after tx-report)))
+                      reversed-datoms (reverse-normalized-tx-data normalized-tx-data)]
+                  (when (seq normalized-tx-data)
+                    (persist-local-tx! repo normalized-tx-data
+                                       reversed-datoms
+                                       {:outliner-op (or (:outliner-op tx-meta)
+                                                         :rtc-rebase)})
+                    (reset! persisted-rebased? true))))))
+          (when (or (nil? rebased-pending-txs) @persisted-rebased?)
             (remove-pending-txs! repo (map :tx-id local-txs)))))
 
       (when-let [*inflight (:inflight client)]
