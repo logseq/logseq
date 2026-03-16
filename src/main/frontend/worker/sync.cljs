@@ -141,17 +141,7 @@
 
 (defn http-base-url
   []
-  (or (:http-base @worker-state/*db-sync-config)
-      (when-let [ws-url (ws-base-url)]
-        (let [base (cond
-                     (string/starts-with? ws-url "wss://")
-                     (str "https://" (subs ws-url (count "wss://")))
-
-                     (string/starts-with? ws-url "ws://")
-                     (str "http://" (subs ws-url (count "ws://")))
-
-                     :else ws-url)]
-          (string/replace base #"/sync/%s$" "")))))
+  (:http-base @worker-state/*db-sync-config))
 
 (defn- cli-node-owner?
   []

@@ -92,6 +92,8 @@
         expected-config-path (node-path/join (.homedir os) "logseq" "cli.edn")]
     (is (= expected-config-path (:config-path result)))
     (is (= "~/logseq/graphs" (:data-dir result)))
+    (is (= "wss://api.logseq.io/sync/%s" (:ws-url result)))
+    (is (= "https://api.logseq.io" (:http-base result)))
     (is (= 10000 (:timeout-ms result)))
     (is (= 300000 (:login-timeout-ms result)))
     (is (= 120000 (:logout-timeout-ms result)))))

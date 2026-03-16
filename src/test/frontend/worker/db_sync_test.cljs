@@ -36,6 +36,17 @@
 (use-fixtures :each {:before reset-db-sync-test-state!
                      :after reset-db-sync-test-state!})
 
+(deftest http-base-url-does-not-derive-from-ws-url-test
+  (let [config-prev @worker-state/*db-sync-config]
+    (try
+      (reset! worker-state/*db-sync-config {:ws-url "wss://api.logseq.io/sync/%s"})
+      (is (nil? (#'db-sync/http-base-url)))
+      (reset! worker-state/*db-sync-config {:ws-url "wss://api.logseq.io/sync/%s"
+                                            :http-base "https://api.logseq.io"})
+      (is (= "https://api.logseq.io" (#'db-sync/http-base-url)))
+      (finally
+        (reset! worker-state/*db-sync-config config-prev)))))
+
 (defn- with-datascript-conns
   [db-conn ops-conn f]
   (let [db-prev @worker-state/*datascript-conns
