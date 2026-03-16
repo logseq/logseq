@@ -69,6 +69,7 @@
                             :logseq.property/icon)))
                        (state/hide-custom-context-menu!)
                        (shui/popup-hide!))
+          :color-auto-chosen? false
           :del-btn? true
           :icon-value nil})]))
 
@@ -217,6 +218,7 @@
                                 :logseq.property/icon))
                              (state/hide-custom-context-menu!)
                              (shui/popup-hide!))
+                :color-auto-chosen? false
                 :del-btn? (boolean icon-value)
                 :icon-value icon-value}))]))
 
