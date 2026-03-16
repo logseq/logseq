@@ -11,7 +11,7 @@
     "postinstall": "yarn build:ui"
   },
   "dependencies": {
-    "@hookform/resolvers": "^3.3.2",
+    "@hookform/resolvers": "^5.2.2",
     "@radix-ui/colors": "^3.0.0",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-avatar": "^1.1.11",
@@ -35,7 +35,7 @@
     "aws-amplify": "^6.15.6",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "cmdk": "^0.2.0",
+    "cmdk": "^1.1.1",
     "date-fns": "^2.30.0",
     "lucide-react": "^0.577.0",
     "react": "^18.3.1",
@@ -43,7 +43,7 @@
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.71.2",
     "react-remove-scroll": "^2.7.2",
-    "tailwind-merge": "^2.0.0",
+    "tailwind-merge": "^3.5.0",
     "tailwindcss-animate": "^1.0.7",
     "uniqolor": "1.1.1",
     "yup": "^1.7.1",
@@ -52,8 +52,8 @@
   "devDependencies": {
     "@babel/core": "^7.29.0",
     "@babel/preset-env": "^7.29.0",
-    "@babel/preset-react": "^7.22.15",
-    "@babel/preset-typescript": "^7.23.2",
+    "@babel/preset-react": "^7.28.5",
+    "@babel/preset-typescript": "^7.28.5",
     "@storybook/addon-essentials": "^7.5.3",
     "@storybook/addon-interactions": "^7.5.3",
     "@storybook/addon-links": "^7.5.3",
@@ -64,20 +64,20 @@
     "@storybook/react": "^7.5.3",
     "@storybook/react-webpack5": "^7.5.3",
     "@storybook/testing-library": "^0.2.2",
-    "@types/babel__core": "^7",
-    "@types/babel__preset-env": "^7",
-    "@types/prop-types": "^15",
-    "@types/react": "17",
-    "@types/react-dom": "17",
+    "@types/babel__core": "^7.20.5",
+    "@types/babel__preset-env": "^7.10.0",
+    "@types/prop-types": "^15.7.15",
+    "@types/react": "18.3.1",
+    "@types/react-dom": "18.3.1",
     "buffer": "^5.5.0",
     "parcel": "2.8.3",
     "postcss": "^8.5.8",
-    "postcss-loader": "^7.3.3",
-    "postcss-nesting": "^12.0.1",
+    "postcss-loader": "^8.2.1",
+    "postcss-nesting": "^14.0.0",
     "storybook": "^7.5.3",
-    "string-width": "4.2.0",
-    "strip-ansi": "^6",
-    "style-loader": "3.3.1"
+    "string-width": "8.2.0",
+    "strip-ansi": "^7.2.0",
+    "style-loader": "4.0.0"
   },
   "alias": {
     "react": {
@@ -103,8 +103,8 @@
   },
   "resolutions": {
     "jackspeak": "^2",
-    "string-width": "^4",
-    "strip-ansi": "^6"
+    "string-width": "^8",
+    "strip-ansi": "^7"
   },
   "license": "MIT"
 }
