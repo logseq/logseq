@@ -2,6 +2,7 @@
   (:require ["/frontend/utils" :as utils]
             [cljs.test :refer [deftest are is testing]]
             [frontend.commands :as commands]
+            [frontend.db :as db]
             [frontend.extensions.html-parser :as html-parser]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.paste :as paste-handler]
@@ -201,3 +202,21 @@
                  #js {:clipboardData #js {:getData (constantly clipboard)
                                           :files files}})]
         (is (= files (js->clj @pasted-file)))))))
+
+(deftest-async editor-on-paste-firefox-html-with-line-breaks
+  (testing "Firefox paste with soft line breaks should not create unwanted line breaks"
+    (let [clipboard-html "<meta charset='utf-8'><p>Delegated access\n management means you can select a subset of roles for a given project \nand allow the granted organization to self-manage those roles for their \nusers.</p>"
+          expected-paste "Delegated access management means you can select a subset of roles for a given project and allow the granted organization to self-manage those roles for their users."]
+      (p/with-redefs
+       [commands/delete-selection! (constantly nil)
+        commands/simple-insert! (fn [_input text] (p/resolved text))
+        util/stop (constantly nil)
+        util/get-selected-text (constantly "")
+        state/get-current-page (constantly nil)
+        db/get-page-format (constantly :markdown)]
+        (p/let [result ((paste-handler/editor-on-paste! nil)
+                        #js {:clipboardData #js {:getData (fn [type]
+                                                            (if (= type "text/html")
+                                                              clipboard-html
+                                                              expected-paste))}})]
+          (is (= expected-paste result)))))))
