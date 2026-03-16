@@ -1,5 +1,7 @@
 (ns electron.utils
   (:require ["electron" :refer [app BrowserWindow]]
+            ["node-fetch" :default node-fetch]
+            ["open" :default open-external]
             ["fs-extra" :as fs]
             ["path" :as node-path]
             [cljs-bean.core :as bean]
@@ -21,16 +23,21 @@
 (defonce dev? (not prod?))
 (defonce *fetchAgent (atom nil))
 
-(defonce open (js/require "open"))
 (defonce HttpsProxyAgent (.-HttpsProxyAgent (js/require "https-proxy-agent")))
 (defonce SocksProxyAgent (.-SocksProxyAgent (js/require "socks-proxy-agent")))
-(defonce _fetch (js/require "node-fetch"))
 (defonce extract-zip (js/require "extract-zip"))
+
+(defn open
+  ([target] (open target nil))
+  ([target options]
+   (if options
+     (open-external target (bean/->js options))
+     (open-external target))))
 
 (defn fetch
   ([url] (fetch url nil))
   ([url options]
-   (_fetch url (bean/->js (merge options {:agent @*fetchAgent})))))
+   (node-fetch url (bean/->js (merge options {:agent @*fetchAgent})))))
 
 (defn fix-win-path!
   [path]
