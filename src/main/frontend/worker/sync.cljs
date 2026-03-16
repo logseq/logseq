@@ -21,6 +21,7 @@
             [logseq.db-sync.order :as sync-order]
             [logseq.db.common.normalize :as db-normalize]
             [logseq.db.common.sqlite :as common-sqlite]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]
@@ -524,6 +525,8 @@
     (fail-fast :db-sync/missing-field
                (merge {:repo repo :field field :value value} context))))
 
+(declare replace-string-block-tempids-with-lookups)
+
 (defn- persist-local-tx! [repo normalized-tx-data reversed-datoms tx-meta]
   (when-let [conn (client-ops-conn repo)]
     (let [tx-id (random-uuid)
@@ -541,6 +544,7 @@
   [repo & {:keys [limit]}]
   (when-let [conn (client-ops-conn repo)]
     (let [db @conn
+          graph-db (some-> (worker-state/get-datascript-conn repo) deref)
           datoms (d/datoms db :avet :db-sync/created-at)
           datoms' (if limit (take limit datoms) datoms)]
       (->> datoms'
@@ -550,8 +554,12 @@
                    (let [tx-id (:db-sync/tx-id ent)]
                      {:tx-id tx-id
                       :outliner-op (:db-sync/outliner-op ent)
-                      :tx (:db-sync/normalized-tx-data ent)
-                      :reversed-tx (:db-sync/reversed-tx-data ent)})))
+                      :tx (replace-string-block-tempids-with-lookups
+                           graph-db
+                           (:db-sync/normalized-tx-data ent))
+                      :reversed-tx (replace-string-block-tempids-with-lookups
+                                    graph-db
+                                    (:db-sync/reversed-tx-data ent))})))
            vec))))
 
 (defn- remove-pending-txs!
@@ -694,6 +702,51 @@
                  [(canonical-entity-id db (second item))
                   (nth item 2)])))
        set))
+
+(defn- resolve-string-block-tempid
+  [db x]
+  (when (and db (string? x))
+    (when-let [block-uuid (parse-uuid x)]
+      (when (d/entity db [:block/uuid block-uuid])
+        [:block/uuid block-uuid]))))
+
+(defn- replace-string-block-tempids-with-lookups
+  [db tx-data]
+  (if db
+    (let [created-string-entity-ids (->> tx-data
+                                         (keep (fn [item]
+                                                 (when (and (vector? item)
+                                                            (= :db/add (first item))
+                                                            (>= (count item) 4)
+                                                            (string? (second item))
+                                                            (= :block/uuid (nth item 2)))
+                                                   (second item))))
+                                         set)
+          replace-entity (fn [entity]
+                           (if (contains? created-string-entity-ids entity)
+                             entity
+                             (or (resolve-string-block-tempid db entity)
+                                 entity)))]
+      (mapv (fn [item]
+              (if (and (vector? item) (>= (count item) 2))
+                (let [op (first item)
+                      entity' (replace-entity (second item))
+                      has-value? (>= (count item) 4)
+                      attr (nth item 2 nil)
+                      value (when has-value? (nth item 3))
+                      value' (if (and has-value?
+                                      (contains? db-schema/ref-type-attributes attr))
+                               (replace-entity value)
+                               value)]
+                  (cond-> item
+                    (and (contains? #{:db/add :db/retract :db/retractEntity} op)
+                         (not= (second item) entity'))
+                    (assoc 1 entity')
+                    (and has-value? (not= value value'))
+                    (assoc 3 value')))
+                item))
+            tx-data))
+    tx-data))
 
 (defn- drop-remote-conflicted-local-tx
   [db remote-updated-keys tx-data]
@@ -1455,7 +1508,9 @@
        reverse
        (map-indexed
         (fn [index local-tx]
-          (when-let [tx-data (seq (:reversed-tx local-tx))]
+          (when-let [tx-data (seq (replace-string-block-tempids-with-lookups
+                                   @temp-conn
+                                   (:reversed-tx local-tx)))]
             (ldb/transact! temp-conn
                            tx-data
                            (local-tx-debug-meta temp-tx-meta
@@ -1633,10 +1688,12 @@
          (reset! *temp-after-db db)
          (fix-tx! temp-conn remote-tx-report rebase-tx-report (assoc tx-meta :op :fix))
          (delete-nodes! temp-conn deleted-nodes (assoc tx-meta :op :delete-blocks))))
-     {:listen-db (fn [{:keys [tx-meta tx-data]}]
+     {:listen-db (fn [{:keys [tx-meta tx-data db-before db-after]}]
                    (when-not (contains? #{:reverse :transact-remote-tx-data} (:op tx-meta))
                      (swap! *rebased-pending-txs conj {:tx-data tx-data
-                                                       :tx-meta tx-meta})))})))
+                                                       :tx-meta tx-meta
+                                                       :db-before db-before
+                                                       :db-after db-after})))})))
 
 (defn- apply-remote-tx-without-local-changes!
   [{:keys [conn remote-txs temp-tx-meta]}]
@@ -1700,22 +1757,26 @@
                          (= :db/retractEntity (first item))
                          (contains? remote-created-block-uuids
                                     (get-lookup-id (second item)))))
-                  db-after (or @*temp-after-db
-                               (:db-after tx-report))
-                  db-before (or (:db-after remote-tx-report)
-                                (:db-after @*reversed-tx-report))]
-              (doseq [{:keys [tx-data tx-meta]} rebased-pending-txs]
-                (let [normalized (->> tx-data
-                                      (normalize-tx-data db-after db-before)
+                  final-db-after (or @*temp-after-db
+                                     (:db-after tx-report))]
+              (doseq [{:keys [tx-data tx-meta db-before db-after]} rebased-pending-txs]
+                (let [db-before' (or db-before
+                                     (:db-after remote-tx-report)
+                                     (:db-after @*reversed-tx-report))
+                      db-after' (or db-after
+                                    final-db-after)
+                      normalized (->> tx-data
+                                      (normalize-tx-data db-after' db-before')
+                                      (replace-string-block-tempids-with-lookups db-before')
                                       (remove (fn [[op _e a]]
                                                 (and (= op :db/retract)
                                                      (contains? #{:block/updated-at :block/created-at :block/title} a)))))
                       normalized-tx-data (->> normalized
-                                              (db-normalize/replace-attr-retract-with-retract-entity-v2 db-after)
+                                              (db-normalize/replace-attr-retract-with-retract-entity-v2 db-after')
                                               (remove (fn [item]
                                                         (and (contains? remote-tx-data-set item)
                                                              (not (keep-local-retract-entity? item)))))
-                                              (drop-missing-block-ref-datoms (:db-after tx-report)))
+                                              (drop-missing-block-ref-datoms db-after'))
                       reversed-datoms (reverse-normalized-tx-data normalized-tx-data)]
                   (when (seq normalized-tx-data)
                     (persist-local-tx! repo normalized-tx-data
