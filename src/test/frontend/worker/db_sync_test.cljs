@@ -578,8 +578,8 @@
             (is (every? some? orders))
             (is (= (count orders) (count (distinct orders))))))))))
 
-(deftest rebase-replaces-pending-txs-test
-  (testing "pending txs are rebased into a single tx after remote rebase"
+(deftest rebase-preserves-pending-tx-boundaries-test
+  (testing "pending txs stay separate after remote rebase"
     (let [{:keys [conn client-ops-conn parent child1 child2]} (setup-parent-child)
           child1-uuid (:block/uuid child1)
           child2-uuid (:block/uuid child2)]
@@ -598,12 +598,19 @@
              nil
              [[:db/add (:db/id parent) :block/title "parent remote"]])
             (let [pending (#'db-sync/pending-txs test-repo)
-                  txs (->> (mapcat :tx pending)
-                           (map (fn [[op e a v _t]]
-                                  [op e a v])))]
-              (is (= 1 (count pending)))
-              (is (some #(= % [:db/add [:block/uuid child1-uuid] :block/title "child 1 local"]) txs))
-              (is (some #(= % [:db/add [:block/uuid child2-uuid] :block/title "child 2 local"]) txs)))))))))
+                  txs (mapv (fn [{:keys [tx]}]
+                              (->> tx
+                                   (map (fn [[op e a v _t]]
+                                          [op e a v]))
+                                   vec))
+                            pending)]
+              (is (= 2 (count pending)))
+              (is (some #(= [[:db/add [:block/uuid child1-uuid] :block/title "child 1 local"]]
+                            %)
+                        txs))
+              (is (some #(= [[:db/add [:block/uuid child2-uuid] :block/title "child 2 local"]]
+                            %)
+                        txs)))))))))
 
 (deftest rebase-keeps-pending-when-rebased-empty-test
   (testing "pending txs stay when rebased txs are empty"
