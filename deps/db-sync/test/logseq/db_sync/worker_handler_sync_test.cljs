@@ -128,7 +128,8 @@
                                                  (swap! schema-probes conj sql-str)
                                                  #js [])
                                storage/fetch-tx-since (fn [_ _] [])
-                               storage/get-t (fn [_] 7)]
+                               storage/get-t (fn [_] 7)
+                               sync-handler/current-checksum (fn [_] "checksum-ok")]
                  (p/let [resp (sync-handler/handle {:self self
                                                     :request request
                                                     :url url
@@ -138,6 +139,7 @@
                          probe-set (set @schema-probes)]
                    (is (= 200 (.-status resp)))
                    (is (= 7 (:t body)))
+                   (is (= "checksum-ok" (:checksum body)))
                    (is (contains? probe-set "select 1 from kvs limit 1"))
                    (is (contains? probe-set "select 1 from tx_log limit 1"))
                    (is (contains? probe-set "select 1 from sync_meta limit 1"))))
@@ -165,11 +167,13 @@
           response (with-redefs [ws/broadcast! (fn [& _] nil)]
                      (sync-handler/handle-tx-batch! self nil [tx-entry] 0))]
       (is (= "tx/batch/ok" (:type response)))
+      (is (string? (:checksum response)))
       (is (= "ok" (:block/title (d/entity @conn [:block/uuid created-uuid]))))
       (is (nil? (d/entity @conn [:block/uuid missing-uuid])))
       (let [pull-response (sync-handler/pull-response self 0)
             tx-log-entry (first (:txs pull-response))]
         (is (= "pull/ok" (:type pull-response)))
+        (is (string? (:checksum pull-response)))
         (is (= :save-block (:outliner-op tx-log-entry)))))))
 
 (deftest tx-batch-rejects-while-snapshot-upload-is-in-progress-test
