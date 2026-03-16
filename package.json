@@ -17,7 +17,7 @@
         "@tailwindcss/typography": "0.5.19",
         "@types/gulp": "^4.0.18",
         "autoprefixer": "^10.4.27",
-        "better-sqlite3": "^12.6.2",
+        "better-sqlite3": "^12.8.0",
         "cross-env": "^10.1.0",
         "cssnano": "^7.1.3",
         "gulp": "^5.0.1",

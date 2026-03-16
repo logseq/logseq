@@ -22,7 +22,7 @@
   "dependencies": {
     "@sentry/cloudflare": "^10.43.0",
     "@sentry/node": "^10.43.0",
-    "better-sqlite3": "^12.6.2",
+    "better-sqlite3": "^12.8.0",
     "shadow-cljs": "^3.3.4",
     "ws": "^8.19.0"
   },

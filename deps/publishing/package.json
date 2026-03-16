@@ -7,7 +7,7 @@
     "mldoc": "^1.5.9"
   },
   "dependencies": {
-    "better-sqlite3": "^12.6.2",
+    "better-sqlite3": "^12.8.0",
     "fs-extra": "^11.3.4"
   },
   "scripts": {
