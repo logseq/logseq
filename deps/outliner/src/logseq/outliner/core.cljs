@@ -13,9 +13,9 @@
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.outliner.batch-tx :include-macros true :as batch-tx]
             [logseq.outliner.datascript :as ds]
             [logseq.outliner.pipeline :as outliner-pipeline]
+            [logseq.outliner.transaction :as outliner-tx]
             [logseq.outliner.tree :as otree]
             [logseq.outliner.validate :as outliner-validate]
             [malli.core :as m]
@@ -915,7 +915,7 @@
                           (set))
             move-parents-to-child? (some parents' (map :db/id blocks))]
         (when-not move-parents-to-child?
-          (batch-tx/with-batch-tx-mode conn {:outliner-op :move-blocks}
+          (outliner-tx/with-temp-conn-batch conn {:outliner-op :move-blocks}
             (doseq [[idx block] (map vector (range (count blocks)) blocks)]
               (let [first-block? (zero? idx)
                     sibling? (if first-block? sibling? true)

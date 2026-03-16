@@ -23,7 +23,6 @@
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
-            [logseq.outliner.transaction :as outliner-tx]
             [promesa.core :as p]))
 
 (defonce *repo->latest-remote-tx (atom {}))
@@ -1453,7 +1452,7 @@
        vec))
 
 (defn- delete-nodes!
-  [temp-conn deleted-nodes tx-meta]
+  [temp-conn deleted-nodes _tx-meta]
   (when (seq deleted-nodes)
     (let [pages (filter ldb/page? deleted-nodes)
           blocks (->> deleted-nodes
@@ -1461,14 +1460,10 @@
                               (d/entity @temp-conn [:block/uuid (:block/uuid block)])))
                       (remove ldb/page?))]
       (when (or (seq blocks) (seq pages))
-        (outliner-tx/transact!
-         (merge tx-meta
-                {:outliner-op :delete-blocks
-                 :transact-opts {:conn temp-conn}})
-         (when (seq blocks)
-           (outliner-core/delete-blocks! temp-conn blocks {}))
-         (doseq [page pages]
-           (worker-page/delete! temp-conn (:block/uuid page) {})))))))
+        (when (seq blocks)
+          (outliner-core/delete-blocks! temp-conn blocks {}))
+        (doseq [page pages]
+          (worker-page/delete! temp-conn (:block/uuid page) {}))))))
 
 (defn- fix-tx!
   [temp-conn remote-tx-report rebase-tx-report tx-meta]
