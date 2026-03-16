@@ -2,7 +2,10 @@
   (:require [reitit.core :as r]))
 
 (def ^:private route-data
-  [["/graphs"
+  [["/admin"
+    ["/graphs/:graph-id" {:methods {"DELETE" :admin-graphs/delete}}]]
+
+   ["/graphs"
     ["" {:methods {"GET" :graphs/list
                    "POST" :graphs/create}}]
     ["/:graph-id"

@@ -422,13 +422,27 @@
 
 (defn- handle-sync-admin-reset
   [^js self]
-  (common/sql-exec (.-sql self) "drop table if exists kvs")
-  (common/sql-exec (.-sql self) "drop table if exists tx_log")
-  (common/sql-exec (.-sql self) "drop table if exists sync_meta")
-  (storage/init-schema! (.-sql self))
-  (set! (.-schema-ready self) true)
-  (set! (.-conn self) nil)
-  (http/json-response :sync/admin-reset {:ok true}))
+  (let [^js state (.-state self)
+        ^js storage (.-storage state)
+        delete-all (.-deleteAll storage)
+        delete-alarm (.-deleteAlarm storage)]
+    (doseq [^js ws (.getWebSockets state)]
+      (.close ws 1000 "graph deleted"))
+    (p/let [_ (when (fn? delete-alarm)
+                (.deleteAlarm storage))]
+      (if (fn? delete-all)
+        (p/let [_ (.deleteAll storage)]
+          (set! (.-schema-ready self) false)
+          (set! (.-conn self) nil)
+          (http/json-response :sync/admin-reset {:ok true}))
+        (do
+          (common/sql-exec (.-sql self) "drop table if exists kvs")
+          (common/sql-exec (.-sql self) "drop table if exists tx_log")
+          (common/sql-exec (.-sql self) "drop table if exists sync_meta")
+          (storage/init-schema! (.-sql self))
+          (set! (.-schema-ready self) true)
+          (set! (.-conn self) nil)
+          (http/json-response :sync/admin-reset {:ok true}))))))
 
 (defn- handle-sync-tx-batch
   [^js self request]
