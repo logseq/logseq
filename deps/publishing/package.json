@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",
-    "fs-extra": "^11.3.0"
+    "fs-extra": "^11.3.4"
   },
   "scripts": {
     "test": "yarn nbb-logseq -cp test -m nextjournal.test-runner"
