@@ -16,6 +16,7 @@
             [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db-sync.cycle :as sync-cycle]
             [logseq.db-sync.malli-schema :as db-sync-schema]
             [logseq.db-sync.order :as sync-order]
@@ -30,6 +31,8 @@
 (defonce *repo->latest-remote-tx (atom {}))
 (defonce *start-inflight-target (atom nil))
 (defonce ^:private *upload-temp-opfs-pool (atom nil))
+
+(declare fail-fast)
 
 (defn- current-client
   [repo]
@@ -57,6 +60,61 @@
        :local-tx local-tx
        :remote-tx remote-tx
        :graph-uuid graph-uuid})))
+
+(defn- local-sync-checksum
+  [repo]
+  (if-let [checksum (client-op/get-local-checksum repo)]
+    checksum
+    (if-let [conn (worker-state/get-datascript-conn repo)]
+      (let [checksum (sync-checksum/recompute-checksum @conn)]
+        (client-op/update-local-checksum repo checksum)
+        checksum)
+      (fail-fast :db-sync/missing-db {:repo repo :op :checksum}))))
+
+(defn- recompute-local-sync-checksum!
+  [repo]
+  (if-let [conn (worker-state/get-datascript-conn repo)]
+    (let [checksum (sync-checksum/recompute-checksum @conn)]
+      (client-op/update-local-checksum repo checksum)
+      checksum)
+    (fail-fast :db-sync/missing-db {:repo repo :op :checksum-recompute})))
+
+(defn update-local-sync-checksum!
+  [repo tx-report]
+  (when (worker-state/get-client-ops-conn repo)
+    (client-op/update-local-checksum
+     repo
+     (sync-checksum/update-checksum (client-op/get-local-checksum repo) tx-report))))
+
+(defn- pending-local-tx?
+  [repo]
+  (when-let [conn (client-ops-conn repo)]
+    (boolean (first (d/datoms @conn :avet :db-sync/created-at)))))
+
+(defn- checksum-compare-ready?
+  [repo client local-t remote-t]
+  (and (= local-t remote-t)
+       (not (pending-local-tx? repo))
+       (empty? @(:inflight client))))
+
+(defn- verify-sync-checksum!
+  [repo client local-t remote-t remote-checksum context]
+  (when (and (string? remote-checksum)
+             (checksum-compare-ready? repo client local-t remote-t))
+    (let [local-checksum (local-sync-checksum repo)]
+      (when-not (= local-checksum remote-checksum)
+        (let [real-local-checksum (recompute-local-sync-checksum! repo)]
+          (when-not (= real-local-checksum remote-checksum)
+            (fail-fast :db-sync/checksum-mismatch
+                       (merge context
+                              {:type :db-sync/checksum-mismatch
+                               :repo repo
+                               :message-type (:type context)
+                               :local-t local-t
+                               :remote-t remote-t
+                               :local-checksum local-checksum
+                               :real-local-checksum real-local-checksum
+                               :remote-checksum remote-checksum}))))))))
 
 (defn- normalize-online-users
   [users]
@@ -1811,12 +1869,14 @@
     (when-not (map? message)
       (fail-fast :db-sync/response-parse-failed {:repo repo :raw raw}))
     (let [local-tx (or (client-op/get-local-tx repo) 0)
-          remote-tx (:t message)]
+          remote-tx (:t message)
+          remote-checksum (:checksum message)]
       (when remote-tx (swap! *repo->latest-remote-tx assoc repo remote-tx))
 
       (case (:type message)
         "hello" (do
                   (require-non-negative remote-tx {:repo repo :type "hello"})
+                  (verify-sync-checksum! repo client local-tx remote-tx remote-checksum {:type "hello"})
                   (broadcast-rtc-state! client)
                   (when (> remote-tx local-tx)
                     (send! (:ws client) {:type "pull" :since local-tx}))
@@ -1838,6 +1898,7 @@
                         (broadcast-rtc-state! client)
                         (remove-pending-txs! repo @(:inflight client))
                         (reset! (:inflight client) [])
+                        (verify-sync-checksum! repo client remote-tx remote-tx remote-checksum {:type "tx/batch/ok"})
                         (flush-pending! repo client))
         ;; Download response
         "pull/ok" (when (> remote-tx local-tx)
@@ -1868,6 +1929,7 @@
                               (throw e)))
                           (client-op/update-local-tx repo remote-tx)
                           (broadcast-rtc-state! client)
+                          (verify-sync-checksum! repo client remote-tx remote-tx remote-checksum {:type "pull/ok"})
                           (flush-pending! repo client)))))
         "changed" (do
                     (require-non-negative remote-tx {:repo repo :type "changed"})

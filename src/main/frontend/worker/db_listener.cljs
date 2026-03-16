@@ -90,5 +90,6 @@
                                       (sync-db-to-main-thread repo conn tx-report)
                                       tx-report)
                          opt {:repo repo}]
+                     (db-sync/update-local-sync-checksum! repo tx-report')
                      (doseq [[k handler-fn] handlers]
                        (handler-fn k opt tx-report'))))))))

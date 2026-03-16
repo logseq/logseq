@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
+            [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db-sync.common :as common]
             [logseq.db.common.normalize :as db-normalize]
             [logseq.db.common.sqlite :as common-sqlite]
@@ -56,6 +57,12 @@
                         " on conflict(key) do update set value = excluded.value")
                    (name k)
                    (str v)))
+
+(defn get-checksum [sql]
+  (get-meta sql :checksum))
+
+(defn set-checksum! [sql checksum]
+  (set-meta! sql :checksum checksum))
 
 (defn get-t [sql]
   (let [value (get-meta sql :t)]
@@ -140,11 +147,16 @@
   [sql {:keys [db-after db-before tx-data tx-meta]}]
   (let [new-t (next-t! sql)
         created-at (common/now-ms)
+        checksum (sync-checksum/update-checksum (get-checksum sql)
+                                                {:db-before db-before
+                                                 :db-after db-after
+                                                 :tx-data tx-data})
         normalized-data (->> tx-data
                              (db-normalize/normalize-tx-data db-after db-before))
         ;; _ (prn :debug :tx-data tx-data)
         ;; _ (prn :debug :normalized-data normalized-data)
         tx-str (common/write-transit normalized-data)]
+    (set-checksum! sql checksum)
     (append-tx! sql new-t tx-str created-at (:outliner-op tx-meta))))
 
 (defn- listen-db-updates!

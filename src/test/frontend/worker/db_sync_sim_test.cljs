@@ -12,6 +12,7 @@
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.client-op :as client-op]
             [logseq.db :as ldb]
+            [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db.common.normalize :as db-normalize]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
@@ -306,12 +307,17 @@
             server-uuids (->> (d/datoms @(get @server :conn) :avet :block/uuid)
                               (map :v)
                               set)
+            server-checksum (sync-checksum/recompute-checksum @(get @server :conn))
             client-sync-states (mapv (fn [c]
                                        {:repo (:repo c)
                                         :pending-count (count (#'db-sync/pending-txs (:repo c)))
                                         :local-tx (client-op/get-local-tx (:repo c))
                                         :server-t (:t @server)})
                                      online-clients)
+            checksum-states (mapv (fn [c]
+                                    {:repo (:repo c)
+                                     :checksum (sync-checksum/recompute-checksum @(:conn c))})
+                                  online-clients)
             base-uuids (:uuids (first client-block-uuids))
             block-counts (map :datoms-count client-block-uuids)
             block-uuid-diffs (mapv (fn [{:keys [repo uuids]}]
@@ -329,15 +335,22 @@
           (throw (ex-info "blocks count not equal after sync"
                           {:block-counts block-counts
                            :clients (mapv #(select-keys % [:repo :datoms-count]) client-block-uuids)
+                           :checksums checksum-states
                            :sync-states client-sync-states
                            :server {:datoms-count (count server-uuids)
+                                    :checksum server-checksum
                                     :missing-from-a (->> (set/difference base-uuids server-uuids)
                                                          (take 5)
                                                          vec)
                                     :extra-vs-a (->> (set/difference server-uuids base-uuids)
                                                      (take 5)
                                                      vec)}
-                           :block-uuid-diffs block-uuid-diffs})))))))
+                           :block-uuid-diffs block-uuid-diffs})))
+        (when-not (= 1 (count (distinct (conj (map :checksum checksum-states) server-checksum))))
+          (throw (ex-info "checksums not equal after sync"
+                          {:checksums checksum-states
+                           :sync-states client-sync-states
+                           :server {:checksum server-checksum}})))))))
 
 (defn- sync-until-idle!
   [server clients max-rounds]

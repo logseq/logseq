@@ -62,19 +62,22 @@
   [:map
    [:type [:= "pull/ok"]]
    [:t :int]
+   [:checksum {:optional true} :string]
    [:txs [:sequential tx-log-entry-schema]]])
 
 (def tx-batch-ok-schema
   [:map
    [:type [:= "tx/batch/ok"]]
-   [:t :int]])
+   [:t :int]
+   [:checksum {:optional true} :string]])
 
 (def ws-server-message-schema
   [:multi {:dispatch :type}
    ["hello"
     [:map
      [:type [:= "hello"]]
-     [:t :int]]]
+     [:t :int]
+     [:checksum {:optional true} :string]]]
    ["online-users" online-users-schema]
    ["presence"
     [:map
