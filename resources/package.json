@@ -38,11 +38,11 @@
     "https-proxy-agent": "7.0.2",
     "node-fetch": "2.6.7",
     "open": "7.3.1",
-    "posthog-js": "1.10.2",
+    "posthog-js": "1.260.1",
     "semver": "7.7.4",
     "socks-proxy-agent": "8.0.2",
     "update-electron-app": "2.0.1",
-    "zod": "^4.1.5",
+    "zod": "^4.3.6",
     "keytar": "^7.9.0"
   },
   "devDependencies": {
