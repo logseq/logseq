@@ -100,6 +100,8 @@
                   :logout-timeout-ms 120000
                   :output-format nil
                   :data-dir (common-graph/get-default-graphs-dir)
+                  :ws-url "wss://api.logseq.io/sync/%s"
+                  :http-base "https://api.logseq.io"
                   :config-path (default-config-path)}
         env (env-config)
         config-path (or (:config-path opts)
