@@ -557,6 +557,18 @@
     (let [retracted-eids (->> tx-data
                               (keep #(retract-entity-eid db %))
                               set)
+          location-fixed-eids (->> tx-data
+                                   (keep (fn [item]
+                                           (when (and (vector? item)
+                                                      (= :db/add (first item))
+                                                      (contains? #{:block/parent :block/page} (nth item 2 nil)))
+                                             (second item))))
+                                   (keep (fn [eid]
+                                           (cond
+                                             (number? eid) eid
+                                             (vector? eid) (some-> (d/entity db eid) :db/id)
+                                             :else nil)))
+                                   set)
           direct-orphans (->> retracted-eids
                               (mapcat #(ldb/get-children db %))
                               (filter content-block?))
@@ -569,7 +581,8 @@
                             (filter content-block?))
           recycle-roots (->> (concat direct-orphans page-orphans)
                              (remove (fn [block]
-                                       (contains? retracted-eids (:db/id block))))
+                                       (or (contains? retracted-eids (:db/id block))
+                                           (contains? location-fixed-eids (:db/id block)))))
                              distinct
                              vec)]
       (if (seq recycle-roots)
@@ -580,10 +593,14 @@
 
 (defn sanitize-tx-data
   [db tx-data]
-  (let [sanitized-tx-data (->> tx-data
-                               (db-normalize/replace-attr-retract-with-retract-entity-v2 db)
-                               ;; Notice: rebase should generate larger tx-id than reverse tx
-                               (map strip-tx-id)
+  (let [vector-items (filter vector? tx-data)
+        other-items (remove vector? tx-data)
+        sanitized-tx-data (->> (concat
+                                (->> vector-items
+                                     (db-normalize/replace-attr-retract-with-retract-entity-v2 db)
+                                     ;; Notice: rebase should generate larger tx-id than reverse tx
+                                     (map strip-tx-id))
+                                other-items)
                                (drop-missing-block-lookup-updates db)
                                (sanitize-block-ref-datoms db)
                                (move-missing-location-blocks-to-recycle db)
@@ -694,6 +711,50 @@
     (vec (butlast item))
     item))
 
+(defn- rewrite-recreated-lookup-refs
+  [tx-data]
+  (let [uuid->tempid (->> tx-data
+                          (keep (fn [item]
+                                  (when (and (vector? item)
+                                             (= :db/add (first item))
+                                             (>= (count item) 4)
+                                             (= :block/uuid (nth item 2)))
+                                    [(nth item 3) (second item)])))
+                          (into {}))
+        recreated-uuids (->> tx-data
+                             (keep (fn [item]
+                                     (when (and (vector? item)
+                                                (= :db/retractEntity (first item))
+                                                (vector? (second item))
+                                                (= :block/uuid (first (second item))))
+                                       (second (second item)))))
+                             (filter #(contains? uuid->tempid %))
+                             set)
+        rewrite-lookup (fn [x]
+                         (if (and (vector? x)
+                                  (= :block/uuid (first x))
+                                  (contains? recreated-uuids (second x)))
+                           (get uuid->tempid (second x) x)
+                           x))]
+    (mapv (fn [item]
+            (if (and (vector? item)
+                     (>= (count item) 2)
+                     (contains? #{:db/add :db/retract} (first item)))
+              (let [entity' (rewrite-lookup (second item))
+                    has-value? (>= (count item) 4)
+                    attr (nth item 2 nil)
+                    value' (if (and has-value?
+                                    (contains? db-schema/ref-type-attributes attr))
+                             (rewrite-lookup (nth item 3))
+                             (when has-value? (nth item 3)))]
+                (cond-> item
+                  (not= (second item) entity')
+                  (assoc 1 entity')
+                  (and has-value? (not= (nth item 3) value'))
+                  (assoc 3 value')))
+              item))
+          tx-data)))
+
 (defn- transact-remote-txs!
   [temp-conn remote-txs temp-tx-meta]
   (loop [remaining remote-txs
@@ -701,6 +762,7 @@
          results []]
     (if-let [remote-tx (first remaining)]
       (let [tx-data (->> (:tx-data remote-tx)
+                         rewrite-recreated-lookup-refs
                          (sanitize-tx-data @temp-conn)
                          seq)
             results' (cond-> results
