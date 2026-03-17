@@ -734,6 +734,10 @@
           :blocks []}
          {:page {:block/title "Quick add" :build/properties {:logseq.property/built-in? true
                                                              :logseq.property/hide? true}}, :blocks []}
+         {:page {:block/title "Recycle"
+                 :build/properties {:logseq.property/built-in? true
+                                    :logseq.property/hide? true}}
+          :blocks []}
          {:page {:block/title "Contents" :build/properties {:logseq.property/built-in? true}}
           :blocks [{:block/title "right sidebar"}]}
          {:page {:block/title common-config/favorites-page-name
