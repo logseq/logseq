@@ -612,12 +612,17 @@
     box-shadow: 0 0 0 1px var(--rx-blue-09);
   }
 
-  /* Ghost asset - file missing from disk */
+  /* Ghost asset - file missing from disk, click to retry */
   &.ghost-asset {
-    @apply cursor-not-allowed;
+    @apply cursor-pointer;
     opacity: 0.4;
     border-style: dashed;
     border-color: var(--rx-gray-07);
+    transition: opacity 150ms;
+
+    &:hover {
+      opacity: 0.7;
+    }
 
     .ghost-asset-placeholder {
       @apply absolute inset-0 flex items-center justify-center;

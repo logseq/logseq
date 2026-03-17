@@ -427,7 +427,10 @@
         ;; Check for default-icon on tags
         default-icon (some :logseq.property.class/default-icon sorted-tags)]
     (cond
-      ;; 1. Instance's own icon takes precedence
+      ;; 1. Instance's own icon takes precedence (:none = explicitly deleted, skip inheritance)
+      (and block-icon (= :none (:type block-icon)))
+      nil
+
       block-icon
       block-icon
 
@@ -435,11 +438,20 @@
       default-icon
       (case (:type default-icon)
         :avatar (when (:block/title node-entity)
-                  {:type :avatar
-                   :data {:value (derive-avatar-initials (:block/title node-entity))}})
+                  (let [colors (select-keys (:data default-icon) [:backgroundColor :color])]
+                    (cond-> {:type :avatar
+                             :data (merge colors
+                                          {:value (derive-avatar-initials (:block/title node-entity))})}
+                      (:color colors) (assoc :color (:color colors)))))
         :text (when (:block/title node-entity)
-                {:type :text
-                 :data {:value (derive-initials (:block/title node-entity))}})
+                (let [colors (select-keys (:data default-icon) [:color])]
+                  (cond-> {:type :text
+                           :data (merge colors
+                                        {:value (derive-initials (:block/title node-entity))})}
+                    (:color colors) (assoc :color (:color colors)))))
+        ;; Image type: return marker indicating inherited image without asset yet
+        :image {:type :image
+                :data {:empty? true}}
         ;; For tabler-icon and emoji, use the stored icon value directly
         default-icon)
 
@@ -1465,6 +1477,23 @@
         (shui/tabler-icon "photo" {:size 16 :style {:color "var(--lx-gray-11)"}})]]
       [:span.custom-tab-item-label "Image"]]]))
 
+(defn- <load-asset-url!
+  "Try to resolve an asset URL, retrying up to `max-retries` times with `delay-ms` between attempts."
+  [*url *error asset-uuid asset-type {:keys [max-retries delay-ms]
+                                      :or {max-retries 3 delay-ms 1000}}]
+  (let [file (str asset-uuid "." asset-type)
+        asset-path (path/path-join (str "../" common-config/local-assets-dir) file)]
+    (letfn [(attempt [n]
+              (-> (assets-handler/<make-asset-url asset-path)
+                  (p/then (fn [url]
+                            (reset! *error false)
+                            (reset! *url url)))
+                  (p/catch (fn [_err]
+                             (if (< n max-retries)
+                               (js/setTimeout #(attempt (inc n)) delay-ms)
+                               (reset! *error true))))))]
+      (attempt 0))))
+
 (rum/defcs image-asset-item < rum/reactive
   (rum/local nil ::url)
   (rum/local false ::error)
@@ -1475,13 +1504,7 @@
                       asset-type (:logseq.property.asset/type asset)
                       asset-uuid (:block/uuid asset)]
                   (when (and asset-uuid asset-type)
-                    (let [file (str asset-uuid "." asset-type)
-                          asset-path (path/path-join (str "../" common-config/local-assets-dir) file)]
-                      (-> (assets-handler/<make-asset-url asset-path)
-                          (p/then #(reset! *url %))
-                          (p/catch (fn [_err]
-                                     ;; Mark as error so we don't show ghost placeholder
-                                     (reset! *error true)))))))
+                    (<load-asset-url! *url *error asset-uuid asset-type {})))
                 state)}
   "Renders a single image asset thumbnail in the asset picker grid.
    When avatar-context is provided, renders circular previews and returns avatar data.
@@ -1499,30 +1522,40 @@
                                 :selected selected?
                                 :ghost-asset error?}])
       :on-click (fn [e]
-                  (when-not error?
-                    ;; Track as recently used
-                    (add-used-asset! asset-uuid)
-                    (let [image-data {:asset-uuid (str asset-uuid)
-                                      :asset-type asset-type}]
-                      (on-chosen e
-                                 (if avatar-context
-                                   ;; Merge image into existing avatar
-                                   {:type :avatar
-                                    :id (:id avatar-context)
-                                    :label (:label avatar-context)
-                                    :data (merge (:data avatar-context) image-data)}
-                                   ;; Standard image selection
-                                   {:type :image
-                                    :id (str "image-" asset-uuid)
-                                    :label asset-title
-                                    :data image-data})))))
-      :disabled error?}
+                  (if error?
+                    ;; Click-to-retry on ghost assets
+                    (do (reset! (::error state) false)
+                        (<load-asset-url! (::url state) (::error state) asset-uuid asset-type {}))
+                    (do
+                      ;; Track as recently used
+                      (add-used-asset! asset-uuid)
+                      (let [image-data {:asset-uuid (str asset-uuid)
+                                        :asset-type asset-type}]
+                        (on-chosen e
+                                   (if avatar-context
+                                     ;; Merge image into existing avatar
+                                     {:type :avatar
+                                      :id (:id avatar-context)
+                                      :label (:label avatar-context)
+                                      :data (merge (:data avatar-context) image-data)}
+                                     ;; Standard image selection
+                                     {:type :image
+                                      :id (str "image-" asset-uuid)
+                                      :label asset-title
+                                      :data image-data}))))))
+      :disabled false}
      (cond
        error?
        [:div.ghost-asset-placeholder
-        (ui/icon "photo-off" {:size 20})]
+        {:title "Click to retry loading"}
+        (ui/icon "refresh" {:size 16})]
        url
-       [:img {:src url :loading "lazy"}]
+       [:img {:src url
+              :loading "lazy"
+              :on-error (fn [_e]
+                          ;; Blob URL became invalid — mark as error so user can retry
+                          (reset! (::url state) nil)
+                          (reset! (::error state) true))}]
        :else
        [:div.bg-gray-04.animate-pulse])]))
 

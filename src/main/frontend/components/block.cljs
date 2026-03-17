@@ -1103,7 +1103,9 @@
                              :contents-page? contents-page?
                              :show-icon? true?
                              :with-tags? false)
-              asset? (some? (:logseq.property.asset/type block))
+              asset? (and (some? (:logseq.property.asset/type block))
+                          (some? (:logseq.property.asset/checksum block))
+                          (some? (:logseq.property.asset/size block)))
               brackets? (and (or show-brackets? nested-link?)
                              (not html-export?)
                              (not contents-page?))]
@@ -2779,7 +2781,10 @@
                                      config))]
              show-editor? (and editor-box edit? (not type-block-editor?))]
          (cond
-           (and (ldb/asset? block) (img-audio-video? block))
+           (and (ldb/asset? block)
+                (some? (:logseq.property.asset/checksum block))
+                (some? (:logseq.property.asset/size block))
+                (img-audio-video? block))
            [:div.flex.flex-col.asset-block-wrap.w-full
             (block-content-f {:custom-block-content
                               [:div.flex.flex-1
@@ -3208,10 +3213,11 @@
                                                                         (:db/id block)
                                                                         :logseq.property/icon
                                                                         icon-data))
-                                                                     ;; del
-                                                                     (db-property-handler/remove-block-property!
+                                                                     ;; del — set :none to override inheritance (prevents auto-fetch re-trigger)
+                                                                     (db-property-handler/set-block-property!
                                                                       (:db/id block)
-                                                                      :logseq.property/icon)))
+                                                                      :logseq.property/icon
+                                                                      {:type :none})))
                                                       :del-btn? (boolean icon')
                                                       :page-title (:block/title block)
                                                       :button-opts (when (:page-title? config)
