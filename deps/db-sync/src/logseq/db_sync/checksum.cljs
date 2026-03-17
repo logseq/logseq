@@ -1,5 +1,6 @@
 (ns logseq.db-sync.checksum
-  (:require [datascript.core :as d]))
+  (:require [datascript.core :as d]
+            [logseq.db :as ldb]))
 
 (def ^:private fnv-offset 2166136261)
 (def ^:private djb-offset 5381)
@@ -59,11 +60,6 @@
   (str (unsigned-hex fnv)
        (unsigned-hex djb)))
 
-(defn- graph-e2ee?
-  [db]
-  (when-let [eid (some-> (first (d/datoms db :avet :db/ident :logseq.kv/graph-rtc-e2ee?)) :e)]
-    (true? (some-> (first (d/datoms db :eavt eid :kv/value)) :v))))
-
 (defn- relevant-attrs
   [e2ee?]
   (cond-> #{:block/uuid :block/parent :block/page}
@@ -71,7 +67,7 @@
 
 (defn- get-block-uuid
   [db eid]
-  (some-> (first (d/datoms db :eavt eid :block/uuid)) :v))
+  (:block/uuid (d/entity db eid)))
 
 (defn- entity-values
   [db eid e2ee?]
@@ -108,7 +104,7 @@
 
 (defn recompute-checksum
   [db]
-  (let [e2ee? (graph-e2ee? db)
+  (let [e2ee? (ldb/get-graph-rtc-e2ee? db)
         attrs (relevant-attrs e2ee?)
         eids (->> (d/datoms db :eavt)
                   (keep (fn [datom]
@@ -127,7 +123,7 @@
 (defn update-checksum
   [checksum {:keys [db-before db-after tx-data]}]
   (let [db (or db-after db-before)
-        e2ee? (graph-e2ee? db)
+        e2ee? (ldb/get-graph-rtc-e2ee? db)
         changed-eids (->> tx-data (keep :e) distinct)
         initial-state (if (string? checksum)
                         (checksum->state checksum)
