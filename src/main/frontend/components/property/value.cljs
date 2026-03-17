@@ -110,11 +110,22 @@
         clear-overlay! (fn []
                          (shui/popup-hide-all!))
         on-chosen! (fn [_e icon]
-                     (let [blocks (get-operating-blocks block)]
+                     (let [blocks (get-operating-blocks block)
+                           ;; Handle text/avatar icons with :data nested structure
+                           icon-data (when icon
+                                       (cond
+                                         (= :text (:type icon))
+                                         {:type :text :data (:data icon)}
+
+                                         (= :avatar (:type icon))
+                                         {:type :avatar :data (:data icon)}
+
+                                         :else
+                                         (select-keys icon [:type :id :color])))]
                        (property-handler/batch-set-block-property!
                         (map :db/id blocks)
                         :logseq.property/icon
-                        (when icon (select-keys icon [:type :id :color]))))
+                        icon-data))
                      (clear-overlay!)
                      (when editing?
                        (editor-handler/restore-last-saved-cursor!)))

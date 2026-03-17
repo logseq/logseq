@@ -1,48 +1,94 @@
 .cp__emoji-icon-picker {
   --ls-color-icon-preset: "inherit";
 
-  @apply w-[380px] max-h-[408px] relative flex flex-col overflow-hidden;
+  @apply w-[380px] max-h-[440px] relative flex flex-col overflow-hidden;
 
-  > .hd {
-    @apply absolute w-full pt-2.5 pb-1 px-3 top-[38px] left-0;
+  /* More visible separator like combobox */
+  .icon-picker-separator {
+    background-color: var(--rx-gray-05) !important;
+  }
+
+  /* Topbar wrapper for easier inspection */
+  .icon-picker-topbar {
+    @apply flex-shrink-0;
+  }
+
+  .search-section {
+    @apply flex items-center gap-2 py-1 pr-3;
+    @apply flex-shrink-0;
+    background-color: var(--lx-gray-03);
+  }
+
+  .tabs-section {
+    @apply flex gap-0 px-3 py-0;
+    @apply flex-shrink-0 h-auto;
+    background-color: var(--lx-gray-03) !important;
+    border-bottom: 1px solid var(--rx-gray-06);
+    padding: 0 !important;
+    border-radius: 0 !important;
+
+    .tab-item {
+      @apply relative px-3 py-2.5 text-xs font-medium;
+      @apply opacity-60 hover:opacity-100;
+      @apply transition-all duration-150;
+      @apply rounded-none;
+      background: transparent !important;
+      box-shadow: none !important;
+      border: none !important;
+      height: auto !important;
+      color: var(--rx-gray-11);
+
+      /* Underline for active state */
+      &[data-active="true"] {
+        @apply opacity-100 font-bold;
+        color: var(--rx-gray-12);
+
+        &::after {
+          content: "";
+          @apply absolute bottom-0 left-0 right-0;
+          @apply h-[2px];
+          background-color: var(--rx-gray-12);
+        }
+      }
+
+      /* Hover state */
+      &:hover {
+        background: transparent !important;
+      }
+    }
   }
 
   > .bd {
-    @apply pt-[96px] py-1 h-full;
+    @apply flex-1 py-1 overflow-y-auto;
+    @apply bg-gray-02;
+    min-height: 0;
 
     &.all {
       @apply overflow-y-auto;
     }
   }
 
-  > .ft {
-    @apply absolute w-full py-3 px-3 bg-gray-02 top-[-1px] left-0;
-    @apply flex items-center border-t h-[40px] overflow-hidden;
-
-    .tab-item {
-      @apply opacity-50 hover:opacity-100;
-
-      &.active {
-        @apply opacity-100;
-      }
-    }
-  }
-
   .search-input {
-    @apply relative;
+    @apply relative flex-1 px-2;
 
     .ls-icon-search {
-      @apply absolute left-2.5 top-[8px] opacity-50;
+      @apply absolute left-[14px] top-[8px] opacity-50;
     }
 
     > .x {
-      @apply flex items-center h-full px-2 opacity-50;
-      @apply absolute right-0 top-0 hover:opacity-80;
+      @apply flex items-center justify-center;
+      @apply absolute right-2 top-1/2 -translate-y-1/2;
+      @apply w-5 h-5 rounded-full;
+      @apply opacity-60 hover:opacity-100;
+      @apply transition-opacity duration-150;
+      background-color: var(--rx-gray-06);
+      color: var(--rx-gray-11);
     }
 
     .ui__input {
       @apply leading-none pl-8 outline-none border-none bg-gray-03;
-      @apply focus:!shadow-accent-06 focus:bg-gray-02 !h-8;
+      @apply focus:bg-gray-03 !h-8;
+      box-shadow: none !important;
     }
 
     &:focus-within {
@@ -53,7 +99,7 @@
   }
 
   .pane-section {
-    @apply pl-2 overflow-y-auto h-full;
+    @apply px-2 overflow-y-auto h-full;
 
     color: var(--ls-color-icon-preset);
 
@@ -108,7 +154,7 @@
 
   .ui__button {
     &[data-action=del] {
-      @apply !w-6 !h-6 overflow-hidden rounded-md ml-1 opacity-60
+      @apply !w-6 !h-6 overflow-hidden rounded-md opacity-60
       hover:text-red-rx-09 hover:opacity-90;
     }
   }
@@ -132,6 +178,15 @@
 }
 
 .ui__dropdown-menu-content .cp__emoji-icon-picker {
+  @apply -m-1;
+}
+
+/* Same negative margin to counteract dropdown p-1 padding */
+.ui__dropdown-menu-content .asset-picker {
+  @apply -m-1;
+}
+
+.ui__dropdown-menu-content .text-picker {
   @apply -m-1;
 }
 
@@ -162,9 +217,567 @@
 }
 
 .ls-icon-picker {
-  @apply w-auto overflow-hidden;
+  @apply overflow-hidden;
+  /* Ensure consistent width for both icon picker and asset picker views */
+  min-width: 380px;
 }
 
 .ls-icon-color-wrap em-emoji {
   @apply !w-auto !h-auto;
+}
+
+/* Custom tab - Text, Avatar, Image options side by side */
+.custom-tab-content {
+  @apply flex flex-row gap-6 p-4 justify-center items-start;
+}
+
+.custom-tab-item {
+  @apply cursor-pointer;
+  @apply transition-opacity duration-150;
+  @apply border-none bg-transparent p-0;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 8px !important;
+
+  &:hover {
+    @apply opacity-80;
+  }
+
+  &:active {
+    @apply opacity-60;
+  }
+}
+
+.custom-tab-item-preview {
+  @apply w-12 h-12 rounded-lg;
+  @apply flex items-center justify-center;
+  @apply transition-all duration-150;
+  border: 1px solid var(--rx-gray-06);
+  background-color: var(--rx-gray-03);
+
+  &:hover {
+    border-color: var(--rx-accent-09);
+  }
+}
+
+.custom-tab-item-label {
+  @apply text-xs;
+  color: var(--rx-gray-11);
+}
+
+/* Asset Picker (Level 2 view) - Figma aligned */
+.asset-picker {
+  @apply flex flex-col overflow-hidden relative;
+  /* Match icon-picker width for visual continuity */
+  width: 380px;
+  min-width: 380px;
+  min-height: 320px;
+  max-height: 440px;
+  background-color: var(--lx-gray-02);
+
+  /* Body content - scrollable area */
+  > .bd {
+    @apply flex-1 py-1 overflow-y-auto;
+    min-height: 0;
+  }
+
+  /* Sections - 8px padding on both sides (symmetric) */
+  .pane-section {
+    @apply px-2;
+  }
+}
+
+/* Topbar wrapper for easier inspection */
+.asset-picker-topbar {
+  @apply flex-shrink-0;
+}
+
+/* Back button row with delete button on right */
+.asset-picker-back {
+  @apply flex-shrink-0 flex items-center justify-between;
+  /* py-2 + content height matches icon-picker topbar */
+  padding-top: 8px;
+  padding-bottom: 7px;
+  /* 14px aligns chevron icon with search icon below */
+  padding-left: 14px;
+  padding-right: 14px;
+  background-color: var(--lx-gray-03);
+  border-bottom: 1px solid var(--rx-gray-05);
+
+  .back-button {
+    @apply flex items-center gap-0.5;
+    @apply text-sm font-medium cursor-pointer;
+    @apply border-none bg-transparent p-0;
+    @apply transition-colors duration-150;
+    color: var(--rx-gray-10);
+
+    &:hover {
+      color: var(--rx-gray-12);
+    }
+  }
+
+  /* Delete button - matching icon picker styling */
+  .ui__button[data-action=del] {
+    @apply !w-6 !h-6 overflow-hidden rounded-md opacity-60;
+    @apply hover:text-red-rx-09 hover:opacity-90;
+  }
+}
+
+/* Search input matching icon picker */
+.asset-picker-search {
+  @apply py-1;
+  @apply flex-shrink-0;
+  background-color: var(--lx-gray-03);
+  /* Grey line at bottom of header section, matching icon picker */
+  border-bottom: 1px solid var(--rx-gray-06);
+
+  .search-input {
+    @apply relative flex-1 px-2;
+
+    .ls-icon-search {
+      @apply absolute left-[14px] top-[8px] opacity-50;
+    }
+
+    .ui__input {
+      @apply leading-none pl-8 outline-none border-none bg-gray-03;
+      @apply focus:bg-gray-03 !h-8;
+      box-shadow: none !important;
+    }
+  }
+}
+
+/* Grid layout - 5 columns for larger, scannable images */
+.asset-picker-grid {
+  @apply grid gap-2 p-3;
+  @apply flex-1 overflow-y-auto;
+  grid-template-columns: repeat(5, 1fr);
+  min-height: 120px;
+  align-content: start;
+  /* Add padding at bottom for floating action buttons */
+  padding-bottom: 56px;
+
+  /* Recently used row - single row, no extra padding */
+  &.recently-used-row,
+  &.web-images-row {
+    @apply flex-none overflow-visible;
+    min-height: auto;
+    padding-bottom: 12px;
+  }
+}
+
+/* Image items - fill grid cell with proper aspect ratio */
+.image-asset-item {
+  @apply overflow-hidden rounded cursor-pointer;
+  @apply transition-all duration-150;
+  position: relative;
+  width: 100%;
+  padding-bottom: 100%; /* Square aspect ratio */
+  border: 2px solid transparent;
+  background-color: var(--rx-gray-04);
+
+  &:hover {
+    border-color: var(--rx-accent-09);
+  }
+
+  &:focus {
+    @apply outline-none;
+    border-color: var(--rx-accent-09);
+  }
+
+  img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 4px;
+  }
+
+  > div {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 4px;
+  }
+
+  /* Avatar mode - circular previews */
+  &.avatar-mode {
+    @apply rounded-full;
+
+    img {
+      @apply rounded-full;
+      object-fit: cover;
+    }
+
+    > div {
+      @apply rounded-full;
+    }
+  }
+
+  /* Selected state - blue outline */
+  &.selected {
+    border-color: var(--rx-blue-09);
+    box-shadow: 0 0 0 1px var(--rx-blue-09);
+  }
+}
+
+/* Action buttons - floating at bottom with fade effect */
+.asset-picker-actions {
+  @apply flex items-center justify-end gap-2;
+  @apply absolute bottom-0 left-0 right-0;
+  @apply py-3 pr-3;
+  @apply transition-opacity duration-200;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--lx-gray-03) 30%, transparent) 30%,
+    color-mix(in srgb, var(--lx-gray-03) 70%, transparent) 60%,
+    var(--lx-gray-03) 100%
+  );
+
+  /* Style shui buttons inside action bar */
+  .ui__button {
+    @apply gap-1.5 transition-colors duration-150;
+
+    /* Make label inside upload button flex */
+    > label {
+      @apply flex items-center gap-1.5 cursor-pointer;
+    }
+
+    /* Override button variant transparency */
+    &.as-secondary {
+      @apply bg-secondary;
+    }
+
+    &.as-classic {
+      @apply bg-primary;
+    }
+  }
+}
+
+/* URL Asset Pane - popover for adding images from URL */
+.url-asset-pane-popup {
+  @apply overflow-visible;
+}
+
+.url-asset-pane {
+  @apply flex flex-col gap-3 p-3;
+  width: 320px;
+  background-color: var(--lx-gray-02);
+
+  .form-group {
+    @apply flex flex-col gap-1;
+
+    label {
+      @apply text-xs font-medium;
+      color: var(--rx-gray-11);
+    }
+
+    .ui__input {
+      @apply text-sm;
+    }
+  }
+
+  .format-note {
+    @apply text-xs leading-relaxed;
+    color: var(--rx-gray-09);
+  }
+
+  .error-message {
+    @apply text-xs px-2 py-1.5 rounded;
+    color: var(--rx-red-11);
+    background-color: var(--rx-red-03);
+  }
+
+  .pane-footer {
+    @apply flex justify-end gap-2 pt-1;
+  }
+}
+
+/* ============================================================================
+   Text Picker (Level 2 view) - matches asset-picker structure
+   ============================================================================ */
+
+.text-picker {
+  @apply flex flex-col overflow-hidden;
+  width: 380px;
+  min-width: 380px;
+  background-color: var(--lx-gray-02);
+}
+
+.text-picker-topbar {
+  @apply flex-shrink-0;
+}
+
+.text-picker-back {
+  @apply flex-shrink-0 flex items-center justify-between;
+  padding: 8px 14px 7px 14px;
+  background-color: var(--lx-gray-03);
+  border-bottom: 1px solid var(--rx-gray-05);
+
+  .back-button {
+    @apply flex items-center gap-0.5;
+    @apply text-sm font-medium cursor-pointer;
+    @apply border-none bg-transparent p-0;
+    @apply transition-colors duration-150;
+    color: var(--rx-gray-10);
+
+    &:hover {
+      color: var(--rx-gray-12);
+    }
+  }
+
+  .ui__button[data-action=del] {
+    @apply !w-6 !h-6 overflow-hidden rounded-md opacity-60;
+    @apply hover:text-red-rx-09 hover:opacity-90;
+  }
+}
+
+.text-picker-actions {
+  @apply flex items-center gap-1;
+}
+
+.text-picker-body {
+  @apply flex flex-col gap-4 p-3;
+
+  .format-note {
+    @apply text-xs leading-relaxed;
+    color: var(--rx-gray-09);
+  }
+}
+
+.text-picker-section {
+  @apply flex flex-col gap-1;
+
+  > label {
+    @apply text-xs font-medium;
+    color: var(--rx-gray-11);
+  }
+}
+
+.text-picker-input-row {
+  @apply flex items-center gap-1.5;
+
+  .ui__input {
+    @apply flex-1;
+  }
+}
+
+.text-picker-preview {
+  @apply flex items-center justify-center flex-shrink-0;
+  @apply w-9 h-8 rounded;
+  border: 1px solid var(--rx-gray-06);
+  background-color: var(--rx-gray-03);
+}
+
+.text-picker-alignment {
+  @apply flex gap-1;
+
+  .ui__button {
+    @apply !w-8 !h-8;
+  }
+}
+
+/* ============================================================================
+   Web Image Search Section
+   ============================================================================ */
+
+/* Section header row with info icon */
+.section-header-row {
+  @apply flex items-center gap-1;
+
+  .info-icon {
+    @apply p-0.5 rounded opacity-50 border-none bg-transparent cursor-help;
+    @apply hover:opacity-70;
+    color: var(--rx-gray-10);
+  }
+}
+
+/* Web image item - similar to image-asset-item */
+.web-image-item {
+  @apply overflow-hidden rounded cursor-pointer;
+  @apply transition-all duration-150;
+  position: relative;
+  width: 100%;
+  padding-bottom: 100%; /* Square aspect ratio */
+  border: 2px solid transparent;
+  background-color: var(--rx-gray-04);
+
+  &:hover {
+    border-color: var(--rx-accent-09);
+  }
+
+  &:focus {
+    @apply outline-none;
+    border-color: var(--rx-accent-09);
+  }
+
+  img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 4px;
+  }
+
+  > div:not(.external-badge) {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 4px;
+  }
+
+  /* Avatar mode - circular previews */
+  &.avatar-mode {
+    @apply rounded-full;
+
+    img {
+      @apply rounded-full;
+    }
+
+    .external-badge {
+      /* Position at bottom-right for circular items */
+      bottom: 0;
+      right: 0;
+    }
+  }
+
+  /* External indicator badge */
+  .external-badge {
+    @apply flex items-center justify-center;
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    background-color: rgba(0, 0, 0, 0.6);
+    color: white;
+  }
+}
+
+/* Web image placeholder (loading skeleton) */
+.web-image-placeholder {
+  position: relative;
+  width: 100%;
+  padding-bottom: 100%; /* Square aspect ratio */
+  border-radius: 6px;
+  overflow: hidden;
+
+  > * {
+    position: absolute;
+    inset: 0;
+  }
+}
+
+/* Bordered tooltip arrow - CSS-positioned (Base UI technique) */
+/* Arrow is a regular child element, positioned via CSS - NOT Radix's TooltipPrimitive.Arrow */
+/* This gives us full control and prevents Radix's position recalculations that cause shift */
+/* Arrow SVG points UP by default (tip near top, base at bottom) */
+
+.ui__tooltip-arrow {
+  position: absolute;
+  display: flex;
+  pointer-events: none;
+}
+
+/* Tooltip ABOVE trigger - arrow at bottom pointing DOWN */
+.ui__tooltip-content[data-side="top"] .ui__tooltip-arrow {
+  bottom: -9px;
+  left: 50%;
+  transform: translateX(-50%) rotate(180deg);
+}
+
+/* Tooltip BELOW trigger - arrow at top pointing UP */
+.ui__tooltip-content[data-side="bottom"] .ui__tooltip-arrow {
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Tooltip LEFT of trigger - arrow at right pointing RIGHT */
+.ui__tooltip-content[data-side="left"] .ui__tooltip-arrow {
+  right: -14px;
+  top: 50%;
+  transform: translateY(-50%) rotate(90deg);
+}
+
+/* Tooltip RIGHT of trigger - arrow at left pointing LEFT */
+.ui__tooltip-content[data-side="right"] .ui__tooltip-arrow {
+  left: -14px;
+  top: 50%;
+  transform: translateY(-50%) rotate(-90deg);
+}
+
+/* Web image tooltip with bordered arrow */
+.web-image-tooltip-content {
+  /* Border connects to arrow via BorderedArrowSvg stroke */
+}
+
+.web-image-tooltip {
+  @apply flex flex-col gap-0.5;
+  max-width: 200px;
+}
+
+/* Web image confirm pane (popover) */
+.web-image-confirm-popup {
+  @apply overflow-visible;
+}
+
+.web-image-confirm-pane {
+  @apply flex flex-col gap-3 p-3;
+  width: 280px;
+  background-color: var(--lx-gray-02);
+
+  .preview-image {
+    @apply flex justify-center;
+
+    img {
+      width: 80px;
+      height: 80px;
+      object-fit: cover;
+      border-radius: 8px;
+    }
+
+    &.avatar-mode img {
+      border-radius: 50%;
+    }
+  }
+
+  .image-info {
+    @apply flex flex-col gap-1 text-center;
+
+    .image-title {
+      @apply font-medium text-sm;
+      color: var(--rx-gray-12);
+    }
+
+    .image-source {
+      @apply text-xs;
+    }
+
+    .license-badge {
+      @apply text-xs px-2 py-1 rounded mt-1 text-center;
+      background-color: var(--lx-gray-04);
+      color: var(--lx-gray-11);
+    }
+  }
+
+  .skip-confirm-checkbox {
+    @apply flex items-center gap-2 cursor-pointer;
+    @apply text-xs py-1;
+    color: var(--rx-gray-11);
+
+    &:hover {
+      color: var(--rx-gray-12);
+    }
+  }
+
+  .pane-footer {
+    @apply flex justify-end gap-2 pt-1;
+  }
 }

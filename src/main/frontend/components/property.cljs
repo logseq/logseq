@@ -659,8 +659,15 @@
         properties (cond-> (:block/properties block)
                      (and (ldb/class? block)
                           (not (ldb/built-in? block)))
-                     (assoc :logseq.property.class/enable-bidirectional?
-                            (:logseq.property.class/enable-bidirectional? block)))
+                     (-> (assoc :logseq.property.class/enable-bidirectional?
+                                (:logseq.property.class/enable-bidirectional? block))
+                         (assoc :logseq.property.class/default-icon
+                                (:logseq.property.class/default-icon block)))
+                     ;; Show icon properties on built-in classes too
+                     (and (ldb/class? block)
+                          (ldb/built-in? block))
+                     (assoc :logseq.property.class/default-icon
+                            (:logseq.property.class/default-icon block)))
         remove-built-in-or-other-position-properties
         (fn [properties show-in-hidden-properties?]
           (remove (fn [property]
@@ -689,11 +696,18 @@
                                   (remove (fn [[id _]] (classes-properties-set id))))
         state-hide-empty-properties? (:ui/hide-empty-properties? (state/get-config))
         ;; This section produces own-properties and full-hidden-properties
+        ;; Class properties that should always show even when empty
+        always-show-class-properties #{:logseq.property.class/enable-bidirectional?
+                                       :logseq.property.class/default-icon}
         hide-with-property-id (fn [property-id]
                                 (let [property (db/entity property-id)]
                                   (boolean
                                    (cond
                                      show-empty-and-hidden-properties?
+                                     false
+                                     ;; Never hide certain class properties on class pages
+                                     (and (ldb/class? block)
+                                          (contains? always-show-class-properties property-id))
                                      false
                                      state-hide-empty-properties?
                                      (nil? (get block property-id))

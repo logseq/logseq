@@ -3187,15 +3187,29 @@
                          (icon-component/icon-picker icon
                                                      {:on-chosen (fn [_e icon]
                                                                    (if icon
-                                                                     (db-property-handler/set-block-property!
-                                                                      (:db/id block)
-                                                                      :logseq.property/icon
-                                                                      (select-keys icon [:id :type :color]))
+                                                                     (let [;; Handle text/avatar icons with :data nested structure
+                                                                           icon-data (cond
+                                                                                       (= :text (:type icon))
+                                                                                       {:type :text :data (:data icon)}
+
+                                                                                       (= :avatar (:type icon))
+                                                                                       {:type :avatar :data (:data icon)}
+
+                                                                                       (= :image (:type icon))
+                                                                                       {:type :image :id (:id icon) :data (:data icon)}
+
+                                                                                       :else
+                                                                                       (select-keys icon [:id :type :color]))]
+                                                                       (db-property-handler/set-block-property!
+                                                                        (:db/id block)
+                                                                        :logseq.property/icon
+                                                                        icon-data))
                                                                      ;; del
                                                                      (db-property-handler/remove-block-property!
                                                                       (:db/id block)
                                                                       :logseq.property/icon)))
                                                       :del-btn? (boolean icon')
+                                                      :page-title (:block/title block)
                                                       :icon-props {:style {:width "1lh"
                                                                            :height "1lh"
                                                                            :font-size (cond

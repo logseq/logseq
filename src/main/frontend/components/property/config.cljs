@@ -317,9 +317,22 @@
                           (db-property-handler/delete-closed-value! (:db/id property) (:db/id block))
                           (re-init-commands! property)))
         update-icon! (fn [icon]
-                       (property-handler/set-block-property!
-                        (:block/uuid block) :logseq.property/icon
-                        (select-keys icon [:id :type :color])))
+                       (let [;; Handle text/avatar/image icons with :data nested structure
+                             icon-data (cond
+                                         (= :text (:type icon))
+                                         {:type :text :data (:data icon)}
+
+                                         (= :avatar (:type icon))
+                                         {:type :avatar :data (:data icon)}
+
+                                         (= :image (:type icon))
+                                         {:type :image :id (:id icon) :data (:data icon)}
+
+                                         :else
+                                         (select-keys icon [:id :type :color]))]
+                         (property-handler/set-block-property!
+                          (:block/uuid block) :logseq.property/icon
+                          icon-data)))
         icon (:logseq.property/icon block)
         value (db-property/closed-value-content block)
         owner-class? (ldb/class? owner-block)
@@ -337,9 +350,9 @@
                                        :button-opts {:title "Set Icon"}})
      [:strong {:on-click (fn [^js e]
                            (shui/popup-show! (.-target e)
-                             (fn [] (choice-base-edit-form property block owner-block))
-                             {:id :ls-base-edit-form
-                              :align "start"}))
+                                             (fn [] (choice-base-edit-form property block owner-block))
+                                             {:id :ls-base-edit-form
+                                              :align "start"}))
                :title value}
       value]
      (shui/dropdown-menu
@@ -392,8 +405,8 @@
           {:key "delete"
            :class "del"
            :on-click delete-choice!}
-           [:span.w-full.text-red-rx-09.opacity-90.flex.items-center.hover:opacity-100
-            (ui/icon "x" {:class "scale-90 pr-1"}) "Delete"]))))]))
+          [:span.w-full.text-red-rx-09.opacity-90.flex.items-center.hover:opacity-100
+           (ui/icon "x" {:class "scale-90 pr-1"}) "Delete"]))))]))
 
 (rum/defc add-existing-values
   [property values {:keys [toggle-fn]}]

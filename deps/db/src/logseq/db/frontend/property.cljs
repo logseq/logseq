@@ -186,6 +186,17 @@
                                                             :view-context :class}
                                                    :properties
                                                    {:logseq.property/description "When enabled, this tag will show reverse nodes that link to the current node via properties."}}
+     ;; Unified default icon property - stores icon data with type inferred from :type field
+     ;; For icon: {:type :tabler-icon :id "checkbox"}
+     ;; For emoji: {:type :emoji :id "🎯"}
+     ;; For avatar: {:type :avatar} (value derived from instance title)
+     ;; For text: {:type :text} (value derived from instance title)
+     :logseq.property.class/default-icon {:title "Default Icon"
+                                          :schema {:type :map
+                                                   :public? true
+                                                   :view-context :class}
+                                          :properties
+                                          {:logseq.property/description "Set the default icon for instances of this tag. Avatar/text are auto-generated from title."}}
      :logseq.property/hide-empty-value {:title "Hide empty value"
                                         :schema {:type :checkbox
                                                  :public? true
@@ -223,6 +234,11 @@
      :logseq.property/asset   {:title "Asset"
                                :schema {:type :entity
                                         :hide? true}}
+     ;; Wikidata entity ID for pages created from Wikidata
+     :logseq.property/wikidata-id {:title "Wikidata ID"
+                                   :schema {:type :default
+                                            :public? false
+                                            :hide? true}}
      ;; used by pdf
      ;; TODO: remove ls-type
      :logseq.property/ls-type {:schema {:type :keyword
@@ -511,6 +527,10 @@
                                              :cardinality :many
                                              :hide? true
                                              :public? false}}
+     :logseq.property/property-key-width {:title "Property key column width"
+                                          :schema {:type :raw-number
+                                                   :hide? true
+                                                   :public? false}}
      :logseq.property/view-for {:title "This view belongs to"
                                 :schema
                                 {:type :node

@@ -70,6 +70,10 @@
 
   .icon-cp-container {
     @apply inline-flex items-center pr-0.5;
+
+    &.photo-icon {
+      @apply pr-1.5;
+    }
   }
 
   .icon-emoji-wrap em-emoji,
@@ -80,6 +84,17 @@
   .block-title-wrap.as-heading {
     @apply inline text-[length:inherit];
   }
+}
+
+/* Center emoji icons in inline icon boxes (used by CMD+K, page refs, etc.) */
+.icon-inline .ui__icon {
+  @apply inline-flex items-center justify-center;
+}
+
+.icon-inline em-emoji,
+.icon-inline .emoji-mart-emoji,
+.icon-inline .emoji-mart-emoji > span {
+  line-height: 1 !important;
 }
 
 .breadcrumb {
@@ -249,6 +264,15 @@
 
 .ls-page-title .block-control-wrap {
   height: initial;
+}
+
+/* Ensure page title has correct font-size in both editing and non-editing mode */
+.ls-page-title-container {
+  font-size: var(--ls-page-title-size, 32px) !important;
+}
+
+.ls-page-title-container .block-title-wrap {
+  font-size: inherit;
 }
 
 .block-title-wrap {
@@ -1119,6 +1143,31 @@ html.is-mac {
 .ls-page-title .ls-page-icon svg, .ls-page-title .ls-page-icon button {
   width: 38px;
   height: 38px;
+}
+
+/* Image icons in page title - fill the button like avatars do */
+.ls-page-title .ls-page-icon .image-icon {
+  width: 2rem !important; /* 32px, matching avatar size */
+  height: 2rem !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ls-page-title .ls-page-icon .image-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Scale up avatars in page title context */
+.ls-page-title .ls-page-icon .ui__avatar {
+  width: 2rem; /* 32px */
+  height: 2rem;
+}
+
+.ls-page-title .ls-page-icon .ui__avatar span {
+  font-size: 14px; /* Slightly larger font for larger avatar */
 }
 
 .ls-page-title .positioned-properties.block-left svg,
