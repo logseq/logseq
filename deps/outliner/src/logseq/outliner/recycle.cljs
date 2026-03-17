@@ -9,7 +9,7 @@
 
 (def ^:private recycle-page-title "Recycle")
 (def retention-ms (* 60 24 3600 1000))
-(def gc-interval-ms (* 24 3600 1000))
+(def ^:api gc-interval-ms (* 24 3600 1000))
 
 (defn recycled?
   [entity]
@@ -222,7 +222,7 @@
                                  subtree))]
       (concat clear-structure [root-tx] subtree-page-tx (remove nil? clear-meta)))))
 
-(defn restore!
+(defn ^:api restore!
   [conn root-uuid]
   (when-let [root (d/entity @conn [:block/uuid root-uuid])]
     (when-let [tx-data (seq (restore-tx-data @conn root))]
@@ -247,7 +247,7 @@
                  (map (fn [node] [:db/retractEntity (:db/id node)]) (block-subtree db entity)))))
      distinct)))
 
-(defn gc!
+(defn ^:api gc!
   [conn opts]
   (when-let [tx-data (seq (gc-tx-data @conn opts))]
     (ldb/transact! conn tx-data {:outliner-op :recycle-gc
