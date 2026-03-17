@@ -2,6 +2,7 @@
   "Pending tx and remote tx application helpers for db sync."
   (:require [clojure.set :as set]
             [datascript.core :as d]
+            [frontend.undo-redo-validate :as undo-validate]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync.assets :as sync-assets]
@@ -21,7 +22,6 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.recycle :as outliner-recycle]
-            [logseq.outliner.undo-redo-validate :as undo-validate]
             [promesa.core :as p]))
 
 (defonce *repo->latest-remote-tx (atom {}))
