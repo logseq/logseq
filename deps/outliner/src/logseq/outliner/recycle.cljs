@@ -140,11 +140,11 @@
 (defn recycle-page-tx-data
   [db page {:keys [deleted-by-uuid now-ms]}]
   (let [{recycle-page-id :page-id
-         recycle-page-tx-data :tx-data
+         recycle-page-init-tx-data :tx-data
          recycle-page-existing :page} (ensure-recycle-page db)
-        deleted-by-id (deleted-by-id db deleted-by-uuid)
+        deleted-by-db-id (deleted-by-id db deleted-by-uuid)
         now-ms (or now-ms (common-util/time-ms))]
-    (concat recycle-page-tx-data
+    (concat recycle-page-init-tx-data
             [(cond-> {:db/id (:db/id page)
                       :block/parent recycle-page-id
                       :block/order (if recycle-page-existing
@@ -152,7 +152,7 @@
                                      (db-order/gen-key nil nil))
                       :logseq.property/deleted-at now-ms}
                true
-               (maybe-assoc-ref :logseq.property/deleted-by-ref (d/entity db deleted-by-id))
+               (maybe-assoc-ref :logseq.property/deleted-by-ref (d/entity db deleted-by-db-id))
                true
                (maybe-assoc-ref :logseq.property.recycle/original-parent (:block/parent page))
                true
