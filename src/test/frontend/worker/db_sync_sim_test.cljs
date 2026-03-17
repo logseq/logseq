@@ -10,6 +10,7 @@
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
+            [frontend.worker.sync.apply-txs :as sync-apply]
             [frontend.worker.sync.client-op :as client-op]
             [logseq.db :as ldb]
             [logseq.db-sync.checksum :as sync-checksum]
@@ -88,7 +89,7 @@
     {:repro repro
      :restore (fn [] (reset! ldb/*transact-invalid-callback prev))}))
 
-(declare op-runs assert-synced-attrs! assert-no-invalid-tx! active-block-uuids block-attr-map)
+(declare op-runs assert-synced-attrs! assert-no-invalid-tx! active-block-uuids block-attr-map checksum-entity-map)
 
 (deftest rng-uuid-deterministic-test
   (testing "rng-uuid produces stable sequences for the same seed"
@@ -262,8 +263,8 @@
                (assoc pending-entry
                       :tx-data (->> tx
                                     (db-normalize/remove-retract-entity-ref @conn)
-                                    (#'db-sync/drop-missing-created-block-datoms @conn)
-                                    (#'db-sync/sanitize-tx-data @conn)
+                                    (#'sync-apply/drop-missing-created-block-datoms @conn)
+                                    (#'sync-apply/sanitize-tx-data @conn)
                                     distinct
                                     vec))))
        (filterv (comp seq :tx-data))))
@@ -278,13 +279,13 @@
         (let [txs (server-pull server local-tx)]
           ;; (prn :debug :apply-remote-tx :repo repo
           ;;      :txs txs)
-          (#'db-sync/apply-remote-txs! repo client
-                                       (mapv (fn [tx-data]
-                                               {:tx-data tx-data})
-                                             txs))
+          (#'sync-apply/apply-remote-txs! repo client
+                                          (mapv (fn [tx-data]
+                                                  {:tx-data tx-data})
+                                                txs))
           (client-op/update-local-tx repo server-t)
           (reset! progress? true)))
-      (let [pending (#'db-sync/pending-txs repo)
+      (let [pending (#'sync-apply/pending-txs repo)
             local-tx' (or (client-op/get-local-tx repo) 0)
             server-t' (:t @server)]
         (when (and (seq pending) (= local-tx' server-t'))
@@ -294,12 +295,12 @@
             (if (seq tx-entries)
               (let [{:keys [accepted? t]} (server-upload! server local-tx' tx-entries)]
                 (when accepted?
-                  (#'db-sync/remove-pending-txs! repo tx-ids)
+                  (#'sync-apply/remove-pending-txs! repo tx-ids)
                   (when (seq tx-ids)
                     (client-op/update-local-tx repo t)
                     (reset! progress? true))))
               (do
-                (#'db-sync/remove-pending-txs! repo tx-ids)
+                (#'sync-apply/remove-pending-txs! repo tx-ids)
                 (when (seq tx-ids)
                   (client-op/update-local-tx repo (:t @server))
                   (reset! progress? true)))))))
@@ -339,7 +340,7 @@
             server-checksum (sync-checksum/recompute-checksum @(get @server :conn))
             client-sync-states (mapv (fn [c]
                                        {:repo (:repo c)
-                                        :pending-count (count (#'db-sync/pending-txs (:repo c)))
+                                        :pending-count (count (#'sync-apply/pending-txs (:repo c)))
                                         :local-tx (client-op/get-local-tx (:repo c))
                                         :server-t (:t @server)})
                                      online-clients)
@@ -376,10 +377,42 @@
                                                      vec)}
                            :block-uuid-diffs block-uuid-diffs})))
         (when-not (= 1 (count (distinct (conj (map :checksum checksum-states) server-checksum))))
-          (throw (ex-info "checksums not equal after sync"
-                          {:checksums checksum-states
-                           :sync-states client-sync-states
-                           :server {:checksum server-checksum}})))))))
+          (let [client-attrs (mapv (fn [c]
+                                     {:repo (:repo c)
+                                      :attrs (block-attr-map @(:conn c))})
+                                   online-clients)
+                base-attrs (:attrs (first client-attrs))
+                server-attrs (block-attr-map @(get @server :conn))
+                attr-diffs (mapv (fn [{:keys [repo attrs]}]
+                                   (let [[missing extra] (data/diff base-attrs attrs)]
+                                     {:repo repo
+                                      :missing-sample (some->> missing (take 5) vec)
+                                      :extra-sample (some->> extra (take 5) vec)}))
+                                 client-attrs)
+                [server-missing server-extra] (data/diff base-attrs server-attrs)
+                client-checksum-maps (mapv (fn [c]
+                                             {:repo (:repo c)
+                                              :attrs (checksum-entity-map @(:conn c))})
+                                           online-clients)
+                base-checksum-attrs (:attrs (first client-checksum-maps))
+                server-checksum-attrs (checksum-entity-map @(get @server :conn))
+                checksum-attr-diffs (mapv (fn [{:keys [repo attrs]}]
+                                            (let [[missing extra] (data/diff base-checksum-attrs attrs)]
+                                              {:repo repo
+                                               :missing-sample (some->> missing (take 5) vec)
+                                               :extra-sample (some->> extra (take 5) vec)}))
+                                          client-checksum-maps)
+                [server-checksum-missing server-checksum-extra] (data/diff base-checksum-attrs server-checksum-attrs)]
+            (throw (ex-info "checksums not equal after sync"
+                            {:checksums checksum-states
+                             :sync-states client-sync-states
+                             :attr-diffs attr-diffs
+                             :checksum-attr-diffs checksum-attr-diffs
+                             :server {:checksum server-checksum
+                                      :missing-sample (some->> server-missing (take 5) vec)
+                                      :extra-sample (some->> server-extra (take 5) vec)
+                                      :checksum-missing-sample (some->> server-checksum-missing (take 5) vec)
+                                      :checksum-extra-sample (some->> server-checksum-extra (take 5) vec)}}))))))))
 
 (defn- sync-until-idle!
   [server clients max-rounds]
@@ -429,12 +462,12 @@
           (ensure-base-page! conn base-uuid)
           (let [base-page (d/entity @conn [:block/uuid base-uuid])]
             (create-block! conn base-page "synced block" block-uuid)
-            (is (seq (#'db-sync/pending-txs repo-a)))
+            (is (seq (#'sync-apply/pending-txs repo-a)))
             (is (true? (sync-client! server {:repo repo-a
                                              :conn conn
                                              :client client
                                              :online? true})))
-            (is (empty? (#'db-sync/pending-txs repo-a)))
+            (is (empty? (#'sync-apply/pending-txs repo-a)))
             (is (= (:t @server) (client-op/get-local-tx repo-a)))
             (is (some? (d/entity @(get @server :conn) [:block/uuid block-uuid])))))))))
 
@@ -498,6 +531,23 @@
                     :block/page (when page (:block/uuid page))
                     :logseq.property/deleted-at (:logseq.property/deleted-at ent)}]))))
        (remove nil?)
+       (into {})))
+
+(defn- checksum-entity-map
+  [db]
+  (->> (d/q '[:find [?e ...]
+              :where
+              [?e :block/uuid]]
+            db)
+       (map (fn [e]
+              (let [ent (d/entity db e)
+                    parent (:block/parent ent)
+                    page (:block/page ent)]
+                [(:block/uuid ent)
+                 {:block/title (:block/title ent)
+                  :block/name (:block/name ent)
+                  :block/parent (when parent (:block/uuid parent))
+                  :block/page (when page (:block/uuid page))}])))
        (into {})))
 
 (def ^:private sim-default-property-title "Sim Default Property")
@@ -1348,7 +1398,7 @@
           (sync-loop! server [{:repo repo-b :conn conn-b :client client-b :online? true}])
           (is (= "before" (:block/title (d/entity @conn-b [:block/uuid block-uuid]))))
           (update-title! conn-a block-uuid "test")
-          (is (seq (#'db-sync/pending-txs repo-a)))
+          (is (seq (#'sync-apply/pending-txs repo-a)))
           (d/transact! conn-b [[:db/add [:block/uuid block-uuid] :block/updated-at 1710000000000]])
           (sync-loop! server [{:repo repo-b :conn conn-b :client client-b :online? true}])
           (sync-loop! server [{:repo repo-a :conn conn-a :client client-a :online? true}])
@@ -1552,7 +1602,7 @@
           (is (some? (d/entity @conn-b [:block/uuid block-uuid])))
           (is (not= :frontend.undo-redo/empty-undo-stack
                     (undo-redo/undo repo-a)))
-          (let [pending (#'db-sync/pending-txs repo-a)
+          (let [pending (#'sync-apply/pending-txs repo-a)
                 retract-block? (fn [item]
                                  (= [:db/retractEntity [:block/uuid block-uuid]]
                                     (take 2 item)))]

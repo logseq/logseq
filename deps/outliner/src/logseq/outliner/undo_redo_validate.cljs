@@ -1,4 +1,4 @@
-(ns frontend.worker.undo-redo
+(ns logseq.outliner.undo-redo-validate
   "Undo redo validate"
   (:require [clojure.set :as set]
             [datascript.core :as d]
@@ -127,36 +127,48 @@
                                  [id ent]))))
                      (into {}))
         ents (vals id->ent)
-        uuid-required-ids (keep (fn [[id ent]]
-                                  (when (or (:block/title ent)
-                                            (:block/page ent)
-                                            (:block/parent ent))
-                                    id))
-                                id->ent)]
+        structural-ids (->> id->ent
+                            (keep (fn [[id ent]]
+                                    (when (or (:block/title ent)
+                                              (:block/page ent)
+                                              (:block/parent ent)
+                                              (:block/order ent))
+                                      id)))
+                            set)]
     (concat
-     (for [e uuid-required-ids
+     (for [e structural-ids
            :let [ent (get id->ent e)]
            :when (nil? (:block/uuid ent))]
        {:type :missing-uuid :e e})
      (for [ent ents
            :let [uuid (:block/uuid ent)
                  parent (:block/parent ent)]
-           :when (and (not (ldb/page? ent)) (nil? parent))]
+           :when (and (contains? structural-ids (:db/id ent))
+                      (not (ldb/page? ent))
+                      (nil? parent))]
        {:type :missing-parent :uuid uuid})
      (for [ent ents
            :let [uuid (:block/uuid ent)
                  parent (:block/parent ent)]
-           :when (and (not (ldb/page? ent)) parent (nil? (:block/uuid parent)))]
+           :when (and (contains? structural-ids (:db/id ent))
+                      (not (ldb/page? ent))
+                      parent
+                      (nil? (:block/uuid parent)))]
        {:type :missing-parent-ref :uuid uuid})
      (for [ent ents
            :let [uuid (:block/uuid ent)
                  page (:block/page ent)]
-           :when (and (not (ldb/page? ent)) (nil? page))]
+           :when (and (contains? structural-ids (:db/id ent))
+                      (not (ldb/page? ent))
+                      (nil? page))]
        {:type :missing-page :uuid uuid})
      (for [ent ents
            :let [uuid (:block/uuid ent)
                  page (:block/page ent)]
-           :when (and (not (ldb/page? ent)) page (not (ldb/page? page)))]
+           :when (and (contains? structural-ids (:db/id ent))
+                      (not (ldb/page? ent))
+                      page
+                      (not (ldb/page? page)))]
        {:type :page-not-page :uuid uuid})
      (for [ent ents
            :let [uuid (:block/uuid ent)
@@ -164,7 +176,8 @@
                  page (:block/page ent)
                  expected-page (when parent
                                  (if (ldb/page? parent) parent (:block/page parent)))]
-           :when (and (not (ldb/page? ent))
+           :when (and (contains? structural-ids (:db/id ent))
+                      (not (ldb/page? ent))
                       parent
                       page
                       expected-page
@@ -173,11 +186,14 @@
      (for [ent ents
            :let [uuid (:block/uuid ent)
                  parent (:block/parent ent)]
-           :when (and parent (= uuid (:block/uuid parent)))]
+           :when (and (contains? structural-ids (:db/id ent))
+                      parent
+                      (= uuid (:block/uuid parent)))]
        {:type :self-parent :uuid uuid})
      (for [ent ents
            :let [uuid (:block/uuid ent)]
-           :when (and (not (ldb/page? ent))
+           :when (and (contains? structural-ids (:db/id ent))
+                      (not (ldb/page? ent))
                       (parent-cycle? ent))]
        {:type :cycle :uuid uuid}))))
 

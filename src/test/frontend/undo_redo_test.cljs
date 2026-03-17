@@ -8,10 +8,10 @@
             [frontend.test.helper :as test-helper]
             [frontend.undo-redo :as undo-redo]
             [frontend.worker.db-listener :as worker-db-listener]
-            [frontend.worker.undo-redo :as undo-validate]
             [logseq.db :as ldb]
             [logseq.outliner.core :as outliner-core]
-            [logseq.outliner.op :as outliner-op]))
+            [logseq.outliner.op :as outliner-op]
+            [logseq.outliner.undo-redo-validate :as undo-validate]))
 
 ;; TODO: random property ops test
 
