@@ -323,16 +323,21 @@
 
 (deftest list-graph-items-treats-percent-encoded-dir-as-legacy-when-non-canonical
   (let [data-dir (node-helper/create-tmp-dir "cli-list-graphs-percent-legacy")
-        _ (doseq [dir ["yy~20y"
+        _ (doseq [dir ["yy y"
+                       "yy~20y"
                        "yy%20y"]]
             (fs/mkdirSync (node-path/join data-dir dir) #js {:recursive true}))
         items (cli-server/list-graph-items {:data-dir data-dir})
         by-kind (group-by :kind items)
         canonical-item (first (get by-kind :canonical))
-        legacy-item (first (get by-kind :legacy))]
-    (is (= "yy~20y" (:graph-dir canonical-item)))
+        legacy-items (get by-kind :legacy)
+        legacy-by-dir (into {} (map (juxt :legacy-dir identity) legacy-items))]
+    (is (= "yy y" (:graph-dir canonical-item)))
     (is (= "yy y" (:graph-name canonical-item)))
-    (is (= "yy%20y" (:legacy-dir legacy-item)))
-    (is (= "yy y" (:legacy-graph-name legacy-item)))
-    (is (= "yy~20y" (:target-graph-dir legacy-item)))
-    (is (= true (:conflict? legacy-item)))))
+    (is (= #{"yy~20y" "yy%20y"}
+           (set (map :legacy-dir legacy-items))))
+    (doseq [legacy-dir ["yy~20y" "yy%20y"]]
+      (let [legacy-item (get legacy-by-dir legacy-dir)]
+        (is (= "yy y" (:legacy-graph-name legacy-item)))
+        (is (= "yy y" (:target-graph-dir legacy-item)))
+        (is (= true (:conflict? legacy-item)))))))

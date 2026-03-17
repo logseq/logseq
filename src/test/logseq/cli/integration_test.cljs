@@ -550,6 +550,7 @@
 (deftest ^:long test-cli-graph-list-percent-legacy-is-marked
   (async done
          (let [data-dir (node-helper/create-tmp-dir "db-worker-percent-legacy")]
+           (fs/mkdirSync (node-path/join data-dir "yy y") #js {:recursive true})
            (fs/mkdirSync (node-path/join data-dir "yy~20y") #js {:recursive true})
            (fs/mkdirSync (node-path/join data-dir "yy%20y") #js {:recursive true})
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
@@ -562,10 +563,13 @@
                  (is (= 0 (:exit-code json-result)))
                  (is (= "ok" (:status json-payload)))
                  (is (= #{"canonical" "legacy"} kinds))
-                 (is (= 1 (count (filter #(= "yy~20y" (:graph-dir %)) graph-items))))
-                 (is (= 1 (count (filter #(= "yy%20y" (:legacy-dir %)) graph-items))))
+                 (is (= 1 (count (filter #(= "yy y" (:graph-dir %)) graph-items))))
+                 (is (= #{"yy~20y" "yy%20y"}
+                        (set (keep :legacy-dir graph-items))))
+                 (is (= #{"yy y"}
+                        (set (keep :target-graph-dir graph-items))))
                  (is (string/includes? human-output "yy y [legacy]"))
-                 (is (string/includes? human-output "Warning: 1 legacy graph directories detected."))
+                 (is (string/includes? human-output "Warning: 2 legacy graph directories detected."))
                  (done))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))

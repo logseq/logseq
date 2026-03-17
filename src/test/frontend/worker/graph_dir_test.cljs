@@ -13,7 +13,9 @@
 (deftest repo->encoded-graph-dir-name-encodes-special-characters
   (testing "db-prefixed repos resolve to the encoded on-disk graph dir name"
     (is (= "foo~2Fbar"
-           (graph-dir/repo->encoded-graph-dir-name "logseq_db_foo/bar")))))
+           (graph-dir/repo->encoded-graph-dir-name "logseq_db_foo/bar")))
+    (is (= "space name"
+           (graph-dir/repo->encoded-graph-dir-name "logseq_db_space name")))))
 
 (deftest decode-graph-dir-name-decodes-only-canonical-encoded-names
   (testing "encoded graph dirs decode back to the logical graph dir key"
