@@ -156,18 +156,23 @@ _logseq_queries() {
       (string/replace "'" "'\\''")))
 
 (defn- zsh-token-for
-  "Generate a zsh _arguments token string for a spec token descriptor."
-  [{:keys [key type alias desc values complete]}]
+  "Generate a zsh _arguments token string for a spec token descriptor.
+   no-prefix-keys: set of keys that get --no-<option> completions."
+  [{:keys [key type alias desc values complete]} no-prefix-keys]
   (let [long-opt (zsh-option-name key)
         desc* (zsh-escape-desc desc)
         alias-short (when alias (str "-" (name alias)))]
     (case type
       :flag
-      (if alias
-        (str "'" (str "(" alias-short " " long-opt ")") "'"
-             "{" alias-short "," long-opt "}"
-             "'[" desc* "]'")
-        (str "'" long-opt "[" desc* "]'"))
+      (let [no-prefix? (contains? no-prefix-keys key)
+            no-opt (str "--no-" (name key))]
+        (if alias
+          (str "'" (str "(" alias-short " " long-opt (when no-prefix? (str " " no-opt)) ")") "'"
+               "{" alias-short "," long-opt "}"
+               "'[" desc* "]'")
+          (if no-prefix?
+            (str "'(" long-opt " " no-opt ")" long-opt "[" desc* "]'")
+            (str "'" long-opt "[" desc* "]'"))))
 
       :enum
       (let [vals-str (string/join " " values)]
@@ -213,16 +218,35 @@ _logseq_queries() {
       ;; default
       (str "'" long-opt "=[" desc* "]:value:'"))))
 
+(defn- zsh-no-token-for
+  "Generate a zsh _arguments token for the --no-<option> negation of a flag.
+   Only emits for keys in no-prefix-keys."
+  [{:keys [key type alias]} no-prefix-keys]
+  (when (and (= type :flag) (contains? no-prefix-keys key))
+    (let [long-opt (zsh-option-name key)
+          no-opt (str "--no-" (name key))
+          excl (if alias
+                 (str "(" (str "-" (name alias)) " " long-opt " " no-opt ")")
+                 (str "(" long-opt " " no-opt ")"))]
+      (str "'" excl no-opt "[Negate " long-opt "]'"))))
+
 (defn- zsh-arguments-tokens
-  "Generate _arguments tokens for a spec map."
-  [spec]
-  (->> (spec->tokens spec)
-       (mapv zsh-token-for)))
+  "Generate _arguments tokens for a spec map.
+   global-keys: set of keys that should NOT get --no- prefix completions."
+  [spec global-keys]
+  (let [tokens (spec->tokens spec)
+        no-prefix-keys (->> tokens
+                            (keep #(when (and (= :flag (:type %))
+                                              (not (contains? global-keys (:key %))))
+                                     (:key %)))
+                            set)]
+    (into (mapv #(zsh-token-for % no-prefix-keys) tokens)
+          (keep #(zsh-no-token-for % no-prefix-keys) tokens))))
 
 (defn- zsh-leaf-function
   "Generate a _logseq_<command>() function for a leaf command."
-  [func-name spec]
-  (let [tokens (zsh-arguments-tokens spec)
+  [func-name spec global-keys]
+  (let [tokens (zsh-arguments-tokens spec global-keys)
         token-lines (string/join " \\\n    " tokens)]
     (str func-name "() {\n"
          "  _arguments -s \\\n"
@@ -247,7 +271,8 @@ _logseq_queries() {
         root-spec (if root-entry
                     (:spec root-entry)
                     global-spec)
-        root-tokens (zsh-arguments-tokens root-spec)
+        global-keys (set (keys global-spec))
+        root-tokens (zsh-arguments-tokens root-spec global-keys)
         root-lines (string/join " \\\n    " root-tokens)
         subcmds (->> sub-entries
                      (mapv (fn [entry]
@@ -312,7 +337,8 @@ _logseq_queries() {
                                   (str "        " g ") " func " ;;"))))
                         )
         dispatch-lines (string/join "\n" dispatches)
-        global-tokens (zsh-arguments-tokens global-spec)
+        global-keys (set (keys global-spec))
+        global-tokens (zsh-arguments-tokens global-spec global-keys)
         global-lines (string/join " \\\n    " global-tokens)]
     (str "_logseq() {\n"
          "  local curcontext=\"$curcontext\" state line\n"
@@ -346,6 +372,7 @@ _logseq_queries() {
         global-spec (-> table first :spec
                         (select-keys [:help :version :config :graph :data-dir
                                       :timeout-ms :output :verbose]))
+        global-keys (set (keys global-spec))
         ;; Collect group names that have subcommands (dispatchers own these)
         group-set (set (group-commands table))
         ;; Generate leaf command functions (skip group roots — dispatchers own those)
@@ -358,7 +385,8 @@ _logseq_queries() {
                                      (mapv (fn [entry]
                                              (zsh-leaf-function
                                               (cmd->func-name (:cmds entry))
-                                              (:spec entry)))))))
+                                              (:spec entry)
+                                              global-keys))))))
                       (string/join "\n"))
         ;; Generate group dispatchers
         group-fns (->> groups
@@ -442,6 +470,18 @@ _logseq_compadd_lines() {
   [k]
   (str "--" (name k)))
 
+(defn- bash-option-names
+  "Return all completion option name strings for a spec entry key and spec-map.
+   Includes --no-<key> for boolean flags."
+  [k spec-map]
+  (let [long-opt (bash-option-name k)
+        base (if (:alias spec-map)
+               [long-opt (str "-" (name (:alias spec-map)))]
+               [long-opt])]
+    (if (= :boolean (:coerce spec-map))
+      (conj base (str "--no-" (name k)))
+      base)))
+
 (defn- bash-all-value-opts
   "Collect all non-boolean option names (options that consume a value argument)."
   [table]
@@ -493,9 +533,8 @@ _logseq_compadd_lines() {
   [global-spec]
   (->> (keys global-spec)
        (mapcat (fn [k]
-                 (let [spec-map (get global-spec k)
-                       long-opt (bash-option-name k)
-                       alias (:alias spec-map)]
+                 (let [long-opt (bash-option-name k)
+                       alias (:alias (get global-spec k))]
                    (if alias
                      [long-opt (str "-" (name alias))]
                      [long-opt]))))
@@ -519,11 +558,7 @@ _logseq_compadd_lines() {
                        (let [entry (first entries)
                              cmd-spec (apply dissoc (:spec entry) (keys global-spec))
                              cmd-opts (->> (keys cmd-spec)
-                                           (mapcat (fn [k]
-                                                     (let [sm (get cmd-spec k)]
-                                                       (if (:alias sm)
-                                                         [(bash-option-name k) (str "-" (name (:alias sm)))]
-                                                         [(bash-option-name k)]))))
+                                           (mapcat (fn [k] (bash-option-names k (get cmd-spec k))))
                                            (string/join " "))]
                          (str "    " group-name ") opts+=' " cmd-opts "' ;;"))
                        ;; Group with subcommands
@@ -533,11 +568,7 @@ _logseq_compadd_lines() {
                              root-opts (when root-entry
                                          (let [cmd-spec (apply dissoc (:spec root-entry) (keys global-spec))]
                                            (->> (keys cmd-spec)
-                                                (mapcat (fn [k]
-                                                          (let [sm (get cmd-spec k)]
-                                                            (if (:alias sm)
-                                                              [(bash-option-name k) (str "-" (name (:alias sm)))]
-                                                              [(bash-option-name k)]))))
+                                                (mapcat (fn [k] (bash-option-names k (get cmd-spec k))))
                                                 (string/join " "))))
                              sub-branches
                              (->> sub-entries
@@ -545,11 +576,7 @@ _logseq_compadd_lines() {
                                           (let [subcmd (second (:cmds entry))
                                                 cmd-spec (apply dissoc (:spec entry) (keys global-spec))
                                                 cmd-opts (->> (keys cmd-spec)
-                                                              (mapcat (fn [k]
-                                                                        (let [sm (get cmd-spec k)]
-                                                                          (if (:alias sm)
-                                                                            [(bash-option-name k) (str "-" (name (:alias sm)))]
-                                                                            [(bash-option-name k)]))))
+                                                              (mapcat (fn [k] (bash-option-names k (get cmd-spec k))))
                                                               (string/join " "))]
                                             (str "        " subcmd ") opts+=' " cmd-opts "' ;;"))))
                                   (string/join "\n"))]
