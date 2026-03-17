@@ -1496,13 +1496,13 @@
         asset-uuid (:block/uuid asset)
         asset-title (or (:block/title asset) (str asset-uuid))
         avatar-mode? (some? avatar-context)]
-    ;; Don't render ghost assets (db entry exists but file doesn't)
-    (when-not error?
-      [:button.image-asset-item
-       {:title asset-title
-        :class (util/classnames [{:avatar-mode avatar-mode?
-                                  :selected selected?}])
-        :on-click (fn [e]
+    [:button.image-asset-item
+     {:title asset-title
+      :class (util/classnames [{:avatar-mode avatar-mode?
+                                :selected selected?
+                                :ghost-asset error?}])
+      :on-click (fn [e]
+                  (when-not error?
                     ;; Track as recently used
                     (add-used-asset! asset-uuid)
                     (let [image-data {:asset-uuid (str asset-uuid)
@@ -1518,10 +1518,16 @@
                                    {:type :image
                                     :id (str "image-" asset-uuid)
                                     :label asset-title
-                                    :data image-data}))))}
-       (if url
-         [:img {:src url :loading "lazy"}]
-         [:div.bg-gray-04.animate-pulse])])))
+                                    :data image-data})))))
+      :disabled error?}
+     (cond
+       error?
+       [:div.ghost-asset-placeholder
+        (ui/icon "photo-off" {:size 20})]
+       url
+       [:img {:src url :loading "lazy"}]
+       :else
+       [:div.bg-gray-04.animate-pulse])]))
 
 (rum/defc web-image-item
   "Renders a single web image thumbnail with external indicator and tooltip.
@@ -2414,12 +2420,19 @@
                                 :data {:value icon-name}})))
         opts (assoc opts :virtual-list? false)
         ;; Read section states reactively
-        section-states (rum/react *section-states)]
+        section-states (rum/react *section-states)
+        ;; Scope highlights to only the active section (prevents duplicate highlighting)
+        scope-opts (fn [section-label o]
+                     (cond-> o
+                       (not= section-label (:highlighted-section o))
+                       (dissoc :highlighted-id)
+                       (not= section-label (:ghost-highlighted-section o))
+                       (dissoc :ghost-highlighted-id)))]
     [:div.all-pane.pb-2
      ;; Recently used - collapsible
      (when (seq used-items)
        (pane-section "Recently used" used-items
-                     (assoc opts
+                     (assoc (scope-opts "Recently used" opts)
                             :collapsible? true
                             :keyboard-hint "alt mod 1"
                             :expanded? (get section-states "Recently used" true))))
@@ -2427,7 +2440,7 @@
      ;; Emojis - collapsible
      (pane-section "Emojis"
                    emoji-items
-                   (assoc opts
+                   (assoc (scope-opts "Emojis" opts)
                           :collapsible? true
                           :keyboard-hint "alt mod 2"
                           :total-count (count emojis)
@@ -2436,7 +2449,7 @@
      ;; Icons - collapsible
      (pane-section "Icons"
                    icon-items
-                   (assoc opts
+                   (assoc (scope-opts "Icons" opts)
                           :collapsible? true
                           :keyboard-hint "alt mod 3"
                           :total-count (count (get-tabler-icons))
@@ -2472,18 +2485,18 @@
                                (if (pos? c)
                                  (recur (rest gs) (+ offset c)
                                         (into items its)
-                                        (conj sections {:start offset :count c :cols (:cols g)}))
+                                        (conj sections {:start offset :count c :cols (:cols g) :label (:label g)}))
                                  (recur (rest gs) offset items sections)))
                              {:items items :sections sections})))]
     (cond
       ;; Search results active
       (seq result)
       (build-sections
-       {:items (when (and (seq (:emojis result)) (get section-states "Emojis" true))
-                 (:emojis result))
+       {:label "Emojis" :items (when (and (seq (:emojis result)) (get section-states "Emojis" true))
+                                 (:emojis result))
         :cols 9}
-       {:items (when (and (seq (:icons result)) (get section-states "Icons" true))
-                 (:icons result))
+       {:label "Icons" :items (when (and (seq (:icons result)) (get section-states "Icons" true))
+                                (:icons result))
         :cols 9})
 
       ;; Custom tab: 3 buttons
@@ -2496,18 +2509,21 @@
       ;; All tab: recently used + emojis + icons (non-virtualized, limited items)
       (= tab :all)
       (build-sections
-       {:items (when (get section-states "Recently used" true)
+       {:label "Recently used"
+        :items (when (get section-states "Recently used" true)
                  (->> (get-used-items)
                       (remove #(#{:text :avatar} (:type %)))))
         :cols 9}
-       {:items (when (get section-states "Emojis" true)
+       {:label "Emojis"
+        :items (when (get section-states "Emojis" true)
                  (->> (take 32 emojis)
                       (map (fn [emoji]
                              {:type :emoji :id (:id emoji)
                               :label (or (:name emoji) (:id emoji))
                               :data {:value (:id emoji)}}))))
         :cols 9}
-       {:items (when (get section-states "Icons" true)
+       {:label "Icons"
+        :items (when (get section-states "Icons" true)
                  (->> (take 48 (get-tabler-icons))
                       (map (fn [icon-name]
                              {:type :icon :id (str "icon-" icon-name)
@@ -3020,11 +3036,21 @@
         highlighted-id (when-let [idx @*highlighted-index]
                          (when (< idx (count flat-items))
                            (:id (nth flat-items idx))))
+        highlighted-section (when-let [idx @*highlighted-index]
+                              (when-let [si (section-for-index idx sections)]
+                                (:label (nth sections si))))
         ghost-highlighted-id (when (and (= @*focus-region :search)
                                         (nil? @*highlighted-index)
                                         (pos? (count flat-items)))
                                (:id (first flat-items)))
-        opts (assoc opts :highlighted-id highlighted-id :ghost-highlighted-id ghost-highlighted-id :focus-region @*focus-region)
+        ghost-highlighted-section (when ghost-highlighted-id
+                                    (:label (first sections)))
+        opts (assoc opts
+                    :highlighted-id highlighted-id
+                    :highlighted-section highlighted-section
+                    :ghost-highlighted-id ghost-highlighted-id
+                    :ghost-highlighted-section ghost-highlighted-section
+                    :focus-region @*focus-region)
         reset-q! #(when-let [^js input (rum/deref *input-ref)]
                     (reset! *q "")
                     (reset! *result {})
@@ -3180,31 +3206,39 @@
            (custom-tab-cp *q page-title *color *view icon-value opts)
            ;; Other tabs: show search results if present, else show tab content
            (if (seq result)
-             (let [section-states (rum/react *section-states)]
-               [:div.flex.flex-1.flex-col.search-result
-                ;; Emojis section
-                (when (seq (:emojis result))
-                  (pane-section
-                   "Emojis"
-                   (:emojis result)
-                   (assoc opts
-                          :collapsible? true
-                          :keyboard-hint "alt mod 2"
-                          :total-count (count (:emojis result))
-                          :virtual-list? false
-                          :expanded? (get section-states "Emojis" true))))
+             (let [section-states (rum/react *section-states)
+                   has-emojis? (seq (:emojis result))
+                   has-icons? (seq (:icons result))]
+               (if (or has-emojis? has-icons?)
+                 [:div.flex.flex-1.flex-col.search-result
+                  ;; Emojis section
+                  (when has-emojis?
+                    (pane-section
+                     "Emojis"
+                     (:emojis result)
+                     (assoc opts
+                            :collapsible? true
+                            :keyboard-hint "alt mod 2"
+                            :total-count (count (:emojis result))
+                            :virtual-list? false
+                            :expanded? (get section-states "Emojis" true))))
 
-                ;; Icons section
-                (when (seq (:icons result))
-                  (pane-section
-                   "Icons"
-                   (:icons result)
-                   (assoc opts
-                          :collapsible? true
-                          :keyboard-hint "alt mod 3"
-                          :total-count (count (:icons result))
-                          :virtual-list? false
-                          :expanded? (get section-states "Icons" true))))])
+                  ;; Icons section
+                  (when has-icons?
+                    (pane-section
+                     "Icons"
+                     (:icons result)
+                     (assoc opts
+                            :collapsible? true
+                            :keyboard-hint "alt mod 3"
+                            :total-count (count (:icons result))
+                            :virtual-list? false
+                            :expanded? (get section-states "Icons" true))))]
+                 ;; Search returned no results
+                 [:div.search-empty-state
+                  (shui/tabler-icon "search-off" {:size 36})
+                  [:span.title "No results found"]
+                  [:span.subtitle "Try a different search term"]]))
              [:div.flex.flex-1.flex-col.gap-1
               (case @*tab
                 :emoji (emojis-cp emojis opts)

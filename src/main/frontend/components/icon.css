@@ -1,7 +1,7 @@
 .cp__emoji-icon-picker {
   --ls-color-icon-preset: "inherit";
 
-  @apply w-[380px] max-h-[440px] relative flex flex-col overflow-hidden;
+  @apply w-[380px] max-h-[442px] relative flex flex-col overflow-hidden;
 
   /* More visible separator like combobox */
   .icon-picker-separator {
@@ -94,6 +94,22 @@
     min-height: 0;
   }
 
+  .search-empty-state {
+    @apply flex-1 flex flex-col items-center justify-center gap-1.5 select-none;
+    min-height: 160px;
+    color: var(--rx-gray-08);
+
+    .title {
+      @apply text-sm font-medium;
+      color: var(--rx-gray-10);
+    }
+
+    .subtitle {
+      @apply text-xs;
+      color: var(--rx-gray-08);
+    }
+  }
+
   .search-input {
     @apply relative flex-1 px-2;
 
@@ -133,12 +149,17 @@
       @apply flex gap-1 py-1 flex-wrap px-2;
 
       > button {
-        @apply flex items-center justify-center rounded-full hover:bg-gray-03 active:opacity-70;
+        @apply flex items-center justify-center rounded-lg active:opacity-70;
+        transition: background-color 150ms, outline-color 150ms;
+
+        &:hover {
+          background-color: var(--rx-gray-05);
+        }
       }
     }
 
     &.has-virtual-list {
-      @apply h-[300px] overflow-y-visible;
+      @apply h-[358px] overflow-y-visible;
 
       &.searching-result {
         @apply h-auto;
@@ -314,6 +335,64 @@
   min-height: 320px;
   max-height: 440px;
   background-color: var(--lx-gray-02);
+  transition: background-color 200ms;
+
+  .section-header {
+    background-color: transparent;
+  }
+
+  /* Drag-active state - visual feedback when dragging files over */
+  &.drag-active {
+    background-color: rgba(var(--lx-color-primary-rgb), 0.05);
+  }
+
+  &.drag-active::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    right: 2px;
+    bottom: 2px;
+    background: linear-gradient(
+      135deg,
+      rgba(37, 99, 235, 0.25) 0%,
+      rgba(0, 0, 0, 0.75) 100%
+    );
+    border: 3px dashed var(--rx-blue-09);
+    border-radius: 4px;
+    z-index: 100;
+    pointer-events: none;
+    transition: opacity 200ms;
+  }
+
+  /* Drag overlay hint - centered icon + text */
+  .drag-overlay-hint {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 101;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+
+    .tabler-icon {
+      color: #ffffff;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+    }
+
+    span {
+      font-size: 18px;
+      color: #ffffff;
+      font-weight: 500;
+      text-align: center;
+      letter-spacing: 0.5px;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+      white-space: nowrap;
+    }
+  }
 
   /* Body content - scrollable area */
   > .bd {
@@ -467,6 +546,19 @@
   &.selected {
     border-color: var(--rx-blue-09);
     box-shadow: 0 0 0 1px var(--rx-blue-09);
+  }
+
+  /* Ghost asset - file missing from disk */
+  &.ghost-asset {
+    @apply cursor-not-allowed;
+    opacity: 0.4;
+    border-style: dashed;
+    border-color: var(--rx-gray-07);
+
+    .ghost-asset-placeholder {
+      @apply absolute inset-0 flex items-center justify-center;
+      color: var(--rx-gray-09);
+    }
   }
 }
 
