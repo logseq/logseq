@@ -3,12 +3,12 @@
   (:require [datascript.core :as d]
             [frontend.db :as db]
             [frontend.state :as state]
-            [frontend.undo-redo-validate :as undo-validate]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.db :as ldb]
             [logseq.outliner.recycle :as outliner-recycle]
+            [logseq.undo-redo-validate :as undo-validate]
             [malli.core :as m]
             [malli.util :as mu]
             [promesa.core :as p]))
