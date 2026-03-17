@@ -182,6 +182,13 @@
                (when (= title (item-title item)) item)))
        item-id))
 
+(defn- ordered-item-ids-by-title-set
+  [payload titles]
+  (->> (get-in payload [:data :items])
+       (filter (fn [item]
+                 (contains? titles (item-title item))))
+       (mapv item-id)))
+
 (defn- first-result-id
   [payload]
   (first (get-in payload [:data :result])))
@@ -2234,6 +2241,112 @@
                  (is (= 0 (:exit-code edn-result)))
                  (is (= :ok (:status edn-payload)))
                  (is (not (string/starts-with? (:output human-result) "{:status")))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest ^:long test-cli-list-page-default-sort-matches-explicit-updated-at
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-list-page-default-sort")
+               repo "list-page-default-sort-graph"
+               titles #{"SortPageA" "SortPageB" "SortPageC"}]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       create-result (run-cli ["graph" "create" "--graph" repo] data-dir cfg-path)
+                       _ (run-cli ["--graph" repo "upsert" "page" "--page" "SortPageA"] data-dir cfg-path)
+                       _ (run-cli ["--graph" repo "upsert" "page" "--page" "SortPageB"] data-dir cfg-path)
+                       _ (run-cli ["--graph" repo "upsert" "page" "--page" "SortPageC"] data-dir cfg-path)
+                       _ (p/delay 80)
+                       update-result (run-cli ["--graph" repo "upsert" "page" "--page" "SortPageA"
+                                               "--update-properties" "{:logseq.property/publishing-public? true}"]
+                                              data-dir cfg-path)
+                       _ (p/delay 80)
+                       default-result (run-cli ["--graph" repo "list" "page" "--fields" "title,id,updated-at"] data-dir cfg-path)
+                       default-payload (parse-json-output default-result)
+                       explicit-result (run-cli ["--graph" repo "list" "page" "--sort" "updated-at" "--fields" "title,id,updated-at"] data-dir cfg-path)
+                       explicit-payload (parse-json-output explicit-result)
+                       default-ids (ordered-item-ids-by-title-set default-payload titles)
+                       explicit-ids (ordered-item-ids-by-title-set explicit-payload titles)
+                       stop-payload (stop-repo! data-dir cfg-path repo)]
+                 (is (= 0 (:exit-code create-result)))
+                 (is (= 0 (:exit-code update-result)))
+                 (is (= "ok" (:status default-payload)))
+                 (is (= "ok" (:status explicit-payload)))
+                 (is (= 3 (count default-ids)))
+                 (is (= explicit-ids default-ids))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest ^:long test-cli-list-tag-default-sort-matches-explicit-updated-at
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-list-tag-default-sort")
+               repo "list-tag-default-sort-graph"
+               titles #{"SortTagA-Renamed" "SortTagB" "SortTagC"}]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       create-result (run-cli ["graph" "create" "--graph" repo] data-dir cfg-path)
+                       tag-a-result (run-cli ["--graph" repo "upsert" "tag" "--name" "SortTagA"] data-dir cfg-path)
+                       tag-a-id (first-result-id (parse-json-output tag-a-result))
+                       _ (run-cli ["--graph" repo "upsert" "tag" "--name" "SortTagB"] data-dir cfg-path)
+                       _ (run-cli ["--graph" repo "upsert" "tag" "--name" "SortTagC"] data-dir cfg-path)
+                       _ (p/delay 80)
+                       update-result (run-cli ["--graph" repo "upsert" "tag" "--id" (str tag-a-id) "--name" "SortTagA-Renamed"]
+                                              data-dir cfg-path)
+                       _ (p/delay 80)
+                       default-result (run-cli ["--graph" repo "list" "tag" "--user-only" "--fields" "title,id,updated-at"] data-dir cfg-path)
+                       default-payload (parse-json-output default-result)
+                       explicit-result (run-cli ["--graph" repo "list" "tag" "--user-only" "--sort" "updated-at" "--fields" "title,id,updated-at"] data-dir cfg-path)
+                       explicit-payload (parse-json-output explicit-result)
+                       default-ids (ordered-item-ids-by-title-set default-payload titles)
+                       explicit-ids (ordered-item-ids-by-title-set explicit-payload titles)
+                       stop-payload (stop-repo! data-dir cfg-path repo)]
+                 (is (= 0 (:exit-code create-result)))
+                 (is (number? tag-a-id))
+                 (is (= 0 (:exit-code update-result)))
+                 (is (= "ok" (:status default-payload)))
+                 (is (= "ok" (:status explicit-payload)))
+                 (is (= 3 (count default-ids)))
+                 (is (= explicit-ids default-ids))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest ^:long test-cli-list-property-default-sort-matches-explicit-updated-at
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-list-property-default-sort")
+               repo "list-property-default-sort-graph"
+               titles #{"SortPropertyA" "SortPropertyB" "SortPropertyC"}]
+           (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
+                       create-result (run-cli ["graph" "create" "--graph" repo] data-dir cfg-path)
+                       property-a-result (run-cli ["--graph" repo "upsert" "property" "--name" "SortPropertyA" "--type" "default"] data-dir cfg-path)
+                       property-a-id (first-result-id (parse-json-output property-a-result))
+                       _ (run-cli ["--graph" repo "upsert" "property" "--name" "SortPropertyB" "--type" "default"] data-dir cfg-path)
+                       _ (run-cli ["--graph" repo "upsert" "property" "--name" "SortPropertyC" "--type" "default"] data-dir cfg-path)
+                       _ (p/delay 80)
+                       update-result (run-cli ["--graph" repo "upsert" "property" "--id" (str property-a-id) "--type" "node"] data-dir cfg-path)
+                       _ (p/delay 80)
+                       default-result (run-cli ["--graph" repo "list" "property" "--user-only" "--fields" "title,id,updated-at"] data-dir cfg-path)
+                       default-payload (parse-json-output default-result)
+                       explicit-result (run-cli ["--graph" repo "list" "property" "--user-only" "--sort" "updated-at" "--fields" "title,id,updated-at"] data-dir cfg-path)
+                       explicit-payload (parse-json-output explicit-result)
+                       default-ids (ordered-item-ids-by-title-set default-payload titles)
+                       explicit-ids (ordered-item-ids-by-title-set explicit-payload titles)
+                       stop-payload (stop-repo! data-dir cfg-path repo)]
+                 (is (= 0 (:exit-code create-result)))
+                 (is (number? property-a-id))
+                 (is (= 0 (:exit-code update-result)))
+                 (is (= "ok" (:status default-payload)))
+                 (is (= "ok" (:status explicit-payload)))
+                 (is (= 3 (count default-ids)))
+                 (is (= explicit-ids default-ids))
+                 (is (= "ok" (:status stop-payload)))
                  (done))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))
