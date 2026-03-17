@@ -1641,11 +1641,11 @@
         remote-tx-data (mapcat :tx-data remote-results)
         remote-tx-report (combine-tx-reports (map :report remote-results))
         _ (reset! *remote-tx-report remote-tx-report)
-        deleted-context (combine-deleted-contexts
-                         (local-deleted-context reversed-tx-reports)
-                         (remote-deleted-context remote-tx-report remote-tx-data))
+        deleted-context-data (combine-deleted-contexts
+                              (local-deleted-context reversed-tx-reports)
+                              (remote-deleted-context remote-tx-report remote-tx-data))
         remote-db @temp-conn]
-    {:deleted-context deleted-context
+    {:deleted-context deleted-context-data
      :remote-db remote-db
      :remote-results remote-results
      :remote-tx-data remote-tx-data
@@ -1654,13 +1654,14 @@
      :remote-updated-keys (remote-updated-attr-keys remote-db remote-tx-data)}))
 
 (defn- rebase-remote-state!
-  [{:keys [temp-conn local-txs tx-meta deleted-context remote-db remote-tx-data-set remote-updated-keys]}]
+  [{:keys [temp-conn local-txs tx-meta remote-db remote-tx-data-set remote-updated-keys]
+    :as remote-state}]
   (let [rebase-tx-reports (rebase-local-txs! temp-conn
                                              local-txs
                                              remote-db
                                              remote-updated-keys
                                              remote-tx-data-set
-                                             (:deleted-block? deleted-context)
+                                             (:deleted-block? (:deleted-context remote-state))
                                              tx-meta)]
     {:rebase-tx-report (combine-tx-reports rebase-tx-reports)
      :rebase-tx-reports rebase-tx-reports}))
@@ -1668,17 +1669,18 @@
 (declare fix-tx! delete-nodes!)
 
 (defn- delete-context-nodes!
-  [temp-conn deleted-context tx-meta]
+  [temp-conn deleted-context-data tx-meta]
   (let [db @temp-conn
         deleted-nodes (keep (fn [id] (d/entity db [:block/uuid id]))
-                            (:deleted-uuids deleted-context))]
+                            (:deleted-uuids deleted-context-data))]
     (delete-nodes! temp-conn deleted-nodes tx-meta)))
 
 (defn- finalize-remote-state!
-  [{:keys [temp-conn tx-meta deleted-context remote-tx-report rebase-tx-report *temp-after-db]}]
+  [{:keys [temp-conn tx-meta remote-tx-report rebase-tx-report *temp-after-db]
+    :as remote-state}]
   (reset! *temp-after-db @temp-conn)
   (fix-tx! temp-conn remote-tx-report rebase-tx-report (assoc tx-meta :op :fix))
-  (delete-context-nodes! temp-conn deleted-context (assoc tx-meta :op :delete-blocks)))
+  (delete-context-nodes! temp-conn (:deleted-context remote-state) (assoc tx-meta :op :delete-blocks)))
 
 (defn- normalize-rebased-pending-tx
   [{:keys [db-before db-after tx-data remote-tx-data-set keep-local-retract-entity?]}]
@@ -1813,8 +1815,8 @@
            remote-tx-report (combine-tx-reports (map :report remote-results))]
        (when remote-tx-report
          (let [tx-meta (:tx-meta remote-tx-report)
-               deleted-context (remote-deleted-context remote-tx-report remote-tx-data)]
-           (delete-context-nodes! temp-conn deleted-context
+               deleted-context-data (remote-deleted-context remote-tx-report remote-tx-data)]
+           (delete-context-nodes! temp-conn deleted-context-data
                                   (assoc tx-meta :op :delete-blocks))))))))
 
 (defn- apply-remote-txs!
