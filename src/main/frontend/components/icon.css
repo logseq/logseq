@@ -28,73 +28,6 @@
     overflow-y: hidden !important;
   }
 
-  .drag-overlay-hint {
-    position: absolute;
-    inset: 0;
-    z-index: 101;
-    pointer-events: none;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 18px;
-
-    /* Corner brackets */
-    .corner {
-      position: absolute;
-      width: 24px;
-      height: 24px;
-
-      &::before {
-        content: "";
-        position: absolute;
-        width: 12px;
-        height: 12px;
-        color: var(--lx-accent-09);
-        opacity: 0.6;
-      }
-
-      &.tl { top: 20px; left: 20px;
-        &::before { top: 0; left: 0; border-top: 1.5px solid; border-left: 1.5px solid; border-radius: 3px 0 0 0; }
-      }
-      &.tr { top: 20px; right: 20px;
-        &::before { top: 0; right: 0; border-top: 1.5px solid; border-right: 1.5px solid; border-radius: 0 3px 0 0; }
-      }
-      &.bl { bottom: 20px; left: 20px;
-        &::before { bottom: 0; left: 0; border-bottom: 1.5px solid; border-left: 1.5px solid; border-radius: 0 0 0 3px; }
-      }
-      &.br { bottom: 20px; right: 20px;
-        &::before { bottom: 0; right: 0; border-bottom: 1.5px solid; border-right: 1.5px solid; border-radius: 0 0 3px 0; }
-      }
-    }
-
-    .tabler-icon {
-      color: var(--rx-gray-12);
-    }
-
-    .text-group {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .title {
-      font-size: 14px;
-      color: var(--rx-gray-12);
-      font-weight: 500;
-      text-align: center;
-      white-space: nowrap;
-    }
-
-    .subtitle {
-      font-size: 11px;
-      color: var(--rx-gray-11);
-      text-align: center;
-      white-space: nowrap;
-    }
-  }
-
   /* More visible separator like combobox */
   .icon-picker-separator {
     background-color: var(--rx-gray-05) !important;
@@ -418,6 +351,73 @@
   color: var(--rx-gray-11);
 }
 
+/* Shared drag overlay hint — used by both icon picker and asset picker */
+.drag-overlay-hint {
+  position: absolute;
+  inset: 0;
+  z-index: 101;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+
+  .corner {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+
+    &::before {
+      content: "";
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      color: var(--lx-accent-09);
+      opacity: 0.6;
+    }
+
+    &.tl { top: 20px; left: 20px;
+      &::before { top: 0; left: 0; border-top: 1.5px solid; border-left: 1.5px solid; border-radius: 3px 0 0 0; }
+    }
+    &.tr { top: 20px; right: 20px;
+      &::before { top: 0; right: 0; border-top: 1.5px solid; border-right: 1.5px solid; border-radius: 0 3px 0 0; }
+    }
+    &.bl { bottom: 20px; left: 20px;
+      &::before { bottom: 0; left: 0; border-bottom: 1.5px solid; border-left: 1.5px solid; border-radius: 0 0 0 3px; }
+    }
+    &.br { bottom: 20px; right: 20px;
+      &::before { bottom: 0; right: 0; border-bottom: 1.5px solid; border-right: 1.5px solid; border-radius: 0 0 3px 0; }
+    }
+  }
+
+  .tabler-icon {
+    color: var(--rx-gray-12);
+  }
+
+  .text-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .title {
+    font-size: 14px;
+    color: var(--rx-gray-12);
+    font-weight: 500;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .subtitle {
+    font-size: 11px;
+    color: var(--rx-gray-11);
+    text-align: center;
+    white-space: nowrap;
+  }
+}
+
 /* Asset Picker (Level 2 view) - Figma aligned */
 .asset-picker {
   @apply flex flex-col overflow-hidden relative;
@@ -433,57 +433,29 @@
     background-color: transparent;
   }
 
-  /* Drag-active state - visual feedback when dragging files over */
-  &.drag-active {
-    background-color: rgba(var(--lx-color-primary-rgb), 0.05);
-  }
-
+  /* Drag-active state - frosted glass with edge glow (matches icon picker) */
   &.drag-active::after {
     content: "";
     position: absolute;
-    top: 2px;
-    left: 2px;
-    right: 2px;
-    bottom: 2px;
-    background: linear-gradient(
-      135deg,
-      rgba(37, 99, 235, 0.25) 0%,
-      rgba(0, 0, 0, 0.75) 100%
+    inset: 0;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    background: radial-gradient(
+      ellipse at center,
+      color-mix(in srgb, var(--lx-gray-02) 94%, transparent) 40%,
+      color-mix(in srgb, var(--lx-accent-09) 10%, transparent) 100%
     );
-    border: 3px dashed var(--rx-blue-09);
-    border-radius: 4px;
     z-index: 100;
     pointer-events: none;
     transition: opacity 200ms;
   }
 
-  /* Drag overlay hint - centered icon + text */
-  .drag-overlay-hint {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 101;
-    pointer-events: none;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 12px;
+  &.drag-active > .bd {
+    overflow-y: hidden;
+  }
 
-    .tabler-icon {
-      color: #ffffff;
-      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
-    }
-
-    span {
-      font-size: 18px;
-      color: #ffffff;
-      font-weight: 500;
-      text-align: center;
-      letter-spacing: 0.5px;
-      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-      white-space: nowrap;
-    }
+  &.drag-active [data-virtuoso-scroller] {
+    overflow-y: hidden !important;
   }
 
   /* Body content - scrollable area */

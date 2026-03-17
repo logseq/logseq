@@ -2166,28 +2166,36 @@
       :on-drag-enter (fn [e]
                        (.preventDefault e)
                        (.stopPropagation e)
-                       ;; Increment depth counter - activate on first enter
                        (swap! *drag-depth inc)
                        (when (= @*drag-depth 1)
-                         (reset! *drag-active? true)))
+                         (reset! *drag-active? true)
+                         (when-let [bd (.querySelector (.-currentTarget e) ".bd-scroll")]
+                           (set! (.. bd -style -overflowY) "hidden"))
+                         (when-let [vs (.querySelector (.-currentTarget e) "[data-virtuoso-scroller]")]
+                           (set! (.. vs -style -overflowY) "hidden"))))
       :on-drag-over (fn [e]
-                      ;; CRITICAL: Must preventDefault to allow drop
                       (.preventDefault e)
                       (.stopPropagation e))
       :on-drag-leave (fn [e]
                        (.preventDefault e)
                        (.stopPropagation e)
-                       ;; Decrement depth counter - deactivate when leaving completely
                        (swap! *drag-depth dec)
                        (when (<= @*drag-depth 0)
                          (reset! *drag-depth 0)
-                         (reset! *drag-active? false)))
+                         (reset! *drag-active? false)
+                         (when-let [bd (.querySelector (.-currentTarget e) ".bd-scroll")]
+                           (set! (.. bd -style -overflowY) ""))
+                         (when-let [vs (.querySelector (.-currentTarget e) "[data-virtuoso-scroller]")]
+                           (set! (.. vs -style -overflowY) ""))))
       :on-drop (fn [e]
                  (.preventDefault e)
                  (.stopPropagation e)
-                 ;; Reset state immediately
                  (reset! *drag-depth 0)
                  (reset! *drag-active? false)
+                 (when-let [bd (.querySelector (.-currentTarget e) ".bd-scroll")]
+                   (set! (.. bd -style -overflowY) ""))
+                 (when-let [vs (.querySelector (.-currentTarget e) "[data-virtuoso-scroller]")]
+                   (set! (.. vs -style -overflowY) ""))
                  (let [files (array-seq (.. e -dataTransfer -files))]
                    (handle-upload files)))}
 
@@ -2198,11 +2206,15 @@
        :aria-atomic "true"}
       (rum/react *upload-status)]
 
-     ;; Drag overlay hint - shown when dragging files
+     ;; Drag overlay hint
      (when @*drag-active?
        [:div.drag-overlay-hint
-        (shui/tabler-icon "photo-up" {:size 40})
-        [:span "Drop images to upload"]])
+        [:div.corner.tl] [:div.corner.tr]
+        [:div.corner.bl] [:div.corner.br]
+        (shui/tabler-icon "upload" {:size 26})
+        [:div.text-group
+         [:span.title "Drop images to upload"]
+         [:span.subtitle "PNG, JPG, SVG, GIF, WebP"]]])
 
      ;; Topbar: back button + search
      [:div.asset-picker-topbar
