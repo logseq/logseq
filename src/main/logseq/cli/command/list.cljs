@@ -9,14 +9,13 @@
 (def ^:private list-common-spec
   {:expand {:desc "Include expanded metadata"
             :coerce :boolean}
-   :user-only {:desc "Exclude built-in entities"
-               :alias :u
-               :coerce :boolean}
+   :include-built-in {:coerce :boolean}
+   :fields {:desc "Select output fields (comma separated)"}
    :limit {:desc "Limit results"
            :coerce :long}
    :offset {:desc "Offset results"
             :coerce :long}
-   :sort {:desc "Sort field"}
+   :sort {:desc "Sort field. Default: updated-at"}
    :order {:desc "Sort order. Default: asc"
            :values ["asc" "desc"]}})
 
@@ -33,43 +32,44 @@
   (or (:sort options) default-sort-field))
 
 (def ^:private list-page-spec
-  (merge list-common-spec
-         {:sort {:desc "Sort field. Default: updated-at"
-                 :values (:list-page list-sort-fields)}
-          :include-journal {:desc "Include journal pages"
-                            :coerce :boolean}
-          :journal-only {:desc "Only journal pages"
-                         :coerce :boolean}
-          :include-hidden {:desc "Include hidden pages"
-                           :coerce :boolean}
-          :updated-after {:desc "Filter by updated-at (ISO8601)"}
-          :created-after {:desc "Filter by created-at (ISO8601)"}
-          :fields {:desc "Select output fields (comma separated)"}}))
+  (merge-with
+   merge
+   list-common-spec
+   {:sort {:values (:list-page list-sort-fields)}
+    :include-built-in {:desc "Include built-in pages"}
+    :include-journal {:desc "Include journal pages"
+                      :coerce :boolean}
+    :journal-only {:desc "Only journal pages"
+                   :coerce :boolean}
+    :include-hidden {:desc "Include hidden pages"
+                     :coerce :boolean}
+    :updated-after {:desc "Filter by updated-at (ISO8601)"}
+    :created-after {:desc "Filter by created-at (ISO8601)"}
+    :fields {:desc "Select output fields (comma separated)"}}))
 
 (def ^:private list-tag-spec
-  (merge list-common-spec
-         {:sort {:desc "Sort field. Default: updated-at"
-                 :values (:list-tag list-sort-fields)}
-          :include-built-in {:desc "Include built-in tags"
-                             :coerce :boolean}
-          :with-properties {:desc "Include tag properties"
-                            :coerce :boolean}
-          :with-extends {:desc "Include tag extends"
-                         :coerce :boolean}
-          :fields {:desc "Select output fields (comma separated)"}}))
+  (merge-with
+   merge
+   list-common-spec
+   {:sort {:values (:list-tag list-sort-fields)}
+    :include-built-in {:desc "Include built-in tags"}
+    :with-properties {:desc "Include tag properties"
+                      :coerce :boolean}
+    :with-extends {:desc "Include tag extends"
+                   :coerce :boolean}
+    :fields {:desc "Select output fields (comma separated)"}}))
 
 (def ^:private list-property-spec
-  (merge list-common-spec
-         {:sort {:desc "Sort field. Default: updated-at"
-                 :values (:list-property list-sort-fields)}
-          :include-built-in {:desc "Include built-in properties"
-                             :coerce :boolean}
-          :with-classes {:desc "Include property classes"
-                         :coerce :boolean}
-          :with-type {:desc "Include property type"
-                      :default true
-                      :coerce :boolean}
-          :fields {:desc "Select output fields (comma separated)"}}))
+  (merge-with
+   merge
+   list-common-spec
+   {:sort {:values (:list-property list-sort-fields)}
+    :include-built-in {:desc "Include built-in properties"}
+    :with-classes {:desc "Include property classes"
+                   :coerce :boolean}
+    :with-type {:desc "Include property type"
+                :default true
+                :coerce :boolean}}))
 
 (def entries
   [(core/command-entry ["list" "page"] :list-page "List pages" list-page-spec
@@ -191,15 +191,10 @@
     (not with-type) (dissoc :logseq.property/type)
     (not (string/includes? (str fields) "description")) (dissoc :logseq.property/description)))
 
-(defn- apply-user-only
-  [options]
-  (cond-> options
-    (:user-only options) (assoc :include-built-in false)))
-
 (defn execute-list-page
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              options (apply-user-only (:options action))
+              options (:options action)
               items (transport/invoke cfg :thread-api/api-list-pages false
                                       [(:repo action) options])
               sort-field (effective-sort-field options)
@@ -214,7 +209,7 @@
 (defn execute-list-tag
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              options (cond-> (apply-user-only (:options action))
+              options (cond-> (:options action)
                         ((some-fn :with-extends :with-properties) (:options action))
                         (assoc :expand true))
               items (transport/invoke cfg :thread-api/api-list-tags false
@@ -232,7 +227,7 @@
 (defn execute-list-property
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              options (cond-> (apply-user-only (:options action))
+              options (cond-> (:options action)
                         (:with-classes (:options action)) (assoc :expand true))
               items (transport/invoke cfg :thread-api/api-list-properties false
                                       [(:repo action) options])
