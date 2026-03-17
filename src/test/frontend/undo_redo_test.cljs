@@ -60,7 +60,8 @@
   disable-browser-fns
   with-worker-undo-validation
   test-helper/react-components
-  #(test-helper/start-and-destroy-db % {:build-init-data? false})
+  #(test-helper/start-and-destroy-db % {:build-init-data? false
+                                        :schema {:logseq.property/deleted-at {:db/index true}}})
   listen-db-fixture)
 
 (defn- undo-all!

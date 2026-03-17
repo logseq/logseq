@@ -44,33 +44,74 @@
                                    (when tx [tx]))))) refs)]
         tx-data))))
 
+(defn build-page-retract-tx
+  "Build cleanup tx-data for deleting a schema page.
+   This is pure and can be reused by sync repair."
+  [db page & [{:keys [include-page-retract?]
+               :or {include-page-retract? true}}]]
+  (let [page-id (:db/id page)
+        page-blocks-tx-data (->> (:block/_page page)
+                                 (keep (fn [block]
+                                         (when (d/entity db [:block/uuid (:block/uuid block)])
+                                           [:db/retractEntity [:block/uuid (:block/uuid block)]]))))
+        property-pair-tx-data (when (ldb/property? page)
+                                (->> (d/datoms db :avet (:db/ident page))
+                                     (map (fn [d] [:db/retract (:e d) (:a d) (:v d)]))))
+        restore-class-parent-tx (when (ldb/class? page)
+                                  (->> (filter ldb/class? (:logseq.property.class/_extends page))
+                                       (map (fn [p]
+                                              {:db/id (:db/id p)
+                                               :logseq.property.class/extends :logseq.class/Root}))))
+        page-tx (when (and include-page-retract?
+                           (d/entity db page-id))
+                  [[:db/retractEntity page-id]])]
+    (concat page-blocks-tx-data
+            property-pair-tx-data
+            restore-class-parent-tx
+            (db-refs->page page)
+            page-tx)))
+
 (defn delete!
   "Deletes a page. Returns true if able to delete page. If unable to delete,
-  calls error-handler fn and returns false"
+  calls error-handler fn and returns false.
+  Rules:
+  1. today page can't be deleted
+  2. properties and tags will be hard retracted
+  3. other pages will be moved to Recycle"
   [conn page-uuid & {:keys [persist-op? rename? error-handler deleted-by-uuid now-ms]
                      :or {persist-op? true
                           error-handler (fn [{:keys [msg]}] (js/console.error msg))}}]
   (assert (uuid? page-uuid) (str ::delete! " wrong page-uuid: " (if page-uuid page-uuid "nil")))
   (when page-uuid
     (when-let [page (d/entity @conn [:block/uuid page-uuid])]
-      ;; TODO: maybe we should add $$$favorites to built-in pages?
-      (if (or (ldb/built-in? page) (ldb/hidden? page))
-        (do
-          (error-handler {:msg "Built-in page cannot be deleted"})
-          false)
-        (let [today-page? (when-let [day (:block/journal-day page)]
-                            (= (date-time-util/ms->journal-day (js/Date.)) day))
-              tx-data (when-not today-page?
-                        (outliner-recycle/recycle-page-tx-data @conn page {:deleted-by-uuid deleted-by-uuid
-                                                                           :now-ms now-ms}))]
-          (when (seq tx-data)
-            (ldb/transact! conn tx-data
-                           (cond-> {:outliner-op :delete-page
-                                    :deleted-page (:block/title page)
-                                    :persist-op? persist-op?}
-                             rename?
-                             (assoc :real-outliner-op :rename-page))))
-          true)))))
+      (let [today-page? (when-let [day (:block/journal-day page)]
+                          (= (date-time-util/ms->journal-day (js/Date.)) day))
+            tx-meta (cond-> {:outliner-op :delete-page
+                             :deleted-page (:block/title page)
+                             :persist-op? persist-op?}
+                      rename?
+                      (assoc :real-outliner-op :rename-page))]
+        ;; TODO: maybe we should add $$$favorites to built-in pages?
+        (cond
+          today-page?
+          false
+
+          (or (ldb/built-in? page) (ldb/hidden? page))
+          (do
+            (error-handler {:msg "Built-in page cannot be deleted"})
+            false)
+
+          (or (ldb/class? page) (ldb/property? page))
+          (let [tx-data (build-page-retract-tx @conn page)]
+            (ldb/transact! conn tx-data tx-meta)
+            true)
+
+          :else
+          (let [tx-data (outliner-recycle/recycle-page-tx-data @conn page {:deleted-by-uuid deleted-by-uuid
+                                                                           :now-ms now-ms})]
+            (when (seq tx-data)
+              (ldb/transact! conn tx-data tx-meta))
+            true))))))
 
 (defn- build-page-tx [db properties page {:keys [class? tags class-ident-namespace]}]
   (when (:block/uuid page)
