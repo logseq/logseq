@@ -4,11 +4,11 @@
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.worker.undo-redo :as undo-validate]
             [lambdaisland.glogi :as log]
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.db :as ldb]
             [logseq.outliner.recycle :as outliner-recycle]
+            [logseq.outliner.undo-redo-validate :as undo-validate]
             [malli.core :as m]
             [malli.util :as mu]
             [promesa.core :as p]))
