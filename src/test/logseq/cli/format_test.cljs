@@ -108,6 +108,19 @@
       (is (string/includes? result "mv '/tmp/graphs/legacy++name' '/tmp/graphs/legacy~2Fname'"))
       (is (string/includes? result "Warning: cannot derive graph name for legacy dir 'mystery'; rename command is not available."))))
 
+  (testing "graph list rename suggestion targets canonical dir with literal spaces"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-list
+                                        :data {:graphs ["space name"]
+                                               :graph-items [{:kind :legacy
+                                                              :legacy-dir "space~20name"
+                                                              :legacy-graph-name "space name"
+                                                              :target-graph-dir "space name"
+                                                              :conflict? false}]}}
+                                       {:output-format nil
+                                        :data-dir "/tmp/graphs"})]
+      (is (string/includes? result "mv '/tmp/graphs/space~20name' '/tmp/graphs/space name'"))))
+
   (testing "graph list conflict warning does not print mv command"
     (let [result (format/format-result {:status :ok
                                         :command :graph-list
