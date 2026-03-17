@@ -20,13 +20,8 @@
    :sort {:desc "Sort field. Default: updated-at"
           :alias :s}
    :order {:desc "Sort order. Default: asc"
-           :values ["asc" "desc"]}})
-
-;; These should be kept in sync with visible columns e.g. format/list-columns
-(def ^:private list-sort-fields
-  {:list-page #{"title" "id" "ident" "created-at" "updated-at"}
-   :list-tag #{"title" "id" "ident" "created-at" "updated-at"}
-   :list-property #{"title" "id" "ident" "created-at" "updated-at" "type"}})
+           :values ["asc" "desc"]
+           :validate #{"asc" "desc"}}})
 
 (def ^:private default-sort-field "updated-at")
 
@@ -34,6 +29,7 @@
   [options]
   (or (:sort options) default-sort-field))
 
+;; Update format/list-page-columns to make field visible
 (def ^:private list-page-field-map
   {"id" :db/id
    "ident" :db/ident
@@ -46,7 +42,8 @@
   (merge-with
    merge
    list-common-spec
-   {:sort {:values (:list-page list-sort-fields)}
+   {:sort {:values (set (keys list-page-field-map))
+           :validate (set (keys list-page-field-map))}
     :fields {:multiple-values (keys list-page-field-map)}
     :include-built-in {:desc "Include built-in pages"}
     :include-journal {:desc "Include journal pages"
@@ -58,6 +55,7 @@
     :updated-after {:desc "Filter by updated-at (ISO8601)"}
     :created-after {:desc "Filter by created-at (ISO8601)"}}))
 
+;; Update format/list-tag-columns to make field visible
 (def ^:private list-tag-field-map
   {"id" :db/id
    "ident" :db/ident
@@ -73,7 +71,8 @@
   (merge-with
    merge
    list-common-spec
-   {:sort {:values (:list-tag list-sort-fields)}
+   {:sort {:values (set (keys list-tag-field-map))
+           :validate (set (keys list-tag-field-map))}
     :fields {:multiple-values (keys list-tag-field-map)}
     :include-built-in {:desc "Include built-in tags"}
     :with-properties {:desc "Include tag properties"
@@ -81,6 +80,7 @@
     :with-extends {:desc "Include tag extends"
                    :coerce :boolean}}))
 
+;; Update format/list-property-columns to make field visible
 (def ^:private list-property-field-map
   {"id" :db/id
    "ident" :db/ident
@@ -96,7 +96,8 @@
   (merge-with
    merge
    list-common-spec
-   {:sort {:values (:list-property list-sort-fields)}
+   {:sort {:values (set (keys list-property-field-map))
+           :validate (set (keys list-property-field-map))}
     :fields {:multiple-values (keys list-property-field-map)}
     :include-built-in {:desc "Include built-in properties"}
     :with-classes {:desc "Include property classes"
@@ -116,18 +117,10 @@
 
 (defn invalid-options?
   [command opts]
-  (let [{:keys [order include-journal journal-only]} opts
-        sort-field (:sort opts)
-        allowed (get list-sort-fields command)]
+  (let [{:keys [include-journal journal-only]} opts]
     (cond
       (and include-journal journal-only)
       "include-journal and journal-only are mutually exclusive"
-
-      (and (seq sort-field) (not (contains? allowed sort-field)))
-      (str "invalid sort field: " sort-field)
-
-      (and (seq order) (not (#{"asc" "desc"} order)))
-      (str "invalid order: " order)
 
       :else nil)))
 
