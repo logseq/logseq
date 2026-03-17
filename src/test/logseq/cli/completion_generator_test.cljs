@@ -199,19 +199,40 @@
       (is (string/includes? output "compdef _logseq logseq")))
     (testing "boolean flags emit alias grouping"
       (is (string/includes? output "'{-v,--verbose}'[")))
+    (testing "global boolean flags do NOT emit --no- negation token"
+      (is (not (string/includes? output "--no-verbose")))
+      (is (not (string/includes? output "--no-help"))))
     (testing "enum options emit value list form"
       (is (string/includes? output "'{-o,--output}'=[Output format. Default: human]:value:(human json edn)'")))
     (testing ":complete :graphs emits _logseq_graphs"
       (is (string/includes? output "'{-g,--graph}'=[Graph name]:value:_logseq_graphs'")))
     (testing ":complete :file emits _files"
       (is (string/includes? output "'{-c,--config}'=[Path to cli.edn (default ~/logseq/cli.edn)]:file:_files'")))
-    (testing ":alias emits grouping"
+    (testing ":alias emits grouping without --no- for global flags"
       (is (re-find #"\(-h --help\)" output)))))
 
 (deftest test-zsh-command-specific-values
   (let [output (gen/generate-completions "zsh" full-table)]
     (testing "--pos under upsert block offers correct values"
       (is (re-find #"--pos=.*\(first-child last-child sibling\)" output)))))
+
+(deftest test-zsh-no-prefix-for-command-booleans
+  (let [output (gen/generate-completions "zsh" full-table)]
+    (testing "--no-include-built-in is offered for list tag"
+      (is (string/includes? output "--no-include-built-in")))
+    (testing "--no-with-type is offered for list property"
+      (is (string/includes? output "--no-with-type")))
+    (testing "--no- tokens have Negate description"
+      (is (string/includes? output "--no-include-built-in[Negate --include-built-in]")))
+    (testing "--no- and positive form are mutually exclusive"
+      (is (string/includes? output "(--include-built-in --no-include-built-in)")))))
+
+(deftest test-bash-no-prefix-for-command-booleans
+  (let [output (gen/generate-completions "bash" full-table)]
+    (testing "--no-include-built-in appears in bash wordlist"
+      (is (string/includes? output "--no-include-built-in")))
+    (testing "--no-with-type appears in bash wordlist"
+      (is (string/includes? output "--no-with-type")))))
 
 (deftest test-zsh-all-commands-present
   (let [output (gen/generate-completions "zsh" full-table)]
@@ -244,6 +265,9 @@
       (is (string/includes? output "--file")))
     (testing "boolean flags appear in wordlist"
       (is (string/includes? output "--verbose")))
+    (testing "global boolean flags do NOT have --no- variants in wordlist"
+      (is (not (string/includes? output "--no-verbose")))
+      (is (not (string/includes? output "--no-help"))))
     (testing "enum values use compgen -W"
       (is (re-find #"compgen -W.*human json edn" output)))
     (testing ":complete :file uses compgen -f"
