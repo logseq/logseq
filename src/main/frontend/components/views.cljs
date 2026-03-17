@@ -2345,18 +2345,29 @@
        (m/sp
          (when-not query?
            (let [repo (state/get-current-repo)]
+             (js/console.log "[DEBUG views/view] effect running"
+                             (pr-str {:parent-id (:db/id view-parent)
+                                      :feature-type view-feature-type
+                                      :has-view-entity? (some? view-entity)}))
              (when-not view-entity
                (c.m/<? (db-async/<get-views repo (:db/id view-parent) view-feature-type))
                (let [views (get-views view-parent view-feature-type)]
+                 (js/console.log "[DEBUG views/view] after <get-views"
+                                 (pr-str {:views-count (count views)
+                                          :first-view-id (some-> (first views) :db/id)}))
                  (if-let [v (first views)]
                    (do
                      (set-views! views)
                      (when-not view-entity (set-view-entity! v)))
                    (when (and view-parent view-feature-type (not view-entity))
+                     (js/console.log "[DEBUG views/view] creating new view for" (pr-str {:parent-id (:db/id view-parent) :type view-feature-type}))
                      (let [new-view (c.m/<? (create-view! view-parent view-feature-type {:auto-triggered? true}))]
+                       (js/console.log "[DEBUG views/view] new view created" (pr-str {:view-id (:db/id new-view)}))
                        (set-views! (concat views [new-view]))
                        (set-view-entity! new-view))))))))))
      [])
+    (js/console.log "[DEBUG views/view] render" (pr-str {:view-entity-id (some-> view-entity :db/id)
+                                                         :will-render? (some? view-entity)}))
     (when view-entity
       (let [option' (assoc option
                            :view-feature-type (or view-feature-type

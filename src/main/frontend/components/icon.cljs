@@ -126,15 +126,22 @@
     (reset! *loaded-for [asset-uuid asset-type])
     (reset! *url nil)
     (reset! *error false)
+    (js/console.log "[DEBUG load-image-url!]" (pr-str {:uuid asset-uuid :type asset-type}))
     (if asset-type
       ;; Known extension - load directly
       (let [file (str asset-uuid "." asset-type)
             asset-path (path/path-join (str "../" common-config/local-assets-dir) file)]
+        (js/console.log "[DEBUG load-image-url!] path=" asset-path)
         (-> (assets-handler/<make-asset-url asset-path)
-            (p/then #(reset! *url %))
-            (p/catch #(reset! *error true))))
+            (p/then (fn [url]
+                      (js/console.log "[DEBUG load-image-url!] OK" (pr-str {:uuid asset-uuid :url (subs (str url) 0 80)}))
+                      (reset! *url url)))
+            (p/catch (fn [err]
+                       (js/console.error "[DEBUG load-image-url!] FAILED" (pr-str {:uuid asset-uuid :type asset-type :error (str err)}))
+                       (reset! *error true)))))
       ;; Unknown extension - try common ones
-      (try-load-image-with-extensions! asset-uuid common-image-extensions *url *error *loaded-for))))
+      (do (js/console.log "[DEBUG load-image-url!] no asset-type, trying extensions" (pr-str {:uuid asset-uuid}))
+          (try-load-image-with-extensions! asset-uuid common-image-extensions *url *error *loaded-for)))))
 
 (rum/defcs image-icon-cp < rum/reactive
   (rum/local nil ::url)
@@ -617,31 +624,37 @@
   "Get image assets from frontend Datascript (fast, but may be empty on cold start)"
   []
   (let [image-extensions (set (map name config/image-formats))
-        results (db-utils/q '[:find ?uuid ?type ?title ?updated
+        results (db-utils/q '[:find ?uuid ?type ?title ?updated ?checksum
                               :where
                               [?e :logseq.property.asset/type ?type]
+                              [?e :logseq.property.asset/checksum ?checksum]
                               [?e :block/uuid ?uuid]
                               [(get-else $ ?e :block/title "") ?title]
                               [(get-else $ ?e :block/updated-at 0) ?updated]])]
     (->> results
-         (filter (fn [[_uuid type _title _updated]]
+         (filter (fn [[_uuid type _title _updated _checksum]]
                    (contains? image-extensions (some-> type string/lower-case))))
-         (sort-by (fn [[_uuid _type _title updated]] updated) >)
-         (map (fn [[uuid type title _updated]]
+         (sort-by (fn [[_uuid _type _title updated _checksum]] updated) >)
+         ;; Deduplicate by checksum — keep the most recently updated entry
+         (medley/distinct-by (fn [[_uuid _type _title _updated checksum]] checksum))
+         (map (fn [[uuid type title _updated checksum]]
                 {:block/uuid uuid
                  :block/title (if (string/blank? title) (str uuid) title)
-                 :logseq.property.asset/type type})))))
+                 :logseq.property.asset/type type
+                 :logseq.property.asset/checksum checksum})))))
 
 (defn <get-image-assets
   "Async fetch image assets from DB worker (works on cold start).
-   Returns a promise that resolves to a list of asset maps."
+   Returns a promise that resolves to a list of asset maps.
+   Uses transact-db? false to avoid re-transacting deleted assets back into frontend."
   []
   (when-let [graph (state/get-current-repo)]
     (p/let [results (db-async/<q graph
-                                 {:transact-db? true}
-                                 '[:find (pull ?e [:block/uuid :block/title :logseq.property.asset/type :block/updated-at])
+                                 {:transact-db? false}
+                                 '[:find (pull ?e [:block/uuid :block/title :logseq.property.asset/type :logseq.property.asset/checksum :block/updated-at])
                                    :where
-                                   [?e :logseq.property.asset/type ?type]])]
+                                   [?e :logseq.property.asset/type ?type]
+                                   [?e :logseq.property.asset/checksum _]])]
       (let [image-extensions (set (map name config/image-formats))
             ;; Results from pull queries come as [[{map}] [{map}] ...], extract the maps
             assets (map (fn [r] (if (vector? r) (first r) r)) results)]
@@ -649,7 +662,9 @@
              (filter (fn [asset]
                        (contains? image-extensions
                                   (some-> (:logseq.property.asset/type asset) string/lower-case))))
-             (sort-by :block/updated-at >))))))
+             ;; Deduplicate by checksum — keep the most recently updated entry
+             (sort-by :block/updated-at >)
+             (medley/distinct-by :logseq.property.asset/checksum))))))
 
 (defn- write-asset-file!
   "Write an asset file to disk"
@@ -768,39 +783,52 @@
    Creates the asset as a child of the Asset class page (like tag tables do),
    avoiding journal entries."
   [repo ^js file]
-  (p/let [[repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)
-          file-name (node-path/basename (.-name file))
+  (p/let [file-name (node-path/basename (.-name file))
           file-name-without-ext* (db-asset/asset-name->title file-name)
           file-name-without-ext (if (= file-name-without-ext* "image")
                                   (date/get-date-time-string-2)
                                   file-name-without-ext*)
           checksum (assets-handler/get-file-checksum file)
-          size (.-size file)
-          ext (db-asset/asset-path->type file-name)
-          asset-class (db/entity :logseq.class/Asset)
-          block-id (ldb/new-block-id)]
-    (when (and ext asset-class)
-      (js/console.log "[DEBUG save-image-asset!] Creating asset block"
-                      (pr-str {:page-uuid (:block/uuid asset-class)
-                               :asset-class-db-id (:db/id asset-class)
-                               :block-id block-id
-                               :ext ext
-                               :edit-block (some-> (state/get-edit-block) :block/uuid str)}))
-      ;; Write file to disk
-      (p/let [_ (let [file-path (str block-id "." ext)
-                      file-rpath (str asset-dir-rpath "/" file-path)]
-                  (write-asset-file! repo repo-dir file file-rpath))
-              ;; Create block using api-insert-new-block! (same approach as tag tables)
-              block (editor-handler/api-insert-new-block!
-                     file-name-without-ext
-                     {:page (:block/uuid asset-class)
-                      :custom-uuid block-id
-                      :properties {:block/tags (:db/id asset-class)
-                                   :logseq.property.asset/type ext
-                                   :logseq.property.asset/checksum checksum
-                                   :logseq.property.asset/size size}
-                      :edit-block? false})]
-        (db/entity [:block/uuid (:block/uuid block)])))))
+          existing-asset (some->> checksum (db-async/<get-asset-with-checksum repo))]
+    (js/console.log "[DEBUG save-image-asset!]"
+                    (pr-str {:file-name file-name :checksum (subs (str checksum) 0 16)
+                             :existing? (some? existing-asset)
+                             :existing-uuid (when existing-asset (str (:block/uuid existing-asset)))}))
+    (if existing-asset
+      ;; Reuse existing asset — skip file write and block creation
+      existing-asset
+      (p/let [[repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)
+              size (.-size file)
+              ext (db-asset/asset-path->type file-name)
+              asset-class (db/entity :logseq.class/Asset)
+              block-id (ldb/new-block-id)]
+        (js/console.log "[DEBUG save-image-asset!] creating"
+                        (pr-str {:block-id block-id :ext ext :size size
+                                 :repo-dir repo-dir :asset-dir asset-dir-rpath
+                                 :write-path (str asset-dir-rpath "/" block-id "." ext)}))
+        (when (and ext asset-class)
+          ;; Write file to disk
+          (p/let [_ (let [file-path (str block-id "." ext)
+                          file-rpath (str asset-dir-rpath "/" file-path)]
+                      (js/console.log "[DEBUG save-image-asset!] writing file" file-rpath)
+                      (write-asset-file! repo repo-dir file file-rpath))
+                  _ (js/console.log "[DEBUG save-image-asset!] file written OK, creating block...")
+                  ;; Create block using api-insert-new-block! (same approach as tag tables)
+                  block (editor-handler/api-insert-new-block!
+                         file-name-without-ext
+                         {:page (:block/uuid asset-class)
+                          :custom-uuid block-id
+                          :properties {:block/tags (:db/id asset-class)
+                                       :logseq.property.asset/type ext
+                                       :logseq.property.asset/checksum checksum
+                                       :logseq.property.asset/size size}
+                          :edit-block? false})]
+            (let [entity (db/entity [:block/uuid (:block/uuid block)])]
+              (js/console.log "[DEBUG save-image-asset!] done"
+                              (pr-str {:block-uuid (str (:block/uuid block))
+                                       :entity-found? (some? entity)
+                                       :entity-type (:logseq.property.asset/type entity)}))
+              entity)))))))
 
 (defn <save-url-asset!
   "Download image from URL and save as asset. Returns promise with asset entity."
@@ -1057,12 +1085,12 @@
        :on-click (fn [e]
                    (on-chosen e {:type :emoji
                                  :id emoji-id
-                                 :name emoji-name}))}
+                                 :name emoji-name}))
        (not (nil? hover))
        (assoc :on-mouse-over #(reset! hover {:type :emoji
                                              :id emoji-id
                                              :name emoji-name})
-              :on-mouse-out #()))
+              :on-mouse-out #())})
      [:em-emoji {:id emoji-id
                  :style {:line-height 1}}]]))
 
@@ -1085,12 +1113,12 @@
        :on-click (fn [e]
                    (on-chosen e {:type :text
                                  :data (cond-> {:value text-value}
-                                         text-color (assoc :color text-color))}))}
+                                         text-color (assoc :color text-color))}))
        (not (nil? hover))
        (assoc :on-mouse-over #(reset! hover {:type :text
                                              :data (cond-> {:value text-value}
                                                      text-color (assoc :color text-color))})
-              :on-mouse-out #()))
+              :on-mouse-out #())})
      display-text]))
 
 (rum/defc avatar-cp < rum/static
@@ -1116,13 +1144,13 @@
                    (on-chosen e {:type :avatar
                                  :data {:value avatar-value
                                         :backgroundColor backgroundColor
-                                        :color color}}))}
+                                        :color color}}))
        (not (nil? hover))
        (assoc :on-mouse-over #(reset! hover {:type :avatar
                                              :data {:value avatar-value
                                                     :backgroundColor backgroundColor
                                                     :color color}})
-              :on-mouse-out #()))
+              :on-mouse-out #())})
      (shui/avatar
       {:class "w-7 h-7"}
       (shui/avatar-fallback
@@ -1483,12 +1511,15 @@
                                       :or {max-retries 3 delay-ms 1000}}]
   (let [file (str asset-uuid "." asset-type)
         asset-path (path/path-join (str "../" common-config/local-assets-dir) file)]
+    (js/console.log "[DEBUG <load-asset-url!]" (pr-str {:uuid asset-uuid :type asset-type :path asset-path}))
     (letfn [(attempt [n]
               (-> (assets-handler/<make-asset-url asset-path)
                   (p/then (fn [url]
+                            (js/console.log "[DEBUG <load-asset-url!] OK" (pr-str {:uuid asset-uuid :attempt n :url (subs (str url) 0 80)}))
                             (reset! *error false)
                             (reset! *url url)))
-                  (p/catch (fn [_err]
+                  (p/catch (fn [err]
+                             (js/console.error "[DEBUG <load-asset-url!] FAILED" (pr-str {:uuid asset-uuid :attempt n :max max-retries :error (str err)}))
                              (if (< n max-retries)
                                (js/setTimeout #(attempt (inc n)) delay-ms)
                                (reset! *error true))))))]
@@ -1503,8 +1534,15 @@
                       *error (::error state)
                       asset-type (:logseq.property.asset/type asset)
                       asset-uuid (:block/uuid asset)]
-                  (when (and asset-uuid asset-type)
-                    (<load-asset-url! *url *error asset-uuid asset-type {})))
+                  (js/console.log "[DEBUG image-asset-item mount]"
+                                  (pr-str {:uuid asset-uuid :type asset-type
+                                           :title (:block/title asset)
+                                           :has-uuid? (some? asset-uuid)
+                                           :has-type? (some? asset-type)}))
+                  (if (and asset-uuid asset-type)
+                    (<load-asset-url! *url *error asset-uuid asset-type {})
+                    (js/console.warn "[DEBUG image-asset-item mount] SKIPPED — missing uuid or type"
+                                     (pr-str {:uuid asset-uuid :type asset-type}))))
                 state)}
   "Renders a single image asset thumbnail in the asset picker grid.
    When avatar-context is provided, renders circular previews and returns avatar data.
@@ -2003,6 +2041,8 @@
                 (let [*loaded-assets (::loaded-assets state)
                       *loading? (::loading? state)
                       sync-assets (get-image-assets)]
+                  (js/console.log "[DEBUG asset-picker mount] sync-assets count:" (count sync-assets)
+                                  "sample:" (pr-str (map #(select-keys % [:block/uuid :logseq.property.asset/type :block/title]) (take 3 sync-assets))))
                   ;; Use sync data as immediate placeholder (avoids spinner if we have partial data)
                   (when (seq sync-assets)
                     (reset! *loaded-assets sync-assets)
@@ -2010,10 +2050,13 @@
                   ;; Always fire async query to ensure complete asset list
                   (-> (<get-image-assets)
                       (p/then (fn [async-assets]
+                                (js/console.log "[DEBUG asset-picker mount] async-assets count:" (count async-assets)
+                                                "sample:" (pr-str (map #(select-keys % [:block/uuid :logseq.property.asset/type :block/title]) (take 3 async-assets))))
                                 (when @*asset-picker-open?
                                   (reset! *loaded-assets (vec async-assets))
                                   (reset! *loading? false))))
-                      (p/catch (fn [_err]
+                      (p/catch (fn [err]
+                                 (js/console.error "[DEBUG asset-picker mount] async query FAILED:" (str err))
                                  (when @*asset-picker-open?
                                    (reset! *loading? false))))))
 
@@ -2126,57 +2169,71 @@
                                                           (contains? config/image-formats ext)))
                                                       files)]
                            (when (seq image-files)
-                             ;; Update ARIA status
-                             (reset! *upload-status
-                                     (str "Uploading " (count image-files) " image"
-                                          (when (not= 1 (count image-files)) "s")))
+                             ;; Check which files already exist (by checksum)
+                             (p/let [checksums (p/all (map #(assets-handler/get-file-checksum %) image-files))
+                                     existing (p/all (map #(when % (db-async/<get-asset-with-checksum repo %)) checksums))
+                                     new-files (vec (keep-indexed (fn [i f] (when-not (nth existing i) f)) image-files))
+                                     reused-entities (vec (remove nil? existing))]
 
-                             (p/let [entities (p/all (map #(save-image-asset! repo %) image-files))]
-                               (p/let [updated-assets (<get-image-assets)]
-                                 (reset! *loaded-assets (or (seq updated-assets) [])))
+                               ;; Update ARIA status
+                               (when (seq new-files)
+                                 (reset! *upload-status
+                                         (str "Uploading " (count new-files) " image"
+                                              (when (not= 1 (count new-files)) "s"))))
 
-                               ;; Show feedback notification
-                               (let [uploaded-count (count (remove nil? entities))]
-                                 (cond
-                                   (and (pos? uploaded-count) (empty? rejected-files))
-                                   (shui/toast! (str "Uploaded " uploaded-count " image"
-                                                     (when (not= 1 uploaded-count) "s"))
-                                                :success)
+                               (p/let [new-entities (p/all (map #(save-image-asset! repo %) new-files))
+                                       entities (into (vec (remove nil? new-entities)) reused-entities)]
+                                 (p/let [updated-assets (<get-image-assets)]
+                                   (reset! *loaded-assets (or (seq updated-assets) [])))
 
-                                   (and (pos? uploaded-count) (seq rejected-files))
-                                   (shui/toast! (str "Uploaded " uploaded-count " image"
-                                                     (when (not= 1 uploaded-count) "s")
-                                                     ". Skipped " (count rejected-files)
-                                                     " file" (when (not= 1 (count rejected-files)) "s")
-                                                     " (not images)")
-                                                :warning)
+                                 ;; Show feedback notification
+                                 (let [new-count (count (remove nil? new-entities))
+                                       reused-count (count reused-entities)]
+                                   (cond
+                                     (and (pos? new-count) (zero? reused-count) (empty? rejected-files))
+                                     (shui/toast! (str "Uploaded " new-count " image"
+                                                       (when (not= 1 new-count) "s"))
+                                                  :success)
 
-                                   :else
-                                   (shui/toast! (str "No valid images to upload. Skipped "
-                                                     (count rejected-files) " file"
-                                                     (when (not= 1 (count rejected-files)) "s"))
-                                                :error)))
+                                     (and (pos? new-count) (pos? reused-count))
+                                     (shui/toast! (str "Uploaded " new-count " new, "
+                                                       reused-count " already existed")
+                                                  :success)
 
-                               ;; Update completion status
-                               (reset! *upload-status
-                                       (str "Upload complete. " (count (remove nil? entities)) " images added"))
+                                     (and (zero? new-count) (pos? reused-count))
+                                     (shui/toast! (str reused-count " image"
+                                                       (when (not= 1 reused-count) "s")
+                                                       " already existed")
+                                                  :success)
 
-                               ;; Clear status after 3 seconds
-                               (js/setTimeout #(reset! *upload-status "") 3000)
+                                     (seq rejected-files)
+                                     (shui/toast! (str "Skipped " (count rejected-files)
+                                                       " file" (when (not= 1 (count rejected-files)) "s")
+                                                       " (not images)")
+                                                  :error)
 
-                               (when-let [first-asset (first (remove nil? entities))]
-                                 (let [image-data {:asset-uuid (str (:block/uuid first-asset))
-                                                   :asset-type (:logseq.property.asset/type first-asset)}]
-                                   (on-chosen nil
-                                              (if avatar-context
-                                                {:type :avatar
-                                                 :id (:id avatar-context)
-                                                 :label (:label avatar-context)
-                                                 :data (merge (:data avatar-context) image-data)}
-                                                {:type :image
-                                                 :id (str "image-" (:block/uuid first-asset))
-                                                 :label (or (:block/title first-asset) "")
-                                                 :data image-data}))))))))
+                                     :else nil))
+
+                                 ;; Update completion status
+                                 (reset! *upload-status
+                                         (str "Upload complete. " (count (remove nil? new-entities)) " images added"))
+
+                                 ;; Clear status after 3 seconds
+                                 (js/setTimeout #(reset! *upload-status "") 3000)
+
+                                 (when-let [first-asset (first entities)]
+                                   (let [image-data {:asset-uuid (str (:block/uuid first-asset))
+                                                     :asset-type (:logseq.property.asset/type first-asset)}]
+                                     (on-chosen nil
+                                                (if avatar-context
+                                                  {:type :avatar
+                                                   :id (:id avatar-context)
+                                                   :label (:label avatar-context)
+                                                   :data (merge (:data avatar-context) image-data)}
+                                                  {:type :image
+                                                   :id (str "image-" (:block/uuid first-asset))
+                                                   :label (or (:block/title first-asset) "")
+                                                   :data image-data})))))))))
 
         ;; Handle file upload with smart multi-file preview
         handle-upload (fn [files]
