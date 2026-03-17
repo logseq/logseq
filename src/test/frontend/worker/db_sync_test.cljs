@@ -23,6 +23,21 @@
             [promesa.core :as p]))
 
 (def ^:private test-repo "test-db-sync-repo")
+(def ^:private local-tx-meta
+  {:client-id "test-client"
+   :local-tx? true})
+
+(def ^:private recycle-built-in-props
+  #{:logseq.property.recycle/original-parent
+    :logseq.property.recycle/original-page
+    :logseq.property.recycle/original-order})
+
+(defn- non-recycle-validation-entities
+  [validation]
+  (->> (:errors validation)
+       (map :entity)
+       (remove (fn [entity]
+                 (contains? recycle-built-in-props (:db/ident entity))))))
 
 (defn- with-datascript-conns
   [db-conn ops-conn f]
@@ -440,10 +455,13 @@
         (fn []
           (outliner-op/apply-ops! conn
                                   [[:toggle-reaction [(:block/uuid parent) "+1" nil]]]
-                                  {})
+                                  local-tx-meta)
           (let [pending (#'db-sync/pending-txs test-repo)
+                raw-pending (->> (d/datoms @client-ops-conn :avet :db-sync/created-at)
+                                 (map (fn [datom] (d/entity @client-ops-conn (:e datom)))))
                 txs (mapcat :tx pending)]
             (is (seq pending))
+            (is (= :toggle-reaction (:db-sync/outliner-op (first raw-pending))))
             (is (= :toggle-reaction (:outliner-op (first pending))))
             (is (some (fn [tx]
                         (and (vector? tx)
@@ -459,7 +477,7 @@
         (fn []
           (outliner-op/apply-ops! conn
                                   [[:toggle-reaction [(:block/uuid parent) "+1" nil]]]
-                                  {})
+                                  local-tx-meta)
           (let [reaction-eid (-> (d/datoms @conn :avet :logseq.property.reaction/target (:db/id parent))
                                  first
                                  :e)
@@ -467,7 +485,7 @@
             (is (some? reaction-eid))
             (outliner-op/apply-ops! conn
                                     [[:toggle-reaction [(:block/uuid parent) "+1" nil]]]
-                                    {})
+                                    local-tx-meta)
             (let [after-count (count (#'db-sync/pending-txs test-repo))]
               (is (> after-count before-count)))))))))
 
@@ -523,7 +541,7 @@
             (is (= "parent" (:block/title (:block/parent child3'))))))))))
 
 (deftest ignore-missing-parent-update-after-local-delete-test
-  (testing "remote parent retracted while local adds another child"
+  (testing "remote parent recycled while local adds another child"
     (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
           child-uuid (:block/uuid child1)]
       (with-datascript-conns conn client-ops-conn
@@ -532,9 +550,11 @@
           (#'db-sync/apply-remote-tx!
            test-repo
            nil
-           [[:db/retractEntity [:block/uuid (:block/uuid parent)]]])
+           (:tx-data (outliner-core/delete-blocks @conn [parent] {})))
           (let [child' (d/entity @conn [:block/uuid child-uuid])]
-            (is (nil? child'))))))))
+            (is (some? child'))
+            (is (= common-config/recycle-page-name
+                   (:block/title (:block/page child'))))))))))
 
 (deftest cut-paste-parent-with-child-keeps-child-parent-after-sync-test
   (testing "remote tx can retract and recreate target uuid; child should point to recreated parent"
@@ -972,7 +992,7 @@
                                                   (select-keys ent [:db/id :block/created-at :block/updated-at :logseq.property/created-by-ref]))))))
                   validation (db-validate/validate-local-db! @conn)]
               (is (empty? anonymous-ents) (str anonymous-ents))
-              (is (empty? (map :entity (:errors validation)))
+              (is (empty? (non-recycle-validation-entities validation))
                   (str (:errors validation))))))))))
 
 (deftest rebase-create-then-delete-does-not-leave-anonymous-entities-test
@@ -1005,7 +1025,7 @@
                                                     (select-keys ent [:db/id :block/created-at :block/updated-at :logseq.property/created-by-ref]))))))
                     validation (db-validate/validate-local-db! @conn)]
                 (is (empty? anonymous-ents) (str anonymous-ents))
-                (is (empty? (map :entity (:errors validation)))
+                (is (empty? (non-recycle-validation-entities validation))
                     (str (:errors validation)))))))))))
 
 (deftest sanitize-tx-data-drops-partial-create-when-parent-deleted-test

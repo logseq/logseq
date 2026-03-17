@@ -283,6 +283,7 @@
   [[:block/uuid :uuid]
    [:block/created-at :int]
    [:block/updated-at :int]
+   [:logseq.property/deleted-at {:optional true} :int]
    ;; Injected by update-properties-in-ents
    [:block/properties {:optional true} block-properties]
    [:block/tags {:optional true} block-tags]
