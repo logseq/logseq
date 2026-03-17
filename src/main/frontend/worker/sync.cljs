@@ -6,6 +6,7 @@
             [frontend.worker.sync.assets :as sync-assets]
             [frontend.worker.sync.auth :as sync-auth]
             [frontend.worker.sync.client-op :as client-op]
+            [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.handle-message :as sync-handle-message]
             [frontend.worker.sync.large-title :as sync-large-title]
             [frontend.worker.sync.presence :as sync-presence]
@@ -47,7 +48,8 @@
 
 (defn update-local-sync-checksum!
   [repo tx-report]
-  (when (worker-state/get-client-ops-conn repo)
+  (when (and (worker-state/get-client-ops-conn repo)
+             (not (sync-crypt/graph-e2ee? repo)))
     (client-op/update-local-checksum
      repo
      (sync-checksum/update-checksum (client-op/get-local-checksum repo) tx-report))))
