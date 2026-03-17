@@ -224,12 +224,9 @@
         size (or (:size opts) 20)
         ;; Fallback data from avatar
         avatar-value (get avatar-data :value "")
-        backgroundColor (or (get avatar-data :backgroundColor)
-                            (colors/variable :gray :09))
-        color (or (get avatar-data :color)
-                  (colors/variable :gray :09))
+        explicit-bg (get avatar-data :backgroundColor)
+        explicit-color (get avatar-data :color)
         display-text (subs avatar-value 0 (min 3 (count avatar-value)))
-        bg-color-rgba (convert-bg-color-to-rgba backgroundColor)
         ;; Scale font-size with avatar size
         font-size (cond
                     (<= size 16) "8px"
@@ -244,10 +241,12 @@
                            :style {:object-fit "cover"}}))
      ;; Fallback (shows while loading or on error)
      (shui/avatar-fallback
-      {:style {:background-color bg-color-rgba
-               :font-size font-size
-               :font-weight "500"
-               :color color}}
+      {:style (cond-> {:font-size font-size
+                       :font-weight "500"}
+                explicit-bg
+                (assoc :background-color (convert-bg-color-to-rgba explicit-bg))
+                explicit-color
+                (assoc :color explicit-color))}
       display-text))))
 
 (defn measure-text-width
@@ -374,12 +373,9 @@
                    ;; Text-only avatar
                    (let [size (or (:size opts) 20)
                          avatar-value (get avatar-data :value)
-                         backgroundColor (or (get avatar-data :backgroundColor)
-                                             (colors/variable :gray :09))
-                         color (or (get avatar-data :color)
-                                   (colors/variable :gray :09))
+                         explicit-bg (get avatar-data :backgroundColor)
+                         explicit-color (get avatar-data :color)
                          display-text (subs avatar-value 0 (min 3 (count avatar-value)))
-                         bg-color-rgba (convert-bg-color-to-rgba backgroundColor)
                          ;; Scale font-size with avatar size
                          font-size (cond
                                      (<= size 16) "8px"
@@ -389,10 +385,12 @@
                      (shui/avatar
                       {:style {:width size :height size}}
                       (shui/avatar-fallback
-                       {:style {:background-color bg-color-rgba
-                                :font-size font-size
-                                :font-weight "500"
-                                :color color}}
+                       {:style (cond-> {:font-size font-size
+                                        :font-weight "500"}
+                                 explicit-bg
+                                 (assoc :background-color (convert-bg-color-to-rgba explicit-bg))
+                                 explicit-color
+                                 (assoc :color explicit-color))}
                        display-text)))))
 
                ;; Image with asset - use image icon component
@@ -473,11 +471,13 @@
                     "arrow-narrow-right"
                     :else
                     (get-node-icon entity))
-        ;; Photo-based custom icons (avatar/image) always render at 20px.
+        ;; Photo-based custom icons (avatar/image) default to 20px but respect caller's :size.
         ;; Symbolic icons (emoji, tabler, text, defaults) use caller's :size or 14.
         photo-icon? (and (map? node-icon)
                          (contains? #{:avatar :image} (:type node-icon)))
-        effective-size (if photo-icon? 20 (or (:size opts) 14))
+        effective-size (if photo-icon?
+                         (or (:size opts) 20)
+                         (or (:size opts) 14))
         opts' (assoc opts :size effective-size)]
     (when-not (or (string/blank? node-icon) (and (contains? #{"letter-n" "file"} node-icon) (:not-text-or-page? opts)))
       [:div.icon-cp-container.flex.items-center.justify-center
@@ -994,18 +994,22 @@
   [:div.its.icons-row items])
 
 (rum/defc icon-cp < rum/static
-  [icon-item {:keys [on-chosen hover]}]
+  [icon-item {:keys [on-chosen hover highlighted-id ghost-highlighted-id]}]
   (let [icon-id (get-in icon-item [:data :value])
         icon-name (or (:label icon-item) icon-id)
         color (get-in icon-item [:data :color])
-        icon-id' (when icon-id (cond-> icon-id (string? icon-id) (string/replace " " "")))]
+        icon-id' (when icon-id (cond-> icon-id (string? icon-id) (string/replace " " "")))
+        my-id (:id icon-item)]
     [:button.w-9.h-9.transition-opacity
      (when icon-id'
        {:key icon-id'
-        :tabIndex "0"
+        :tabIndex "-1"
+        :data-item-id my-id
+        :class (cond
+                 (= my-id highlighted-id) "is-highlighted"
+                 (= my-id ghost-highlighted-id) "is-ghost-highlighted")
         :title icon-name
         :on-click (fn [e]
-                    ;; Use legacy format like emoji-cp for consistent normalization
                     (on-chosen e (cond-> {:type :tabler-icon
                                           :id icon-id'
                                           :value icon-id'}
@@ -1020,12 +1024,17 @@
        (ui/icon icon-id' {:size 24}))]))
 
 (rum/defc emoji-cp < rum/static
-  [icon-item {:keys [on-chosen hover]}]
+  [icon-item {:keys [on-chosen hover highlighted-id ghost-highlighted-id]}]
   (let [emoji-id (get-in icon-item [:data :value])
-        emoji-name (or (:label icon-item) emoji-id)]
+        emoji-name (or (:label icon-item) emoji-id)
+        my-id (:id icon-item)]
     [:button.text-2xl.w-9.h-9.transition-opacity
      (cond->
-      {:tabIndex "0"
+      {:tabIndex "-1"
+       :data-item-id my-id
+       :class (cond
+                (= my-id highlighted-id) "is-highlighted"
+                (= my-id ghost-highlighted-id) "is-ghost-highlighted")
        :title emoji-name
        :on-click (fn [e]
                    (on-chosen e {:type :emoji
@@ -1040,15 +1049,20 @@
                  :style {:line-height 1}}]]))
 
 (rum/defc text-cp < rum/static
-  [icon-item {:keys [on-chosen hover]}]
+  [icon-item {:keys [on-chosen hover highlighted-id ghost-highlighted-id]}]
   (let [text-value (get-in icon-item [:data :value])
         text-color (get-in icon-item [:data :color])
+        my-id (:id icon-item)
         display-text (if (> (count text-value) 8)
                        (subs text-value 0 8)
                        text-value)]
     [:button.w-9.h-9.transition-opacity.text-sm.font-medium
      (cond->
-      {:tabIndex "0"
+      {:tabIndex "-1"
+       :data-item-id my-id
+       :class (cond
+                (= my-id highlighted-id) "is-highlighted"
+                (= my-id ghost-highlighted-id) "is-ghost-highlighted")
        :title text-value
        :on-click (fn [e]
                    (on-chosen e {:type :text
@@ -1062,19 +1076,24 @@
      display-text]))
 
 (rum/defc avatar-cp < rum/static
-  [icon-item {:keys [on-chosen hover]}]
+  [icon-item {:keys [on-chosen hover highlighted-id ghost-highlighted-id]}]
   (let [avatar-value (get-in icon-item [:data :value])
         backgroundColor (or (get-in icon-item [:data :backgroundColor])
                             (colors/variable :gray :09))
         color (or (get-in icon-item [:data :color])
                   (colors/variable :gray :09))
+        my-id (:id icon-item)
         display-text (subs avatar-value 0 (min 3 (count avatar-value)))
         bg-color-rgba (convert-bg-color-to-rgba backgroundColor)]
     [:button.w-9.h-9.transition-opacity.flex.items-center.justify-center
      (cond->
-      {:tabIndex "0"
+      {:tabIndex "-1"
+       :data-item-id my-id
        :title avatar-value
-       :class "p-0 border-0 bg-transparent cursor-pointer"
+       :class (str "p-0 border-0 bg-transparent cursor-pointer"
+                   (cond
+                     (= my-id highlighted-id) " is-highlighted"
+                     (= my-id ghost-highlighted-id) " is-ghost-highlighted"))
        :on-click (fn [e]
                    (on-chosen e {:type :avatar
                                  :data {:value avatar-value
@@ -1119,7 +1138,7 @@
 (defonce *section-states (atom {}))
 
 (rum/defc section-header
-  [{:keys [title count total-count expanded? keyboard-hint on-toggle input-focused? simple?]}]
+  [{:keys [title count total-count expanded? keyboard-hint on-toggle focus-region simple?]}]
   [:div.section-header.text-xs.py-1.5.px-3.flex.justify-between.items-center.gap-2.bg-gray-02.h-8
    {:style {:color "var(--lx-gray-11)"}}
    ;; Left: Title · total-count · Chevron (chevron and count hidden in simple mode)
@@ -1137,17 +1156,18 @@
 
    [:div.flex-1] ; Spacer
 
-   ;; Right: Hide/Show with keyboard shortcut (fades out when input is focused)
+   ;; Right: Hide/Show with keyboard shortcut (visible when navigating grid or tabs, hidden when typing in search)
    (when keyboard-hint
-     [:div.flex.gap-1.items-center.text-xs.opacity-50.transition-all.duration-200
-      {:class (when input-focused? "!opacity-0")
-       :style {:pointer-events (if input-focused? "none" "auto")}}
-      (if expanded? "Hide" "Show")
-      (shui/shortcut keyboard-hint {:style :compact})])])
+     (let [show-hint? (contains? #{:grid :tabs} focus-region)]
+       [:div.flex.gap-1.items-center.text-xs.opacity-50.transition-all.duration-200
+        {:class (when-not show-hint? "!opacity-0")
+         :style {:pointer-events (if show-hint? "auto" "none")}}
+        (if expanded? "Hide" "Show")
+        (shui/shortcut keyboard-hint {:style :compact})]))])
 
 (rum/defc pane-section
-  [label icon-items & {:keys [collapsible? keyboard-hint total-count searching? virtual-list? render-item-fn expanded? input-focused? show-header?]
-                       :or {virtual-list? true collapsible? false expanded? true input-focused? false show-header? true}
+  [label icon-items & {:keys [collapsible? keyboard-hint total-count searching? virtual-list? render-item-fn expanded? focus-region show-header? *virtuoso-ref]
+                       :or {virtual-list? true collapsible? false expanded? true show-header? true}
                        :as opts}]
   (let [*el-ref (rum/use-ref nil)
         render-fn (or render-item-fn render-item)
@@ -1167,7 +1187,7 @@
                           :expanded? expanded?
                           :keyboard-hint keyboard-hint
                           :on-toggle toggle-fn
-                          :input-focused? input-focused?})
+                          :focus-region focus-region})
          ;; Simple header (current style) for non-collapsible
          [:div.hd.px-1.pb-1.leading-none
           [:strong.text-xs.font-medium.text-gray-07.dark:opacity-80 label]]))
@@ -1183,6 +1203,9 @@
                items (vec icon-items)]
            (ui/virtualized-list
             (cond-> {:total-count rows
+                     :ref (fn [^js el]
+                            (when *virtuoso-ref
+                              (reset! *virtuoso-ref el)))
                      :item-content (fn [idx]
                                      (icons-row
                                       (let [last? (= (dec rows) idx)
@@ -1212,7 +1235,8 @@
      icon-items
      :show-header? false
      :on-chosen (:on-chosen opts)
-     :on-hover (:on-hover opts))))
+     :on-hover (:on-hover opts)
+     :*virtuoso-ref (:*virtuoso-ref opts))))
 
 (rum/defc icons-cp < rum/static
   [icons opts]
@@ -1227,7 +1251,8 @@
      icon-items
      :show-header? false
      :on-chosen (:on-chosen opts)
-     :on-hover (:on-hover opts))))
+     :on-hover (:on-hover opts)
+     :*virtuoso-ref (:*virtuoso-ref opts))))
 
 ;; ============================================================================
 ;; Recently Used Assets
@@ -2261,10 +2286,15 @@
                 (str (:block/uuid asset))))
 
             :else
-            [:div.flex.flex-col.items-center.justify-center.h-32.text-gray-08
-             (shui/tabler-icon "photo-off" {:size 32})
-             [:span.text-sm.mt-2 "No image assets found"]
-             [:span.text-xs.mt-1 "Upload an image to get started"]])]]])
+            (if (and (seq assets) (not (string/blank? search-q)))
+              ;; Search returned no results
+              [:div.asset-picker-empty
+               (shui/tabler-icon "search-off" {:size 32})
+               [:span.text-sm "No matching images"]]
+              ;; No assets uploaded yet
+              [:div.asset-picker-empty
+               (shui/tabler-icon "photo" {:size 32})
+               [:span.text-sm "No images yet"]]))]]])
 
      ;; Action buttons (floating at bottom) - using shui buttons
      [:div.asset-picker-actions
@@ -2418,89 +2448,338 @@
    [tab q])
   nil)
 
-(rum/defc keyboard-shortcut-observer
-  [tab input-focused?]
-  (hooks/use-effect!
-   (fn []
-     ;; Register shortcuts whenever on "All" tab (works for both normal view and search results)
-     (when (= tab :all)
-       (let [handler (fn [^js e]
-                       ;; Don't trigger shortcuts when input is focused or target is an input
-                       (when (and (.-metaKey e)
-                                  (.-altKey e)
-                                  (not @input-focused?)
-                                  (not= "INPUT" (.-tagName (.-target e))))
-                         (case (.-keyCode e)
-                           49 (do ; Option+Command+1 -> Toggle "Recently used"
-                                (swap! *section-states update "Recently used" (fn [v] (if (nil? v) false (not v))))
-                                (util/stop e))
-                           50 (do ; Option+Command+2 -> Toggle "Emojis"
-                                (swap! *section-states update "Emojis" (fn [v] (if (nil? v) false (not v))))
-                                (util/stop e))
-                           51 (do ; Option+Command+3 -> Toggle "Icons"
-                                (swap! *section-states update "Icons" (fn [v] (if (nil? v) false (not v))))
-                                (util/stop e))
-                           nil)))]
-         (.addEventListener js/document "keydown" handler false)
-         #(.removeEventListener js/document "keydown" handler false))))
-   [tab])
-  nil)
+;; ============================================================
+;; Keyboard navigation system
+;; Three tab stops: :tabs -> :search -> :grid
+;; Uses index-based highlighting with data attributes (no DOM focus on grid items)
+;; ============================================================
 
-(rum/defc select-observer
-  [*input-ref]
+(defn- compute-flat-items
+  "Compute the flat navigable item list and section metadata for the current view.
+   Returns {:items [icon-item ...] :sections [{:start N :count N :cols N} ...]}."
+  [tab result section-states]
+  (let [build-sections (fn [& groups]
+                         (loop [gs groups offset 0 items [] sections []]
+                           (if-let [g (first gs)]
+                             (let [its (vec (or (:items g) []))
+                                   c (count its)]
+                               (if (pos? c)
+                                 (recur (rest gs) (+ offset c)
+                                        (into items its)
+                                        (conj sections {:start offset :count c :cols (:cols g)}))
+                                 (recur (rest gs) offset items sections)))
+                             {:items items :sections sections})))]
+    (cond
+      ;; Search results active
+      (seq result)
+      (build-sections
+       {:items (when (and (seq (:emojis result)) (get section-states "Emojis" true))
+                 (:emojis result))
+        :cols 9}
+       {:items (when (and (seq (:icons result)) (get section-states "Icons" true))
+                 (:icons result))
+        :cols 9})
+
+      ;; Custom tab: 3 buttons
+      (= tab :custom)
+      {:items [{:type :custom-text :id "custom-text"}
+               {:type :custom-avatar :id "custom-avatar"}
+               {:type :custom-image :id "custom-image"}]
+       :sections [{:start 0 :count 3 :cols 3}]}
+
+      ;; All tab: recently used + emojis + icons (non-virtualized, limited items)
+      (= tab :all)
+      (build-sections
+       {:items (when (get section-states "Recently used" true)
+                 (->> (get-used-items)
+                      (remove #(#{:text :avatar} (:type %)))))
+        :cols 9}
+       {:items (when (get section-states "Emojis" true)
+                 (->> (take 32 emojis)
+                      (map (fn [emoji]
+                             {:type :emoji :id (:id emoji)
+                              :label (or (:name emoji) (:id emoji))
+                              :data {:value (:id emoji)}}))))
+        :cols 9}
+       {:items (when (get section-states "Icons" true)
+                 (->> (take 48 (get-tabler-icons))
+                      (map (fn [icon-name]
+                             {:type :icon :id (str "icon-" icon-name)
+                              :label icon-name :data {:value icon-name}}))))
+        :cols 9})
+
+      ;; Emojis tab: full emoji list
+      (= tab :emoji)
+      (let [items (vec (map (fn [emoji]
+                              {:type :emoji :id (:id emoji)
+                               :label (or (:name emoji) (:id emoji))
+                               :data {:value (:id emoji)}})
+                            emojis))]
+        {:items items :sections [{:start 0 :count (count items) :cols 9}]})
+
+      ;; Icons tab: full icon list
+      (= tab :icon)
+      (let [items (vec (map (fn [icon-name]
+                              {:type :icon :id (str "icon-" icon-name)
+                               :label icon-name :data {:value icon-name}})
+                            (get-tabler-icons)))]
+        {:items items :sections [{:start 0 :count (count items) :cols 9}]})
+
+      :else {:items [] :sections []})))
+
+(defn- section-for-index
+  "Find which section index contains the given flat index."
+  [idx sections]
+  (some (fn [[si sec]]
+          (when (and (>= idx (:start sec))
+                     (< idx (+ (:start sec) (:count sec))))
+            si))
+        (map-indexed vector sections)))
+
+(defn- move-grid-highlight
+  "Section-aware 2D grid navigation.
+   Returns new index, or nil to signal 'move to search'."
+  [current-index direction sections]
+  (when (and (seq sections) (some? current-index))
+    (let [total (+ (:start (last sections)) (:count (last sections)))
+          si (section-for-index current-index sections)]
+      (when si
+        (let [sec (nth sections si)
+              local-idx (- current-index (:start sec))
+              cols (:cols sec)
+              row (quot local-idx cols)
+              col (rem local-idx cols)
+              n-rows (js/Math.ceil (/ (:count sec) cols))
+              next-sec (fn [i] (when (< (inc i) (count sections)) (inc i)))
+              prev-sec (fn [i] (when (pos? i) (dec i)))]
+          (case direction
+            :down
+            (let [next-row (inc row)]
+              (if (< next-row n-rows)
+                ;; Next row in this section (clamp to last item for partial rows)
+                (min (+ (:start sec) (* next-row cols) col)
+                     (+ (:start sec) (dec (:count sec))))
+                ;; Jump to next section, same column clamped
+                (when-let [nsi (next-sec si)]
+                  (let [nsec (nth sections nsi)
+                        target-col (min col (dec (min (:cols nsec) (:count nsec))))]
+                    (+ (:start nsec) target-col)))))
+
+            :up
+            (if (pos? row)
+              ;; Previous row in this section
+              (+ (:start sec) (* (dec row) cols) col)
+              ;; Jump to previous section's last row, same column clamped
+              (when-let [psi (prev-sec si)]
+                (let [psec (nth sections psi)
+                      pcols (:cols psec)
+                      last-row (dec (js/Math.ceil (/ (:count psec) pcols)))
+                      candidate (+ (:start psec) (* last-row pcols) col)
+                      max-idx (+ (:start psec) (dec (:count psec)))]
+                  (min candidate max-idx))))
+
+            :right
+            (let [next-idx (inc current-index)
+                  sec-end (+ (:start sec) (:count sec))]
+              (if (< next-idx sec-end)
+                next-idx
+                (when-let [nsi (next-sec si)]
+                  (:start (nth sections nsi)))))
+
+            :left
+            (if (> current-index (:start sec))
+              (dec current-index)
+              (when-let [psi (prev-sec si)]
+                (let [psec (nth sections psi)]
+                  (+ (:start psec) (dec (:count psec))))))
+
+            :home 0
+            :end (dec total)
+            nil))))))
+
+(defn- tab-items
+  "Returns the ordered tab IDs for keyboard navigation."
+  []
+  [:all :emoji :icon :custom])
+
+(rum/defc keyboard-nav-controller
+  "Unified keyboard navigation controller for the icon picker.
+   Manages three tab stops: :tabs, :search, :grid.
+   Highlighting is React-props-driven (no DOM attribute manipulation)."
+  [*focus-region *highlighted-index *tab *input-ref flat-items sections *virtuoso-ref]
   (let [*el-ref (rum/use-ref nil)
-        *items-ref (rum/use-ref [])
-        *current-ref (rum/use-ref [-1])
-        set-current! (fn [idx node] (set! (. *current-ref -current) [idx node]))
         get-cnt #(some-> (rum/deref *el-ref) (.closest ".cp__emoji-icon-picker"))
-        focus! (fn [idx dir]
-                 (let [items (rum/deref *items-ref)
-                       ^js popup (some-> (get-cnt) (.-parentNode))
-                       idx (loop [n idx]
-                             (if (false? (nth items n nil))
-                               (recur (+ n (if (= dir :prev) -1 1))) n))]
-                   (if-let [node (nth items idx nil)]
-                     (do (.focus node #js {:preventScroll true :focusVisible true})
-                         (.scrollIntoView node #js {:block "center"})
-                         (when popup (set! (. popup -scrollTop) 0))
-                         (set-current! idx node))
-                     (do (.focus (rum/deref *input-ref)) (set-current! -1 nil)))))
-        down-handler!
+
+        focus-search! (fn []
+                        (reset! *focus-region :search)
+                        (reset! *highlighted-index nil)
+                        (some-> (rum/deref *input-ref) (.focus)))
+
+        focus-grid! (fn [idx]
+                      (let [idx (or idx 0)
+                            idx (min idx (max 0 (dec (count flat-items))))]
+                        (reset! *focus-region :grid)
+                        (reset! *highlighted-index idx)))
+
+        focus-tabs! (fn [& [tab-id]]
+                      (reset! *focus-region :tabs)
+                      (reset! *highlighted-index nil)
+                      (when-let [cnt (get-cnt)]
+                        (let [selector (if tab-id
+                                         (str "[data-tab-id='" (name tab-id) "'].tab-item")
+                                         "[data-active='true'].tab-item")]
+                          (when-let [tab-el (.querySelector cnt selector)]
+                            (.focus tab-el)))))
+
+        select-highlighted! (fn []
+                              (when-let [idx @*highlighted-index]
+                                (when (< idx (count flat-items))
+                                  (let [item-id (:id (nth flat-items idx))]
+                                    (when-let [cnt (get-cnt)]
+                                      (when-let [btn (.querySelector cnt (str "[data-item-id='" item-id "']"))]
+                                        (.click btn)))))))
+
+        handle-grid-keys (fn [^js e]
+                           (let [key (.-key e)
+                                 code (.-keyCode e)
+                                 idx (or @*highlighted-index 0)]
+                             (cond
+                               (or (= code 13) (= key " "))
+                               (do (util/stop e) (select-highlighted!))
+
+                               (= code 27)
+                               (do (util/stop e) (focus-search!))
+
+                               (and (= code 9) (not (.-shiftKey e)))
+                               (do (util/stop e) (focus-tabs!))
+
+                               (and (= code 9) (.-shiftKey e))
+                               (do (util/stop e) (focus-search!))
+
+                               (= code 37) ;; Left
+                               (do (util/stop e)
+                                   (if-let [new-idx (move-grid-highlight idx :left sections)]
+                                     (focus-grid! new-idx)
+                                     (focus-search!)))
+
+                               (= code 39) ;; Right
+                               (do (util/stop e)
+                                   (when-let [new-idx (move-grid-highlight idx :right sections)]
+                                     (focus-grid! new-idx)))
+
+                               (= code 38) ;; Up
+                               (do (util/stop e)
+                                   (if-let [new-idx (move-grid-highlight idx :up sections)]
+                                     (focus-grid! new-idx)
+                                     (focus-search!)))
+
+                               (= code 40) ;; Down
+                               (do (util/stop e)
+                                   (when-let [new-idx (move-grid-highlight idx :down sections)]
+                                     (focus-grid! new-idx)))
+
+                               (= code 36) ;; Home
+                               (do (util/stop e) (focus-grid! 0))
+
+                               (= code 35) ;; End
+                               (do (util/stop e) (focus-grid! (dec (count flat-items))))
+
+                               ;; Type-through: printable character -> redirect to search
+                               (and (= 1 (count key))
+                                    (not (.-metaKey e))
+                                    (not (.-ctrlKey e))
+                                    (not (.-altKey e)))
+                               (focus-search!))))
+
+        handle-tabs-keys (fn [^js e]
+                           (let [code (.-keyCode e)
+                                 tabs (tab-items)
+                                 current-tab @*tab
+                                 current-idx (.indexOf tabs current-tab)]
+                             (cond
+                               (= code 39)
+                               (do (util/stop e)
+                                   (let [next-idx (mod (inc current-idx) (count tabs))
+                                         next-tab (nth tabs next-idx)]
+                                     (reset! *tab next-tab)
+                                     (focus-tabs! next-tab)))
+
+                               (= code 37)
+                               (do (util/stop e)
+                                   (let [prev-idx (mod (+ current-idx (dec (count tabs))) (count tabs))
+                                         prev-tab (nth tabs prev-idx)]
+                                     (reset! *tab prev-tab)
+                                     (focus-tabs! prev-tab)))
+
+                               (or (= code 13) (= (.-key e) " "))
+                               (do (util/stop e))
+
+                               (or (= code 40) (and (= code 9) (not (.-shiftKey e))))
+                               (do (util/stop e) (focus-search!))
+
+                               (and (= code 9) (.-shiftKey e))
+                               (do (util/stop e)
+                                   (when (pos? (count flat-items))
+                                     (focus-grid! 0)))
+
+                               (= code 27)
+                               (do (util/stop e) (shui/popup-hide!)))))
+
+        ;; Refs for latest handler versions (avoids stale closures)
+        *grid-handler-ref (hooks/use-ref handle-grid-keys)
+        _ (set! (.-current *grid-handler-ref) handle-grid-keys)
+        *tabs-handler-ref (hooks/use-ref handle-tabs-keys)
+        _ (set! (.-current *tabs-handler-ref) handle-tabs-keys)
+
+        keydown-handler
         (hooks/use-callback
          (fn [^js e]
-           (let []
-             (if (= 13 (.-keyCode e))
-                ;; enter
-               (some-> (second (rum/deref *current-ref)) (.click))
-               (let [[idx _node] (rum/deref *current-ref)]
-                 (case (.-keyCode e)
-                    ;;left
-                   37 (focus! (dec idx) :prev)
-                    ;; tab & right
-                   (9 39) (focus! (inc idx) :next)
-                    ;; up
-                   38 (do (focus! (- idx 9) :prev) (util/stop e))
-                    ;; down
-                   40 (do (focus! (+ idx 9) :next) (util/stop e))
-                   :dune))))) [])]
+           (let [region @*focus-region]
+             (if (and (.-metaKey e) (.-altKey e))
+               ;; ⌥⌘1/2/3 toggle section collapse on the All tab
+               (when (= @*tab :all)
+                 (let [section-name (case (.-keyCode e)
+                                      49 "Recently used"
+                                      50 "Emojis"
+                                      51 "Icons"
+                                      nil)]
+                   (when section-name
+                     (swap! *section-states update section-name (fn [v] (if (nil? v) false (not v))))
+                     (reset! *highlighted-index nil)
+                     (util/stop e))))
+               (case region
+                 :grid ((.-current *grid-handler-ref) e)
+                 :tabs ((.-current *tabs-handler-ref) e)
+                 nil))))
+         [])]
 
+    ;; Scroll highlighted item into view (highlighting itself is React-props-driven)
     (hooks/use-effect!
      (fn []
-        ;; calculate items
-       (let [^js sections (.querySelectorAll (get-cnt) ".pane-section")
-             items (map #(some-> (.querySelectorAll % ".its > button") (js/Array.from) (js->clj)) sections)
-             step 9
-             items (map #(let [count (count %)
-                               m (mod count step)]
-                           (if (> m 0) (concat % (repeat (- step m) false)) %)) items)]
-         (set! (. *items-ref -current) (flatten items))
-         (focus! 0 :next))
+       (when-let [idx @*highlighted-index]
+         (if-let [virt @*virtuoso-ref]
+           ;; Virtuoso: scroll to row
+           (when-let [si (section-for-index idx sections)]
+             (let [sec (nth sections si)
+                   local-idx (- idx (:start sec))
+                   row (quot local-idx (:cols sec))]
+               (.scrollToIndex virt #js {:index row :align "center" :behavior "auto"})))
+           ;; Non-virtualized: scrollIntoView on the button
+           (when-let [cnt (get-cnt)]
+             (when (< idx (count flat-items))
+               (let [item-id (:id (nth flat-items idx))]
+                 (when-let [btn (.querySelector cnt (str "[data-item-id='" item-id "']"))]
+                   (.scrollIntoView btn #js {:block "nearest" :behavior "instant"}))))))))
+     [@*highlighted-index])
 
-        ;; handlers
-       (let [^js cnt (get-cnt)]
-         (.addEventListener cnt "keydown" down-handler! false)
-         #(.removeEventListener cnt "keydown" down-handler!)))
+    ;; Attach global keydown handler
+    (hooks/use-effect!
+     (fn []
+       (when-let [cnt (get-cnt)]
+         (.addEventListener cnt "keydown" keydown-handler true)
+         #(.removeEventListener cnt "keydown" keydown-handler true)))
      [])
+
     [:span.absolute.hidden {:ref *el-ref}]))
 
 (rum/defc color-picker
@@ -2678,9 +2957,11 @@
 (rum/defcs ^:large-vars/cleanup-todo icon-search < rum/reactive
   (rum/local "" ::q)
   (rum/local nil ::result)
-  (rum/local false ::select-mode?)
+  (rum/local :search ::focus-region)
+  (rum/local nil ::highlighted-index)
   (rum/local :all ::tab)
   (rum/local false ::input-focused?)
+  (rum/local nil ::virtuoso-ref)
   (rum/local :icon-picker ::view) ;; Default view, updated in :will-mount for avatars/images
   {:will-mount (fn [s]
                  (let [opts (first (:rum/args s))
@@ -2700,10 +2981,12 @@
         *view (::view state)
         *input-ref (rum/create-ref)
         *result-ref (rum/create-ref)
+        *virtuoso-ref (::virtuoso-ref state)
         result @*result
         normalized-icon-value (normalize-icon icon-value)
         opts (assoc opts
                     :input-focused? @*input-focused?
+                    :*virtuoso-ref *virtuoso-ref
                     :on-chosen (fn [e m & [keep-popup?]]
                                  (let [icon-item (normalize-icon m)
                                        can-have-color? (contains? #{:icon :avatar :text} (:type icon-item))
@@ -2724,11 +3007,23 @@
                                             m)]
                                    (and on-chosen (on-chosen e m' keep-popup?))
                                    (when (:type icon-item) (add-used-item! icon-item)))))
-        *select-mode? (::select-mode? state)
+        *focus-region (::focus-region state)
+        *highlighted-index (::highlighted-index state)
+        section-states @*section-states
+        {flat-items :items sections :sections} (compute-flat-items @*tab result section-states)
+        highlighted-id (when-let [idx @*highlighted-index]
+                         (when (< idx (count flat-items))
+                           (:id (nth flat-items idx))))
+        ghost-highlighted-id (when (and (= @*focus-region :search)
+                                        (nil? @*highlighted-index)
+                                        (pos? (count flat-items)))
+                               (:id (first flat-items)))
+        opts (assoc opts :highlighted-id highlighted-id :ghost-highlighted-id ghost-highlighted-id :focus-region @*focus-region)
         reset-q! #(when-let [^js input (rum/deref *input-ref)]
                     (reset! *q "")
                     (reset! *result {})
-                    (reset! *select-mode? false)
+                    (reset! *focus-region :search)
+                    (reset! *highlighted-index nil)
                     (set! (. input -value) "")
                     (util/schedule
                      (fn []
@@ -2764,21 +3059,25 @@
 
        ;; Topbar: tabs + separator + search
        [:div.icon-picker-topbar
-        [:div.tabs-section
+        [:div.tabs-section {:role "tablist"}
          (tab-observer @*tab {:q @*q :*result *result})
-         (keyboard-shortcut-observer @*tab *input-focused?)
-         (when @*select-mode?
-           (select-observer *input-ref))
+         (keyboard-nav-controller *focus-region *highlighted-index *tab *input-ref flat-items sections *virtuoso-ref)
          (let [tabs [[:all "All"] [:emoji "Emojis"] [:icon "Icons"] [:custom "Custom"]]]
            (for [[id label] tabs
                  :let [active? (= @*tab id)]]
              [:button.tab-item
               {:key (name id)
+               :role "tab"
+               :aria-selected (str active?)
+               :tabIndex (if active? "0" "-1")
                :data-text label
+               :data-tab-id (name id)
                :data-active (when active? "true")
                :on-mouse-down (fn [e]
                                 (util/stop e)
-                                (reset! *tab id))}
+                                (reset! *tab id)
+                                (reset! *focus-region :search)
+                                (reset! *highlighted-index nil))}
               label]))
          [:div.tab-actions
           ;; color picker (always visible)
@@ -2811,25 +3110,52 @@
              :ref *input-ref
              :placeholder "Search emojis, icons, assets..."
              :default-value ""
-             :on-focus #(do (reset! *select-mode? false)
+             :on-focus #(do (reset! *focus-region :search)
                             (reset! *input-focused? true))
              :on-blur #(reset! *input-focused? false)
              :on-key-down (fn [^js e]
-                            (case (.-keyCode e)
-                              ;; esc
-                              27 (do (util/stop e)
-                                     (if (string/blank? @*q)
-                                       (shui/popup-hide!)
-                                       (reset-q!)))
-                              38 (do (util/stop e))
-                              (9 40) (do
-                                       (reset! *select-mode? true)
-                                       (util/stop e))
-                              :dune))
+                            (let [code (.-keyCode e)]
+                              (cond
+                                ;; Escape: clear search or close picker
+                                (= code 27)
+                                (do (util/stop e)
+                                    (if (string/blank? @*q)
+                                      (shui/popup-hide!)
+                                      (reset-q!)))
+
+                                ;; Up Arrow / Shift+Tab: move to tab bar
+                                (or (= code 38)
+                                    (and (= code 9) (.-shiftKey e)))
+                                (do (util/stop e)
+                                    (reset! *focus-region :tabs)
+                                    (reset! *highlighted-index nil)
+                                    (when-let [^js cnt (some-> (rum/deref *input-ref) (.closest ".cp__emoji-icon-picker"))]
+                                      (when-let [active-tab (.querySelector cnt "[data-active='true'].tab-item")]
+                                        (.focus active-tab))))
+
+                                ;; Tab / Down Arrow: enter grid at first item
+                                (or (and (= code 9) (not (.-shiftKey e)))
+                                    (= code 40))
+                                (do (util/stop e)
+                                    (when (pos? (count flat-items))
+                                      (reset! *focus-region :grid)
+                                      (reset! *highlighted-index 0)))
+
+                                ;; Enter: select ghost-highlighted item (first result)
+                                (= code 13)
+                                (when (and (nil? @*highlighted-index)
+                                           (pos? (count flat-items)))
+                                  (let [item (first flat-items)
+                                        item-id (:id item)]
+                                    (when-let [^js cnt (some-> (rum/deref *input-ref) (.closest ".cp__emoji-icon-picker"))]
+                                      (when-let [btn (.querySelector cnt (str "[data-item-id='" item-id "']"))]
+                                        (.click btn)
+                                        (util/stop e))))))))
              :on-change (debounce
                          (fn [e]
                            (reset! *q (util/evalue e))
-                           (reset! *select-mode? false)
+                           (reset! *focus-region :search)
+                           (reset! *highlighted-index nil)
                            (if (string/blank? @*q)
                              (reset! *result {})
                              (p/let [result (search @*q @*tab)]
