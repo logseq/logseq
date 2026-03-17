@@ -96,7 +96,7 @@ List property options:
 | --- | --- | --- |
 | --include-built-in | Include built-in properties | Built-in properties are currently included by default, clarify behavior. |
 | --with-classes | Include property classes | Uses :logseq.property/classes when expanded. |
-| --with-type | Include property type | Uses :logseq.property/type when expanded. |
+| --with-type | Include property type | Uses :logseq.property/type. |
 | --fields FIELD,FIELD | Select output fields | |
 
 List block is removed to avoid overlap with search.

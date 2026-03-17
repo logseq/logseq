@@ -153,9 +153,10 @@
   [items & ks]
   (some (fn [item] (some #(contains? item %) ks)) items))
 
-(def ^:private list-columns
+(def ^:private list-page-columns
   [["ID"         (fn [item _] (or (:db/id item) (:id item)))           [:db/id :id]]
    ["TITLE"      (fn [item _] (or (:title item) (:block/title item) (:name item)))  [:title :block/title :name]]
+   ["UUID"       (fn [item _] (or (:block/uuid item) "-"))             [:block/uuid]]
    ["IDENT"      (fn [item _] (:db/ident item))                       [:db/ident]]
    ["UPDATED-AT" (fn [item now-ms] (human-ago (or (:updated-at item) (:block/updated-at item)) now-ms)) [:updated-at :block/updated-at]]
    ["CREATED-AT" (fn [item now-ms] (human-ago (or (:created-at item) (:block/created-at item)) now-ms)) [:created-at :block/created-at]]])
@@ -174,11 +175,30 @@
 
 (defn- format-list-page
   [items now-ms]
-  (format-list-dynamic items now-ms list-columns))
+  (format-list-dynamic items now-ms list-page-columns))
+
+(defn- format-extends
+  [classes]
+  (if (seq classes) (string/join ", " classes) "-"))
+
+(defn- format-properties
+  [properties]
+  (if (seq properties) (string/join ", " properties) "-"))
+
+(def ^:private list-tag-columns
+  [["ID"         (fn [item _] (or (:db/id item) (:id item)))           [:db/id :id]]
+   ["TITLE"      (fn [item _] (or (:title item) (:block/title item) (:name item)))  [:title :block/title :name]]
+   ["UUID"       (fn [item _] (or (:block/uuid item) "-"))             [:block/uuid]]
+   ["IDENT"      (fn [item _] (:db/ident item))                       [:db/ident]]
+   ["EXTENDS"    (fn [item _] (format-extends (:logseq.property.class/extends item)))       [:logseq.property.class/extends]]
+   ["PROPERTIES" (fn [item _] (format-properties (:logseq.property.class/properties item))) [:logseq.property.class/properties]]
+   ["DESCRIPTION" (fn [item _] (:logseq.property/description item))  [:logseq.property/description]]
+   ["UPDATED-AT" (fn [item now-ms] (human-ago (or (:updated-at item) (:block/updated-at item)) now-ms)) [:updated-at :block/updated-at]]
+   ["CREATED-AT" (fn [item now-ms] (human-ago (or (:created-at item) (:block/created-at item)) now-ms)) [:created-at :block/created-at]]])
 
 (defn- format-list-tag
   [items now-ms]
-  (format-list-dynamic items now-ms list-columns))
+  (format-list-dynamic items now-ms list-tag-columns))
 
 (defn- normalize-property-type
   [value]
@@ -187,11 +207,18 @@
     (nil? value) "-"
     :else (str value)))
 
+(defn- format-classes
+  [classes]
+  (if (seq classes) (string/join ", " classes) "-"))
+
 (def ^:private list-property-columns
   [["ID"         (fn [item _] (or (:db/id item) (:id item)))           [:db/id :id]]
    ["TITLE"      (fn [item _] (or (:title item) (:block/title item) (:name item)))  [:title :block/title :name]]
    ["TYPE"       (fn [item _] (normalize-property-type (:logseq.property/type item))) [:logseq.property/type]]
+   ["CLASSES"    (fn [item _] (format-classes (:logseq.property/classes item)))       [:logseq.property/classes]]
+   ["UUID"       (fn [item _] (or (:block/uuid item) "-"))             [:block/uuid]]
    ["IDENT"      (fn [item _] (:db/ident item))                       [:db/ident]]
+   ["DESCRIPTION" (fn [item _] (:logseq.property/description item))  [:logseq.property/description]]
    ["UPDATED-AT" (fn [item now-ms] (human-ago (or (:updated-at item) (:block/updated-at item)) now-ms)) [:updated-at :block/updated-at]]
    ["CREATED-AT" (fn [item now-ms] (human-ago (or (:created-at item) (:block/created-at item)) now-ms)) [:created-at :block/created-at]]])
 

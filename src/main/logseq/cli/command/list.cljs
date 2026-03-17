@@ -20,10 +20,11 @@
    :order {:desc "Sort order. Default: asc"
            :values ["asc" "desc"]}})
 
+;; These should be kept in sync with visible columns e.g. format/list-columns
 (def ^:private list-sort-fields
   {:list-page #{"title" "id" "ident" "created-at" "updated-at"}
    :list-tag #{"title" "id" "ident" "created-at" "updated-at"}
-   :list-property #{"title" "id" "ident" "created-at" "updated-at"}})
+   :list-property #{"title" "id" "ident" "created-at" "updated-at" "type"}})
 
 (def ^:private list-page-spec
   (merge list-common-spec
@@ -60,6 +61,7 @@
           :with-classes {:desc "Include property classes"
                          :coerce :boolean}
           :with-type {:desc "Include property type"
+                      :default true
                       :coerce :boolean}
           :fields {:desc "Select output fields (comma separated)"}}))
 
@@ -168,16 +170,18 @@
     (some? limit) (->> (take limit) vec)))
 
 (defn- prepare-tag-item
-  [item {:keys [with-properties with-extends]}]
+  [item {:keys [with-properties with-extends fields]}]
   (cond-> item
     (not with-properties) (dissoc :logseq.property.class/properties)
-    (not with-extends) (dissoc :logseq.property.class/extends)))
+    (not with-extends) (dissoc :logseq.property.class/extends)
+    (not (string/includes? (str fields) "description")) (dissoc :logseq.property/description)))
 
 (defn- prepare-property-item
-  [item {:keys [with-classes with-type]}]
+  [item {:keys [with-classes with-type fields]}]
   (cond-> item
     (not with-classes) (dissoc :logseq.property/classes)
-    (not with-type) (dissoc :logseq.property/type)))
+    (not with-type) (dissoc :logseq.property/type)
+    (not (string/includes? (str fields) "description")) (dissoc :logseq.property/description)))
 
 (defn- apply-user-only
   [options]
@@ -201,7 +205,9 @@
 (defn execute-list-tag
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              options (apply-user-only (:options action))
+              options (cond-> (apply-user-only (:options action))
+                        ((some-fn :with-extends :with-properties) (:options action))
+                        (assoc :expand true))
               items (transport/invoke cfg :thread-api/api-list-tags false
                                       [(:repo action) options])
               order (or (:order options) "asc")
@@ -216,7 +222,8 @@
 (defn execute-list-property
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              options (apply-user-only (:options action))
+              options (cond-> (apply-user-only (:options action))
+                        (:with-classes (:options action)) (assoc :expand true))
               items (transport/invoke cfg :thread-api/api-list-properties false
                                       [(:repo action) options])
               order (or (:order options) "asc")
