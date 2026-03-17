@@ -12,6 +12,7 @@
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.const :as rtc-const]
             [frontend.worker.sync.crypt :as sync-crypt]
+            [frontend.worker.undo-redo :as undo-validate]
             [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
@@ -420,14 +421,16 @@
 (defn- reverse-tx-data
   [tx-data]
   (->> tx-data
-       (map (fn [[e a v t added]]
-              [(if added :db/retract :db/add) e a v t]))))
+       (keep (fn [[e a v t added]]
+               (when (and (some? a) (some? v) (some? t) (boolean? added))
+                 [(if added :db/retract :db/add) e a v t])))))
 
 (defn- reverse-normalized-tx-data
   [tx-data]
-  (mapv (fn [[op e a v t]]
-          [(if (= :db/add op) :db/retract :db/add) e a v t])
-        tx-data))
+  (->> tx-data
+       (keep (fn [[op e a v t]]
+               (when (and (some? a) (some? v) (some? t))
+                 [(if (= :db/add op) :db/retract :db/add) e a v t])))))
 
 (defn- parse-message [raw]
   (try
@@ -615,6 +618,10 @@
                            tx-ids))
       (when-let [client (current-client repo)]
         (broadcast-rtc-state! client)))))
+
+(defn- clear-pending-txs!
+  [repo]
+  (remove-pending-txs! repo (mapv :tx-id (pending-txs repo))))
 
 (comment
   (defn- clear-pending-txs!
@@ -834,6 +841,12 @@
       (when (d/entity db [:block/uuid block-uuid])
         [:block/uuid block-uuid]))))
 
+(defn- string-block-uuid->lookup
+  [x]
+  (when (string? x)
+    (when-let [block-uuid (parse-uuid x)]
+      [:block/uuid block-uuid])))
+
 (defn- replace-string-block-tempids-with-lookups
   [db tx-data]
   (if db
@@ -849,7 +862,8 @@
           replace-entity (fn [entity]
                            (if (contains? created-string-entity-ids entity)
                              entity
-                             (or (resolve-string-block-tempid db entity)
+                             (or (string-block-uuid->lookup entity)
+                                 (resolve-string-block-tempid db entity)
                                  entity)))]
       (mapv (fn [item]
               (if (and (vector? item) (>= (count item) 2))
@@ -875,14 +889,60 @@
 (defn- drop-remote-conflicted-local-tx
   [db remote-updated-keys tx-data]
   (if (seq remote-updated-keys)
-    (remove (fn [item]
-              (and (vector? item)
-                   (>= (count item) 4)
-                   (contains? #{:db/add :db/retract} (first item))
-                   (contains? remote-updated-keys
-                              [(canonical-entity-id db (second item))
-                               (nth item 2)])))
-            tx-data)
+    (let [structural-attrs #{:block/parent :block/page :block/order}
+          conflicted-structural-entities
+          (->> tx-data
+               (keep (fn [item]
+                       (when (and (vector? item)
+                                  (>= (count item) 4)
+                                  (contains? #{:db/add :db/retract} (first item)))
+                         (let [entity-key (canonical-entity-id db (second item))
+                               attr (nth item 2)]
+                           (when (and (contains? structural-attrs attr)
+                                      (contains? remote-updated-keys [entity-key attr]))
+                             entity-key)))))
+               set)]
+      (remove (fn [item]
+                (and (vector? item)
+                     (let [entity-key (canonical-entity-id db (second item))]
+                       (or
+                        (and (contains? conflicted-structural-entities entity-key)
+                             (contains? #{:db/add :db/retract :db/retractEntity} (first item)))
+                        (and (>= (count item) 4)
+                             (contains? #{:db/add :db/retract} (first item))
+                             (contains? remote-updated-keys
+                                        [entity-key (nth item 2)]))))))
+              tx-data))
+    tx-data))
+
+(defn- missing-block-lookup-update?
+  [db item]
+  (when (and db
+             (vector? item)
+             (>= (count item) 4)
+             (contains? #{:db/add :db/retract} (first item)))
+    (let [entity (second item)
+          attr (nth item 2)
+          create-attrs #{:block/uuid :block/name :db/ident :block/page :block/parent :block/order}]
+      (and (vector? entity)
+           (= :block/uuid (first entity))
+           (nil? (d/entity db entity))
+           (not (contains? create-attrs attr))))))
+
+(defn- drop-missing-block-lookup-updates
+  [db tx-data]
+  (if db
+    (let [stale-lookups (->> tx-data
+                             (keep (fn [item]
+                                     (when (missing-block-lookup-update? db item)
+                                       (second item))))
+                             set)]
+      (if (seq stale-lookups)
+        (remove (fn [item]
+                  (and (vector? item)
+                       (contains? stale-lookups (second item))))
+                tx-data)
+        tx-data))
     tx-data))
 
 (defn- sanitize-tx-data
@@ -891,6 +951,7 @@
                                (db-normalize/replace-attr-retract-with-retract-entity-v2 db)
                                ;; Notice: rebase should generate larger tx-id than reverse tx
                                (map strip-tx-id)
+                               (drop-missing-block-lookup-updates db)
                                (sanitize-block-ref-datoms db)
                                drop-orphaning-parent-retracts)]
     ;; (when (not= tx-data sanitized-tx-data)
@@ -1401,6 +1462,16 @@
     (concat tx-data'
             (map (fn [id] [:db/retractEntity id]) retract-block-ids))))
 
+(defn- tx-has-missing-lookup-entity?
+  [db tx-data]
+  (some (fn [item]
+          (when (vector? item)
+            (let [entity (second item)]
+              (and (vector? entity)
+                   (= :block/uuid (first entity))
+                   (nil? (d/entity db entity))))))
+        tx-data))
+
 (defn- reverse-local-txs!
   [temp-conn local-txs temp-tx-meta]
   (->> local-txs
@@ -1412,13 +1483,15 @@
                                   (replace-string-block-tempids-with-lookups @temp-conn)
                                   (reverse-replace-retract-uuid-with-retract-entity)
                                   seq)]
-            (ldb/transact! temp-conn
-                           tx-data
-                           (local-tx-debug-meta temp-tx-meta
-                                                local-txs
-                                                index
-                                                local-tx
-                                                :reverse)))))
+            (when (and (not (tx-has-missing-lookup-entity? @temp-conn tx-data))
+                       (undo-validate/valid-undo-redo-tx? temp-conn tx-data))
+              (ldb/transact! temp-conn
+                             tx-data
+                             (local-tx-debug-meta temp-tx-meta
+                                                  local-txs
+                                                  index
+                                                  local-tx
+                                                  :reverse))))))
        (keep identity)
        vec))
 
@@ -1606,9 +1679,32 @@
                          :*reversed-tx-report *reversed-tx-report
                          :*rebased-pending-txs *rebased-pending-txs
                          :*temp-after-db *temp-after-db}
-          tx-report (if has-local-changes?
-                      (apply-remote-tx-with-local-changes! apply-context)
-                      (apply-remote-tx-without-local-changes! apply-context))
+          tx-report (try
+                      (if has-local-changes?
+                        (apply-remote-tx-with-local-changes! apply-context)
+                        (apply-remote-tx-without-local-changes! apply-context))
+                      (catch :default error
+                        (log/error :db-sync/apply-remote-txs-failed
+                                   {:repo repo
+                                    :has-local-changes? has-local-changes?
+                                    :remote-tx-count (count remote-txs)
+                                    :local-tx-count (count local-txs)
+                                    :remote-txs (mapv (fn [{:keys [t outliner-op tx-data]}]
+                                                        {:t t
+                                                         :outliner-op outliner-op
+                                                         :tx-data-count (count tx-data)
+                                                         :tx-data-preview (take 12 tx-data)})
+                                                      remote-txs)
+                                    :local-txs (mapv (fn [{:keys [tx-id outliner-op tx reversed-tx]}]
+                                                       {:tx-id tx-id
+                                                        :outliner-op outliner-op
+                                                        :tx-count (count tx)
+                                                        :tx-preview (take 12 tx)
+                                                        :reversed-count (count reversed-tx)
+                                                        :reversed-preview (take 12 reversed-tx)})
+                                                     local-txs)
+                                    :error error})
+                        (throw error)))
           remote-tx-report @*remote-tx-report]
       (when has-local-changes?
         (when-let [rebased-pending-txs (seq @*rebased-pending-txs)]
@@ -2021,45 +2117,50 @@
                        (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))]
              (set-graph-sync-metadata! repo graph-e2ee?)
              (ensure-client-graph-uuid! repo graph-id)
-             (p/let [_ (update-progress {:sub-type :upload-progress
-                                         :message (if graph-e2ee? "Encrypting..." "Preparing...")})
-                     {:keys [db] :as temp} (<prepare-upload-temp-sqlite! repo graph-id source-conn aes-key update-progress)
-                     total-rows (count-kvs-rows db)]
-               (->
-                (p/loop [last-addr -1
-                         first-batch? true
-                         loaded 0]
-                  (let [rows (fetch-kvs-rows db last-addr upload-kvs-batch-size)]
-                    (if (empty? rows)
-                      (do
-                        (client-op/remove-local-tx repo)
-                        (client-op/update-local-tx repo 0)
-                        (client-op/add-all-exists-asset-as-ops repo)
-                        (update-progress {:sub-type :upload-completed
-                                          :message "Graph upload finished!"})
-                        {:graph-id graph-id})
-                      (let [max-addr (apply max (map first rows))
-                            rows (normalize-snapshot-rows rows)
-                            loaded' (+ loaded (count rows))
-                            finished? (= loaded' total-rows)
-                            upload-url (str base "/sync/" graph-id "/snapshot/upload?reset="
-                                            (if first-batch? "true" "false")
-                                            "&finished="
-                                            (if finished? "true" "false"))]
-                        (p/let [{:keys [body encoding]} (<snapshot-upload-body rows)
-                                headers (cond-> {"content-type" snapshot-content-type}
-                                          (string? encoding) (assoc "content-encoding" encoding))
-                                _ (fetch-json upload-url
-                                              {:method "POST"
-                                               :headers headers
-                                               :body body}
-                                              {:response-schema :sync/snapshot-upload})]
-                          (update-progress {:sub-type :upload-progress
-                                            :message (str "Uploading " loaded' "/" total-rows)})
-                          (p/recur max-addr false loaded'))))))
-                (p/finally
-                  (fn []
-                    (cleanup-temp-sqlite! temp)))))))
+             (let [snapshot-checksum (sync-checksum/recompute-checksum @source-conn)]
+               (client-op/update-local-checksum repo snapshot-checksum)
+               (p/let [_ (update-progress {:sub-type :upload-progress
+                                           :message (if graph-e2ee? "Encrypting..." "Preparing...")})
+                       {:keys [db] :as temp} (<prepare-upload-temp-sqlite! repo graph-id source-conn aes-key update-progress)
+                       total-rows (count-kvs-rows db)]
+                 (->
+                  (p/loop [last-addr -1
+                           first-batch? true
+                           loaded 0]
+                    (let [rows (fetch-kvs-rows db last-addr upload-kvs-batch-size)]
+                      (if (empty? rows)
+                        (do
+                          (clear-pending-txs! repo)
+                          (client-op/remove-local-tx repo)
+                          (client-op/update-local-tx repo 0)
+                          (client-op/add-all-exists-asset-as-ops repo)
+                          (update-progress {:sub-type :upload-completed
+                                            :message "Graph upload finished!"})
+                          {:graph-id graph-id})
+                        (let [max-addr (apply max (map first rows))
+                              rows (normalize-snapshot-rows rows)
+                              loaded' (+ loaded (count rows))
+                              finished? (= loaded' total-rows)
+                              upload-url (str base "/sync/" graph-id "/snapshot/upload?reset="
+                                              (if first-batch? "true" "false")
+                                              "&finished="
+                                              (if finished? "true" "false")
+                                              (when finished?
+                                                (str "&checksum=" (js/encodeURIComponent snapshot-checksum))))]
+                          (p/let [{:keys [body encoding]} (<snapshot-upload-body rows)
+                                  headers (cond-> {"content-type" snapshot-content-type}
+                                            (string? encoding) (assoc "content-encoding" encoding))
+                                  _ (fetch-json upload-url
+                                                {:method "POST"
+                                                 :headers headers
+                                                 :body body}
+                                                {:response-schema :sync/snapshot-upload})]
+                            (update-progress {:sub-type :upload-progress
+                                              :message (str "Uploading " loaded' "/" total-rows)})
+                            (p/recur max-addr false loaded'))))))
+                  (p/finally
+                    (fn []
+                      (cleanup-temp-sqlite! temp))))))))
          (p/rejected (ex-info "db-sync missing datascript conn"
                               {:repo repo :graph-id graph-id})))
        (p/rejected (ex-info "db-sync missing upload info"

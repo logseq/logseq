@@ -464,6 +464,43 @@
                                              [[:db/add [:block/uuid child-uuid]
                                                :block/title "child-updated"]])))))
 
+(deftest undo-validation-rejects-invalid-recycle-restore-tx-test
+  (testing "recycle-shaped undo tx still validates resulting structure"
+    (let [conn (db/get-db test-db false)
+          page-uuid (random-uuid)
+          block-uuid (random-uuid)]
+      (d/transact! conn
+                   [{:db/ident :logseq.class/Page}
+                    {:block/uuid page-uuid
+                     :block/name "page"
+                     :block/title "page"
+                     :block/tags #{:logseq.class/Page}}
+                    {:db/id 1000
+                     :block/uuid block-uuid
+                     :block/title "bad-block"
+                     :block/page [:block/uuid page-uuid]
+                     :block/parent [:block/uuid page-uuid]
+                     :logseq.property/deleted-at 1
+                     :logseq.property.recycle/original-page [:block/uuid page-uuid]
+                     :logseq.property.recycle/original-parent [:block/uuid page-uuid]
+                     :logseq.property.recycle/original-order "aj"}]
+                   {:local-tx? false})
+      ;; Simulate a broken recycled block shell like the runtime repro: entity has
+      ;; structural attrs but no title/uuid dispatch attrs after sync churn.
+      (d/transact! conn
+                   [[:db/retract 1000 :block/uuid block-uuid]
+                    [:db/retract 1000 :block/title "bad-block"]]
+                   {:local-tx? false})
+      (is (false? (undo-validate/valid-undo-redo-tx?
+                   conn
+                   [[:db/retract 1000 :logseq.property.recycle/original-order "aj"]
+                    [:db/retract 1000 :logseq.property/deleted-at 1]
+                    [:db/add 1000 :block/parent [:block/uuid page-uuid]]
+                    [:db/retract 1000 :logseq.property.recycle/original-page [:block/uuid page-uuid]]
+                    [:db/retract 1000 :logseq.property.recycle/original-parent [:block/uuid page-uuid]]
+                    [:db/add 1000 :block/order "aj"]
+                    [:db/add 1000 :block/page [:block/uuid page-uuid]]]))))))
+
 (deftest undo-skips-when-parent-missing-test
   (testing "undo skips when parent is missing"
     (undo-redo/clear-history! test-db)

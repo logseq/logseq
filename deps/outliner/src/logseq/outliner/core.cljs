@@ -805,7 +805,6 @@
                               (remove :logseq.property/built-in?)
                               (remove ldb/page?))
         txs-state (ds/new-outliner-txs-state)
-        block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) top-level-blocks)
         start-block (first top-level-blocks)
         end-block (last top-level-blocks)
         delete-one-block? (or (= 1 (count top-level-blocks)) (= start-block end-block))]
