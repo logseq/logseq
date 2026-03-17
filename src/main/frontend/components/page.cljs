@@ -12,6 +12,7 @@
             [frontend.components.plugins :as plugins]
             [frontend.components.property.config :as property-config]
             [frontend.components.query :as query]
+            [frontend.components.recycle :as recycle]
             [frontend.components.reference :as reference]
             [frontend.components.scheduled-deadlines :as scheduled]
             [frontend.components.svg :as svg]
@@ -418,6 +419,8 @@
         property-page? (ldb/property? page)
         title (:block/title page)
         journal? (db/journal-page? title)
+        recycle-page? (and (ldb/page? page)
+                           (= title common-config/recycle-page-name))
         fmt-journal? (boolean (date/journal-title->int title))
         today? (and
                 journal?
@@ -462,14 +465,16 @@
             (tabs page {:current-page? option :sidebar? sidebar?}))
 
           (when (not tag-dialog?)
-            [:div.ls-page-blocks
-             {:style {:margin-left (if (util/mobile?) 0 -20)}
-              :class (when-not (or sidebar? (util/capacitor?))
-                       "mt-4")}
-             (page-blocks-cp page (merge option {:sidebar? sidebar?
-                                                 :container-id (:container-id state)}))])]
+            (if recycle-page?
+              (recycle/recycle-page page)
+              [:div.ls-page-blocks
+               {:style {:margin-left (if (util/mobile?) 0 -20)}
+                :class (when-not (or sidebar? (util/capacitor?))
+                         "mt-4")}
+               (page-blocks-cp page (merge option {:sidebar? sidebar?
+                                                   :container-id (:container-id state)}))]))]
 
-         (when-not preview?
+         (when-not (or preview? recycle-page?)
            [:div.flex.flex-col.gap-8
             {:class (when-not (util/mobile?) "ml-1")}
             (when today?

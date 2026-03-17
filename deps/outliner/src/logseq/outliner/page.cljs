@@ -18,6 +18,7 @@
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.text :as text]
+            [logseq.outliner.recycle :as outliner-recycle]
             [logseq.outliner.validate :as outliner-validate]))
 
 (defn- db-refs->page
@@ -46,49 +47,30 @@
 (defn delete!
   "Deletes a page. Returns true if able to delete page. If unable to delete,
   calls error-handler fn and returns false"
-  [conn page-uuid & {:keys [persist-op? rename? error-handler]
+  [conn page-uuid & {:keys [persist-op? rename? error-handler deleted-by-uuid now-ms]
                      :or {persist-op? true
                           error-handler (fn [{:keys [msg]}] (js/console.error msg))}}]
   (assert (uuid? page-uuid) (str ::delete! " wrong page-uuid: " (if page-uuid page-uuid "nil")))
   (when page-uuid
     (when-let [page (d/entity @conn [:block/uuid page-uuid])]
-      (let [blocks (:block/_page page)
-            truncate-blocks-tx-data (mapv
-                                     (fn [block]
-                                       [:db/retractEntity [:block/uuid (:block/uuid block)]])
-                                     blocks)]
-        ;; TODO: maybe we should add $$$favorites to built-in pages?
-        (if (or (ldb/built-in? page) (ldb/hidden? page))
-          (do
-            (error-handler {:msg "Built-in page cannot be deleted"})
-            false)
-          (let [delete-property-tx (when (ldb/property? page)
-                                     (concat
-                                      (let [datoms (d/datoms @conn :avet (:db/ident page))]
-                                        (map (fn [d] [:db/retract (:e d) (:a d)]) datoms))
-                                      (map (fn [d] [:db/retractEntity (:e d)])
-                                           (d/datoms @conn :avet :logseq.property.history/property (:db/ident page)))))
-                today-page? (when-let [day (:block/journal-day page)]
-                              (= (date-time-util/ms->journal-day (js/Date.)) day))
-                delete-page-tx (when-not today-page?
-                                 (concat (db-refs->page page)
-                                         delete-property-tx
-                                         [[:db/retractEntity (:db/id page)]]))
-                restore-class-parent-tx (->> (filter ldb/class? (:logseq.property.class/_extends page))
-                                             (map (fn [p]
-                                                    {:db/id (:db/id p)
-                                                     :logseq.property.class/extends :logseq.class/Root})))
-                tx-data (concat truncate-blocks-tx-data
-                                restore-class-parent-tx
-                                delete-page-tx)]
-
+      ;; TODO: maybe we should add $$$favorites to built-in pages?
+      (if (or (ldb/built-in? page) (ldb/hidden? page))
+        (do
+          (error-handler {:msg "Built-in page cannot be deleted"})
+          false)
+        (let [today-page? (when-let [day (:block/journal-day page)]
+                            (= (date-time-util/ms->journal-day (js/Date.)) day))
+              tx-data (when-not today-page?
+                        (outliner-recycle/recycle-page-tx-data @conn page {:deleted-by-uuid deleted-by-uuid
+                                                                           :now-ms now-ms}))]
+          (when (seq tx-data)
             (ldb/transact! conn tx-data
                            (cond-> {:outliner-op :delete-page
-                                    :deleted-page (str (:block/uuid page))
+                                    :deleted-page (:block/title page)
                                     :persist-op? persist-op?}
                              rename?
-                             (assoc :real-outliner-op :rename-page)))
-            true))))))
+                             (assoc :real-outliner-op :rename-page))))
+          true)))))
 
 (defn- build-page-tx [db properties page {:keys [class? tags class-ident-namespace]}]
   (when (:block/uuid page)
