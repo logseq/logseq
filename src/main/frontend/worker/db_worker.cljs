@@ -57,7 +57,15 @@
             [missionary.core :as m]
             [promesa.core :as p]))
 
-(.importScripts js/self "worker.js")
+(def ^:private worker-bootstrap-loaded-key "__logseq_db_worker_bootstrap_loaded__")
+
+(defn- ensure-worker-bootstrap!
+  []
+  (when-not (gobj/get js/self worker-bootstrap-loaded-key)
+    (gobj/set js/self worker-bootstrap-loaded-key true)
+    (.importScripts js/self "worker.js")))
+
+(ensure-worker-bootstrap!)
 
 (declare <build-blocks-fts!)
 
@@ -1171,6 +1179,7 @@
 (defn- notify-invalid-data
   [{:keys [tx-meta]} errors]
   ;; don't notify on production when undo/redo failed
+
   (when-not (and (or (:undo? tx-meta) (:redo? tx-meta))
                  (not worker-util/dev?))
     (shared-service/broadcast-to-clients! :notification
