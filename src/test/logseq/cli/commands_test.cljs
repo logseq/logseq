@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [async deftest is testing]]
             [clojure.string :as string]
             [logseq.cli.command.add :as add-command]
+            [logseq.cli.command.list :as list-command]
             [logseq.cli.command.show :as show-command]
             [logseq.cli.command.sync :as sync-command]
             [logseq.cli.commands :as commands]
@@ -47,6 +48,10 @@
                      (some contains-block-uuid? (vals value)))
     (sequential? value) (some contains-block-uuid? value)
     :else false))
+
+(defn- item-ids
+  [result]
+  (mapv :db/id (get-in result [:data :items])))
 
 (deftest test-help-output
   (testing "top-level help lists command groups"
@@ -957,6 +962,48 @@
     (let [result (commands/parse-args ["list" "property" "--sort" "wat"])]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code]))))))
+
+(deftest test-list-execute-default-sort-updated-at
+  (async done
+         (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                             transport/invoke (fn [_ method _ _]
+                                                (case method
+                                                  :thread-api/api-list-pages [{:db/id 11 :block/title "Page C" :block/updated-at 30}
+                                                                              {:db/id 7 :block/title "Page B" :block/updated-at 10}
+                                                                              {:db/id 5 :block/title "Page A" :block/updated-at 10}]
+                                                  :thread-api/api-list-tags [{:db/id 4 :block/title "Tag C" :block/updated-at 20}
+                                                                             {:db/id 9 :block/title "Tag B" :block/updated-at 5}
+                                                                             {:db/id 2 :block/title "Tag A" :block/updated-at 5}]
+                                                  :thread-api/api-list-properties [{:db/id 8 :block/title "Property C" :block/updated-at 9}
+                                                                                   {:db/id 6 :block/title "Property B" :block/updated-at 3}
+                                                                                   {:db/id 1 :block/title "Property A" :block/updated-at 3}]
+                                                  (throw (ex-info "unexpected invoke" {:method method}))))]
+               (p/let [page-result (list-command/execute-list-page {:repo "demo" :options {}} {})
+                       tag-result (list-command/execute-list-tag {:repo "demo" :options {}} {})
+                       property-result (list-command/execute-list-property {:repo "demo" :options {}} {})]
+                 (is (= [5 7 11] (item-ids page-result)))
+                 (is (= [2 9 4] (item-ids tag-result)))
+                 (is (= [1 6 8] (item-ids property-result)))))
+             (p/catch (fn [e]
+                        (is false (str "unexpected error: " e))))
+             (p/finally done))))
+
+(deftest test-list-execute-default-sort-respects-order-and-explicit-sort
+  (async done
+         (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                             transport/invoke (fn [_ method _ _]
+                                                (case method
+                                                  :thread-api/api-list-pages [{:db/id 3 :block/title "Gamma" :block/updated-at 20}
+                                                                              {:db/id 2 :block/title "Alpha" :block/updated-at 5}
+                                                                              {:db/id 1 :block/title "Beta" :block/updated-at 10}]
+                                                  (throw (ex-info "unexpected invoke" {:method method}))))]
+               (p/let [desc-default-result (list-command/execute-list-page {:repo "demo" :options {:order "desc"}} {})
+                       explicit-sort-result (list-command/execute-list-page {:repo "demo" :options {:sort "title"}} {})]
+                 (is (= [3 1 2] (item-ids desc-default-result)))
+                 (is (= [2 1 3] (item-ids explicit-sort-result)))))
+             (p/catch (fn [e]
+                        (is false (str "unexpected error: " e))))
+             (p/finally done))))
 
 (deftest test-verb-subcommand-parse-upsert-remove
   (testing "remove block parses with id"

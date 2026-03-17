@@ -26,9 +26,15 @@
    :list-tag #{"title" "id" "ident" "created-at" "updated-at"}
    :list-property #{"title" "id" "ident" "created-at" "updated-at" "type"}})
 
+(def ^:private default-sort-field "updated-at")
+
+(defn- effective-sort-field
+  [options]
+  (or (:sort options) default-sort-field))
+
 (def ^:private list-page-spec
   (merge list-common-spec
-         {:sort {:desc "Sort field"
+         {:sort {:desc "Sort field. Default: updated-at"
                  :values (:list-page list-sort-fields)}
           :include-journal {:desc "Include journal pages"
                             :coerce :boolean}
@@ -42,7 +48,7 @@
 
 (def ^:private list-tag-spec
   (merge list-common-spec
-         {:sort {:desc "Sort field"
+         {:sort {:desc "Sort field. Default: updated-at"
                  :values (:list-tag list-sort-fields)}
           :include-built-in {:desc "Include built-in tags"
                              :coerce :boolean}
@@ -54,7 +60,7 @@
 
 (def ^:private list-property-spec
   (merge list-common-spec
-         {:sort {:desc "Sort field"
+         {:sort {:desc "Sort field. Default: updated-at"
                  :values (:list-property list-sort-fields)}
           :include-built-in {:desc "Include built-in properties"
                              :coerce :boolean}
@@ -157,7 +163,9 @@
   (if (seq sort-field)
     (let [sort-key (get field-map sort-field)
           sorted (if sort-key
-                   (sort-by #(get % sort-key) items)
+                   (sort-by (fn [item]
+                              [(get item sort-key) (:db/id item)])
+                            items)
                    items)
           sorted (if (= "desc" order) (reverse sorted) sorted)]
       (vec sorted))
@@ -194,9 +202,10 @@
               options (apply-user-only (:options action))
               items (transport/invoke cfg :thread-api/api-list-pages false
                                       [(:repo action) options])
+              sort-field (effective-sort-field options)
               order (or (:order options) "asc")
               fields (parse-field-list (:fields options))
-              sorted (apply-sort items (:sort options) order list-page-field-map)
+              sorted (apply-sort items sort-field order list-page-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
               final (apply-fields limited fields list-page-field-map)]
         {:status :ok
@@ -210,10 +219,11 @@
                         (assoc :expand true))
               items (transport/invoke cfg :thread-api/api-list-tags false
                                       [(:repo action) options])
+              sort-field (effective-sort-field options)
               order (or (:order options) "asc")
               fields (parse-field-list (:fields options))
               prepared (mapv #(prepare-tag-item % options) items)
-              sorted (apply-sort prepared (:sort options) order list-tag-field-map)
+              sorted (apply-sort prepared sort-field order list-tag-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
               final (apply-fields limited fields list-tag-field-map)]
         {:status :ok
@@ -226,10 +236,11 @@
                         (:with-classes (:options action)) (assoc :expand true))
               items (transport/invoke cfg :thread-api/api-list-properties false
                                       [(:repo action) options])
+              sort-field (effective-sort-field options)
               order (or (:order options) "asc")
               fields (parse-field-list (:fields options))
               prepared (mapv #(prepare-property-item % options) items)
-              sorted (apply-sort prepared (:sort options) order list-property-field-map)
+              sorted (apply-sort prepared sort-field order list-property-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
               final (apply-fields limited fields list-property-field-map)]
         {:status :ok
