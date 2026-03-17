@@ -84,7 +84,6 @@
 
    :block/created-at {:db/index true}
    :block/updated-at {:db/index true}
-   :logseq.property/deleted-at {:db/index true}
 
    ;; page additional attributes
    ;; page's name, lowercase
