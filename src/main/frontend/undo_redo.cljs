@@ -165,15 +165,35 @@
          [op e a v])))
    datoms))
 
+(defn- datom-attr
+  [datom]
+  (or (nth datom 1 nil)
+      (:a datom)))
+
+(defn- datom-value
+  [datom]
+  (or (nth datom 2 nil)
+      (:v datom)))
+
+(defn- datom-added?
+  [datom]
+  (let [value (nth datom 4 nil)]
+    (if (some? value)
+      value
+      (:added datom))))
+
 (defn- reversed-move-target-ref
   [datoms attr undo?]
-  (some (fn [{:keys [a v added]}]
-          (when (and (= a attr)
-                     (if undo? (not added) added))
-            v))
+  (some (fn [datom]
+          (let [a (datom-attr datom)
+                v (datom-value datom)
+                added (datom-added? datom)]
+            (when (and (= a attr)
+                       (if undo? (not added) added))
+              v)))
         datoms))
 
-(defn- reversed-move-conflicted?
+(defn- reversed-structural-target-conflicted?
   [conn e->datoms undo?]
   (some (fn [[_e datoms]]
           (let [target-parent (reversed-move-target-ref datoms :block/parent undo?)
@@ -193,33 +213,38 @@
   (let [recycle-restore-tx (when (and undo?
                                       (= :delete-blocks (:outliner-op tx-meta)))
                              (->> tx-data
-                                  (keep (fn [{:keys [e a added]}]
-                                          (when (and added
-                                                     (= :logseq.property/deleted-at a))
-                                            (d/entity @conn e))))
+                                  (keep (fn [datom]
+                                          (let [e (or (nth datom 0 nil)
+                                                      (:e datom))
+                                                a (datom-attr datom)
+                                                added (datom-added? datom)]
+                                            (when (and added
+                                                       (= :logseq.property/deleted-at a))
+                                              (d/entity @conn e)))))
                                   (mapcat #(outliner-recycle/restore-tx-data @conn %))
                                   seq))
         redo? (not undo?)
         e->datoms (->> (if redo? tx-data (reverse tx-data))
                        (group-by :e))
         schema (:schema @conn)
-        move-conflicted? (and (= :move-blocks (:outliner-op tx-meta))
-                              (reversed-move-conflicted? conn e->datoms undo?))
-        reversed-tx-data (or (when move-conflicted? nil)
-                             (some-> recycle-restore-tx reverse seq)
-                             (->> (mapcat
-                                   (fn [[e datoms]]
-                                     (cond
-                                       (and undo? (contains? added-ids e))
-                                       [[:db/retractEntity e]]
+        structural-target-conflicted? (and undo?
+                                           (reversed-structural-target-conflicted? conn e->datoms undo?))
+        reversed-tx-data (if structural-target-conflicted?
+                           nil
+                           (or (some-> recycle-restore-tx reverse seq)
+                               (->> (mapcat
+                                     (fn [[e datoms]]
+                                       (cond
+                                         (and undo? (contains? added-ids e))
+                                         [[:db/retractEntity e]]
 
-                                       (and redo? (contains? retracted-ids e))
-                                       [[:db/retractEntity e]]
+                                         (and redo? (contains? retracted-ids e))
+                                         [[:db/retractEntity e]]
 
-                                       :else
-                                       (reverse-datoms conn datoms schema added-ids retracted-ids undo? redo?)))
-                                   e->datoms)
-                                  (remove nil?)))]
+                                         :else
+                                         (reverse-datoms conn datoms schema added-ids retracted-ids undo? redo?)))
+                                     e->datoms)
+                                    (remove nil?))))]
     reversed-tx-data))
 
 (defn- undo-redo-aux

@@ -516,7 +516,7 @@
         (is (= page-uuid (:block/uuid (:block/parent child))))))))
 
 (deftest undo-skips-conflicted-move-and-keeps-earlier-history-test
-  (testing "undo fails closed on a conflicting move and keeps db valid"
+  (testing "undo skips a conflicting move and continues to earlier safe history"
     (undo-redo/clear-history! test-db)
     (let [conn (db/get-db test-db false)
           {:keys [parent-a-uuid parent-b-uuid child-uuid]} (seed-page-two-parents-child!)]
@@ -534,8 +534,8 @@
                     :local-tx? false})
       (let [undo-result (undo-redo/undo test-db)
             child (d/entity @conn [:block/uuid child-uuid])]
-        (is (= :frontend.undo-redo/empty-undo-stack undo-result))
-        (is (= "local-title" (:block/title child)))
+        (is (map? undo-result))
+        (is (= "child" (:block/title child)))
         (is (= parent-b-uuid
                (:block/uuid (:block/parent child))))
         (is (empty? (db-issues @conn)))))))
@@ -585,6 +585,34 @@
         (is (seq reversed))
         (is (= parent-a-uuid
                (:block/uuid (:block/parent (d/entity @conn [:block/uuid child-uuid])))))))))
+
+(deftest undo-skips-move-when-original-parent-is-recycled-test
+  (testing "undo should skip a move whose original parent has been recycled"
+    (undo-redo/clear-history! test-db)
+    (let [conn (db/get-db test-db false)
+          {:keys [child-uuid parent-a-uuid parent-b-uuid]} (seed-page-two-parents-child!)]
+      (d/transact! conn
+                   [[:db/add [:block/uuid child-uuid] :block/parent [:block/uuid parent-b-uuid]]]
+                   {:outliner-op :move-blocks
+                    :local-tx? true})
+      (d/transact! conn
+                   (:tx-data (outliner-core/delete-blocks @conn [(d/entity @conn [:block/uuid parent-a-uuid])] {}))
+                   {:outliner-op :delete-blocks
+                    :local-tx? false})
+      (let [parent-a (d/entity @conn [:block/uuid parent-a-uuid])
+            _ (is (some? parent-a))
+            _ (is (true? (ldb/recycled? parent-a)))
+            undo-op (last (get @undo-redo/*undo-ops test-db))
+            data (some #(when (= ::undo-redo/db-transact (first %))
+                          (second %))
+                       undo-op)
+            conflicted? (#'undo-redo/reversed-structural-target-conflicted?
+                         conn
+                         (->> (:tx-data data) reverse (group-by :e))
+                         true)
+            reversed (undo-redo/get-reversed-datoms conn true data (:tx-meta data))]
+        (is (true? conflicted?))
+        (is (nil? reversed))))))
 
 (deftest ^:long undo-redo-test
   (testing "Random mixed operations"
