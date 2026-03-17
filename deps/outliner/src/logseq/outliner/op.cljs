@@ -299,9 +299,14 @@
 (defn apply-ops!
   [conn ops opts]
   (assert (ops-validator ops) ops)
-  (let [opts' (assoc opts
-                     :transact-opts {:conn conn}
-                     :local-tx? true)
+  (let [single-op-outliner-op (when (= 1 (count ops))
+                                (first (first ops)))
+        opts' (cond-> (assoc opts
+                             :transact-opts {:conn conn}
+                             :local-tx? true)
+                (and single-op-outliner-op
+                     (nil? (:outliner-op opts)))
+                (assoc :outliner-op single-op-outliner-op))
         *result (atom nil)]
     (outliner-tx/transact!
      opts'

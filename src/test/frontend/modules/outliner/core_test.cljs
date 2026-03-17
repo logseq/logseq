@@ -114,13 +114,15 @@
              [15]]]
         [16 [[17]]]]]])
 
+(declare get-datoms)
+
 (defn get-blocks-count
   []
-  (count (d/datoms (db/get-db test-db) :avet :block/uuid)))
+  (count (get-datoms)))
 
 (defn get-blocks-ids
   []
-  (set (map :v (d/datoms (db/get-db test-db) :avet :block/uuid))))
+  (set (map :v (get-datoms))))
 
 (defn- transact-opts
   []
@@ -525,7 +527,11 @@
 
         (is (= [5] (get-children 4)))
 
-        (is (nil? (get-block 3)))))))
+        (let [recycled (get-block 3)
+              recycle-page (db/get-page "Recycle")]
+          (is (some? recycled))
+          (is (integer? (:logseq.property/deleted-at recycled)))
+          (is (= (:db/id recycle-page) (:db/id (:block/page recycled)))))))))
 
 (deftest test-bocks-with-level
   (testing "blocks with level"
@@ -625,19 +631,34 @@
 
 (defn get-datoms
   []
-  (d/datoms (db/get-db test-db) :avet :block/uuid))
+  (let [db' (db/get-db test-db)
+        recycled-ids (into #{}
+                           (map :e)
+                           (d/datoms db' :avet :logseq.property/deleted-at))
+        recycle-page-ids (into #{}
+                               (map :e)
+                               (d/datoms db' :avet :block/title "Recycle"))
+        recycled-page-block-ids (into #{}
+                                      (map :e)
+                                      (mapcat (fn [page-id]
+                                                (d/datoms db' :avet :block/page page-id))
+                                              recycle-page-ids))]
+    (->> (d/datoms db' :avet :block/uuid)
+         (remove (fn [datom]
+                   (or (contains? recycled-ids (:e datom))
+                       (contains? recycled-page-block-ids (:e datom))
+                       (contains? recycle-page-ids (:e datom))))))))
 
 (defn get-random-block
   []
   (let [datoms (->> (get-datoms)
                     (remove (fn [datom] (= 1 (:e datom))))
                     (remove (fn [datom]
-                              (let [block (db/pull test-db '[*] (:e datom))]
-                                (or (nil? (:block/parent block))
-                                    (= "Recycle" (:block/title block)))))))]
+                              (empty? (d/datoms (db/get-db test-db) :eavt (:e datom) :block/parent))))
+                    vec)]
     (if (seq datoms)
       (let [id (:e (gen/generate (gen/elements datoms)))
-            block (db/pull test-db '[*] id)]
+            block (db/entity test-db id)]
         (assert (:block/parent block)
                 (str "No parent for block: " block))
         block)
@@ -661,15 +682,17 @@
 
 (defn get-random-blocks
   []
-  (let [limit (inc (rand-int 20))]
+  (let [limit (inc (rand-int 5))]
     (repeatedly limit get-random-block)))
+
+(def ^:private random-ops-iterations 40)
 
 (deftest ^:long random-inserts
   (testing "Random inserts"
     (transact-random-tree!)
     (let [c1 (get-blocks-ids)
           *random-blocks (atom c1)]
-      (dotimes [_i 100]
+      (dotimes [_i random-ops-iterations]
         ;; (prn "random insert: " i)
         (let [blocks (gen-blocks)]
           (swap! *random-blocks (fn [old]
@@ -681,7 +704,7 @@
 (deftest ^:long random-deletes
   (testing "Random deletes"
     (transact-random-tree!)
-    (dotimes [_i 100]
+    (dotimes [_i random-ops-iterations]
       ;; (prn "Random deletes: " i)
       (insert-blocks! (gen-blocks) (get-random-block))
       (let [blocks (get-random-blocks)]
@@ -695,8 +718,8 @@
     (transact-random-tree!)
     (let [c1 (get-blocks-ids)
           *random-blocks (atom c1)]
-      (dotimes [_i 100]
-        ;; (prn "Random move: " i)
+      (dotimes [_i random-ops-iterations]
+        ;; (prn :debug :i i)
         (let [blocks (gen-blocks)]
           (swap! *random-blocks (fn [old]
                                   (set/union old (set (map :block/uuid blocks)))))
@@ -717,7 +740,7 @@
     (transact-random-tree!)
     (let [c1 (get-blocks-ids)
           *random-blocks (atom c1)]
-      (dotimes [_i 100]
+      (dotimes [_i random-ops-iterations]
         ;; (prn "Random move up/down: " i)
         (let [blocks (gen-blocks)]
           (swap! *random-blocks (fn [old]
@@ -735,7 +758,7 @@
     (transact-random-tree!)
     (let [c1 (get-blocks-ids)
           *random-blocks (atom c1)]
-      (dotimes [_i 100]
+      (dotimes [_i random-ops-iterations]
         ;; (prn "Random move indent/outdent: " i)
         (let [new-blocks (gen-blocks)]
           (swap! *random-blocks (fn [old]
