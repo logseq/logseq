@@ -5,6 +5,7 @@
 
 (defn developer-mode
   []
+  (w/eval-js "localStorage.setItem('preferred-language', '\"en\"')")
   (w/click "button[title='More'] .ls-icon-dots")
   (w/click ".ls-icon-settings")
   (w/click "[data-id='advanced']")
