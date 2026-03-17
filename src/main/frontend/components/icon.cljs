@@ -3084,7 +3084,79 @@
 
       ;; Default - Level 1: Icon Picker view
       [:div.cp__emoji-icon-picker
-       {:data-keep-selection true}
+       {:data-keep-selection true
+        :class (when (rum/react *drag-active?) "drag-active")
+        :on-drag-enter (fn [e]
+                         (.preventDefault e)
+                         (.stopPropagation e)
+                         (swap! *drag-depth inc)
+                         (when (= @*drag-depth 1)
+                           (reset! *drag-active? true)
+                           ;; Lock scroll behind overlay
+                           (when-let [bd (.querySelector (.-currentTarget e) ".bd-scroll")]
+                             (set! (.. bd -style -overflowY) "hidden"))
+                           (when-let [vs (.querySelector (.-currentTarget e) "[data-virtuoso-scroller]")]
+                             (set! (.. vs -style -overflowY) "hidden"))))
+        :on-drag-over (fn [e]
+                        (.preventDefault e)
+                        (.stopPropagation e))
+        :on-drag-leave (fn [e]
+                         (.preventDefault e)
+                         (.stopPropagation e)
+                         (swap! *drag-depth dec)
+                         (when (<= @*drag-depth 0)
+                           (reset! *drag-depth 0)
+                           (reset! *drag-active? false)
+                           ;; Restore scroll
+                           (when-let [bd (.querySelector (.-currentTarget e) ".bd-scroll")]
+                             (set! (.. bd -style -overflowY) ""))
+                           (when-let [vs (.querySelector (.-currentTarget e) "[data-virtuoso-scroller]")]
+                             (set! (.. vs -style -overflowY) ""))))
+        :on-drop (fn [e]
+                   (.preventDefault e)
+                   (.stopPropagation e)
+                   (reset! *drag-depth 0)
+                   (reset! *drag-active? false)
+                   ;; Restore scroll
+                   (when-let [bd (.querySelector (.-currentTarget e) ".bd-scroll")]
+                     (set! (.. bd -style -overflowY) ""))
+                   (when-let [vs (.querySelector (.-currentTarget e) "[data-virtuoso-scroller]")]
+                     (set! (.. vs -style -overflowY) ""))
+                   (let [files (array-seq (.. e -dataTransfer -files))
+                         file (first files)
+                         repo (state/get-current-repo)]
+                     (when file
+                       (let [file-type (.-type file)
+                             ext (some-> file-type (string/split "/") second keyword)]
+                         (if (contains? config/image-formats ext)
+                           (p/let [entity (save-image-asset! repo file)]
+                             (when entity
+                               (let [image-data {:asset-uuid (str (:block/uuid entity))
+                                                 :asset-type (:logseq.property.asset/type entity)}
+                                     avatar-ctx (when (= :avatar (:type normalized-icon-value))
+                                                  normalized-icon-value)]
+                                 (on-chosen nil
+                                            (if avatar-ctx
+                                              {:type :avatar
+                                               :id (:id avatar-ctx)
+                                               :label (:label avatar-ctx)
+                                               :data (merge (:data avatar-ctx) image-data)}
+                                              {:type :image
+                                               :id (str "image-" (:block/uuid entity))
+                                               :label (or (:block/title entity) "")
+                                               :data image-data})))))
+                           (shui/toast! "Only image files are supported (PNG, JPG, SVG, GIF, WebP)"
+                                        :warning))))))}
+
+       ;; Drag overlay hint
+       (when @*drag-active?
+         [:div.drag-overlay-hint
+          [:div.corner.tl] [:div.corner.tr]
+          [:div.corner.bl] [:div.corner.br]
+          (shui/tabler-icon "upload" {:size 26})
+          [:div.text-group
+           [:span.title "Drop to set as icon"]
+           [:span.subtitle "PNG, JPG, SVG, GIF, WebP"]]])
 
        ;; Topbar: tabs + separator + search
        [:div.icon-picker-topbar

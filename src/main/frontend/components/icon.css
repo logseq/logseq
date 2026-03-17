@@ -3,6 +3,98 @@
 
   @apply w-[380px] max-h-[442px] relative flex flex-col overflow-hidden;
 
+  /* Drag-active state - frosted glass with edge glow */
+  &.drag-active::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    background: radial-gradient(
+      ellipse at center,
+      color-mix(in srgb, var(--lx-gray-02) 94%, transparent) 40%,
+      color-mix(in srgb, var(--lx-accent-09) 10%, transparent) 100%
+    );
+    z-index: 100;
+    pointer-events: none;
+    transition: opacity 200ms;
+  }
+
+  &.drag-active > .bd {
+    overflow-y: hidden;
+  }
+
+  &.drag-active [data-virtuoso-scroller] {
+    overflow-y: hidden !important;
+  }
+
+  .drag-overlay-hint {
+    position: absolute;
+    inset: 0;
+    z-index: 101;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+
+    /* Corner brackets */
+    .corner {
+      position: absolute;
+      width: 24px;
+      height: 24px;
+
+      &::before {
+        content: "";
+        position: absolute;
+        width: 12px;
+        height: 12px;
+        color: var(--lx-accent-09);
+        opacity: 0.6;
+      }
+
+      &.tl { top: 20px; left: 20px;
+        &::before { top: 0; left: 0; border-top: 1.5px solid; border-left: 1.5px solid; border-radius: 3px 0 0 0; }
+      }
+      &.tr { top: 20px; right: 20px;
+        &::before { top: 0; right: 0; border-top: 1.5px solid; border-right: 1.5px solid; border-radius: 0 3px 0 0; }
+      }
+      &.bl { bottom: 20px; left: 20px;
+        &::before { bottom: 0; left: 0; border-bottom: 1.5px solid; border-left: 1.5px solid; border-radius: 0 0 0 3px; }
+      }
+      &.br { bottom: 20px; right: 20px;
+        &::before { bottom: 0; right: 0; border-bottom: 1.5px solid; border-right: 1.5px solid; border-radius: 0 0 3px 0; }
+      }
+    }
+
+    .tabler-icon {
+      color: var(--rx-gray-12);
+    }
+
+    .text-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .title {
+      font-size: 14px;
+      color: var(--rx-gray-12);
+      font-weight: 500;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    .subtitle {
+      font-size: 11px;
+      color: var(--rx-gray-11);
+      text-align: center;
+      white-space: nowrap;
+    }
+  }
+
   /* More visible separator like combobox */
   .icon-picker-separator {
     background-color: var(--rx-gray-05) !important;
