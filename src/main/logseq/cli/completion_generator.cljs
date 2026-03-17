@@ -41,24 +41,26 @@
 (defn spec->token
   "Convert a single spec entry [key spec-map] to a token descriptor.
    Returns {:key k :type t ...} with type being one of:
-   :flag, :enum, :dynamic, :file, :dir, :free"
+   :flag, :enum, :multi, :dynamic, :file, :dir, :free"
   [[k spec-map]]
   (let [alias (:alias spec-map)
         desc (or (:desc spec-map) "")
         coerce (:coerce spec-map)
         values (:values spec-map)
+        multiple-values (:multiple-values spec-map)
         complete (:complete spec-map)]
     (cond-> {:key k
              :desc desc}
       alias (assoc :alias alias)
       (= coerce :boolean) (assoc :type :flag)
-      (and (not= coerce :boolean) (seq values)) (assoc :type :enum :values values)
-      (and (not= coerce :boolean) (nil? values) (= complete :graphs)) (assoc :type :dynamic :complete :graphs)
-      (and (not= coerce :boolean) (nil? values) (= complete :pages)) (assoc :type :dynamic :complete :pages)
-      (and (not= coerce :boolean) (nil? values) (= complete :queries)) (assoc :type :dynamic :complete :queries)
-      (and (not= coerce :boolean) (nil? values) (= complete :file)) (assoc :type :file)
-      (and (not= coerce :boolean) (nil? values) (= complete :dir)) (assoc :type :dir)
-      (and (not= coerce :boolean) (nil? values) (nil? complete)) (assoc :type :free))))
+      (and (not= coerce :boolean) (seq multiple-values)) (assoc :type :multi :values (sort multiple-values))
+      (and (not= coerce :boolean) (nil? multiple-values) (seq values)) (assoc :type :enum :values values)
+      (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :graphs)) (assoc :type :dynamic :complete :graphs)
+      (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :pages)) (assoc :type :dynamic :complete :pages)
+      (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :queries)) (assoc :type :dynamic :complete :queries)
+      (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :file)) (assoc :type :file)
+      (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :dir)) (assoc :type :dir)
+      (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (nil? complete)) (assoc :type :free))))
 
 (defn spec->tokens
   "Convert a full spec map to a vector of token descriptors."
@@ -138,6 +140,30 @@ _logseq_queries() {
   fi
   compadd -a queries
 }
+
+_logseq_multi_values() {
+  # Complete comma-delimited lists. Usage: _logseq_multi_values val1 val2 ...
+  local -a all_values=(\"$@\")
+  local cur=\"${PREFIX}${SUFFIX}\"
+  local prefix='' remaining=\"$cur\"
+
+  # Split on last comma to get prefix and partial token
+  if [[ \"$cur\" == *,* ]]; then
+    prefix=\"${cur%,*},\"
+    remaining=\"${cur##*,}\"
+  fi
+
+  # Filter out already-selected values
+  local -a already=(${(s:,:)cur})
+  local -a candidates=()
+  for v in \"${all_values[@]}\"; do
+    if [[ ! \" ${already[*]} \" == *\" $v \"* ]]; then
+      candidates+=(\"$v\")
+    fi
+  done
+
+  compadd -p \"$prefix\" -S ',' -- \"${candidates[@]}\"
+}
 ")
 
 ;; ---------------------------------------------------------------------------
@@ -182,6 +208,14 @@ _logseq_queries() {
                "'=[" desc* "]:value:(" vals-str ")'")
           (str "'" long-opt "=[" desc* "]:value:(" vals-str ")'"))
         )
+
+      :multi
+      (let [vals-str (string/join " " values)]
+        (if alias
+          (str "'" (str "(" alias-short " " long-opt ")") "'"
+               "{" alias-short "," long-opt "}"
+               "'=[" desc* "]:value:{_logseq_multi_values " vals-str "}'")
+          (str "'" long-opt "=[" desc* "]:value:{_logseq_multi_values " vals-str "}'")))
 
       :dynamic
       (let [action (case complete
@@ -460,6 +494,37 @@ _logseq_compadd_lines() {
     [[ \"$item\" == \"$cur\"* ]] && COMPREPLY+=( \"$item\" )
   done < <(\"$source_fn\" \"$@\")
 }
+
+_logseq_multi_values_bash() {
+  # Complete comma-delimited lists. Usage: _logseq_multi_values_bash \"$cur\" val1 val2 ...
+  local cur=\"$1\"; shift
+  local -a all_values=(\"$@\")
+  local prefix='' remaining=\"$cur\"
+
+  if [[ \"$cur\" == *,* ]]; then
+    prefix=\"${cur%,*},\"
+    remaining=\"${cur##*,}\"
+  fi
+
+  # Collect already-selected values
+  local IFS=','
+  local -a already=($cur)
+  unset IFS
+
+  local v
+  for v in \"${all_values[@]}\"; do
+    local found=0
+    local a
+    for a in \"${already[@]}\"; do
+      [[ \"$a\" == \"$v\" ]] && found=1 && break
+    done
+    if (( ! found )) && [[ \"$v\" == \"$remaining\"* ]]; then
+      COMPREPLY+=( \"${prefix}${v}\" )
+    fi
+  done
+  [[ ${#COMPREPLY[@]} -eq 1 ]] && COMPREPLY=( \"${COMPREPLY[0]},\" )
+  compopt -o nospace 2>/dev/null
+}
 ")
 
 ;; ---------------------------------------------------------------------------
@@ -609,6 +674,11 @@ _logseq_compadd_lines() {
            "      COMPREPLY=( $(compgen -W '" (string/join " " values) "' -- \"$cur\") )\n"
            "      return ;;")
 
+      :multi
+      (str "    " long-opt ")\n"
+           "      _logseq_multi_values_bash \"$cur\" " (string/join " " values) "\n"
+           "      return ;;")
+
       :dynamic
       (case complete
         :graphs
@@ -664,9 +734,10 @@ _logseq_compadd_lines() {
 
 (defn- option-completion-sig
   "Extract completion-relevant signature from a spec-map entry."
-  [{:keys [coerce values complete]}]
+  [{:keys [coerce values multiple-values complete]}]
   {:flag? (= coerce :boolean)
    :values values
+   :multiple-values multiple-values
    :complete complete})
 
 (defn find-varied-option-keys
@@ -729,6 +800,12 @@ _logseq_compadd_lines() {
       :dir
       (str "      if " condition "; then\n"
            "        COMPREPLY=( $(compgen -d -- \"$cur\") )\n"
+           "        return\n"
+           "      fi")
+
+      :multi
+      (str "      if " condition "; then\n"
+           "        _logseq_multi_values_bash \"$cur\" " (string/join " " (:values token)) "\n"
            "        return\n"
            "      fi")
 

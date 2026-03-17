@@ -52,7 +52,12 @@
       (is (contains? (get-in property-entry [:spec :sort :values]) "title")))
     (testing "common :order has correct values"
       (is (= ["asc" "desc"]
-             (get-in page-entry [:spec :order :values]))))))
+             (get-in page-entry [:spec :order :values]))))
+    (testing "tag-spec :fields has :multiple-values"
+      (let [mv (get-in tag-entry [:spec :fields :multiple-values])]
+        (is (seq mv))
+        (is (some #{"title"} mv))
+        (is (some #{"uuid"} mv))))))
 
 (deftest test-upsert-spec-metadata
   (let [entries upsert-command/entries
@@ -170,7 +175,14 @@
       (is (= :h (:alias token)))))
   (testing "bare string spec → :free type"
     (let [token (gen/spec->token [:query {:desc "Query EDN"}])]
-      (is (= :free (:type token))))))
+      (is (= :free (:type token)))))
+  (testing "spec with :multiple-values → :multi type"
+    (let [token (gen/spec->token [:fields {:desc "Fields" :multiple-values ["id" "title" "uuid"]}])]
+      (is (= :multi (:type token)))
+      (is (= ["id" "title" "uuid"] (:values token)))))
+  (testing ":multiple-values takes precedence over :values"
+    (let [token (gen/spec->token [:fields {:multiple-values ["a" "b"] :values ["x" "y"]}])]
+      (is (= :multi (:type token))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Phase 3 — Zsh output
@@ -233,6 +245,24 @@
       (is (string/includes? output "--no-include-built-in")))
     (testing "--no-with-type appears in bash wordlist"
       (is (string/includes? output "--no-with-type")))))
+
+(deftest test-zsh-multi-value-completion
+  (let [output (gen/generate-completions "zsh" full-table)]
+    (testing "zsh preamble contains _logseq_multi_values helper"
+      (is (string/includes? output "_logseq_multi_values()")))
+    (testing "--fields under list tag uses {_logseq_multi_values ...} action"
+      (is (re-find #"--fields\}.*\{_logseq_multi_values " output)))
+    (testing "multi-values include known tag field names"
+      (is (string/includes? output "created-at"))
+      (is (string/includes? output "title"))
+      (is (string/includes? output "uuid")))))
+
+(deftest test-bash-multi-value-completion
+  (let [output (gen/generate-completions "bash" full-table)]
+    (testing "bash preamble contains _logseq_multi_values_bash helper"
+      (is (string/includes? output "_logseq_multi_values_bash()")))
+    (testing "--fields case calls _logseq_multi_values_bash for list tag context"
+      (is (string/includes? output "_logseq_multi_values_bash \"$cur\" created-at")))))
 
 (deftest test-zsh-all-commands-present
   (let [output (gen/generate-completions "zsh" full-table)]
