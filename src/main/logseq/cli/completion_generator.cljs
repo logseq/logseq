@@ -182,40 +182,42 @@ _logseq_multi_values() {
       (string/replace "'" "'\\''")))
 
 (defn- zsh-token-for
-  "Generate a zsh _arguments token string for a spec token descriptor.
+  "Generate zsh _arguments token strings for a spec token descriptor.
+   Returns a vector of one or two strings. Aliased value-taking options produce
+   separate long (--opt=) and short (-o+) specs so that -o=val is not suggested
+   (babashka.cli does not support = with short aliases).
    no-prefix-keys: set of keys that get --no-<option> completions."
   [{:keys [key type alias desc values complete]} no-prefix-keys]
   (let [long-opt (zsh-option-name key)
         desc* (zsh-escape-desc desc)
-        alias-short (when alias (str "-" (name alias)))]
+        alias-short (when alias (str "-" (name alias)))
+        ;; Exclusion list shared by aliased value-option pairs
+        excl (when alias (str "(" alias-short " " long-opt ")"))]
     (case type
       :flag
       (let [no-prefix? (contains? no-prefix-keys key)
             no-opt (str "--no-" (name key))]
         (if alias
-          (str "'" (str "(" alias-short " " long-opt (when no-prefix? (str " " no-opt)) ")") "'"
-               "{" alias-short "," long-opt "}"
-               "'[" desc* "]'")
-          (if no-prefix?
-            (str "'(" long-opt " " no-opt ")" long-opt "[" desc* "]'")
-            (str "'" long-opt "[" desc* "]'"))))
+          [(str "'" (str "(" alias-short " " long-opt (when no-prefix? (str " " no-opt)) ")") "'"
+                "{" alias-short "," long-opt "}"
+                "'[" desc* "]'")]
+          [(if no-prefix?
+             (str "'(" long-opt " " no-opt ")" long-opt "[" desc* "]'")
+             (str "'" long-opt "[" desc* "]'"))]))
 
       :enum
       (let [vals-str (string/join " " values)]
         (if alias
-          (str "'" (str "(" alias-short " " long-opt ")") "'"
-               "{" alias-short "," long-opt "}"
-               "'=[" desc* "]:value:(" vals-str ")'")
-          (str "'" long-opt "=[" desc* "]:value:(" vals-str ")'"))
-        )
+          [(str "'" excl long-opt "=[" desc* "]:value:(" vals-str ")'")
+           (str "'" excl alias-short "[" desc* "]:value:(" vals-str ")'")]
+          [(str "'" long-opt "=[" desc* "]:value:(" vals-str ")'")]))
 
       :multi
       (let [vals-str (string/join " " values)]
         (if alias
-          (str "'" (str "(" alias-short " " long-opt ")") "'"
-               "{" alias-short "," long-opt "}"
-               "'=[" desc* "]:value:{_logseq_multi_values " vals-str "}'")
-          (str "'" long-opt "=[" desc* "]:value:{_logseq_multi_values " vals-str "}'")))
+          [(str "'" excl long-opt "=[" desc* "]:value:{_logseq_multi_values " vals-str "}'")
+           (str "'" excl alias-short "[" desc* "]:value:{_logseq_multi_values " vals-str "}'")]
+          [(str "'" long-opt "=[" desc* "]:value:{_logseq_multi_values " vals-str "}'")]))
 
       :dynamic
       (let [action (case complete
@@ -223,34 +225,30 @@ _logseq_multi_values() {
                      :pages "_logseq_pages"
                      :queries "_logseq_queries")]
         (if alias
-          (str "'" (str "(" alias-short " " long-opt ")") "'"
-               "{" alias-short "," long-opt "}"
-               "'=[" desc* "]:value:" action "'")
-          (str "'" long-opt "=[" desc* "]:value:" action "'")))
+          [(str "'" excl long-opt "=[" desc* "]:value:" action "'")
+           (str "'" excl alias-short "[" desc* "]:value:" action "'")]
+          [(str "'" long-opt "=[" desc* "]:value:" action "'")]))
 
       :file
       (if alias
-        (str "'" (str "(" alias-short " " long-opt ")") "'"
-             "{" alias-short "," long-opt "}"
-             "'=[" desc* "]:file:_files'")
-        (str "'" long-opt "=[" desc* "]:file:_files'"))
+        [(str "'" excl long-opt "=[" desc* "]:file:_files'")
+         (str "'" excl alias-short "[" desc* "]:file:_files'")]
+        [(str "'" long-opt "=[" desc* "]:file:_files'")])
 
       :dir
       (if alias
-        (str "'" (str "(" alias-short " " long-opt ")") "'"
-             "{" alias-short "," long-opt "}"
-             "'=[" desc* "]:dir:_files -/'")
-        (str "'" long-opt "=[" desc* "]:dir:_files -/'"))
+        [(str "'" excl long-opt "=[" desc* "]:dir:_files -/'")
+         (str "'" excl alias-short "[" desc* "]:dir:_files -/'")]
+        [(str "'" long-opt "=[" desc* "]:dir:_files -/'")])
 
       :free
       (if alias
-        (str "'" (str "(" alias-short " " long-opt ")") "'"
-             "{" alias-short "," long-opt "}"
-             "'=[" desc* "]:value:'")
-        (str "'" long-opt "=[" desc* "]:value:'"))
+        [(str "'" excl long-opt "=[" desc* "]:value:'")
+         (str "'" excl alias-short "[" desc* "]:value:'")]
+        [(str "'" long-opt "=[" desc* "]:value:'")])
 
       ;; default
-      (str "'" long-opt "=[" desc* "]:value:'"))))
+      [(str "'" long-opt "=[" desc* "]:value:'")])))
 
 (defn- zsh-no-token-for
   "Generate a zsh _arguments token for the --no-<option> negation of a flag.
@@ -274,7 +272,7 @@ _logseq_multi_values() {
                                               (not (contains? global-keys (:key %))))
                                      (:key %)))
                             set)]
-    (into (mapv #(zsh-token-for % no-prefix-keys) tokens)
+    (into (vec (mapcat #(zsh-token-for % no-prefix-keys) tokens))
           (keep #(zsh-no-token-for % no-prefix-keys) tokens))))
 
 (defn- zsh-leaf-function
