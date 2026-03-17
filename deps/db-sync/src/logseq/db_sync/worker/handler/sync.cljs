@@ -55,7 +55,9 @@
 
 (defn current-checksum [^js self]
   (ensure-conn! self)
-  (storage/get-checksum (.-sql self)))
+  (let [db @(.-conn self)]
+    (when-not (ldb/get-graph-rtc-e2ee? db)
+      (storage/get-checksum (.-sql self)))))
 
 (defn snapshot-upload-finished? [^js self]
   (ensure-schema! self)
