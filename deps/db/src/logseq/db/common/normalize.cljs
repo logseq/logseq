@@ -135,6 +135,11 @@
                       (if added
                         [:db/add e' a v' t]
                         [:db/retract e' a v' t])))))
-              d)))
+              (when-let [[op e] (and (= 2 (count d))
+                                     (= :db/retractEntity (first d))
+                                     d)]
+                (when-let [e' (or (eid->lookup db-before e)
+                                  e)]
+                  [op e'])))))
          (remove-retract-entity-ref db-after)
          distinct)))

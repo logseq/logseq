@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [logseq.db :as ldb]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]))
 
@@ -60,6 +61,7 @@
     (outliner-core/delete-blocks! conn [parent] {:deleted-by-uuid user-uuid})
     (let [parent' (db-test/find-block-by-content @conn "parent")
           child' (db-test/find-block-by-content @conn "child")
+          properties (entity-plus/lookup-kv-then-entity parent' :block/properties)
           recycle-page (ldb/get-built-in-page @conn "Recycle")]
       (is (some? parent'))
       (is (some? child'))
@@ -67,9 +69,9 @@
       (is (= (:block/uuid recycle-page) (:block/uuid (:block/page parent'))))
       (is (integer? (:logseq.property/deleted-at parent')))
       (is (= user-uuid
-             (:block/uuid (d/entity @conn (:logseq.property/deleted-by-ref parent')))))
+             (:block/uuid (:logseq.property/deleted-by-ref properties))))
       (is (= (:block/uuid page)
-             (:block/uuid (d/entity @conn (:logseq.property.recycle/original-page parent')))))
+             (:block/uuid (:logseq.property.recycle/original-page properties))))
       (is (= original-order (:logseq.property.recycle/original-order parent')))
       (is (= (:block/uuid parent') (:block/uuid (:block/parent child'))))
       (is (= (:block/uuid recycle-page) (:block/uuid (:block/page child'))))

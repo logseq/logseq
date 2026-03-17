@@ -181,7 +181,6 @@
        (if-let [transact-fn @*transact-fn]
          (transact-fn repo-or-conn tx-data tx-meta)
          (transact-sync repo-or-conn tx-data tx-meta))))))
-(def remove-conflict-datoms db-normalize/remove-conflict-datoms)
 
 (defn transact-with-temp-conn!
   "Validate db and store once for a batch transaction, the `temp` conn can still load data from disk,

@@ -719,7 +719,8 @@
     "logseq.property.code" "logseq.property.repeat"
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"
     "logseq.property.user" "logseq.property.history" "logseq.property.embedding"
-    "logseq.property.reaction" "logseq.property.sync" "logseq.property.publish"})
+    "logseq.property.reaction" "logseq.property.sync" "logseq.property.publish"
+    "logseq.property.recycle"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"
