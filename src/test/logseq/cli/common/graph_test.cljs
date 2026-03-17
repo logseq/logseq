@@ -23,7 +23,9 @@
   (let [graphs-dir (node-helper/create-tmp-dir "cli-common-graph-encoded")
         _ (doseq [dir ["foo~2Fbar"
                        "a~3Ab"
+                       "space name"
                        "space~20name"
+                       "space%20name"
                        "Unlinked graphs"]]
             (fs/mkdirSync (node-path/join graphs-dir dir) #js {:recursive true}))]
     (with-redefs [cli-common-graph/get-db-graphs-dir (fn [] graphs-dir)]

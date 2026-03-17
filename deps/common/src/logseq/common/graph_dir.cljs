@@ -7,6 +7,7 @@
   [graph-name]
   (let [encoded (js/encodeURIComponent (or graph-name ""))]
     (-> encoded
+        (string/replace "%20" " ")
         (string/replace "~" "%7E")
         (string/replace "%" "~"))))
 
