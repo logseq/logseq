@@ -1152,7 +1152,7 @@
     (when-not simple? {:class "cursor-pointer"
                        :on-click on-toggle})
     [:span.font-bold title]
-    (when (and (not simple?) (or total-count count))
+    (when (or total-count count)
       [:<>
        [:span "·"]
        [:span {:style {:font-size "0.7rem"}}
@@ -1184,19 +1184,16 @@
       :class (util/classnames
               [{:has-virtual-list virtual-list?
                 :searching-result searching?}])}
-     ;; Use new collapsible header when collapsible? is true
+     ;; Section header: collapsible with chevron + shortcut, or simple label-only
      (when show-header?
-       (if collapsible?
-         (section-header {:title label
-                          :count (count icon-items)
-                          :total-count total-count
-                          :expanded? expanded?
-                          :keyboard-hint keyboard-hint
-                          :on-toggle toggle-fn
-                          :focus-region focus-region})
-         ;; Simple header (current style) for non-collapsible
-         [:div.hd.px-1.pb-1.leading-none
-          [:strong.text-xs.font-medium.text-gray-07.dark:opacity-80 label]]))
+       (section-header {:title label
+                        :count (count icon-items)
+                        :total-count total-count
+                        :expanded? expanded?
+                        :keyboard-hint keyboard-hint
+                        :on-toggle toggle-fn
+                        :focus-region focus-region
+                        :simple? (not collapsible?)}))
 
      ;; Content - only render if expanded or not collapsible
      (when (or (not collapsible?) expanded?)
@@ -3210,30 +3207,31 @@
                    has-emojis? (seq (:emojis result))
                    has-icons? (seq (:icons result))]
                (if (or has-emojis? has-icons?)
-                 [:div.flex.flex-1.flex-col.search-result
-                  ;; Emojis section
-                  (when has-emojis?
-                    (pane-section
-                     "Emojis"
-                     (:emojis result)
-                     (assoc opts
-                            :collapsible? true
-                            :keyboard-hint "alt mod 2"
-                            :total-count (count (:emojis result))
-                            :virtual-list? false
-                            :expanded? (get section-states "Emojis" true))))
+                 (let [both? (and has-emojis? has-icons?)]
+                   [:div.flex.flex-1.flex-col.search-result
+                    ;; Emojis section
+                    (when has-emojis?
+                      (pane-section
+                       "Emojis"
+                       (:emojis result)
+                       (assoc opts
+                              :collapsible? both?
+                              :keyboard-hint (when both? "alt mod 2")
+                              :total-count (count (:emojis result))
+                              :virtual-list? false
+                              :expanded? (get section-states "Emojis" true))))
 
-                  ;; Icons section
-                  (when has-icons?
-                    (pane-section
-                     "Icons"
-                     (:icons result)
-                     (assoc opts
-                            :collapsible? true
-                            :keyboard-hint "alt mod 3"
-                            :total-count (count (:icons result))
-                            :virtual-list? false
-                            :expanded? (get section-states "Icons" true))))]
+                    ;; Icons section
+                    (when has-icons?
+                      (pane-section
+                       "Icons"
+                       (:icons result)
+                       (assoc opts
+                              :collapsible? both?
+                              :keyboard-hint (when both? "alt mod 3")
+                              :total-count (count (:icons result))
+                              :virtual-list? false
+                              :expanded? (get section-states "Icons" true))))])
                  ;; Search returned no results
                  [:div.search-empty-state
                   (shui/tabler-icon "search-off" {:size 36})
