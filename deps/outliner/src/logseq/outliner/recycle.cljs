@@ -8,10 +8,10 @@
             [logseq.db.common.order :as db-order]))
 
 (def ^:private recycle-page-title "Recycle")
-(def retention-ms (* 60 24 3600 1000))
+(def ^:private retention-ms (* 60 24 3600 1000))
 (def gc-interval-ms (* 24 3600 1000))
 
-(defn recycled?
+(defn- recycled?
   [entity]
   (some? (:logseq.property/deleted-at entity)))
 
@@ -27,7 +27,7 @@
      :logseq.property/hide? true
      :logseq.property/built-in? true}))
 
-(defn recycle-page
+(defn- recycle-page
   [db]
   (ldb/get-built-in-page db recycle-page-title))
 
@@ -194,7 +194,7 @@
       :else
       nil)))
 
-(defn restore-tx-data
+(defn- restore-tx-data
   [db root]
   (when-let [{:keys [parent page order]} (restore-target db root)]
     (let [subtree (when-not (ldb/page? root)
@@ -229,7 +229,7 @@
       (ldb/transact! conn tx-data {:outliner-op :restore-recycled})
       true)))
 
-(defn gc-tx-data
+(defn- gc-tx-data
   [db {:keys [now-ms] :or {now-ms (common-util/time-ms)}}]
   (let [cutoff (- now-ms retention-ms)]
     (->>
