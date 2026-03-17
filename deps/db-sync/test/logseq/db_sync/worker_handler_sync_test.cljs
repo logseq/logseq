@@ -192,6 +192,40 @@
     (is (= "tx/reject" (:type response)))
     (is (= "snapshot upload in progress" (:reason response)))))
 
+(deftest finished-snapshot-upload-persists-provided-checksum-test
+  (async done
+         (let [sql (test-sql/make-sql)
+               checksum "1be70518babe8784"
+               conn (d/create-conn db-schema/schema)
+               self #js {:sql sql
+                         :conn conn
+                         :schema-ready true
+                         :env #js {"DB" nil}}
+               request (js/Request. (str "http://localhost/sync/graph-1/snapshot/upload?graph-id=graph-1&finished=true&checksum=" checksum)
+                                    #js {:method "POST"
+                                         :body (js/Uint8Array. 0)})]
+           (d/transact! conn [{:block/uuid (random-uuid)
+                               :block/title "uploaded"}])
+           (is (nil? (storage/get-checksum sql)))
+           (-> (p/with-redefs [sync-handler/import-snapshot-stream! (fn [_self _stream _reset?]
+                                                                      (p/resolved 0))
+                               sync-handler/<set-graph-ready-for-use! (fn [_self _graph-id _graph-ready-for-use?]
+                                                                        (p/resolved true))]
+                 (p/let [resp (sync-handler/handle {:self self
+                                                    :request request
+                                                    :url (js/URL. (.-url request))
+                                                    :route {:handler :sync/snapshot-upload}})
+                         text (.text resp)
+                         body (js->clj (js/JSON.parse text) :keywordize-keys true)]
+                   (is (= 200 (.-status resp)))
+                   (is (= {:ok true :count 0} body))
+                   (is (= checksum (storage/get-checksum sql)))))
+               (p/then (fn []
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (deftest tx-batch-rejects-with-the-exact-failed-tx-entry-test
   (testing "db transact failure replies with the specific rejected tx entry"
     (let [sql (test-sql/make-sql)

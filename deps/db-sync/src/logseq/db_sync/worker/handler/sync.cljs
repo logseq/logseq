@@ -515,6 +515,7 @@
         reset? (parse-reset-param reset-param)
         finished-param (.get (.-searchParams url) "finished")
         finished? (parse-finished-param finished-param)
+        checksum-param (.get (.-searchParams url) "checksum")
         req-encoding (.get (.-headers request) "content-encoding")]
     (cond
       (not (seq graph-id))
@@ -538,6 +539,9 @@
                   count (import-snapshot-stream! self stream reset?)
                   _ (when finished?
                       (storage/set-meta! (.-sql self) snapshot-uploading-meta-key false))
+                  _ (when finished?
+                      (when (seq checksum-param)
+                        (storage/set-checksum! (.-sql self) checksum-param)))
                   _ (when finished?
                       (<set-graph-ready-for-use! self graph-id true))]
             (http/json-response :sync/snapshot-upload {:ok true
