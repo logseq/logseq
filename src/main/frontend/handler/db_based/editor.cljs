@@ -48,7 +48,15 @@
 
 (defn wrap-parse-block
   [{:block/keys [title level] :as block}]
-  (let [block (or (and (:db/id block) (db/entity (:db/id block))) block)
+  (let [_ (when-let [eid (:db/id block)]
+            (when-let [ent (db/entity eid)]
+              (when (:logseq.property.asset/type ent)
+                (js/console.warn "[DEBUG wrap-parse-block] Entity has asset/type!"
+                                 (pr-str {:db-id eid
+                                          :uuid (:block/uuid ent)
+                                          :asset-type (:logseq.property.asset/type ent)
+                                          :parent (:db/id (:block/parent ent))})))))
+        block (or (and (:db/id block) (db/entity (:db/id block))) block)
         block (if (nil? title)
                 block
                 (let [ast (mldoc/->edn (string/trim title) :markdown)

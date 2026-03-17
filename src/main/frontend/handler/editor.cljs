@@ -258,6 +258,13 @@
                    ;; a block that has been refed
                    (assoc :block/uuid (:block/uuid block)))
         opts' (assoc opts :outliner-op :save-block)]
+    (when (:logseq.property.asset/type block')
+      (js/console.warn "[DEBUG save-block-inner!] Block has asset/type!"
+                       (pr-str {:db-id (:db/id block')
+                                :uuid (:block/uuid block')
+                                :asset-type (:logseq.property.asset/type block')
+                                :title (:block/title block')
+                                :keys (keys block')})))
     (ui-outliner-tx/transact!
      opts'
      (outliner-save-block! block'))))
@@ -591,6 +598,12 @@
              (let [new-block' (if (seq properties)
                                 (into new-block properties)
                                 new-block)]
+               (when (:logseq.property.asset/type new-block')
+                 (js/console.warn "[DEBUG api-insert-new-block!] New block has asset/type!"
+                                  (pr-str {:page page
+                                           :block-uuid block-uuid
+                                           :asset-type (:logseq.property.asset/type new-block')
+                                           :properties properties})))
                (ui-outliner-tx/transact!
                 {:outliner-op :insert-blocks}
                 (outliner-insert-block! config target-block new-block'

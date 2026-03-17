@@ -768,6 +768,12 @@
           asset-class (db/entity :logseq.class/Asset)
           block-id (ldb/new-block-id)]
     (when (and ext asset-class)
+      (js/console.log "[DEBUG save-image-asset!] Creating asset block"
+                      (pr-str {:page-uuid (:block/uuid asset-class)
+                               :asset-class-db-id (:db/id asset-class)
+                               :block-id block-id
+                               :ext ext
+                               :edit-block (some-> (state/get-edit-block) :block/uuid str)}))
       ;; Write file to disk
       (p/let [_ (let [file-path (str block-id "." ext)
                       file-rpath (str asset-dir-rpath "/" file-path)]
