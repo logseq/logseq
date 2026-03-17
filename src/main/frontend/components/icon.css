@@ -1,7 +1,7 @@
 .cp__emoji-icon-picker {
   --ls-color-icon-preset: "inherit";
 
-  @apply w-[380px] max-h-[442px] relative flex flex-col overflow-hidden;
+  @apply w-[380px] max-h-[442px] relative flex flex-col overflow-hidden bg-gray-02;
 
   /* Drag-active state - frosted glass with edge glow */
   &.drag-active::after {
