@@ -47,10 +47,6 @@
   (when (= 8 (count s))
     (bit-or (js/parseInt s 16) 0)))
 
-(defn zero-checksum
-  []
-  "0000000000000000")
-
 (defn- checksum->state
   [checksum]
   (if (and (string? checksum) (= 16 (count checksum)))
