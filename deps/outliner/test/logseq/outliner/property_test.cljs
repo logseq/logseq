@@ -305,7 +305,11 @@
         _ (assert (:user.property/default (db-test/find-block-by-content @conn "b1")))
         property-id (:db/id (d/entity @conn :user.property/default))
         _ (outliner-property/delete-closed-value! conn property-id [:block/uuid closed-value-uuid])]
-    (is (nil? (d/entity @conn [:block/uuid closed-value-uuid])))))
+    (let [closed-value (d/entity @conn [:block/uuid closed-value-uuid])
+          recycle-page (ldb/get-built-in-page @conn "Recycle")]
+      (is (some? closed-value))
+      (is (integer? (:logseq.property/deleted-at closed-value)))
+      (is (= (:db/id recycle-page) (:db/id (:block/page closed-value)))))))
 
 (deftest class-add-property!
   (let [conn (db-test/create-conn-with-blocks

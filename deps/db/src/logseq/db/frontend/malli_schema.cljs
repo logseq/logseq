@@ -561,7 +561,8 @@
                        :property
                        (entity-util/class? d)
                        :class
-                       (entity-util/hidden? d)
+                       (and (entity-util/page? d)
+                            (true? (:logseq.property/hide? d)))
                        :hidden
                        ;; TODO: Remove deprecated
                        (whiteboard? d)
