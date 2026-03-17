@@ -73,18 +73,13 @@
       chunk)))
 
 (defn- response-body-stream
+  "Return the response body ReadableStream, or nil when unavailable.
+  We intentionally skip `content-encoding` header inspection because `fetch()`
+  transparently decompresses gzip in browsers, Node >= 18, and Electron, yet
+  some runtimes leave the header intact.  Decompressing again would cause
+  `Z_DATA_ERROR: incorrect header check`."
   [^js resp]
-  (let [encoding (some-> resp .-headers (.get "content-encoding"))]
-    (cond
-      (nil? (.-body resp))
-      nil
-
-      (= "gzip" encoding)
-      (when (exists? js/DecompressionStream)
-        (.pipeThrough (.-body resp) (js/DecompressionStream. "gzip")))
-
-      :else
-      (.-body resp))))
+  (.-body resp))
 
 (defn- <flush-datom-batches!
   [datoms batch-size on-batch]
