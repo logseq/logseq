@@ -96,11 +96,16 @@
 
 (defn- db-issues
   [db]
-  (let [ents (->> (d/q '[:find [?e ...]
+  (let [ignore-ent? (fn [ent]
+                      (or (ldb/recycled? ent)
+                          (= "Recycle" (:block/title ent))
+                          (= "Recycle" (some-> ent :block/page :block/title))))
+        ents (->> (d/q '[:find [?e ...]
                          :where
                          [?e :block/uuid]]
                        db)
-                  (map (fn [e] (d/entity db e))))
+                  (map (fn [e] (d/entity db e)))
+                  (remove ignore-ent?))
         uuid-required-ids (->> (concat
                                 (d/q '[:find [?e ...]
                                        :where
@@ -118,7 +123,8 @@
     (concat
      (for [e uuid-required-ids
            :let [ent (d/entity db e)]
-           :when (nil? (:block/uuid ent))]
+           :when (and (not (ignore-ent? ent))
+                      (nil? (:block/uuid ent)))]
        {:type :missing-uuid :e e})
      (for [ent ents
            :let [uuid (:block/uuid ent)

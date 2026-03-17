@@ -628,11 +628,11 @@
                                                :hide? true
                                                :public? false}}
      :logseq.property.recycle/original-parent {:title "Recycle original parent"
-                                               :schema {:type :entity
+                                               :schema {:type :node
                                                         :hide? true
                                                         :public? false}}
      :logseq.property.recycle/original-page {:title "Recycle original page"
-                                             :schema {:type :entity
+                                             :schema {:type :node
                                                       :hide? true
                                                       :public? false}}
      :logseq.property.recycle/original-order {:title "Recycle original order"
