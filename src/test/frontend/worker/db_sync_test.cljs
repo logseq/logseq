@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.crypt :as crypt]
+            [frontend.undo-redo-validate :as undo-validate]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.pipeline :as worker-pipeline]
@@ -32,7 +33,6 @@
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
-            [logseq.outliner.undo-redo-validate :as undo-validate]
             [promesa.core :as p]))
 
 (def ^:private test-repo "test-db-sync-repo")

@@ -1,4 +1,4 @@
-(ns logseq.outliner.undo-redo-validate
+(ns frontend.undo-redo-validate
   "Undo redo validate"
   (:require [clojure.set :as set]
             [datascript.core :as d]
