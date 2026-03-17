@@ -113,32 +113,22 @@
         checksum)
       (fail-fast :db-sync/missing-db {:repo repo :op :checksum}))))
 
-(defn- recompute-local-sync-checksum!
-  [repo]
-  (if-let [conn (worker-state/get-datascript-conn repo)]
-    (let [checksum (sync-checksum/recompute-checksum @conn)]
-      (client-op/update-local-checksum repo checksum)
-      checksum)
-    (fail-fast :db-sync/missing-db {:repo repo :op :checksum-recompute})))
-
 (defn- verify-sync-checksum!
   [repo client local-tx remote-tx remote-checksum context]
-  (when (and (string? remote-checksum)
+  (when (and (not (sync-crypt/graph-e2ee? repo))
+             (string? remote-checksum)
              (checksum-compare-ready? repo client local-tx remote-tx))
     (let [local-checksum (local-sync-checksum repo)]
       (when-not (= local-checksum remote-checksum)
-        (let [real-local-checksum (recompute-local-sync-checksum! repo)]
-          (when-not (= real-local-checksum remote-checksum)
-            (fail-fast :db-sync/checksum-mismatch
-                       (merge context
-                              {:type :db-sync/checksum-mismatch
-                               :repo repo
-                               :message-type (:type context)
-                               :local-tx local-tx
-                               :remote-tx remote-tx
-                               :local-checksum local-checksum
-                               :real-local-checksum real-local-checksum
-                               :remote-checksum remote-checksum}))))))))
+        (fail-fast :db-sync/checksum-mismatch
+                   (merge context
+                          {:type :db-sync/checksum-mismatch
+                           :repo repo
+                           :message-type (:type context)
+                           :local-tx local-tx
+                           :remote-tx remote-tx
+                           :local-checksum local-checksum
+                           :remote-checksum remote-checksum}))))))
 
 (defn- handle-tx-reject!
   [repo client message local-tx]
