@@ -232,11 +232,6 @@
 (defn <graph-delete-index-entry! [db graph-id]
   (common/<d1-run db "delete from graphs where graph_id = ?" graph-id))
 
-(defn <index-delete! [db graph-id]
-  (p/do!
-   (<graph-delete-metadata! db graph-id)
-   (<graph-delete-index-entry! db graph-id)))
-
 (defn <graph-name-exists?
   [db graph-name user-id]
   (when (and (string? graph-name) (string? user-id))
