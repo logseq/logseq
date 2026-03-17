@@ -1,5 +1,5 @@
 (ns logseq.outliner.recycle-test
-  (:require [cljs.test :refer [deftest is testing]]
+  (:require [cljs.test :refer [deftest is]]
             [datascript.core :as d]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]

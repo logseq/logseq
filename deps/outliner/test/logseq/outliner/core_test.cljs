@@ -51,10 +51,8 @@
               [{:page {:block/title "page1"}
                 :blocks [{:block/title "parent"
                           :build/children [{:block/title "child"}]}]}])
-        recycle-page (ldb/get-built-in-page @conn "Recycle")
         page (ldb/get-page @conn "page1")
         parent (db-test/find-block-by-content @conn "parent")
-        child (db-test/find-block-by-content @conn "child")
         original-order (:block/order parent)]
     (d/transact! conn [{:block/uuid user-uuid
                         :block/title "Alice"}])

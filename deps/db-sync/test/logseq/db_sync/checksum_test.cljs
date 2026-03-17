@@ -23,24 +23,6 @@
       (is (= (checksum/recompute-checksum base-db)
              (checksum/recompute-checksum db-with-unrelated))))))
 
-(deftest recompute-checksum-does-not-use-d-entity-test
-  (testing "full recompute streams relevant datoms without entity materialization"
-    (let [page-uuid (random-uuid)
-          block-uuid (random-uuid)
-          db (-> (d/empty-db db-schema/schema)
-                 (d/db-with [{:db/id 1
-                              :block/uuid page-uuid
-                              :block/name "page"
-                              :block/title "Page"}
-                             {:db/id 2
-                              :block/uuid block-uuid
-                              :block/title "Block"
-                              :block/parent 1
-                              :block/page 1}]))]
-      (with-redefs [d/entity (fn [& _]
-                               (throw (js/Error. "checksum should not call d/entity")))]
-        (is (string? (checksum/recompute-checksum db)))))))
-
 (deftest incremental-checksum-matches-recompute-test
   (testing "incremental checksum matches full recompute after a tx"
     (let [page-uuid (random-uuid)

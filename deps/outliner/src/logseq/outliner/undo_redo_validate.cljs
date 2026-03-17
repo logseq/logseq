@@ -2,7 +2,6 @@
   "Undo redo validate"
   (:require [clojure.set :as set]
             [datascript.core :as d]
-            [lambdaisland.glogi :as log]
             [logseq.db :as ldb]))
 
 (def ^:private structural-attrs
@@ -141,37 +140,37 @@
            :when (nil? (:block/uuid ent))]
        {:type :missing-uuid :e e})
      (for [ent ents
-           :let [uuid (:block/uuid ent)
+           :let [block-uuid (:block/uuid ent)
                  parent (:block/parent ent)]
            :when (and (contains? structural-ids (:db/id ent))
                       (not (ldb/page? ent))
                       (nil? parent))]
-       {:type :missing-parent :uuid uuid})
+       {:type :missing-parent :uuid block-uuid})
      (for [ent ents
-           :let [uuid (:block/uuid ent)
+           :let [block-uuid (:block/uuid ent)
                  parent (:block/parent ent)]
            :when (and (contains? structural-ids (:db/id ent))
                       (not (ldb/page? ent))
                       parent
                       (nil? (:block/uuid parent)))]
-       {:type :missing-parent-ref :uuid uuid})
+       {:type :missing-parent-ref :uuid block-uuid})
      (for [ent ents
-           :let [uuid (:block/uuid ent)
+           :let [block-uuid (:block/uuid ent)
                  page (:block/page ent)]
            :when (and (contains? structural-ids (:db/id ent))
                       (not (ldb/page? ent))
                       (nil? page))]
-       {:type :missing-page :uuid uuid})
+       {:type :missing-page :uuid block-uuid})
      (for [ent ents
-           :let [uuid (:block/uuid ent)
+           :let [block-uuid (:block/uuid ent)
                  page (:block/page ent)]
            :when (and (contains? structural-ids (:db/id ent))
                       (not (ldb/page? ent))
                       page
                       (not (ldb/page? page)))]
-       {:type :page-not-page :uuid uuid})
+       {:type :page-not-page :uuid block-uuid})
      (for [ent ents
-           :let [uuid (:block/uuid ent)
+           :let [block-uuid (:block/uuid ent)
                  parent (:block/parent ent)
                  page (:block/page ent)
                  expected-page (when parent
@@ -182,20 +181,20 @@
                       page
                       expected-page
                       (not= (:block/uuid expected-page) (:block/uuid page)))]
-       {:type :page-mismatch :uuid uuid})
+       {:type :page-mismatch :uuid block-uuid})
      (for [ent ents
-           :let [uuid (:block/uuid ent)
+           :let [block-uuid (:block/uuid ent)
                  parent (:block/parent ent)]
            :when (and (contains? structural-ids (:db/id ent))
                       parent
-                      (= uuid (:block/uuid parent)))]
-       {:type :self-parent :uuid uuid})
+                      (= block-uuid (:block/uuid parent)))]
+       {:type :self-parent :uuid block-uuid})
      (for [ent ents
-           :let [uuid (:block/uuid ent)]
+           :let [block-uuid (:block/uuid ent)]
            :when (and (contains? structural-ids (:db/id ent))
                       (not (ldb/page? ent))
                       (parent-cycle? ent))]
-       {:type :cycle :uuid uuid}))))
+       {:type :cycle :uuid block-uuid}))))
 
 (defn- retract-entity-ids
   [db-before tx-data]
@@ -225,6 +224,14 @@
         (into retract-ids)
         (into child-ids))))
 
+(defn- warn-invalid!
+  [data]
+  (js/console.warn "undo-redo-invalid" (clj->js data)))
+
+(defn- log-validate-error!
+  [error]
+  (js/console.error "undo-redo-validate-failed" error))
+
 (defn valid-undo-redo-tx?
   [conn tx-data]
   (try
@@ -232,13 +239,13 @@
       (if (recycle-entities-valid? @conn tx-data)
         true
         (do
-          (log/warn ::undo-redo-invalid {:reason :invalid-recycle-entities})
+          (warn-invalid! {:reason :invalid-recycle-entities})
           false))
       (if-not (structural-tx? tx-data)
         (if (entities-exist? @conn tx-data)
           true
           (do
-            (log/warn ::undo-redo-invalid {:reason :missing-entities})
+            (warn-invalid! {:reason :missing-entities})
             false))
         (let [db-before @conn
               tx-report (d/with db-before tx-data)
@@ -252,9 +259,8 @@
                              #{})
               new-issues (seq (set/difference after-issues baseline-issues))]
           (when (seq new-issues)
-            (log/warn ::undo-redo-invalid
-                      {:issues (take 5 new-issues)}))
+            (warn-invalid! {:issues (take 5 new-issues)}))
           (empty? new-issues))))
     (catch :default e
-      (log/error ::undo-redo-validate-failed e)
+      (log-validate-error! e)
       false)))
