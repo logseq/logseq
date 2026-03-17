@@ -364,6 +364,12 @@
     }
   }
 
+  &:not(.is-open) {
+      .left-sidebar-resizer {
+          @apply hidden;
+      }
+  }
+
   &.is-closing {
     .left-sidebar-inner {
       transition: transform .3s;
