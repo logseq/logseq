@@ -1028,8 +1028,8 @@
                 (is (empty? (non-recycle-validation-entities validation))
                     (str (:errors validation)))))))))))
 
-(deftest sanitize-tx-data-drops-partial-create-when-parent-deleted-test
-  (testing "created block should be dropped entirely when parent is in deleted-block-ids"
+(deftest sanitize-tx-data-drops-partial-create-when-parent-recycled-test
+  (testing "created block is kept when parent is recycled because recycled refs are still valid entities"
     (let [{:keys [conn parent]} (setup-parent-child)
           page-uuid (:block/uuid (:block/page parent))
           parent-uuid (:block/uuid parent)
@@ -1039,9 +1039,10 @@
                    [:db/add -1 :block/page [:block/uuid page-uuid]]
                    [:db/add -1 :block/order "a0"]
                    [:db/add [:block/uuid child-uuid] :block/parent [:block/uuid parent-uuid]]]
-          sanitized (->> (#'db-sync/sanitize-tx-data @conn tx-data #{parent-uuid})
+          _ (outliner-core/delete-blocks! conn [parent] {})
+          sanitized (->> (#'db-sync/sanitize-tx-data @conn tx-data)
                          vec)]
-      (is (empty? sanitized)))))
+      (is (= tx-data sanitized)))))
 
 (deftest sanitize-tx-data-removes-orphaning-parent-retract-test
   (testing "when invalid reparent add is dropped, paired parent retract should be dropped too"
@@ -1051,37 +1052,53 @@
           missing-parent-uuid (random-uuid)
           tx-data [[:db/retract [:block/uuid child-uuid] :block/parent [:block/uuid old-parent-uuid]]
                    [:db/add [:block/uuid child-uuid] :block/parent [:block/uuid missing-parent-uuid]]]
-          sanitized (->> (#'db-sync/sanitize-tx-data @conn tx-data #{})
+          sanitized (->> (#'db-sync/sanitize-tx-data @conn tx-data)
                          vec)]
       (is (empty? sanitized)))))
 
-(deftest sanitize-tx-data-drops-numeric-entity-datoms-for-deleted-block-test
-  (testing "deleted-block-ids should also drop datoms when entity is numeric id"
+(deftest drop-orphaning-parent-retracts-is-still-needed-test
+  (testing "without orphaning-parent cleanup, sanitize leaves a bad parent retract behind"
+    (let [{:keys [conn parent child1]} (setup-parent-child)
+          child-uuid (:block/uuid child1)
+          old-parent-uuid (:block/uuid parent)
+          missing-parent-uuid (random-uuid)
+          tx-data [[:db/retract [:block/uuid child-uuid] :block/parent [:block/uuid old-parent-uuid]]
+                   [:db/add [:block/uuid child-uuid] :block/parent [:block/uuid missing-parent-uuid]]]
+          sanitized-without-cleanup (with-redefs [db-sync/drop-orphaning-parent-retracts identity]
+                                      (->> (#'db-sync/sanitize-tx-data @conn tx-data)
+                                           vec))]
+      (is (= [[:db/retract [:block/uuid child-uuid]
+               :block/parent
+               [:block/uuid old-parent-uuid]]]
+             sanitized-without-cleanup)))))
+
+(deftest sanitize-tx-data-drops-numeric-entity-datoms-for-recycled-block-test
+  (testing "recycled entity ids are kept when the entity still exists"
     (let [{:keys [conn child1]} (setup-parent-child)
           child-id (:db/id child1)
-          child-uuid (:block/uuid child1)
           tx-data [[:db/add child-id :block/title "should-drop"]]
-          sanitized (->> (#'db-sync/sanitize-tx-data @conn tx-data #{child-uuid})
+          _ (outliner-core/delete-blocks! conn [child1] {})
+          sanitized (->> (#'db-sync/sanitize-tx-data @conn tx-data)
                          vec)]
-      (is (empty? sanitized)))))
+      (is (= tx-data sanitized)))))
 
-(deftest sanitize-tx-data-drops-numeric-value-refs-for-deleted-block-test
-  (testing "deleted-block-ids should drop datoms when value is numeric id of a deleted block"
+(deftest sanitize-tx-data-drops-numeric-value-refs-for-recycled-block-test
+  (testing "recycled block refs are kept when the referenced entity still exists"
     (let [{:keys [conn parent child1]} (setup-parent-child)
           parent-id (:db/id parent)
           child-id (:db/id child1)
-          child-uuid (:block/uuid child1)
           tx-data [[:db/add parent-id :block/parent child-id]]
-          sanitized (->> (#'db-sync/sanitize-tx-data @conn tx-data #{child-uuid})
+          _ (outliner-core/delete-blocks! conn [child1] {})
+          sanitized (->> (#'db-sync/sanitize-tx-data @conn tx-data)
                          vec)]
-      (is (empty? sanitized)))))
+      (is (= tx-data sanitized)))))
 
 (deftest sanitize-tx-data-drops-datoms-with-missing-numeric-entity-test
   (testing "stale numeric entity ids should be dropped to avoid creating anonymous entities"
     (let [{:keys [conn]} (setup-parent-child)
           missing-id 999999
           tx-data [[:db/add missing-id :block/title ""]]
-          sanitized (->> (#'db-sync/sanitize-tx-data @conn tx-data #{})
+          sanitized (->> (#'db-sync/sanitize-tx-data @conn tx-data)
                          vec)]
       (is (empty? sanitized)))))
 
@@ -1091,7 +1108,7 @@
           parent-id (:db/id parent)
           missing-id 999999
           tx-data [[:db/add parent-id :block/parent missing-id]]
-          sanitized (->> (#'db-sync/sanitize-tx-data @conn tx-data #{})
+          sanitized (->> (#'db-sync/sanitize-tx-data @conn tx-data)
                          vec)]
       (is (empty? sanitized)))))
 
@@ -1107,57 +1124,19 @@
                    [:db/add [:block/uuid child-uuid]
                     :block/parent
                     [:block/uuid new-parent-uuid]]]
-          sanitized (->> (#'db-sync/sanitize-tx-data @conn tx-data #{})
+          sanitized (->> (#'db-sync/sanitize-tx-data @conn tx-data)
                          vec)]
       (is (= [[:db/add [:block/uuid child-uuid]
                :block/parent
                [:block/uuid new-parent-uuid]]]
              sanitized)))))
 
-(deftest drop-missing-block-ref-datoms-drops-mixed-id-create-on-missing-parent-test
-  (testing "mixed temp-id/lookup-ref create should be dropped when parent ref is missing"
-    (let [{:keys [conn parent]} (setup-parent-child)
-          page-uuid (:block/uuid (:block/page parent))
-          child-uuid (random-uuid)
-          missing-parent-uuid (random-uuid)
-          tx-data [[:db/add -1 :block/uuid child-uuid]
-                   [:db/add -1 :block/title ""]
-                   [:db/add -1 :block/page [:block/uuid page-uuid]]
-                   [:db/add -1 :block/order "a0"]
-                   [:db/add [:block/uuid child-uuid] :block/parent [:block/uuid missing-parent-uuid]]]
-          sanitized (->> (#'db-sync/drop-missing-block-ref-datoms @conn tx-data)
-                         vec)]
-      (is (empty? sanitized)))))
-
-(deftest drop-missing-block-ref-datoms-drops-refs-to-broken-created-block-test
-  (testing "refs to a broken created block should be removed as well"
-    (let [{:keys [conn parent child1]} (setup-parent-child)
-          page-uuid (:block/uuid (:block/page parent))
-          child-uuid (:block/uuid child1)
-          broken-parent-uuid (random-uuid)
-          missing-parent-uuid (random-uuid)
-          tx-data [[:db/add -1 :block/uuid broken-parent-uuid]
-                   [:db/add -1 :block/title ""]
-                   [:db/add -1 :block/page [:block/uuid page-uuid]]
-                   [:db/add -1 :block/order "a0"]
-                   [:db/add [:block/uuid broken-parent-uuid] :block/parent [:block/uuid missing-parent-uuid]]
-                   [:db/add [:block/uuid child-uuid] :block/parent [:block/uuid broken-parent-uuid]]]
-          sanitized (->> (#'db-sync/drop-missing-block-ref-datoms @conn tx-data)
-                         vec)]
-      (is (empty? sanitized)))))
-
-(deftest drop-missing-block-ref-datoms-keeps-valid-create-test
-  (testing "valid create should remain unchanged when refs exist"
-    (let [{:keys [conn parent]} (setup-parent-child)
-          page-uuid (:block/uuid (:block/page parent))
-          parent-uuid (:block/uuid parent)
-          child-uuid (random-uuid)
-          tx-data [[:db/add -1 :block/uuid child-uuid]
-                   [:db/add -1 :block/title ""]
-                   [:db/add -1 :block/page [:block/uuid page-uuid]]
-                   [:db/add -1 :block/order "a0"]
-                   [:db/add [:block/uuid child-uuid] :block/parent [:block/uuid parent-uuid]]]
-          sanitized (->> (#'db-sync/drop-missing-block-ref-datoms @conn tx-data)
+(deftest sanitize-tx-data-keeps-retract-entity-lookup-for-missing-block-test
+  (testing "retractEntity lookup should survive sanitize for synced undo of inserted blocks"
+    (let [{:keys [conn]} (setup-parent-child)
+          missing-uuid (random-uuid)
+          tx-data [[:db/retractEntity [:block/uuid missing-uuid]]]
+          sanitized (->> (#'db-sync/sanitize-tx-data @conn tx-data)
                          vec)]
       (is (= tx-data sanitized)))))
 

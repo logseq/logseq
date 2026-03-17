@@ -16,7 +16,7 @@
   (some? (:logseq.property/deleted-at entity)))
 
 (defn- build-recycle-page-tx
-  [db db-id]
+  [db-id]
   (let [now (common-util/time-ms)]
     {:db/id db-id
      :block/uuid (common-uuid/gen-uuid :builtin-block-uuid recycle-page-title)
@@ -39,7 +39,7 @@
      :tx-data []}
     {:page nil
      :page-id "recycle-page"
-     :tx-data [(build-recycle-page-tx db "recycle-page")]}))
+     :tx-data [(build-recycle-page-tx "recycle-page")]}))
 
 (defn- next-child-order
   [parent]
