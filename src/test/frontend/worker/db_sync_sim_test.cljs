@@ -1047,7 +1047,7 @@
 (def ^:private op-table
   [{:name :create-page :weight 6 :f op-create-page!}
    {:name :rename-page :weight 2 :f op-rename-page!}
-   {:name :delete-page :weight 2 :f op-delete-page!}
+   {:name :delete-page :weight 10 :f op-delete-page!}
    {:name :save-block :weight 4 :f op-save-block!}
    {:name :upsert-property :weight 2 :f op-upsert-property!}
    {:name :set-block-property :weight 3 :f op-set-block-property!}

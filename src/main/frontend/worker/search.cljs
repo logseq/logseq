@@ -506,32 +506,33 @@ DROP TRIGGER IF EXISTS blocks_au;
         k-max (if (seq keyword-scores) (apply max keyword-scores) 1.0)
         all-ids (set/union (set (map :id keyword-results))
                            (set (map :id semantic-results)))
-        merged (map (fn [id]
-                      (let [block (when id (d/entity db [:block/uuid (uuid id)]))
-                            k-result (first (filter #(= (:id %) id) keyword-results))
-                            s-result (first (filter #(= (:id %) id) semantic-results))
-                            result (merge s-result k-result)
-                            page? (ldb/page? block)
-                            keyword-score (if page? (+ (:keyword-score k-result) 2) (:keyword-score k-result))
-                            k-score (or keyword-score 0.0)
-                            s-score (or (:semantic-score s-result) 0.0)
-                            norm-k-score (normalize-score k-score k-min k-max)
-                            ;; Weighted combination
-                            combined-score (+ (* (:keyword-weight config)
-                                                 norm-k-score)
-                                              (* (:semantic-weight config) s-score)
-                                              (cond
-                                                (ldb/page? block)
-                                                0.02
-                                                (:block/tags block)
-                                                0.01
-                                                :else
-                                                0))]
-                        (merge result
-                               {:combined-score combined-score
-                                :keyword-score k-score
-                                :semantic-score s-score})))
-                    all-ids)
+        merged (keep (fn [id]
+                       (let [block (when id (d/entity db [:block/uuid (uuid id)]))]
+                         (when-not (ldb/hidden? block)
+                           (let [k-result (first (filter #(= (:id %) id) keyword-results))
+                                 s-result (first (filter #(= (:id %) id) semantic-results))
+                                 result (merge s-result k-result)
+                                 page? (ldb/page? block)
+                                 keyword-score (if page? (+ (:keyword-score k-result) 2) (:keyword-score k-result))
+                                 k-score (or keyword-score 0.0)
+                                 s-score (or (:semantic-score s-result) 0.0)
+                                 norm-k-score (normalize-score k-score k-min k-max)
+                                 ;; Weighted combination
+                                 combined-score (+ (* (:keyword-weight config)
+                                                      norm-k-score)
+                                                   (* (:semantic-weight config) s-score)
+                                                   (cond
+                                                     (ldb/page? block)
+                                                     0.02
+                                                     (:block/tags block)
+                                                     0.01
+                                                     :else
+                                                     0))]
+                             (merge result
+                                    {:combined-score combined-score
+                                     :keyword-score k-score
+                                     :semantic-score s-score})))))
+                     all-ids)
         sorted-result (sort-by :combined-score #(compare %2 %1) merged)]
     sorted-result))
 
@@ -676,25 +677,64 @@ DROP TRIGGER IF EXISTS blocks_au;
 
 (defn- get-blocks-from-datoms-impl
   [{:keys [db-after db-before]} datoms]
-  (when (seq datoms)
-    (let [blocks-to-add-set (->> (filter :added datoms)
+  (letfn [(page-descendants [page]
+            (loop [pages [page]
+                   result []]
+              (if-let [page' (first pages)]
+                (let [children (->> (:block/_parent page')
+                                    (filter ldb/page?)
+                                    ldb/sort-by-order)]
+                  (recur (concat (rest pages) children)
+                         (conj result page')))
+                result)))
+          (page-tree [db page]
+            (->> (page-descendants page)
+                 (mapcat (fn [page']
+                           (concat
+                            [page']
+                            (mapcat #(ldb/get-block-and-children db (:block/uuid %))
+                                    (ldb/sort-by-order (:block/_page page'))))))
+                 distinct))
+          (entity-tree [db entity]
+            (cond
+              (nil? entity) []
+              (ldb/page? entity) (page-tree db entity)
+              (:block/uuid entity) (ldb/get-block-and-children db (:block/uuid entity))
+              :else [entity]))
+          (referrer-eids [db eids]
+            (->> eids
+                 (mapcat (fn [id]
+                           (map :db/id (:block/_refs (d/entity db id)))))
+                 set))
+          (entities-for [db eids {:keys [include-tree? include-refs?]}]
+            (let [entities (keep #(d/entity db %) eids)
+                  entities' (if include-tree?
+                              (mapcat #(entity-tree db %) entities)
+                              entities)
+                  entities'' (if include-refs?
+                               (concat entities'
+                                       (keep #(d/entity db %)
+                                             (referrer-eids db eids)))
+                               entities')]
+              (->> entities''
+                   distinct
+                   (remove nil?))))]
+    (when (seq datoms)
+      (let [ref-affecting-attrs #{:block/uuid :block/name :block/title :block/properties}
+            visibility-affecting-attrs #{:logseq.property/deleted-at :block/parent :block/page}
+            ref-eids (->> datoms
+                          (filter #(contains? ref-affecting-attrs (:a %)))
+                          (map :e)
+                          set)
+            visibility-eids (->> datoms
+                                 (filter #(contains? visibility-affecting-attrs (:a %)))
                                  (map :e)
-                                 (set))
-          blocks-to-remove-set (->> (remove :added datoms)
-                                    (filter #(= :block/uuid (:a %)))
-                                    (map :e)
-                                    (set))
-          blocks-to-add-set' (if (seq blocks-to-add-set)
-                               (->> blocks-to-add-set
-                                    (mapcat (fn [id] (map :db/id (:block/_refs (d/entity db-after id)))))
-                                    (concat blocks-to-add-set)
-                                    set)
-                               blocks-to-add-set)]
-      {:blocks-to-remove     (->>
-                              (keep #(d/entity db-before %) blocks-to-remove-set))
-       :blocks-to-add        (->>
-                              (keep #(d/entity db-after %) blocks-to-add-set')
-                              (remove hidden-entity?))})))
+                                 set)]
+        {:blocks-to-remove (concat (entities-for db-before ref-eids {:include-refs? true})
+                                   (entities-for db-before visibility-eids {:include-tree? true}))
+         :blocks-to-add (->> (concat (entities-for db-after ref-eids {:include-refs? true})
+                                     (entities-for db-after visibility-eids {:include-tree? true}))
+                             (remove hidden-entity?))}))))
 
 (defn- get-affected-blocks
   [tx-report]

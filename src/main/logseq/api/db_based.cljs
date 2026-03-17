@@ -98,8 +98,8 @@
                                    (sdk-utils/uuid-or-throw-error block-uuid) content
                                    (dissoc opts :properties))
         ;; update editing block content if the block is currently being edited
-        (when (= block-uuid (some-> (state/get-edit-block) :block/uuid))
-          (state/set-edit-content! content))))))
+       (when (= block-uuid (some-> (state/get-edit-block) :block/uuid))
+         (state/set-edit-content! content))))))
 
 (defn get-property
   [k]
@@ -191,7 +191,7 @@
 
 (defn get-all-properties
   []
-  (-> (ldb/get-all-properties (db/get-db))
+  (-> (db-model/get-all-properties (state/get-current-repo))
       sdk-utils/result->js))
 
 (defn get-tag-objects

@@ -304,12 +304,19 @@
                  :blocks [{:block/title "b1" :user.property/default [:block/uuid used-closed-value-uuid]}]}]})
         _ (assert (:user.property/default (db-test/find-block-by-content @conn "b1")))
         property-id (:db/id (d/entity @conn :user.property/default))
+        closed-value-id (:db/id (d/entity @conn [:block/uuid closed-value-uuid]))
+        child-uuid (random-uuid)
+        _ (d/transact! conn [{:block/uuid child-uuid
+                              :block/title "closed value child"
+                              :block/page property-id
+                              :block/parent closed-value-id
+                              :block/order "a0"}])
         _ (outliner-property/delete-closed-value! conn property-id [:block/uuid closed-value-uuid])]
-    (let [closed-value (d/entity @conn [:block/uuid closed-value-uuid])
-          recycle-page (ldb/get-built-in-page @conn "Recycle")]
-      (is (some? closed-value))
-      (is (integer? (:logseq.property/deleted-at closed-value)))
-      (is (= (:db/id recycle-page) (:db/id (:block/page closed-value)))))))
+    (let [closed-value (d/entity @conn [:block/uuid closed-value-uuid])]
+      (is (nil? closed-value))
+      (is (nil? (d/entity @conn [:block/uuid child-uuid])))
+      (is (= [used-closed-value-uuid]
+             (mapv :block/uuid (:block/_closed-value-property (d/entity @conn :user.property/default))))))))
 
 (deftest class-add-property!
   (let [conn (db-test/create-conn-with-blocks

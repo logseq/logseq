@@ -704,12 +704,14 @@
                    (when (bidirectional-property-attr-cached? a)
                      (when-let [entity (d/entity db e)]
                        (when (and (not= (:db/id entity) target-id)
+                                  (not (entity-util/recycled? entity))
                                   (not (entity-util/class? entity))
                                   (not (entity-util/property? entity)))
                          (let [classes (filter entity-util/class? (:block/tags entity))]
                            (when (seq classes)
                              (keep (fn [class-ent]
-                                     (when-not (built-in? class-ent)
+                                     (when (and (not (built-in? class-ent))
+                                                (not (entity-util/recycled? class-ent)))
                                        [(:db/id class-ent) entity]))
                                    classes))))))))
            (mapcat identity)

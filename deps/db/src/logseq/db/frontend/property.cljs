@@ -779,6 +779,7 @@
   (when db
     (when-let [property (d/entity db property-id)]
       (some->> (:block/_closed-value-property property)
+               (remove entity-util/recycled?)
                (sort-by :block/order)))))
 
 (defn closed-value-content
@@ -913,7 +914,7 @@
 
                   :else
                   false)))
-            values)))
+            (remove entity-util/recycled? values))))
 
 (defn lookup
   "Get the property value by a built-in property's db-ident from coll"

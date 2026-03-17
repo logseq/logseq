@@ -31,6 +31,7 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.page :as outliner-page]
+            [logseq.outliner.property :as outliner-property]
             [logseq.outliner.undo-redo-validate :as undo-validate]
             [promesa.core :as p]))
 
@@ -786,6 +787,109 @@
             (is (some? child'))
             (is (= common-config/recycle-page-name
                    (:block/title (:block/page child'))))))))))
+
+(deftest missing-parent-after-remote-retract-moves-child-to-recycle-test
+  (testing "remote hard delete of a parent moves orphaned content children to recycle"
+    (let [{:keys [conn parent child1]} (setup-parent-child)
+          parent-uuid (:block/uuid parent)
+          child-uuid (:block/uuid child1)]
+      (with-datascript-conns conn nil
+        (fn []
+          (#'sync-apply/apply-remote-tx!
+           test-repo
+           nil
+           [[:db/retractEntity [:block/uuid parent-uuid]]])
+          (let [child' (d/entity @conn [:block/uuid child-uuid])]
+            (is (some? child'))
+            (is (integer? (:logseq.property/deleted-at child')))
+            (is (= common-config/recycle-page-name
+                   (:block/title (:block/page child'))))))))))
+
+(deftest rebase-drops-local-property-pairs-for-remotely-deleted-property-test
+  (testing "remote property deletion removes stale local offline property writes during rebase"
+    (let [graph {:properties {:p2 {:logseq.property/type :default}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "local object"}]}]}
+          conn-a (db-test/create-conn-with-blocks graph)
+          conn-b (d/conn-from-db @conn-a)
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          remote-tx (atom nil)]
+      (d/listen! conn-b ::capture-property-delete-rebase
+                 (fn [tx-report]
+                   (when-not @remote-tx
+                     (reset! remote-tx
+                             (db-normalize/normalize-tx-data
+                              (:db-after tx-report)
+                              (:db-before tx-report)
+                              (:tx-data tx-report))))))
+      (try
+        (with-datascript-conns conn-a client-ops-conn
+          (fn []
+            (let [local-block (db-test/find-block-by-content @conn-a "local object")
+                  property-id :user.property/p2]
+              (outliner-property/set-block-property! conn-a
+                                                     [:block/uuid (:block/uuid local-block)]
+                                                     property-id
+                                                     "local value"))
+            (outliner-page/delete! conn-b (:block/uuid (d/entity @conn-b :user.property/p2)))
+            (#'sync-apply/apply-remote-tx! test-repo nil @remote-tx)
+            (let [local-block' (db-test/find-block-by-content @conn-a "local object")
+                  validation (db-validate/validate-local-db! @conn-a)
+                  pending (#'sync-apply/pending-txs test-repo)]
+              (is (nil? (:user.property/p2 local-block')))
+              (is (not-any? (fn [{:keys [tx]}]
+                              (some (fn [item]
+                                      (and (vector? item)
+                                           (= :user.property/p2 (nth item 2 nil))))
+                                    tx))
+                            pending))
+              (is (empty? (non-recycle-validation-entities validation))
+                  (str (:errors validation))))))
+        (finally
+          (d/unlisten! conn-b ::capture-property-delete-rebase))))))
+
+(deftest rebase-drops-local-tags-for-remotely-deleted-tag-test
+  (testing "remote tag deletion removes stale local offline tag writes during rebase"
+    (let [graph {:classes {:Tag1 {}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "local object"}]}]}
+          conn-a (db-test/create-conn-with-blocks graph)
+          conn-b (d/conn-from-db @conn-a)
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          remote-tx (atom nil)]
+      (d/listen! conn-b ::capture-tag-delete-rebase
+                 (fn [tx-report]
+                   (when-not @remote-tx
+                     (reset! remote-tx
+                             (db-normalize/normalize-tx-data
+                              (:db-after tx-report)
+                              (:db-before tx-report)
+                              (:tx-data tx-report))))))
+      (try
+        (with-datascript-conns conn-a client-ops-conn
+          (fn []
+            (let [local-block (db-test/find-block-by-content @conn-a "local object")
+                  tag-id (:db/id (d/entity @conn-a :user.class/Tag1))]
+              (ldb/transact! conn-a [[:db/add (:db/id local-block) :block/tags tag-id]]
+                             local-tx-meta))
+            (outliner-page/delete! conn-b (:block/uuid (d/entity @conn-b :user.class/Tag1)))
+            (#'sync-apply/apply-remote-tx! test-repo nil @remote-tx)
+            (let [local-block' (db-test/find-block-by-content @conn-a "local object")
+                  validation (db-validate/validate-local-db! @conn-a)
+                  pending (#'sync-apply/pending-txs test-repo)]
+              (is (empty? (:block/tags local-block')))
+              (is (not-any? (fn [{:keys [tx]}]
+                              (some (fn [item]
+                                      (and (vector? item)
+                                           (= :block/tags (nth item 2 nil))))
+                                    tx))
+                            pending))
+              (is (empty? (non-recycle-validation-entities validation))
+                  (str (:errors validation))))))
+        (finally
+          (d/unlisten! conn-b ::capture-tag-delete-rebase))))))
 
 (deftest cut-paste-parent-with-child-keeps-child-parent-after-sync-test
   (testing "remote tx can retract and recreate target uuid; child should point to recreated parent"

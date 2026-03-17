@@ -847,9 +847,8 @@
                       {:type :notification
                        :payload {:message "The choice can't be deleted because it's built-in."
                                  :type :warning}}))
-      (let [data (:tx-data (outliner-core/delete-blocks @conn [value-block] {}))
-            tx-data (conj data (outliner-core/block-with-updated-at
-                                {:db/id property-id}))]
+      (let [tx-data (conj (:tx-data (outliner-core/delete-blocks @conn [value-block] {:hard-retract? true}))
+                          (outliner-core/block-with-updated-at {:db/id property-id}))]
         (ldb/transact! conn tx-data)))))
 
 (defn class-add-property!

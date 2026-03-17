@@ -798,7 +798,8 @@
 (defn ^:api ^:large-vars/cleanup-todo delete-blocks
   "Delete blocks from the tree."
   [db blocks opts]
-  (let [top-level-blocks (filter-top-level-blocks db blocks)
+  (let [{:keys [hard-retract?]} opts
+        top-level-blocks (filter-top-level-blocks db blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
         top-level-blocks* (get-top-level-blocks top-level-blocks non-consecutive?)
         top-level-blocks (->> top-level-blocks*
@@ -822,6 +823,15 @@
                                                (:db/id (:logseq.property/default-value from-property)))
                                          (not (:block/closed-value-property start-block)))]
         (cond
+          hard-retract?
+          (let [block-ids (->> top-level-blocks
+                               (mapcat (fn [block]
+                                         (map :db/id (ldb/get-block-and-children db (:block/uuid block)
+                                                                                 {:include-property-block? true}))))
+                               distinct)
+                tx-data (map (fn [id] [:db/retractEntity id]) block-ids)]
+            (when (seq tx-data) (swap! txs-state concat tx-data)))
+
           (and delete-one-block? default-value-property?)
           (let [datoms (d/datoms db :avet (:db/ident from-property) (:db/id start-block))
                 tx-data (map (fn [d] {:db/id (:e d)

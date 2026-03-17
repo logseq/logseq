@@ -20,6 +20,7 @@
             [logseq.db.common.normalize :as db-normalize]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.outliner.recycle :as outliner-recycle]
             [logseq.outliner.undo-redo-validate :as undo-validate]
             [promesa.core :as p]))
 
@@ -519,6 +520,64 @@
         tx-data))
     tx-data))
 
+(defn- retract-entity-eid
+  [db item]
+  (when (and db
+             (vector? item)
+             (= :db/retractEntity (first item)))
+    (let [entity (second item)]
+      (cond
+        (number? entity) entity
+        (vector? entity) (some-> (d/entity db entity) :db/id)
+        :else nil))))
+
+(defn- content-block?
+  [block]
+  (and block
+       (not (ldb/page? block))
+       (not (ldb/class? block))
+       (not (ldb/property? block))))
+
+(def ^:private sync-recycle-meta-attrs
+  [:logseq.property.recycle/original-parent
+   :logseq.property.recycle/original-page
+   :logseq.property.recycle/original-order])
+
+(defn- orphaned-blocks->recycle-tx-data
+  [db blocks]
+  (->> (outliner-recycle/recycle-blocks-tx-data db blocks {})
+       (map (fn [item]
+              (if (map? item)
+                (apply dissoc item sync-recycle-meta-attrs)
+                item)))))
+
+(defn- move-missing-location-blocks-to-recycle
+  [db tx-data]
+  (if db
+    (let [retracted-eids (->> tx-data
+                              (keep #(retract-entity-eid db %))
+                              set)
+          direct-orphans (->> retracted-eids
+                              (mapcat #(ldb/get-children db %))
+                              (filter content-block?))
+          ;; Only recycle top-level page roots whose parent is the page being retracted.
+          page-orphans (->> retracted-eids
+                            (mapcat (fn [eid]
+                                      (->> (ldb/get-page-blocks db eid)
+                                           (filter (fn [block]
+                                                     (= eid (:db/id (:block/parent block))))))))
+                            (filter content-block?))
+          recycle-roots (->> (concat direct-orphans page-orphans)
+                             (remove (fn [block]
+                                       (contains? retracted-eids (:db/id block))))
+                             distinct
+                             vec)]
+      (if (seq recycle-roots)
+        (concat tx-data
+                (orphaned-blocks->recycle-tx-data db recycle-roots))
+        tx-data))
+    tx-data))
+
 (defn sanitize-tx-data
   [db tx-data]
   (let [sanitized-tx-data (->> tx-data
@@ -527,11 +586,25 @@
                                (map strip-tx-id)
                                (drop-missing-block-lookup-updates db)
                                (sanitize-block-ref-datoms db)
+                               (move-missing-location-blocks-to-recycle db)
                                drop-orphaning-parent-retracts)]
     ;; (when (not= tx-data sanitized-tx-data)
     ;;   (prn :debug :tx-data tx-data)
     ;;   (prn :debug :sanitized-tx-data sanitized-tx-data))
     sanitized-tx-data))
+
+(defn- get-remote-deleted-properties
+  [{:keys [db-before db-after tx-data]}]
+  (when (and db-before db-after)
+    (->> tx-data
+         (keep (fn [d]
+                 (when-let [e (and (= :db/ident (:a d))
+                                   (false? (:added d))
+                                   (d/entity db-before (:e d)))]
+                   (when (and (ldb/property? e) (nil? (d/entity db-after (:db/ident e))))
+                     e))))
+
+         distinct)))
 
 (defn flush-pending!
   [repo client]
@@ -627,7 +700,9 @@
          index 0
          results []]
     (if-let [remote-tx (first remaining)]
-      (let [tx-data (seq (:tx-data remote-tx))
+      (let [tx-data (->> (:tx-data remote-tx)
+                         (sanitize-tx-data @temp-conn)
+                         seq)
             results' (cond-> results
                        tx-data
                        (conj {:tx-data tx-data
@@ -698,26 +773,30 @@
        vec))
 
 (defn- rebase-local-txs!
-  [temp-conn local-txs remote-db remote-updated-keys remote-tx-data-set temp-tx-meta]
-  (->> local-txs
-       (map-indexed
-        (fn [index local-tx]
-          (let [pending-tx-data (drop-remote-conflicted-local-tx remote-db
-                                                                 remote-updated-keys
-                                                                 (:tx local-tx))
-                rebased-tx-data (->> (sanitize-tx-data @temp-conn
-                                                       pending-tx-data)
-                                     (remove remote-tx-data-set))]
-            (when (seq rebased-tx-data)
-              (ldb/transact! temp-conn
-                             rebased-tx-data
-                             (local-tx-debug-meta temp-tx-meta
-                                                  local-txs
-                                                  index
-                                                  local-tx
-                                                  :rebase))))))
-       (keep identity)
-       vec))
+  [temp-conn local-txs remote-db remote-updated-keys remote-tx-data-set temp-tx-meta retracted-properties]
+  (let [retracted-property-idents (set (map :db/ident retracted-properties))]
+    (->> local-txs
+         (map-indexed
+          (fn [index local-tx]
+            (let [pending-tx-data (->> (:tx local-tx)
+                                       (remove (fn [item]
+                                                 (and (vector? item)
+                                                      (contains? #{:db/add :db/retract} (first item))
+                                                      (contains? retracted-property-idents (nth item 2 nil)))))
+                                       (drop-remote-conflicted-local-tx remote-db remote-updated-keys))
+                  rebased-tx-data (->> (sanitize-tx-data @temp-conn
+                                                         pending-tx-data)
+                                       (remove remote-tx-data-set))]
+              (when (seq rebased-tx-data)
+                (ldb/transact! temp-conn
+                               rebased-tx-data
+                               (local-tx-debug-meta temp-tx-meta
+                                                    local-txs
+                                                    index
+                                                    local-tx
+                                                    :rebase))))))
+         (keep identity)
+         vec)))
 
 (defn- build-remote-state
   [{:keys [temp-conn remote-txs tx-meta *remote-tx-report]}]
@@ -725,22 +804,25 @@
         remote-tx-data (mapcat :tx-data remote-results)
         remote-tx-report (combine-tx-reports (map :report remote-results))
         _ (reset! *remote-tx-report remote-tx-report)
+        retracted-properties (get-remote-deleted-properties remote-tx-report)
         remote-db @temp-conn]
     {:remote-db remote-db
      :remote-results remote-results
      :remote-tx-data remote-tx-data
      :remote-tx-data-set (set (map tx-data-item->set-item remote-tx-data))
      :remote-tx-report remote-tx-report
+     :retracted-properties retracted-properties
      :remote-updated-keys (remote-updated-attr-keys remote-db remote-tx-data)}))
 
 (defn- rebase-remote-state!
-  [{:keys [temp-conn local-txs tx-meta remote-db remote-tx-data-set remote-updated-keys]}]
+  [{:keys [temp-conn local-txs tx-meta remote-db remote-tx-data-set remote-updated-keys retracted-properties]}]
   (let [rebase-tx-reports (rebase-local-txs! temp-conn
                                              local-txs
                                              remote-db
                                              remote-updated-keys
                                              remote-tx-data-set
-                                             tx-meta)]
+                                             tx-meta
+                                             retracted-properties)]
     {:rebase-tx-report (combine-tx-reports rebase-tx-reports)
      :rebase-tx-reports rebase-tx-reports}))
 
@@ -778,6 +860,39 @@
                 (into root-eids
                       (mapcat #(ldb/get-block-full-children-ids db %))
                       root-eids)))
+            (recycle-location-broken-blocks! [conn tx-data tx-meta]
+              (let [db @conn
+                    location-broken? (fn [block]
+                                       (and block
+                                            (not (ldb/page? block))
+                                            (not (ldb/class? block))
+                                            (not (ldb/property? block))
+                                            (or (nil? (:block/parent block))
+                                                (nil? (:block/page block)))))
+                    top-level-broken-blocks
+                    (fn [blocks]
+                      (let [broken-ids (set (map :db/id blocks))
+                            broken-parent? (fn [block]
+                                             (loop [parent (:block/parent block)
+                                                    seen #{}]
+                                               (when (and parent
+                                                          (:db/id parent)
+                                                          (not (contains? seen (:db/id parent))))
+                                                 (if (contains? broken-ids (:db/id parent))
+                                                   true
+                                                   (recur (:block/parent parent)
+                                                          (conj seen (:db/id parent)))))))]
+                        (remove broken-parent? blocks)))
+                    recycle-blocks (->> (page-consistency-candidate-eids db tx-data)
+                                        (keep #(d/entity db %))
+                                        (filter location-broken?)
+                                        distinct
+                                        top-level-broken-blocks
+                                        vec)]
+                (when (seq recycle-blocks)
+                  (ldb/transact! conn
+                                 (vec (orphaned-blocks->recycle-tx-data db recycle-blocks))
+                                 (merge tx-meta {:op :fix-missing-block-location})))))
             (fix-block-page-consistency! [conn tx-data tx-meta]
               (let [db @conn
                     expected-page-for-block
@@ -807,6 +922,11 @@
                                vec)]
                 (when (seq fixes)
                   (d/transact! conn fixes (merge tx-meta {:op :fix-block-page})))))]
+      (recycle-location-broken-blocks! temp-conn
+                                       (mapcat :tx-data [remote-tx-report
+                                                         rebase-tx-report
+                                                         cycle-tx-report])
+                                       tx-meta)
       (fix-block-page-consistency! temp-conn
                                    (mapcat :tx-data [remote-tx-report
                                                      rebase-tx-report
