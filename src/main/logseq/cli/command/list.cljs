@@ -8,14 +8,17 @@
 
 (def ^:private list-common-spec
   {:expand {:desc "Include expanded metadata"
+            :alias :e
             :coerce :boolean}
    :include-built-in {:coerce :boolean}
-   :fields {:desc "Select output fields (comma separated)"}
+   :fields {:desc "Select output fields (comma separated)"
+            :alias :f}
    :limit {:desc "Limit results"
            :coerce :long}
    :offset {:desc "Offset results"
             :coerce :long}
-   :sort {:desc "Sort field. Default: updated-at"}
+   :sort {:desc "Sort field. Default: updated-at"
+          :alias :s}
    :order {:desc "Sort order. Default: asc"
            :values ["asc" "desc"]}})
 
@@ -31,11 +34,20 @@
   [options]
   (or (:sort options) default-sort-field))
 
+(def ^:private list-page-field-map
+  {"id" :db/id
+   "ident" :db/ident
+   "title" :block/title
+   "uuid" :block/uuid
+   "created-at" :block/created-at
+   "updated-at" :block/updated-at})
+
 (def ^:private list-page-spec
   (merge-with
    merge
    list-common-spec
    {:sort {:values (:list-page list-sort-fields)}
+    :fields {:multiple-values (keys list-page-field-map)}
     :include-built-in {:desc "Include built-in pages"}
     :include-journal {:desc "Include journal pages"
                       :coerce :boolean}
@@ -44,26 +56,48 @@
     :include-hidden {:desc "Include hidden pages"
                      :coerce :boolean}
     :updated-after {:desc "Filter by updated-at (ISO8601)"}
-    :created-after {:desc "Filter by created-at (ISO8601)"}
-    :fields {:desc "Select output fields (comma separated)"}}))
+    :created-after {:desc "Filter by created-at (ISO8601)"}}))
+
+(def ^:private list-tag-field-map
+  {"id" :db/id
+   "ident" :db/ident
+   "title" :block/title
+   "uuid" :block/uuid
+   "created-at" :block/created-at
+   "updated-at" :block/updated-at
+   "properties" :logseq.property.class/properties
+   "extends" :logseq.property.class/extends
+   "description" :logseq.property/description})
 
 (def ^:private list-tag-spec
   (merge-with
    merge
    list-common-spec
    {:sort {:values (:list-tag list-sort-fields)}
+    :fields {:multiple-values (keys list-tag-field-map)}
     :include-built-in {:desc "Include built-in tags"}
     :with-properties {:desc "Include tag properties"
                       :coerce :boolean}
     :with-extends {:desc "Include tag extends"
-                   :coerce :boolean}
-    :fields {:desc "Select output fields (comma separated)"}}))
+                   :coerce :boolean}}))
+
+(def ^:private list-property-field-map
+  {"id" :db/id
+   "ident" :db/ident
+   "title" :block/title
+   "uuid" :block/uuid
+   "created-at" :block/created-at
+   "updated-at" :block/updated-at
+   "classes" :logseq.property/classes
+   "type" :logseq.property/type
+   "description" :logseq.property/description})
 
 (def ^:private list-property-spec
   (merge-with
    merge
    list-common-spec
    {:sort {:values (:list-property list-sort-fields)}
+    :fields {:multiple-values (keys list-property-field-map)}
     :include-built-in {:desc "Include built-in properties"}
     :with-classes {:desc "Include property classes"
                    :coerce :boolean}
@@ -107,36 +141,6 @@
      :action {:type command
               :repo repo
               :options options}}))
-
-(def ^:private list-page-field-map
-  {"id" :db/id
-   "ident" :db/ident
-   "title" :block/title
-   "uuid" :block/uuid
-   "created-at" :block/created-at
-   "updated-at" :block/updated-at})
-
-(def ^:private list-tag-field-map
-  {"id" :db/id
-   "ident" :db/ident
-   "title" :block/title
-   "uuid" :block/uuid
-   "created-at" :block/created-at
-   "updated-at" :block/updated-at
-   "properties" :logseq.property.class/properties
-   "extends" :logseq.property.class/extends
-   "description" :logseq.property/description})
-
-(def ^:private list-property-field-map
-  {"id" :db/id
-   "ident" :db/ident
-   "title" :block/title
-   "uuid" :block/uuid
-   "created-at" :block/created-at
-   "updated-at" :block/updated-at
-   "classes" :logseq.property/classes
-   "type" :logseq.property/type
-   "description" :logseq.property/description})
 
 (defn- parse-field-list
   [fields]
