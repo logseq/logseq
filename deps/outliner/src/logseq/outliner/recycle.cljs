@@ -9,7 +9,7 @@
 
 (def ^:private recycle-page-title "Recycle")
 (def retention-ms (* 60 24 3600 1000))
-(def ^:api gc-interval-ms (* 24 3600 1000))
+(def gc-interval-ms (* 24 3600 1000))
 
 (defn recycled?
   [entity]
