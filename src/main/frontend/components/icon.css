@@ -17,18 +17,22 @@
     @apply flex items-center gap-2 py-1 pr-3;
     @apply flex-shrink-0;
     background-color: var(--lx-gray-03);
+    border-bottom: 1px solid var(--rx-gray-06);
   }
 
   .tabs-section {
-    @apply flex gap-0 px-3 py-0;
+    @apply flex items-center gap-0 px-3 py-0;
     @apply flex-shrink-0 h-auto;
     background-color: var(--lx-gray-03) !important;
-    border-bottom: 1px solid var(--rx-gray-06);
-    padding: 0 !important;
+    padding: 0 12px 0 0 !important;
     border-radius: 0 !important;
 
+    .tab-actions {
+      @apply flex items-center gap-1 ml-auto;
+    }
+
     .tab-item {
-      @apply relative px-3 py-2.5 text-xs font-medium;
+      @apply relative px-3 py-2.5 text-sm font-medium;
       @apply opacity-60 hover:opacity-100;
       @apply transition-all duration-150;
       @apply rounded-none;
@@ -37,6 +41,16 @@
       border: none !important;
       height: auto !important;
       color: var(--rx-gray-11);
+
+      /* Reserve bold width to prevent layout shift on active */
+      &::before {
+        content: attr(data-text);
+        display: block;
+        font-weight: bold;
+        height: 0;
+        overflow: hidden;
+        visibility: hidden;
+      }
 
       /* Underline for active state */
       &[data-active="true"] {
@@ -55,17 +69,29 @@
       &:hover {
         background: transparent !important;
       }
+
+      /* Keyboard focus state */
+      &:focus-visible {
+        outline: 2px solid var(--lx-accent-09);
+        outline-offset: -2px;
+        border-radius: 4px;
+      }
     }
   }
 
   > .bd {
-    @apply flex-1 py-1 overflow-y-auto;
+    @apply flex-1 overflow-y-auto;
     @apply bg-gray-02;
     min-height: 0;
 
     &.all {
       @apply overflow-y-auto;
     }
+  }
+
+  .content-pane {
+    @apply flex flex-col flex-1;
+    min-height: 0;
   }
 
   .search-input {
@@ -99,17 +125,15 @@
   }
 
   .pane-section {
-    @apply px-2 overflow-y-auto h-full;
+    @apply h-full;
 
     color: var(--ls-color-icon-preset);
 
     > .its, .icons-row {
-      @apply flex gap-1 py-1 flex-wrap;
+      @apply flex gap-1 py-1 flex-wrap px-2;
 
       > button {
         @apply flex items-center justify-center rounded-full hover:bg-gray-03 active:opacity-70;
-
-        @apply focus:outline-accent-09;
       }
     }
 
@@ -122,7 +146,7 @@
     }
 
     .virtuoso-item-list {
-      @apply pb-4;
+      @apply pt-1 pb-4 px-2;
     }
   }
 
@@ -150,6 +174,21 @@
         @apply opacity-90 scale-90;
       }
     }
+  }
+
+  /* Keyboard navigation highlights — React-props-driven via CSS classes */
+  button.is-highlighted {
+    background-color: var(--lx-accent-04) !important;
+    outline: 2px solid var(--lx-accent-09);
+    outline-offset: -2px;
+    border-radius: 8px !important;
+  }
+
+  button.is-ghost-highlighted {
+    background-color: var(--rx-gray-04) !important;
+    outline: 1.5px solid var(--rx-gray-08);
+    outline-offset: -1.5px;
+    border-radius: 8px !important;
   }
 
   .ui__button {
@@ -364,6 +403,14 @@
     min-height: auto;
     padding-bottom: 12px;
   }
+}
+
+/* Empty state - spans all grid columns, centered */
+.asset-picker-empty {
+  @apply flex flex-col items-center justify-center gap-2 select-none;
+  grid-column: 1 / -1;
+  min-height: 120px;
+  color: var(--lx-gray-09, var(--rx-gray-09));
 }
 
 /* Image items - fill grid cell with proper aspect ratio */

@@ -41,7 +41,7 @@
   [page recent?]
   (when-let [id (:db/id page)]
     (let [page (db/sub-block id)
-          icon (icon/get-node-icon-cp page {:size 16})
+          icon (icon/get-node-icon-cp page {:size 20})
           title (:block/title page)
           untitled? (db-model/untitled-page? title)
           ctx-icon #(shui/tabler-icon %1 {:class "scale-90 pr-1 opacity-80"})

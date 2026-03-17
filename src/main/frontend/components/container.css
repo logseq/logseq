@@ -105,9 +105,9 @@
     height: 20px;
     flex-shrink: 0;
 
-    /* Avatar font size in sidebar: 8px */
+    /* Avatar font size in sidebar */
     .avatar-fallback {
-      font-size: 8px !important;
+      font-size: 10px !important;
       font-weight: 500 !important;
     }
 
