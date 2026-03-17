@@ -214,12 +214,15 @@
     (testing "global boolean flags do NOT emit --no- negation token"
       (is (not (string/includes? output "--no-verbose")))
       (is (not (string/includes? output "--no-help"))))
-    (testing "enum options emit value list form"
-      (is (string/includes? output "'{-o,--output}'=[Output format. Default: human]:value:(human json edn)'")))
-    (testing ":complete :graphs emits _logseq_graphs"
-      (is (string/includes? output "'{-g,--graph}'=[Graph name]:value:_logseq_graphs'")))
-    (testing ":complete :file emits _files"
-      (is (string/includes? output "'{-c,--config}'=[Path to cli.edn (default ~/logseq/cli.edn)]:file:_files'")))
+    (testing "enum options emit separate long= and short+ specs"
+      (is (string/includes? output "--output=[Output format. Default: human]:value:(human json edn)'"))
+      (is (string/includes? output "-o[Output format. Default: human]:value:(human json edn)'")))
+    (testing ":complete :graphs emits separate long= and short+ specs"
+      (is (string/includes? output "--graph=[Graph name]:value:_logseq_graphs'"))
+      (is (string/includes? output "-g[Graph name]:value:_logseq_graphs'")))
+    (testing ":complete :file emits separate long= and short+ specs"
+      (is (string/includes? output "--config=[Path to cli.edn (default ~/logseq/cli.edn)]:file:_files'"))
+      (is (string/includes? output "-c[Path to cli.edn (default ~/logseq/cli.edn)]:file:_files'")))
     (testing ":alias emits grouping without --no- for global flags"
       (is (re-find #"\(-h --help\)" output)))))
 
@@ -251,7 +254,7 @@
     (testing "zsh preamble contains _logseq_multi_values helper"
       (is (string/includes? output "_logseq_multi_values()")))
     (testing "--fields under list tag uses {_logseq_multi_values ...} action"
-      (is (re-find #"--fields\}.*\{_logseq_multi_values " output)))
+      (is (re-find #"--fields=.*\{_logseq_multi_values " output)))
     (testing "multi-values include known tag field names"
       (is (string/includes? output "created-at"))
       (is (string/includes? output "title"))
