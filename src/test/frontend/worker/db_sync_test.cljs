@@ -4,15 +4,21 @@
             [datascript.core :as d]
             [frontend.common.crypt :as crypt]
             [frontend.worker-common.util :as worker-util]
+            [frontend.worker.handler.page :as worker-page]
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.crypt :as sync-crypt]
+            [frontend.worker.undo-redo :as undo-validate]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db-sync.checksum :as sync-checksum]
+            [logseq.db-sync.storage :as sync-storage]
+            [logseq.db-sync.worker.handler.sync :as sync-handler]
+            [logseq.db-sync.worker.ws :as ws]
+            [logseq.db.common.normalize :as db-normalize]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -31,6 +37,106 @@
   #{:logseq.property.recycle/original-parent
     :logseq.property.recycle/original-page
     :logseq.property.recycle/original-order})
+
+(defn- js-row
+  [m]
+  (let [row (js-obj)]
+    (doseq [[k v] m]
+      (aset row (name k) v))
+    row))
+
+(defn- js-rows
+  [rows]
+  (into-array (map js-row rows)))
+
+(defn- make-storage-sql
+  []
+  (let [state (atom {:kvs {}
+                     :tx-log {}
+                     :meta {}})
+        sql (doto (js-obj)
+              (aset "exec"
+                    (fn [sql & args]
+                      (cond
+                        (or (string/includes? sql "create table")
+                            (string/includes? sql "alter table")
+                            (string/includes? sql "select 1 from"))
+                        #js []
+
+                        (string/includes? sql "delete from kvs")
+                        (do
+                          (swap! state assoc :kvs {})
+                          nil)
+
+                        (string/includes? sql "delete from tx_log")
+                        (do
+                          (swap! state assoc :tx-log {})
+                          nil)
+
+                        (string/includes? sql "delete from sync_meta")
+                        (do
+                          (swap! state assoc :meta {})
+                          nil)
+
+                        (or (string/includes? sql "insert into kvs")
+                            (string/includes? sql "insert or replace into kvs"))
+                        (do
+                          (doseq [[addr content addresses] (partition 3 args)]
+                            (swap! state assoc-in [:kvs addr]
+                                   {:addr addr
+                                    :content content
+                                    :addresses addresses}))
+                          nil)
+
+                        (string/includes? sql "select content, addresses from kvs where addr = ?")
+                        (if-let [{:keys [content addresses]} (get-in @state [:kvs (first args)])]
+                          (js-rows [{:content content
+                                     :addresses addresses}])
+                          (js-rows []))
+
+                        (string/includes? sql "insert into tx_log")
+                        (let [[t tx created-at outliner-op] args]
+                          (swap! state assoc-in [:tx-log t]
+                                 {:t t
+                                  :tx tx
+                                  :created-at created-at
+                                  :outliner-op outliner-op})
+                          nil)
+
+                        (string/includes? sql "select t, tx, outliner_op from tx_log")
+                        (let [since (first args)
+                              rows (->> (:tx-log @state)
+                                        vals
+                                        (filter (fn [row] (> (:t row) since)))
+                                        (sort-by :t)
+                                        (map (fn [row]
+                                               {:t (:t row)
+                                                :tx (:tx row)
+                                                :outliner_op (:outliner-op row)})))]
+                          (js-rows rows))
+
+                        (string/includes? sql "insert into sync_meta")
+                        (let [[k v] args]
+                          (swap! state assoc-in [:meta k] v)
+                          nil)
+
+                        (string/includes? sql "select value from sync_meta")
+                        (if-let [value (get-in @state [:meta (first args)])]
+                          (js-rows [{:value value}])
+                          (js-rows []))
+
+                        :else
+                        #js []))))]
+    {:state state
+     :sql sql}))
+
+(defn- kvs-rows
+  [storage-state]
+  (->> (:kvs @storage-state)
+       vals
+       (sort-by :addr)
+       (mapv (fn [{:keys [addr content addresses]}]
+               [addr content addresses]))))
 
 (defn- non-recycle-validation-entities
   [validation]
@@ -448,6 +554,108 @@
             (is (= (client-op/get-local-checksum test-repo)
                    (sync-checksum/recompute-checksum (:db-after tx-report))))))))))
 
+(deftest first-local-block-after-upload-keeps-server-checksum-in-sync-test
+  (testing "the first local block tx after upload keeps server and client checksums equal"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          server-conn (d/conn-from-db @conn)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (let [parent-id (:db/id parent)
+                block-uuid (random-uuid)]
+            (outliner-core/insert-blocks! conn
+                                          [{:block/title "Uploaded graph block"
+                                            :block/uuid block-uuid}]
+                                          (d/entity @conn parent-id)
+                                          {:sibling? false
+                                           :keep-uuid? true})
+            (let [tx-entries (->> (#'db-sync/pending-txs test-repo)
+                                  (mapv (fn [{:keys [tx outliner-op]}]
+                                          {:tx (sqlite-util/write-transit-str
+                                                (->> tx
+                                                     (db-normalize/remove-retract-entity-ref @conn)
+                                                     (#'db-sync/drop-missing-created-block-datoms @conn)
+                                                     (#'db-sync/sanitize-tx-data @conn)
+                                                     distinct
+                                                     vec))
+                                           :outliner-op outliner-op})))]
+              (doseq [tx-entry tx-entries]
+                (#'sync-handler/apply-tx-entry! server-conn tx-entry))
+              (is (= (sync-checksum/recompute-checksum @conn)
+                     (sync-checksum/recompute-checksum @server-conn))))))))))
+
+(deftest first-page-and-block-after-upload-keeps-server-checksum-in-sync-test
+  (testing "creating the first page and first block after upload keeps server and client checksums equal"
+    (let [conn (db-test/create-conn)
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          server-conn (d/conn-from-db @conn)
+          page-uuid (random-uuid)
+          block-uuid (random-uuid)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (worker-page/create! conn "Fresh Sync Page" :uuid page-uuid)
+          (outliner-core/insert-blocks! conn
+                                        [{:block/title "Fresh graph block"
+                                          :block/uuid block-uuid}]
+                                        (d/entity @conn [:block/uuid page-uuid])
+                                        {:sibling? false
+                                         :keep-uuid? true})
+          (let [tx-entries (->> (#'db-sync/pending-txs test-repo)
+                                (mapv (fn [{:keys [tx outliner-op]}]
+                                        {:tx (sqlite-util/write-transit-str
+                                              (->> tx
+                                                   (db-normalize/remove-retract-entity-ref @conn)
+                                                   (#'db-sync/drop-missing-created-block-datoms @conn)
+                                                   (#'db-sync/sanitize-tx-data @conn)
+                                                   distinct
+                                                   vec))
+                                         :outliner-op outliner-op})))]
+            (doseq [tx-entry tx-entries]
+              (#'sync-handler/apply-tx-entry! server-conn tx-entry))
+            (is (= (sync-checksum/recompute-checksum @conn)
+                   (sync-checksum/recompute-checksum @server-conn)))))))))
+
+(deftest snapshot-roundtrip-first-page-and-block-after-upload-keeps-server-checksum-in-sync-test
+  (testing "freshly uploaded graph storage roundtrip keeps the first page/block tx in sync"
+    (let [base-conn (db-test/create-conn)
+          local-storage (make-storage-sql)
+          server-storage (make-storage-sql)
+          local-conn (d/conn-from-datoms (d/datoms @base-conn :eavt)
+                                         (d/schema @base-conn)
+                                         {:storage (sync-storage/new-sqlite-storage (:sql local-storage))})
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          _ (#'sync-handler/import-snapshot-rows! (:sql server-storage) "kvs" (kvs-rows (:state local-storage)))
+          server-conn (sync-storage/open-conn (:sql server-storage))
+          page-uuid (random-uuid)
+          block-uuid (random-uuid)
+          server-self #js {:sql (:sql server-storage)
+                           :conn server-conn
+                           :schema-ready true}]
+      (with-datascript-conns local-conn client-ops-conn
+        (fn []
+          (worker-page/create! local-conn "Fresh Sync Page" :uuid page-uuid)
+          (outliner-core/insert-blocks! local-conn
+                                        [{:block/title "Fresh graph block"
+                                          :block/uuid block-uuid}]
+                                        (d/entity @local-conn [:block/uuid page-uuid])
+                                        {:sibling? false
+                                         :keep-uuid? true})
+          (let [sanitize-tx (fn [tx]
+                              (->> tx
+                                   (db-normalize/remove-retract-entity-ref @local-conn)
+                                   (#'db-sync/drop-missing-created-block-datoms @local-conn)
+                                   (#'db-sync/sanitize-tx-data @local-conn)
+                                   distinct
+                                   vec))
+                tx-entries (mapv (fn [{:keys [tx outliner-op]}]
+                                   {:tx (sqlite-util/write-transit-str (sanitize-tx tx))
+                                    :outliner-op outliner-op})
+                                 (#'db-sync/pending-txs test-repo))
+                response (with-redefs [ws/broadcast! (fn [& _] nil)]
+                           (sync-handler/handle-tx-batch! server-self nil tx-entries 0))]
+            (is (= "tx/batch/ok" (:type response)))
+            (is (= (sync-checksum/recompute-checksum @local-conn)
+                   (sync-checksum/recompute-checksum @server-conn)))))))))
+
 (deftest reaction-add-enqueues-pending-sync-tx-test
   (testing "adding a reaction should enqueue tx for db-sync"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
@@ -817,6 +1025,20 @@
                 (is (not-any? string?
                               (keep second save-block-tx)))))))))))
 
+(deftest structural-conflict-drops-whole-entity-local-tx-test
+  (testing "remote structural conflicts drop the whole entity tx instead of leaving partial block state"
+    (let [{:keys [conn child1]} (setup-parent-child)
+          child-uuid (:block/uuid child1)
+          tx-data [[:db/add [:block/uuid child-uuid] :block/title "local title"]
+                   [:db/add [:block/uuid child-uuid] :block/parent 999]
+                   [:db/add [:block/uuid child-uuid] :block/page 998]
+                   [:db/retract [:block/uuid child-uuid] :logseq.property/created-by-ref 100]]
+          remote-updated-keys #{[child-uuid :block/page]}]
+      (is (empty? (#'db-sync/drop-remote-conflicted-local-tx
+                   @conn
+                   remote-updated-keys
+                   tx-data))))))
+
 (deftest rebase-order-fix-for-new-blocks-does-not-keep-string-tempids-test
   (testing "rebased order-fix tx should not keep string tempids for newly created blocks"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
@@ -914,6 +1136,52 @@
          {:rtc-tx? true}))
       (is (= [[:db/retractEntity 577]] @captured)))))
 
+(deftest reverse-local-txs-skips-invalid-reverse-step-test
+  (testing "reverse-local-txs skips stored reverse txs that no longer validate"
+    (let [captured (atom [])]
+      (with-redefs [undo-validate/valid-undo-redo-tx? (fn [_conn tx-data]
+                                                        (not-any? #(= [:db/add [:block/uuid #uuid "69b947ae-d4b2-4ae3-bc0e-bcf77efb77fa"] nil nil nil] %)
+                                                                  tx-data))
+                    ldb/transact! (fn [_conn tx-data _tx-meta]
+                                    (swap! captured conj tx-data)
+                                    nil)]
+        (#'db-sync/reverse-local-txs!
+         (atom nil)
+         [{:tx-id (random-uuid)
+           :outliner-op :insert-blocks
+           :reversed-tx [[:db/add [:block/uuid #uuid "69b947ae-d4b2-4ae3-bc0e-bcf77efb77fa"] nil nil nil]]}
+          {:tx-id (random-uuid)
+           :outliner-op :move-blocks
+           :reversed-tx [[:db/add [:block/uuid #uuid "69b947ae-d4b2-4ae3-bc0e-bcf77efb77fa"] :block/order "a0" 1]]}]
+         {:rtc-tx? true}))
+      (is (= [[[:db/add [:block/uuid #uuid "69b947ae-d4b2-4ae3-bc0e-bcf77efb77fa"] :block/order "a0" 1]]]
+             @captured)))))
+
+(deftest reverse-local-txs-skips-missing-lookup-entity-step-test
+  (testing "reverse-local-txs skips reverse step when lookup entity no longer exists in temp db"
+    (let [captured (atom [])]
+      (with-redefs [ldb/transact! (fn [_conn tx-data _tx-meta]
+                                    (swap! captured conj tx-data)
+                                    nil)]
+        (#'db-sync/reverse-local-txs!
+         (db-test/create-conn)
+         [{:tx-id (random-uuid)
+           :outliner-op :delete-blocks
+           :reversed-tx [[:db/add [:block/uuid #uuid "69b95175-7dbc-4d5b-82ef-81df968fa9d4"]
+                          :logseq.property/deleted-at
+                          1773752696187
+                          1]]}
+          {:tx-id (random-uuid)
+           :outliner-op :move-blocks
+           :reversed-tx [[:db/add [:block/uuid #uuid "69b94d2b-e200-4610-b78e-691a434334c0"] :block/order "a0" 1]]}]
+         {:rtc-tx? true}))
+      (is (empty? @captured)))))
+
+(deftest reverse-tx-data-drops-retract-entity-items-test
+  (testing "reverse tx builders should not turn retractEntity into malformed add items"
+    (is (empty? (#'db-sync/reverse-tx-data [[:db/retractEntity [:block/uuid (random-uuid)]]])))
+    (is (empty? (#'db-sync/reverse-normalized-tx-data [[:db/retractEntity [:block/uuid (random-uuid)]]])))))
+
 (deftest pending-txs-rewrite-old-string-tempids-test
   (testing "pending tx rows loaded from client ops rewrite legacy string tempids to lookup refs"
     (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
@@ -937,6 +1205,14 @@
             (is (some #(= [:db/add [:block/uuid child2-uuid] :block/order child2-order 1] %) reversed-tx))
             (is (not-any? string? (keep second tx)))
             (is (not-any? string? (keep second reversed-tx)))))))))
+
+(deftest replace-string-block-tempids-rewrites-retract-entity-string-uuid-test
+  (testing "retractEntity with legacy string uuid is rewritten to block lookup"
+    (let [missing-uuid (random-uuid)
+          tx-data [[:db/retractEntity (str missing-uuid)]]
+          rewritten (#'db-sync/replace-string-block-tempids-with-lookups (db-test/create-conn) tx-data)]
+      (is (= [[:db/retractEntity [:block/uuid missing-uuid]]]
+             rewritten)))))
 
 (deftest rebase-preserves-title-when-reversed-tx-ids-change-test
   (testing "rebase keeps local title when reverse tx gets a new tx id"
@@ -1139,6 +1415,16 @@
           sanitized (->> (#'db-sync/sanitize-tx-data @conn tx-data)
                          vec)]
       (is (= tx-data sanitized)))))
+
+(deftest sanitize-tx-data-drops-stale-missing-block-lookup-updates-test
+  (testing "title-only updates for a missing lookup block should be dropped"
+    (let [{:keys [conn]} (setup-parent-child)
+          missing-uuid (random-uuid)
+          tx-data [[:db/add [:block/uuid missing-uuid] :block/title "stale title"]
+                   [:db/add [:block/uuid missing-uuid] :block/updated-at 1773747515784]]
+          sanitized (->> (#'db-sync/sanitize-tx-data @conn tx-data)
+                         vec)]
+      (is (empty? sanitized)))))
 
 (deftest apply-remote-tx-local-delete-remote-recreate-does-not-leave-local-only-delete-test
   (testing "if remote batch recreates a locally deleted block, client should not end with unsynced local-only deletion"

@@ -4,6 +4,7 @@
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.worker.undo-redo :as undo-validate]
             [lambdaisland.glogi :as log]
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.db :as ldb]
@@ -283,22 +284,28 @@
                                :editor-cursors editor-cursors
                                :block-content block-content}))]
               (if (seq reversed-tx-data)
-                (if util/node-test?
-                  (try
-                    (ldb/transact! conn reversed-tx-data tx-meta')
-                    (handler)
-                    (catch :default e
-                      (log/error ::undo-redo-failed e)
-                      (clear-history! repo)
-                      (if undo? ::empty-undo-stack ::empty-redo-stack)))
-                  (->
-                   (p/do!
-                    ;; async write to the master worker
-                    (ldb/transact! repo reversed-tx-data tx-meta')
-                    (handler))
-                   (p/catch (fn [e]
-                              (log/error ::undo-redo-failed e)
-                              (clear-history! repo)))))
+                (if (undo-validate/valid-undo-redo-tx? conn reversed-tx-data)
+                  (if util/node-test?
+                    (try
+                      (ldb/transact! conn reversed-tx-data tx-meta')
+                      (handler)
+                      (catch :default e
+                        (log/error ::undo-redo-failed e)
+                        (clear-history! repo)
+                        (if undo? ::empty-undo-stack ::empty-redo-stack)))
+                    (->
+                     (p/do!
+                      ;; async write to the master worker
+                      (ldb/transact! repo reversed-tx-data tx-meta')
+                      (handler))
+                     (p/catch (fn [e]
+                                (log/error ::undo-redo-failed e)
+                                (clear-history! repo)))))
+                  (do
+                    (log/warn ::undo-redo-skip-invalid-op
+                              {:undo? undo?
+                               :outliner-op (:outliner-op tx-meta)})
+                    (undo-redo-aux repo undo?)))
                 (do
                   (log/warn ::undo-redo-skip-conflicted-op
                             {:undo? undo?
