@@ -91,6 +91,18 @@
               (d/entity db id)))
           (tx-entity-ids db tx-data)))
 
+(defn- entity-has-identity?
+  [ent]
+  (or (:block/uuid ent)
+      (:db/ident ent)))
+
+(defn- recycle-entities-valid?
+  [db tx-data]
+  (every? (fn [id]
+            (when-let [ent (d/entity db id)]
+              (entity-has-identity? ent)))
+          (tx-entity-ids db tx-data)))
+
 (defn- parent-cycle?
   [ent]
   (let [start (:block/uuid ent)]
@@ -201,7 +213,11 @@
   [conn tx-data]
   (try
     (if (recycle-tx? tx-data)
-      true
+      (if (recycle-entities-valid? @conn tx-data)
+        true
+        (do
+          (log/warn ::undo-redo-invalid {:reason :invalid-recycle-entities})
+          false))
       (if-not (structural-tx? tx-data)
         (if (entities-exist? @conn tx-data)
           true
@@ -220,7 +236,8 @@
                              #{})
               new-issues (seq (set/difference after-issues baseline-issues))]
           (when (seq new-issues)
-            (log/warn ::undo-redo-invalid {:issues (take 5 new-issues)}))
+            (log/warn ::undo-redo-invalid
+                      {:issues (take 5 new-issues)}))
           (empty? new-issues))))
     (catch :default e
       (log/error ::undo-redo-validate-failed e)

@@ -108,34 +108,34 @@
 (defn recycle-blocks-tx-data
   [db blocks {:keys [deleted-by-uuid now-ms]}]
   (let [{:keys [page page-id tx-data]} (ensure-recycle-page db)
-        deleted-by-id (deleted-by-id db deleted-by-uuid)
-        now-ms (or now-ms (common-util/time-ms))]
-    (let [[recycle-tx _previous-order]
-          (reduce
-           (fn [[txs previous-order] block]
-             (let [subtree (block-subtree db block)
-                   order (db-order/gen-key previous-order nil)
-                   root-tx (cond-> {:db/id (:db/id block)
-                                    :block/parent page-id
-                                    :block/page page-id
-                                    :block/order order
-                                    :logseq.property/deleted-at now-ms}
-                             true
-                             (maybe-assoc-ref :logseq.property/deleted-by-ref (d/entity db deleted-by-id))
-                             true
-                             (maybe-assoc-ref :logseq.property.recycle/original-parent (:block/parent block))
-                             true
-                             (maybe-assoc-ref :logseq.property.recycle/original-page (:block/page block))
-                             true
-                             (maybe-assoc :logseq.property.recycle/original-order (:block/order block)))
-                   subtree-page-tx (map (fn [node]
-                                          {:db/id (:db/id node)
-                                           :block/page page-id})
-                                        subtree)]
-               [(into txs (cons root-tx (rest subtree-page-tx))) order]))
-           [[] (some->> page :block/_parent ldb/sort-by-order last :block/order)]
-           blocks)]
-      (concat tx-data recycle-tx))))
+        deleted-by-id' (deleted-by-id db deleted-by-uuid)
+        now-ms (or now-ms (common-util/time-ms))
+        [recycle-tx _previous-order]
+        (reduce
+         (fn [[txs previous-order] block]
+           (let [subtree (block-subtree db block)
+                 order (db-order/gen-key previous-order nil)
+                 root-tx (cond-> {:db/id (:db/id block)
+                                  :block/parent page-id
+                                  :block/page page-id
+                                  :block/order order
+                                  :logseq.property/deleted-at now-ms}
+                           true
+                           (maybe-assoc-ref :logseq.property/deleted-by-ref (d/entity db deleted-by-id'))
+                           true
+                           (maybe-assoc-ref :logseq.property.recycle/original-parent (:block/parent block))
+                           true
+                           (maybe-assoc-ref :logseq.property.recycle/original-page (:block/page block))
+                           true
+                           (maybe-assoc :logseq.property.recycle/original-order (:block/order block)))
+                 subtree-page-tx (map (fn [node]
+                                        {:db/id (:db/id node)
+                                         :block/page page-id})
+                                      subtree)]
+             [(into txs (cons root-tx (rest subtree-page-tx))) order]))
+         [[] (some->> page :block/_parent ldb/sort-by-order last :block/order)]
+         blocks)]
+    (concat tx-data recycle-tx)))
 
 (defn recycle-page-tx-data
   [db page {:keys [deleted-by-uuid now-ms]}]
