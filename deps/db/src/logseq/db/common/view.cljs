@@ -295,7 +295,8 @@
         exclude-ids (get-exclude-page-ids db)]
     (keep (fn [d]
             (let [e (entity-plus/unsafe->Entity db (:e d))]
-              (when-not (exclude-ids (:db/id e))
+              (when-not (or (exclude-ids (:db/id e))
+                            (entity-util/hidden? e))
                 (cond-> e
                   refs-count?
                   (assoc :block.temp/refs-count (common-initial-data/get-block-refs-count db (:e d)))))))

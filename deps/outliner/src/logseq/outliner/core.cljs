@@ -15,6 +15,7 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.outliner.datascript :as ds]
             [logseq.outliner.pipeline :as outliner-pipeline]
+            [logseq.outliner.recycle :as outliner-recycle]
             [logseq.outliner.transaction :as outliner-tx]
             [logseq.outliner.tree :as otree]
             [logseq.outliner.validate :as outliner-validate]
@@ -796,11 +797,13 @@
 
 (defn ^:api ^:large-vars/cleanup-todo delete-blocks
   "Delete blocks from the tree."
-  [db blocks]
+  [db blocks opts]
   (let [top-level-blocks (filter-top-level-blocks db blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
         top-level-blocks* (get-top-level-blocks top-level-blocks non-consecutive?)
-        top-level-blocks (remove :logseq.property/built-in? top-level-blocks*)
+        top-level-blocks (->> top-level-blocks*
+                              (remove :logseq.property/built-in?)
+                              (remove ldb/page?))
         txs-state (ds/new-outliner-txs-state)
         block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) top-level-blocks)
         start-block (first top-level-blocks)
@@ -827,9 +830,8 @@
             (when (seq tx-data) (swap! txs-state concat tx-data)))
 
           :else
-          (doseq [id block-ids]
-            (let [node (d/entity db id)]
-              (otree/-del node txs-state db))))))
+          (swap! txs-state concat
+                 (outliner-recycle/recycle-blocks-tx-data db top-level-blocks opts)))))
     {:tx-data @txs-state}))
 
 (defn- move-to-original-position?
@@ -1067,8 +1069,8 @@
                     opts
                     (assoc opts :outliner-op :insert-blocks)))))
 
-(let [f (fn [conn blocks _opts]
-          (delete-blocks @conn blocks))]
+(let [f (fn [conn blocks opts]
+          (delete-blocks @conn blocks opts))]
   (defn delete-blocks!
     [conn blocks opts]
     (op-transact! :delete-blocks f conn blocks opts)))

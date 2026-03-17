@@ -108,8 +108,14 @@
     (is (contains? (set (map :db/id (:block/refs (d/entity @conn (:db/id b1)))))
                    (:db/id d1)))
     (outliner-page/delete! conn (:block/uuid d1))
-    (is (nil? (d/entity @conn (:db/id d1))))
-    (is (nil? (d/entity @conn (:db/id b1))))))
+    (let [d1' (d/entity @conn (:db/id d1))
+          b1' (d/entity @conn (:db/id b1))
+          recycle-page (ldb/get-built-in-page @conn "Recycle")]
+      (is (some? d1'))
+      (is (some? b1'))
+      (is (= (:block/uuid recycle-page) (:block/uuid (:block/parent d1'))))
+      (is (integer? (:logseq.property/deleted-at d1')))
+      (is (= (:block/uuid d1') (:block/uuid (:block/page b1')))))))
 
 (deftest create-journal
   (let [conn (db-test/create-conn)

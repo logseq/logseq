@@ -619,6 +619,26 @@
                                       :schema {:type :entity
                                                :hide? true}
                                       :queryable? true}
+     :logseq.property/deleted-at {:title "Deleted at"
+                                  :schema {:type :datetime
+                                           :hide? true
+                                           :public? false}}
+     :logseq.property/deleted-by-ref {:title "Deleted by"
+                                      :schema {:type :entity
+                                               :hide? true
+                                               :public? false}}
+     :logseq.property.recycle/original-parent {:title "Recycle original parent"
+                                               :schema {:type :entity
+                                                        :hide? true
+                                                        :public? false}}
+     :logseq.property.recycle/original-page {:title "Recycle original page"
+                                             :schema {:type :entity
+                                                      :hide? true
+                                                      :public? false}}
+     :logseq.property.recycle/original-order {:title "Recycle original order"
+                                              :schema {:type :string
+                                                       :hide? true
+                                                       :public? false}}
      :logseq.property.reaction/emoji-id {:title "Reaction emoji"
                                          :schema {:type :string
                                                   :public? false

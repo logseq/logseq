@@ -2,13 +2,16 @@
   (:require [clojure.test :as t :refer [deftest is testing use-fixtures]]
             [datascript.core :as d]
             [frontend.db :as db]
+            [frontend.handler.editor :as editor]
             [frontend.modules.outliner.core-test :as outliner-test]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
             [frontend.undo-redo :as undo-redo]
             [frontend.worker.db-listener :as worker-db-listener]
             [frontend.worker.undo-redo :as undo-validate]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.op :as outliner-op]))
 
 ;; TODO: random property ops test
 
@@ -239,6 +242,25 @@
                     :local-tx? false})
       (is (= :frontend.undo-redo/empty-undo-stack (undo-redo/undo test-db))))))
 
+(deftest single-op-apply-ops-preserves-local-tx-and-client-id-test
+  (testing "single local outliner ops should reach listeners with local/client metadata intact"
+    (let [conn (db/get-db test-db false)
+          {:keys [child-uuid]} (seed-page-parent-child!)
+          tx-meta* (atom nil)]
+      (d/listen! conn ::capture-tx-meta
+                 (fn [{:keys [tx-meta]}]
+                   (reset! tx-meta* tx-meta)))
+      (try
+        (outliner-op/apply-ops! conn
+                                [[:save-block [{:block/uuid child-uuid
+                                                :block/title "single-op-save"} {}]]]
+                                {:client-id (:client-id @state/state)
+                                 :local-tx? true})
+        (is (= true (:local-tx? @tx-meta*)))
+        (is (= (:client-id @state/state) (:client-id @tx-meta*)))
+        (finally
+          (d/unlisten! conn ::capture-tx-meta))))))
+
 (deftest undo-conflict-clears-history-test
   (testing "undo clears history when reverse tx is unsafe"
     (undo-redo/clear-history! test-db)
@@ -267,6 +289,124 @@
         (is (not= :frontend.undo-redo/empty-redo-stack redo-result))
         (is (= "local-1" (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))
 
+(deftest undo-insert-retracts-added-entity-cleanly-test
+  (testing "undoing a local insert retracts the inserted entity instead of leaving a partial shell"
+    (undo-redo/clear-history! test-db)
+    (let [conn (db/get-db test-db false)
+          {:keys [page-uuid]} (seed-page-parent-child!)
+          inserted-uuid (random-uuid)]
+      (d/transact! conn
+                   [{:block/uuid inserted-uuid
+                     :block/title "inserted"
+                     :block/page [:block/uuid page-uuid]
+                     :block/parent [:block/uuid page-uuid]}]
+                   {:outliner-op :insert-blocks
+                    :local-tx? true})
+      (is (some? (d/entity @conn [:block/uuid inserted-uuid])))
+      (let [undo-result (undo-redo/undo test-db)]
+        (is (not= :frontend.undo-redo/empty-undo-stack undo-result))
+        (is (nil? (d/entity @conn [:block/uuid inserted-uuid])))))))
+
+(deftest repeated-save-block-content-undo-redo-test
+  (testing "multiple saves on the same block undo and redo one step at a time"
+    (undo-redo/clear-history! test-db)
+    (let [conn (db/get-db test-db false)
+          {:keys [child-uuid]} (seed-page-parent-child!)]
+      (doseq [title ["v1" "v2" "v3"]]
+        (d/transact! conn
+                     [[:db/add [:block/uuid child-uuid] :block/title title]]
+                     {:outliner-op :save-block
+                      :local-tx? true}))
+      (is (= "v3" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+      (undo-redo/undo test-db)
+      (is (= "v2" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+      (undo-redo/undo test-db)
+      (is (= "v1" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+      (undo-redo/undo test-db)
+      (is (= "child" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+      (undo-redo/redo test-db)
+      (is (= "v1" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+      (undo-redo/redo test-db)
+      (is (= "v2" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+      (undo-redo/redo test-db)
+      (is (= "v3" (:block/title (d/entity @conn [:block/uuid child-uuid])))))))
+
+(deftest repeated-editor-save-block-content-undo-redo-test
+  (testing "editor/save-block! records sequential content saves in order"
+    (undo-redo/clear-history! test-db)
+    (let [conn (db/get-db test-db false)
+          {:keys [child-uuid]} (seed-page-parent-child!)]
+      (doseq [title ["foo" "foo bar"]]
+        (editor/save-block! test-db child-uuid title))
+      (is (= "foo bar" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+      (undo-redo/undo test-db)
+      (is (= "foo" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+      (undo-redo/redo test-db)
+      (is (= "foo bar" (:block/title (d/entity @conn [:block/uuid child-uuid])))))))
+
+(deftest editor-save-two-blocks-undo-targets-latest-block-test
+  (testing "undo after saving two different blocks reverts the latest saved block first"
+    (undo-redo/clear-history! test-db)
+    (let [conn (db/get-db test-db false)
+          {:keys [parent-uuid child-uuid]} (seed-page-parent-child!)]
+      (editor/save-block! test-db parent-uuid "parent updated")
+      (editor/save-block! test-db child-uuid "child updated")
+      (undo-redo/undo test-db)
+      (is (= "parent updated" (:block/title (d/entity @conn [:block/uuid parent-uuid]))))
+      (is (= "child" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+      (undo-redo/undo test-db)
+      (is (= "parent" (:block/title (d/entity @conn [:block/uuid parent-uuid])))))))
+
+(deftest new-local-save-clears-redo-stack-test
+  (testing "a new local save clears redo history"
+    (undo-redo/clear-history! test-db)
+    (let [conn (db/get-db test-db false)
+          {:keys [child-uuid]} (seed-page-parent-child!)]
+      (editor/save-block! test-db child-uuid "v1")
+      (editor/save-block! test-db child-uuid "v2")
+      (undo-redo/undo test-db)
+      (is (= "v1" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+      (editor/save-block! test-db child-uuid "v3")
+      (is (= :frontend.undo-redo/empty-redo-stack (undo-redo/redo test-db)))
+      (is (= "v3" (:block/title (d/entity @conn [:block/uuid child-uuid])))))))
+
+(deftest insert-save-delete-sequence-undo-redo-test
+  (testing "insert then save then recycle-delete can be undone and redone in order"
+    (undo-redo/clear-history! test-db)
+    (let [conn (db/get-db test-db false)
+          {:keys [page-uuid]} (seed-page-parent-child!)
+          inserted-uuid (random-uuid)
+          recycle-title "Recycle"]
+      (d/transact! conn
+                   [{:block/uuid inserted-uuid
+                     :block/title "draft"
+                     :block/page [:block/uuid page-uuid]
+                     :block/parent [:block/uuid page-uuid]}]
+                   {:outliner-op :insert-blocks
+                    :local-tx? true})
+      (d/transact! conn
+                   [[:db/add [:block/uuid inserted-uuid] :block/title "published"]]
+                   {:outliner-op :save-block
+                    :local-tx? true})
+      (outliner-core/delete-blocks! conn [(d/entity @conn [:block/uuid inserted-uuid])] {})
+      (is (= recycle-title
+             (:block/title (:block/page (d/entity @conn [:block/uuid inserted-uuid])))))
+      (undo-redo/undo test-db)
+      (let [restored (d/entity @conn [:block/uuid inserted-uuid])]
+        (is (= page-uuid (:block/uuid (:block/page restored))))
+        (is (= "published" (:block/title restored))))
+      (undo-redo/undo test-db)
+      (is (= "draft" (:block/title (d/entity @conn [:block/uuid inserted-uuid]))))
+      (undo-redo/undo test-db)
+      (is (nil? (d/entity @conn [:block/uuid inserted-uuid])))
+      (undo-redo/redo test-db)
+      (is (= "draft" (:block/title (d/entity @conn [:block/uuid inserted-uuid]))))
+      (undo-redo/redo test-db)
+      (is (= "published" (:block/title (d/entity @conn [:block/uuid inserted-uuid]))))
+      (undo-redo/redo test-db)
+      (is (= recycle-title
+             (:block/title (:block/page (d/entity @conn [:block/uuid inserted-uuid]))))))))
+
 (deftest undo-works-with-remote-updates-test
   (testing "undo works after remote updates on sync graphs"
     (undo-redo/clear-history! test-db)
@@ -283,6 +423,27 @@
       (let [undo-result (undo-redo/undo test-db)]
         (is (not= :frontend.undo-redo/empty-undo-stack undo-result))
         (is (= "child" (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))
+
+(deftest undo-redo-works-for-recycle-delete-test
+  (testing "undo restores a recycled delete and redo sends it back to recycle"
+    (undo-redo/clear-history! test-db)
+    (let [conn (db/get-db test-db false)
+          {:keys [child-uuid page-uuid]} (seed-page-parent-child!)
+          recycle-page-title "Recycle"]
+      (outliner-core/delete-blocks! conn [(d/entity @conn [:block/uuid child-uuid])] {})
+      (let [deleted-child (d/entity @conn [:block/uuid child-uuid])]
+        (is (integer? (:logseq.property/deleted-at deleted-child)))
+        (is (= recycle-page-title (:block/title (:block/page deleted-child)))))
+      (let [undo-result (undo-redo/undo test-db)
+            restored-child (d/entity @conn [:block/uuid child-uuid])]
+        (is (not= :frontend.undo-redo/empty-undo-stack undo-result))
+        (is (= page-uuid (:block/uuid (:block/page restored-child))))
+        (is (nil? (:logseq.property/deleted-at restored-child))))
+      (let [redo-result (undo-redo/redo test-db)
+            recycled-child (d/entity @conn [:block/uuid child-uuid])]
+        (is (not= :frontend.undo-redo/empty-redo-stack redo-result))
+        (is (= recycle-page-title (:block/title (:block/page recycled-child))))
+        (is (integer? (:logseq.property/deleted-at recycled-child)))))))
 
 (deftest undo-validation-allows-baseline-issues-test
   (testing "undo validation allows existing issues without introducing new ones"
@@ -349,7 +510,7 @@
         (is (= page-uuid (:block/uuid (:block/parent child))))))))
 
 (deftest undo-skips-conflicted-move-and-keeps-earlier-history-test
-  (testing "undo drops a conflicting move op but still undoes earlier safe ops"
+  (testing "undo fails closed on a conflicting move and keeps db valid"
     (undo-redo/clear-history! test-db)
     (let [conn (db/get-db test-db false)
           {:keys [parent-a-uuid parent-b-uuid child-uuid]} (seed-page-two-parents-child!)]
@@ -362,18 +523,16 @@
                    {:outliner-op :move-blocks
                     :local-tx? true})
       (d/transact! conn
-                   [[:db/retractEntity [:block/uuid parent-a-uuid]]]
+                   (:tx-data (outliner-core/delete-blocks @conn [(d/entity @conn [:block/uuid parent-a-uuid])] {}))
                    {:outliner-op :delete-blocks
                     :local-tx? false})
       (let [undo-result (undo-redo/undo test-db)
             child (d/entity @conn [:block/uuid child-uuid])]
-        (is (not= :frontend.undo-redo/empty-undo-stack undo-result))
-        (is (= "child" (:block/title child)))
+        (is (= :frontend.undo-redo/empty-undo-stack undo-result))
+        (is (= "local-title" (:block/title child)))
         (is (= parent-b-uuid
                (:block/uuid (:block/parent child))))
-        (is (empty? (db-issues @conn))))
-      (is (= :frontend.undo-redo/empty-undo-stack
-             (undo-redo/undo test-db))))))
+        (is (empty? (db-issues @conn)))))))
 
 (deftest undo-validation-fast-path-skips-db-issues-for-non-structural-tx-test
   (testing "undo validation skips db-issues for non-structural tx-data"
@@ -398,8 +557,8 @@
                     [[:db/add [:block/uuid child-uuid] :block/parent [:block/uuid page-uuid]]])))
         (is (pos? @calls))))))
 
-(deftest redo-skips-when-target-parent-deleted-test
-  (testing "redo skips move-blocks when target parent was deleted remotely"
+(deftest redo-builds-reversed-tx-when-target-parent-is-recycled-test
+  (testing "redo still builds reversed tx from raw datoms when target parent was recycled remotely"
     (undo-redo/clear-history! test-db)
     (let [conn (db/get-db test-db false)
           {:keys [child-uuid parent-a-uuid parent-b-uuid]} (seed-page-two-parents-child!)]
@@ -409,7 +568,7 @@
                     :local-tx? true})
       (undo-redo/undo test-db)
       (d/transact! conn
-                   [[:db/retractEntity [:block/uuid parent-b-uuid]]]
+                   (:tx-data (outliner-core/delete-blocks @conn [(d/entity @conn [:block/uuid parent-b-uuid])] {}))
                    {:outliner-op :delete-blocks
                     :local-tx? false})
       (let [redo-op (last (get @undo-redo/*redo-ops test-db))
@@ -417,7 +576,7 @@
                           (second %))
                        redo-op)
             reversed (undo-redo/get-reversed-datoms conn false data (:tx-meta data))]
-        (is (nil? reversed))
+        (is (seq reversed))
         (is (= parent-a-uuid
                (:block/uuid (:block/parent (d/entity @conn [:block/uuid child-uuid])))))))))
 

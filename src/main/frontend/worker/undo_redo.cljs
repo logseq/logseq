@@ -11,6 +11,31 @@
 (def ^:private ref-attrs
   #{:block/parent :block/page})
 
+(def ^:private recycle-attrs
+  #{:logseq.property/deleted-at
+    :logseq.property/deleted-by-ref
+    :logseq.property.recycle/original-parent
+    :logseq.property.recycle/original-page
+    :logseq.property.recycle/original-order})
+
+(defn- recycle-tx-item?
+  [item]
+  (cond
+    (map? item)
+    (some recycle-attrs (keys item))
+
+    (vector? item)
+    (contains? recycle-attrs (nth item 2 nil))
+
+    (d/datom? item)
+    (contains? recycle-attrs (:a item))
+
+    :else false))
+
+(defn- recycle-tx?
+  [tx-data]
+  (boolean (some recycle-tx-item? tx-data)))
+
 (defn- structural-tx-item?
   [item]
   (cond
@@ -175,26 +200,28 @@
 (defn valid-undo-redo-tx?
   [conn tx-data]
   (try
-    (if-not (structural-tx? tx-data)
-      (if (entities-exist? @conn tx-data)
-        true
-        (do
-          (log/warn ::undo-redo-invalid {:reason :missing-entities})
-          false))
-      (let [db-before @conn
-            tx-report (d/with db-before tx-data)
-            db-after (:db-after tx-report)
-            affected-ids (affected-entity-ids db-before tx-report tx-data)
-            baseline-issues (if (seq affected-ids)
-                              (set (issues-for-entity-ids db-before affected-ids))
-                              #{})
-            after-issues (if (seq affected-ids)
-                           (set (issues-for-entity-ids db-after affected-ids))
-                           #{})
-            new-issues (seq (set/difference after-issues baseline-issues))]
-        (when (seq new-issues)
-          (log/warn ::undo-redo-invalid {:issues (take 5 new-issues)}))
-        (empty? new-issues)))
+    (if (recycle-tx? tx-data)
+      true
+      (if-not (structural-tx? tx-data)
+        (if (entities-exist? @conn tx-data)
+          true
+          (do
+            (log/warn ::undo-redo-invalid {:reason :missing-entities})
+            false))
+        (let [db-before @conn
+              tx-report (d/with db-before tx-data)
+              db-after (:db-after tx-report)
+              affected-ids (affected-entity-ids db-before tx-report tx-data)
+              baseline-issues (if (seq affected-ids)
+                                (set (issues-for-entity-ids db-before affected-ids))
+                                #{})
+              after-issues (if (seq affected-ids)
+                             (set (issues-for-entity-ids db-after affected-ids))
+                             #{})
+              new-issues (seq (set/difference after-issues baseline-issues))]
+          (when (seq new-issues)
+            (log/warn ::undo-redo-invalid {:issues (take 5 new-issues)}))
+          (empty? new-issues))))
     (catch :default e
       (log/error ::undo-redo-validate-failed e)
       false)))

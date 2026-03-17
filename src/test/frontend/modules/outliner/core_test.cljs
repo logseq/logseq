@@ -630,7 +630,11 @@
 (defn get-random-block
   []
   (let [datoms (->> (get-datoms)
-                    (remove (fn [datom] (= 1 (:e datom)))))]
+                    (remove (fn [datom] (= 1 (:e datom))))
+                    (remove (fn [datom]
+                              (let [block (db/pull test-db '[*] (:e datom))]
+                                (or (nil? (:block/parent block))
+                                    (= "Recycle" (:block/title block)))))))]
     (if (seq datoms)
       (let [id (:e (gen/generate (gen/elements datoms)))
             block (db/pull test-db '[*] id)]

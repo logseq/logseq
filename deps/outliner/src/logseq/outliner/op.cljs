@@ -120,7 +120,7 @@
    [:delete-page
     [:catn
      [:op :keyword]
-     [:args [:tuple ::uuid]]]]
+     [:args [:tuple ::uuid ::option]]]]
 
    [:toggle-reaction
     [:catn
@@ -303,11 +303,9 @@
                      :transact-opts {:conn conn}
                      :local-tx? true)
         *result (atom nil)]
-    (if (next ops)
-      (outliner-tx/transact!
-       opts'
-       (doseq [op-entry ops]
-         (apply-op! conn opts' *result op-entry)))
-      (apply-op! conn opts' *result (first ops)))
+    (outliner-tx/transact!
+     opts'
+     (doseq [op-entry ops]
+       (apply-op! conn opts' *result op-entry)))
 
     @*result))
