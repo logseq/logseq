@@ -683,6 +683,23 @@
     (update acc class-id (fnil conj #{}) entity)
     acc))
 
+(defn- build-bidirectional-property-group
+  [db [class-id entities]]
+  (let [class (d/entity db class-id)]
+    (when (true? (:logseq.property.class/enable-bidirectional? class))
+      (let [custom-title (when-let [custom (:logseq.property.class/bidirectional-property-title class)]
+                           (if (string? custom)
+                             custom
+                             (db-property/property-value-content custom)))
+            title (if (string/blank? custom-title)
+                    (common-plural/plural (:block/title class))
+                    custom-title)]
+        {:title title
+         :class (-> (into {} class)
+                    (assoc :db/id (:db/id class)))
+         :entities (->> entities
+                        (sort-by :block/created-at))}))))
+
 (defn get-bidirectional-properties
   "Given a target entity id, returns a seq of maps with:
    * :class - class entity
@@ -718,19 +735,5 @@
            (reduce (fn [acc [class-ent entity]]
                      (add-entity acc class-ent entity))
                    {})
-           (keep (fn [[class-id entities]]
-                   (let [class (d/entity db class-id)]
-                     (when (true? (:logseq.property.class/enable-bidirectional? class))
-                       (let [custom-title (when-let [custom (:logseq.property.class/bidirectional-property-title class)]
-                                            (if (string? custom)
-                                              custom
-                                              (db-property/property-value-content custom)))
-                             title (if (string/blank? custom-title)
-                                     (common-plural/plural (:block/title class))
-                                     custom-title)]
-                         {:title title
-                          :class (-> (into {} class)
-                                     (assoc :db/id (:db/id class)))
-                          :entities (->> entities
-                                         (sort-by :block/created-at))})))))
+           (keep (partial build-bidirectional-property-group db))
            (sort-by (comp :block/created-at :class))))))

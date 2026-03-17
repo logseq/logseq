@@ -312,11 +312,10 @@
                               :block/parent closed-value-id
                               :block/order "a0"}])
         _ (outliner-property/delete-closed-value! conn property-id [:block/uuid closed-value-uuid])]
-    (let [closed-value (d/entity @conn [:block/uuid closed-value-uuid])]
-      (is (nil? closed-value))
-      (is (nil? (d/entity @conn [:block/uuid child-uuid])))
-      (is (= [used-closed-value-uuid]
-             (mapv :block/uuid (:block/_closed-value-property (d/entity @conn :user.property/default))))))))
+    (is (nil? (d/entity @conn [:block/uuid closed-value-uuid])))
+    (is (nil? (d/entity @conn [:block/uuid child-uuid])))
+    (is (= [used-closed-value-uuid]
+           (mapv :block/uuid (:block/_closed-value-property (d/entity @conn :user.property/default)))))))
 
 (deftest class-add-property!
   (let [conn (db-test/create-conn-with-blocks
