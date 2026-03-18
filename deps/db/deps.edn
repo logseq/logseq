@@ -14,7 +14,7 @@
   logseq/clj-fractional-indexing        {:git/url "https://github.com/logseq/clj-fractional-indexing"
                                          :sha     "1087f0fb18aa8e25ee3bbbb0db983b7a29bce270"}
   borkdude/rewrite-edn                  {:mvn/version "0.5.9"}
-  metosin/malli                         {:mvn/version "0.20.1"}
+  metosin/malli                         {:mvn/version "0.16.1"}
   medley/medley                         {:mvn/version "1.4.0"}}
 
  :aliases
