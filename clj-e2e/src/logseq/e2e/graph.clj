@@ -95,18 +95,7 @@
   ([graph-name enable-sync?]
    (new-graph graph-name enable-sync? true))
   ([graph-name enable-sync? graph-e2ee?]
-   (try
-     (new-graph-helper graph-name enable-sync? graph-e2ee?)
-     (catch com.microsoft.playwright.TimeoutError e
-       ;; sometimes, 'Use Logseq Sync?' option not showing
-       ;; because of user-group not recv from server yet
-       ;; workaround: try again
-       (if enable-sync?
-         (do
-           (when (w/visible? "button.ui__dialog-close")
-             (w/click "button.ui__dialog-close"))
-           (new-graph-helper graph-name enable-sync? graph-e2ee?))
-         (throw e))))))
+   (new-graph-helper graph-name enable-sync? graph-e2ee?)))
 
 (defn wait-for-remote-graph
   [graph-name]
