@@ -16,7 +16,6 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.reaction :as reaction-handler]
-            [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -27,7 +26,7 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
-            [logseq.shui.popup.core :as popup-core]
+            [logseq.shui.popup.core :as shui-popup]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -49,8 +48,8 @@
      (shui/dropdown-menu-sub
       {:open set-icon-sub-menu-open?
        :onOpenChange (fn [v]
-                       (when (not= (some-> (popup-core/get-last-popup) :id) :icons-color-picker)
-                         (swap! popup-core/*opened-sub-menus (if v conj disj) :set-icon)
+                       (when (not= (some-> (shui-popup/get-last-popup) :id) :icons-color-picker)
+                         (swap! shui-popup/*opened-sub-menus (if v conj disj) :set-icon)
                          (set-icon-sub-menu-open v)))}
       (shui/dropdown-menu-sub-trigger
        (t :context-menu/set-icon))
@@ -198,8 +197,8 @@
          (shui/dropdown-menu-sub
           {:open set-icon-sub-menu-open?
            :onOpenChange (fn [v]
-                           (when (not= (some-> (popup-core/get-last-popup) :id) :icons-color-picker)
-                             (swap! popup-core/*opened-sub-menus (if v conj disj) :set-icon)
+                           (when (not= (some-> (shui-popup/get-last-popup) :id) :icons-color-picker)
+                             (swap! shui-popup/*opened-sub-menus (if v conj disj) :set-icon)
                              (set-icon-sub-menu-open v)))}
           (shui/dropdown-menu-sub-trigger
            (t :context-menu/set-icon))
