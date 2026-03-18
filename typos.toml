@@ -23,5 +23,5 @@ extend-exclude = ["resources/*",
                   "scripts/resources/*",
                   "src/test/fixtures/*",
                   "clj-e2e/resources/*",
-                  "deps/common/src/logseq/common/plural.cljs"
+                  "deps/common/src/logseq/common/plural.cljs",
                   "packages/amplify/src/amplify-i18n-dict.ts"]
