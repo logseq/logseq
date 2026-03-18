@@ -19,5 +19,5 @@
 
  :aliases
  {:clj-kondo
-  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2024.09.27"}}
+  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.01.19"}}
    :main-opts  ["-m" "clj-kondo.main"]}}}
