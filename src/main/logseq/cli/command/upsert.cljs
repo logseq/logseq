@@ -19,14 +19,14 @@
    :target-page {:desc "Target page name"
                  :complete :pages}
    :pos {:desc "Position. Default: create=last-child, update=first-child"
-         :values ["first-child" "last-child" "sibling"]}
+         :validate #{"first-child" "last-child" "sibling"}}
    :content {:desc "Block content (create inserts; update rewrites source block content)"}
    :blocks {:desc "EDN vector of blocks for create mode"}
    :blocks-file {:desc "EDN file of blocks for create mode"
                  :complete :file}
    :status {:desc "Task status (create/update)"
-            :values ["todo" "doing" "done" "now" "later" "wait" "waiting"
-                     "backlog" "canceled" "cancelled" "in-review" "in-progress"]}
+            :validate #{"todo" "doing" "done" "now" "later" "wait" "waiting"
+                        "backlog" "canceled" "cancelled" "in-review" "in-progress"}}
    :update-tags {:desc "Tags to add/update (EDN vector)"}
    :update-properties {:desc "Properties to add/update (EDN map)"}
    :remove-tags {:desc "Tags to remove (EDN vector)"}
@@ -52,9 +52,9 @@
         :coerce :long}
    :name {:desc "Property name"}
    :type {:desc "Property type"
-          :values ["default" "number" "date" "datetime" "checkbox" "url" "node" "json" "string"]}
+          :validate #{"default" "number" "date" "datetime" "checkbox" "url" "node" "json" "string"}}
    :cardinality {:desc "Property cardinality"
-                 :values ["one" "many"]}
+                 :validate #{"one" "many"}}
    :hide {:desc "Hide property"
           :coerce :boolean}
    :public {:desc "Set property public visibility"
@@ -70,12 +70,6 @@
                        {:examples ["logseq upsert tag --graph my-graph --name project"]})
    (core/command-entry ["upsert" "property"] :upsert-property "Upsert property" upsert-property-spec
                        {:examples ["logseq upsert property --graph my-graph --name status --type default --cardinality one"]})])
-
-(def ^:private property-types
-  #{"default" "number" "date" "datetime" "checkbox" "url" "node" "json" "string"})
-
-(def ^:private property-cardinalities
-  #{"one" "many"})
 
 (defn- normalize-tag-name
   [value]
@@ -115,22 +109,10 @@
         (add-command/invalid-options? opts)))
 
     :upsert-property
-    (let [type' (normalize-property-type (:type opts))
-          cardinality' (normalize-property-cardinality (:cardinality opts))
-          name (normalize-property-name (:name opts))
+    (let [name (normalize-property-name (:name opts))
           selectors (filter some? [(:id opts) name])]
-      (cond
-        (> (count selectors) 1)
-        "only one of --id or --name is allowed"
-
-        (and (seq (:type opts)) (not (contains? property-types type')))
-        (str "invalid type: " (:type opts))
-
-        (and (seq (:cardinality opts)) (not (contains? property-cardinalities cardinality')))
-        (str "invalid cardinality: " (:cardinality opts))
-
-        :else
-        nil))
+      (when (> (count selectors) 1)
+        "only one of --id or --name is allowed"))
 
     :upsert-page
     (let [page (some-> (:page opts) string/trim)
