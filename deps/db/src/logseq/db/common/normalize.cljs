@@ -42,12 +42,15 @@
                       (sort-by first))]
     (mapcat
      (fn [[_e datoms]]
-       (if-let [d (some (fn [d]
-                          (when (and (= :block/uuid (:a d))
-                                     (false? (:added d))
-                                     (nil? (d/entity db-after [:block/uuid (:v d)])))
-                            d)) datoms)]  ; retract entity
-         [[:db/retractEntity [:block/uuid (:v d)]]]
+       (if-let [eid (some (fn [d]
+                            (when (and (= :block/uuid (:a d))
+                                       (false? (:added d)))
+                              (let [entity (d/entity db-after [:block/uuid (:v d)])]
+                                (when (not= (:db/id entity) (:e d)) ; eid changed
+                                  (if entity
+                                    (:e d)
+                                    [:block/uuid (:v d)]))))) datoms)]  ; retract entity
+         [[:db/retractEntity eid]]
          datoms))
      e-datoms)))
 
@@ -132,6 +135,11 @@
                       (if added
                         [:db/add e' a v' t]
                         [:db/retract e' a v' t])))))
-              d)))
+              (when-let [[op e] (and (= 2 (count d))
+                                     (= :db/retractEntity (first d))
+                                     d)]
+                (when-let [e' (or (eid->lookup db-before e)
+                                  e)]
+                  [op e'])))))
          (remove-retract-entity-ref db-after)
          distinct)))

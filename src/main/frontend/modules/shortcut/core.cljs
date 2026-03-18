@@ -11,8 +11,10 @@
             [frontend.storage :as storage]
             [frontend.util :as util]
             [goog.events :as events]
+            [goog.object :as gobj]
             [goog.ui.KeyboardShortcutHandler.EventType :as EventType]
-            [lambdaisland.glogi :as log])
+            [lambdaisland.glogi :as log]
+            [logseq.shui.ui :as shui])
   (:import [goog.events KeyCodes KeyNames]
            [goog.ui KeyboardShortcutHandler]))
 
@@ -78,12 +80,30 @@
          (doseq [k (dh/shortcut-binding id)]
            (try
              (log/debug :shortcut/register-shortcut {:id id :binding k})
-             (.registerShortcut handler (util/keyname id) (shortcut-utils/undecorate-binding k))
+             ;; Defensively clear stale registration before registering.
+             (let [undec-k (shortcut-utils/undecorate-binding k)]
+               (try (.unregisterShortcut handler undec-k)
+                    (catch :default _))
+               (.registerShortcut handler (util/keyname id) undec-k))
              (catch :default e
-               (log/error :shortcut/register-shortcut {:id      id
-                                                       :binding k
-                                                       :error   e})
-               (notification/show! (string/join " " [id k (.-message e)]) :error false)))))))))
+               ;; Closure's KeyboardShortcutHandler throws when a chord prefix
+               ;; collides with an existing key (either direction):
+               ;; - "...shortcut: null" when a simple key meets an existing chord prefix
+               ;; - "...shortcut: <id>" when a chord meets an existing simple key
+               ;; see: google-closure-library goog.ui.KeyboardShortcutHandler setShortcut_
+               (let [chord-prefix? (string/includes? (.-message e)
+                                                     "Keyboard shortcut conflicts with existing shortcut")]
+                 (if chord-prefix?
+                   ;; Chord-prefix tree clash: expected when a simple key and a
+                   ;; chord starting with that key coexist on the same handler.
+                   ;; The chord becomes dormant — no user notification needed.
+                   (log/debug :shortcut/chord-prefix-clash {:id id :binding k})
+                   ;; Unexpected conflict: log full debug info for investigation.
+                   (do
+                     (log/error :shortcut/register-shortcut {:id      id
+                                                             :binding k
+                                                             :error   e})
+                     (notification/show! (string/join " " [id k (.-message e)]) :error false))))))))))))
 
 (defn unregister-shortcut!
   "Unregister a shortcut.
@@ -135,10 +155,21 @@
     (let [f (fn [e]
               (let [id (keyword (.-identifier e))
                     shortcut-map (dh/shortcuts-map-by-handler-id handler-id state) ;; required to get shortcut map dynamically
-                    dispatch-fn (get shortcut-map id)]
+                    dispatch-fn (get shortcut-map id)
+                    binding (dh/shortcut-binding id)]
                 (state/set-state! :editor/latest-shortcut id)
-                ;; trigger fn
-                (when dispatch-fn
+                ;; Trigger animation for visible shortcuts
+                (when binding
+                  (let [bindings (if (coll? binding) binding [binding])]
+                    (doseq [b bindings]
+                      (when b
+                        (try
+                          (shui/shortcut-press! b true)
+                          (catch :default e
+                            (log/warn :shortcut-press-animation-error {:binding b :error e})))))))
+                ;; trigger fn — suppress on keymap settings page (animate-only mode)
+                (when (and dispatch-fn
+                           (not (= "keymap" (.. js/document -body -dataset -settingsTab))))
                   (plugin-handler/hook-lifecycle-fn! id dispatch-fn e))))
           install-id (random-uuid)
           data {install-id
@@ -254,24 +285,97 @@
     (state/pub-event! [:shortcut-handler-refreshed])
     (state/set-state! :ui/shortcut-handler-refreshing? false)))
 
-(defn- name-with-meta [e]
+(def ^:private code->key-name-map
+  "Maps KeyboardEvent.code values to the key-name strings used by key-names.
+   Used as fallback when Closure's KeyHandler corrupts keyCode (e.g. macOS
+   Option+key producing Unicode characters, or AltGr on Windows)."
+  {"Space"        "space"
+   "Enter"        "enter"
+   "Tab"          "tab"
+   "Backspace"    "backspace"
+   "Delete"       "delete"
+   "Escape"       "esc"
+   "ArrowUp"      "up"
+   "ArrowDown"    "down"
+   "ArrowLeft"    "left"
+   "ArrowRight"   "right"
+   "BracketLeft"  "open-square-bracket"
+   "BracketRight" "close-square-bracket"
+   "Semicolon"    "semicolon"
+   "Equal"        "equals"
+   "Minus"        "dash"
+   "Quote"        "single-quote"
+   "Backquote"    "grave-accent"
+   "Backslash"    "backslash"
+   "Comma"        "comma"
+   "Period"       "period"
+   "Slash"        "slash"
+   "PageUp"       "page-up"
+   "PageDown"     "page-down"
+   "Home"         "home"
+   "End"          "end"
+   "Insert"       "insert"
+   "CapsLock"     "caps-lock"
+   "NumpadEnter"  "enter"
+   "NumpadAdd"    "+"
+   "NumpadSubtract" "-"
+   "NumpadMultiply" "*"
+   "NumpadDivide" "/"
+   "Numpad0" "0" "Numpad1" "1" "Numpad2" "2" "Numpad3" "3" "Numpad4" "4"
+   "Numpad5" "5" "Numpad6" "6" "Numpad7" "7" "Numpad8" "8" "Numpad9" "9"})
+
+(defn- code->key-name
+  "Maps a KeyboardEvent.code string to the key-name used by key-names."
+  [code]
+  (when (string? code)
+    (cond
+      ;; KeyA-KeyZ → "a"-"z"
+      (string/starts-with? code "Key")
+      (string/lower-case (subs code 3))
+
+      ;; Digit0-Digit9 → "0"-"9"
+      (string/starts-with? code "Digit")
+      (subs code 5)
+
+      ;; F1-F12
+      (re-matches #"F\d{1,2}" code)
+      (string/lower-case code)
+
+      ;; Everything else via lookup
+      :else
+      (get code->key-name-map code))))
+
+(defn- resolve-key-name
+  "Resolve the key name from a KeyEvent. Tries key-names (keyCode) first,
+   then falls back to code->key-name (native KeyboardEvent.code) when a
+   modifier is held — corrects macOS Option+key corruption and AltGr on Windows."
+  [e]
+  (or (get key-names (str (.-keyCode e)))
+      (when (or (.-altKey e) (.-ctrlKey e) (.-metaKey e))
+        (some-> (gobj/getValueByKeys e "event_" "code")
+                code->key-name))))
+
+(defn- name-with-meta [e resolved-name]
   (let [ctrl (.-ctrlKey e)
         alt (.-altKey e)
         meta (.-metaKey e)
-        shift (.-shiftKey e)
-        keyname (get key-names (str (.-keyCode e)))]
-    (cond->> keyname
-      ctrl (str "ctrl+")
-      alt (str "alt+")
+        shift (.-shiftKey e)]
+    ;; cond->> threads top-to-bottom, so list modifiers in reverse
+    ;; canonical order (ctrl+alt+meta+shift) so the first applied modifier
+    ;; ends up innermost in the final key name
+    (cond->> resolved-name
+      shift (str "shift+")
       meta (str "meta+")
-      shift (str "shift+"))))
+      alt (str "alt+")
+      ctrl (str "ctrl+"))))
 
-(defn keyname [e]
-  (let [name (get key-names (str (.-keyCode e)))]
-    (case name
-      nil nil
-      ("ctrl" "shift" "alt" "esc") nil
-      (str " " (name-with-meta e)))))
+(defn keyname
+  [e]
+  (let [name (resolve-key-name e)]
+    (cond
+      (nil? name) nil
+      (#{"ctrl" "shift" "alt" "meta" "esc"} name) nil
+      :else (str " " (name-with-meta e name)))))
 
 (defn persist-user-shortcut!
   [id binding]
@@ -294,3 +398,29 @@
          :shortcuts (into-shortcuts (:shortcuts (state/get-global-config))))
         ;; web browser platform
         (storage/set :ls-shortcuts (into-shortcuts (storage/get :ls-shortcuts)))))))
+
+(defn persist-user-shortcuts-batch!
+  "Persist multiple shortcut binding changes atomically.
+   changes is a seq of [id binding] pairs where binding is a string, vector,
+   boolean, or nil (nil means remove/reset to default).
+   Reads each config source once, applies all changes, and writes once per source
+   to avoid read-modify-write races between sequential persist-user-shortcut! calls."
+  [changes]
+  (let [apply-changes
+        (fn [shortcuts]
+          (reduce (fn [m [id binding]]
+                    (if (nil? binding)
+                      (dissoc m id)
+                      (if (or (string? binding)
+                              (vector? binding)
+                              (boolean? binding))
+                        (assoc m id binding)
+                        m)))
+                  (or shortcuts {})
+                  changes))]
+    (config-handler/set-config!
+     :shortcuts (apply-changes (:shortcuts (state/get-graph-config))))
+    (if (util/electron?)
+      (global-config-handler/set-global-config-kv!
+       :shortcuts (apply-changes (:shortcuts (state/get-global-config))))
+      (storage/set :ls-shortcuts (apply-changes (storage/get :ls-shortcuts))))))

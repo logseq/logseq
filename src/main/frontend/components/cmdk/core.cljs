@@ -378,9 +378,9 @@
                    files)]
       (swap! !results update group merge {:status :success :items items}))))
 
-(defmethod load-results :themes [group _state]
-  (let [!input (::input _state)
-        !results (::results _state)
+(defmethod load-results :themes [group state]
+  (let [!input (::input state)
+        !results (::results state)
         themes (state/sub :plugin/installed-themes)
         themes (if (string/blank? @!input)
                  themes
@@ -829,10 +829,10 @@
            (if (= show :more)
              [:div.flex.flex-row.gap-1.items-center
               "Show less"
-              (shui/shortcut "mod up" nil)]
+              (shui/shortcut "mod up" {:style :compact})]
              [:div.flex.flex-row.gap-1.items-center
               "Show more"
-              (shui/shortcut "mod down" nil)])])])
+              (shui/shortcut "mod down" {:style :compact})])])])
 
      [:div.search-results
       (for [item visible-items
@@ -947,6 +947,7 @@
         enter? (= keyname "Enter")
         esc? (= keyname "Escape")
         composing? (util/goog-event-is-composing? e)
+        shift? (.-shiftKey e)
         highlighted-group (some-> (state->highlighted-item state) :group)
         show-less (fn []
                     (when highlighted-group
@@ -976,6 +977,10 @@
                     (reset! (::focus-source state) :keyboard)
                     (move-highlight state -1)))
       (and enter? (not composing?)) (do
+                                      (when shift?
+                                        (shui/shortcut-press! "shift+return" true))
+                                      (when-not shift?
+                                        (shui/shortcut-press! "return" true))
                                       (handle-action :default state e)
                                       (util/stop-propagation e))
       esc? (let [filter' @(::filter state)
@@ -998,6 +1003,7 @@
                :else
                (shui/dialog-close! :ls-dialog-cmdk)))
       (and meta? (= keyname "c")) (do
+                                    (shui/shortcut-press! (if util/mac? "cmd+c" "ctrl+c") true)
                                     (copy-block-ref state)
                                     (util/stop-propagation e))
       (and meta? (= keyname "o"))
@@ -1092,7 +1098,7 @@
      (shui/shortcut "/")
      [:div "to filter search results"]]
     [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
-     (shui/shortcut ["mod" "enter"])
+     (shui/shortcut ["mod" "enter"] {:style :combo})
      [:div "to open search in the sidebar"]]]))
 
 (rum/defcs tip <
@@ -1104,7 +1110,7 @@
       filter'
       [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
        [:div "Type"]
-       (shui/shortcut "esc" {:tiled false})
+       (shui/shortcut "esc")
        [:div "to clear search filter"]]
 
       :else
@@ -1120,16 +1126,15 @@
    [[:span.opacity-60 text]
      ;; shortcut
     (when (not-empty shortcut)
-      (for [key shortcut]
-        [:div.ui__button-shortcut-key
-         (case key
-           "cmd" [:div (if util/mac? "⌘" "Ctrl")]
-           "shift" [:div "⇧"]
-           "return" [:div "⏎"]
-           "esc" [:div.tracking-tightest {:style {:transform   "scaleX(0.8) scaleY(1.2) "
-                                                  :font-size   "0.5rem"
-                                                  :font-weight "500"}} "ESC"]
-           (cond-> key (string? key) .toUpperCase))]))]))
+      (let [has-modifier? (and (coll? shortcut)
+                               (some #(#{"shift" "ctrl" "alt" "cmd" "mod" "⌘" "⌥" "⌃"}
+                                       (string/lower-case (str %)))
+                                     shortcut))
+            style (if (and (> (count shortcut) 1) has-modifier?)
+                    :combo
+                    :auto)]
+        (shui/shortcut shortcut {:style style
+                                 :aria-hidden? true})))]))
 
 (rum/defc hints
   [state]

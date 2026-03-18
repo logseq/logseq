@@ -19,21 +19,23 @@
   - Optional keepalive; server replies `pong`.
 
 ## Server -> Client
-- `{"type":"hello","t":<t>}`
-  - Server hello with current t.
+- `{"type":"hello","t":<t>,"checksum":"<hex>"}`
+  - Server hello with current t and entity checksum.
 - `{"type":"online-users","online-users":[{"user-id":"...","email":"...","username":"...","name":"..."}...]}`
   - Presence update
   - Optional `editing-block-uuid` indicates the block the user is editing.
-- `{"type":"pull/ok","t":<t>,"txs":[{"t":<t>,"tx":"<tx-transit>"}...]}`
-  - Pull response with txs.
-- `{"type":"tx/batch/ok","t":<t>}`
-  - Batch accepted; server advanced to t.
+- `{"type":"pull/ok","t":<t>,"checksum":"<hex>","txs":[{"t":<t>,"tx":"<tx-transit>"}...]}`
+  - Pull response with txs and post-apply entity checksum.
+- `{"type":"tx/batch/ok","t":<t>,"checksum":"<hex>"}`
+  - Batch accepted; server advanced to t and returns the resulting entity checksum.
 - `{"type":"changed","t":<t>}`
   - Broadcast that server state advanced; client should pull.
 - `{"type":"tx/reject","reason":"stale","t":<t>}`
   - Client tx is based on stale t.
 - `{"type":"tx/reject","reason":"cycle","data":"<transit {:attr <kw> :server-values ...}>"}`
   - Cycle detected with server values.
+- `{"type":"tx/reject","reason":"db transact failed","t":<t>,"data":"<transit {:tx \"<tx-transit>\" :outliner-op ...}>"}`
+  - Server-side transact/validation failed for one tx entry in the batch; `data` echoes the rejected tx entry for debugging.
 - `{"type":"tx/reject","reason":"empty tx data"|"invalid tx"|"invalid t-before"}`
   - Invalid batch.
 - `{"type":"pong"}`
@@ -52,9 +54,10 @@
 
 ### Graphs (index DO)
 - `GET /graphs`
-  - List graphs the user owns. Response: `{"graphs":[{graph-id, graph-name, schema-version?, created-at, updated-at}...]}`.
+  - List graphs the user owns. Response: `{"graphs":[{graph-id, graph-name, schema-version?, graph-ready-for-use?, created-at, updated-at}...]}`.
 - `POST /graphs`
-  - Create graph. Body: `{"graph-name":"...","schema-version":"<major>"}` (schema-version optional). Response: `{"graph-id":"..."}`.
+  - Create graph. Body: `{"graph-name":"...","schema-version":"<major>"}` (schema-version optional). Response: `{"graph-id":"...","graph-ready-for-use?":false}`.
+  - `graph-ready-for-use?` is persisted in the D1 `graphs` row. Existing graphs default to `true`; bootstrap uploads flip it to `false` until the final snapshot upload request completes.
 - `GET /graphs/:graph-id/access`
   - Access check. Response: `{"ok":true}`, `401` (unauthorized), `403` (forbidden), or `404` (not found).
 - `GET /graphs/:graph-id/members`
@@ -84,18 +87,21 @@
 - `GET /sync/:graph-id/health`
   - Health check. Response: `{"ok":true}`.
 - `GET /sync/:graph-id/pull?since=<t>`
-  - Same as WS pull. Response: `{"type":"pull/ok","t":<t>,"txs":[{"t":<t>,"tx":"<tx-transit>"}...]}`.
+  - Same as WS pull. Response: `{"type":"pull/ok","t":<t>,"checksum":"<hex>","txs":[{"t":<t>,"tx":"<tx-transit>"}...]}`.
   - Error response (400): `{"error":"invalid since"}`.
+  - Error response (409): `{"error":"graph not ready"}` when bootstrap upload/import has not finished.
 - `POST /sync/:graph-id/tx/batch`
   - Same as WS tx/batch. Body: `{"t-before":<t>,"txs":["<tx-transit>", ...]}`.
-  - Response: `{"type":"tx/batch/ok","t":<t>}` or `{"type":"tx/reject","reason":...}`.
+  - Response: `{"type":"tx/batch/ok","t":<t>,"checksum":"<hex>"}` or `{"type":"tx/reject","reason":...}`.
   - Error response (400): `{"error":"missing body"|"invalid tx"}`.
+  - Error response (409): `{"error":"graph not ready"}` when bootstrap upload/import has not finished.
 - `GET /sync/:graph-id/snapshot/download`
   - Build a snapshot file in R2 and return a download URL.
   - Response: `{"ok":true,"key":"<graph-id>/<uuid>.snapshot","url":"<origin>/assets/:graph-id/<uuid>.snapshot","content-encoding":"gzip"}`.
-  - The snapshot file is a framed Transit JSON stream of kvs rows, optionally gzip-compressed.
+  - Error response (409): `{"error":"graph not ready"}` when bootstrap upload/import has not finished.
+  - The snapshot file stored in R2 is a gzip-compressed NDJSON stream of full Datascript datoms. Each line is a Transit JSON datom map: `{e,a,v,tx,added}`.
 - `POST /sync/:graph-id/snapshot/upload?reset=true|false`
-  - Upload a snapshot stream (framed Transit JSON, optionally gzip-compressed). The server imports rows into kvs.
+  - Upload a snapshot stream for bootstrap import. Current upload format remains framed Transit JSON kvs rows, optionally gzip-compressed.
   - Request body: binary stream; headers should include `content-type: application/transit+json` and `content-encoding: gzip` when compressed.
   - Response: `{"ok":true,"count":<n>,"key":"<graph-id>/<uuid>.snapshot"}`.
   - Error response (400): `{"error":"missing body"|"missing graph id"}`.

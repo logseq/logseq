@@ -22,7 +22,7 @@
     [:tr
      [:td.text-left (t :help/search)]
      [:td.text-right [:div.float-right
-                      (shui/shortcut ["mod" "k"] nil)]]]
+                      (shui/shortcut ["mod" "k"])]]]
     [:tr
      [:td.text-left (t :help/reference-autocomplete)]
      [:td.text-right [:code page-ref/left-and-right-brackets]]]

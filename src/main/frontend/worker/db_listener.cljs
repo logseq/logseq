@@ -8,9 +8,7 @@
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
-            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.outliner.batch-tx :as batch-tx]
             [promesa.core :as p]))
 
 (defmulti listen-db-changes
@@ -20,7 +18,8 @@
   "Return tx-report"
   [repo conn {:keys [tx-meta] :as tx-report}]
   (when repo (worker-state/set-db-latest-tx-time! repo))
-  (when-not (:rtc-download-graph? tx-meta)
+  (when-not (or (:rtc-download-graph? tx-meta)
+                (:mark-embedding? tx-meta))
     (let [{:keys [from-disk?]} tx-meta
           result (worker-pipeline/invoke-hooks conn tx-report (worker-state/get-context))
           tx-report' (:tx-report result)]
@@ -68,9 +67,10 @@
                                                         (:e datom))) tx-data)
                                       ;; Mark block embedding to be computed
                                     (map (fn [id] [:db/add id :logseq.property.embedding/hnsw-label-updated-at 0])))
-        tx-data (concat remove-old-hnsw-tx-data mark-embedding-tx-data)]
+        tx-data' (concat remove-old-hnsw-tx-data mark-embedding-tx-data)]
     (when (seq tx-data)
-      (ldb/transact! conn tx-data {:skip-validate-db? true}))))
+      (ldb/transact! conn tx-data' {:skip-validate-db? true
+                                    :mark-embedding? true}))))
 
 (defn listen-db-changes!
   [repo conn & {:keys [handler-keys]}]
@@ -81,47 +81,15 @@
         (or (nil? handler-keys)
             (contains? (set handler-keys) :sync-db-to-main-thread))]
     (d/unlisten! conn ::listen-db-changes!)
-    (let [*batch-all-txs (volatile! [])
-          get-batch-txs #(->> @*batch-all-txs
-                              (sort-by :tx)
-                              (common-util/distinct-by-last-wins (fn [[e a v _tx added]] [e a v added])))]
-      (d/listen! conn ::listen-db-changes!
-                 (fn listen-db-changes!-inner
-                   [{:keys [tx-data _db-before _db-after tx-meta] :as tx-report}]
-                   (remove-old-embeddings-and-reset-new-updates! conn tx-data tx-meta)
-
-                   (let [tx-meta (merge (batch-tx/get-batch-opts) tx-meta)
-                         in-batch-tx-mode? (:batch-tx/batch-tx-mode? tx-meta)]
-                     (when in-batch-tx-mode?
-                       (batch-tx/set-batch-opts tx-meta))
-                     (cond
-                       (and in-batch-tx-mode?
-                            (not (:batch-tx/exit? tx-meta)))
-                         ;; still in batch mode
-                       (vswap! *batch-all-txs into tx-data)
-
-                       in-batch-tx-mode?
-                         ;; exit batch mode
-                       (when-let [tx-data (not-empty (get-batch-txs))]
-                         (vreset! *batch-all-txs [])
-                         (let [db-before (batch-tx/get-batch-db-before)
-                               tx-meta (dissoc tx-meta :batch-tx/batch-tx-mode? :batch-tx/exit?)
-                               tx-report (assoc tx-report
-                                                :tx-data tx-data
-                                                :db-before db-before
-                                                :tx-meta tx-meta)
-                               tx-report' (if sync-db-to-main-thread?
-                                            (sync-db-to-main-thread repo conn tx-report)
-                                            tx-report)
-                               opt {:repo repo}]
-                           (doseq [[k handler-fn] handlers]
-                             (handler-fn k opt tx-report'))))
-
-                       (seq tx-data)
-                         ;; raw transact
-                       (let [tx-report' (if sync-db-to-main-thread?
-                                          (sync-db-to-main-thread repo conn tx-report)
-                                          tx-report)
-                             opt {:repo repo}]
-                         (doseq [[k handler-fn] handlers]
-                           (handler-fn k opt tx-report'))))))))))
+    (d/listen! conn ::listen-db-changes!
+               (fn listen-db-changes!-inner
+                 [{:keys [tx-data tx-meta] :as tx-report}]
+                 (remove-old-embeddings-and-reset-new-updates! conn tx-data tx-meta)
+                 (when (and (seq tx-data) (not (:mark-embedding? tx-meta)))
+                   (let [tx-report' (if sync-db-to-main-thread?
+                                      (sync-db-to-main-thread repo conn tx-report)
+                                      tx-report)
+                         opt {:repo repo}]
+                     (db-sync/update-local-sync-checksum! repo tx-report')
+                     (doseq [[k handler-fn] handlers]
+                       (handler-fn k opt tx-report'))))))))

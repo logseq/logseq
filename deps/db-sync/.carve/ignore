@@ -16,8 +16,9 @@ logseq.db-sync.protocol/datoms->wire
 logseq.db-sync.protocol/datoms->wire
 ;; debugging
 logseq.db-sync.sentry.node/capture-exception!
-;; Used?
+;; API
 logseq.db-sync.snapshot/framed-length
+logseq.db-sync.snapshot/finalize-datoms-jsonl-buffer
 ;; API
 logseq.db-sync.worker/worker
 ;; debugging
