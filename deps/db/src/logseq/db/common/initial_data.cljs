@@ -343,9 +343,10 @@
         user-datoms (get-all-user-datoms db)
         pages-datoms (let [contents-id (get-first-page-by-title db "Contents")
                            capture-page-id (:db/id (db-db/get-built-in-page db common-config/quick-add-page-name))
-                           views-id (get-first-page-by-title db common-config/views-page-name)]
+                           views-id (get-first-page-by-title db common-config/views-page-name)
+                           recycle-id (get-first-page-by-title db "Recycle")]
                        (mapcat #(d/datoms db :eavt %)
-                               (remove nil? [contents-id capture-page-id views-id])))
+                               (remove nil? [contents-id capture-page-id views-id recycle-id])))
         data (->> (concat idents
                           structured-datoms
                           user-datoms

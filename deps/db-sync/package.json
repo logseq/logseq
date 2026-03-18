@@ -6,6 +6,8 @@
     "dev": "cd ./worker && npx wrangler dev",
     "watch": "clojure -M:cljs watch db-sync",
     "release": "clojure -M:cljs release db-sync",
+    "delete-graphs-for-user": "node worker/scripts/delete_graphs_for_user.js",
+    "show-graphs-for-user": "node worker/scripts/show_graphs_for_user.js",
     "build:node-adapter": "clojure -M:cljs release db-sync-node",
     "dev:node-adapter": "clojure -M:cljs watch db-sync-node",
     "start:node-adapter": "node worker/dist/node-adapter.js",

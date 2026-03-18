@@ -22,17 +22,22 @@
     #js {:exec (fn [sql & args]
                  (cond
                    (string/includes? sql "insert into tx_log")
-                   (let [[t tx created-at] args]
-                     (swap! state update :tx-log assoc t {:t t :tx tx :created-at created-at})
+                   (let [[t tx created-at outliner-op] args]
+                     (swap! state update :tx-log assoc t {:t t
+                                                          :tx tx
+                                                          :created-at created-at
+                                                          :outliner-op outliner-op})
                      nil)
 
-                   (string/includes? sql "select t, tx from tx_log")
+                   (string/includes? sql "select t, tx, outliner_op from tx_log")
                    (let [since (first args)
                          rows (->> (:tx-log @state)
                                    vals
                                    (filter (fn [row] (> (:t row) since)))
                                    (sort-by :t)
-                                   (map (fn [row] {:t (:t row) :tx (:tx row)})))]
+                                   (map (fn [row] {:t (:t row)
+                                                   :tx (:tx row)
+                                                   :outliner-op (:outliner-op row)})))]
                      (js-rows rows))
 
                    (string/includes? sql "insert into sync_meta")

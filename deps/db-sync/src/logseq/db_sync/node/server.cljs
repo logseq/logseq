@@ -126,12 +126,13 @@
                  (p/let [allowed? (access-allowed? env graph-id request)]
                    (if allowed?
                      (let [ctx (graph/get-or-create-graph registry deps graph-id)]
-                       (if (sync-handler/ready-for-sync? ctx)
-                         (.handleUpgrade wss req socket head
-                                         (fn [ws-socket]
-                                           (attach-ws! ctx ws-socket)
-                                           (handle-ws-connection ctx env request ws-socket)))
-                         (reject-ws-upgrade! socket 409 "snapshot upload in progress")))
+                       (p/let [ready-for-sync? (sync-handler/<ready-for-sync? ctx graph-id)]
+                         (if ready-for-sync?
+                           (.handleUpgrade wss req socket head
+                                           (fn [ws-socket]
+                                             (attach-ws! ctx ws-socket)
+                                             (handle-ws-connection ctx env request ws-socket)))
+                           (reject-ws-upgrade! socket 409 "graph not ready"))))
                      (.destroy socket)))
                  (.destroy socket)))))
       (p/let [_ (js/Promise.

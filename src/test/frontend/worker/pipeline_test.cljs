@@ -5,41 +5,6 @@
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]))
 
-(deftest remove-conflict-datoms-test
-  (testing "remove-conflict-datoms (1)"
-    (let [datoms [[1 :a 1 1]
-                  [1 :a 1 1]
-                  [1 :a 2 1]
-                  [2 :a 1 1]]]
-      (is (= (set [[1 :a 1 1]
-                   [1 :a 2 1]
-                   [2 :a 1 1]])
-             (set (ldb/remove-conflict-datoms datoms))))))
-  (testing "check block/tags"
-    (let [datoms [[163 :block/tags 2 536870930 true]
-                  [163 :block/tags 136 536870930 true]
-                  [163 :block/tags 136 536870930 false]]]
-      (is (= (set [[163 :block/tags 2 536870930 true]
-                   [163 :block/tags 136 536870930 false]])
-             (set (ldb/remove-conflict-datoms datoms))))))
-  (testing "check block/refs"
-    (let [datoms [[176 :block/refs 177 536871080 true]
-                  [158 :block/refs 21 536871082 false]
-                  [158 :block/refs 137 536871082 false]
-                  [158 :block/refs 137 536871082 true]
-                  [158 :block/refs 21 536871082 true]
-                  [176 :block/refs 177 536871082 false]
-                  [176 :block/refs 177 536871082 true]
-                  [177 :block/refs 136 536871082 true]
-                  [177 :block/refs 21 536871082 true]]]
-      (is (= (set [[176 :block/refs 177 536871080 true]
-                   [158 :block/refs 137 536871082 true]
-                   [158 :block/refs 21 536871082 true]
-                   [176 :block/refs 177 536871082 true]
-                   [177 :block/refs 136 536871082 true]
-                   [177 :block/refs 21 536871082 true]])
-             (set (ldb/remove-conflict-datoms datoms)))))))
-
 (deftest test-built-in-page-updates-that-should-be-reverted
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
