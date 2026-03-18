@@ -239,8 +239,8 @@
       (missing-query-result summary)
 
       (and (#{:list-page :list-tag :list-property} command)
-           (list-command/invalid-options? command opts))
-      (command-core/invalid-options-result summary (list-command/invalid-options? command opts))
+           (list-command/invalid-options? opts))
+      (command-core/invalid-options-result summary (list-command/invalid-options? opts))
 
       (and (#{:remove-block :remove-page :remove-tag :remove-property} command)
            (remove-command/invalid-options? command opts))
@@ -255,21 +255,11 @@
       (and (= command :graph-export) (not (seq (:file opts))))
       (missing-file-result summary)
 
-      (and (= command :graph-export)
-           (not (contains? (graph-command/import-export-types)
-                           (graph-command/normalize-import-export-type (:type opts)))))
-      (command-core/invalid-options-result summary (str "invalid type: " (:type opts)))
-
       (and (= command :graph-import) (not (seq (graph-command/normalize-import-export-type (:type opts)))))
       (missing-type-result summary)
 
       (and (= command :graph-import) (not (seq (:input opts))))
       (missing-input-result summary)
-
-      (and (= command :graph-import)
-           (not (contains? (graph-command/import-export-types)
-                           (graph-command/normalize-import-export-type (:type opts)))))
-      (command-core/invalid-options-result summary (str "invalid type: " (:type opts)))
 
       (and (#{:server-status :server-start :server-stop :server-restart} command)
            (not (seq (:graph opts))))

@@ -9,7 +9,7 @@
     (let [entry (first completion-command/entries)]
       (is (= ["completion"] (:cmds entry)))
       (is (= :completion (:command entry)))
-      (is (= ["zsh" "bash"] (get-in entry [:spec :shell :values])))))
+      (is (= #{"zsh" "bash"} (get-in entry [:spec :shell :validate])))))
   (testing "completion entry has long-desc with setup instructions"
     (let [entry (first completion-command/entries)]
       (is (some? (:long-desc entry)))

@@ -20,7 +20,6 @@
    :sort {:desc "Sort field. Default: updated-at"
           :alias :s}
    :order {:desc "Sort order. Default: asc"
-           :values ["asc" "desc"]
            :validate #{"asc" "desc"}}})
 
 (def ^:private default-sort-field "updated-at")
@@ -42,8 +41,7 @@
   (merge-with
    merge
    list-common-spec
-   {:sort {:values (set (keys list-page-field-map))
-           :validate (set (keys list-page-field-map))}
+   {:sort {:validate (set (keys list-page-field-map))}
     :fields {:multiple-values (keys list-page-field-map)}
     :include-built-in {:desc "Include built-in pages"}
     :include-journal {:desc "Include journal pages"
@@ -71,8 +69,7 @@
   (merge-with
    merge
    list-common-spec
-   {:sort {:values (set (keys list-tag-field-map))
-           :validate (set (keys list-tag-field-map))}
+   {:sort {:validate (set (keys list-tag-field-map))}
     :fields {:multiple-values (keys list-tag-field-map)}
     :include-built-in {:desc "Include built-in tags"}
     :with-properties {:desc "Include tag properties"
@@ -96,8 +93,7 @@
   (merge-with
    merge
    list-common-spec
-   {:sort {:values (set (keys list-property-field-map))
-           :validate (set (keys list-property-field-map))}
+   {:sort {:validate (set (keys list-property-field-map))}
     :fields {:multiple-values (keys list-property-field-map)}
     :include-built-in {:desc "Include built-in properties"}
     :with-classes {:desc "Include property classes"
@@ -116,13 +112,10 @@
                        {:examples ["logseq list property --graph my-graph --with-type"]})])
 
 (defn invalid-options?
-  [command opts]
+  [opts]
   (let [{:keys [include-journal journal-only]} opts]
-    (cond
-      (and include-journal journal-only)
-      "include-journal and journal-only are mutually exclusive"
-
-      :else nil)))
+    (when (and include-journal journal-only)
+      "include-journal and journal-only are mutually exclusive")))
 
 (defn build-action
   [command options repo]

@@ -23,7 +23,7 @@
                 :coerce :long}
    :output {:desc "Output format. Default: human"
             :alias :o
-            :values ["human" "json" "edn"]}
+            :validate #{"human" "json" "edn"}}
    :verbose {:desc "Enable verbose debug logging to stderr"
              :alias :v
              :coerce :boolean}})

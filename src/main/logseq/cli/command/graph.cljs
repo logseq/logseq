@@ -11,13 +11,15 @@
 
 (def ^:private graph-export-spec
   {:type {:desc "Export type"
-          :values ["edn" "sqlite"]}
+          :alias :t
+          :validate #{"edn" "sqlite"}}
    :file {:desc "Export file path"
           :complete :file}})
 
 (def ^:private graph-import-spec
   {:type {:desc "Import type"
-          :values ["edn" "sqlite"]}
+          :alias :t
+          :validate #{"edn" "sqlite"}}
    :input {:desc "Input path"
            :complete :file}})
 
@@ -44,9 +46,6 @@
    (core/command-entry ["graph" "import"] :graph-import "Import graph" graph-import-spec
                        {:examples ["logseq graph import --graph my-graph --type edn --input /tmp/my-graph.edn"]})])
 
-(def ^:private import-export-types*
-  #{"edn" "sqlite"})
-
 (def ^:private graph-info-kv-query
   '[:find ?ident ?value
     :where
@@ -54,10 +53,6 @@
     [(namespace ?ident) ?ns]
     [(= "logseq.kv" ?ns)]
     [?e :kv/value ?value]])
-
-(defn import-export-types
-  []
-  import-export-types*)
 
 (defn normalize-import-export-type
   [value]

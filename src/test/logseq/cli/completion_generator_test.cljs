@@ -30,8 +30,8 @@
 
 (deftest test-global-spec-metadata
   (let [spec (core/global-spec)]
-    (testing ":output has :values"
-      (is (= ["human" "json" "edn"] (get-in spec [:output :values]))))
+    (testing ":output has :validate set"
+      (is (= #{"human" "json" "edn"} (get-in spec [:output :validate]))))
     (testing ":graph has :complete :graphs"
       (is (= :graphs (get-in spec [:graph :complete]))))
     (testing ":config has :complete :file"
@@ -45,14 +45,14 @@
         tag-entry (first (filter #(= :list-tag (:command %)) entries))
         property-entry (first (filter #(= :list-property (:command %)) entries))]
     (testing "page-spec :sort has some correct values"
-      (is (contains? (get-in page-entry [:spec :sort :values]) "title")))
+      (is (contains? (get-in page-entry [:spec :sort :validate]) "title")))
     (testing "tag-spec :sort has some correct values"
-      (is (contains? (get-in tag-entry [:spec :sort :values]) "title")))
+      (is (contains? (get-in tag-entry [:spec :sort :validate]) "title")))
     (testing "property-spec :sort has some correct values"
-      (is (contains? (get-in property-entry [:spec :sort :values]) "title")))
+      (is (contains? (get-in property-entry [:spec :sort :validate]) "title")))
     (testing "common :order has correct values"
-      (is (= ["asc" "desc"]
-             (get-in page-entry [:spec :order :values]))))
+      (is (= #{"asc" "desc"}
+             (get-in page-entry [:spec :order :validate]))))
     (testing "tag-spec :fields has :multiple-values"
       (let [mv (get-in tag-entry [:spec :fields :multiple-values])]
         (is (seq mv))
@@ -64,34 +64,34 @@
         block-entry (first (filter #(= :upsert-block (:command %)) entries))
         page-entry (first (filter #(= :upsert-page (:command %)) entries))
         property-entry (first (filter #(= :upsert-property (:command %)) entries))]
-    (testing "block-spec :pos has :values"
-      (is (= ["first-child" "last-child" "sibling"]
-             (get-in block-entry [:spec :pos :values]))))
-    (testing "block-spec :status has :values"
-      (is (seq (get-in block-entry [:spec :status :values]))))
+    (testing "block-spec :pos has :validate set"
+      (is (= #{"first-child" "last-child" "sibling"}
+             (get-in block-entry [:spec :pos :validate]))))
+    (testing "block-spec :status has :validate set"
+      (is (seq (get-in block-entry [:spec :status :validate]))))
     (testing "block-spec :target-page has :complete :pages"
       (is (= :pages (get-in block-entry [:spec :target-page :complete]))))
     (testing "block-spec :blocks-file has :complete :file"
       (is (= :file (get-in block-entry [:spec :blocks-file :complete]))))
     (testing "page-spec :page has :complete :pages"
       (is (= :pages (get-in page-entry [:spec :page :complete]))))
-    (testing "property-spec :type has :values"
-      (is (= ["default" "number" "date" "datetime" "checkbox" "url" "node" "json" "string"]
-             (get-in property-entry [:spec :type :values]))))
-    (testing "property-spec :cardinality has :values"
-      (is (= ["one" "many"]
-             (get-in property-entry [:spec :cardinality :values]))))))
+    (testing "property-spec :type has :validate set"
+      (is (= #{"default" "number" "date" "datetime" "checkbox" "url" "node" "json" "string"}
+             (get-in property-entry [:spec :type :validate]))))
+    (testing "property-spec :cardinality has :validate set"
+      (is (= #{"one" "many"}
+             (get-in property-entry [:spec :cardinality :validate]))))))
 
 (deftest test-graph-spec-metadata
   (let [entries graph-command/entries
         export-entry (first (filter #(= :graph-export (:command %)) entries))
         import-entry (first (filter #(= :graph-import (:command %)) entries))]
-    (testing "export-spec :type has :values"
-      (is (= ["edn" "sqlite"] (get-in export-entry [:spec :type :values]))))
+    (testing "export-spec :type has :validate set"
+      (is (= #{"edn" "sqlite"} (get-in export-entry [:spec :type :validate]))))
     (testing "export-spec :file has :complete :file"
       (is (= :file (get-in export-entry [:spec :file :complete]))))
-    (testing "import-spec :type has :values"
-      (is (= ["edn" "sqlite"] (get-in import-entry [:spec :type :values]))))
+    (testing "import-spec :type has :validate set"
+      (is (= #{"edn" "sqlite"} (get-in import-entry [:spec :type :validate]))))
     (testing "import-spec :input has :complete :file"
       (is (= :file (get-in import-entry [:spec :input :complete]))))))
 
@@ -156,10 +156,10 @@
   (testing "boolean spec → :flag type"
     (let [token (gen/spec->token [:help {:coerce :boolean :desc "Show help"}])]
       (is (= :flag (:type token)))))
-  (testing "spec with :values → :enum type"
-    (let [token (gen/spec->token [:output {:values ["human" "json" "edn"] :desc "Format"}])]
+  (testing "spec with :validate set → :enum type"
+    (let [token (gen/spec->token [:output {:validate #{"human" "json" "edn"} :desc "Format"}])]
       (is (= :enum (:type token)))
-      (is (= ["human" "json" "edn"] (:values token)))))
+      (is (= ["edn" "human" "json"] (:values token)))))
   (testing "spec with :complete :graphs → :dynamic type"
     (let [token (gen/spec->token [:graph {:complete :graphs :desc "Graph name"}])]
       (is (= :dynamic (:type token)))
@@ -179,10 +179,7 @@
   (testing "spec with :multiple-values → :multi type"
     (let [token (gen/spec->token [:fields {:desc "Fields" :multiple-values ["id" "title" "uuid"]}])]
       (is (= :multi (:type token)))
-      (is (= ["id" "title" "uuid"] (:values token)))))
-  (testing ":multiple-values takes precedence over :values"
-    (let [token (gen/spec->token [:fields {:multiple-values ["a" "b"] :values ["x" "y"]}])]
-      (is (= :multi (:type token))))))
+      (is (= ["id" "title" "uuid"] (:values token))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Phase 3 — Zsh output
@@ -215,8 +212,8 @@
       (is (not (string/includes? output "--no-verbose")))
       (is (not (string/includes? output "--no-help"))))
     (testing "enum options emit separate long= and short+ specs"
-      (is (string/includes? output "--output=[Output format. Default: human]:value:(human json edn)'"))
-      (is (string/includes? output "-o[Output format. Default: human]:value:(human json edn)'")))
+      (is (string/includes? output "--output=[Output format. Default: human]:value:(edn human json)'"))
+      (is (string/includes? output "-o[Output format. Default: human]:value:(edn human json)'")))
     (testing ":complete :graphs emits separate long= and short+ specs"
       (is (string/includes? output "--graph=[Graph name]:value:_logseq_graphs'"))
       (is (string/includes? output "-g[Graph name]:value:_logseq_graphs'")))
@@ -302,7 +299,7 @@
       (is (not (string/includes? output "--no-verbose")))
       (is (not (string/includes? output "--no-help"))))
     (testing "enum values use compgen -W"
-      (is (re-find #"compgen -W.*human json edn" output)))
+      (is (re-find #"compgen -W.*edn human json" output)))
     (testing ":complete :file uses compgen -f"
       (is (re-find #"compgen -f" output)))))
 
@@ -324,9 +321,9 @@
       (is (= ["completion"] (:cmds (first entries)))))
     (testing "command is :completion"
       (is (= :completion (:command (first entries)))))
-    (testing "spec has :shell with :values"
-      (is (= ["zsh" "bash"]
-             (get-in (first entries) [:spec :shell :values]))))))
+    (testing "spec has :shell with :validate set"
+      (is (= #{"zsh" "bash"}
+             (get-in (first entries) [:spec :shell :validate]))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Phase 6 — End-to-end validation
@@ -379,7 +376,8 @@
       (is (string/includes? output "compgen -W 'edn sqlite'")))
     (testing "--type completes with property types under upsert property context"
       (is (string/includes? output "upsert' && \"$__subcmd\" == 'property'"))
-      (is (string/includes? output "compgen -W 'default number")))
+      (is (string/includes? output "compgen -W 'checkbox date datetime default json node number string url'")))
+
     (testing "--type does NOT have a context-free case (simple COMPREPLY after --type)"
       ;; --type should be in context-dependent if-blocks, not a simple case
       (let [type-section (second (string/split output #"--type\)"))]
