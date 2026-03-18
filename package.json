@@ -99,7 +99,6 @@
         "cljs:lint": "clojure -M:clj-kondo --parallel --lint src --cache false",
         "ios:dev": "cross-env PLATFORM=ios gulp cap",
         "android:dev": "cross-env PLATFORM=android gulp cap",
-        "amplify:build": "yarn --cwd packages/amplify install",
         "ui:build": "yarn --cwd packages/ui install",
         "postinstall": "yarn ui:build"
     },
