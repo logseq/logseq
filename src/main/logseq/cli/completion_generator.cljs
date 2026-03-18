@@ -46,7 +46,8 @@
   (let [alias (:alias spec-map)
         desc (or (:desc spec-map) "")
         coerce (:coerce spec-map)
-        values (:values spec-map)
+        validate (:validate spec-map)
+        values (if (set? validate) validate (:values spec-map))
         multiple-values (:multiple-values spec-map)
         complete (:complete spec-map)]
     (cond-> {:key k
@@ -54,7 +55,7 @@
       alias (assoc :alias alias)
       (= coerce :boolean) (assoc :type :flag)
       (and (not= coerce :boolean) (seq multiple-values)) (assoc :type :multi :values (sort multiple-values))
-      (and (not= coerce :boolean) (nil? multiple-values) (seq values)) (assoc :type :enum :values values)
+      (and (not= coerce :boolean) (nil? multiple-values) (seq values)) (assoc :type :enum :values (sort values))
       (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :graphs)) (assoc :type :dynamic :complete :graphs)
       (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :pages)) (assoc :type :dynamic :complete :pages)
       (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :queries)) (assoc :type :dynamic :complete :queries)
@@ -732,9 +733,9 @@ _logseq_multi_values_bash() {
 
 (defn- option-completion-sig
   "Extract completion-relevant signature from a spec-map entry."
-  [{:keys [coerce values multiple-values complete]}]
+  [{:keys [coerce validate values multiple-values complete]}]
   {:flag? (= coerce :boolean)
-   :values values
+   :values (if (set? validate) validate values)
    :multiple-values multiple-values
    :complete complete})
 

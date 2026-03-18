@@ -5,7 +5,7 @@
 
 (def ^:private completion-spec
   {:shell {:desc "Shell (zsh, bash)"
-           :values ["zsh" "bash"]}})
+           :validate #{"zsh" "bash"}}})
 
 (def ^:private long-desc
   (string/join "\n"
