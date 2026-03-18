@@ -104,7 +104,9 @@
     (->> (if plugin?
            (->> (keys dict) (filter #(string/starts-with? (str %) ":plugin.")))
            (shortcut-config/get-category-shortcuts name))
-         (mapv (fn [k] [k (assoc (get dict k) :category name)])))))
+         (keep (fn [k] (when-let [m (get dict k)]
+                         [k (assoc m :category name)])))
+         (vec))))
 
 (defn shortcuts-map-full
   []
@@ -179,51 +181,188 @@
     #{from-handler-id :shortcut.handler/global-prevent-default}
     #{from-handler-id}))
 
+(defn- binding-prefix-overlap?
+  "Returns true when two parsed bindings share the same full prefix up to the
+   shorter binding, but are not exactly equal."
+  [a b]
+  (and (sequential? a)
+       (sequential? b)
+       (not= a b)
+       (let [prefix-len (min (count a) (count b))]
+         (and (pos? prefix-len)
+              (= (take prefix-len a) (take prefix-len b))))))
+
+(defn- handlers-co-active?
+  "Two handler groups conflict (can be active simultaneously) unless one is
+   editing-only and the other is non-editing-only — those are mutually exclusive
+   at runtime."
+  [h1 h2]
+  (let [editing-only     #{:shortcut.handler/editor-global
+                           :shortcut.handler/block-editing-only}
+        non-editing-only #{:shortcut.handler/global-non-editing-only}]
+    (not (or (and (contains? editing-only h1) (contains? non-editing-only h2))
+             (and (contains? non-editing-only h1) (contains? editing-only h2))))))
+
 (defn get-conflicts-by-keys
   ([ks] (get-conflicts-by-keys ks :shortcut.handler/global-prevent-default {:group-global? true}))
   ([ks handler-id] (get-conflicts-by-keys ks handler-id {:group-global? true}))
   ([ks handler-id {:keys [exclude-ids group-global?]}]
    (let [global-handlers #{:shortcut.handler/editor-global
+                           :shortcut.handler/block-editing-only
                            :shortcut.handler/global-non-editing-only
                            :shortcut.handler/global-prevent-default
                            :shortcut.handler/misc}
          ks-bindings (get-bindings-keys-map)
-         handler-ids (should-be-included-to-global-handler handler-id)
+         handler-ids (if group-global?
+                       (should-be-included-to-global-handler handler-id)
+                       #{handler-id})
          global? (when group-global? (seq (set/intersection global-handlers handler-ids)))]
      (->> (if (string? ks) [ks] ks)
           (map (fn [k]
                  (when-let [k' (shortcut-utils/undecorate-binding k)]
-                   (let [k (shortcut-utils/safe-parse-string-binding k')
-                         k (bean/->clj k)
+                   (let [input-binding (bean/->clj (shortcut-utils/safe-parse-string-binding k'))
 
-                         same-leading-key?
+                         same-key?
                          (fn [[k' _]]
-                           (when (sequential? k)
-                             (or (= k k')
-                                 (and (> (count k') (count k))
-                                      (= (first k) (first k'))))))
+                           (when (sequential? input-binding)
+                             (or (= input-binding k')
+                                 (binding-prefix-overlap? input-binding k'))))
 
                          into-conflict-refs
                          (fn [[k o]]
                            (when-let [{:keys [key refs]} o]
                              [k [key (reduce-kv (fn [r id handler-id']
-                                                  (if (and
-                                                       (not (contains? exclude-ids id))
-                                                       (or (= handler-ids #{handler-id'})
-                                                           (and (set? handler-ids) (contains? handler-ids handler-id'))
-                                                           (and global? (contains? global-handlers handler-id'))))
-                                                    (assoc r id handler-id')
-                                                    r))
+                                                  (let [same-handler? (= handler-id handler-id')
+                                                        handler-match?
+                                                        (or same-handler?
+                                                            (and group-global?
+                                                                 (or (= handler-ids #{handler-id'})
+                                                                     (and (set? handler-ids) (contains? handler-ids handler-id'))
+                                                                     (and global?
+                                                                          (contains? global-handlers handler-id')
+                                                                          (every? #(handlers-co-active? % handler-id') handler-ids)))))
+                                                        binding-match?
+                                                        (or (= input-binding k)
+                                                            (and same-handler?
+                                                                 (binding-prefix-overlap? input-binding k)))]
+                                                    (if (and (not (contains? exclude-ids id))
+                                                             handler-match?
+                                                             binding-match?)
+                                                      (assoc r id handler-id')
+                                                      r)))
                                                 {} refs)]]))]
 
                      [k' (->> ks-bindings
-                              (filterv same-leading-key?)
+                              (filterv same-key?)
                               (mapv into-conflict-refs)
                               (remove #(empty? (second (second %1))))
                               (into {}))]))))
 
           (remove #(empty? (vals (second %1))))
           (into {})))))
+
+(def handler-display-labels
+  {:shortcut.handler/block-editing-only      "editing mode"
+   :shortcut.handler/editor-global           "editor"
+   :shortcut.handler/global-prevent-default  "global"
+   :shortcut.handler/global-non-editing-only "navigation"
+   :shortcut.handler/misc                    "global"
+   :shortcut.handler/pdf                     "PDF viewer"
+   :shortcut.handler/auto-complete           "autocomplete"
+   :shortcut.handler/cards                   "flashcards"
+   :shortcut.handler/date-picker             "date picker"})
+
+(defn get-cross-context-conflicts
+  "Like get-conflicts-by-keys but returns conflicts from OTHER handler contexts only.
+   Used for non-blocking amber warnings when a key is shared across contexts."
+  [ks handler-id {:keys [exclude-ids]}]
+  (let [global-handlers #{:shortcut.handler/editor-global
+                          :shortcut.handler/block-editing-only
+                          :shortcut.handler/global-non-editing-only
+                          :shortcut.handler/global-prevent-default
+                          :shortcut.handler/misc}
+        ks-bindings (get-bindings-keys-map)
+        caller-handlers (should-be-included-to-global-handler handler-id)
+        caller-is-global? (seq (set/intersection global-handlers caller-handlers))]
+    (->> (if (string? ks) [ks] ks)
+         (map (fn [k]
+                (when-let [k' (shortcut-utils/undecorate-binding k)]
+                  (let [k-parsed (bean/->clj (shortcut-utils/safe-parse-string-binding k'))
+
+                        same-key?
+                        (fn [[k' _]]
+                          (when (sequential? k-parsed)
+                            (= k-parsed k')))
+
+                        cross-context-ref
+                        (fn [[k o]]
+                          ;; Only exact key matches — chord-prefix overlaps from
+                          ;; other contexts coexist fine at runtime and don't
+                          ;; warrant even an amber warning.
+                          (when (= k-parsed k)
+                            (when-let [{:keys [key refs]} o]
+                              [k [key (reduce-kv
+                                       (fn [r id handler-id']
+                                         (if (and (not (contains? exclude-ids id))
+                                                  (not (contains? caller-handlers handler-id'))
+                                                  (not (and caller-is-global?
+                                                            (contains? global-handlers handler-id'))))
+                                           (assoc r id handler-id')
+                                           r))
+                                       {} refs)]])))]
+
+                    [k' (->> ks-bindings
+                             (filterv same-key?)
+                             (mapv cross-context-ref)
+                             (remove #(empty? (second (second %))))
+                             (into {}))]))))
+         (remove #(empty? (vals (second %))))
+         (into {}))))
+
+(defn conflict-context-label
+  "Get the human-readable context label for the first conflict in a conflicts map."
+  [conflicts-map]
+  (->> (for [[_ ks] conflicts-map
+             v (vals ks)
+             :let [refs (second v)]
+             [_ handler-id'] refs]
+         (get handler-display-labels handler-id'))
+       (first)))
+
+(defn partition-conflicts-by-type
+  "Split a conflicts map into {:exact ... :prefix ...} sub-maps.
+   Exact = inner key equals the parsed input. Prefix = inner key is a prefix overlap."
+  [conflicts-map input-key]
+  (let [input-binding (some-> input-key
+                              shortcut-utils/undecorate-binding
+                              shortcut-utils/safe-parse-string-binding
+                              bean/->clj)]
+    (when (sequential? input-binding)
+      (reduce-kv
+       (fn [acc outer-k inner-map]
+         (let [grouped (group-by (fn [[inner-k _]] (= input-binding inner-k)) inner-map)
+               exact-entries (get grouped true)
+               prefix-entries (get grouped false)]
+           (cond-> acc
+             (seq exact-entries)
+             (assoc-in [:exact outer-k] (into {} exact-entries))
+             (seq prefix-entries)
+             (assoc-in [:prefix outer-k] (into {} prefix-entries)))))
+       {:exact {} :prefix {}}
+       conflicts-map))))
+
+(defn conflict-has-exact?
+  "Returns true if any conflict in the map is an exact match (not just prefix overlap)."
+  [conflicts-map input-key]
+  (let [input-binding (some-> input-key
+                              shortcut-utils/undecorate-binding
+                              shortcut-utils/safe-parse-string-binding
+                              bean/->clj)]
+    (boolean
+     (and (sequential? input-binding)
+          (some (fn [[_ inner-map]]
+                  (some (fn [[inner-k _]] (= input-binding inner-k)) inner-map))
+                conflicts-map)))))
 
 (defn parse-conflicts-from-binding
   [from-binding target]

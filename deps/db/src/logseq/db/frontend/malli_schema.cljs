@@ -283,6 +283,7 @@
   [[:block/uuid :uuid]
    [:block/created-at :int]
    [:block/updated-at :int]
+   [:logseq.property/deleted-at {:optional true} :int]
    ;; Injected by update-properties-in-ents
    [:block/properties {:optional true} block-properties]
    [:block/tags {:optional true} block-tags]
@@ -561,7 +562,8 @@
                        :property
                        (entity-util/class? d)
                        :class
-                       (entity-util/hidden? d)
+                       (and (entity-util/page? d)
+                            (true? (:logseq.property/hide? d)))
                        :hidden
                        ;; TODO: Remove deprecated
                        (whiteboard? d)

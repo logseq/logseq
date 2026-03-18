@@ -120,7 +120,7 @@
    [:delete-page
     [:catn
      [:op :keyword]
-     [:args [:tuple ::uuid]]]]
+     [:args [:tuple ::uuid ::option]]]]
 
    [:toggle-reaction
     [:catn
@@ -207,101 +207,118 @@
           (js/console.error "Unexpected Import EDN error:" e)
           (reset! *result {:error (str "Unexpected Import EDN error: " (pr-str (ex-message e)))}))))))
 
-(defn ^:large-vars/cleanup-todo apply-ops!
+(defn- ^:large-vars/cleanup-todo apply-op!
+  [conn opts' *result [op args]]
+  (case op
+    ;; blocks
+    :save-block
+    (apply outliner-core/save-block! conn args)
+
+    :insert-blocks
+    (let [[blocks target-block-id opts] args]
+      (when-let [target-block (d/entity @conn target-block-id)]
+        (let [result (outliner-core/insert-blocks! conn blocks target-block opts)]
+          (reset! *result result))))
+
+    :delete-blocks
+    (let [[block-ids opts] args
+          blocks (keep #(d/entity @conn %) block-ids)]
+      (outliner-core/delete-blocks! conn blocks (merge opts opts')))
+
+    :move-blocks
+    (let [[block-ids target-block-id opts] args
+          blocks (keep #(d/entity @conn %) block-ids)
+          target-block (d/entity @conn target-block-id)]
+      (when (and target-block (seq blocks))
+        (outliner-core/move-blocks! conn blocks target-block opts)))
+
+    :move-blocks-up-down
+    (let [[block-ids up?] args
+          blocks (keep #(d/entity @conn %) block-ids)]
+      (when (seq blocks)
+        (outliner-core/move-blocks-up-down! conn blocks up?)))
+
+    :indent-outdent-blocks
+    (let [[block-ids indent? opts] args
+          blocks (keep #(d/entity @conn %) block-ids)]
+      (when (seq blocks)
+        (outliner-core/indent-outdent-blocks! conn blocks indent? opts)))
+
+    ;; properties
+    :upsert-property
+    (reset! *result (apply outliner-property/upsert-property! conn args))
+
+    :set-block-property
+    (apply outliner-property/set-block-property! conn args)
+
+    :remove-block-property
+    (apply outliner-property/remove-block-property! conn args)
+
+    :delete-property-value
+    (apply outliner-property/delete-property-value! conn args)
+
+    :create-property-text-block
+    (apply outliner-property/create-property-text-block! conn args)
+
+    :batch-set-property
+    (apply outliner-property/batch-set-property! conn args)
+
+    :batch-remove-property
+    (apply outliner-property/batch-remove-property! conn args)
+
+    :batch-delete-property-value
+    (apply outliner-property/batch-delete-property-value! conn args)
+
+    :class-add-property
+    (apply outliner-property/class-add-property! conn args)
+
+    :class-remove-property
+    (apply outliner-property/class-remove-property! conn args)
+
+    :upsert-closed-value
+    (apply outliner-property/upsert-closed-value! conn args)
+
+    :delete-closed-value
+    (apply outliner-property/delete-closed-value! conn args)
+
+    :add-existing-values-to-closed-values
+    (apply outliner-property/add-existing-values-to-closed-values! conn args)
+
+    :batch-import-edn
+    (apply import-edn-data conn *result args)
+
+    :transact
+    (apply ldb/transact! conn args)
+
+    :toggle-reaction
+    (reset! *result (apply toggle-reaction! conn args))
+
+    (when-let [handler (get @*op-handlers op)]
+      (reset! *result (handler conn args)))))
+
+(defn apply-ops!
   [conn ops opts]
   (assert (ops-validator ops) ops)
-  (let [opts' (assoc opts
-                     :transact-opts {:conn conn}
-                     :local-tx? true)
-        *result (atom nil)]
-    (outliner-tx/transact!
-     opts'
-     (doseq [[op args] ops]
-       (case op
-         ;; blocks
-         :save-block
-         (apply outliner-core/save-block! conn args)
-
-         :insert-blocks
-         (let [[blocks target-block-id opts] args]
-           (when-let [target-block (d/entity @conn target-block-id)]
-             (let [result (outliner-core/insert-blocks! conn blocks target-block opts)]
-               (reset! *result result))))
-
-         :delete-blocks
-         (let [[block-ids opts] args
-               blocks (keep #(d/entity @conn %) block-ids)]
-           (outliner-core/delete-blocks! conn blocks (merge opts opts')))
-
-         :move-blocks
-         (let [[block-ids target-block-id opts] args
-               blocks (keep #(d/entity @conn %) block-ids)
-               target-block (d/entity @conn target-block-id)]
-           (when (and target-block (seq blocks))
-             (outliner-core/move-blocks! conn blocks target-block opts)))
-
-         :move-blocks-up-down
-         (let [[block-ids up?] args
-               blocks (keep #(d/entity @conn %) block-ids)]
-           (when (seq blocks)
-             (outliner-core/move-blocks-up-down! conn blocks up?)))
-
-         :indent-outdent-blocks
-         (let [[block-ids indent? opts] args
-               blocks (keep #(d/entity @conn %) block-ids)]
-           (when (seq blocks)
-             (outliner-core/indent-outdent-blocks! conn blocks indent? opts)))
-
-         ;; properties
-         :upsert-property
-         (reset! *result (apply outliner-property/upsert-property! conn args))
-
-         :set-block-property
-         (apply outliner-property/set-block-property! conn args)
-
-         :remove-block-property
-         (apply outliner-property/remove-block-property! conn args)
-
-         :delete-property-value
-         (apply outliner-property/delete-property-value! conn args)
-
-         :create-property-text-block
-         (apply outliner-property/create-property-text-block! conn args)
-
-         :batch-set-property
-         (apply outliner-property/batch-set-property! conn args)
-
-         :batch-remove-property
-         (apply outliner-property/batch-remove-property! conn args)
-
-         :batch-delete-property-value
-         (apply outliner-property/batch-delete-property-value! conn args)
-
-         :class-add-property
-         (apply outliner-property/class-add-property! conn args)
-
-         :class-remove-property
-         (apply outliner-property/class-remove-property! conn args)
-
-         :upsert-closed-value
-         (apply outliner-property/upsert-closed-value! conn args)
-
-         :delete-closed-value
-         (apply outliner-property/delete-closed-value! conn args)
-
-         :add-existing-values-to-closed-values
-         (apply outliner-property/add-existing-values-to-closed-values! conn args)
-
-         :batch-import-edn
-         (apply import-edn-data conn *result args)
-
-         :transact
-         (apply ldb/transact! conn args)
-
-         :toggle-reaction
-         (reset! *result (apply toggle-reaction! conn args))
-
-         (when-let [handler (get @*op-handlers op)]
-           (reset! *result (handler conn args))))))
-
-    @*result))
+  (letfn [(apply-ops-batch!
+            [ops']
+            (let [single-op-outliner-op (when (= 1 (count ops'))
+                                          (first (first ops')))
+                  opts' (cond-> (assoc opts
+                                       :transact-opts {:conn conn}
+                                       :local-tx? true)
+                          (and single-op-outliner-op
+                               (nil? (:outliner-op opts)))
+                          (assoc :outliner-op single-op-outliner-op))
+                  *result (atom nil)]
+              (outliner-tx/transact!
+               opts'
+               (doseq [op-entry ops']
+                 (apply-op! conn opts' *result op-entry)))
+              @*result))]
+    (let [schema-ops (filter #(= :upsert-property (first %)) ops)
+          data-ops (remove #(= :upsert-property (first %)) ops)
+          schema-result (when (seq schema-ops)
+                          (apply-ops-batch! schema-ops))]
+      (if (seq data-ops)
+        (apply-ops-batch! data-ops)
+        schema-result))))

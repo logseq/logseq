@@ -50,7 +50,7 @@
     {:key "cut"
      :on-click #(editor-handler/cut-selection-blocks true)}
     (t :editor/cut)
-    (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/cut)))
+    (ui/dropdown-shortcut :editor/cut))
 
    (shui/dropdown-menu-item
     {:key "delete"
@@ -59,13 +59,13 @@
                     (shui/popup-hide!))}
 
     (t :editor/delete-selection)
-    (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/delete)))
+    (ui/dropdown-shortcut :editor/delete))
 
    (shui/dropdown-menu-item
     {:key "copy"
      :on-click #(editor-handler/copy-selection-blocks true)}
     (t :editor/copy)
-    (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/copy)))
+    (ui/dropdown-shortcut :editor/copy))
 
    (shui/dropdown-menu-item
     {:key "copy as"
@@ -99,7 +99,7 @@
     {:key "cycle todos"
      :on-click editor-handler/cycle-todos!}
     (t :editor/cycle-todo)
-    (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/cycle-todo)))
+    (ui/dropdown-shortcut :editor/cycle-todo))
 
    (shui/dropdown-menu-separator)
 
@@ -109,7 +109,7 @@
                         (util/stop e)
                         (editor-handler/expand-all-selection!))}
     (t :editor/expand-block-children)
-    (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/expand-block-children)))
+    (ui/dropdown-shortcut :editor/expand-block-children))
 
    (shui/dropdown-menu-item
     {:key "Collapse all"
@@ -117,7 +117,7 @@
                         (util/stop e)
                         (editor-handler/collapse-all-selection!))}
     (t :editor/collapse-block-children)
-    (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/collapse-block-children)))])
+    (ui/dropdown-shortcut :editor/collapse-block-children))])
 
 (rum/defc ^:large-vars/cleanup-todo block-context-menu-content <
   shortcut/disable-all-shortcuts
@@ -144,7 +144,7 @@
          :on-click (fn [_e]
                      (editor-handler/open-block-in-sidebar! block-id))}
         (t :content/open-in-sidebar)
-        (shui/dropdown-menu-shortcut "⇧+click"))
+        (ui/dropdown-shortcut "shift+click"))
 
        (shui/dropdown-menu-sub
         (shui/dropdown-menu-sub-trigger
@@ -198,14 +198,14 @@
            :on-click (fn [_e]
                        (editor-handler/cut-block! block-id))}
           (t :editor/cut)
-          (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/cut))))
+          (ui/dropdown-shortcut :editor/cut)))
 
        (when-not property-default-value?
          (shui/dropdown-menu-item
           {:key "delete"
            :on-click #(editor-handler/delete-block-aux! block)}
           (t :editor/delete-selection)
-          (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/delete))))
+          (ui/dropdown-shortcut :editor/delete)))
 
        (shui/dropdown-menu-separator)
 
@@ -230,14 +230,14 @@
          :on-click (fn [_e]
                      (editor-handler/expand-all! block-id))}
         (t :editor/expand-block-children)
-        (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/expand-block-children)))
+        (ui/dropdown-shortcut :editor/expand-block-children))
 
        (shui/dropdown-menu-item
         {:key "Collapse all"
          :on-click (fn [_e]
                      (editor-handler/collapse-all! block-id {}))}
         (t :editor/collapse-block-children)
-        (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/collapse-block-children)))
+        (ui/dropdown-shortcut :editor/collapse-block-children))
 
        (when (state/sub [:plugin/simple-commands])
          (when-let [cmds (state/get-plugins-commands-with-type :block-context-menu-item)]
@@ -298,7 +298,7 @@
                     block-ref-id
                     :block-ref))}
       (t :content/open-in-sidebar)
-      (shui/dropdown-menu-shortcut ["⇧+click"]))
+      (ui/dropdown-shortcut "shift+click"))
      (shui/dropdown-menu-item
       {:key "copy"
        :on-click (fn [] (editor-handler/copy-current-ref block-ref-id))}

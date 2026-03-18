@@ -1,4 +1,4 @@
-# ADR 0002: Optional Encryption When Creating a Sync Graph
+# ADR 0003: Optional Encryption When Creating a Sync Graph
 
 Date: 2026-02-11
 Status: Proposed

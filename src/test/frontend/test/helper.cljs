@@ -14,6 +14,7 @@
             [frontend.worker.pipeline :as worker-pipeline]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -32,9 +33,12 @@
 (def test-db "logseq_db_test-db")
 
 (defn start-test-db!
-  [& {:keys [build-init-data?] :or {build-init-data? true} :as opts}]
+  [& {:keys [build-init-data? schema] :or {build-init-data? true}}]
   (state/set-current-repo! test-db)
-  (conn/start! test-db opts)
+  (let [db-name (conn/get-repo-path test-db)
+        db-conn (d/create-conn (merge db-schema/schema schema))]
+    (conn/destroy-all!)
+    (swap! conn/conns assoc db-name db-conn))
   (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
   (let [conn (conn/get-db test-db false)]
     (when build-init-data? (d/transact! conn (sqlite-create-graph/build-db-initial-data config/config-default-content)))
