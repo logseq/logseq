@@ -38,21 +38,29 @@
 
 (defn replace-attr-retract-with-retract-entity
   [db-after tx-data]
-  (let [e-datoms (->> (group-by first tx-data)
-                      (sort-by first))]
-    (mapcat
-     (fn [[_e datoms]]
-       (if-let [eid (some (fn [d]
-                            (when (and (= :block/uuid (:a d))
-                                       (false? (:added d)))
-                              (let [entity (d/entity db-after [:block/uuid (:v d)])]
-                                (when (not= (:db/id entity) (:e d)) ; eid changed
-                                  (if entity
-                                    (:e d)
-                                    [:block/uuid (:v d)]))))) datoms)]  ; retract entity
-         [[:db/retractEntity eid]]
-         datoms))
-     e-datoms)))
+  (let [retract-eids-by-entity
+        (into {}
+              (keep (fn [d]
+                      (when (and (= :block/uuid (:a d))
+                                 (false? (:added d)))
+                        (let [entity (d/entity db-after [:block/uuid (:v d)])]
+                          (when (not= (:db/id entity) (:e d)) ; eid changed
+                            [(:e d) (if entity
+                                      (:e d)
+                                      [:block/uuid (:v d)])])))))
+              tx-data)]
+    (loop [result []
+           seen #{}
+           [d & more] tx-data]
+      (if-not d
+        result
+        (if-let [eid (get retract-eids-by-entity (:e d))]
+          (if (contains? seen (:e d))
+            (recur result seen more)
+            (recur (conj result [:db/retractEntity eid])
+                   (conj seen (:e d))
+                   more))
+          (recur (conj result d) seen more))))))
 
 (defn eid->lookup
   [db e]
