@@ -71,7 +71,7 @@ Update-by-id failures should use new id-mode specific error codes so scripts can
 ```text
 list property
   -> /src/main/logseq/cli/command/list.cljs execute-list-property
-  -> /src/main/frontend/worker/db_core.cljs :thread-api/api-list-properties
+  -> /src/main/frontend/worker/db_core.cljs :thread-api/cli-list-properties
   -> /src/main/logseq/cli/common/mcp/tools.cljs list-properties
   -> /src/main/logseq/cli/format.cljs format-list-property (new dedicated formatter)
 ```

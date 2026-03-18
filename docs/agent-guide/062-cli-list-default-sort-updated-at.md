@@ -25,7 +25,7 @@ The requested behavior is a consistent default sort key of `updated-at` for page
 | Layer | File | Current behavior |
 | --- | --- | --- |
 | CLI command parsing and execution | `/Users/rcmerci/gh-repos/logseq/src/main/logseq/cli/command/list.cljs` | `:sort` is optional and defaults to nil, so `apply-sort` is skipped when `--sort` is absent. |
-| db-worker-node list thread-api bridge | `/Users/rcmerci/gh-repos/logseq/src/main/frontend/worker/db_core.cljs` | `:thread-api/api-list-pages`, `:thread-api/api-list-tags`, and `:thread-api/api-list-properties` return unsorted collections from shared list helpers. |
+| db-worker-node list thread-api bridge | `/Users/rcmerci/gh-repos/logseq/src/main/frontend/worker/db_core.cljs` | `:thread-api/cli-list-pages`, `:thread-api/cli-list-tags`, and `:thread-api/cli-list-properties` return unsorted collections from shared list helpers. |
 | Shared list helpers | `/Users/rcmerci/gh-repos/logseq/src/main/logseq/cli/common/mcp/tools.cljs` | List helpers filter and shape items but do not apply sort by `updated-at`. |
 | User docs | `/Users/rcmerci/gh-repos/logseq/docs/cli/logseq-cli.md` | List command syntax documents `--sort` as optional but does not state default sort behavior. |
 
