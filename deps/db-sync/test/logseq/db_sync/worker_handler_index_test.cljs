@@ -1,5 +1,7 @@
 (ns logseq.db-sync.worker-handler-index-test
   (:require [cljs.test :refer [async deftest is]]
+            [clojure.string :as string]
+            [logseq.db-sync.common :as common]
             [logseq.db-sync.index :as index]
             [logseq.db-sync.worker.auth :as auth]
             [logseq.db-sync.worker.handler.index :as index-handler]
@@ -46,6 +48,42 @@
                  (p/let [result (index-handler/graph-access-response-with-timing request env "graph-2")]
                    (is (= 200 (.-status (:response result))))
                    (is (= true (get-in result [:timing :access-ok?])))))
+               (p/then (fn []
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest graphs-create-defaults-ready-for-use-true-test
+  (async done
+         (let [request (js/Request. "http://localhost/graphs" #js {:method "POST"})
+               url (js/URL. (.-url request))
+               d1-runs (atom [])]
+           (-> (p/with-redefs [common/read-json (fn [_]
+                                                  (p/resolved #js {"graph-name" "Graph 1"
+                                                                   "schema-version" "65"}))
+                               common/<d1-all (fn [& _]
+                                                (p/resolved #js {:results #js []}))
+                               common/get-sql-rows (fn [result]
+                                                     (aget result "results"))
+                               common/<d1-run (fn [_db sql & args]
+                                                (swap! d1-runs conj {:sql sql
+                                                                     :args args})
+                                                (p/resolved {:ok true}))]
+                 (p/let [resp (index-handler/handle {:db :db
+                                                     :env #js {}
+                                                     :request request
+                                                     :url url
+                                                     :claims #js {"sub" "user-1"}
+                                                     :route {:handler :graphs/create
+                                                             :path-params {}}})
+                         text (.text resp)
+                         body (js->clj (js/JSON.parse text) :keywordize-keys true)
+                         graph-insert (first @d1-runs)]
+                   (is (= 200 (.-status resp)))
+                   (is (string/includes? (:sql graph-insert) "graph_ready_for_use"))
+                   (is (= 1 (nth (:args graph-insert) 5)))
+                   (is (= true (:graph-ready-for-use? body)))))
                (p/then (fn []
                          (done)))
                (p/catch (fn [error]

@@ -2,43 +2,31 @@
   (:require [cljs.test :refer [deftest is testing]]
             [logseq.db-sync.snapshot :as snapshot]))
 
-(deftest transit-frame-roundtrip-test
-  (testing "framed transit json roundtrips rows"
-    (let [expected [{:addr 1 :content "a" :addresses nil}
-                    {:addr 2 :content "b" :addresses "{\"k\":1}"}]
-          frame (snapshot/frame-bytes (snapshot/encode-rows expected))
-          {:keys [rows buffer]} (snapshot/parse-framed-chunk nil frame)]
-      (is (= rows expected))
+(def sample-datoms
+  [{:e 1 :a :db/ident :v :logseq.class/Page :tx 1 :added true}
+   {:e 2 :a :block/title :v "hello" :tx 1 :added true}])
+
+(deftest datoms-jsonl-roundtrip-test
+  (testing "jsonl transit roundtrips datoms"
+    (let [payload (snapshot/encode-datoms-jsonl sample-datoms)
+          {:keys [datoms buffer]} (snapshot/parse-datoms-jsonl-chunk nil payload)]
+      (is (= sample-datoms datoms))
       (is (or (nil? buffer) (zero? (.-byteLength buffer)))))))
 
-(deftest transit-frame-split-test
-  (testing "parse-framed-chunk handles partial trailing frame"
-    (let [rows1 [{:addr 1 :content "a" :addresses nil}]
-          rows2 [{:addr 2 :content "b" :addresses nil}]
-          frame1 (snapshot/frame-bytes (snapshot/encode-rows rows1))
-          frame2 (snapshot/frame-bytes (snapshot/encode-rows rows2))
-          split-pos (- (.-byteLength frame2) 3)
-          part1 (.slice frame2 0 split-pos)
-          part2 (.slice frame2 split-pos (.-byteLength frame2))
-          {rows1-parsed :rows buffer :buffer} (snapshot/parse-framed-chunk nil (snapshot/concat-bytes frame1 part1))
-          {rows2-parsed :rows rows-buffer :buffer} (snapshot/parse-framed-chunk buffer part2)]
-      (is (= rows1-parsed rows1))
-      (is (= rows2-parsed rows2))
-      (is (or (nil? rows-buffer) (zero? (.-byteLength rows-buffer)))))))
+(deftest datoms-jsonl-split-test
+  (testing "parse-datoms-jsonl-chunk handles partial trailing line"
+    (let [payload (snapshot/encode-datoms-jsonl sample-datoms)
+          split-pos (- (.-byteLength payload) 3)
+          part1 (.slice payload 0 split-pos)
+          part2 (.slice payload split-pos (.-byteLength payload))
+          {datoms1 :datoms buffer :buffer} (snapshot/parse-datoms-jsonl-chunk nil part1)
+          {datoms2 :datoms next-buffer :buffer} (snapshot/parse-datoms-jsonl-chunk buffer part2)]
+      (is (= (subvec sample-datoms 0 1) datoms1))
+      (is (= (subvec sample-datoms 1) datoms2))
+      (is (or (nil? next-buffer) (zero? (.-byteLength next-buffer)))))))
 
-(deftest transit-finalize-buffer-test
-  (testing "finalize-framed-buffer parses remaining frame"
-    (let [rows [{:addr 3 :content "c" :addresses nil}]
-          frame (snapshot/frame-bytes (snapshot/encode-rows rows))]
-      (is (= rows (snapshot/finalize-framed-buffer frame)))
-      (is (= [] (snapshot/finalize-framed-buffer (js/Uint8Array.)))))))
-
-(deftest transit-framed-length-test
-  (testing "framed-length sums frame sizes"
-    (let [rows1 [{:addr 1 :content "a" :addresses nil}]
-          rows2 [{:addr 2 :content "b" :addresses nil}
-                 {:addr 3 :content "c" :addresses nil}]
-          frame1 (snapshot/frame-bytes (snapshot/encode-rows rows1))
-          frame2 (snapshot/frame-bytes (snapshot/encode-rows rows2))]
-      (is (= (+ (.-byteLength frame1) (.-byteLength frame2))
-             (snapshot/framed-length [rows1 rows2]))))))
+(deftest datoms-jsonl-finalize-buffer-test
+  (testing "finalize-datoms-jsonl-buffer parses the remaining line"
+    (let [payload (snapshot/encode-datoms-jsonl sample-datoms)]
+      (is (= sample-datoms (snapshot/finalize-datoms-jsonl-buffer payload)))
+      (is (= [] (snapshot/finalize-datoms-jsonl-buffer (js/Uint8Array.)))))))

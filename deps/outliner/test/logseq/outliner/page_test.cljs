@@ -4,6 +4,7 @@
             [logseq.common.config :as common-config]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
+            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.db :as db-db]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.page :as outliner-page]))
@@ -108,8 +109,40 @@
     (is (contains? (set (map :db/id (:block/refs (d/entity @conn (:db/id b1)))))
                    (:db/id d1)))
     (outliner-page/delete! conn (:block/uuid d1))
-    (is (nil? (d/entity @conn (:db/id d1))))
-    (is (nil? (d/entity @conn (:db/id b1))))))
+    (let [d1' (d/entity @conn (:db/id d1))
+          b1' (d/entity @conn (:db/id b1))
+          recycle-page (ldb/get-built-in-page @conn "Recycle")]
+      (is (some? d1'))
+      (is (some? b1'))
+      (is (= (:block/uuid recycle-page) (:block/uuid (:block/parent d1'))))
+      (is (integer? (:logseq.property/deleted-at d1')))
+      (is (= (:block/uuid d1') (:block/uuid (:block/page b1')))))))
+
+(deftest delete-class-page-hard-retracts-page-tree
+  (let [conn (db-test/create-conn-with-blocks {:classes {:Movie {}}})
+        class-page (ldb/get-page @conn "Movie")
+        child-uuid (random-uuid)
+        _ (d/transact! conn [{:block/uuid child-uuid
+                              :block/title "class child"
+                              :block/page (:db/id class-page)
+                              :block/parent (:db/id class-page)
+                              :block/order (db-order/gen-key)}])]
+    (outliner-page/delete! conn (:block/uuid class-page))
+    (is (nil? (d/entity @conn [:block/uuid (:block/uuid class-page)])))
+    (is (nil? (d/entity @conn [:block/uuid child-uuid])))))
+
+(deftest delete-property-page-hard-retracts-page-tree
+  (let [conn (db-test/create-conn-with-blocks {:properties {:rating {:logseq.property/type :number}}})
+        property-page (d/entity @conn :user.property/rating)
+        child-uuid (random-uuid)
+        _ (d/transact! conn [{:block/uuid child-uuid
+                              :block/title "property child"
+                              :block/page (:db/id property-page)
+                              :block/parent (:db/id property-page)
+                              :block/order (db-order/gen-key)}])]
+    (outliner-page/delete! conn (:block/uuid property-page))
+    (is (nil? (d/entity @conn :user.property/rating)))
+    (is (nil? (d/entity @conn [:block/uuid child-uuid])))))
 
 (deftest create-journal
   (let [conn (db-test/create-conn)

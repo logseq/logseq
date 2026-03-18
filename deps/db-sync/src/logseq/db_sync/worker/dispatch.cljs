@@ -21,6 +21,9 @@
              (string/starts-with? path "/graphs/"))
          (index-handler/handle-fetch #js {:env env :d1 (aget env "DB")} request)
 
+         (string/starts-with? path "/admin/graphs/")
+         (index-handler/handle-fetch #js {:env env :d1 (aget env "DB")} request)
+
          (string/starts-with? path "/e2ee")
          (index-handler/handle-fetch #js {:env env :d1 (aget env "DB")} request)
 

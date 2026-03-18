@@ -41,6 +41,7 @@
    :db-sync/checksum {:db/index true}
    :db-sync/tx-id {:db/unique :db.unique/identity}
    :db-sync/created-at {:db/index true}
+   :db-sync/outliner-op {}
    :db-sync/tx-data {}
    :db-sync/normalized-tx-data {}
    :db-sync/reversed-tx-data {}})
@@ -73,26 +74,24 @@
               [:db/add "e" :local-tx t]))]
       (ldb/transact! conn [tx-data]))))
 
-(comment
-  (defn update-local-checksum
-    [repo checksum]
-    {:pre [(some? checksum)]}
-    (let [conn (worker-state/get-client-ops-conn repo)]
-      (assert (some? conn) repo)
-      (let [tx-data
-            (if-let [datom (first (d/datoms @conn :avet :db-sync/checksum))]
+(defn update-local-checksum
+  [repo checksum]
+  {:pre [(some? checksum)]}
+  (let [conn (worker-state/get-client-ops-conn repo)]
+    (assert (some? conn) repo)
+    (let [tx-data
+          (if-let [datom (first (d/datoms @conn :avet :db-sync/checksum))]
+            [:db/add (:e datom) :db-sync/checksum checksum]
+            (if-let [datom (first (d/datoms @conn :avet :local-tx))]
               [:db/add (:e datom) :db-sync/checksum checksum]
-              (if-let [datom (first (d/datoms @conn :avet :local-tx))]
-                [:db/add (:e datom) :db-sync/checksum checksum]
-                [:db/add "e" :db-sync/checksum checksum]))]
-        (ldb/transact! conn [tx-data])))))
+              [:db/add "e" :db-sync/checksum checksum]))]
+      (ldb/transact! conn [tx-data]))))
 
 (defn remove-local-tx
   [repo]
   (when-let [conn (worker-state/get-client-ops-conn repo)]
     (when-let [datom (first (d/datoms @conn :avet :local-tx))]
-      (ldb/transact! conn [[:db/retract (:e datom) :local-tx]
-                           [:db/retract (:e datom) :db-sync/checksum]]))))
+      (ldb/transact! conn [[:db/retract (:e datom) :local-tx]]))))
 
 (defn get-local-tx
   [repo]
@@ -102,12 +101,11 @@
       ;; (assert (some? r))
       r)))
 
-(comment
-  (defn get-local-checksum
-    [repo]
-    (let [conn (worker-state/get-client-ops-conn repo)]
-      (assert (some? conn) repo)
-      (:v (first (d/datoms @conn :avet :db-sync/checksum))))))
+(defn get-local-checksum
+  [repo]
+  (let [conn (worker-state/get-client-ops-conn repo)]
+    (assert (some? conn) repo)
+    (:v (first (d/datoms @conn :avet :db-sync/checksum)))))
 
 (defn rtc-db-graph?
   "Is RTC enabled"

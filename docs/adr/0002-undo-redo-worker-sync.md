@@ -1,4 +1,4 @@
-# ADR 0001: Undo/Redo scoped to local changes in worker sync
+# ADR 0002: Undo/Redo scoped to local changes in worker sync
 
 Date: 2026-01-28
 Status: Accepted
