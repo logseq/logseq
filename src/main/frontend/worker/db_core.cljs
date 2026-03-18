@@ -30,6 +30,7 @@
             [frontend.worker.sync.log-and-state :as sync-log-and-state]
             [frontend.worker.thread-atom]
             [lambdaisland.glogi :as log]
+            [logseq.cli.common.db-worker :as cli-db-worker]
             [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
             [logseq.common.graph-dir :as graph-dir]
             [logseq.common.util :as common-util]
@@ -1273,6 +1274,23 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (ldb/get-graph-rtc-uuid @conn)))
 
+;; Cli specific fns start with 'cli-'
+(def-thread-api :thread-api/cli-list-properties
+  [repo options]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (cli-db-worker/list-properties @conn options)))
+
+(def-thread-api :thread-api/cli-list-tags
+  [repo options]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (cli-db-worker/list-tags @conn options)))
+
+(def-thread-api :thread-api/cli-list-pages
+  [repo options]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (cli-db-worker/list-pages @conn options)))
+
+;; API server specific fns start with 'api-'
 (def-thread-api :thread-api/api-get-page-data
   [repo page-title]
   (let [conn (worker-state/get-datascript-conn repo)]
