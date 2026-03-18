@@ -411,7 +411,7 @@
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))]
         (perform-remove-entity cfg action
-                               {:list-method :thread-api/api-list-tags
+                               {:list-method :thread-api/cli-list-tags
                                 :not-found-code :tag-not-found
                                 :ambiguous-code :ambiguous-tag-name
                                 :label "tag"
@@ -421,7 +421,7 @@
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))]
         (perform-remove-entity cfg action
-                               {:list-method :thread-api/api-list-properties
+                               {:list-method :thread-api/cli-list-properties
                                 :not-found-code :property-not-found
                                 :ambiguous-code :ambiguous-property-name
                                 :label "property"

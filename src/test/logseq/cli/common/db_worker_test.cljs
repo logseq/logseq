@@ -1,8 +1,8 @@
-(ns logseq.cli.mcp-tools-contract-test
+(ns logseq.cli.common.db-worker-test
   (:require [cljs.test :refer [deftest is testing]]
             [clojure.set :as set]
             [datascript.core :as d]
-            [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
+            [logseq.cli.common.db-worker :as cli-db-worker]
             [logseq.db.test.helper :as db-test]))
 
 (defn- create-test-db
@@ -50,15 +50,15 @@
         required-keys #{:db/id :block/title :block/created-at :block/updated-at}
         required-property-keys #{:db/id :block/title :block/created-at :block/updated-at :logseq.property/type}
         visible-page (some #(when (= "Visible Page" (:block/title %)) %)
-                           (cli-common-mcp-tools/list-pages db {}))
+                           (cli-db-worker/list-pages db {}))
         custom-tag-entity (first-user-tag-entity db)
         custom-tag-title (:block/title custom-tag-entity)
         custom-tag (some #(when (= custom-tag-title (:block/title %)) %)
-                         (cli-common-mcp-tools/list-tags db {}))
+                         (cli-db-worker/list-tags db {}))
         custom-property-entity (first-user-property-entity db)
         custom-property-title (:block/title custom-property-entity)
         custom-property (some #(when (= custom-property-title (:block/title %)) %)
-                              (cli-common-mcp-tools/list-properties db {}))]
+                              (cli-db-worker/list-properties db {}))]
     (testing "list-pages non-expanded includes stable id and timestamps"
       (is (some? visible-page))
       (is (set/subset? required-keys (set (keys visible-page)))))
@@ -87,10 +87,10 @@
                                    set)
         custom-tag-id (:db/id (first-user-tag-entity db))
         custom-property-id (:db/id (first-user-property-entity db))
-        default-tag-ids (list-item-ids (cli-common-mcp-tools/list-tags db {}))
-        default-property-ids (list-item-ids (cli-common-mcp-tools/list-properties db {}))
-        no-built-in-tag-ids (list-item-ids (cli-common-mcp-tools/list-tags db {:include-built-in false}))
-        no-built-in-property-ids (list-item-ids (cli-common-mcp-tools/list-properties db {:include-built-in false}))]
+        default-tag-ids (list-item-ids (cli-db-worker/list-tags db {}))
+        default-property-ids (list-item-ids (cli-db-worker/list-properties db {}))
+        no-built-in-tag-ids (list-item-ids (cli-db-worker/list-tags db {:include-built-in false}))
+        no-built-in-property-ids (list-item-ids (cli-db-worker/list-properties db {:include-built-in false}))]
     (testing "built-ins are included by default"
       (is (seq built-in-tag-ids))
       (is (seq built-in-property-ids))
@@ -125,14 +125,14 @@
                             :where [?e :block/title ?title]]
                           db "Late Page")
                      first)
-        default-ids (list-item-ids (cli-common-mcp-tools/list-pages db {}))
-        include-hidden-ids (list-item-ids (cli-common-mcp-tools/list-pages db {:include-hidden true}))
-        exclude-journal-ids (list-item-ids (cli-common-mcp-tools/list-pages db {:include-journal false}))
-        journal-only-ids (list-item-ids (cli-common-mcp-tools/list-pages db {:journal-only true}))
-        created-after-ids (list-item-ids (cli-common-mcp-tools/list-pages db {:created-after 2500}))
-        updated-after-ids (list-item-ids (cli-common-mcp-tools/list-pages db {:updated-after "1970-01-01T00:00:03.500Z"}))
-        invalid-created-after-ids (list-item-ids (cli-common-mcp-tools/list-pages db {:created-after "not-a-date"}))
-        invalid-updated-after-ids (list-item-ids (cli-common-mcp-tools/list-pages db {:updated-after "still-not-a-date"}))]
+        default-ids (list-item-ids (cli-db-worker/list-pages db {}))
+        include-hidden-ids (list-item-ids (cli-db-worker/list-pages db {:include-hidden true}))
+        exclude-journal-ids (list-item-ids (cli-db-worker/list-pages db {:include-journal false}))
+        journal-only-ids (list-item-ids (cli-db-worker/list-pages db {:journal-only true}))
+        created-after-ids (list-item-ids (cli-db-worker/list-pages db {:created-after 2500}))
+        updated-after-ids (list-item-ids (cli-db-worker/list-pages db {:updated-after "1970-01-01T00:00:03.500Z"}))
+        invalid-created-after-ids (list-item-ids (cli-db-worker/list-pages db {:created-after "not-a-date"}))
+        invalid-updated-after-ids (list-item-ids (cli-db-worker/list-pages db {:updated-after "still-not-a-date"}))]
     (testing "journals are included by default and hidden pages are excluded by default"
       (is (contains? default-ids journal-id))
       (is (not (contains? default-ids hidden-id))))

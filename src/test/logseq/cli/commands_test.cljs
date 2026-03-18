@@ -968,13 +968,13 @@
          (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
                              transport/invoke (fn [_ method _ _]
                                                 (case method
-                                                  :thread-api/api-list-pages [{:db/id 11 :block/title "Page C" :block/updated-at 30}
+                                                  :thread-api/cli-list-pages [{:db/id 11 :block/title "Page C" :block/updated-at 30}
                                                                               {:db/id 7 :block/title "Page B" :block/updated-at 10}
                                                                               {:db/id 5 :block/title "Page A" :block/updated-at 10}]
-                                                  :thread-api/api-list-tags [{:db/id 4 :block/title "Tag C" :block/updated-at 20}
+                                                  :thread-api/cli-list-tags [{:db/id 4 :block/title "Tag C" :block/updated-at 20}
                                                                              {:db/id 9 :block/title "Tag B" :block/updated-at 5}
                                                                              {:db/id 2 :block/title "Tag A" :block/updated-at 5}]
-                                                  :thread-api/api-list-properties [{:db/id 8 :block/title "Property C" :block/updated-at 9}
+                                                  :thread-api/cli-list-properties [{:db/id 8 :block/title "Property C" :block/updated-at 9}
                                                                                    {:db/id 6 :block/title "Property B" :block/updated-at 3}
                                                                                    {:db/id 1 :block/title "Property A" :block/updated-at 3}]
                                                   (throw (ex-info "unexpected invoke" {:method method}))))]
@@ -993,7 +993,7 @@
          (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
                              transport/invoke (fn [_ method _ _]
                                                 (case method
-                                                  :thread-api/api-list-pages [{:db/id 3 :block/title "Gamma" :block/updated-at 20}
+                                                  :thread-api/cli-list-pages [{:db/id 3 :block/title "Gamma" :block/updated-at 20}
                                                                               {:db/id 2 :block/title "Alpha" :block/updated-at 5}
                                                                               {:db/id 1 :block/title "Beta" :block/updated-at 10}]
                                                   (throw (ex-info "unexpected invoke" {:method method}))))]
@@ -2311,8 +2311,8 @@
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
                                transport/invoke (fn [_ method _ args]
                                                   (case method
-                                                    :thread-api/api-list-tags [{:db/id 1 :block/title "Quote"}]
-                                                    :thread-api/api-list-properties [{:db/id 2 :block/title "owner"}]
+                                                    :thread-api/cli-list-tags [{:db/id 1 :block/title "Quote"}]
+                                                    :thread-api/cli-list-properties [{:db/id 2 :block/title "owner"}]
                                                     :thread-api/pull (let [[_ selector lookup] args]
                                                                        (cond
                                                                          (= lookup 1) {:db/id 1 :block/title "Quote" :block/uuid (uuid "00000000-0000-0000-0000-000000000011") :block/tags [{:db/ident :logseq.class/Tag}] :logseq.property/public? true}
@@ -2341,7 +2341,7 @@
                              cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
                              transport/invoke (fn [_ method _ _]
                                                 (case method
-                                                  :thread-api/api-list-tags [{:db/id 1 :block/title "Quote"}
+                                                  :thread-api/cli-list-tags [{:db/id 1 :block/title "Quote"}
                                                                              {:db/id 2 :block/title "QUOTE"}]
                                                   (throw (ex-info "unexpected invoke" {:method method}))))]
                (p/let [result (commands/execute {:type :remove-tag :repo "demo" :name "Quote"} {})]

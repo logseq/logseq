@@ -192,7 +192,7 @@
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
               options (:options action)
-              items (transport/invoke cfg :thread-api/api-list-pages false
+              items (transport/invoke cfg :thread-api/cli-list-pages false
                                       [(:repo action) options])
               sort-field (effective-sort-field options)
               order (or (:order options) "asc")
@@ -209,7 +209,7 @@
               options (cond-> (:options action)
                         ((some-fn :with-extends :with-properties) (:options action))
                         (assoc :expand true))
-              items (transport/invoke cfg :thread-api/api-list-tags false
+              items (transport/invoke cfg :thread-api/cli-list-tags false
                                       [(:repo action) options])
               sort-field (effective-sort-field options)
               order (or (:order options) "asc")
@@ -226,7 +226,7 @@
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
               options (cond-> (:options action)
                         (:with-classes (:options action)) (assoc :expand true))
-              items (transport/invoke cfg :thread-api/api-list-properties false
+              items (transport/invoke cfg :thread-api/cli-list-properties false
                                       [(:repo action) options])
               sort-field (effective-sort-field options)
               order (or (:order options) "asc")
