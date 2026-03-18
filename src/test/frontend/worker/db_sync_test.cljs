@@ -534,6 +534,131 @@
                       (catch :default e
                         e)))))))))
 
+(deftest apply-remote-txs-preserves-many-page-property-values-test
+  (testing "remote txs keep both values when a new page-many property is created and then assigned twice"
+    (let [graph {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "remote object"}]}]}
+          conn-a (db-test/create-conn-with-blocks graph)
+          conn-b (d/conn-from-db @conn-a)
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          remote-txs (atom [])
+          property-id :plugin.property._test_plugin/x7]
+      (d/listen! conn-b ::capture-remote-many-page-property
+                 (fn [tx-report]
+                   (swap! remote-txs conj
+                          {:tx-data (db-normalize/normalize-tx-data
+                                     (:db-after tx-report)
+                                     (:db-before tx-report)
+                                     (:tx-data tx-report))
+                           :outliner-op (get-in tx-report [:tx-meta :outliner-op])})))
+      (try
+        (let [block-id (:db/id (db-test/find-block-by-content @conn-b "remote object"))]
+          (outliner-property/upsert-property! conn-b property-id
+                                              {:logseq.property/type :page
+                                               :db/cardinality :db.cardinality/many}
+                                              {:property-name "x7"})
+          (outliner-property/set-block-property! conn-b block-id property-id "Page y")
+          (outliner-property/set-block-property! conn-b block-id property-id "Page z"))
+        (with-datascript-conns conn-a client-ops-conn
+          (fn []
+            (#'sync-apply/apply-remote-txs! test-repo nil @remote-txs)
+            (let [block' (db-test/find-block-by-content @conn-a "remote object")]
+              (is (= #{"page y" "page z"}
+                     (set (map :block/name (:plugin.property._test_plugin/x7 block'))))))))
+        (finally
+          (d/unlisten! conn-b ::capture-remote-many-page-property))))))
+
+(deftest transact-with-temp-conn-preserves-many-page-property-values-test
+  (testing "temp conn batch keeps both values when a new page-many property is created and then assigned twice"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "remote object"}]}]})
+          block-id (:db/id (db-test/find-block-by-content @conn "remote object"))
+          property-id :plugin.property._test_plugin/x7]
+      (ldb/transact-with-temp-conn!
+       conn
+       {}
+       (fn [temp-conn]
+         (outliner-property/upsert-property! temp-conn property-id
+                                             {:logseq.property/type :page
+                                              :db/cardinality :db.cardinality/many}
+                                             {:property-name "x7"})
+         (outliner-property/set-block-property! temp-conn block-id property-id "Page y")
+         (outliner-property/set-block-property! temp-conn block-id property-id "Page z")))
+      (let [block' (db-test/find-block-by-content @conn "remote object")]
+        (is (= #{"page y" "page z"}
+               (set (map :block/name (:plugin.property._test_plugin/x7 block')))))))))
+
+(deftest transact-with-temp-conn-preserves-tag-many-page-property-values-test
+  (testing "temp conn batch keeps tag property values when a new many page property is upserted first"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "remote object"}]}]})
+          property-id :plugin.property._test_plugin/x7]
+      (ldb/transact-with-temp-conn!
+       conn
+       {}
+       (fn [temp-conn]
+         (outliner-property/upsert-property! temp-conn property-id
+                                             {:logseq.property/type :page
+                                              :db/cardinality :db.cardinality/many}
+                                             {:property-name "x7"})
+         (outliner-page/create! temp-conn "Tag x" {:class? true})
+         (let [tag-id (:db/id (ldb/get-page @temp-conn "Tag x"))]
+           (outliner-property/set-block-property! temp-conn tag-id property-id "Page y")
+           (outliner-property/set-block-property! temp-conn tag-id property-id "Page z"))))
+      (let [tag' (ldb/get-page @conn "Tag x")]
+        (is (ldb/class? tag'))
+        (is (= #{"page y" "page z"}
+               (set (map :block/name (:plugin.property._test_plugin/x7 tag')))))))))
+
+(deftest replace-attr-retract-with-retract-entity-preserves-input-order-test
+  (testing "temp batch replay transform keeps property schema datoms before later value datoms"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "remote object"}]}]})
+          block-id (:db/id (db-test/find-block-by-content @conn "remote object"))
+          property-id :plugin.property._test_plugin/x7
+          temp-conn (d/conn-from-db @conn)
+          *batch-tx-data (volatile! [])]
+      (swap! temp-conn assoc
+             :skip-store? true
+             :batch-temp-conn? true)
+      (d/listen! temp-conn ::capture-temp-batch
+                 (fn [{:keys [tx-data]}]
+                   (vswap! *batch-tx-data into tx-data)))
+      (try
+        (outliner-property/upsert-property! temp-conn property-id
+                                            {:logseq.property/type :page
+                                             :db/cardinality :db.cardinality/many}
+                                            {:property-name "x7"})
+        (outliner-property/set-block-property! temp-conn block-id property-id "Page y")
+        (outliner-property/set-block-property! temp-conn block-id property-id "Page z")
+        (let [tx-data @*batch-tx-data
+              tx-data' (db-normalize/replace-attr-retract-with-retract-entity @temp-conn tx-data)
+              schema-index (first (keep-indexed
+                                   (fn [idx d]
+                                     (when (and (= :db/ident (:a d))
+                                                (= property-id (:v d)))
+                                       idx))
+                                   tx-data'))
+              value-index (first (keep-indexed
+                                  (fn [idx d]
+                                    (when (and (= block-id (:e d))
+                                               (= property-id (:a d))
+                                               (:added d))
+                                      idx))
+                                  tx-data'))]
+          (is (number? schema-index))
+          (is (number? value-index))
+          (is (< schema-index value-index)))
+        (finally
+          (d/unlisten! temp-conn ::capture-temp-batch))))))
+
 (deftest local-checksum-matches-recompute-after-post-pipeline-update-test
   (testing "stored checksum matches recompute when updated from post-pipeline tx report"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
