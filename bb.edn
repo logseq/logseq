@@ -14,7 +14,7 @@
   cheshire/cheshire
   {:mvn/version "6.1.0"}}
  :pods
-  clj-kondo/clj-kondo {:version "2026.01.19"}
+ {clj-kondo/clj-kondo {:version "2026.01.19"}
   org.babashka/fswatcher {:version "0.0.7"}
   org.babashka/go-sqlite3 {:version "0.3.13"}}
  :tasks
