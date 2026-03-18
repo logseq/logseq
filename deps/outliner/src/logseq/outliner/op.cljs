@@ -299,26 +299,18 @@
 (defn apply-ops!
   [conn ops opts]
   (assert (ops-validator ops) ops)
-  (letfn [(apply-ops-batch!
-            [ops']
-            (let [single-op-outliner-op (when (= 1 (count ops'))
-                                          (first (first ops')))
-                  opts' (cond-> (assoc opts
-                                       :transact-opts {:conn conn}
-                                       :local-tx? true)
-                          (and single-op-outliner-op
-                               (nil? (:outliner-op opts)))
-                          (assoc :outliner-op single-op-outliner-op))
-                  *result (atom nil)]
-              (outliner-tx/transact!
-               opts'
-               (doseq [op-entry ops']
-                 (apply-op! conn opts' *result op-entry)))
-              @*result))]
-    (let [schema-ops (filter #(= :upsert-property (first %)) ops)
-          data-ops (remove #(= :upsert-property (first %)) ops)
-          schema-result (when (seq schema-ops)
-                          (apply-ops-batch! schema-ops))]
-      (if (seq data-ops)
-        (apply-ops-batch! data-ops)
-        schema-result))))
+  (let [single-op-outliner-op (when (= 1 (count ops))
+                                (first (first ops)))
+        opts' (cond-> (assoc opts
+                             :transact-opts {:conn conn}
+                             :local-tx? true)
+                (and single-op-outliner-op
+                     (nil? (:outliner-op opts)))
+                (assoc :outliner-op single-op-outliner-op))
+        *result (atom nil)]
+    (outliner-tx/transact!
+     opts'
+     (doseq [op-entry ops]
+       (apply-op! conn opts' *result op-entry)))
+
+    @*result))
