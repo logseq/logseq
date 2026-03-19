@@ -79,67 +79,75 @@
 # --- dynamic helpers ---
 
 _logseq_json_names() {
+  # Navigate a JSON path and print leaf strings.
+  # Usage: _logseq_json_names key1 key2 ... keyN
+  # Each key navigates into the JSON object. The final array is printed:
+  #   - strings are printed directly
+  #   - objects have the last key extracted as a field
   python3 -c \"
 import sys, json
-field = sys.argv[1]
+keys = sys.argv[1:]
 try:
     data = json.load(sys.stdin)
+    for key in keys:
+        if isinstance(data, dict):
+            data = data.get(key, [])
+        elif isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    v = item.get(key)
+                    if isinstance(v, str) and v:
+                        print(v)
+            sys.exit(0)
     if isinstance(data, list):
         for item in data:
-            v = item.get(field)
-            if isinstance(v, str) and v:
-                print(v)
+            if isinstance(item, str) and item:
+                print(item)
 except Exception:
     pass
-\" \"$1\" 2>/dev/null
+\" \"$@\" 2>/dev/null
 }
 
 _logseq_current_graph() {
-  local i
+  local i w
   for (( i = 1; i < ${#words[@]}; i++ )); do
-    if [[ \"${words[i]}\" == '--graph' && -n \"${words[i+1]}\" ]]; then
+    w=\"${words[i]}\"
+    if [[ \"$w\" == '--graph' || \"$w\" == '-g' ]] && [[ -n \"${words[i+1]}\" ]]; then
       print -r -- \"${words[i+1]}\"
+      return
+    elif [[ \"$w\" == --graph=* ]]; then
+      print -r -- \"${w#--graph=}\"
       return
     fi
   done
+  # Fall back to the current graph from 'logseq graph list' (marked with '* ')
+  logseq graph list 2>/dev/null | sed -n 's/^[*] //p'
 }
 
 _logseq_graphs() {
-  local cache_id='logseq_graphs'
   local -a graphs
-  if _cache_invalid \"$cache_id\" || ! _retrieve_cache \"$cache_id\"; then
-    graphs=( ${(f)\"$(logseq graph list --output json 2>/dev/null | _logseq_json_names name)\"} )
-    _store_cache \"$cache_id\" graphs
-  fi
+  graphs=( ${(f)\"$(logseq graph list --output json 2>/dev/null | _logseq_json_names data graphs)\"} )
   compadd -a graphs
 }
 
 _logseq_pages() {
   local graph
   graph=$(_logseq_current_graph)
-  local cache_id=\"logseq_pages_${graph:-__default__}\"
-  local -a pages
-  if _cache_invalid \"$cache_id\" || ! _retrieve_cache \"$cache_id\"; then
-    if [[ -n \"$graph\" ]]; then
-      pages=( ${(f)\"$(logseq list page --graph \"$graph\" --output json 2>/dev/null | _logseq_json_names title)\"} )
-    fi
-    _store_cache \"$cache_id\" pages
+  if [[ -n \"$graph\" ]]; then
+    local -a pages
+    pages=( ${(f)\"$(logseq list page --graph \"$graph\" --output json 2>/dev/null | _logseq_json_names data items title)\"} )
+    compadd -a pages
   fi
-  compadd -a pages
 }
 
 _logseq_queries() {
   local graph
   graph=$(_logseq_current_graph)
-  local cache_id=\"logseq_queries_${graph:-__default__}\"
-  local -a queries
-  if _cache_invalid \"$cache_id\" || ! _retrieve_cache \"$cache_id\"; then
-    if [[ -n \"$graph\" ]]; then
-      queries=( ${(f)\"$(logseq query list --graph \"$graph\" --output json 2>/dev/null | _logseq_json_names name)\"} )
-    fi
-    _store_cache \"$cache_id\" queries
+  if [[ -n \"$graph\" ]]; then
+    local -a queries
+    queries=( ${(f)\"$(logseq query list --graph \"$graph\" --output json 2>/dev/null | _logseq_json_names data queries name)\"} )
+    compadd -a queries
   fi
-  compadd -a queries
 }
 
 _logseq_multi_values() {
@@ -222,9 +230,9 @@ _logseq_multi_values() {
 
       :dynamic
       (let [action (case complete
-                     :graphs "_logseq_graphs"
-                     :pages "_logseq_pages"
-                     :queries "_logseq_queries")]
+                     :graphs "{_logseq_graphs}"
+                     :pages "{_logseq_pages}"
+                     :queries "{_logseq_queries}")]
         (if alias
           [(str "'" excl long-opt "=[" desc* "]:value:" action "'")
            (str "'" excl alias-short "[" desc* "]:value:" action "'")]
@@ -450,41 +458,58 @@ _logseq_multi_values() {
 # --- dynamic helpers ---
 
 _logseq_json_names_bash() {
+  # Navigate a JSON path and print leaf strings.
+  # Usage: _logseq_json_names_bash key1 key2 ... keyN
   python3 -c \"
 import sys, json
-field = sys.argv[1]
+keys = sys.argv[1:]
 try:
     data = json.load(sys.stdin)
+    for key in keys:
+        if isinstance(data, dict):
+            data = data.get(key, [])
+        elif isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    v = item.get(key)
+                    if isinstance(v, str) and v:
+                        print(v)
+            sys.exit(0)
     if isinstance(data, list):
         for item in data:
-            v = item.get(field)
-            if isinstance(v, str) and v:
-                print(v)
+            if isinstance(item, str) and item:
+                print(item)
 except Exception:
     pass
-\" \"$1\" 2>/dev/null
+\" \"$@\" 2>/dev/null
 }
 
 _logseq_current_graph_bash() {
-  local i
+  local i w
   for (( i = 1; i < ${#COMP_WORDS[@]}; i++ )); do
-    if [[ \"${COMP_WORDS[i]}\" == '--graph' && -n \"${COMP_WORDS[i+1]}\" ]]; then
+    w=\"${COMP_WORDS[i]}\"
+    if [[ \"$w\" == '--graph' || \"$w\" == '-g' ]] && [[ -n \"${COMP_WORDS[i+1]}\" ]]; then
       printf '%s' \"${COMP_WORDS[i+1]}\"
+      return
+    elif [[ \"$w\" == --graph=* ]]; then
+      printf '%s' \"${w#--graph=}\"
       return
     fi
   done
+  # Fall back to the current graph from 'logseq graph list' (marked with '* ')
+  logseq graph list 2>/dev/null | sed -n 's/^[*] //p'
 }
 
 _logseq_graphs_bash() {
-  logseq graph list --output json 2>/dev/null | _logseq_json_names_bash name
+  logseq graph list --output json 2>/dev/null | _logseq_json_names_bash data graphs
 }
 
 _logseq_pages_bash() {
-  logseq list page --graph \"$1\" --output json 2>/dev/null | _logseq_json_names_bash title
+  logseq list page --graph \"$1\" --output json 2>/dev/null | _logseq_json_names_bash data items title
 }
 
 _logseq_queries_bash() {
-  logseq query list --graph \"$1\" --output json 2>/dev/null | _logseq_json_names_bash name
+  logseq query list --graph \"$1\" --output json 2>/dev/null | _logseq_json_names_bash data queries name
 }
 
 _logseq_compadd_lines() {
@@ -547,13 +572,17 @@ _logseq_multi_values_bash() {
       base)))
 
 (defn- bash-all-value-opts
-  "Collect all non-boolean option names (options that consume a value argument)."
+  "Collect all non-boolean option names (options that consume a value argument).
+   Includes both long (--opt) and short (-x) forms."
   [table]
   (let [all-specs (->> table (mapcat (fn [entry] (seq (:spec entry)))))
         value-opts (->> all-specs
                         (remove (fn [[_ spec-map]]
                                   (= :boolean (:coerce spec-map))))
-                        (mapv (fn [[k _]] (bash-option-name k))))]
+                        (mapcat (fn [[k spec-map]]
+                                  (cond-> [(bash-option-name k)]
+                                    (:alias spec-map)
+                                    (conj (str "-" (name (:alias spec-map))))))))]
     (-> (set value-opts)
         sort
         vec)))
@@ -665,45 +694,48 @@ _logseq_multi_values_bash() {
 
 (defn- bash-prev-completion-case
   "Generate a case branch for prev-word value completion."
-  [{:keys [key type values complete]}]
-  (let [long-opt (bash-option-name key)]
+  [{:keys [key type alias values complete]}]
+  (let [long-opt (bash-option-name key)
+        pattern (if alias
+                  (str long-opt "|-" (name alias))
+                  long-opt)]
     (case type
       :enum
-      (str "    " long-opt ")\n"
+      (str "    " pattern ")\n"
            "      COMPREPLY=( $(compgen -W '" (string/join " " values) "' -- \"$cur\") )\n"
            "      return ;;")
 
       :multi
-      (str "    " long-opt ")\n"
+      (str "    " pattern ")\n"
            "      _logseq_multi_values_bash \"$cur\" " (string/join " " values) "\n"
            "      return ;;")
 
       :dynamic
       (case complete
         :graphs
-        (str "    " long-opt ")\n"
+        (str "    " pattern ")\n"
              "      _logseq_compadd_lines \"$cur\" _logseq_graphs_bash\n"
              "      return ;;")
         :pages
-        (str "    " long-opt ")\n"
+        (str "    " pattern ")\n"
              "      local graph\n"
              "      graph=\"$(_logseq_current_graph_bash)\"\n"
              "      [[ -n \"$graph\" ]] && _logseq_compadd_lines \"$cur\" _logseq_pages_bash \"$graph\"\n"
              "      return ;;")
         :queries
-        (str "    " long-opt ")\n"
+        (str "    " pattern ")\n"
              "      local graph\n"
              "      graph=\"$(_logseq_current_graph_bash)\"\n"
              "      [[ -n \"$graph\" ]] && _logseq_compadd_lines \"$cur\" _logseq_queries_bash \"$graph\"\n"
              "      return ;;"))
 
       :file
-      (str "    " long-opt ")\n"
+      (str "    " pattern ")\n"
            "      COMPREPLY=( $(compgen -f -- \"$cur\") )\n"
            "      return ;;")
 
       :dir
-      (str "    " long-opt ")\n"
+      (str "    " pattern ")\n"
            "      COMPREPLY=( $(compgen -d -- \"$cur\") )\n"
            "      return ;;")
 
