@@ -38,7 +38,6 @@
     "https-proxy-agent": "8.0.0",
     "node-fetch": "3.3.2",
     "open": "11.0.0",
-    "posthog-js": "1.260.1",
     "semver": "7.7.4",
     "socks-proxy-agent": "9.0.0",
     "update-electron-app": "3.1.2",
