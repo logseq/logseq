@@ -42,6 +42,8 @@
    :db-sync/tx-id {:db/unique :db.unique/identity}
    :db-sync/created-at {:db/index true}
    :db-sync/outliner-op {}
+   :db-sync/outliner-ops {}
+   :db-sync/inferred-outliner-ops? {}
    :db-sync/tx-data {}
    :db-sync/normalized-tx-data {}
    :db-sync/reversed-tx-data {}})
