@@ -16,7 +16,6 @@
             [logseq.outliner.datascript :as ds]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [logseq.outliner.recycle :as outliner-recycle]
-            [logseq.outliner.transaction :as outliner-tx]
             [logseq.outliner.tree :as otree]
             [logseq.outliner.tx-meta :as outliner-tx-meta]
             [logseq.outliner.validate :as outliner-validate]
@@ -956,18 +955,21 @@
                           (set))
             move-parents-to-child? (some parents' (map :db/id blocks))]
         (when-not move-parents-to-child?
-          (outliner-tx/with-temp-conn-batch conn {:outliner-op :move-blocks}
-            (doseq [[idx block] (map vector (range (count blocks)) blocks)]
-              (let [first-block? (zero? idx)
-                    sibling? (if first-block? sibling? true)
-                    target-block (if first-block? target-block
-                                     (d/entity @conn (:db/id (nth blocks (dec idx)))))
-                    block (d/entity @conn (:db/id block))]
-                (when-not (move-to-original-position? [block] target-block sibling? false)
-                  (let [tx-data (move-block @conn block target-block sibling?)]
+          (ldb/batch-transact!
+           conn
+           {:outliner-op :move-blocks}
+           (fn [conn]
+             (doseq [[idx block] (map vector (range (count blocks)) blocks)]
+               (let [first-block? (zero? idx)
+                     sibling? (if first-block? sibling? true)
+                     target-block (if first-block? target-block
+                                      (d/entity @conn (:db/id (nth blocks (dec idx)))))
+                     block (d/entity @conn (:db/id block))]
+                 (when-not (move-to-original-position? [block] target-block sibling? false)
+                   (let [tx-data (move-block @conn block target-block sibling?)]
                     ;; (prn "==>> move blocks tx:" tx-data)
-                    (ldb/transact! conn tx-data {:sibling? sibling?
-                                                 :outliner-op (or outliner-op :move-blocks)}))))))
+                     (ldb/transact! conn tx-data {:sibling? sibling?
+                                                  :outliner-op (or outliner-op :move-blocks)})))))))
           nil)))))
 
 (defn- move-blocks-up-down
