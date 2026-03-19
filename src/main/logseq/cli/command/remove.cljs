@@ -10,7 +10,9 @@
 
 (def ^:private remove-block-spec
   {:id {:desc "Block db/id or EDN vector of ids"}
-   :uuid {:desc "Block UUID"}})
+   :uuid {:desc "Block UUID"
+          :validate {:pred (comp parse-uuid str)
+                     :ex-msg (constantly "Option uuid must be a valid UUID string")}}})
 
 (def ^:private remove-page-spec
   {:name {:desc "Page name"
@@ -134,12 +136,10 @@
     (remove-block-id config repo (first ids))
 
     (seq uuid)
-    (if-not (common-util/uuid-string? uuid)
-      (p/rejected (ex-info "block must be a uuid" {:code :invalid-block}))
-      (p/let [entity (fetch-block-by-uuid config repo uuid)]
-        (if-let [id (:db/id entity)]
-          (delete-block-ids config repo [id])
-          (throw (ex-info "block not found" {:code :block-not-found})))))
+    (p/let [entity (fetch-block-by-uuid config repo uuid)]
+      (if-let [id (:db/id entity)]
+        (delete-block-ids config repo [id])
+        (throw (ex-info "block not found" {:code :block-not-found}))))
 
     :else
     (p/rejected (ex-info "block is required" {:code :missing-target}))))

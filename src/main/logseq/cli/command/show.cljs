@@ -13,7 +13,9 @@
 
 (def ^:private show-spec
   {:id {:desc "Block db/id or EDN vector of ids"}
-   :uuid {:desc "Block UUID"}
+   :uuid {:desc "Block UUID"
+          :validate {:pred (comp parse-uuid str)
+                     :ex-msg (constantly "Option uuid must be a valid UUID string")}}
    :page {:desc "Page name"
           :complete :pages}
    :linked-references {:desc "Include linked references (default true)"
@@ -710,34 +712,32 @@
                 (throw (ex-info "entity not found" {:code :entity-not-found})))))))
 
       (seq uuid-str)
-      (if-not (common-util/uuid-string? uuid-str)
-        (p/rejected (ex-info "block must be a uuid" {:code :invalid-block}))
-        (p/let [entity (transport/invoke config :thread-api/pull false
+      (p/let [entity (transport/invoke config :thread-api/pull false
+                                       [repo [:db/id :db/ident :block/name :block/uuid :block/title
+                                              {:logseq.property/status [:db/ident :block/name :block/title]}
+                                              {:block/page [:db/id :block/title]}
+                                              {:block/tags [:db/id :block/name :block/title :block/uuid]}]
+                                        [:block/uuid (uuid uuid-str)]])
+              entity (if (:db/id entity)
+                       entity
+                       (transport/invoke config :thread-api/pull false
                                          [repo [:db/id :db/ident :block/name :block/uuid :block/title
                                                 {:logseq.property/status [:db/ident :block/name :block/title]}
                                                 {:block/page [:db/id :block/title]}
                                                 {:block/tags [:db/id :block/name :block/title :block/uuid]}]
-                                          [:block/uuid (uuid uuid-str)]])
-                entity (if (:db/id entity)
-                         entity
-                         (transport/invoke config :thread-api/pull false
-                                           [repo [:db/id :db/ident :block/name :block/uuid :block/title
-                                                  {:logseq.property/status [:db/ident :block/name :block/title]}
-                                                  {:block/page [:db/id :block/title]}
-                                                  {:block/tags [:db/id :block/name :block/title :block/uuid]}]
-                                            [:block/uuid uuid-str]]))]
-          (p/let [entity (attach-user-properties-to-entity config repo entity)]
-            (if (missing-show-entity? entity)
-              (throw (ex-info "entity not found" {:code :entity-not-found}))
-              (if-let [page-id (get-in entity [:block/page :db/id])]
-                (p/let [blocks (fetch-blocks-for-page config repo page-id)
-                        children (build-tree blocks (:db/id entity) max-depth)]
+                                          [:block/uuid uuid-str]]))]
+        (p/let [entity (attach-user-properties-to-entity config repo entity)]
+          (if (missing-show-entity? entity)
+            (throw (ex-info "entity not found" {:code :entity-not-found}))
+            (if-let [page-id (get-in entity [:block/page :db/id])]
+              (p/let [blocks (fetch-blocks-for-page config repo page-id)
+                      children (build-tree blocks (:db/id entity) max-depth)]
+                {:root (assoc entity :block/children children)})
+              (if-let [entity-id (:db/id entity)]
+                (p/let [blocks (fetch-blocks-for-page config repo entity-id)
+                        children (build-tree blocks entity-id max-depth)]
                   {:root (assoc entity :block/children children)})
-                (if-let [entity-id (:db/id entity)]
-                  (p/let [blocks (fetch-blocks-for-page config repo entity-id)
-                          children (build-tree blocks entity-id max-depth)]
-                    {:root (assoc entity :block/children children)})
-                  (throw (ex-info "entity not found" {:code :entity-not-found}))))))))
+                (throw (ex-info "entity not found" {:code :entity-not-found})))))))
 
       (seq page)
       (p/let [page-entity (transport/invoke config :thread-api/pull false

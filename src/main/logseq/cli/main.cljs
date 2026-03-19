@@ -87,7 +87,7 @@
                                                                  cfg)}
                                   {:exit-code 1
                                    :output (format/format-result {:status :error
-                                                                  :error {:code :exception
+                                                                  :error {:code (or (:code data) :exception)
                                                                           :message message}}
                                                                  cfg)})))))))
            (catch :default error
