@@ -87,7 +87,7 @@
 
 (defn- format-opts
   [spec]
-  (style/bold-options (cli/format-opts {:spec spec})))
+  (style/bold-options (cli/format-opts {:spec (into (sorted-map) spec)})))
 
 (defn group-summary
   [group table]
