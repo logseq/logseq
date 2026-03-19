@@ -12,10 +12,14 @@
 (def ^:private upsert-block-spec
   {:id {:desc "Source block db/id (forces update mode)"
         :coerce :long}
-   :uuid {:desc "Source block UUID (forces update mode)"}
+   :uuid {:desc "Source block UUID (forces update mode)"
+          :validate {:pred (comp parse-uuid str)
+                     :ex-msg (constantly "Option uuid must be a valid UUID string")}}
    :target-id {:desc "Target block db/id"
                :coerce :long}
-   :target-uuid {:desc "Target block UUID"}
+   :target-uuid {:desc "Target block UUID"
+                 :validate {:pred (comp parse-uuid str)
+                            :ex-msg (constantly "Option target-uuid must be a valid UUID string")}}
    :target-page {:desc "Target page name"
                  :complete :pages}
    :pos {:desc "Position. Default: create=last-child, update=first-child"

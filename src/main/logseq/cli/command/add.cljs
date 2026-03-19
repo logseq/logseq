@@ -950,13 +950,11 @@
         (throw (ex-info "target block not found" {:code :target-not-found}))))
 
     (seq target-uuid)
-    (if-not (common-util/uuid-string? target-uuid)
-      (p/rejected (ex-info "target must be a uuid" {:code :invalid-target}))
-      (p/let [block (transport/invoke config :thread-api/pull false
-                                      [repo [:db/id :block/uuid :block/title] [:block/uuid (uuid target-uuid)]])]
-        (if-let [id (:db/id block)]
-          id
-          (throw (ex-info "target block not found" {:code :target-not-found})))))
+    (p/let [block (transport/invoke config :thread-api/pull false
+                                    [repo [:db/id :block/uuid :block/title] [:block/uuid (uuid target-uuid)]])]
+      (if-let [id (:db/id block)]
+        id
+        (throw (ex-info "target block not found" {:code :target-not-found}))))
 
     :else
     (p/let [page-name (if (seq target-page-name) target-page-name (today-page-title config repo))
