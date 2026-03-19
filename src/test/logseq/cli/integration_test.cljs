@@ -161,6 +161,27 @@
                                (pr-str [title name]))]
       (first (first (get-in payload [:data :result]))))))
 
+(defn- query-ref-property-value-titles
+  [data-dir cfg-path repo title property-ident]
+  (let [name (common-util/page-name-sanity-lc title)]
+    (p/let [payload (run-query data-dir cfg-path repo
+                               "[:find ?value-title :in $ ?title ?name ?property-ident :where (or [?e :block/title ?title] [?e :block/content ?title] [?e :block/name ?name]) [?e ?property-ident ?value] [?value :block/title ?value-title]]"
+                               (pr-str [title name property-ident]))]
+      (->> (get-in payload [:data :result])
+           (map first)
+           set))))
+
+(defn- query-ref-property-value-ids
+  [data-dir cfg-path repo title property-ident]
+  (let [name (common-util/page-name-sanity-lc title)]
+    (p/let [payload (run-query data-dir cfg-path repo
+                               "[:find ?value-id :in $ ?title ?name ?property-ident :where (or [?e :block/title ?title] [?e :block/content ?title] [?e :block/name ?name]) [?e ?property-ident ?value-id]]"
+                               (pr-str [title name property-ident]))]
+      (->> (get-in payload [:data :result])
+           (map first)
+           sort
+           vec))))
+
 (defn- query-block-uuid-by-title
   [data-dir cfg-path repo title]
   (let [name (common-util/page-name-sanity-lc title)]
@@ -1482,6 +1503,89 @@
                  (is (= 0 (:exit-code remove-result)))
                  (is (= "ok" (:status remove-payload)))
                  (is (nil? property-after-remove))
+                 (is (= "ok" (:status stop-payload)))
+                 (done))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest ^:long test-cli-upsert-block-update-custom-many-property
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "db-worker-upsert-block-custom-many-property")]
+           (-> (p/let [{:keys [cfg-path repo]} (setup-tags-graph data-dir)
+                       property-ident :user.property/reproducible-steps
+                       property-input {property-ident ["Step 1" "Step 2" "Step 3"]}
+                       upsert-property-result (run-cli ["--graph" repo
+                                                        "upsert" "property"
+                                                        "--name" "reproducible-steps"
+                                                        "--type" "default"
+                                                        "--cardinality" "many"
+                                                        "--public" "true"]
+                                                       data-dir cfg-path)
+                       upsert-property-payload (parse-json-output upsert-property-result)
+                       add-source-result (run-cli ["--graph" repo
+                                                   "upsert" "block"
+                                                   "--target-page" "Home"
+                                                   "--content" "Block source custom many"
+                                                   "--update-properties" (pr-str property-input)]
+                                                  data-dir cfg-path)
+                       add-source-payload (parse-json-output add-source-result)
+                       add-target-result (run-cli ["--graph" repo
+                                                   "upsert" "block"
+                                                   "--target-page" "Home"
+                                                   "--content" "Block target custom many"]
+                                                  data-dir cfg-path)
+                       add-target-payload (parse-json-output add-target-result)
+                       target-id (first-result-id add-target-payload)
+                       update-by-title-result (run-cli ["--graph" repo
+                                                        "upsert" "block"
+                                                        "--id" (str target-id)
+                                                        "--update-properties" (pr-str property-input)]
+                                                       data-dir cfg-path)
+                       update-by-title-payload (parse-json-output update-by-title-result)
+                       _ (p/delay 150)
+                       values-after-title-update (query-ref-property-value-titles data-dir cfg-path repo "Block target custom many" property-ident)
+                       source-value-ids (query-ref-property-value-ids data-dir cfg-path repo "Block source custom many" property-ident)
+                       update-by-id-result (run-cli ["--graph" repo
+                                                     "upsert" "block"
+                                                     "--id" (str target-id)
+                                                     "--update-properties" (pr-str {property-ident source-value-ids})]
+                                                    data-dir cfg-path)
+                       update-by-id-payload (parse-json-output update-by-id-result)
+                       _ (p/delay 150)
+                       values-after-id-update (query-ref-property-value-titles data-dir cfg-path repo "Block target custom many" property-ident)
+                       clear-result (run-cli ["--graph" repo
+                                              "upsert" "block"
+                                              "--id" (str target-id)
+                                              "--update-properties" (pr-str {property-ident []})]
+                                             data-dir cfg-path)
+                       clear-payload (parse-json-output clear-result)
+                       _ (p/delay 150)
+                       values-after-clear (query-ref-property-value-ids data-dir cfg-path repo "Block target custom many" property-ident)
+                       stop-payload (stop-repo! data-dir cfg-path repo)]
+                 (is (= 0 (:exit-code upsert-property-result)))
+                 (is (= "ok" (:status upsert-property-payload)))
+                 (is (= 0 (:exit-code add-source-result)))
+                 (is (= "ok" (:status add-source-payload)))
+                 (is (= 0 (:exit-code add-target-result)))
+                 (is (= "ok" (:status add-target-payload)))
+                 (is (number? target-id))
+                 (is (= 0 (:exit-code update-by-title-result)))
+                 (is (= "ok" (:status update-by-title-payload))
+                     (pr-str update-by-title-payload))
+                 (is (= #{"Step 1" "Step 2" "Step 3"}
+                        values-after-title-update))
+                 (is (= 3 (count source-value-ids)))
+                 (is (every? number? source-value-ids))
+                 (is (= 0 (:exit-code update-by-id-result)))
+                 (is (= "ok" (:status update-by-id-payload))
+                     (pr-str update-by-id-payload))
+                 (is (= #{"Step 1" "Step 2" "Step 3"}
+                        values-after-id-update))
+                 (is (= 0 (:exit-code clear-result)))
+                 (is (= "ok" (:status clear-payload))
+                     (pr-str clear-payload))
+                 (is (empty? values-after-clear))
                  (is (= "ok" (:status stop-payload)))
                  (done))
                (p/catch (fn [e]

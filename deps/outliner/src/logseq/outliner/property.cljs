@@ -394,13 +394,36 @@
                       v)]
         (find-or-create-property-value conn property-id v')))))
 
+(defn- convert-ref-property-values
+  [conn property-id value property-type {:keys [many?]}]
+  (if-not (and many? (or (sequential? value) (set? value)))
+    (convert-ref-property-value conn property-id value property-type)
+    (try
+      (mapv #(convert-ref-property-value conn property-id % property-type) value)
+      (catch :default e
+        (throw (ex-info "Failed to convert many property values"
+                        (merge
+                         {:property-id property-id
+                          :property-type property-type
+                          :value value
+                          :many? many?
+                          :value-shape (cond
+                                         (vector? value) :vector
+                                         (set? value) :set
+                                         (sequential? value) :seq
+                                         :else :single)}
+                         (ex-data e))
+                        e))))))
+
 (defn- throw-error-if-self-value
   [block value ref?]
-  (when (and ref? (= value (:db/id block)))
-    (throw (ex-info "Can't set this block itself as own property value"
-                    {:type :notification
-                     :payload {:message "Can't set this block itself as own property value"
-                               :type :error}}))))
+  (let [values (if (or (sequential? value) (set? value)) value [value])]
+    (when (and ref?
+               (some #(= % (:db/id block)) values))
+      (throw (ex-info "Can't set this block itself as own property value"
+                      {:type :notification
+                       :payload {:message "Can't set this block itself as own property value"
+                                 :type :error}})))))
 
 (defn batch-remove-property!
   [conn block-ids property-id]
@@ -437,7 +460,9 @@
 
 (defn batch-set-property!
   "Sets properties for multiple blocks. Automatically handles property value refs.
-   Does no validation of property values."
+   Does no validation of property values.
+   For :many properties, passing a collection replaces existing values in one
+   call, while passing a scalar preserves add-single-value behavior."
   ([conn block-ids property-id v]
    (batch-set-property! conn block-ids property-id v {}))
   ([conn block-ids property-id v options]
@@ -457,12 +482,13 @@
            _ (when (nil? property)
                (throw (ex-info (str "Property " property-id " doesn't exist yet") {:property-id property-id})))
            property-type (get property :logseq.property/type :default)
+           many? (= :db.cardinality/many (:db/cardinality property))
            entity-id? (and (:entity-id? options) (number? v))
            ref? (contains? db-property-type/all-ref-property-types property-type)
            default-url-not-closed? (and (contains? #{:default :url} property-type)
                                         (not (seq (entity-plus/lookup-kv-then-entity property :property/closed-values))))
            v' (if (and ref? (not entity-id?))
-                (convert-ref-property-value conn property-id v property-type)
+                (convert-ref-property-values conn property-id v property-type {:many? many?})
                 v)
            _ (when (nil? v')
                (throw (ex-info "Property value must be not nil" {:v v})))
@@ -472,11 +498,17 @@
                    (if-let [block (d/entity @conn eid)]
                      (let [v' (if (and default-url-not-closed?
                                        (not (and (keyword? v) entity-id?)))
-                                (do
-                                  (when (number? v')
-                                    (throw-error-if-invalid-property-value @conn property v'))
-                                  (let [v (if (number? v') (:block/title (d/entity @conn v')) v')]
-                                    (convert-ref-property-value conn property-id v property-type)))
+                                (let [normalize-default-url-value
+                                      (fn [value]
+                                        (if (number? value)
+                                          (do
+                                            (throw-error-if-invalid-property-value @conn property value)
+                                            (:block/title (d/entity @conn value)))
+                                          value))
+                                      value' (if (and many? (or (sequential? v') (set? v')))
+                                               (mapv normalize-default-url-value v')
+                                               (normalize-default-url-value v'))]
+                                  (convert-ref-property-values conn property-id value' property-type {:many? many?}))
                                 v')]
                        (throw-error-if-self-value block v' ref?)
                        (throw-error-if-invalid-property-value @conn property v')

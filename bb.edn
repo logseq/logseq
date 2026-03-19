@@ -67,6 +67,7 @@
            (run '-dev:publishing-dev {:parallel true})
            (run '-dev:publishing-release))}
 
+  ;; legacy cli
   dev:cli
   {:doc "Run CLI with current deps/db code. Commands with JS deps are not usable e.g. mcp-server"
    :task (apply shell {:dir "deps/db"}
