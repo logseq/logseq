@@ -815,11 +815,6 @@
   (testing "rename-page is persisted as canonical save-block op"
     (let [{:keys [conn client-ops-conn]} (setup-parent-child)
           page-uuid (random-uuid)]
-      (outliner-op/register-op-handlers!
-       {:rename-page (fn [conn* [page-uuid* new-title]]
-                       (outliner-core/save-block! conn*
-                                                  {:block/uuid page-uuid*
-                                                   :block/title new-title}))})
       (with-datascript-conns conn client-ops-conn
         (fn []
           (worker-page/create! conn "Rename Me" :uuid page-uuid)
@@ -895,9 +890,6 @@
   (testing "rebased create-page should preserve the original page uuid"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
           page-title "rebase page uuid"]
-      (outliner-op/register-op-handlers!
-       {:create-page (fn [conn* [title options]]
-                       (worker-page/create! conn* title options))})
       (with-datascript-conns conn client-ops-conn
         (fn []
           (outliner-op/apply-ops! conn

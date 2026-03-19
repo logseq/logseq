@@ -19,7 +19,6 @@
             [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.embedding :as embedding]
             [frontend.worker.export :as worker-export]
-            [frontend.worker.handler.page :as worker-page]
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.publish]
             [frontend.worker.search :as search]
@@ -937,7 +936,14 @@
     (try
       (worker-util/profile
        "apply outliner ops"
-       (outliner-op/apply-ops! conn ops opts))
+       (outliner-op/apply-ops!
+        conn
+        ops
+        (assoc opts
+               :error-handler
+               (fn [{:keys [msg]}]
+                 (worker-util/post-message :notification
+                                           [[:div [:p msg]] :error])))))
       (catch :default e
         (let [data (ex-data e)
               {:keys [type payload]} (when (map? data) data)]
@@ -1110,36 +1116,6 @@
             dbs (ldb/read-transit-str r)]
       (p/all (map #(.unsafeUnlinkDB this (:name %)) dbs)))))
 
-(defn- delete-page!
-  [conn page-uuid opts]
-  (let [error-handler (fn [{:keys [msg]}]
-                        (worker-util/post-message :notification
-                                                  [[:div [:p msg]] :error]))]
-    (worker-page/delete! conn page-uuid (merge opts {:error-handler error-handler}))))
-
-(defn- create-page!
-  [conn title options]
-  (try
-    (worker-page/create! conn title options)
-    (catch :default e
-      (js/console.error e)
-      (throw e))))
-
-(defn- outliner-register-op-handlers!
-  []
-  (outliner-op/register-op-handlers!
-   {:create-page (fn [conn [title options]]
-                   (create-page! conn title options))
-    :rename-page (fn [conn [page-uuid new-title]]
-                   (if (string/blank? new-title)
-                     (throw (ex-info "Page name shouldn't be blank" {:block/uuid page-uuid
-                                                                     :block/title new-title}))
-                     (outliner-core/save-block! conn
-                                                {:block/uuid page-uuid
-                                                 :block/title new-title})))
-    :delete-page (fn [conn [page-uuid opts]]
-                   (delete-page! conn page-uuid opts))}))
-
 (defn- on-become-master
   [repo start-opts]
   (js/Promise.
@@ -1232,7 +1208,6 @@
     (log/set-levels {:glogi/root :info})
     (log/add-handler worker-state/log-append!)
     (check-worker-scope!)
-    (outliner-register-op-handlers!)
     (js/setInterval #(.postMessage js/self "keepAliveResponse") (* 1000 25))
     (Comlink/expose proxy-object)
     (let [^js wrapped-main-thread* (Comlink/wrap js/self)
