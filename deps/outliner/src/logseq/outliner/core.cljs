@@ -1051,7 +1051,8 @@
   (try
     (let [result (apply f args)]
       (when result
-        (let [tx-meta (assoc (:tx-meta result)
+        (let [tx-meta (:tx-meta result)
+              tx-meta (assoc tx-meta
                              :outliner-op outliner-op)]
           (ldb/transact! (first args) (:tx-data result) tx-meta)))
       result)

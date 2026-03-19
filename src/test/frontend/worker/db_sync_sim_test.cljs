@@ -12,6 +12,7 @@
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.apply-txs :as sync-apply]
             [frontend.worker.sync.client-op :as client-op]
+            [frontend.worker.sync.legacy-rebase :as legacy-rebase]
             [logseq.db :as ldb]
             [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db.common.normalize :as db-normalize]
@@ -263,8 +264,8 @@
                (assoc pending-entry
                       :tx-data (->> tx
                                     (db-normalize/remove-retract-entity-ref @conn)
-                                    (#'sync-apply/drop-missing-created-block-datoms @conn)
-                                    (#'sync-apply/sanitize-tx-data @conn)
+                                    (#'legacy-rebase/drop-missing-created-block-datoms @conn)
+                                    (#'legacy-rebase/sanitize-tx-data @conn)
                                     distinct
                                     vec))))
        (filterv (comp seq :tx-data))))

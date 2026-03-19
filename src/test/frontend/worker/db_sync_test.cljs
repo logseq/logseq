@@ -15,9 +15,11 @@
             [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.handle-message :as sync-handle-message]
             [frontend.worker.sync.large-title :as sync-large-title]
+            [frontend.worker.sync.legacy-rebase :as legacy-rebase]
             [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
             [frontend.worker.sync.upload :as sync-upload]
             [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db-sync.storage :as sync-storage]
@@ -700,8 +702,8 @@
                                           {:tx (sqlite-util/write-transit-str
                                                 (->> tx
                                                      (db-normalize/remove-retract-entity-ref @conn)
-                                                     (#'sync-apply/drop-missing-created-block-datoms @conn)
-                                                     (#'sync-apply/sanitize-tx-data @conn)
+                                                     (#'legacy-rebase/drop-missing-created-block-datoms @conn)
+                                                     (#'legacy-rebase/sanitize-tx-data @conn)
                                                      distinct
                                                      vec))
                                            :outliner-op outliner-op})))]
@@ -731,8 +733,8 @@
                                         {:tx (sqlite-util/write-transit-str
                                               (->> tx
                                                    (db-normalize/remove-retract-entity-ref @conn)
-                                                   (#'sync-apply/drop-missing-created-block-datoms @conn)
-                                                   (#'sync-apply/sanitize-tx-data @conn)
+                                                   (#'legacy-rebase/drop-missing-created-block-datoms @conn)
+                                                   (#'legacy-rebase/sanitize-tx-data @conn)
                                                    distinct
                                                    vec))
                                          :outliner-op outliner-op})))]
@@ -769,8 +771,8 @@
           (let [sanitize-tx (fn [tx]
                               (->> tx
                                    (db-normalize/remove-retract-entity-ref @local-conn)
-                                   (#'sync-apply/drop-missing-created-block-datoms @local-conn)
-                                   (#'sync-apply/sanitize-tx-data @local-conn)
+                                   (#'legacy-rebase/drop-missing-created-block-datoms @local-conn)
+                                   (#'legacy-rebase/sanitize-tx-data @local-conn)
                                    distinct
                                    vec))
                 tx-entries (mapv (fn [{:keys [tx outliner-op]}]
@@ -798,12 +800,150 @@
             (is (seq pending))
             (is (= :toggle-reaction (:db-sync/outliner-op (first raw-pending))))
             (is (= :toggle-reaction (:outliner-op (first pending))))
+            (is (= [[:transact nil]]
+                   (:db-sync/outliner-ops (first raw-pending))))
+            (is (= [[:transact nil]]
+                   (:outliner-ops (first pending))))
             (is (some (fn [tx]
                         (and (vector? tx)
                              (= :db/add (first tx))
                              (= :logseq.property.reaction/emoji-id (nth tx 2 nil))
                              (= "+1" (nth tx 3 nil))))
                       txs))))))))
+
+(deftest rename-page-enqueues-canonical-save-block-pending-op-test
+  (testing "rename-page is persisted as canonical save-block op"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          page-uuid (random-uuid)]
+      (outliner-op/register-op-handlers!
+       {:rename-page (fn [conn* [page-uuid* new-title]]
+                       (outliner-core/save-block! conn*
+                                                  {:block/uuid page-uuid*
+                                                   :block/title new-title}))})
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (worker-page/create! conn "Rename Me" :uuid page-uuid)
+          (outliner-op/apply-ops! conn
+                                  [[:rename-page [page-uuid "Renamed"]]]
+                                  local-tx-meta)
+          (let [{:keys [outliner-ops]} (last (#'sync-apply/pending-txs test-repo))]
+            (is (= :save-block (ffirst outliner-ops)))
+            (is (= {:block/uuid page-uuid
+                    :block/title "Renamed"}
+                   (first (second (first outliner-ops)))))))))))
+
+(deftest move-blocks-up-down-enqueues-canonical-move-blocks-pending-op-test
+  (testing "move-blocks-up-down is persisted as canonical move-blocks op"
+    (let [{:keys [conn client-ops-conn child2]} (setup-parent-child)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-op/apply-ops! conn
+                                  [[:move-blocks-up-down [[(:db/id child2)] true]]]
+                                  local-tx-meta)
+          (let [{:keys [outliner-ops]} (first (#'sync-apply/pending-txs test-repo))
+                [_ [_ _ opts]] (first outliner-ops)]
+            (is (= :move-blocks (ffirst outliner-ops)))
+            (is (= :move-blocks-up-down (:source-op opts)))
+            (is (= true (:up? opts)))))))))
+
+(deftest indent-outdent-enqueues-canonical-move-blocks-pending-op-test
+  (testing "indent-outdent-blocks is persisted as canonical move-blocks op"
+    (let [{:keys [conn client-ops-conn child2]} (setup-parent-child)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-op/apply-ops! conn
+                                  [[:indent-outdent-blocks [[(:db/id child2)] true {}]]]
+                                  local-tx-meta)
+          (let [{:keys [outliner-ops]} (first (#'sync-apply/pending-txs test-repo))
+                [_ [_ _ opts]] (first outliner-ops)]
+            (is (= :move-blocks (ffirst outliner-ops)))
+            (is (= :indent-outdent-blocks (:source-op opts)))
+            (is (= true (:indent? opts)))))))))
+
+(deftest enqueue-local-tx-canonicalizes-batch-import-to-transact-test
+  (testing "batch-import-edn local tx persists as canonical transact op"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          tx-report (d/with @conn
+                            [{:block/uuid (random-uuid)
+                              :block/title "imported"
+                              :block/tags :logseq.class/Page
+                              :block/created-at 1760000000000
+                              :block/updated-at 1760000000000}]
+                            (assoc local-tx-meta :outliner-op :batch-import-edn))]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (db-sync/enqueue-local-tx! test-repo tx-report)
+          (let [{:keys [outliner-ops]} (first (#'sync-apply/pending-txs test-repo))]
+            (is (= [[:transact nil]] outliner-ops))))))))
+
+(deftest enqueue-local-tx-canonicalizes-undo-to-transact-test
+  (testing "undo local tx persists as canonical transact op"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          tx-report (d/with @conn
+                            [[:db/add (:db/id child1) :block/title "undo value"]]
+                            (assoc local-tx-meta
+                                   :outliner-op :save-block
+                                   :undo? true
+                                   :gen-undo-ops? false))]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (db-sync/enqueue-local-tx! test-repo tx-report)
+          (let [{:keys [outliner-ops]} (first (#'sync-apply/pending-txs test-repo))]
+            (is (= [[:transact nil]] outliner-ops))))))))
+
+(deftest rebase-create-page-keeps-page-uuid-test
+  (testing "rebased create-page should preserve the original page uuid"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          page-title "rebase page uuid"]
+      (outliner-op/register-op-handlers!
+       {:create-page (fn [conn* [title options]]
+                       (worker-page/create! conn* title options))})
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-op/apply-ops! conn
+                                  [[:create-page [page-title {:redirect? false
+                                                              :split-namespace? true
+                                                              :tags ()}]]]
+                                  local-tx-meta)
+          (let [page-before (db-test/find-page-by-title @conn page-title)
+                page-uuid (:block/uuid page-before)
+                pending-before (last (#'sync-apply/pending-txs test-repo))]
+            (is (= :create-page (ffirst (:outliner-ops pending-before))))
+            (is (= page-uuid (get-in pending-before [:outliner-ops 0 1 1 :uuid])))
+            (#'sync-apply/apply-remote-tx!
+             test-repo
+             nil
+             [[:db/add (:db/id parent) :block/title "parent remote create-page"]])
+            (let [page-after (db-test/find-page-by-title @conn page-title)]
+              (is (some? page-after))
+              (is (= page-uuid (:block/uuid page-after))))))))))
+
+(deftest rebase-insert-blocks-keeps-block-uuid-test
+  (testing "rebased insert-blocks should preserve the original block uuid"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-op/apply-ops! conn
+                                  [[:insert-blocks [[{:block/title "rebase uuid block"
+                                                      :block/uuid (random-uuid)}]
+                                                    (:db/id parent)
+                                                    {:sibling? false}]]]
+                                  local-tx-meta)
+          (let [block-before (db-test/find-block-by-content @conn "rebase uuid block")
+                block-uuid (:block/uuid block-before)
+                pending-before (last (#'sync-apply/pending-txs test-repo))]
+            (is (some? block-before))
+            (is (= :insert-blocks (ffirst (:outliner-ops pending-before))))
+            (is (= block-uuid
+                   (get-in pending-before [:outliner-ops 0 1 0 0 :block/uuid])))
+            (is (= true (get-in pending-before [:outliner-ops 0 1 2 :keep-uuid?])))
+            (#'sync-apply/apply-remote-tx!
+             test-repo
+             nil
+             [[:db/add (:db/id parent) :block/title "parent remote insert-blocks"]])
+            (let [block-after (d/entity @conn [:block/uuid block-uuid])]
+              (is (some? block-after))
+              (is (= block-uuid (:block/uuid block-after))))))))))
 
 (deftest reaction-remove-enqueues-pending-sync-tx-test
   (testing "removing a reaction should enqueue tx for db-sync"
@@ -823,6 +963,22 @@
                                     local-tx-meta)
             (let [after-count (count (#'sync-apply/pending-txs test-repo))]
               (is (> after-count before-count)))))))))
+
+(deftest rebase-drops-whole-pending-reaction-tx-when-target-deleted-test
+  (testing "if a pending user action becomes invalid during rebase, the whole tx is dropped"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          target-uuid (:block/uuid parent)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-op/apply-ops! conn
+                                  [[:toggle-reaction [target-uuid "+1" nil]]]
+                                  local-tx-meta)
+          (is (= 1 (count (#'sync-apply/pending-txs test-repo))))
+          (#'sync-apply/apply-remote-tx!
+           test-repo
+           nil
+           [[:db/retractEntity [:block/uuid target-uuid]]])
+          (is (empty? (#'sync-apply/pending-txs test-repo))))))))
 
 (deftest tx-batch-ok-removes-acked-pending-txs-test
   (testing "tx/batch/ok clears inflight and removes acked pending txs"
@@ -1015,6 +1171,52 @@
                   (str (:errors validation))))))
         (finally
           (d/unlisten! conn-b ::capture-tag-delete-rebase))))))
+
+(deftest rebase-inserted-page-ref-does-not-keep-stale-ref-to-remotely-deleted-tag-test
+  (testing "offline inserted [[tag1]] block keeps text but drops stale block/refs after remote tag deletion"
+    (let [graph {:classes {:tag1 {}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks []}]}
+          conn-a (db-test/create-conn-with-blocks graph)
+          conn-b (d/conn-from-db @conn-a)
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          remote-tx (atom nil)]
+      (d/listen! conn-b ::capture-ref-delete-rebase
+                 (fn [tx-report]
+                   (when-not @remote-tx
+                     (reset! remote-tx
+                             (db-normalize/normalize-tx-data
+                              (:db-after tx-report)
+                              (:db-before tx-report)
+                              (:tx-data tx-report))))))
+      (try
+        (with-datascript-conns conn-a client-ops-conn
+          (fn []
+            (let [page (db-test/find-page-by-title @conn-a "page 1")
+                  tag1 (ldb/get-page @conn-a "tag1")
+                  result (outliner-op/apply-ops!
+                          conn-a
+                          [[:insert-blocks
+                            [[{:block/title (common-util/format "[[%s]]"
+                                                                (:block/uuid tag1))
+
+                               :block/refs [{:block/uuid (:block/uuid tag1)
+                                             :block/title "tag1"}]}]
+                             (:db/id page)
+                             {:sibling? false}]]]
+                          {})
+                  block-id (:block/uuid (first (:blocks result)))]
+              (outliner-page/delete! conn-a (:block/uuid (d/entity @conn-b :user.class/tag1)) {})
+              (#'sync-apply/apply-remote-tx! test-repo nil @remote-tx)
+              (let [block (d/entity @conn-a [:block/uuid block-id])
+                    tag-page (db-test/find-page-by-title @conn-a "tag1")]
+                (is (some? block))
+                (is (nil? tag-page))
+                (is (empty? (:block/refs block)))
+                (is (= "tag1" (:block/raw-title block)))))))
+        (finally
+          (d/unlisten! conn-b ::capture-ref-delete-rebase))))))
 
 (deftest cut-paste-parent-with-child-keeps-child-parent-after-sync-test
   (testing "remote tx can retract and recreate target uuid; child should point to recreated parent"
@@ -1286,7 +1488,7 @@
                    [:db/add [:block/uuid child-uuid] :block/page 998]
                    [:db/retract [:block/uuid child-uuid] :logseq.property/created-by-ref 100]]
           remote-updated-keys #{[child-uuid :block/page]}]
-      (is (empty? (#'sync-apply/drop-remote-conflicted-local-tx
+      (is (empty? (#'legacy-rebase/drop-remote-conflicted-local-tx
                    @conn
                    remote-updated-keys
                    tx-data))))))
@@ -1462,7 +1664,7 @@
   (testing "retractEntity with legacy string uuid is rewritten to block lookup"
     (let [missing-uuid (random-uuid)
           tx-data [[:db/retractEntity (str missing-uuid)]]
-          rewritten (#'sync-apply/replace-string-block-tempids-with-lookups (db-test/create-conn) tx-data)]
+          rewritten (#'legacy-rebase/replace-string-block-tempids-with-lookups (db-test/create-conn) tx-data)]
       (is (= [[:db/retractEntity [:block/uuid missing-uuid]]]
              rewritten)))))
 
@@ -1568,7 +1770,7 @@
                    [:db/add -1 :block/order "a0"]
                    [:db/add [:block/uuid child-uuid] :block/parent [:block/uuid parent-uuid]]]
           _ (outliner-core/delete-blocks! conn [parent] {})
-          sanitized (->> (#'sync-apply/sanitize-tx-data @conn tx-data)
+          sanitized (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
                          vec)]
       (is (= tx-data sanitized)))))
 
@@ -1580,7 +1782,7 @@
           missing-parent-uuid (random-uuid)
           tx-data [[:db/retract [:block/uuid child-uuid] :block/parent [:block/uuid old-parent-uuid]]
                    [:db/add [:block/uuid child-uuid] :block/parent [:block/uuid missing-parent-uuid]]]
-          sanitized (->> (#'sync-apply/sanitize-tx-data @conn tx-data)
+          sanitized (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
                          vec)]
       (is (empty? sanitized)))))
 
@@ -1592,8 +1794,8 @@
           missing-parent-uuid (random-uuid)
           tx-data [[:db/retract [:block/uuid child-uuid] :block/parent [:block/uuid old-parent-uuid]]
                    [:db/add [:block/uuid child-uuid] :block/parent [:block/uuid missing-parent-uuid]]]
-          sanitized-without-cleanup (with-redefs [sync-apply/drop-orphaning-parent-retracts identity]
-                                      (->> (#'sync-apply/sanitize-tx-data @conn tx-data)
+          sanitized-without-cleanup (with-redefs [legacy-rebase/drop-orphaning-parent-retracts identity]
+                                      (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
                                            vec))]
       (is (= [[:db/retract [:block/uuid child-uuid]
                :block/parent
@@ -1606,7 +1808,7 @@
           child-id (:db/id child1)
           tx-data [[:db/add child-id :block/title "should-drop"]]
           _ (outliner-core/delete-blocks! conn [child1] {})
-          sanitized (->> (#'sync-apply/sanitize-tx-data @conn tx-data)
+          sanitized (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
                          vec)]
       (is (= tx-data sanitized)))))
 
@@ -1617,7 +1819,7 @@
           child-id (:db/id child1)
           tx-data [[:db/add parent-id :block/parent child-id]]
           _ (outliner-core/delete-blocks! conn [child1] {})
-          sanitized (->> (#'sync-apply/sanitize-tx-data @conn tx-data)
+          sanitized (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
                          vec)]
       (is (= tx-data sanitized)))))
 
@@ -1626,7 +1828,7 @@
     (let [{:keys [conn]} (setup-parent-child)
           missing-id 999999
           tx-data [[:db/add missing-id :block/title ""]]
-          sanitized (->> (#'sync-apply/sanitize-tx-data @conn tx-data)
+          sanitized (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
                          vec)]
       (is (empty? sanitized)))))
 
@@ -1636,7 +1838,7 @@
           parent-id (:db/id parent)
           missing-id 999999
           tx-data [[:db/add parent-id :block/parent missing-id]]
-          sanitized (->> (#'sync-apply/sanitize-tx-data @conn tx-data)
+          sanitized (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
                          vec)]
       (is (empty? sanitized)))))
 
@@ -1652,7 +1854,7 @@
                    [:db/add [:block/uuid child-uuid]
                     :block/parent
                     [:block/uuid new-parent-uuid]]]
-          sanitized (->> (#'sync-apply/sanitize-tx-data @conn tx-data)
+          sanitized (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
                          vec)]
       (is (= [[:db/add [:block/uuid child-uuid]
                :block/parent
@@ -1664,7 +1866,7 @@
     (let [{:keys [conn]} (setup-parent-child)
           missing-uuid (random-uuid)
           tx-data [[:db/retractEntity [:block/uuid missing-uuid]]]
-          sanitized (->> (#'sync-apply/sanitize-tx-data @conn tx-data)
+          sanitized (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
                          vec)]
       (is (= tx-data sanitized)))))
 
@@ -1674,7 +1876,7 @@
           missing-uuid (random-uuid)
           tx-data [[:db/add [:block/uuid missing-uuid] :block/title "stale title"]
                    [:db/add [:block/uuid missing-uuid] :block/updated-at 1773747515784]]
-          sanitized (->> (#'sync-apply/sanitize-tx-data @conn tx-data)
+          sanitized (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
                          vec)]
       (is (empty? sanitized)))))
 
