@@ -74,7 +74,6 @@
         "css:build": "postcss tailwind.all.css -o static/css/style.css --verbose --env production",
         "css:watch": "cross-env TAILWIND_MODE=watch postcss tailwind.all.css -o static/css/style.css --verbose --watch",
         "cljs:watch": "clojure -M:cljs watch app db-worker inference-worker electron",
-        "cljs:storybook-watch": "clojure -M:cljs watch stories-dev",
         "gulp:mobile-watch": "gulp watchMobile",
         "css:mobile-build": "postcss tailwind.mobile.css -o static/mobile/css/style.css --verbose --env production",
         "css:mobile-watch": "cross-env TAILWIND_MODE=watch postcss tailwind.mobile.css -o static/mobile/css/style.css --verbose --watch",
