@@ -81,6 +81,7 @@
              (and (string? page-name) (not (string/blank? page-name))))
      (let [page (db/get-page page-name)]
        (if (and (not config/dev?)
+                (not= common-config/recycle-page-name (:block/title page))
                 (or (and (ldb/hidden? page) (not (ldb/property? page)))
                     (and (ldb/built-in? page) (ldb/private-built-in-page? page))))
          (notification/show! "Cannot go to an internal page." :warning)

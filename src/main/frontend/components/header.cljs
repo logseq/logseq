@@ -29,6 +29,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.version :refer [version]]
+            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
@@ -155,6 +156,11 @@
                   {:title (t :appearance)
                    :options {:on-click #(state/pub-event! [:ui/toggle-appearance])}
                    :icon (ui/icon "color-swatch")}
+
+                  (when (db/get-page common-config/recycle-page-name)
+                    {:title "Recycle"
+                     :options {:on-click page-handler/open-recycle!}
+                     :icon (ui/icon "trash")})
 
                   (when current-repo
                     {:title (t :export-graph)

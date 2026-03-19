@@ -53,6 +53,12 @@
   (ensure-schema! self)
   (storage/get-t (.-sql self)))
 
+(defn current-checksum [^js self]
+  (ensure-conn! self)
+  (let [db @(.-conn self)]
+    (when-not (ldb/get-graph-rtc-e2ee? db)
+      (storage/get-checksum (.-sql self)))))
+
 (defn snapshot-upload-finished? [^js self]
   (ensure-schema! self)
   (not= "true" (storage/get-meta (.-sql self) snapshot-uploading-meta-key)))
@@ -269,10 +275,11 @@
 (defn pull-response [^js self since]
   (let [sql (.-sql self)
         txs (storage/fetch-tx-since sql since)
-        response {:type "pull/ok"
-                  :t (t-now self)
-                  :txs txs}]
-    response))
+        checksum (current-checksum self)]
+    (cond-> {:type "pull/ok"
+             :t (t-now self)
+             :txs txs}
+      (string? checksum) (assoc :checksum checksum))))
 
 (defn- import-snapshot! [^js self rows reset?]
   (let [sql (.-sql self)]
@@ -282,44 +289,71 @@
       (reset-import! sql))
     (import-snapshot-rows! sql "kvs" rows)))
 
-(defn- apply-tx! [^js self sender txs]
+(defn- sanitize-client-tx-data
+  [conn txs]
+  (let [lookup-id (fn [x]
+                    (when (and (vector? x)
+                               (= 2 (count x))
+                               (= :block/uuid (first x)))
+                      (second x)))
+        tx-data* (protocol/transit->tx txs)
+        created-block-uuids (->> tx-data*
+                                 (keep (fn [item]
+                                         (when (and (vector? item)
+                                                    (= :db/add (first item))
+                                                    (>= (count item) 4)
+                                                    (= :block/uuid (nth item 2)))
+                                           (nth item 3))))
+                                 set)
+        missing-lookup-ref? (fn [x]
+                              (when-let [block-uuid (lookup-id x)]
+                                (and (not (contains? created-block-uuids block-uuid))
+                                     (nil? (d/entity @conn x)))))]
+    (remove (fn [item]
+              (when (vector? item)
+                (let [op (first item)
+                      attr (nth item 2 nil)
+                      value (when (>= (count item) 4) (nth item 3))]
+                  (or (and (contains? #{:db/add :db/retract :db/retractEntity} op)
+                           (missing-lookup-ref? (second item)))
+                      (and (contains? #{:db/add :db/retract} op)
+                           (contains? db-schema/ref-type-attributes attr)
+                           (missing-lookup-ref? value))))))
+            tx-data*)))
+
+(defn- apply-tx-entry!
+  [conn {:keys [tx outliner-op]}]
+  (let [tx-data (sanitize-client-tx-data conn tx)]
+    (when (seq tx-data)
+      (ldb/transact! conn tx-data (cond-> {:op :apply-client-tx}
+                                    outliner-op (assoc :outliner-op outliner-op))))))
+
+(defn- db-transact-failed-response
+  [sql tx-entry]
+  {:type "tx/reject"
+   :reason "db transact failed"
+   :t (storage/get-t sql)
+   :data (common/write-transit tx-entry)})
+
+(defn- apply-tx! [^js self sender tx-entries]
   (let [sql (.-sql self)]
     (ensure-conn! self)
-    (let [conn (.-conn self)
-          lookup-id (fn [x]
-                      (when (and (vector? x)
-                                 (= 2 (count x))
-                                 (= :block/uuid (first x)))
-                        (second x)))
-          tx-data* (protocol/transit->tx txs)
-          created-block-uuids (->> tx-data*
-                                   (keep (fn [item]
-                                           (when (and (vector? item)
-                                                      (= :db/add (first item))
-                                                      (>= (count item) 4)
-                                                      (= :block/uuid (nth item 2)))
-                                             (nth item 3))))
-                                   set)
-          missing-lookup-ref? (fn [x]
-                                (when-let [block-uuid (lookup-id x)]
-                                  (and (not (contains? created-block-uuids block-uuid))
-                                       (nil? (d/entity @conn x)))))
-          tx-data (remove (fn [item]
-                            (when (vector? item)
-                              (let [op (first item)
-                                    attr (nth item 2 nil)
-                                    value (when (>= (count item) 4) (nth item 3))]
-                                (or (and (contains? #{:db/add :db/retract :db/retractEntity} op)
-                                         (missing-lookup-ref? (second item)))
-                                    (and (contains? #{:db/add :db/retract} op)
-                                         (contains? db-schema/ref-type-attributes attr)
-                                         (missing-lookup-ref? value))))))
-                          tx-data*)]
-      (ldb/transact! conn tx-data {:op :apply-client-tx})
-      (let [new-t (storage/get-t sql)]
-        ;; FIXME: no need to broadcast if client tx is less than remote tx
-        (ws/broadcast! self sender {:type "changed" :t new-t})
-        new-t))))
+    (let [conn (.-conn self)]
+      (loop [remaining tx-entries]
+        (if-let [tx-entry (first remaining)]
+          (let [result (try
+                         (apply-tx-entry! conn tx-entry)
+                         ::ok
+                         (catch :default e
+                           (log/error :db-sync/transact-failed e)
+                           (db-transact-failed-response sql tx-entry)))]
+            (if (= ::ok result)
+              (recur (next remaining))
+              result))
+          (let [new-t (storage/get-t sql)]
+            ;; FIXME: no need to broadcast if client tx is less than remote tx
+            (ws/broadcast! self sender {:type "changed" :t new-t})
+            new-t))))))
 
 (defn handle-tx-batch! [^js self sender txs t-before]
   (let [current-t (t-now self)]
@@ -339,18 +373,20 @@
        :t current-t}
 
       :else
-      (if txs
+      (if (seq txs)
         (try
           (let [new-t (apply-tx! self sender txs)]
             (if (and (map? new-t) (= "tx/reject" (:type new-t)))
               new-t
-              {:type "tx/batch/ok"
-               :t new-t}))
+              (let [checksum (current-checksum self)]
+                (cond-> {:type "tx/batch/ok"
+                         :t new-t}
+                  (string? checksum) (assoc :checksum checksum)))))
           (catch :default e
             (log/error :db-sync/transact-failed e)
             {:type "tx/reject"
              :reason "db transact failed"
-             :t current-t}))
+             :t (t-now self)}))
         {:type "tx/reject"
          :reason "empty tx data"}))))
 
@@ -422,13 +458,27 @@
 
 (defn- handle-sync-admin-reset
   [^js self]
-  (common/sql-exec (.-sql self) "drop table if exists kvs")
-  (common/sql-exec (.-sql self) "drop table if exists tx_log")
-  (common/sql-exec (.-sql self) "drop table if exists sync_meta")
-  (storage/init-schema! (.-sql self))
-  (set! (.-schema-ready self) true)
-  (set! (.-conn self) nil)
-  (http/json-response :sync/admin-reset {:ok true}))
+  (let [^js state (.-state self)
+        ^js storage (.-storage state)
+        delete-all (.-deleteAll storage)
+        delete-alarm (.-deleteAlarm storage)]
+    (doseq [^js ws (.getWebSockets state)]
+      (.close ws 1000 "graph deleted"))
+    (p/let [_ (when (fn? delete-alarm)
+                (.deleteAlarm storage))]
+      (if (fn? delete-all)
+        (p/let [_ (.deleteAll storage)]
+          (set! (.-schema-ready self) false)
+          (set! (.-conn self) nil)
+          (http/json-response :sync/admin-reset {:ok true}))
+        (do
+          (common/sql-exec (.-sql self) "drop table if exists kvs")
+          (common/sql-exec (.-sql self) "drop table if exists tx_log")
+          (common/sql-exec (.-sql self) "drop table if exists sync_meta")
+          (storage/init-schema! (.-sql self))
+          (set! (.-schema-ready self) true)
+          (set! (.-conn self) nil)
+          (http/json-response :sync/admin-reset {:ok true}))))))
 
 (defn- handle-sync-tx-batch
   [^js self request]
@@ -443,7 +493,7 @@
                  (http/bad-request "invalid tx")
                  (let [{:keys [txs t-before]} body
                        t-before (parse-int t-before)]
-                   (if (string? txs)
+                   (if (sequential? txs)
                      (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
                        (if-not ready-for-sync?
                          (http/error-response "graph not ready" 409)
@@ -467,6 +517,7 @@
         reset? (parse-reset-param reset-param)
         finished-param (.get (.-searchParams url) "finished")
         finished? (parse-finished-param finished-param)
+        checksum-param (.get (.-searchParams url) "checksum")
         req-encoding (.get (.-headers request) "content-encoding")]
     (cond
       (not (seq graph-id))
@@ -490,6 +541,9 @@
                   count (import-snapshot-stream! self stream reset?)
                   _ (when finished?
                       (storage/set-meta! (.-sql self) snapshot-uploading-meta-key false))
+                  _ (when finished?
+                      (when (seq checksum-param)
+                        (storage/set-checksum! (.-sql self) checksum-param)))
                   _ (when finished?
                       (<set-graph-ready-for-use! self graph-id true))]
             (http/json-response :sync/snapshot-upload {:ok true

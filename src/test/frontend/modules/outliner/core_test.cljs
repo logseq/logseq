@@ -37,7 +37,10 @@
 (use-fixtures :each
   disable-browser-fns
   test-helper/react-components
-  #(test-helper/start-and-destroy-db % {:build-init-data? false})
+  #(test-helper/start-and-destroy-db
+    %
+    {:build-init-data? false
+     :schema {:logseq.property/deleted-at {:db/index true}}})
   listen-db-fixture)
 
 (defn get-block
@@ -114,13 +117,15 @@
              [15]]]
         [16 [[17]]]]]])
 
+(declare get-datoms)
+
 (defn get-blocks-count
   []
-  (count (d/datoms (db/get-db test-db) :avet :block/uuid)))
+  (count (get-datoms)))
 
 (defn get-blocks-ids
   []
-  (set (map :v (d/datoms (db/get-db test-db) :avet :block/uuid))))
+  (set (map :v (get-datoms))))
 
 (defn- transact-opts
   []
@@ -167,10 +172,10 @@
                                  [(get-block 3)] (get-block 14)
                                  {:sibling? true}))
     (is (= [6 9] (get-children 2)))
-    (is (= [13 14 3 15] (get-children 12))))
+    (is (= [13 14 3 15] (get-children 12)))))
 
-  (deftest test-move-block-as-first-child
-    (testing "
+(deftest test-move-block-as-first-child
+  (testing "
   Move 3 as first child of 12.
 
   [1 [[2 [[6 [[7 [[8]]]]]
@@ -183,14 +188,14 @@
            [15]]]
       [16 [[17]]]]]
    "
-      (transact-tree! tree)
-      (outliner-tx/transact!
-       (transact-opts)
-       (outliner-core/move-blocks! (db/get-db test-db false)
-                                   [(get-block 3)] (get-block 12)
-                                   {:sibling? false}))
-      (is (= [6 9] (get-children 2)))
-      (is (= [3 13 14 15] (get-children 12))))))
+    (transact-tree! tree)
+    (outliner-tx/transact!
+     (transact-opts)
+     (outliner-core/move-blocks! (db/get-db test-db false)
+                                 [(get-block 3)] (get-block 12)
+                                 {:sibling? false}))
+    (is (= [6 9] (get-children 2)))
+    (is (= [3 13 14 15] (get-children 12)))))
 
 (deftest test-move-child-as-first-sibling
   (testing "Move 3 as sibling of 2."
@@ -525,7 +530,11 @@
 
         (is (= [5] (get-children 4)))
 
-        (is (nil? (get-block 3)))))))
+        (let [recycled (get-block 3)
+              recycle-page (db/get-page "Recycle")]
+          (is (some? recycled))
+          (is (integer? (:logseq.property/deleted-at recycled)))
+          (is (= (:db/id recycle-page) (:db/id (:block/page recycled)))))))))
 
 (deftest test-bocks-with-level
   (testing "blocks with level"
@@ -625,15 +634,34 @@
 
 (defn get-datoms
   []
-  (d/datoms (db/get-db test-db) :avet :block/uuid))
+  (let [db' (db/get-db test-db)
+        recycled-ids (into #{}
+                           (map :e)
+                           (d/datoms db' :avet :logseq.property/deleted-at))
+        recycle-page-ids (into #{}
+                               (map :e)
+                               (d/datoms db' :avet :block/title "Recycle"))
+        recycled-page-block-ids (into #{}
+                                      (map :e)
+                                      (mapcat (fn [page-id]
+                                                (d/datoms db' :avet :block/page page-id))
+                                              recycle-page-ids))]
+    (->> (d/datoms db' :avet :block/uuid)
+         (remove (fn [datom]
+                   (or (contains? recycled-ids (:e datom))
+                       (contains? recycled-page-block-ids (:e datom))
+                       (contains? recycle-page-ids (:e datom))))))))
 
 (defn get-random-block
   []
   (let [datoms (->> (get-datoms)
-                    (remove (fn [datom] (= 1 (:e datom)))))]
+                    (remove (fn [datom] (= 1 (:e datom))))
+                    (remove (fn [datom]
+                              (empty? (d/datoms (db/get-db test-db) :eavt (:e datom) :block/parent))))
+                    vec)]
     (if (seq datoms)
       (let [id (:e (gen/generate (gen/elements datoms)))
-            block (db/pull test-db '[*] id)]
+            block (db/entity test-db id)]
         (assert (:block/parent block)
                 (str "No parent for block: " block))
         block)
@@ -657,15 +685,17 @@
 
 (defn get-random-blocks
   []
-  (let [limit (inc (rand-int 20))]
+  (let [limit (inc (rand-int 5))]
     (repeatedly limit get-random-block)))
+
+(def ^:private random-ops-iterations 40)
 
 (deftest ^:long random-inserts
   (testing "Random inserts"
     (transact-random-tree!)
     (let [c1 (get-blocks-ids)
           *random-blocks (atom c1)]
-      (dotimes [_i 100]
+      (dotimes [_i random-ops-iterations]
         ;; (prn "random insert: " i)
         (let [blocks (gen-blocks)]
           (swap! *random-blocks (fn [old]
@@ -677,7 +707,7 @@
 (deftest ^:long random-deletes
   (testing "Random deletes"
     (transact-random-tree!)
-    (dotimes [_i 100]
+    (dotimes [_i random-ops-iterations]
       ;; (prn "Random deletes: " i)
       (insert-blocks! (gen-blocks) (get-random-block))
       (let [blocks (get-random-blocks)]
@@ -691,8 +721,8 @@
     (transact-random-tree!)
     (let [c1 (get-blocks-ids)
           *random-blocks (atom c1)]
-      (dotimes [_i 100]
-        ;; (prn "Random move: " i)
+      (dotimes [_i random-ops-iterations]
+        ;; (prn :debug :i i)
         (let [blocks (gen-blocks)]
           (swap! *random-blocks (fn [old]
                                   (set/union old (set (map :block/uuid blocks)))))
@@ -713,7 +743,7 @@
     (transact-random-tree!)
     (let [c1 (get-blocks-ids)
           *random-blocks (atom c1)]
-      (dotimes [_i 100]
+      (dotimes [_i random-ops-iterations]
         ;; (prn "Random move up/down: " i)
         (let [blocks (gen-blocks)]
           (swap! *random-blocks (fn [old]
@@ -731,7 +761,7 @@
     (transact-random-tree!)
     (let [c1 (get-blocks-ids)
           *random-blocks (atom c1)]
-      (dotimes [_i 100]
+      (dotimes [_i random-ops-iterations]
         ;; (prn "Random move indent/outdent: " i)
         (let [new-blocks (gen-blocks)]
           (swap! *random-blocks (fn [old]

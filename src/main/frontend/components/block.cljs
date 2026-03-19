@@ -663,6 +663,7 @@
    page-entity children label]
   (let [*mouse-down? (::mouse-down? state)
         tag? (:tag? config)
+        recycled? (ldb/recycled? page-entity)
         page-name (when (:block/title page-entity)
                     (util/page-name-sanity-lc (:block/title page-entity)))
         untitled? (when page-name
@@ -675,8 +676,10 @@
        :class (cond->
                (if tag? "tag" "page-ref")
                 (:property? config) (str " page-property-key block-property")
+                recycled? (str " line-through opacity-70")
                 untitled? (str " opacity-50"))
        :data-ref page-name
+       :title (when recycled? "Deleted")
        :draggable true
        :on-drag-start (fn [e]
                         (editor-handler/block->data-transfer! page-name e true))
@@ -3213,6 +3216,7 @@
        :ref #(when (nil? @*ref) (reset! *ref %))
        :data-collapsed (and collapsed? has-child?)
        :class (str (when selected? "selected")
+                   (when (ldb/recycled? block) " line-through opacity-70")
                    (when order-list? " is-order-list")
                    (when (string/blank? title) " is-blank")
                    (when original-block " embed-block"))

@@ -12,6 +12,7 @@
             [frontend.components.plugins :as plugins]
             [frontend.components.property.config :as property-config]
             [frontend.components.query :as query]
+            [frontend.components.recycle :as recycle]
             [frontend.components.reference :as reference]
             [frontend.components.scheduled-deadlines :as scheduled]
             [frontend.components.svg :as svg]
@@ -418,85 +419,94 @@
         property-page? (ldb/property? page)
         title (:block/title page)
         journal? (db/journal-page? title)
+        recycle-page? (and (ldb/page? page)
+                           (= title common-config/recycle-page-name))
         fmt-journal? (boolean (date/journal-title->int title))
         today? (and
                 journal?
                 (= title (date/journal-name)))
         home? (= :home (state/get-current-route))
+        recycled? (ldb/recycled? page)
         show-tabs? (and (or class-page? (ldb/property? page)) (not tag-dialog?))]
     (if page
       (when (or title block?)
-        [:div.flex-1.page.relative.cp__page-inner-wrap
-         (merge (if (seq (:block/tags page))
-                  (let [page-names (map :block/title (:block/tags page))]
-                    (when (seq page-names)
-                      {:data-page-tags (text-util/build-data-value page-names)}))
-                  {})
+        (if recycled?
+          [:div.flex-1.page.relative.cp__page-inner-wrap
+           [:div.relative.grid.gap-4.sm:gap-8.page-inner.mb-16
+            [:div.opacity-75 "Node has been moved to Recycle"]]]
+          [:div.flex-1.page.relative.cp__page-inner-wrap
+           (merge (if (seq (:block/tags page))
+                    (let [page-names (map :block/title (:block/tags page))]
+                      (when (seq page-names)
+                        {:data-page-tags (text-util/build-data-value page-names)}))
+                    {})
 
-                {:key title
-                 :class (util/classnames [{:is-journals (or journal? fmt-journal?)
-                                           :is-node-page (or class-page? property-page?)}])})
+                  {:key title
+                   :class (util/classnames [{:is-journals (or journal? fmt-journal?)
+                                             :is-node-page (or class-page? property-page?)}])})
 
-         [:div.relative.grid.gap-4.sm:gap-8.page-inner.mb-16
-          (when-not (or block? sidebar?)
-            [:div.flex.flex-row.space-between
-             (when (ldb/page? page)
-               (db-page-title page
-                              {:sidebar? sidebar?
-                               :journals? journals?
-                               :container-id (:container-id state)
-                               :tag-dialog? tag-dialog?}))
-             (lsp-pagebar-slot)])
+           [:div.relative.grid.gap-4.sm:gap-8.page-inner.mb-16
+            (when-not (or block? sidebar?)
+              [:div.flex.flex-row.space-between
+               (when (ldb/page? page)
+                 (db-page-title page
+                                {:sidebar? sidebar?
+                                 :journals? journals?
+                                 :container-id (:container-id state)
+                                 :tag-dialog? tag-dialog?}))
+               (lsp-pagebar-slot)])
 
-          (when (and block? (not sidebar?))
-            (component-block/breadcrumb {} repo (:block/uuid page) {}))
+            (when (and block? (not sidebar?))
+              (component-block/breadcrumb {} repo (:block/uuid page) {}))
 
-          (when (ldb/library? page)
-            (library/add-pages page))
+            (when (ldb/library? page)
+              (library/add-pages page))
 
-          (when (and sidebar? (ldb/page? page))
-            [:div.-mb-8
-             (sidebar-page-properties config page)])
+            (when (and sidebar? (ldb/page? page))
+              [:div.-mb-8
+               (sidebar-page-properties config page)])
 
-          (when show-tabs?
-            (tabs page {:current-page? option :sidebar? sidebar?}))
+            (when show-tabs?
+              (tabs page {:current-page? option :sidebar? sidebar?}))
 
-          (when (not tag-dialog?)
-            [:div.ls-page-blocks
-             {:style {:margin-left (if (util/mobile?) 0 -20)}
-              :class (when-not (or sidebar? (util/capacitor?))
-                       "mt-4")}
-             (page-blocks-cp page (merge option {:sidebar? sidebar?
-                                                 :container-id (:container-id state)}))])]
+            (when (not tag-dialog?)
+              (if recycle-page?
+                (recycle/recycle-page page)
+                [:div.ls-page-blocks
+                 {:style {:margin-left (if (util/mobile?) 0 -20)}
+                  :class (when-not (or sidebar? (util/capacitor?))
+                           "mt-4")}
+                 (page-blocks-cp page (merge option {:sidebar? sidebar?
+                                                     :container-id (:container-id state)}))]))]
 
-         (when-not preview?
-           [:div.flex.flex-col.gap-8
-            {:class (when-not (util/mobile?) "ml-1")}
-            (when today?
-              (today-queries repo today? sidebar?))
+           (when-not (or preview? recycle-page?)
+             [:div.flex.flex-col.gap-8
+              {:class (when-not (util/mobile?) "ml-1")}
+              (when today?
+                (today-queries repo today? sidebar?))
 
-            (when today?
-              (scheduled/scheduled-and-deadlines title))
+              (when today?
+                (scheduled/scheduled-and-deadlines title))
 
-            (when (and (ldb/page? page) (:logseq.property.class/_extends page))
-              (class-component/class-children page))
+              (when (and (ldb/page? page) (:logseq.property.class/_extends page))
+                (class-component/class-children page))
 
             ;; referenced blocks
-            (when-not (or tag-dialog? linked-refs?)
-              [:div.fade-in.delay {:key "page-references"}
-               (rum/with-key
-                 (reference/references page {:sidebar? sidebar?
-                                             :journals? journals?
-                                             :refs-count (:refs-count option)})
-                 (str title "-refs"))])
+              (when-not (or tag-dialog? linked-refs?)
+                [:div.fade-in.delay {:key "page-references"}
+                 (rum/with-key
+                   (reference/references page {:sidebar? sidebar?
+                                               :journals? journals?
+                                               :refs-count (:refs-count option)})
+                   (str title "-refs"))])
 
-            (when-not (or unlinked-refs?
-                          sidebar?
-                          tag-dialog?
-                          home?
-                          class-page? property-page?)
-              [:div.fade-in.delay {:key "page-unlinked-references"}
-               (reference/unlinked-references page {:sidebar? sidebar?})])])])
+              (when-not (or unlinked-refs?
+                            sidebar?
+                            tag-dialog?
+                            home?
+                            class-page? property-page?)
+                [:div.fade-in.delay {:key "page-unlinked-references"}
+                 (reference/unlinked-references page {:sidebar? sidebar?})])])]))
       [:div.opacity-75 "Page not found"])))
 
 (rum/defcs page-aux < rum/reactive

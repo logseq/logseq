@@ -541,71 +541,72 @@
                   (db/get-page page)
                   (db/entity [:block/uuid block-uuid]))]
       (when block
-        (let [last-block (when (not sibling?)
-                           (let [children (:block/_parent block)
-                                 blocks (db/sort-by-order children)
-                                 last-block-id (:db/id (last blocks))]
-                             (when last-block-id
-                               (db/entity last-block-id))))
-              new-block (-> (select-keys block [:block/page])
-                            (assoc :block/title content))
-              new-block (assoc new-block :block/page
-                               (if page
-                                 (:db/id block)
-                                 (:db/id (:block/page new-block))))
-              new-block (-> new-block
-                            (wrap-parse-block)
-                            (assoc :block/uuid (or custom-uuid (db/new-block-id))))
-              new-block (merge new-block other-attrs)
-              block' (db/entity (:db/id block))
-              [target-block sibling?] (cond
-                                        before?
-                                        (let [left-or-parent (or (ldb/get-left-sibling block)
-                                                                 (:block/parent block))
-                                              sibling? (if (= (:db/id (:block/parent block)) (:db/id left-or-parent))
-                                                         false sibling?)]
-                                          [left-or-parent sibling?])
+        (if (ldb/recycled? block)
+          (notification/show! "Recycle is read-only." :warning)
+          (let [last-block (when (not sibling?)
+                             (let [children (:block/_parent block)
+                                   blocks (db/sort-by-order children)
+                                   last-block-id (:db/id (last blocks))]
+                               (when last-block-id
+                                 (db/entity last-block-id))))
+                new-block (-> (select-keys block [:block/page])
+                              (assoc :block/title content))
+                new-block (assoc new-block :block/page
+                                 (if page
+                                   (:db/id block)
+                                   (:db/id (:block/page new-block))))
+                new-block (-> new-block
+                              (wrap-parse-block)
+                              (assoc :block/uuid (or custom-uuid (db/new-block-id))))
+                new-block (merge new-block other-attrs)
+                block' (db/entity (:db/id block))
+                [target-block sibling?] (cond
+                                          before?
+                                          (let [left-or-parent (or (ldb/get-left-sibling block)
+                                                                   (:block/parent block))
+                                                sibling? (if (= (:db/id (:block/parent block)) (:db/id left-or-parent))
+                                                           false sibling?)]
+                                            [left-or-parent sibling?])
 
-                                        sibling?
-                                        [block' sibling?]
+                                          sibling?
+                                          [block' sibling?]
 
-                                        start?
-                                        [block' false]
+                                          start?
+                                          [block' false]
 
-                                        end?
-                                        (if last-block
+                                          end?
+                                          (if last-block
+                                            [last-block true]
+                                            [block' false])
+
+                                          last-block
                                           [last-block true]
-                                          [block' false])
 
-                                        last-block
-                                        [last-block true]
+                                          block
+                                          [block' sibling?]
 
-                                        block
-                                        [block' sibling?]
-
-                                        ;; FIXME: assert
-                                        :else
-                                        nil)]
-          (when target-block
-            (p/do!
-             (let [new-block' (if (seq properties)
-                                (into new-block properties)
-                                new-block)]
-               (ui-outliner-tx/transact!
-                {:outliner-op :insert-blocks}
-                (outliner-insert-block! config target-block new-block'
-                                        {:sibling? sibling?
-                                         :keep-uuid? true
-                                         :ordered-list? ordered-list?
-                                         :outliner-op outliner-op
-                                         :replace-empty-target? replace-empty-target?})))
-             (when edit-block?
-               (if (and replace-empty-target?
-                        (string/blank? (:block/title last-block)))
-                 (edit-block! last-block :max)
-                 (edit-block! new-block :max)))
-             (when-let [id (:block/uuid new-block)]
-               (db/entity [:block/uuid id])))))))))
+                                          :else
+                                          nil)]
+            (when target-block
+              (p/do!
+               (let [new-block' (if (seq properties)
+                                  (into new-block properties)
+                                  new-block)]
+                 (ui-outliner-tx/transact!
+                  {:outliner-op :insert-blocks}
+                  (outliner-insert-block! config target-block new-block'
+                                          {:sibling? sibling?
+                                           :keep-uuid? true
+                                           :ordered-list? ordered-list?
+                                           :outliner-op outliner-op
+                                           :replace-empty-target? replace-empty-target?})))
+               (when edit-block?
+                 (if (and replace-empty-target?
+                          (string/blank? (:block/title last-block)))
+                   (edit-block! last-block :max)
+                   (edit-block! new-block :max)))
+               (when-let [id (:block/uuid new-block)]
+                 (db/entity [:block/uuid id]))))))))))
 
 (defn get-selected-blocks
   []
@@ -797,9 +798,12 @@
 (defn move-blocks!
   [blocks target opts]
   (when (seq blocks)
-    (ui-outliner-tx/transact!
-     {:outliner-op :move-blocks}
-     (outliner-op/move-blocks! blocks target opts))))
+    (if (or (some ldb/recycled? blocks)
+            (ldb/recycled? target))
+      (notification/show! "Recycle is read-only." :warning)
+      (ui-outliner-tx/transact!
+       {:outliner-op :move-blocks}
+       (outliner-op/move-blocks! blocks target opts)))))
 
 (defn move-selected-blocks
   [e]
@@ -976,10 +980,11 @@
         (let [repo (state/get-current-repo)
               block-uuids (distinct (keep #(when-let [id (dom/attr % "blockid")] (uuid id)) dom-blocks))
               lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
-              blocks (map db/entity lookup-refs)]
-          (ui-outliner-tx/transact!
-           {:outliner-op :delete-blocks}
-           (let [top-level-blocks (block-handler/get-top-level-blocks blocks)]
+              blocks (map db/entity lookup-refs)
+              top-level-blocks (block-handler/get-top-level-blocks blocks)]
+          (when-not (every? ldb/recycled? top-level-blocks)
+            (ui-outliner-tx/transact!
+             {:outliner-op :delete-blocks}
              (when (seq top-level-blocks)
                (let [sorted-blocks (mapcat (fn [block]
                                              (tree/get-sorted-block-and-children repo (:db/id block)))
@@ -1831,6 +1836,14 @@
   (let [ids (set (map :db/id blocks))]
     (some? (some #(ids (:db/id (:block/parent %))) blocks))))
 
+(defn- unrecycle-tx-data
+  [root]
+  [[:db/retract (:db/id root) :logseq.property/deleted-at]
+   [:db/retract (:db/id root) :logseq.property/deleted-by-ref]
+   [:db/retract (:db/id root) :logseq.property.recycle/original-parent]
+   [:db/retract (:db/id root) :logseq.property.recycle/original-page]
+   [:db/retract (:db/id root) :logseq.property.recycle/original-order]])
+
 (defn paste-blocks
   "Given a vec of blocks, insert them into the target page.
    keep-uuid?: if true, keep the uuid provided in the block structure."
@@ -1865,6 +1878,13 @@
                         (or (ldb/get-left-sibling target-block)
                             (:block/parent (db/entity (:db/id target-block))))
                         target-block)
+        existing-blocks (keep (fn [block]
+                                (when-let [id (:block/uuid block)]
+                                  (db/entity [:block/uuid id])))
+                              blocks)
+        move-from-recycle? (and keep-uuid?
+                                (seq existing-blocks)
+                                (every? ldb/recycled? existing-blocks))
         sibling? (cond
                    (and paste-nested-blocks? empty-target?)
                    (= (:block/parent target-block') (:block/parent target-block))
@@ -1877,20 +1897,32 @@
 
                    :else
                    true)
-        transact-blocks! #(ui-outliner-tx/transact!
-                           {:outliner-op :insert-blocks
-                            :additional-tx revert-cut-txs}
-                           (when target-block'
-                             (let [format (get target-block' :block/format :markdown)
-                                   repo (state/get-current-repo)
-                                   blocks' (map (fn [block]
-                                                  (paste-block-cleanup repo block page exclude-properties format content-update-fn keep-uuid?))
-                                                blocks)]
-                               (outliner-op/insert-blocks! blocks' target-block' {:sibling? sibling?
-                                                                                  :outliner-op :paste
-                                                                                  :outliner-real-op outliner-real-op
-                                                                                  :replace-empty-target? replace-empty-target?
-                                                                                  :keep-uuid? keep-uuid?}))))]
+        transact-blocks! #(if move-from-recycle?
+                            (ui-outliner-tx/transact!
+                             {:outliner-op :move-blocks
+                              :additional-tx revert-cut-txs}
+                             (when target-block'
+                               (let [top-level-blocks (block-handler/get-top-level-blocks existing-blocks)
+                                     unrecycle-tx (mapcat unrecycle-tx-data top-level-blocks)]
+                                 (when (seq unrecycle-tx)
+                                   (outliner-op/transact! unrecycle-tx nil))
+                                 (outliner-op/move-blocks! top-level-blocks target-block'
+                                                           {:sibling? sibling?
+                                                            :outliner-op :paste}))))
+                            (ui-outliner-tx/transact!
+                             {:outliner-op :insert-blocks
+                              :additional-tx revert-cut-txs}
+                             (when target-block'
+                               (let [format (get target-block' :block/format :markdown)
+                                     repo (state/get-current-repo)
+                                     blocks' (map (fn [block]
+                                                    (paste-block-cleanup repo block page exclude-properties format content-update-fn keep-uuid?))
+                                                  blocks)]
+                                 (outliner-op/insert-blocks! blocks' target-block' {:sibling? sibling?
+                                                                                    :outliner-op :paste
+                                                                                    :outliner-real-op outliner-real-op
+                                                                                    :replace-empty-target? replace-empty-target?
+                                                                                    :keep-uuid? keep-uuid?})))))]
     (if ops-only?
       (transact-blocks!)
       (p/let [_ (when has-unsaved-edits

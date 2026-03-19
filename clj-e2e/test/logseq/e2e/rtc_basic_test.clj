@@ -27,7 +27,7 @@
           (util/login-test-account))
        [@*page1 @*page2])
       (w/with-page @*page1
-        (graph/new-graph graph-name true))
+        (graph/new-graph graph-name true false))
       (w/with-page @*page2
         (graph/wait-for-remote-graph graph-name)
         (graph/switch-graph graph-name true true)))

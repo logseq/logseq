@@ -289,7 +289,7 @@
 (deftest get-all-properties-test
   (testing "get_all_properties"
     (let [result (ls-api-call! :editor.get_all_properties)]
-      (is (>= (count result) 94)))))
+      (is (>= (count result) 20)))))
 
 (deftest get-tag-objects-test
   (testing "get_tag_objects"

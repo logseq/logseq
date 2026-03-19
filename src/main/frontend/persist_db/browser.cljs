@@ -104,11 +104,6 @@
   (reset! state/*infer-worker-port nil)
   (reset! state/*infer-worker nil))
 
-(defn stop-workers!
-  []
-  (stop-inference-worker!)
-  (stop-db-worker!))
-
 (defn start-db-worker!
   []
   (when-not util/node-test?

@@ -2,10 +2,16 @@
   (:require [malli.core :as ma]
             [malli.transform :as mt]))
 
+(def tx-entry-schema
+  [:map
+   [:tx :string]
+   [:outliner-op {:optional true} [:maybe :keyword]]])
+
 (def tx-log-entry-schema
   [:map
    [:t :int]
-   [:tx :string]])
+   [:tx :string]
+   [:outliner-op {:optional true} [:maybe :keyword]]])
 
 (def ws-client-message-schema
   [:multi {:dispatch :type}
@@ -25,7 +31,7 @@
     [:map
      [:type [:= "tx/batch"]]
      [:t-before :int]
-     [:txs :string]]]
+     [:txs [:sequential tx-entry-schema]]]]
    ["ping"
     [:map
      [:type [:= "ping"]]]]])
@@ -56,19 +62,22 @@
   [:map
    [:type [:= "pull/ok"]]
    [:t :int]
+   [:checksum {:optional true} :string]
    [:txs [:sequential tx-log-entry-schema]]])
 
 (def tx-batch-ok-schema
   [:map
    [:type [:= "tx/batch/ok"]]
-   [:t :int]])
+   [:t :int]
+   [:checksum {:optional true} :string]])
 
 (def ws-server-message-schema
   [:multi {:dispatch :type}
    ["hello"
     [:map
      [:type [:= "hello"]]
-     [:t :int]]]
+     [:t :int]
+     [:checksum {:optional true} :string]]]
    ["online-users" online-users-schema]
    ["presence"
     [:map
@@ -167,7 +176,7 @@
 (def tx-batch-request-schema
   [:map
    [:t-before :int]
-   [:txs :string]])
+   [:txs [:sequential tx-entry-schema]]])
 
 (def e2ee-user-key-request-schema
   [:map

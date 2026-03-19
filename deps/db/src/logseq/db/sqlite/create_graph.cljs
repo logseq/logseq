@@ -182,6 +182,16 @@
        :logseq.property/hide? true
        :logseq.property/built-in? true})]))
 
+(defn- build-recycle-page
+  []
+  [(sqlite-util/block-with-timestamps
+    {:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "Recycle")
+     :block/name (common-util/page-name-sanity-lc "Recycle")
+     :block/title "Recycle"
+     :block/tags [:logseq.class/Page]
+     :logseq.property/hide? true
+     :logseq.property/built-in? true})])
+
 (defn- build-favorites-page
   []
   [(sqlite-util/block-with-timestamps
@@ -247,7 +257,7 @@
         default-classes (build-initial-classes db-ident->properties)
         default-pages (->> (map sqlite-util/build-new-page built-in-pages-names)
                            (map mark-block-as-built-in))
-        hidden-pages (concat (build-initial-views) (build-favorites-page))
+        hidden-pages (concat (build-initial-views) (build-favorites-page) (build-recycle-page))
         ;; These classes bootstrap our tags and properties as they depend on each other e.g.
         ;; Root <-> Tag, classes-tx depends on logseq.property.class/extends, properties-tx depends on Property
         bootstrap-class? (fn [c] (contains? #{:logseq.class/Root :logseq.class/Property :logseq.class/Tag :logseq.class/Template} (:db/ident c)))
