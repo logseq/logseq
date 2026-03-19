@@ -185,17 +185,68 @@
     (is (nil? (:user.property/default updated-block)) "Block property is deleted")))
 
 (deftest batch-set-property!
-  (let [conn (db-test/create-conn-with-blocks
-              [{:page {:block/title "page1"}
-                :blocks [{:block/title "item 1"}
-                         {:block/title "item 2"}]}])
-        block-ids (map #(-> (db-test/find-block-by-content @conn %) :block/uuid) ["item 1" "item 2"])
-        _ (outliner-property/batch-set-property! conn block-ids :logseq.property/order-list-type "number")
-        updated-blocks (map #(db-test/find-block-by-content @conn %) ["item 1" "item 2"])]
-    (is (= ["number" "number"]
-           (map #(db-property/property-value-content (:logseq.property/order-list-type %))
-                updated-blocks))
-        "Property values are batch set")))
+  (testing "Set built-in property values for multiple blocks"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "item 1"}
+                           {:block/title "item 2"}]}])
+          block-ids (map #(-> (db-test/find-block-by-content @conn %) :block/uuid) ["item 1" "item 2"])
+          _ (outliner-property/batch-set-property! conn block-ids :logseq.property/order-list-type "number")
+          updated-blocks (map #(db-test/find-block-by-content @conn %) ["item 1" "item 2"])]
+      (is (= ["number" "number"]
+             (map #(db-property/property-value-content (:logseq.property/order-list-type %))
+                  updated-blocks))
+          "Property values are batch set")))
+
+  (testing "Set custom default-many property values from string vector"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/reproducible-steps {:logseq.property/type :default
+                                                                 :db/cardinality :db.cardinality/many
+                                                                 :logseq.property/public? true}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "target"}]}]})
+          block-id (:block/uuid (db-test/find-block-by-content @conn "target"))]
+      (outliner-property/batch-set-property! conn [block-id] :user.property/reproducible-steps ["Step 1" "Step 2" "Step 3"])
+      (is (= #{"Step 1" "Step 2" "Step 3"}
+             (->> (:user.property/reproducible-steps (d/entity @conn [:block/uuid block-id]))
+                  (map db-property/property-value-content)
+                  set))
+          "String vector values are persisted as many property values")))
+
+  (testing "Set custom default-many property values from id vector"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/reproducible-steps {:logseq.property/type :default
+                                                                 :db/cardinality :db.cardinality/many
+                                                                 :logseq.property/public? true}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "source"
+                                               :build/properties {:user.property/reproducible-steps #{"Step 1" "Step 2" "Step 3"}}}
+                                              {:block/title "target"}]}]})
+          source-values (->> (:user.property/reproducible-steps (db-test/find-block-by-content @conn "source"))
+                             (map :db/id)
+                             vec)
+          target-id (:block/uuid (db-test/find-block-by-content @conn "target"))]
+      (outliner-property/batch-set-property! conn [target-id] :user.property/reproducible-steps source-values)
+      (is (= #{"Step 1" "Step 2" "Step 3"}
+             (->> (:user.property/reproducible-steps (d/entity @conn [:block/uuid target-id]))
+                  (map db-property/property-value-content)
+                  set))
+          "Id vector values are persisted as many property values")))
+
+  (testing "Invalid many values throw and don't partially persist"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:user.property/reproducible-steps {:logseq.property/type :default
+                                                                 :db/cardinality :db.cardinality/many
+                                                                 :logseq.property/public? true}}
+                 :pages-and-blocks [{:page {:block/title "page1"}
+                                     :blocks [{:block/title "target"}]}]})
+          block-id (:block/uuid (db-test/find-block-by-content @conn "target"))]
+      (is (thrown-with-msg?
+           js/Error
+           #"Schema validation failed"
+           (outliner-property/batch-set-property! conn [block-id] :user.property/reproducible-steps [999999])))
+      (is (nil? (:user.property/reproducible-steps (d/entity @conn [:block/uuid block-id])))
+          "No partial values are persisted on failure"))))
 
 (deftest status-property-setting-classes
   (let [conn (db-test/create-conn-with-blocks
