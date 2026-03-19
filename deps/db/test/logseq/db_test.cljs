@@ -95,7 +95,7 @@
                         (d/datom 1 :property :v1 (+ tx 2) true)]))
       (is (= :v1 (:property (d/entity @conn 1)))))))
 
-(deftest test-transact-with-temp-conn!
+(deftest test-batch-transact!
   (testing "DB validation should be running after the whole transaction"
     (let [conn (db-test/create-conn)]
       (testing "#Task shouldn't be converted to property"
@@ -104,7 +104,7 @@
                        (db-test/silence-stderr
                         (ldb/transact! conn [{:db/ident :logseq.class/Task
                                               :block/tags :logseq.class/Property}]))))))
-      (ldb/transact-with-temp-conn!
+      (ldb/batch-transact!
        conn
        {}
        (fn [temp-conn _*batch-tx-data]

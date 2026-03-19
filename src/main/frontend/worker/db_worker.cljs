@@ -935,14 +935,7 @@
     (try
       (worker-util/profile
        "apply outliner ops"
-       (outliner-op/apply-ops!
-        conn
-        ops
-        (assoc opts
-               :error-handler
-               (fn [{:keys [msg]}]
-                 (worker-util/post-message :notification
-                                           [[:div [:p msg]] :error])))))
+       (outliner-op/apply-ops! conn ops opts))
       (catch :default e
         (let [data (ex-data e)
               {:keys [type payload]} (when (map? data) data)]
