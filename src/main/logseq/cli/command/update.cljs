@@ -44,7 +44,7 @@
       "--pos sibling is only valid for block targets"
 
       (and (seq pos) (empty? target-selectors))
-      "--pos is only valid when a target is provided"
+      "--pos is only for adding which requires a target option"
 
       (and (empty? target-selectors) (not has-updates?))
       "target or update/remove options are required"
