@@ -197,7 +197,9 @@
                                         (d/datoms @conn :avet :block/title)
                                         (map (fn [d]
                                                [:db/add (:e d) :logseq.property.embedding/hnsw-label-updated-at 0])))]
-            (ldb/transact! conn mark-embedding-tx-data {:skip-refresh? true})))
+            ;; (ldb/transact! conn mark-embedding-tx-data {:skip-refresh? true
+            ;;                                             :persist-op? true})
+            ))
 
         (embedding-stale-blocks! repo reset-embedding?)))))
 

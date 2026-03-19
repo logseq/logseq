@@ -34,7 +34,6 @@
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
-            [logseq.undo-redo-validate :as undo-validate]
             [promesa.core :as p]))
 
 (def ^:private test-repo "test-db-sync-repo")
@@ -571,7 +570,7 @@
         (finally
           (d/unlisten! conn-b ::capture-remote-many-page-property))))))
 
-(deftest transact-with-temp-conn-preserves-many-page-property-values-test
+(deftest batch-transact-preserves-many-page-property-values-test
   (testing "temp conn batch keeps both values when a new page-many property is created and then assigned twice"
     (let [conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
@@ -579,7 +578,7 @@
                    :blocks [{:block/title "remote object"}]}]})
           block-id (:db/id (db-test/find-block-by-content @conn "remote object"))
           property-id :plugin.property._test_plugin/x7]
-      (ldb/transact-with-temp-conn!
+      (ldb/batch-transact!
        conn
        {}
        (fn [temp-conn]
@@ -593,14 +592,14 @@
         (is (= #{"page y" "page z"}
                (set (map :block/name (:plugin.property._test_plugin/x7 block')))))))))
 
-(deftest transact-with-temp-conn-preserves-tag-many-page-property-values-test
+(deftest batch-transact-preserves-tag-many-page-property-values-test
   (testing "temp conn batch keeps tag property values when a new many page property is upserted first"
     (let [conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
                  [{:page {:block/title "page 1"}
                    :blocks [{:block/title "remote object"}]}]})
           property-id :plugin.property._test_plugin/x7]
-      (ldb/transact-with-temp-conn!
+      (ldb/batch-transact!
        conn
        {}
        (fn [temp-conn]
@@ -629,7 +628,7 @@
           *batch-tx-data (volatile! [])]
       (swap! temp-conn assoc
              :skip-store? true
-             :batch-temp-conn? true)
+             :batch-tx? true)
       (d/listen! temp-conn ::capture-temp-batch
                  (fn [{:keys [tx-data]}]
                    (vswap! *batch-tx-data into tx-data)))
@@ -993,6 +992,49 @@
                        [:block/uuid (:block/uuid page-y)]
                        {}]]
                      (first property-tx))))))))))
+
+(deftest replay-batch-set-property-converts-lookup-ref-to-eid-when-entity-id-test
+  (testing "replay should resolve stable lookup refs back to entity ids for batch-set-property when :entity-id? is true"
+    (let [graph {:properties {:x7 {:logseq.property/type :page
+                                   :db/cardinality :db.cardinality/many}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "local object"}]}]}
+          conn (db-test/create-conn-with-blocks graph)
+          block (db-test/find-block-by-content @conn "local object")
+          property-id :user.property/x7]
+      (outliner-page/create! conn "Page y" {})
+      (let [page-y (db-test/find-page-by-title @conn "Page y")]
+        (is (some? (#'sync-apply/replay-canonical-outliner-op!
+                    conn
+                    [:batch-set-property [[[:block/uuid (:block/uuid block)]]
+                                          property-id
+                                          [:block/uuid (:block/uuid page-y)]
+                                          {:entity-id? true}]])))
+        (let [block' (d/entity @conn [:block/uuid (:block/uuid block)])]
+          (is (= #{"page y"}
+                 (set (map :block/name (:user.property/x7 block'))))))))))
+
+(deftest replay-set-block-property-converts-lookup-ref-to-eid-test
+  (testing "replay should resolve stable lookup refs back to entity ids for set-block-property"
+    (let [graph {:properties {:x7 {:logseq.property/type :page
+                                   :db/cardinality :db.cardinality/many}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "local object"}]}]}
+          conn (db-test/create-conn-with-blocks graph)
+          block (db-test/find-block-by-content @conn "local object")
+          property-id :user.property/x7]
+      (outliner-page/create! conn "Page y" {})
+      (let [page-y (db-test/find-page-by-title @conn "Page y")]
+        (is (some? (#'sync-apply/replay-canonical-outliner-op!
+                    conn
+                    [:set-block-property [[:block/uuid (:block/uuid block)]
+                                          property-id
+                                          [:block/uuid (:block/uuid page-y)]]])))
+        (let [block' (d/entity @conn [:block/uuid (:block/uuid block)])]
+          (is (= #{"page y"}
+                 (set (map :block/name (:user.property/x7 block'))))))))))
 
 (deftest direct-outliner-core-insert-blocks-persists-insert-blocks-outliner-op-test
   (testing "direct outliner-core/insert-blocks! still persists singleton insert-blocks outliner-ops"
@@ -1723,74 +1765,127 @@
         (is (not-any? string?
                       (keep second @captured)))))))
 
-(deftest reverse-local-tx-collapses-retracted-block-to-retract-entity-test
-  (testing "reverse should retractEntity blocks whose uuid is retracted, dropping leftover tx-id datoms"
-    (let [captured (atom nil)]
-      (with-redefs [ldb/transact! (fn [_conn tx-data _tx-meta]
-                                    (reset! captured tx-data)
-                                    nil)]
-        (#'sync-apply/reverse-local-txs!
-         (atom nil)
-         [{:tx-id (random-uuid)
-           :outliner-op :insert-blocks
-           :reversed-tx [[:db/retract 577 :block/uuid #uuid "69b8147e-e09d-4349-8646-f85d183005d7" 1]
-                         [:db/retract 577 :block/updated-at 1773671550625 1]
-                         [:db/retract 577 :block/created-at 1773671550625 1]
-                         [:db/retract 577 :block/title "" 1]
-                         [:db/retract 577 :block/parent 540 1]
-                         [:db/retract 577 :block/order "a1l" 1]
-                         [:db/retract 577 :block/page 539 1]
-                         [:db/retract 577 :logseq.property/created-by-ref 176 1]
-                         [:db/retract 577 :block/tx-id 536871087 1]
-                         [:db/add 577 :block/tx-id 536871087 2]]}]
-         {:rtc-tx? true}))
-      (is (= [[:db/retractEntity 577]] @captured)))))
+(deftest reverse-tx-data-create-property-text-block-restores-base-db-test
+  (testing "reverse-tx-data for create-property-text-block should restore the base db"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "b1" :build/properties {:default "foo"}}
+                           {:block/title "b2"}]}])
+          tx-reports* (atom [])]
+      (d/listen! conn ::capture-create-property-text-block
+                 (fn [tx-report]
+                   (swap! tx-reports* conj tx-report)))
+      (try
+        (let [base-db @conn
+              block-before (db-test/find-block-by-content base-db "b2")]
+          (outliner-property/create-property-text-block! conn (:db/id block-before) :user.property/default "" {})
+          (let [db-after @conn
+                block-after (db-test/find-block-by-content db-after "b2")
+                value-block (:user.property/default block-after)
+                value-uuid (:block/uuid value-block)
+                reversed-rows (mapv (fn [{:keys [db-before db-after tx-data]}]
+                                      (#'sync-apply/reverse-tx-data db-before db-after tx-data))
+                                    @tx-reports*)
+                restored-db (reduce (fn [db reversed]
+                                      (:db-after (d/with db reversed)))
+                                    db-after
+                                    (reverse reversed-rows))
+                block-restored (db-test/find-block-by-content restored-db "b2")]
+            (is (= 2 (count @tx-reports*)))
+            (is (some #(some (fn [item]
+                               (= [:db/retractEntity [:block/uuid value-uuid]] item))
+                             %)
+                      reversed-rows))
+            (is (nil? (:user.property/default block-restored)))
+            (is (= (select-keys block-before [:block/uuid :block/title :block/order])
+                   (select-keys block-restored [:block/uuid :block/title :block/order])))
+            (is (nil? (d/entity restored-db [:block/uuid value-uuid])))))
+        (finally
+          (d/unlisten! conn ::capture-create-property-text-block))))))
 
-(deftest reverse-local-txs-skips-invalid-reverse-step-test
-  (testing "reverse-local-txs skips stored reverse txs that no longer validate"
-    (let [captured (atom [])]
-      (with-redefs [undo-validate/valid-undo-redo-tx? (fn [_conn tx-data]
-                                                        (not-any? #(= [:db/add [:block/uuid #uuid "69b947ae-d4b2-4ae3-bc0e-bcf77efb77fa"] nil nil nil] %)
-                                                                  tx-data))
-                    ldb/transact! (fn [_conn tx-data _tx-meta]
-                                    (swap! captured conj tx-data)
-                                    nil)]
-        (#'sync-apply/reverse-local-txs!
-         (atom nil)
-         [{:tx-id (random-uuid)
-           :outliner-op :insert-blocks
-           :reversed-tx [[:db/add [:block/uuid #uuid "69b947ae-d4b2-4ae3-bc0e-bcf77efb77fa"] nil nil nil]]}
-          {:tx-id (random-uuid)
-           :outliner-op :move-blocks
-           :reversed-tx [[:db/add [:block/uuid #uuid "69b947ae-d4b2-4ae3-bc0e-bcf77efb77fa"] :block/order "a0" 1]]}]
-         {:rtc-tx? true}))
-      (is (= [[[:db/add [:block/uuid #uuid "69b947ae-d4b2-4ae3-bc0e-bcf77efb77fa"] :block/order "a0" 1]]]
-             @captured)))))
+(deftest pending-reversed-txs-for-multiple-status-changes-restore-base-db-test
+  (testing "fresh persisted reversed tx rows from repeated status changes should restore the base db"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "task"
+                             :build/properties {:status "Todo"}}]}]})
+          client-ops-conn (d/create-conn client-op/schema-in-db)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (let [base-db @conn
+                block-before (db-test/find-block-by-content base-db "task")
+                block-uuid (:block/uuid block-before)
+                base-status (some-> (:logseq.property/status block-before) :db/ident)
+                base-tags (set (map :db/ident (:block/tags block-before)))
+                base-history-count (count (d/q '[:find ?h
+                                                 :in $ ?block
+                                                 :where [?h :logseq.property.history/block ?block]]
+                                               base-db
+                                               (:db/id block-before)))]
+            (outliner-property/set-block-property! conn (:db/id block-before) :logseq.property/status "Doing")
+            (outliner-property/set-block-property! conn (:db/id block-before) :logseq.property/status "Todo")
+            (outliner-property/set-block-property! conn (:db/id block-before) :logseq.property/status "Doing")
+            (let [pending (#'sync-apply/pending-txs test-repo)
+                  restored-db (reduce (fn [db {:keys [reversed-tx]}]
+                                        (:db-after (d/with db reversed-tx)))
+                                      @conn
+                                      (reverse pending))
+                  block-restored (d/entity restored-db [:block/uuid block-uuid])
+                  restored-history-count (count (d/q '[:find ?h
+                                                       :in $ ?block
+                                                       :where [?h :logseq.property.history/block ?block]]
+                                                     restored-db
+                                                     (:db/id block-restored)))]
+              (is (= 3 (count pending)))
+              (is (= base-status
+                     (some-> (:logseq.property/status block-restored) :db/ident)))
+              (is (= base-tags
+                     (set (map :db/ident (:block/tags block-restored)))))
+              (is (= base-history-count restored-history-count)))))))))
 
-(deftest reverse-local-txs-skips-missing-lookup-entity-step-test
-  (testing "reverse-local-txs skips reverse step when lookup entity no longer exists in temp db"
-    (let [captured (atom [])]
-      (with-redefs [ldb/transact! (fn [_conn tx-data _tx-meta]
-                                    (swap! captured conj tx-data)
-                                    nil)]
-        (#'sync-apply/reverse-local-txs!
-         (db-test/create-conn)
-         [{:tx-id (random-uuid)
-           :outliner-op :delete-blocks
-           :reversed-tx [[:db/add [:block/uuid #uuid "69b95175-7dbc-4d5b-82ef-81df968fa9d4"]
-                          :logseq.property/deleted-at
-                          1773752696187
-                          1]]}
-          {:tx-id (random-uuid)
-           :outliner-op :move-blocks
-           :reversed-tx [[:db/add [:block/uuid #uuid "69b94d2b-e200-4610-b78e-691a434334c0"] :block/order "a0" 1]]}]
-         {:rtc-tx? true}))
-      (is (empty? @captured)))))
-
-(deftest reverse-tx-data-drops-retract-entity-items-test
-  (testing "reverse tx builders should not turn retractEntity into malformed add items"
-    (is (empty? (#'sync-apply/reverse-tx-data [[:db/retractEntity [:block/uuid (random-uuid)]]])))
-    (is (empty? (#'sync-apply/reverse-normalized-tx-data [[:db/retractEntity [:block/uuid (random-uuid)]]])))))
+(deftest pending-reversed-txs-for-batch-status-changes-restore-base-db-test
+  (testing "fresh persisted reversed tx rows from repeated batch status changes should restore the base db"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "task"
+                             :build/properties {:status "Todo"}}]}]})
+          client-ops-conn (d/create-conn client-op/schema-in-db)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (let [base-db @conn
+                block-before (db-test/find-block-by-content base-db "task")
+                block-uuid (:block/uuid block-before)
+                status-doing (:db/id (d/entity base-db :logseq.property/status.doing))
+                status-todo (:db/id (d/entity base-db :logseq.property/status.todo))
+                base-status (some-> (:logseq.property/status block-before) :db/ident)
+                base-tags (set (map :db/ident (:block/tags block-before)))
+                base-history-count (count (d/q '[:find ?h
+                                                 :in $ ?block
+                                                 :where [?h :logseq.property.history/block ?block]]
+                                               base-db
+                                               (:db/id block-before)))]
+            (outliner-property/batch-set-property! conn [(:db/id block-before)] :logseq.property/status status-doing {:entity-id? true})
+            (outliner-property/batch-set-property! conn [(:db/id block-before)] :logseq.property/status status-todo {:entity-id? true})
+            (outliner-property/batch-set-property! conn [(:db/id block-before)] :logseq.property/status status-doing {:entity-id? true})
+            (let [pending (#'sync-apply/pending-txs test-repo)
+                  restored-db (reduce (fn [db {:keys [reversed-tx]}]
+                                        (:db-after (d/with db reversed-tx)))
+                                      @conn
+                                      (reverse pending))
+                  block-restored (d/entity restored-db [:block/uuid block-uuid])
+                  restored-history-count (count (d/q '[:find ?h
+                                                       :in $ ?block
+                                                       :where [?h :logseq.property.history/block ?block]]
+                                                     restored-db
+                                                     (:db/id block-restored)))]
+              (is (= 3 (count pending)))
+              (is (= base-status
+                     (some-> (:logseq.property/status block-restored) :db/ident)))
+              (is (= base-tags
+                     (set (map :db/ident (:block/tags block-restored)))))
+              (is (= base-history-count restored-history-count)))))))))
 
 (deftest pending-txs-rewrite-old-string-tempids-test
   (testing "pending tx rows loaded from client ops rewrite legacy string tempids to lookup refs"
@@ -1823,6 +1918,32 @@
           rewritten (#'legacy-rebase/replace-string-block-tempids-with-lookups (db-test/create-conn) tx-data)]
       (is (= [[:db/retractEntity [:block/uuid missing-uuid]]]
              rewritten)))))
+
+(deftest normalize-rebased-pending-tx-keeps-reconstructive-reverse-for-retract-entity-test
+  (testing "rebased pending tx should keep non-empty reverse datoms even when forward tx collapses to retractEntity"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "target"}]}]})
+          target (db-test/find-block-by-content @conn "target")
+          target-uuid (:block/uuid target)
+          db-before @conn
+          tx-report (d/with db-before
+                            [[:db/retractEntity [:block/uuid target-uuid]]]
+                            {})
+          {:keys [normalized-tx-data reversed-datoms]}
+          (#'sync-apply/normalize-rebased-pending-tx
+           {:db-before db-before
+            :db-after (:db-after tx-report)
+            :tx-data (:tx-data tx-report)
+            :remote-tx-data-set #{}})
+          restored-db (:db-after (d/with (:db-after tx-report) reversed-datoms))]
+      (is (= [[:db/retractEntity [:block/uuid target-uuid]]]
+             normalized-tx-data))
+      (is (seq reversed-datoms))
+      (is (some map? reversed-datoms))
+      (is (= target-uuid
+             (-> (d/entity restored-db [:block/uuid target-uuid]) :block/uuid))))))
 
 (deftest rebase-preserves-title-when-reversed-tx-ids-change-test
   (testing "rebase keeps local title when reverse tx gets a new tx id"

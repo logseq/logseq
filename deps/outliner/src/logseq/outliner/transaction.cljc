@@ -3,17 +3,17 @@
    transient state from logseq.outliner.core"
   #?(:cljs (:require-macros [logseq.outliner.transaction])))
 
-(defmacro ^:api with-temp-conn-batch
+(defmacro ^:api with-batch-tx
   [conn opts & body]
-  (let [temp-conn-sym (gensym "temp-conn__")]
-    `(logseq.db/transact-with-temp-conn!
+  (let [conn-sym (gensym "conn__")]
+    `(logseq.db/batch-transact!
       ~conn
       (dissoc ~opts :additional-tx :transact-opts :current-block)
-      (fn [~temp-conn-sym _*batch-tx-data#]
-        (let [~conn ~temp-conn-sym]
+      (fn [~conn-sym _*batch-tx-data#]
+        (let [~conn ~conn-sym]
           ~@body
           (when (seq (:additional-tx ~opts))
-            (logseq.db/transact! ~temp-conn-sym (:additional-tx ~opts) {})))))))
+            (logseq.db/transact! ~conn-sym (:additional-tx ~opts) {})))))))
 
 (defmacro ^:api transact!
   "Batch all the transactions in `body` to a single transaction.
@@ -33,7 +33,7 @@
     (delete-blocks! ...))"
   [opts & body]
   `(let [~'conn (:conn (:transact-opts ~opts))]
-     (logseq.outliner.transaction/with-temp-conn-batch
+     (logseq.outliner.transaction/with-batch-tx
        ~'conn
        ~opts
        ~@body)))

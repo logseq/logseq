@@ -47,7 +47,8 @@
 (defn- remove-temp-block-data
   [tx-data]
   (let [remove-block-temp-f (fn [m]
-                              (->> (remove (fn [[k _v]] (= "block.temp" (namespace k))) m)
+                              (->> (remove (fn [[k _v]]
+                                             (= "block.temp" (namespace k))) m)
                                    (into {})))]
     (keep (fn [data]
             (cond
@@ -106,7 +107,7 @@
           db-based? (entity-plus/db-based-graph? db)]
       (if (and db-based?
                (not
-                (or (:batch-temp-conn? @conn)
+                (or (:batch-tx? @conn)
                     (:rtc-download-graph? tx-meta)
                     (:reset-conn! tx-meta)
                     (:initial-db? tx-meta)
@@ -182,33 +183,30 @@
          (transact-fn repo-or-conn tx-data tx-meta)
          (transact-sync repo-or-conn tx-data tx-meta))))))
 
-(defn transact-with-temp-conn!
-  "Validate db and store once for a batch transaction, the `temp` conn can still load data from disk,
+(defn batch-transact!
+  "Validate db and store once for a batch transaction, the conn can still load data from disk,
   however it can't write to the disk."
   [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
-  (let [temp-conn (d/conn-from-db @conn)
+  (let [_ (swap! conn assoc :skip-store? true
+                 :batch-tx? true)
+        db-before @conn
         *batch-tx-data (volatile! [])]
-    ;; can read from disk, write is disallowed
-    (swap! temp-conn assoc
-           :skip-store? true
-           :batch-temp-conn? true)
-    (d/listen! temp-conn ::temp-conn-batch-tx
+    (d/listen! conn ::batch-tx
                (fn [{:keys [tx-data] :as tx-report}]
                  (vswap! *batch-tx-data into tx-data)
                  (when (fn? listen-db)
                    (listen-db tx-report))))
-    (batch-tx-fn temp-conn *batch-tx-data)
-    (let [tx-data @*batch-tx-data
-          temp-after-db @temp-conn]
-      (d/unlisten! temp-conn ::temp-conn-batch-tx)
-      (reset! temp-conn nil)
+    (batch-tx-fn conn)
+    (d/unlisten! conn ::batch-tx)
+    (let [tx-data @*batch-tx-data]
+      (reset! conn db-before)
+      (swap! conn assoc
+             :skip-store? false
+             :batch-tx? false)
       (vreset! *batch-tx-data nil)
       (when (seq tx-data)
         ;; transact tx-data to `conn` and validate db
-        (let [tx-data' (->>
-                        tx-data
-                        (db-normalize/replace-attr-retract-with-retract-entity temp-after-db))]
-          (transact! conn tx-data' tx-meta))))))
+        (transact! conn tx-data (assoc tx-meta :debug-batch? true))))))
 
 (def page? entity-util/page?)
 (def internal-page? entity-util/internal-page?)
