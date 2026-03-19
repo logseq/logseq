@@ -7936,11 +7936,6 @@ table@^6.6.0:
     string-width "^4.2.3"
     strip-ansi "^6.0.1"
 
-tailwind-capitalize-first-letter@^1.0.4:
-  version "1.0.4"
-  resolved "https://registry.yarnpkg.com/tailwind-capitalize-first-letter/-/tailwind-capitalize-first-letter-1.0.4.tgz#d7a07c1dda4a7555f2240d57154df394b0ee8db6"
-  integrity sha512-ZB8hBi68JI4aQ1cDUxuFWfMYTxgBvlzIdPPHSkFkMUlo7p2QlbMy0hVv/vAREAFmkUh9QfjuKQnOSbe4Gnqljg==
-
 tailwindcss-animate@^1.0.7:
   version "1.0.7"
   resolved "https://registry.yarnpkg.com/tailwindcss-animate/-/tailwindcss-animate-1.0.7.tgz#318b692c4c42676cc9e67b19b78775742388bef4"
