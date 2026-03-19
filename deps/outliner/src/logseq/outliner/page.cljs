@@ -19,6 +19,7 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.text :as text]
             [logseq.outliner.recycle :as outliner-recycle]
+            [logseq.outliner.tx-meta :as outliner-tx-meta]
             [logseq.outliner.validate :as outliner-validate]))
 
 (defn- db-refs->page
@@ -86,9 +87,12 @@
     (when-let [page (d/entity @conn [:block/uuid page-uuid])]
       (let [today-page? (when-let [day (:block/journal-day page)]
                           (= (date-time-util/ms->journal-day (js/Date.)) day))
-            tx-meta (cond-> {:outliner-op :delete-page
-                             :deleted-page (:block/title page)
-                             :persist-op? persist-op?}
+            tx-meta (cond-> (outliner-tx-meta/ensure-outliner-ops
+                             {:outliner-op :delete-page
+                              :deleted-page (:block/title page)
+                              :persist-op? persist-op?}
+                             [:delete-page [page-uuid {:deleted-by-uuid deleted-by-uuid
+                                                       :now-ms now-ms}]])
                       rename?
                       (assoc :real-outliner-op :rename-page))]
         ;; TODO: maybe we should add $$$favorites to built-in pages?
@@ -343,8 +347,10 @@
                      ;; transact doesn't support entities
                      (remove de/entity? parents')
                      page-txs)
-                tx-meta (cond-> {:persist-op? persist-op?
-                                 :outliner-op :create-page}
+                tx-meta (cond-> (outliner-tx-meta/ensure-outliner-ops
+                                 {:persist-op? persist-op?
+                                  :outliner-op :create-page}
+                                 [:create-page [title options]])
                           today-journal?
                           (assoc :create-today-journal? true
                                  :today-journal-name title))]

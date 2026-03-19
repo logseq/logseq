@@ -49,7 +49,6 @@
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.gc :as sqlite-gc]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.recycle :as outliner-recycle]
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
