@@ -18,9 +18,39 @@
             [logseq.outliner.recycle :as outliner-recycle]
             [logseq.outliner.transaction :as outliner-tx]
             [logseq.outliner.tree :as otree]
+            [logseq.outliner.tx-meta :as outliner-tx-meta]
             [logseq.outliner.validate :as outliner-validate]
             [malli.core :as m]
             [malli.util :as mu]))
+
+(defn- direct-op-entry
+  [outliner-op args]
+  (case outliner-op
+    :save-block
+    (let [[_conn block opts] args]
+      [:save-block [block opts]])
+
+    :insert-blocks
+    (let [[_conn blocks target-block opts] args]
+      [:insert-blocks [blocks (:db/id target-block) opts]])
+
+    :delete-blocks
+    (let [[_conn blocks opts] args]
+      [:delete-blocks [(map :db/id blocks) opts]])
+
+    :move-blocks
+    (let [[_conn blocks target-block opts] args]
+      [:move-blocks [(map :db/id blocks) (:db/id target-block) opts]])
+
+    :move-blocks-up-down
+    (let [[_conn blocks up?] args]
+      [:move-blocks-up-down [(map :db/id blocks) up?]])
+
+    :indent-outdent-blocks
+    (let [[_conn blocks indent? opts] args]
+      [:indent-outdent-blocks [(map :db/id blocks) indent? opts]])
+
+    nil))
 
 (def ^:private block-map
   (mu/optional-keys
@@ -1051,7 +1081,9 @@
   (try
     (let [result (apply f args)]
       (when result
-        (let [tx-meta (:tx-meta result)
+        (let [tx-meta (outliner-tx-meta/ensure-outliner-ops
+                       (:tx-meta result)
+                       (direct-op-entry outliner-op args))
               tx-meta (assoc tx-meta
                              :outliner-op outliner-op)]
           (ldb/transact! (first args) (:tx-data result) tx-meta)))
