@@ -215,8 +215,8 @@
       (is (string/includes? output "--output=[Output format. Default: human]:value:(edn human json)'"))
       (is (string/includes? output "-o[Output format. Default: human]:value:(edn human json)'")))
     (testing ":complete :graphs emits separate long= and short+ specs"
-      (is (string/includes? output "--graph=[Graph name]:value:_logseq_graphs'"))
-      (is (string/includes? output "-g[Graph name]:value:_logseq_graphs'")))
+      (is (string/includes? output "--graph=[Graph name]:value:{_logseq_graphs}'"))
+      (is (string/includes? output "-g[Graph name]:value:{_logseq_graphs}'")))
     (testing ":complete :file emits separate long= and short+ specs"
       (is (string/includes? output "--config=[Path to cli.edn (default ~/logseq/cli.edn)]:file:_files'"))
       (is (string/includes? output "-c[Path to cli.edn (default ~/logseq/cli.edn)]:file:_files'")))
