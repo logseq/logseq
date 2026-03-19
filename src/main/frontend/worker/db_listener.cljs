@@ -14,6 +14,16 @@
 (defmulti listen-db-changes
   (fn [listen-key & _] listen-key))
 
+(defn- transit-safe-tx-meta
+  [tx-meta]
+  (when (map? tx-meta)
+    (->> tx-meta
+         (remove (fn [[k v]]
+                   (or (= :error-handler k)
+                       (= :outliner-ops k)
+                       (fn? v))))
+         (into {}))))
+
 (defn- sync-db-to-main-thread
   "Return tx-report"
   [repo conn {:keys [tx-meta] :as tx-report}]
@@ -28,7 +38,7 @@
                     {:repo repo
                      :request-id (:request-id tx-meta)
                      :tx-data (:tx-data tx-report')
-                     :tx-meta tx-meta}
+                     :tx-meta (transit-safe-tx-meta tx-meta)}
                     (dissoc result :tx-report))]
           (shared-service/broadcast-to-clients! :sync-db-changes data))
 
