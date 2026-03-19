@@ -158,6 +158,18 @@
     :move-blocks-up-down
     :indent-outdent-blocks
     :delete-blocks
+    :set-block-property
+    :remove-block-property
+    :batch-set-property
+    :batch-remove-property
+    :delete-property-value
+    :batch-delete-property-value
+    :create-property-text-block
+    :class-add-property
+    :class-remove-property
+    :upsert-closed-value
+    :add-existing-values-to-closed-values
+    :delete-closed-value
     :create-page
     :delete-page
     :rename-page
@@ -337,6 +349,54 @@
     :delete-blocks
     (let [[ids opts] args]
       [:delete-blocks [(stable-id-coll db ids) opts]])
+
+    :set-block-property
+    (let [[block-eid property-id v] args]
+      [:set-block-property [(stable-entity-ref db block-eid) property-id v]])
+
+    :remove-block-property
+    (let [[block-eid property-id] args]
+      [:remove-block-property [(stable-entity-ref db block-eid) property-id]])
+
+    :batch-set-property
+    (let [[block-ids property-id v opts] args]
+      [:batch-set-property [(stable-id-coll db block-ids) property-id v opts]])
+
+    :batch-remove-property
+    (let [[block-ids property-id] args]
+      [:batch-remove-property [(stable-id-coll db block-ids) property-id]])
+
+    :delete-property-value
+    (let [[block-eid property-id property-value] args]
+      [:delete-property-value [(stable-entity-ref db block-eid) property-id property-value]])
+
+    :batch-delete-property-value
+    (let [[block-eids property-id property-value] args]
+      [:batch-delete-property-value [(stable-id-coll db block-eids) property-id property-value]])
+
+    :create-property-text-block
+    (let [[block-id property-id value opts] args]
+      [:create-property-text-block [(stable-entity-ref db block-id) property-id value opts]])
+
+    :class-add-property
+    (let [[class-id property-id] args]
+      [:class-add-property [(stable-entity-ref db class-id) property-id]])
+
+    :class-remove-property
+    (let [[class-id property-id] args]
+      [:class-remove-property [(stable-entity-ref db class-id) property-id]])
+
+    :upsert-closed-value
+    (let [[property-id opts] args]
+      [:upsert-closed-value [property-id opts]])
+
+    :add-existing-values-to-closed-values
+    (let [[property-id values] args]
+      [:add-existing-values-to-closed-values [property-id values]])
+
+    :delete-closed-value
+    (let [[property-id value-block-id] args]
+      [:delete-closed-value [property-id (stable-entity-ref db value-block-id)]])
 
     [op args]))
 
@@ -698,6 +758,42 @@
         (invalid-rebase-op! op {:args args}))
       (outliner-core/delete-blocks! conn blocks (or opts {}))
       true)
+
+    :set-block-property
+    (apply outliner-property/set-block-property! conn args)
+
+    :remove-block-property
+    (apply outliner-property/remove-block-property! conn args)
+
+    :batch-set-property
+    (apply outliner-property/batch-set-property! conn args)
+
+    :batch-remove-property
+    (apply outliner-property/batch-remove-property! conn args)
+
+    :delete-property-value
+    (apply outliner-property/delete-property-value! conn args)
+
+    :batch-delete-property-value
+    (apply outliner-property/batch-delete-property-value! conn args)
+
+    :create-property-text-block
+    (apply outliner-property/create-property-text-block! conn args)
+
+    :class-add-property
+    (apply outliner-property/class-add-property! conn args)
+
+    :class-remove-property
+    (apply outliner-property/class-remove-property! conn args)
+
+    :upsert-closed-value
+    (apply outliner-property/upsert-closed-value! conn args)
+
+    :add-existing-values-to-closed-values
+    (apply outliner-property/add-existing-values-to-closed-values! conn args)
+
+    :delete-closed-value
+    (apply outliner-property/delete-closed-value! conn args)
 
     :create-page
     (let [[title opts] args]
