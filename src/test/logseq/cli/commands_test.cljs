@@ -1108,11 +1108,11 @@
       (is (= :invalid-options (get-in result [:error :code])))))
 
   (testing "upsert block parses with source and target"
-    (let [result (commands/parse-args ["upsert" "block" "--uuid" "abc" "--target-uuid" "def" "--pos" "last-child"])]
+    (let [result (commands/parse-args ["upsert" "block" "--uuid" "11111111-1111-1111-1111-111111111111" "--target-uuid" "22222222-2222-2222-2222-222222222222" "--pos" "last-child"])]
       (is (true? (:ok? result)))
       (is (= :upsert-block (:command result)))
-      (is (= "abc" (get-in result [:options :uuid])))
-      (is (= "def" (get-in result [:options :target-uuid])))
+      (is (= "11111111-1111-1111-1111-111111111111" (get-in result [:options :uuid])))
+      (is (= "22222222-2222-2222-2222-222222222222" (get-in result [:options :target-uuid])))
       (is (= "last-child" (get-in result [:options :pos])))))
 
   (testing "upsert block parses with update tags and properties"
@@ -1125,11 +1125,11 @@
       (is (= "{:logseq.property/publishing-public? true}" (get-in result [:options :update-properties])))))
 
   (testing "upsert block allows updates without move target"
-    (let [result (commands/parse-args ["upsert" "block" "--uuid" "abc"
+    (let [result (commands/parse-args ["upsert" "block" "--uuid" "11111111-1111-1111-1111-111111111111"
                                        "--update-tags" "[\"TagA\"]"])]
       (is (true? (:ok? result)))
       (is (= :upsert-block (:command result)))
-      (is (= "abc" (get-in result [:options :uuid])))))
+      (is (= "11111111-1111-1111-1111-111111111111" (get-in result [:options :uuid])))))
 
   (testing "upsert block update mode accepts status-only updates"
     (let [result (commands/parse-args ["upsert" "block" "--id" "1"
@@ -1173,11 +1173,11 @@
   (testing "upsert block create mode parses with target selectors and pos"
     (let [result (commands/parse-args ["upsert" "block"
                                        "--content" "hello"
-                                       "--target-uuid" "abc"
+                                       "--target-uuid" "11111111-1111-1111-1111-111111111111"
                                        "--pos" "first-child"])]
       (is (true? (:ok? result)))
       (is (= :upsert-block (:command result)))
-      (is (= "abc" (get-in result [:options :target-uuid])))
+      (is (= "11111111-1111-1111-1111-111111111111" (get-in result [:options :target-uuid])))
       (is (= "first-child" (get-in result [:options :pos])))))
 
   (testing "upsert block create mode parses with update tags and update properties"

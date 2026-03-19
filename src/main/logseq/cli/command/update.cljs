@@ -81,12 +81,10 @@
         (throw (ex-info "source block not found" {:code :source-not-found}))))
 
     (seq uuid)
-    (if-not (common-util/uuid-string? uuid)
-      (p/rejected (ex-info "source must be a uuid" {:code :invalid-source}))
-      (p/let [entity (fetch-entity-by-uuid config repo uuid)]
-        (if (:db/id entity)
-          (ensure-non-page entity "source must be a non-page block" :invalid-source)
-          (throw (ex-info "source block not found" {:code :source-not-found})))))
+    (p/let [entity (fetch-entity-by-uuid config repo uuid)]
+      (if (:db/id entity)
+        (ensure-non-page entity "source must be a non-page block" :invalid-source)
+        (throw (ex-info "source block not found" {:code :source-not-found}))))
 
     :else
     (p/rejected (ex-info "source is required" {:code :missing-source}))))
@@ -102,21 +100,19 @@
         (throw (ex-info "target block not found" {:code :target-not-found}))))
 
     (seq target-uuid)
-    (if-not (common-util/uuid-string? target-uuid)
-      (p/rejected (ex-info "target must be a uuid" {:code :invalid-target}))
-      (p/let [entity (fetch-entity-by-uuid config repo target-uuid)]
-        (if (:db/id entity)
-          (ensure-non-page entity "target must be a block" :invalid-target)
-          (throw (ex-info "target block not found" {:code :target-not-found})))))
+    (p/let [entity (fetch-entity-by-uuid config repo target-uuid)]
+      (if (:db/id entity)
+        (ensure-non-page entity "target must be a block" :invalid-target)
+        (throw (ex-info "target block not found" {:code :target-not-found}))))
 
     (seq target-page)
     (let [page-name (common-util/page-name-sanity-lc target-page)]
       (p/let [entity (transport/invoke config :thread-api/pull false
                                        [repo [:db/id :block/uuid :block/name :block/title]
                                         [:block/name page-name]])]
-      (if (:db/id entity)
-        entity
-        (throw (ex-info "page not found" {:code :page-not-found})))))
+        (if (:db/id entity)
+          entity
+          (throw (ex-info "page not found" {:code :page-not-found})))))
 
     :else
     (p/rejected (ex-info "target is required" {:code :missing-target}))))
