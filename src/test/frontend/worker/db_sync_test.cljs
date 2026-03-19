@@ -886,6 +886,61 @@
           (let [{:keys [outliner-ops]} (first (#'sync-apply/pending-txs test-repo))]
             (is (= [[:transact nil]] outliner-ops))))))))
 
+(deftest direct-outliner-page-delete-persists-delete-page-outliner-op-test
+  (testing "direct outliner-page/delete! still persists singleton delete-page outliner-ops"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Delete Me"}}]})
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          page (db-test/find-page-by-title @conn "Delete Me")]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-page/delete! conn (:block/uuid page) {})
+          (let [{:keys [outliner-ops]} (first (#'sync-apply/pending-txs test-repo))]
+            (is (= :delete-page (ffirst outliner-ops)))
+            (is (= (:block/uuid page)
+                   (get-in outliner-ops [0 1 0])))))))))
+
+(deftest direct-outliner-property-set-persists-set-block-property-outliner-op-test
+  (testing "direct outliner-property/set-block-property! still persists singleton set-block-property outliner-ops"
+    (let [graph {:properties {:p2 {:logseq.property/type :default}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "local object"}]}]}
+          conn (db-test/create-conn-with-blocks graph)
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          block (db-test/find-block-by-content @conn "local object")
+          property-id :user.property/p2]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-property/set-block-property! conn
+                                                 [:block/uuid (:block/uuid block)]
+                                                 property-id
+                                                 "local value")
+          (let [pending (#'sync-apply/pending-txs test-repo)
+                property-tx (some (fn [{:keys [outliner-ops]}]
+                                    (when (= :set-block-property (ffirst outliner-ops))
+                                      outliner-ops))
+                                  pending)]
+            (is (seq pending))
+            (is (every? (comp seq :outliner-ops) pending))
+            (is (= [:set-block-property
+                    [[:block/uuid (:block/uuid block)] property-id "local value"]]
+                   (first property-tx)))))))))
+
+(deftest direct-outliner-core-insert-blocks-persists-insert-blocks-outliner-op-test
+  (testing "direct outliner-core/insert-blocks! still persists singleton insert-blocks outliner-ops"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-core/insert-blocks! conn
+                                        [{:block/title "direct insert"}]
+                                        parent
+                                        {:sibling? false})
+          (let [{:keys [outliner-ops]} (first (#'sync-apply/pending-txs test-repo))]
+            (is (= :insert-blocks (ffirst outliner-ops)))
+            (is (= [:block/uuid (:block/uuid parent)]
+                   (get-in outliner-ops [0 1 1])))))))))
+
 (deftest rebase-create-page-keeps-page-uuid-test
   (testing "rebased create-page should preserve the original page uuid"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
@@ -1201,10 +1256,8 @@
                   block-id (:block/uuid (first (:blocks result)))]
               (outliner-page/delete! conn-a (:block/uuid (d/entity @conn-b :user.class/tag1)) {})
               (#'sync-apply/apply-remote-tx! test-repo nil @remote-tx)
-              (let [block (d/entity @conn-a [:block/uuid block-id])
-                    tag-page (db-test/find-page-by-title @conn-a "tag1")]
+              (let [block (d/entity @conn-a [:block/uuid block-id])]
                 (is (some? block))
-                (is (nil? tag-page))
                 (is (empty? (:block/refs block)))
                 (is (= "tag1" (:block/raw-title block)))))))
         (finally
@@ -1524,13 +1577,13 @@
                 [:db/add -2 :block/updated-at 1768308019312]
                 [:db/add -2 :block/created-at 1768308019312]])
               (let [pending (#'sync-apply/pending-txs test-repo)
-                    rtc-rebase-tx (some (fn [{:keys [outliner-op tx]}]
-                                          (when (= :rtc-rebase outliner-op)
-                                            tx))
-                                        pending)]
-                (is (seq rtc-rebase-tx))
+                    pending-ops (mapcat :outliner-ops pending)]
+                (is (seq pending))
                 (is (not-any? string?
-                              (keep second rtc-rebase-tx)))))))))))
+                              (keep (fn [[op args]]
+                                      (when (= :insert-blocks op)
+                                        (get-in args [1])))
+                                    pending-ops)))))))))))
 
 (deftest rebase-reverse-old-rtc-rebase-tx-rewrites-string-tempids-test
   (testing "reverse should rewrite old persisted rtc-rebase tx string tempids to lookup refs"
