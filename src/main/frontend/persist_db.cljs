@@ -2,6 +2,7 @@
   "Backend of DB based graph"
   (:require [electron.ipc :as ipc]
             [frontend.db :as db]
+            [frontend.db.transact :as db-transact]
             [frontend.persist-db.browser :as browser]
             [frontend.persist-db.node :as node]
             [frontend.persist-db.protocol :as protocol]
@@ -10,6 +11,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
+            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (defonce opfs-db (browser/->InBrowser))
@@ -40,6 +42,13 @@
       (reset! remote-db client)
       (reset! remote-repo repo)
       (reset! state/*db-worker (:wrapped-worker client))
+      (ldb/register-transact-fn!
+       (fn remote-transact!
+         [repo tx-data tx-meta]
+         (db-transact/transact browser/transact!
+                               (if (string? repo) repo (state/get-current-repo))
+                               tx-data
+                               (assoc tx-meta :client-id (:client-id @state/state)))))
       client)))
 
 (defn <start-runtime!
