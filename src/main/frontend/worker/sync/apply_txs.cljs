@@ -20,6 +20,7 @@
             [logseq.db-sync.order :as sync-order]
             [logseq.db.common.normalize :as db-normalize]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
@@ -264,6 +265,13 @@
   [db ids]
   (mapv #(stable-entity-ref db %) ids))
 
+(defn- stable-property-value
+  [db property-id v]
+  (let [property-type (some-> (d/entity db property-id) :logseq.property/type)]
+    (if (contains? db-property-type/all-ref-property-types property-type)
+      (sanitize-ref-value db v)
+      v)))
+
 (defn- created-block-uuids-from-tx-data
   [tx-data]
   (->> tx-data
@@ -352,7 +360,9 @@
 
     :set-block-property
     (let [[block-eid property-id v] args]
-      [:set-block-property [(stable-entity-ref db block-eid) property-id v]])
+      [:set-block-property [(stable-entity-ref db block-eid)
+                            property-id
+                            (stable-property-value db property-id v)]])
 
     :remove-block-property
     (let [[block-eid property-id] args]
@@ -360,7 +370,10 @@
 
     :batch-set-property
     (let [[block-ids property-id v opts] args]
-      [:batch-set-property [(stable-id-coll db block-ids) property-id v opts]])
+      [:batch-set-property [(stable-id-coll db block-ids)
+                            property-id
+                            (stable-property-value db property-id v)
+                            opts]])
 
     :batch-remove-property
     (let [[block-ids property-id] args]
@@ -368,11 +381,15 @@
 
     :delete-property-value
     (let [[block-eid property-id property-value] args]
-      [:delete-property-value [(stable-entity-ref db block-eid) property-id property-value]])
+      [:delete-property-value [(stable-entity-ref db block-eid)
+                               property-id
+                               (stable-property-value db property-id property-value)]])
 
     :batch-delete-property-value
     (let [[block-eids property-id property-value] args]
-      [:batch-delete-property-value [(stable-id-coll db block-eids) property-id property-value]])
+      [:batch-delete-property-value [(stable-id-coll db block-eids)
+                                     property-id
+                                     (stable-property-value db property-id property-value)]])
 
     :create-property-text-block
     (let [[block-id property-id value opts] args]
@@ -825,8 +842,10 @@
        (fn [row-conn _*batch-tx-data]
          (if (= [[:transact nil]] outliner-ops)
            (when-let [tx-data (seq (:tx local-tx))]
+             (prn :debug :replay :transact tx-data)
              (ldb/transact! row-conn tx-data {:outliner-op :transact}))
            (doseq [op outliner-ops]
+             (prn :debug :replay :op op)
              (replay-canonical-outliner-op! row-conn op)))))
       true
       (catch :default error
