@@ -303,7 +303,8 @@
                                 (first (first ops)))
         opts' (cond-> (assoc opts
                              :transact-opts {:conn conn}
-                             :local-tx? true)
+                             :local-tx? true
+                             :outliner-ops ops)
                 (and single-op-outliner-op
                      (nil? (:outliner-op opts)))
                 (assoc :outliner-op single-op-outliner-op))
