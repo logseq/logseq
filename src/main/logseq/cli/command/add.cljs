@@ -627,15 +627,19 @@
     (when-not lookup
       (throw (ex-info "invalid tag value" {:code :invalid-tag :tag tag})))
     (p/let [entity (pull-entity config repo
-                                [:db/id :block/name :block/title :block/uuid :block/tags
+                                [:db/id :block/name :block/title :block/uuid
+                                 {:block/tags [:db/ident]}
                                  :logseq.property/public? :logseq.property/built-in?]
                                 lookup)]
       (cond
         (nil? (:db/id entity))
-        (throw (ex-info "tag not found" {:code :tag-not-found :tag tag}))
+        (throw (ex-info (str "tag not found: " (pr-str tag)) {:code :tag-not-found :tag tag}))
+
+        (not (some #(= :logseq.class/Tag (:db/ident %)) (:block/tags entity)))
+        (throw (ex-info (str "This is not a tag: " (pr-str tag)) {:code :not-a-tag :tag tag}))
 
         (false? (:logseq.property/public? entity))
-        (throw (ex-info "tag is not public" {:code :tag-not-public :tag tag}))
+        (throw (ex-info (str "tag is not public: " (pr-str tag)) {:code :tag-not-public :tag tag}))
 
         :else
         entity))))

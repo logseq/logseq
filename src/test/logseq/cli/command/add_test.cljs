@@ -1,6 +1,9 @@
 (ns logseq.cli.command.add-test
-  (:require [cljs.test :refer [deftest is testing]]
-            [logseq.cli.command.add :as add-command]))
+  (:require [cljs.test :refer [async deftest is testing]]
+            [clojure.string :as string]
+            [logseq.cli.command.add :as add-command]
+            [logseq.cli.transport :as transport]
+            [promesa.core :as p]))
 
 (deftest test-collect-created-block-uuids
   (testing "collects uuids depth-first and removes duplicates"
@@ -43,3 +46,48 @@
       (is (some? error))
       (is (= :add-id-resolution-failed (-> error ex-data :code)))
       (is (= [uuid-b] (-> error ex-data :missing-uuids))))))
+
+(def ^:private mock-transport-invoke
+  (fn [_ _ _ args]
+    (let [[_ _ lookup] args]
+      (p/resolved
+       (cond
+         (= lookup [:block/name "plainpage"])
+         {:db/id 42 :block/name "plainpage" :block/title "PlainPage"
+          :block/tags [{:db/ident :logseq.class/Page}]}
+
+         (= lookup [:block/name "realtag"])
+         {:db/id 99 :block/name "realtag" :block/title "RealTag"
+          :block/tags [{:db/ident :logseq.class/Tag}]}
+
+         :else {})))))
+
+(deftest test-resolve-tags-accepts-valid-tag
+  (async done
+         (-> (p/with-redefs [transport/invoke mock-transport-invoke]
+               (p/let [result (add-command/resolve-tags {} "demo" ["RealTag"])]
+                 (is (= [99] (mapv :db/id result)))))
+             (p/catch (fn [e] (is false (str "unexpected error: " e))))
+             (p/finally done))))
+
+(deftest test-resolve-tags-rejects-non-tag-page
+  (async done
+         (-> (p/with-redefs [transport/invoke mock-transport-invoke]
+               (-> (add-command/resolve-tags {} "demo" ["PlainPage"])
+                   (p/then (fn [_] (is false "expected error for non-tag page")))
+                   (p/catch (fn [e]
+                              (is (= :not-a-tag (-> e ex-data :code)))
+                              (is (string/includes? (ex-message e) "PlainPage"))))))
+             (p/catch (fn [e] (is false (str "unexpected error: " e))))
+             (p/finally done))))
+
+(deftest test-resolve-tags-rejects-missing-tag
+  (async done
+         (-> (p/with-redefs [transport/invoke mock-transport-invoke]
+               (-> (add-command/resolve-tags {} "demo" ["NoSuchTag"])
+                   (p/then (fn [_] (is false "expected error for missing tag")))
+                   (p/catch (fn [e]
+                              (is (= :tag-not-found (-> e ex-data :code)))
+                              (is (string/includes? (ex-message e) "NoSuchTag"))))))
+             (p/catch (fn [e] (is false (str "unexpected error: " e))))
+             (p/finally done))))
