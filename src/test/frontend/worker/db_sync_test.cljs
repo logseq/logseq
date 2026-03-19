@@ -927,6 +927,73 @@
                     [[:block/uuid (:block/uuid block)] property-id "local value"]]
                    (first property-tx)))))))))
 
+(deftest canonical-set-block-property-rewrites-ref-values-to-stable-refs-test
+  (testing "ref-valued set-block-property ops should persist stable entity refs instead of numeric ids"
+    (let [graph {:properties {:x7 {:logseq.property/type :page
+                                   :db/cardinality :db.cardinality/many}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "local object"}]}]}
+          conn (db-test/create-conn-with-blocks graph)
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          block (db-test/find-block-by-content @conn "local object")
+          property-id :user.property/x7]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-page/create! conn "Page y" {})
+          (let [page-y (db-test/find-page-by-title @conn "Page y")]
+            (outliner-property/set-block-property! conn
+                                                   [:block/uuid (:block/uuid block)]
+                                                   property-id
+                                                   (:db/id page-y))
+            (let [pending (#'sync-apply/pending-txs test-repo)
+                  property-tx (some (fn [{:keys [outliner-ops]}]
+                                      (when (= :set-block-property (ffirst outliner-ops))
+                                        outliner-ops))
+                                    pending)]
+              (is (= [:set-block-property
+                      [[:block/uuid (:block/uuid block)]
+                       property-id
+                       [:block/uuid (:block/uuid page-y)]]]
+                     (first property-tx))))))))))
+
+(deftest canonical-batch-set-property-rewrites-ref-values-to-stable-refs-test
+  (testing "ref-valued batch-set-property ops should persist stable entity refs instead of numeric ids"
+    (let [graph {:properties {:x7 {:logseq.property/type :page
+                                   :db/cardinality :db.cardinality/many}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "local object 1"}
+                            {:block/title "local object 2"}]}]}
+          conn (db-test/create-conn-with-blocks graph)
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          block-1 (db-test/find-block-by-content @conn "local object 1")
+          block-2 (db-test/find-block-by-content @conn "local object 2")
+          property-id :user.property/x7]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-page/create! conn "Page y" {})
+          (let [page-y (db-test/find-page-by-title @conn "Page y")]
+            (outliner-op/apply-ops! conn
+                                    [[:batch-set-property [[(:db/id block-1)
+                                                            (:db/id block-2)]
+                                                           property-id
+                                                           (:db/id page-y)
+                                                           {}]]]
+                                    {})
+            (let [pending (#'sync-apply/pending-txs test-repo)
+                  property-tx (some (fn [{:keys [outliner-ops]}]
+                                      (when (= :batch-set-property (ffirst outliner-ops))
+                                        outliner-ops))
+                                    pending)]
+              (is (= [:batch-set-property
+                      [[[:block/uuid (:block/uuid block-1)]
+                        [:block/uuid (:block/uuid block-2)]]
+                       property-id
+                       [:block/uuid (:block/uuid page-y)]
+                       {}]]
+                     (first property-tx))))))))))
+
 (deftest direct-outliner-core-insert-blocks-persists-insert-blocks-outliner-op-test
   (testing "direct outliner-core/insert-blocks! still persists singleton insert-blocks outliner-ops"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
@@ -991,6 +1058,50 @@
             (let [block-after (d/entity @conn [:block/uuid block-uuid])]
               (is (some? block-after))
               (is (= block-uuid (:block/uuid block-after))))))))))
+
+(deftest rebase-insert-indent-save-sequence-keeps-structural-state-test
+  (testing "rebasing insert -> indent -> save should not restore stale page attrs after a remote move"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "parent"
+                             :build/children [{:block/title "child 1"}]}]}
+                  {:page {:block/title "page 2"}
+                   :blocks []}]})
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          parent (db-test/find-block-by-content @conn "parent")
+          page-1 (db-test/find-page-by-title @conn "page 1")
+          page-2 (db-test/find-page-by-title @conn "page 2")
+          parent-uuid (:block/uuid parent)
+          block-uuid (random-uuid)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-core/insert-blocks! conn
+                                        [{:block/uuid block-uuid
+                                          :block/title ""}]
+                                        parent
+                                        {:sibling? true
+                                         :keep-uuid? true})
+          (let [inserted (d/entity @conn [:block/uuid block-uuid])]
+            (outliner-core/indent-outdent-blocks! conn [inserted] true)
+            (outliner-core/save-block! conn
+                                       (assoc (d/entity @conn [:block/uuid block-uuid])
+                                              :block/title "121")
+                                       {}))
+          (#'sync-apply/apply-remote-tx!
+           test-repo
+           nil
+           [[:db/retract [:block/uuid parent-uuid] :block/parent [:block/uuid (:block/uuid page-1)]]
+            [:db/add [:block/uuid parent-uuid] :block/parent [:block/uuid (:block/uuid page-2)]]
+            [:db/retract [:block/uuid parent-uuid] :block/page [:block/uuid (:block/uuid page-1)]]
+            [:db/add [:block/uuid parent-uuid] :block/page [:block/uuid (:block/uuid page-2)]]
+            [:db/retract [:block/uuid parent-uuid] :block/order (:block/order parent)]
+            [:db/add [:block/uuid parent-uuid] :block/order "a0"]])
+          (let [block-after (d/entity @conn [:block/uuid block-uuid])]
+            (is (some? block-after))
+            (is (= "121" (:block/title block-after)))
+            (is (= parent-uuid (-> block-after :block/parent :block/uuid)))
+            (is (= (:block/uuid page-2) (-> block-after :block/page :block/uuid)))))))))
 
 (deftest reaction-remove-enqueues-pending-sync-tx-test
   (testing "removing a reaction should enqueue tx for db-sync"
