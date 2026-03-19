@@ -11,6 +11,7 @@
             [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.download :as sync-download]
             [frontend.worker.sync.large-title :as sync-large-title]
+            [frontend.worker.sync.legacy-rebase :as legacy-rebase]
             [frontend.worker.sync.presence :as sync-presence]
             [frontend.worker.sync.transport :as sync-transport]
             [lambdaisland.glogi :as log]
@@ -18,9 +19,12 @@
             [logseq.db-sync.cycle :as sync-cycle]
             [logseq.db-sync.order :as sync-order]
             [logseq.db.common.normalize :as db-normalize]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.outliner.recycle :as outliner-recycle]
+            [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.page :as outliner-page]
+            [logseq.outliner.property :as outliner-property]
             [logseq.undo-redo-validate :as undo-validate]
             [promesa.core :as p]))
 
@@ -31,8 +35,7 @@
   (log/error tag data)
   (throw (ex-info (name tag) data)))
 
-(declare enqueue-asset-task!
-         replace-string-block-tempids-with-lookups)
+(declare enqueue-asset-task!)
 
 (defn- current-client [repo]
   (sync-presence/current-client worker-state/*db-sync-client repo))
@@ -148,14 +151,239 @@
   (when-let [queue (:asset-queue client)]
     (swap! queue (fn [prev] (p/then prev (fn [_] (task)))))))
 
-(defn- persist-local-tx! [repo normalized-tx-data reversed-datoms tx-meta]
+(def ^:private semantic-outliner-ops
+  #{:save-block
+    :insert-blocks
+    :move-blocks
+    :move-blocks-up-down
+    :indent-outdent-blocks
+    :delete-blocks
+    :create-page
+    :delete-page
+    :rename-page
+    :upsert-property})
+
+(def ^:private transient-block-keys
+  #{:db/id
+    :block/tx-id
+    :block/created-at
+    :block/updated-at
+    :block/meta
+    :block/unordered
+    :block/level
+    :block.temp/ast-title
+    :block.temp/ast-body
+    :block.temp/load-status
+    :block.temp/has-children?})
+
+(def ^:private rebase-refs-key :db-sync.rebase/refs)
+
+(defn- stable-entity-ref
+  [db x]
+  (cond
+    (map? x) (stable-entity-ref db (:db/id x))
+    (and (integer? x) (not (neg? x)))
+    (if-let [ent (d/entity db x)]
+      (cond
+        (:block/uuid ent) [:block/uuid (:block/uuid ent)]
+        (:db/ident ent) (:db/ident ent)
+        :else x)
+      x)
+    :else x))
+
+(defn- sanitize-ref-value
+  [db v]
+  (cond
+    (vector? v) (stable-entity-ref db v)
+    (or (set? v) (sequential? v)) (set (map #(stable-entity-ref db %) v))
+    :else (stable-entity-ref db v)))
+
+(defn- sanitize-block-refs
+  [refs]
+  (->> refs
+       (keep (fn [ref]
+               (when (:block/uuid ref)
+                 (select-keys ref [:block/uuid :block/title]))))
+       vec))
+
+(defn- ref-attr?
+  [db a]
+  (and (keyword? a)
+       (= :db.type/ref
+          (:db/valueType (d/entity db a)))))
+
+(defn- sanitize-block-payload
+  [db block]
+  (if (map? block)
+    (let [refs (sanitize-block-refs (:block/refs block))
+          m (reduce-kv
+             (fn [m k v]
+               (cond
+                 (contains? transient-block-keys k) m
+                 (= "block.temp" (namespace k)) m
+                 (ref-attr? db k)
+                 (assoc m k (sanitize-ref-value db v))
+                 :else
+                 (assoc m k v)))
+             {}
+             block)]
+      (assoc m rebase-refs-key refs))
+    block))
+
+(defn- rewrite-block-title-with-retracted-refs
+  [db block]
+  (let [refs (get block rebase-refs-key)
+        retracted-refs (remove (fn [ref] (d/entity db [:block/uuid (:block/uuid ref)])) refs)
+        block' (if (seq retracted-refs)
+                 (update block :block/title
+                         (fn [title]
+                           (db-content/content-id-ref->page title retracted-refs)))
+                 block)]
+    (dissoc block' rebase-refs-key)))
+
+(defn- sanitize-insert-block-payload
+  [db block]
+  (let [block' (sanitize-block-payload db block)]
+    (if (map? block')
+      (dissoc block' :block/parent :block/page :block/order)
+      block')))
+
+(defn- stable-id-coll
+  [db ids]
+  (mapv #(stable-entity-ref db %) ids))
+
+(defn- created-block-uuids-from-tx-data
+  [tx-data]
+  (->> tx-data
+       (keep (fn [item]
+               (cond
+                 (and (map? item) (:block/uuid item))
+                 (:block/uuid item)
+
+                 (and (some? (:a item))
+                      (= :block/uuid (:a item))
+                      (true? (:added item)))
+                 (:v item)
+
+                 (and (vector? item)
+                      (= :db/add (first item))
+                      (>= (count item) 4)
+                      (= :block/uuid (nth item 2)))
+                 (nth item 3)
+
+                 :else
+                 nil)))
+       distinct
+       vec))
+
+(defn- canonicalize-semantic-outliner-op
+  [db tx-data [op args]]
+  (case op
+    :create-page
+    (let [[title opts] args
+          page-uuid (some-> (ldb/get-page db title) :block/uuid)]
+      [:create-page [title
+                     (cond-> (or opts {})
+                       page-uuid
+                       (assoc :uuid page-uuid))]])
+
+    :rename-page
+    (let [[page-uuid new-title] args]
+      [:save-block [{:block/uuid page-uuid
+                     :block/title new-title}
+                    {:source-op :rename-page}]])
+
+    :save-block
+    (let [[block opts] args]
+      [:save-block [(sanitize-block-payload db block) opts]])
+
+    :insert-blocks
+    (let [[blocks target-id opts] args
+          created-uuids (created-block-uuids-from-tx-data tx-data)
+          blocks' (mapv #(sanitize-insert-block-payload db %) blocks)
+          blocks' (if (and (not (:keep-uuid? opts))
+                           (= (count blocks') (count created-uuids)))
+                    (mapv (fn [block uuid]
+                            (assoc block :block/uuid uuid))
+                          blocks'
+                          created-uuids)
+                    blocks')]
+      [:insert-blocks [blocks'
+                       (stable-entity-ref db target-id)
+                       (assoc (dissoc (or opts {}) :outliner-op)
+                              :keep-uuid? true)]])
+
+    :move-blocks-up-down
+    (let [[ids up?] args]
+      [:move-blocks [(stable-id-coll db ids)
+                     nil
+                     {:source-op :move-blocks-up-down
+                      :up? up?}]])
+
+    :indent-outdent-blocks
+    (let [[ids indent? opts] args]
+      [:move-blocks [(stable-id-coll db ids)
+                     nil
+                     (assoc (dissoc (or opts {}) :outliner-op)
+                            :source-op :indent-outdent-blocks
+                            :indent? indent?)]])
+
+    :move-blocks
+    (let [[ids target-id opts] args]
+      [:move-blocks [(stable-id-coll db ids)
+                     (stable-entity-ref db target-id)
+                     (dissoc (or opts {}) :outliner-op)]])
+
+    :delete-blocks
+    (let [[ids opts] args]
+      [:delete-blocks [(stable-id-coll db ids) opts]])
+
+    [op args]))
+
+(defn- canonicalize-outliner-ops
+  [db tx-meta tx-data]
+  (let [outliner-ops (:outliner-ops tx-meta)]
+    (cond
+      (or (:undo? tx-meta)
+          (:redo? tx-meta)
+          (= :batch-import-edn (:outliner-op tx-meta)))
+      [[:transact nil]]
+
+      (seq outliner-ops)
+      (if (every? (fn [[op]]
+                    (contains? semantic-outliner-ops op))
+                  outliner-ops)
+        (mapv #(canonicalize-semantic-outliner-op db tx-data %) outliner-ops)
+        [[:transact nil]])
+
+      (= :transact (:outliner-op tx-meta))
+      [[:transact nil]]
+
+      ;; Fallback for local txs that bypassed apply-outliner-ops and therefore
+      ;; never attached semantic op data.
+      :else
+      [[:transact nil]])))
+
+(defn- inferred-outliner-ops?
+  [tx-meta]
+  (and (nil? (:outliner-ops tx-meta))
+       (not (:undo? tx-meta))
+       (not (:redo? tx-meta))
+       (not= :batch-import-edn (:outliner-op tx-meta))))
+
+(defn- persist-local-tx! [repo tx-data normalized-tx-data reversed-datoms tx-meta]
   (when-let [conn (client-ops-conn repo)]
     (let [tx-id (random-uuid)
-          now (.now js/Date)]
+          now (.now js/Date)
+          graph-db (some-> (worker-state/get-datascript-conn repo) deref)
+          outliner-ops (canonicalize-outliner-ops graph-db tx-meta tx-data)
+          inferred-outliner-ops?' (inferred-outliner-ops? tx-meta)]
       (ldb/transact! conn [{:db-sync/tx-id tx-id
                             :db-sync/normalized-tx-data normalized-tx-data
                             :db-sync/reversed-tx-data reversed-datoms
                             :db-sync/outliner-op (:outliner-op tx-meta)
+                            :db-sync/outliner-ops outliner-ops
+                            :db-sync/inferred-outliner-ops? inferred-outliner-ops?'
                             :db-sync/created-at now}])
       (when-let [client (current-client repo)]
         (broadcast-rtc-state! client))
@@ -175,10 +403,12 @@
                    (let [tx-id (:db-sync/tx-id ent)]
                      {:tx-id tx-id
                       :outliner-op (:db-sync/outliner-op ent)
-                      :tx (replace-string-block-tempids-with-lookups
+                      :outliner-ops (:db-sync/outliner-ops ent)
+                      :inferred-outliner-ops? (:db-sync/inferred-outliner-ops? ent)
+                      :tx (legacy-rebase/replace-string-block-tempids-with-lookups
                            graph-db
                            (:db-sync/normalized-tx-data ent))
-                      :reversed-tx (replace-string-block-tempids-with-lookups
+                      :reversed-tx (legacy-rebase/replace-string-block-tempids-with-lookups
                                     graph-db
                                     (:db-sync/reversed-tx-data ent))})))
            vec))))
@@ -198,431 +428,6 @@
   [repo]
   (remove-pending-txs! repo (mapv :tx-id (pending-txs repo))))
 
-(comment
-  (defn- clear-pending-txs!
-    [repo]
-    (when-let [conn (client-ops-conn repo)]
-      (let [tx-data (->> (d/datoms @conn :avet :db-sync/created-at)
-                         (map (fn [d]
-                                [:db/retractEntity (:e d)])))]
-        (d/transact! conn tx-data)))))
-
-(defn get-lookup-id
-  [x]
-  (when (and (vector? x)
-             (= 2 (count x))
-             (= :block/uuid (first x)))
-    (second x)))
-
-(defn- created-block-uuid-entry
-  [item]
-  (when (and (vector? item)
-             (= :db/add (first item))
-             (>= (count item) 4)
-             (= :block/uuid (nth item 2)))
-    [(second item) (nth item 3)]))
-
-(defn- created-block-uuid-by-entity-id
-  [tx-data]
-  (->> tx-data
-       (keep created-block-uuid-entry)
-       (into {})))
-
-(defn- created-block-context
-  [tx-data]
-  (let [uuid-by-entity-id (created-block-uuid-by-entity-id tx-data)]
-    {:uuid-by-entity-id uuid-by-entity-id
-     :uuids (set (vals uuid-by-entity-id))}))
-
-(defn- tx-created-block-uuid
-  [{:keys [uuid-by-entity-id uuids]} entity-id]
-  (or (get uuid-by-entity-id entity-id)
-      (let [lookup-id (get-lookup-id entity-id)]
-        (when (contains? uuids lookup-id)
-          lookup-id))))
-
-(defn- add-datom-ref-block-uuids
-  [item]
-  (when (and (vector? item)
-             (= :db/add (first item)))
-    (cond-> []
-      (get-lookup-id (second item))
-      (conj (get-lookup-id (second item)))
-
-      (and (>= (count item) 4)
-           (get-lookup-id (nth item 3)))
-      (conj (get-lookup-id (nth item 3))))))
-
-(defn drop-missing-created-block-datoms
-  [db tx-data]
-  (if db
-    (let [{:keys [uuid-by-entity-id]} (created-block-context tx-data)
-          missing-created-uuids (->> (vals uuid-by-entity-id)
-                                     (remove #(d/entity db [:block/uuid %]))
-                                     set)]
-      (if (seq missing-created-uuids)
-        (remove (fn [item]
-                  (when (vector? item)
-                    (let [entity-lookup-id (get-lookup-id (second item))
-                          value-lookup-id (when (>= (count item) 4)
-                                            (get-lookup-id (nth item 3)))
-                          created-uuid (or (get uuid-by-entity-id (second item))
-                                           entity-lookup-id)]
-                      (or (contains? missing-created-uuids created-uuid)
-                          (contains? missing-created-uuids entity-lookup-id)
-                          (contains? missing-created-uuids value-lookup-id)))))
-                tx-data)
-        tx-data))
-    tx-data))
-
-(defn- missing-block-ref?
-  [db x]
-  (and db
-       (or (and (vector? x)
-                (some? (get-lookup-id x))
-                (nil? (d/entity db x)))
-           (and (number? x)
-                (not (neg? x))
-                (nil? (d/entity db x))))))
-
-(defn- invalid-block-ref?
-  [db x]
-  (missing-block-ref? db x))
-
-(defn- ref-attr?
-  [db a]
-  (and db
-       (keyword? a)
-       (= :db.type/ref
-          (:db/valueType (d/entity db a)))))
-
-(defn- tx-entity-key
-  [entity]
-  (or (get-lookup-id entity)
-      entity))
-
-(defn- strip-tx-id
-  [item]
-  (if (= (count item) 5)
-    (vec (butlast item))
-    item))
-
-(defn drop-orphaning-parent-retracts
-  [tx-data]
-  (let [entities-with-parent-add (->> tx-data
-                                      (keep (fn [item]
-                                              (when (and (vector? item)
-                                                         (= :db/add (first item))
-                                                         (= :block/parent (nth item 2 nil)))
-                                                (tx-entity-key (second item)))))
-                                      set)]
-    (remove (fn [item]
-              (and (vector? item)
-                   (= :db/retract (first item))
-                   (= :block/parent (nth item 2 nil))
-                   (not (contains? entities-with-parent-add
-                                   (tx-entity-key (second item))))))
-            tx-data)))
-
-(defn- created-block-ref?
-  [created-context x]
-  (when-let [block-uuid (or (tx-created-block-uuid created-context x)
-                            (get-lookup-id x))]
-    (contains? (:uuids created-context) block-uuid)))
-
-(defn- invalid-block-uuid?
-  [db created-context broken-block-uuids block-uuid]
-  (and block-uuid
-       (or (contains? broken-block-uuids block-uuid)
-           (and (not (contains? (:uuids created-context) block-uuid))
-                (nil? (d/entity db [:block/uuid block-uuid]))))))
-
-(defn- add-datom-invalid-block-ref?
-  [db created-context broken-block-uuids item]
-  (some (partial invalid-block-uuid? db created-context broken-block-uuids)
-        (add-datom-ref-block-uuids item)))
-
-(defn- broken-created-block-uuids
-  [db created-context tx-data]
-  (loop [broken-block-uuids #{}]
-    (let [next-broken-block-uuids (->> tx-data
-                                       (keep (fn [item]
-                                               (when (and (vector? item)
-                                                          (= :db/add (first item))
-                                                          (add-datom-invalid-block-ref? db created-context broken-block-uuids item))
-                                                 (tx-created-block-uuid created-context (second item)))))
-                                       (into broken-block-uuids))]
-      (if (= broken-block-uuids next-broken-block-uuids)
-        broken-block-uuids
-        (recur next-broken-block-uuids)))))
-
-(defn- invalid-block-ref-datom?
-  [db created-context broken-block-uuids item]
-  (when (vector? item)
-    (let [op (first item)
-          e (second item)
-          a (nth item 2 nil)
-          has-value? (>= (count item) 4)
-          v (when has-value? (nth item 3))
-          block-uuid (tx-created-block-uuid created-context e)
-          value-ref? (and has-value?
-                          (contains? #{:db/add :db/retract} op)
-                          (ref-attr? db a))]
-      (or (and (= :db/add op)
-               (add-datom-invalid-block-ref? db created-context broken-block-uuids item))
-          (contains? broken-block-uuids block-uuid)
-          (and (contains? #{:db/add :db/retract} op)
-               (not (created-block-ref? created-context e))
-               (invalid-block-ref? db e))
-          (and (= :db/retractEntity op)
-               (number? e)
-               (not (created-block-ref? created-context e))
-               (invalid-block-ref? db e))
-          (and value-ref?
-               (not (created-block-ref? created-context v))
-               (invalid-block-ref? db v))))))
-
-(defn- sanitize-block-ref-datoms
-  [db tx-data]
-  (if db
-    (let [created-context (created-block-context tx-data)
-          broken-block-uuids (broken-created-block-uuids db created-context tx-data)]
-      (remove (partial invalid-block-ref-datom? db created-context broken-block-uuids)
-              tx-data))
-    tx-data))
-
-(defn- canonical-entity-id
-  [db e]
-  (cond
-    (vector? e) (or (get-lookup-id e) e)
-    (and (number? e) (not (neg? e))) (or (:block/uuid (d/entity db e)) e)
-    :else e))
-
-(defn- remote-updated-attr-keys
-  [db tx-data]
-  (->> tx-data
-       (keep (fn [item]
-               (when (and (vector? item)
-                          (>= (count item) 4)
-                          (contains? #{:db/add :db/retract} (first item)))
-                 [(canonical-entity-id db (second item))
-                  (nth item 2)])))
-       set))
-
-(defn- resolve-string-block-tempid
-  [db x]
-  (when (and db (string? x))
-    (when-let [block-uuid (parse-uuid x)]
-      (when (d/entity db [:block/uuid block-uuid])
-        [:block/uuid block-uuid]))))
-
-(defn- string-block-uuid->lookup
-  [x]
-  (when (string? x)
-    (when-let [block-uuid (parse-uuid x)]
-      [:block/uuid block-uuid])))
-
-(defn replace-string-block-tempids-with-lookups
-  [db tx-data]
-  (if db
-    (let [created-string-entity-ids (->> tx-data
-                                         (keep (fn [item]
-                                                 (when (and (vector? item)
-                                                            (= :db/add (first item))
-                                                            (>= (count item) 4)
-                                                            (string? (second item))
-                                                            (= :block/uuid (nth item 2)))
-                                                   (second item))))
-                                         set)
-          replace-entity (fn [entity]
-                           (if (contains? created-string-entity-ids entity)
-                             entity
-                             (or (string-block-uuid->lookup entity)
-                                 (resolve-string-block-tempid db entity)
-                                 entity)))]
-      (mapv (fn [item]
-              (if (and (vector? item) (>= (count item) 2))
-                (let [op (first item)
-                      entity' (replace-entity (second item))
-                      has-value? (>= (count item) 4)
-                      attr (nth item 2 nil)
-                      value (when has-value? (nth item 3))
-                      value' (if (and has-value?
-                                      (contains? db-schema/ref-type-attributes attr))
-                               (replace-entity value)
-                               value)]
-                  (cond-> item
-                    (and (contains? #{:db/add :db/retract :db/retractEntity} op)
-                         (not= (second item) entity'))
-                    (assoc 1 entity')
-                    (and has-value? (not= value value'))
-                    (assoc 3 value')))
-                item))
-            tx-data))
-    tx-data))
-
-(defn drop-remote-conflicted-local-tx
-  [db remote-updated-keys tx-data]
-  (if (seq remote-updated-keys)
-    (let [structural-attrs #{:block/parent :block/page :block/order}
-          conflicted-structural-entities
-          (->> tx-data
-               (keep (fn [item]
-                       (when (and (vector? item)
-                                  (>= (count item) 4)
-                                  (contains? #{:db/add :db/retract} (first item)))
-                         (let [entity-key (canonical-entity-id db (second item))
-                               attr (nth item 2)]
-                           (when (and (contains? structural-attrs attr)
-                                      (contains? remote-updated-keys [entity-key attr]))
-                             entity-key)))))
-               set)]
-      (remove (fn [item]
-                (and (vector? item)
-                     (let [entity-key (canonical-entity-id db (second item))]
-                       (or
-                        (and (contains? conflicted-structural-entities entity-key)
-                             (contains? #{:db/add :db/retract :db/retractEntity} (first item)))
-                        (and (>= (count item) 4)
-                             (contains? #{:db/add :db/retract} (first item))
-                             (contains? remote-updated-keys
-                                        [entity-key (nth item 2)]))))))
-              tx-data))
-    tx-data))
-
-(defn- missing-block-lookup-update?
-  [db item]
-  (when (and db
-             (vector? item)
-             (>= (count item) 4)
-             (contains? #{:db/add :db/retract} (first item)))
-    (let [entity (second item)
-          attr (nth item 2)
-          create-attrs #{:block/uuid :block/name :db/ident :block/page :block/parent :block/order}]
-      (and (vector? entity)
-           (= :block/uuid (first entity))
-           (nil? (d/entity db entity))
-           (not (contains? create-attrs attr))))))
-
-(defn- drop-missing-block-lookup-updates
-  [db tx-data]
-  (if db
-    (let [stale-lookups (->> tx-data
-                             (keep (fn [item]
-                                     (when (missing-block-lookup-update? db item)
-                                       (second item))))
-                             set)]
-      (if (seq stale-lookups)
-        (remove (fn [item]
-                  (and (vector? item)
-                       (contains? stale-lookups (second item))))
-                tx-data)
-        tx-data))
-    tx-data))
-
-(defn- retract-entity-eid
-  [db item]
-  (when (and db
-             (vector? item)
-             (= :db/retractEntity (first item)))
-    (let [entity (second item)]
-      (cond
-        (number? entity) entity
-        (vector? entity) (some-> (d/entity db entity) :db/id)
-        :else nil))))
-
-(defn- content-block?
-  [block]
-  (and block
-       (not (ldb/page? block))
-       (not (ldb/class? block))
-       (not (ldb/property? block))))
-
-(def ^:private sync-recycle-meta-attrs
-  [:logseq.property.recycle/original-parent
-   :logseq.property.recycle/original-page
-   :logseq.property.recycle/original-order])
-
-(defn- orphaned-blocks->recycle-tx-data
-  [db blocks]
-  (->> (outliner-recycle/recycle-blocks-tx-data db blocks {})
-       (map (fn [item]
-              (if (map? item)
-                (apply dissoc item sync-recycle-meta-attrs)
-                item)))))
-
-(defn- move-missing-location-blocks-to-recycle
-  [db tx-data]
-  (if db
-    (let [retracted-eids (->> tx-data
-                              (keep #(retract-entity-eid db %))
-                              set)
-          location-fixed-eids (->> tx-data
-                                   (keep (fn [item]
-                                           (when (and (vector? item)
-                                                      (= :db/add (first item))
-                                                      (contains? #{:block/parent :block/page} (nth item 2 nil)))
-                                             (second item))))
-                                   (keep (fn [eid]
-                                           (cond
-                                             (number? eid) eid
-                                             (vector? eid) (some-> (d/entity db eid) :db/id)
-                                             :else nil)))
-                                   set)
-          direct-orphans (->> retracted-eids
-                              (mapcat #(ldb/get-children db %))
-                              (filter content-block?))
-          ;; Only recycle top-level page roots whose parent is the page being retracted.
-          page-orphans (->> retracted-eids
-                            (mapcat (fn [eid]
-                                      (->> (ldb/get-page-blocks db eid)
-                                           (filter (fn [block]
-                                                     (= eid (:db/id (:block/parent block))))))))
-                            (filter content-block?))
-          recycle-roots (->> (concat direct-orphans page-orphans)
-                             (remove (fn [block]
-                                       (or (contains? retracted-eids (:db/id block))
-                                           (contains? location-fixed-eids (:db/id block)))))
-                             distinct
-                             vec)]
-      (if (seq recycle-roots)
-        (concat tx-data
-                (orphaned-blocks->recycle-tx-data db recycle-roots))
-        tx-data))
-    tx-data))
-
-(defn sanitize-tx-data
-  [db tx-data]
-  (let [vector-items (filter vector? tx-data)
-        other-items (remove vector? tx-data)
-        sanitized-tx-data (->> (concat
-                                (->> vector-items
-                                     (db-normalize/replace-attr-retract-with-retract-entity-v2 db)
-                                     ;; Notice: rebase should generate larger tx-id than reverse tx
-                                     (map strip-tx-id))
-                                other-items)
-                               (drop-missing-block-lookup-updates db)
-                               (sanitize-block-ref-datoms db)
-                               (move-missing-location-blocks-to-recycle db)
-                               drop-orphaning-parent-retracts)]
-    ;; (when (not= tx-data sanitized-tx-data)
-    ;;   (prn :debug :tx-data tx-data)
-    ;;   (prn :debug :sanitized-tx-data sanitized-tx-data))
-    sanitized-tx-data))
-
-(defn- get-remote-deleted-properties
-  [{:keys [db-before db-after tx-data]}]
-  (when (and db-before db-after)
-    (->> tx-data
-         (keep (fn [d]
-                 (when-let [e (and (= :db/ident (:a d))
-                                   (false? (:added d))
-                                   (d/entity db-before (:e d)))]
-                   (when (and (ldb/property? e) (nil? (d/entity db-after (:db/ident e))))
-                     e))))
-
-         distinct)))
-
 (defn flush-pending!
   [repo client]
   (let [inflight @(:inflight client)
@@ -641,8 +446,8 @@
                                                :outliner-op outliner-op
                                                :tx-data (->> tx
                                                              (db-normalize/remove-retract-entity-ref @conn)
-                                                             (drop-missing-created-block-datoms @conn)
-                                                             (sanitize-tx-data @conn)
+                                                             (legacy-rebase/drop-missing-created-block-datoms @conn)
+                                                             (legacy-rebase/sanitize-tx-data @conn)
                                                              distinct
                                                              vec)}))
                                       (filterv (comp seq :tx-data)))
@@ -763,7 +568,7 @@
     (if-let [remote-tx (first remaining)]
       (let [tx-data (->> (:tx-data remote-tx)
                          rewrite-recreated-lookup-refs
-                         (sanitize-tx-data @temp-conn)
+                         (legacy-rebase/sanitize-tx-data @temp-conn)
                          seq)
             results' (cond-> results
                        tx-data
@@ -819,7 +624,7 @@
         (fn [index local-tx]
           (when-let [tx-data (->> (:reversed-tx local-tx)
                                   remove-ignored-attrs
-                                  (replace-string-block-tempids-with-lookups @temp-conn)
+                                  (legacy-rebase/replace-string-block-tempids-with-lookups @temp-conn)
                                   (reverse-replace-retract-uuid-with-retract-entity)
                                   seq)]
             (when (and (not (tx-has-missing-lookup-entity? @temp-conn tx-data))
@@ -834,29 +639,133 @@
        (keep identity)
        vec))
 
+(defn- invalid-rebase-op!
+  [op data]
+  (throw (ex-info "invalid rebase op" (assoc data :op op))))
+
+(defn- replay-canonical-outliner-op!
+  [conn [op args]]
+  (case op
+    :transact
+    (let [tx-data (:tx args)]
+      (when-let [tx-data (seq tx-data)]
+        (ldb/transact! conn tx-data {:outliner-op :transact})
+        true))
+
+    :save-block
+    (let [[block opts] args]
+      (when-not block
+        (invalid-rebase-op! op {:args args}))
+      (outliner-core/save-block! conn (rewrite-block-title-with-retracted-refs @conn block) (or opts {}))
+      true)
+
+    :insert-blocks
+    (let [[blocks target-id opts] args
+          target-block (d/entity @conn target-id)
+          db @conn]
+      (when-not (and target-block (seq blocks))
+        (invalid-rebase-op! op {:args args}))
+      (outliner-core/insert-blocks! conn (mapv #(rewrite-block-title-with-retracted-refs db %) blocks) target-block opts)
+      true)
+
+    :move-blocks
+    (let [[ids target-id opts] args
+          source-op (:source-op opts)
+          blocks (keep #(d/entity @conn %) ids)]
+      (when-not (seq blocks)
+        (invalid-rebase-op! op {:args args}))
+      (case source-op
+        :move-blocks-up-down
+        (do
+          (outliner-core/move-blocks-up-down! conn blocks (:up? opts))
+          true)
+
+        :indent-outdent-blocks
+        (do
+          (outliner-core/indent-outdent-blocks! conn blocks (:indent? opts) (dissoc opts :source-op :indent?))
+          true)
+
+        (let [target-block (d/entity @conn target-id)]
+          (when-not target-block
+            (invalid-rebase-op! op {:args args}))
+          (outliner-core/move-blocks! conn blocks target-block (or opts {}))
+          true)))
+
+    :delete-blocks
+    (let [[ids opts] args
+          blocks (keep #(d/entity @conn %) ids)]
+      (when-not (seq blocks)
+        (invalid-rebase-op! op {:args args}))
+      (outliner-core/delete-blocks! conn blocks (or opts {}))
+      true)
+
+    :create-page
+    (let [[title opts] args]
+      (outliner-page/create! conn title (or opts {}))
+      true)
+
+    :delete-page
+    (let [[page-uuid opts] args]
+      (when-not (outliner-page/delete! conn page-uuid (or opts {}))
+        (invalid-rebase-op! op {:args args}))
+      true)
+
+    :upsert-property
+    (let [[property-id schema opts] args]
+      (outliner-property/upsert-property! conn property-id schema (or opts {}))
+      true)
+
+    (invalid-rebase-op! op {:args args})))
+
+(defn- rebase-op-driven-local-tx!
+  [temp-conn local-txs index local-tx temp-tx-meta]
+  (let [outliner-ops (:outliner-ops local-tx)
+        replay-meta (assoc (local-tx-debug-meta temp-tx-meta local-txs index local-tx :rebase)
+                           :outliner-ops outliner-ops)]
+    (try
+      (ldb/transact-with-temp-conn!
+       temp-conn
+       replay-meta
+       (fn [row-conn _*batch-tx-data]
+         (if (= [[:transact nil]] outliner-ops)
+           (when-let [tx-data (seq (:tx local-tx))]
+             (ldb/transact! row-conn tx-data {:outliner-op :transact}))
+           (doseq [op outliner-ops]
+             (replay-canonical-outliner-op! row-conn op)))))
+      true
+      (catch :default error
+        (log/warn :db-sync/drop-op-driven-pending-tx
+                  {:tx-id (:tx-id local-tx)
+                   :outliner-ops outliner-ops
+                   :error error})
+        nil))))
+
 (defn- rebase-local-txs!
   [temp-conn local-txs remote-db remote-updated-keys remote-tx-data-set temp-tx-meta retracted-properties]
   (let [retracted-property-idents (set (map :db/ident retracted-properties))]
     (->> local-txs
          (map-indexed
           (fn [index local-tx]
-            (let [pending-tx-data (->> (:tx local-tx)
-                                       (remove (fn [item]
-                                                 (and (vector? item)
-                                                      (contains? #{:db/add :db/retract} (first item))
-                                                      (contains? retracted-property-idents (nth item 2 nil)))))
-                                       (drop-remote-conflicted-local-tx remote-db remote-updated-keys))
-                  rebased-tx-data (->> (sanitize-tx-data @temp-conn
-                                                         pending-tx-data)
-                                       (remove remote-tx-data-set))]
-              (when (seq rebased-tx-data)
-                (ldb/transact! temp-conn
-                               rebased-tx-data
-                               (local-tx-debug-meta temp-tx-meta
-                                                    local-txs
-                                                    index
-                                                    local-tx
-                                                    :rebase))))))
+            (if (and (seq (:outliner-ops local-tx))
+                     (not (:inferred-outliner-ops? local-tx)))
+              (rebase-op-driven-local-tx! temp-conn local-txs index local-tx temp-tx-meta)
+              (let [pending-tx-data (->> (:tx local-tx)
+                                         (remove (fn [item]
+                                                   (and (vector? item)
+                                                        (contains? #{:db/add :db/retract} (first item))
+                                                        (contains? retracted-property-idents (nth item 2 nil)))))
+                                         (legacy-rebase/drop-remote-conflicted-local-tx remote-db remote-updated-keys))
+                    rebased-tx-data (->> (legacy-rebase/sanitize-tx-data @temp-conn
+                                                                         pending-tx-data)
+                                         (remove remote-tx-data-set))]
+                (when (seq rebased-tx-data)
+                  (ldb/transact! temp-conn
+                                 rebased-tx-data
+                                 (local-tx-debug-meta temp-tx-meta
+                                                      local-txs
+                                                      index
+                                                      local-tx
+                                                      :rebase)))))))
          (keep identity)
          vec)))
 
@@ -866,7 +775,7 @@
         remote-tx-data (mapcat :tx-data remote-results)
         remote-tx-report (combine-tx-reports (map :report remote-results))
         _ (reset! *remote-tx-report remote-tx-report)
-        retracted-properties (get-remote-deleted-properties remote-tx-report)
+        retracted-properties (legacy-rebase/get-remote-deleted-properties remote-tx-report)
         remote-db @temp-conn]
     {:remote-db remote-db
      :remote-results remote-results
@@ -874,7 +783,7 @@
      :remote-tx-data-set (set (map tx-data-item->set-item remote-tx-data))
      :remote-tx-report remote-tx-report
      :retracted-properties retracted-properties
-     :remote-updated-keys (remote-updated-attr-keys remote-db remote-tx-data)}))
+     :remote-updated-keys (legacy-rebase/remote-updated-attr-keys remote-db remote-tx-data)}))
 
 (defn- rebase-remote-state!
   [{:keys [temp-conn local-txs tx-meta remote-db remote-tx-data-set remote-updated-keys retracted-properties]}]
@@ -899,11 +808,11 @@
   [{:keys [db-before db-after tx-data remote-tx-data-set]}]
   (let [normalized (->> tx-data
                         (normalize-tx-data db-after db-before)
-                        (replace-string-block-tempids-with-lookups db-before))
+                        (legacy-rebase/replace-string-block-tempids-with-lookups db-before))
         normalized-tx-data (->> normalized
                                 (db-normalize/replace-attr-retract-with-retract-entity-v2 db-after)
                                 (remove remote-tx-data-set)
-                                (sanitize-block-ref-datoms db-after))]
+                                (legacy-rebase/sanitize-block-ref-datoms db-after))]
     {:normalized-tx-data normalized-tx-data
      :reversed-datoms (reverse-normalized-tx-data normalized-tx-data)}))
 
@@ -953,7 +862,7 @@
                                         vec)]
                 (when (seq recycle-blocks)
                   (ldb/transact! conn
-                                 (vec (orphaned-blocks->recycle-tx-data db recycle-blocks))
+                                 (vec (legacy-rebase/orphaned-blocks->recycle-tx-data db recycle-blocks))
                                  (merge tx-meta {:op :fix-missing-block-location})))))
             (fix-block-page-consistency! [conn tx-data tx-meta]
               (let [db @conn
@@ -1109,6 +1018,7 @@
                       :remote-tx-data-set remote-tx-data-set})]
                 (when (seq normalized-tx-data)
                   (persist-local-tx! repo normalized-tx-data
+                                     normalized-tx-data
                                      reversed-datoms
                                      {:outliner-op (or (:outliner-op tx-meta)
                                                        :rtc-rebase)}))))))
@@ -1142,7 +1052,7 @@
         (let [normalized (normalize-tx-data db-after db-before tx-data)
               reversed-datoms (reverse-tx-data tx-data)]
           (when (seq normalized)
-            (persist-local-tx! repo normalized reversed-datoms tx-meta)
+            (persist-local-tx! repo tx-data normalized reversed-datoms tx-meta)
             (when-let [client @worker-state/*db-sync-client]
               (when (= repo (:repo client))
                 (let [send-queue (:send-queue client)]
