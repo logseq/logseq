@@ -885,7 +885,7 @@
         class? (= :class (:logseq.property/type property))
         non-root-classes (cond-> (remove (fn [c] (= (:db/ident c) :logseq.class/Root)) classes)
                            class?
-                           (conj (frontend.db/entity :logseq.class/Tag)))
+                           (conj (db/entity :logseq.class/Tag)))
         extends-property? (= (:db/ident property) :logseq.property.class/extends)]
 
     ;; effect runs once
@@ -1478,10 +1478,10 @@
                              :auto-focus editing?
                              :checked value
                              :on-checked-change (fn []
-                                                  (add-property! (boolean (not value))))
+                                                  (add-property! (not value)))
                              :on-key-down (fn [e]
                                             (when (= (util/ekey e) "Enter")
-                                              (add-property! (boolean (not value))))
+                                              (add-property! (not value)))
                                             (when (contains? #{"Backspace" "Delete"} (util/ekey e))
                                               (delete-block-property! block property)))})])
           ;; :others

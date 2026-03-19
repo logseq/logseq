@@ -66,7 +66,7 @@
                    (fn [^js e]
                      (glogi-console/install!)
                      (let [port (first (.-ports e))
-                           ^js obj #_{:clj-kondo/ignore [:unresolved-symbol]} (InferenceWorker.)]
+                           ^js obj (js/InferenceWorker.)]
                        (reset! infer-worker.text-embedding/*port port)
                        (.start port)
                        (Comlink/expose obj port))))

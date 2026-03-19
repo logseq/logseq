@@ -1527,10 +1527,9 @@
 (defn- macro-cp
   [config options]
   (let [{:keys [name arguments]} options
-        arguments (if (and
-                       (>= (count arguments) 2)
-                       (and (string/starts-with? (first arguments) page-ref/left-brackets)
-                            (string/ends-with? (last arguments) page-ref/right-brackets))) ; page reference
+        arguments (if (and (>= (count arguments) 2)
+                           (string/starts-with? (first arguments) page-ref/left-brackets)
+                           (string/ends-with? (last arguments) page-ref/right-brackets)) ; page reference
                     (let [title (string/join ", " arguments)]
                       [title])
                     arguments)]

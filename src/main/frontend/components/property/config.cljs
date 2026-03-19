@@ -587,7 +587,7 @@
                    (property-handler/remove-block-property! (:block/uuid block) (:db/ident property)))]
     (if (and class? class-schema?)
       (-> (shui/dialog-confirm!
-           [:p (str "Are you sure you want to delete the property from this tag?")]
+           [:p "Are you sure you want to delete the property from this tag?"]
            {:id :delete-property-from-class
             :data-reminder :ok})
           (p/then remove!))

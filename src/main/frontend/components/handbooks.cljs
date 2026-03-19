@@ -6,7 +6,6 @@
    [logseq.shui.hooks :as hooks]
    [rum.core :as rum]))
 
-#_:clj-kondo/ignore
 ;(def lazy-handbooks (lazy/loadable frontend.extensions.handbooks.core/content))
 ;
 ;(rum/defc loadable-handbooks

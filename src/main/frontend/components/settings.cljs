@@ -1309,7 +1309,7 @@
             [:li.settings-menu-item
              {:key      text
               :data-id  id
-              :class    (util/classnames [{:active (= label (first @*active))}])
+              :class    (classnames [{:active (= label (first @*active))}])
               :on-click (fn []
                           (if (= label :plugins-setting)
                             (state/pub-event! [:go/plugins-settings (:id (first plugins-of-settings))])

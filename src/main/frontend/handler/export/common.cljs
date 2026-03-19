@@ -1,8 +1,5 @@
 (ns frontend.handler.export.common
-  "common fns for exporting.
-  exclude some fns which produce lazy-seq, which can cause strange behaviors
-  when use together with dynamic var."
-  (:refer-clojure :exclude [map filter mapcat concat remove])
+  "Common functions for exporting."
   (:require [clojure.string :as string]
             [frontend.db.conn :as conn]
             [frontend.state :as state]
