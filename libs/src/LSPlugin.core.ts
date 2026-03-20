@@ -21,8 +21,8 @@ import {
   injectTheme,
   cleanInjectedUI,
   PluginLogger,
-} from './helpers'
-import * as pluginHelpers from './helpers'
+} from './common'
+import * as pluginHelpers from './common'
 import DOMPurify from 'dompurify'
 import Debug from 'debug'
 import {
@@ -177,6 +177,15 @@ type PluginLocalUrl = Pick<PluginLocalOptions, 'url'> & { [key: string]: any }
 type RegisterPluginOpts = PluginLocalOptions | PluginLocalUrl
 
 type PluginLocalIdentity = string
+
+interface MainUILayoutData {
+  width: number
+  height: number
+  left: number
+  top: number
+  vw: number
+  vh: number
+}
 
 enum PluginLocalLoadStatus {
   LOADING = 'loading',
@@ -719,17 +728,12 @@ class PluginLocal extends EventEmitter<
     return layouts || {}
   }
 
-  async _saveLayoutsData(data) {
+  async _saveLayoutsData(data: any) {
     const key = this.id + '_layouts'
     await invokeHostExportedApi('save_plugin_user_settings', key, data)
   }
 
-  async _persistMainUILayoutData(e: {
-    width: number
-    height: number
-    left: number
-    top: number
-  }) {
+  async _persistMainUILayoutData(e: MainUILayoutData) {
     const layouts = await this._loadLayoutsData()
     layouts.$$0 = e
     await this._saveLayoutsData(layouts)

@@ -441,9 +441,10 @@
                         {:data-page-tags (text-util/build-data-value page-names)}))
                     {})
 
-                  {:key title
-                   :class (util/classnames [{:is-journals (or journal? fmt-journal?)
-                                             :is-node-page (or class-page? property-page?)}])})
+                {:key title
+                 :class (util/classnames [{:is-journals (or journal? fmt-journal?)
+                                           :is-today-page (and (not home?) (boolean today?))
+                                           :is-node-page (or class-page? property-page?)}])})
 
            [:div.relative.grid.gap-4.sm:gap-8.page-inner.mb-16
             (when-not (or block? sidebar?)
