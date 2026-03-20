@@ -65,4 +65,5 @@
     [:quick-capture-options (mu/optional-keys [:map
                                                [:insert-today? :boolean]
                                                [:redirect-page? :boolean]
-                                               [:default-page :string]])]]))
+                                               [:default-page :string]
+                                               [:prettify-url? :boolean]])]]))
