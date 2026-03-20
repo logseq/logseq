@@ -187,9 +187,9 @@
   "Validate db and store once for a batch transaction, the conn can still load data from disk,
   however it can't write to the disk."
   [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
-  (let [_ (swap! conn assoc :skip-store? true
+  (let [conn-state-before @(:atom conn)
+        _ (swap! conn assoc :skip-store? true
                  :batch-tx? true)
-        db-before @conn
         *batch-tx-data (volatile! [])]
     (d/listen! conn ::batch-tx
                (fn [{:keys [tx-data] :as tx-report}]
@@ -199,14 +199,11 @@
     (batch-tx-fn conn)
     (d/unlisten! conn ::batch-tx)
     (let [tx-data @*batch-tx-data]
-      (reset! conn db-before)
-      (swap! conn assoc
-             :skip-store? false
-             :batch-tx? false)
+      (reset! (:atom conn) conn-state-before)
       (vreset! *batch-tx-data nil)
       (when (seq tx-data)
         ;; transact tx-data to `conn` and validate db
-        (transact! conn tx-data (assoc tx-meta :debug-batch? true))))))
+        (transact! conn tx-data tx-meta)))))
 
 (def page? entity-util/page?)
 (def internal-page? entity-util/internal-page?)
