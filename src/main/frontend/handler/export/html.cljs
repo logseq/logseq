@@ -91,13 +91,18 @@
 (defn- inline-link
   [{:keys [url label full_text]}]
   (let [href (case (first url)
-               "Search" (second url)
+               "Search"  (second url)
                "Complex" (str (:protocol (second url)) "://" (:link (second url)))
-               nil)]
-    (cond-> [:a]
-      href (conj {:href href})
-      href (concatv (mapv inline-ast->hiccup label))
-      (not href) (conj full_text))))
+               "File"    (second url)
+               nil)
+        image? (and (string? full_text) (string/starts-with? (string/triml full_text) "!"))
+        alt-text (string/join (keep #(when (= "Plain" (first %)) (second %)) label))]
+    (if (and image? href)
+      [:img {:src href :alt alt-text}]
+      (cond-> [:a]
+        href (conj {:href href})
+        href (concatv (mapv inline-ast->hiccup label))
+        (not href) (conj full_text)))))
 
 (defn- inline-nested-link
   [{:keys [content]}]
