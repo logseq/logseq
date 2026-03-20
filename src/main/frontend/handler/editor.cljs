@@ -2579,7 +2579,8 @@
 
         (and (util/goog-event-is-composing? e true) ;; #3218
              (not hashtag?) ;; #3283 @Rime
-             (not (state/get-editor-show-page-search-hashtag?))) ;; #3283 @MacOS pinyin
+             (not (state/get-editor-show-page-search-hashtag?)) ;; #3283 @MacOS pinyin
+             (not (contains? (set (keys autopair-map)) key))) ;; allow autopair chars through during IME
         nil
 
         (or ctrlKey metaKey)
