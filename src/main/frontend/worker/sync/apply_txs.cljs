@@ -768,7 +768,6 @@
              (ldb/transact! row-conn tx-data {:outliner-op :transact}))
            (doseq [op outliner-ops]
              (replay-canonical-outliner-op! row-conn op)))))
-      true
       (catch :default error
         (log/warn :db-sync/drop-op-driven-pending-tx
                   {:tx-id (:tx-id local-tx)
@@ -787,13 +786,10 @@
 
 (defn- fix-tx!
   [conn remote-tx-report rebase-tx-report tx-meta]
-  (let [cycle-tx-report (sync-cycle/fix-cycle! conn remote-tx-report rebase-tx-report
-                                               {:tx-meta tx-meta})]
-    (sync-order/fix-duplicate-orders! conn
-                                      (mapcat :tx-data [remote-tx-report
-                                                        rebase-tx-report
-                                                        cycle-tx-report])
-                                      tx-meta)))
+  (sync-order/fix-duplicate-orders! conn
+                                    (mapcat :tx-data [remote-tx-report
+                                                      rebase-tx-report])
+                                    tx-meta))
 
 (defn- apply-remote-tx-with-local-changes!
   [{:keys [repo conn local-txs remote-txs]}]
@@ -803,6 +799,7 @@
      conn
      batch-tx-meta
      (fn [conn] (reverse-local-txs! conn local-txs {:rtc-tx? true})))
+
     (let [remote-tx-report (ldb/batch-transact!
                             conn
                             batch-tx-meta
@@ -812,7 +809,7 @@
                    :gen-undo-ops? false
                    :persist-op? true}
           rebase-result (rebase-local-txs! conn local-txs tx-meta)
-          rebase-tx-report (combine-tx-reports (map :report rebase-result))]
+          rebase-tx-report (combine-tx-reports rebase-result)]
       (fix-tx! conn remote-tx-report rebase-tx-report {:outliner-op :rebase-fix})
       (remove-pending-txs! repo (map :tx-id local-txs)))))
 
@@ -835,7 +832,8 @@
           temp-tx-meta {:rtc-tx? true
                         :gen-undo-ops? false
                         :persist-op? false}
-          apply-context {:conn conn
+          apply-context {:repo repo
+                         :conn conn
                          :local-txs local-txs
                          :remote-txs remote-txs
                          :temp-tx-meta temp-tx-meta}]
