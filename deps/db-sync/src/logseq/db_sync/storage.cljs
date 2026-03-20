@@ -3,10 +3,29 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
+            [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db-sync.common :as common]
             [logseq.db.common.normalize :as db-normalize]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.frontend.schema :as db-schema]))
+
+(def ^:private tx-log-outliner-op-migration-sql
+  "alter table tx_log add column outliner_op TEXT")
+
+(defn- duplicate-column-error?
+  [error column-name]
+  (let [message (-> (or (ex-message error) (some-> error .-message) (str error))
+                    string/lower-case)]
+    (and (string/includes? message "duplicate column")
+         (string/includes? message (string/lower-case column-name)))))
+
+(defn- ensure-tx-log-outliner-op-column!
+  [sql]
+  (try
+    (common/sql-exec sql tx-log-outliner-op-migration-sql)
+    (catch :default error
+      (when-not (duplicate-column-error? error "outliner_op")
+        (throw error)))))
 
 ;; TODO: GC kvs table
 
@@ -18,6 +37,7 @@
                         "tx TEXT not null,"
                         "created_at INTEGER"
                         ");"))
+  (ensure-tx-log-outliner-op-column! sql)
   (common/sql-exec sql
                    (str "create table if not exists sync_meta ("
                         "key TEXT primary key,"
@@ -38,6 +58,12 @@
                    (name k)
                    (str v)))
 
+(defn get-checksum [sql]
+  (get-meta sql :checksum))
+
+(defn set-checksum! [sql checksum]
+  (set-meta! sql :checksum checksum))
+
 (defn get-t [sql]
   (let [value (get-meta sql :t)]
     (if (string? value)
@@ -52,30 +78,35 @@
     (set-t! sql t)
     t))
 
-(defn append-tx! [sql t tx-str created-at]
+(defn- outliner-op->sql [outliner-op]
+  (cond
+    (keyword? outliner-op) (name outliner-op)
+    (string? outliner-op) outliner-op
+    :else nil))
+
+(defn- sql->outliner-op [value]
+  (when (string? value)
+    (keyword value)))
+
+(defn append-tx! [sql t tx-str created-at outliner-op]
   (common/sql-exec sql
-                   (str "insert into tx_log (t, tx, created_at) values (?, ?, ?)"
-                        " on conflict(t) do update set tx = excluded.tx, created_at = excluded.created_at")
+                   (str "insert into tx_log (t, tx, created_at, outliner_op) values (?, ?, ?, ?)"
+                        " on conflict(t) do update set tx = excluded.tx, created_at = excluded.created_at, outliner_op = excluded.outliner_op")
                    t
                    tx-str
-                   created-at))
+                   created-at
+                   (outliner-op->sql outliner-op)))
 
 (defn fetch-tx-since [sql since-t]
   (let [rows (common/get-sql-rows
               (common/sql-exec sql
-                               "select t, tx from tx_log where t > ? order by t asc"
+                               "select t, tx, outliner_op from tx_log where t > ? order by t asc"
                                since-t))]
     (mapv (fn [row]
             {:t (aget row "t")
-             :tx (aget row "tx")})
+             :tx (aget row "tx")
+             :outliner-op (sql->outliner-op (aget row "outliner_op"))})
           rows)))
-
-(defn- delete-addrs! [sql addrs]
-  (when (seq addrs)
-    (let [placeholders (->> addrs (map (constantly "?")) (string/join ","))]
-      (apply common/sql-exec sql
-             (str "delete from kvs where addr in (" placeholders ")")
-             addrs))))
 
 (defn- upsert-addr-content! [sql data]
   (doseq [item data]
@@ -97,7 +128,7 @@
 
 (defn new-sqlite-storage [sql]
   (reify IStorage
-    (-store [_ addr+data-seq delete-addrs]
+    (-store [_ addr+data-seq _delete-addrs]
       (let [data (map
                   (fn [[addr data]]
                     (let [data' (if (map? data) (dissoc data :addresses) data)
@@ -108,21 +139,25 @@
                            "content" (common/write-transit data')
                            "addresses" addresses}))
                   addr+data-seq)]
-        (delete-addrs! sql delete-addrs)
         (upsert-addr-content! sql data)))
     (-restore [_ addr]
       (restore-data-from-addr sql addr))))
 
 (defn- append-tx-for-tx-report
-  [sql {:keys [db-after db-before tx-data]}]
+  [sql {:keys [db-after db-before tx-data tx-meta]}]
   (let [new-t (next-t! sql)
         created-at (common/now-ms)
+        checksum (sync-checksum/update-checksum (get-checksum sql)
+                                                {:db-before db-before
+                                                 :db-after db-after
+                                                 :tx-data tx-data})
         normalized-data (->> tx-data
                              (db-normalize/normalize-tx-data db-after db-before))
         ;; _ (prn :debug :tx-data tx-data)
         ;; _ (prn :debug :normalized-data normalized-data)
         tx-str (common/write-transit normalized-data)]
-    (append-tx! sql new-t tx-str created-at)))
+    (set-checksum! sql checksum)
+    (append-tx! sql new-t tx-str created-at (:outliner-op tx-meta))))
 
 (defn- listen-db-updates!
   [sql conn]

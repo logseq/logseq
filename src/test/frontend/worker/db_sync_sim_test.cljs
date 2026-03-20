@@ -10,8 +10,10 @@
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
+            [frontend.worker.sync.apply-txs :as sync-apply]
             [frontend.worker.sync.client-op :as client-op]
             [logseq.db :as ldb]
+            [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db.common.normalize :as db-normalize]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
@@ -87,9 +89,9 @@
     {:repro repro
      :restore (fn [] (reset! ldb/*transact-invalid-callback prev))}))
 
-(declare op-runs assert-synced-attrs! assert-no-invalid-tx!)
+(declare op-runs assert-synced-attrs! assert-no-invalid-tx! active-block-uuids block-attr-map checksum-entity-map)
 
-(deftest ^:long rng-uuid-deterministic-test
+(deftest rng-uuid-deterministic-test
   (testing "rng-uuid produces stable sequences for the same seed"
     (let [rng-a (make-rng 42)
           rng-b (make-rng 42)
@@ -100,7 +102,7 @@
       (is (= seq-a seq-b))
       (is (not= seq-a seq-c)))))
 
-(deftest ^:long invalid-tx-repro-callback-test
+(deftest invalid-tx-repro-callback-test
   (testing "invalid tx callback captures sim repro payload"
     (let [seed 7
           history (atom [{:type :op :op :create-page}])
@@ -217,9 +219,7 @@
 (defn- existing-entities
   [db uuids]
   (->> uuids
-       (keep (fn [uuid]
-               (when-let [ent (d/entity db [:block/uuid uuid])]
-                 (when (:block/uuid ent) ent))))))
+       (keep (fn [uuid] (d/entity db [:block/uuid uuid])))))
 
 (defn- existing-blocks
   [db uuids]
@@ -236,24 +236,38 @@
     (->> (filter (fn [{:keys [t]}] (> t since)) txs)
          (mapv :tx))))
 
-(defn- server-upload! [server t-before tx-data]
-  (swap! server
-         (fn [{:keys [t txs conn] :as state}]
-           (if (not= t t-before)
-             state
-             (let [{:keys [db-before db-after tx-data]} (ldb/transact! conn tx-data {:op :apply-client-tx})
-                   normalized-data (->> tx-data
-                                        (db-normalize/normalize-tx-data db-after db-before))
-                   next-t (inc t)]
-               (assoc state :t next-t :txs (conj txs {:t next-t :tx normalized-data})))))))
+(defn- server-upload! [server t-before tx-entries]
+  (let [accepted? (atom false)]
+    (swap! server
+           (fn [{:keys [t] :as state}]
+             (if (not= t t-before)
+               state
+               (do
+                 (reset! accepted? true)
+                 (reduce
+                  (fn [{:keys [t txs conn] :as state} tx-entry]
+                    (let [tx-data (:tx-data tx-entry)
+                          {:keys [db-before db-after tx-data]} (ldb/transact! conn tx-data {:op :apply-client-tx})
+                          normalized-data (->> tx-data
+                                               (db-normalize/normalize-tx-data db-after db-before))
+                          next-t (inc t)]
+                      (assoc state :t next-t :txs (conj txs {:t next-t :tx normalized-data}))))
+                  state
+                  tx-entries)))))
+    {:accepted? @accepted?
+     :t (:t @server)}))
 
-(defn- build-upload-tx [conn pending]
-  (let [txs (mapcat :tx pending)]
-    (->> txs
-         (db-normalize/remove-retract-entity-ref @conn)
-         (#'db-sync/drop-missing-block-ref-datoms @conn)
-         distinct
-         vec)))
+(defn- build-upload-entries [conn pending]
+  (->> pending
+       (mapv (fn [{:keys [tx] :as pending-entry}]
+               (assoc pending-entry
+                      :tx-data (->> tx
+                                    (db-normalize/remove-retract-entity-ref @conn)
+                                    (#'sync-apply/drop-missing-created-block-datoms @conn)
+                                    (#'sync-apply/sanitize-tx-data @conn)
+                                    distinct
+                                    vec))))
+       (filterv (comp seq :tx-data))))
 
 (defn- sync-client! [server {:keys [repo conn client online?]}]
   (when online?
@@ -264,23 +278,45 @@
       (when (< local-tx server-t)
         (let [txs (server-pull server local-tx)]
           ;; (prn :debug :apply-remote-tx :repo repo
-          ;;      :tx tx)
-          (#'db-sync/apply-remote-tx! repo client txs)
+          ;;      :txs txs)
+          (#'sync-apply/apply-remote-txs! repo client
+                                          (mapv (fn [tx-data]
+                                                  {:tx-data tx-data})
+                                                txs))
           (client-op/update-local-tx repo server-t)
           (reset! progress? true)))
-      (let [pending (#'db-sync/pending-txs repo)
+      (let [pending (#'sync-apply/pending-txs repo)
             local-tx' (or (client-op/get-local-tx repo) 0)
             server-t' (:t @server)]
         (when (and (seq pending) (= local-tx' server-t'))
-          (let [tx-data (build-upload-tx conn pending)
+          (let [tx-entries (build-upload-entries conn pending)
                 tx-ids (mapv :tx-id pending)]
-            ;; (prn :debug :upload :repo repo :tx-data tx-data)
-            (when (seq tx-data)
-              (server-upload! server local-tx' tx-data)
-              (#'db-sync/remove-pending-txs! repo tx-ids)
-              (client-op/update-local-tx repo (:t @server))
-              (reset! progress? true)))))
+            ;; (prn :debug :upload :repo repo :tx-entries tx-entries)
+            (if (seq tx-entries)
+              (let [{:keys [accepted? t]} (server-upload! server local-tx' tx-entries)]
+                (when accepted?
+                  (#'sync-apply/remove-pending-txs! repo tx-ids)
+                  (when (seq tx-ids)
+                    (client-op/update-local-tx repo t)
+                    (reset! progress? true))))
+              (do
+                (#'sync-apply/remove-pending-txs! repo tx-ids)
+                (when (seq tx-ids)
+                  (client-op/update-local-tx repo (:t @server))
+                  (reset! progress? true)))))))
       @progress?)))
+
+(defn- active-block-uuids
+  [db]
+  (->> (d/datoms db :avet :block/uuid)
+       (keep (fn [datom]
+               (let [ent (d/entity db (:e datom))]
+                 (when (and ent
+                            (not (ldb/built-in? ent))
+                            (or (ldb/page? ent)
+                                (:block/page ent)))
+                   (:v datom)))))
+       set))
 
 (defn- sync-loop! [server clients]
   (loop [i 0]
@@ -295,22 +331,23 @@
     (when (seq conns)
       (let [online-clients (filter :online? clients)
             client-block-uuids (mapv (fn [c]
-                                       (let [uuids (->> (d/datoms (deref (:conn c)) :avet :block/uuid)
-                                                        (map :v)
-                                                        set)]
+                                       (let [uuids (active-block-uuids @(:conn c))]
                                          {:repo (:repo c)
                                           :uuids uuids
                                           :datoms-count (count uuids)}))
                                      online-clients)
-            server-uuids (->> (d/datoms @(get @server :conn) :avet :block/uuid)
-                              (map :v)
-                              set)
+            server-uuids (active-block-uuids @(get @server :conn))
+            server-checksum (sync-checksum/recompute-checksum @(get @server :conn))
             client-sync-states (mapv (fn [c]
                                        {:repo (:repo c)
-                                        :pending-count (count (#'db-sync/pending-txs (:repo c)))
+                                        :pending-count (count (#'sync-apply/pending-txs (:repo c)))
                                         :local-tx (client-op/get-local-tx (:repo c))
                                         :server-t (:t @server)})
                                      online-clients)
+            checksum-states (mapv (fn [c]
+                                    {:repo (:repo c)
+                                     :checksum (sync-checksum/recompute-checksum @(:conn c))})
+                                  online-clients)
             base-uuids (:uuids (first client-block-uuids))
             block-counts (map :datoms-count client-block-uuids)
             block-uuid-diffs (mapv (fn [{:keys [repo uuids]}]
@@ -328,15 +365,54 @@
           (throw (ex-info "blocks count not equal after sync"
                           {:block-counts block-counts
                            :clients (mapv #(select-keys % [:repo :datoms-count]) client-block-uuids)
+                           :checksums checksum-states
                            :sync-states client-sync-states
                            :server {:datoms-count (count server-uuids)
+                                    :checksum server-checksum
                                     :missing-from-a (->> (set/difference base-uuids server-uuids)
                                                          (take 5)
                                                          vec)
                                     :extra-vs-a (->> (set/difference server-uuids base-uuids)
                                                      (take 5)
                                                      vec)}
-                           :block-uuid-diffs block-uuid-diffs})))))))
+                           :block-uuid-diffs block-uuid-diffs})))
+        (when-not (= 1 (count (distinct (conj (map :checksum checksum-states) server-checksum))))
+          (let [client-attrs (mapv (fn [c]
+                                     {:repo (:repo c)
+                                      :attrs (block-attr-map @(:conn c))})
+                                   online-clients)
+                base-attrs (:attrs (first client-attrs))
+                server-attrs (block-attr-map @(get @server :conn))
+                attr-diffs (mapv (fn [{:keys [repo attrs]}]
+                                   (let [[missing extra] (data/diff base-attrs attrs)]
+                                     {:repo repo
+                                      :missing-sample (some->> missing (take 5) vec)
+                                      :extra-sample (some->> extra (take 5) vec)}))
+                                 client-attrs)
+                [server-missing server-extra] (data/diff base-attrs server-attrs)
+                client-checksum-maps (mapv (fn [c]
+                                             {:repo (:repo c)
+                                              :attrs (checksum-entity-map @(:conn c))})
+                                           online-clients)
+                base-checksum-attrs (:attrs (first client-checksum-maps))
+                server-checksum-attrs (checksum-entity-map @(get @server :conn))
+                checksum-attr-diffs (mapv (fn [{:keys [repo attrs]}]
+                                            (let [[missing extra] (data/diff base-checksum-attrs attrs)]
+                                              {:repo repo
+                                               :missing-sample (some->> missing (take 5) vec)
+                                               :extra-sample (some->> extra (take 5) vec)}))
+                                          client-checksum-maps)
+                [server-checksum-missing server-checksum-extra] (data/diff base-checksum-attrs server-checksum-attrs)]
+            (throw (ex-info "checksums not equal after sync"
+                            {:checksums checksum-states
+                             :sync-states client-sync-states
+                             :attr-diffs attr-diffs
+                             :checksum-attr-diffs checksum-attr-diffs
+                             :server {:checksum server-checksum
+                                      :missing-sample (some->> server-missing (take 5) vec)
+                                      :extra-sample (some->> server-extra (take 5) vec)
+                                      :checksum-missing-sample (some->> server-checksum-missing (take 5) vec)
+                                      :checksum-extra-sample (some->> server-checksum-extra (take 5) vec)}}))))))))
 
 (defn- sync-until-idle!
   [server clients max-rounds]
@@ -358,6 +434,42 @@
           client (make-client repo-a)
           clients [{:repo repo-a :conn conn :client client :online? false}]]
       (is (nil? (sync-loop! server clients))))))
+
+(deftest recycled-entities-are-included-in-sim-comparison-test
+  (testing "deleted blocks remain part of sync comparison"
+    (let [base-uuid (random-uuid)
+          block-uuid (random-uuid)
+          conn (db-test/create-conn)]
+      (ensure-base-page! conn base-uuid)
+      (let [base-page (d/entity @conn [:block/uuid base-uuid])]
+        (create-block! conn base-page "to recycle" block-uuid)
+        (delete-block! conn block-uuid)
+        (is (contains? (active-block-uuids @conn) block-uuid))
+        (is (contains? (block-attr-map @conn) block-uuid))))))
+
+(deftest uploaded-pending-txs-are-cleared-in-sim-test
+  (testing "sim upload removes acked pending txs so later rebases don't reverse stale creates"
+    (let [base-uuid (random-uuid)
+          block-uuid (random-uuid)
+          conn (db-test/create-conn)
+          ops-conn (d/create-conn client-op/schema-in-db)
+          client (make-client repo-a)
+          server (make-server)]
+      (with-test-repos {repo-a {:conn conn :ops-conn ops-conn}}
+        (fn []
+          (reset! db-sync/*repo->latest-remote-tx {})
+          (client-op/update-local-tx repo-a 0)
+          (ensure-base-page! conn base-uuid)
+          (let [base-page (d/entity @conn [:block/uuid base-uuid])]
+            (create-block! conn base-page "synced block" block-uuid)
+            (is (seq (#'sync-apply/pending-txs repo-a)))
+            (is (true? (sync-client! server {:repo repo-a
+                                             :conn conn
+                                             :client client
+                                             :online? true})))
+            (is (empty? (#'sync-apply/pending-txs repo-a)))
+            (is (= (:t @server) (client-op/get-local-tx repo-a)))
+            (is (some? (d/entity @(get @server :conn) [:block/uuid block-uuid])))))))))
 
 (defn- db-issues [db]
   (let [blocks (->> (d/q '[:find [?e ...]
@@ -401,8 +513,31 @@
 (defn- block-attr-map [db]
   (->> (d/q '[:find [?e ...]
               :where
-              [?e :block/uuid]
-              [?e :block/page]]
+              [?e :block/uuid]]
+            db)
+       (map (fn [e]
+              (let [ent (d/entity db e)
+                    parent (:block/parent ent)
+                    page (:block/page ent)]
+                (when (and ent
+                           (not (ldb/built-in? ent))
+                           (or (ldb/page? ent)
+                               page))
+                  [(:block/uuid ent)
+                   {:block/page? (boolean (ldb/page? ent))
+                    :block/title (:block/title ent)
+                    :block/order (:block/order ent)
+                    :block/parent (when parent (:block/uuid parent))
+                    :block/page (when page (:block/uuid page))
+                    :logseq.property/deleted-at (:logseq.property/deleted-at ent)}]))))
+       (remove nil?)
+       (into {})))
+
+(defn- checksum-entity-map
+  [db]
+  (->> (d/q '[:find [?e ...]
+              :where
+              [?e :block/uuid]]
             db)
        (map (fn [e]
               (let [ent (d/entity db e)
@@ -410,6 +545,7 @@
                     page (:block/page ent)]
                 [(:block/uuid ent)
                  {:block/title (:block/title ent)
+                  :block/name (:block/name ent)
                   :block/parent (when parent (:block/uuid parent))
                   :block/page (when page (:block/uuid page))}])))
        (into {})))
@@ -528,7 +664,8 @@
                                   (d/entity db [:block/uuid uuid])))
                               [base-uuid]))
         parent (rand-nth! rng (vec parents))]
-    (when (and block parent (not= (:block/uuid block) (:block/uuid parent)))
+    (when (and block parent
+               (not= (:block/uuid block) (:block/uuid parent)))
       (move-block! conn block parent)
       {:op :move-block
        :uuid (:block/uuid block)
@@ -888,7 +1025,8 @@
                [[:move-blocks [[(:db/id source)] (:db/id target) {:sibling? true}]]
                 [:delete-blocks [[(:db/id target)] {}]]]
                {})
-              (swap! state update :blocks disj target-uuid)
+              ;; The emptied target is now recycled, so keep it in state; active op
+              ;; pickers filter recycled entities from the DB directly.
               {:op :cut-paste-block-with-child
                :uuid source-uuid
                :target target-uuid
@@ -909,7 +1047,7 @@
 (def ^:private op-table
   [{:name :create-page :weight 6 :f op-create-page!}
    {:name :rename-page :weight 2 :f op-rename-page!}
-   {:name :delete-page :weight 2 :f op-delete-page!}
+   {:name :delete-page :weight 10 :f op-delete-page!}
    {:name :save-block :weight 4 :f op-save-block!}
    {:name :upsert-property :weight 2 :f op-upsert-property!}
    {:name :set-block-property :weight 3 :f op-set-block-property!}
@@ -939,18 +1077,18 @@
    {:name :delete-block :weight 4 :f op-delete-block!}
    {:name :update-title :weight 8 :f op-update-title!}])
 
-(deftest ^:long cut-paste-op-registered-in-sim-op-table-test
+(deftest cut-paste-op-registered-in-sim-op-table-test
   (testing "sim op-table includes cut-paste op for random sync stress"
     (is (contains? (set (map :name op-table))
                    :cut-paste-block-with-child))))
 
-(deftest ^:long undo-redo-ops-registered-in-sim-op-table-test
+(deftest undo-redo-ops-registered-in-sim-op-table-test
   (testing "sim op-table includes undo/redo ops for random sync stress"
     (let [registered (set (map :name op-table))]
       (is (contains? registered :undo))
       (is (contains? registered :redo)))))
 
-(deftest ^:long core-outliner-ops-registered-in-sim-op-table-test
+(deftest core-outliner-ops-registered-in-sim-op-table-test
   (testing "sim op-table includes core logseq.outliner.op operations"
     (let [registered (set (map :name op-table))
           required #{:save-block
@@ -1236,7 +1374,7 @@
               (finally
                 (restore)))))))))
 
-(deftest ^:long two-clients-rebase-keeps-local-title-after-reverse-tx-test
+(deftest two-clients-rebase-keeps-local-title-after-reverse-tx-test
   (testing "two clients keep local title after reverse tx with newer tx id"
     (let [base-uuid (uuid "11111111-1111-1111-1111-111111111111")
           block-uuid (uuid "22222222-2222-2222-2222-222222222222")
@@ -1260,11 +1398,223 @@
           (sync-loop! server [{:repo repo-b :conn conn-b :client client-b :online? true}])
           (is (= "before" (:block/title (d/entity @conn-b [:block/uuid block-uuid]))))
           (update-title! conn-a block-uuid "test")
-          (is (seq (#'db-sync/pending-txs repo-a)))
+          (is (seq (#'sync-apply/pending-txs repo-a)))
           (d/transact! conn-b [[:db/add [:block/uuid block-uuid] :block/updated-at 1710000000000]])
           (sync-loop! server [{:repo repo-b :conn conn-b :client client-b :online? true}])
           (sync-loop! server [{:repo repo-a :conn conn-a :client client-a :online? true}])
           (is (= "test" (:block/title (d/entity @conn-a [:block/uuid block-uuid])))))))))
+
+(deftest ^:long two-clients-undo-skips-conflicted-move-but-keeps-db-valid-test
+  (testing "undo skips a conflicted move while syncing the remaining safe history"
+    (let [base-uuid (uuid "31111111-1111-1111-1111-111111111111")
+          parent-a-uuid (uuid "32222222-2222-2222-2222-222222222222")
+          parent-b-uuid (uuid "33333333-3333-3333-3333-333333333333")
+          child-uuid (uuid "34444444-4444-4444-4444-444444444444")
+          conn-a (db-test/create-conn)
+          conn-b (db-test/create-conn)
+          ops-a (d/create-conn client-op/schema-in-db)
+          ops-b (d/create-conn client-op/schema-in-db)
+          client-a (make-client repo-a)
+          client-b (make-client repo-b)
+          server (make-server)
+          seed 20260311
+          history (atom [])]
+      (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}
+                        repo-b {:conn conn-b :ops-conn ops-b}}
+        (fn []
+          (let [{:keys [repro restore]} (install-invalid-tx-repro! seed history)]
+            (try
+              (reset! db-sync/*repo->latest-remote-tx {})
+              (client-op/update-local-tx repo-a 0)
+              (client-op/update-local-tx repo-b 0)
+              (ensure-base-page! conn-a base-uuid)
+              (let [base-a (d/entity @conn-a [:block/uuid base-uuid])]
+                (create-block! conn-a base-a "parent-a" parent-a-uuid)
+                (create-block! conn-a base-a "parent-b" parent-b-uuid)
+                (let [parent-a (d/entity @conn-a [:block/uuid parent-a-uuid])]
+                  (create-block! conn-a parent-a "seed-child" child-uuid)))
+              (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                        {:repo repo-b :conn conn-b :client client-b :online? true}]
+                                20)
+
+              (update-title! conn-a child-uuid "local-title")
+              (move-block! conn-a
+                           {:block/uuid child-uuid}
+                           {:block/uuid parent-b-uuid})
+              (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                        {:repo repo-b :conn conn-b :client client-b :online? true}]
+                                50)
+
+              (delete-block! conn-b parent-a-uuid)
+              (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                        {:repo repo-b :conn conn-b :client client-b :online? true}]
+                                50)
+
+              (is (not= :frontend.undo-redo/empty-undo-stack
+                        (undo-redo/undo repo-a)))
+
+              (let [rounds (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                                     {:repo repo-b :conn conn-b :client client-b :online? true}]
+                                             50)
+                    child-a (d/entity @conn-a [:block/uuid child-uuid])
+                    child-b (d/entity @conn-b [:block/uuid child-uuid])
+                    attrs-a (block-attr-map @conn-a)
+                    attrs-b (block-attr-map @conn-b)
+                    issues-a (db-issues @conn-a)
+                    issues-b (db-issues @conn-b)]
+                (is (< rounds 50) (str "sync did not become idle rounds=" rounds))
+                (is (= "seed-child" (:block/title child-a)))
+                (is (= "seed-child" (:block/title child-b)))
+                (is (= parent-b-uuid
+                       (:block/uuid (:block/parent child-a))))
+                (is (= parent-b-uuid
+                       (:block/uuid (:block/parent child-b))))
+                (is (empty? issues-a) (str "db A issues " (pr-str issues-a)))
+                (is (empty? issues-b) (str "db B issues " (pr-str issues-b)))
+                (assert-synced-attrs! seed history attrs-a attrs-b attrs-b)
+                (assert-no-invalid-tx! seed history repro))
+              (finally
+                (restore)))))))))
+
+(deftest two-clients-rebase-repairs-descendant-page-after-remote-subtree-move-test
+  (testing "rebase repairs descendant page after a remote subtree move"
+    (let [seed 20260316
+          base-uuid (uuid "41111111-1111-1111-1111-111111111111")
+          target-page-uuid (uuid "42222222-2222-2222-2222-222222222222")
+          moved-parent-uuid (uuid "43333333-3333-3333-3333-333333333333")
+          subtree-root-uuid (uuid "44444444-4444-4444-4444-444444444444")
+          local-child-uuid (uuid "45555555-5555-5555-5555-555555555555")
+          local-grandchild-uuid (uuid "46666666-6666-6666-6666-666666666666")
+          conn-a (db-test/create-conn)
+          conn-b (db-test/create-conn)
+          ops-a (d/create-conn client-op/schema-in-db)
+          ops-b (d/create-conn client-op/schema-in-db)
+          client-a (make-client repo-a)
+          client-b (make-client repo-b)
+          server (make-server)
+          history (atom [])]
+      (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}
+                        repo-b {:conn conn-b :ops-conn ops-b}}
+        (fn []
+          (let [{:keys [repro restore]} (install-invalid-tx-repro! seed history)]
+            (try
+              (reset! db-sync/*repo->latest-remote-tx {})
+              (client-op/update-local-tx repo-a 0)
+              (client-op/update-local-tx repo-b 0)
+              (record-meta! history {:seed seed
+                                     :base-uuid base-uuid
+                                     :target-page-uuid target-page-uuid
+                                     :moved-parent-uuid moved-parent-uuid
+                                     :subtree-root-uuid subtree-root-uuid})
+
+              (ensure-base-page! conn-a base-uuid)
+              (let [base-a (d/entity @conn-a [:block/uuid base-uuid])]
+                (create-page! conn-a "Target Page" target-page-uuid)
+                (create-block! conn-a base-a "moved-parent" moved-parent-uuid)
+                (let [moved-parent-a (d/entity @conn-a [:block/uuid moved-parent-uuid])]
+                  (create-block! conn-a moved-parent-a "subtree-root" subtree-root-uuid)))
+
+              (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                        {:repo repo-b :conn conn-b :client client-b :online? true}]
+                                30)
+
+              (move-block! conn-a
+                           {:block/uuid moved-parent-uuid}
+                           {:block/uuid target-page-uuid})
+              (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                        {:repo repo-b :conn conn-b :client client-b :online? false}]
+                                30)
+
+              (let [subtree-root-b (d/entity @conn-b [:block/uuid subtree-root-uuid])]
+                (create-block! conn-b subtree-root-b "local-child" local-child-uuid)
+                (let [local-child-b (d/entity @conn-b [:block/uuid local-child-uuid])]
+                  (create-block! conn-b local-child-b "local-grandchild" local-grandchild-uuid)))
+
+              (let [rounds (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                                     {:repo repo-b :conn conn-b :client client-b :online? true}]
+                                             60)
+                    local-child-a (d/entity @conn-a [:block/uuid local-child-uuid])
+                    local-child-b (d/entity @conn-b [:block/uuid local-child-uuid])
+                    local-grandchild-a (d/entity @conn-a [:block/uuid local-grandchild-uuid])
+                    local-grandchild-b (d/entity @conn-b [:block/uuid local-grandchild-uuid])
+                    issues-a (db-issues @conn-a)
+                    issues-b (db-issues @conn-b)
+                    attrs-a (block-attr-map @conn-a)
+                    attrs-b (block-attr-map @conn-b)
+                    descendants-on-target-page?
+                    (every?
+                     true?
+                     [(= target-page-uuid (:block/uuid (:block/page local-child-a)))
+                      (= target-page-uuid (:block/uuid (:block/page local-child-b)))
+                      (= target-page-uuid (:block/uuid (:block/page local-grandchild-a)))
+                      (= target-page-uuid (:block/uuid (:block/page local-grandchild-b)))])]
+                (is (< rounds 60) (str "sync did not become idle rounds=" rounds))
+                (is (some? local-child-a))
+                (is (some? local-child-b))
+                (is (some? local-grandchild-a))
+                (is (some? local-grandchild-b))
+                (is (= target-page-uuid (:block/uuid (:block/page local-child-a))))
+                (is (= target-page-uuid (:block/uuid (:block/page local-child-b))))
+                (is (= target-page-uuid (:block/uuid (:block/page local-grandchild-a))))
+                (is (= target-page-uuid (:block/uuid (:block/page local-grandchild-b))))
+                (is (empty? issues-a) (str "db A issues " (pr-str issues-a)))
+                (is (empty? issues-b) (str "db B issues " (pr-str issues-b)))
+                (assert-synced-attrs! seed history attrs-a attrs-b attrs-b)
+                (when descendants-on-target-page?
+                  (delete-page! conn-b target-page-uuid)
+                  (let [post-delete-rounds (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                                                     {:repo repo-b :conn conn-b :client client-b :online? true}]
+                                                             60)
+                        post-delete-issues-a (db-issues @conn-a)
+                        post-delete-issues-b (db-issues @conn-b)]
+                    (is (< post-delete-rounds 60) (str "post-delete sync did not become idle rounds=" post-delete-rounds))
+                    (is (empty? post-delete-issues-a) (str "post-delete db A issues " (pr-str post-delete-issues-a)))
+                    (is (empty? post-delete-issues-b) (str "post-delete db B issues " (pr-str post-delete-issues-b)))
+                    (assert-no-invalid-tx! seed history repro))))
+              (finally
+                (restore)))))))))
+
+(deftest two-clients-syncs-undo-of-new-block-test
+  (testing "undoing a newly created block syncs the retractEntity to other clients"
+    (let [base-uuid (uuid "51111111-1111-1111-1111-111111111111")
+          block-uuid (uuid "52222222-2222-2222-2222-222222222222")
+          conn-a (db-test/create-conn)
+          conn-b (db-test/create-conn)
+          ops-a (d/create-conn client-op/schema-in-db)
+          ops-b (d/create-conn client-op/schema-in-db)
+          client-a (make-client repo-a)
+          client-b (make-client repo-b)
+          server (make-server)]
+      (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}
+                        repo-b {:conn conn-b :ops-conn ops-b}}
+        (fn []
+          (reset! db-sync/*repo->latest-remote-tx {})
+          (doseq [repo [repo-a repo-b]]
+            (client-op/update-local-tx repo 0))
+          (ensure-base-page! conn-a base-uuid)
+          (sync-loop! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                              {:repo repo-b :conn conn-b :client client-b :online? true}])
+          (let [base-a (d/entity @conn-a [:block/uuid base-uuid])]
+            (create-block! conn-a base-a "temp" block-uuid))
+          (sync-loop! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                              {:repo repo-b :conn conn-b :client client-b :online? true}])
+          (is (some? (d/entity @conn-a [:block/uuid block-uuid])))
+          (is (some? (d/entity @conn-b [:block/uuid block-uuid])))
+          (is (not= :frontend.undo-redo/empty-undo-stack
+                    (undo-redo/undo repo-a)))
+          (let [pending (#'sync-apply/pending-txs repo-a)
+                retract-block? (fn [item]
+                                 (= [:db/retractEntity [:block/uuid block-uuid]]
+                                    (take 2 item)))]
+            (is (seq pending))
+            (is (some (fn [{:keys [tx]}]
+                        (some retract-block? tx))
+                      pending)))
+          (sync-loop! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                              {:repo repo-b :conn conn-b :client client-b :online? true}])
+          (is (nil? (d/entity @conn-a [:block/uuid block-uuid])))
+          (is (nil? (d/entity @conn-b [:block/uuid block-uuid])))
+          (is (nil? (d/entity @(get @server :conn) [:block/uuid block-uuid]))))))))
 
 (defonce op-runs 200)
 
@@ -1365,7 +1715,7 @@
               (finally
                 (restore)))))))))
 
-(deftest ^:long two-clients-cut-paste-random-sim-test
+(deftest two-clients-cut-paste-random-sim-test
   (testing "db-sync convergence under random cut-paste with child operations"
     (let [seed (or (env-seed) default-seed)
           rng (make-rng seed)
@@ -1502,7 +1852,6 @@
                 (restore)))))))))
 
 (deftest ^:long ^:large-vars/cleanup-todo three-clients-single-repo-sim-test
-  (prn :debug "run three-clients-single-repo-sim-test")
   (testing "db-sync convergence with three clients sharing one repo"
     (let [seed (or (env-seed) default-seed)
           rng (make-rng seed)

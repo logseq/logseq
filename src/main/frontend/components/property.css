@@ -436,8 +436,7 @@ a.control-link {
 }
 
 .ls-property-choices-sub-pane {
-  @apply w-[220px] px-0 pb-8 overflow-y-scroll;
-  max-height: 100vh;
+  @apply w-[220px] px-0 py-0 overflow-y-scroll max-h-screen;
 
   > ul.choices-list {
     @apply m-0 px-1.5 pt-1 pb-[1px];
@@ -451,7 +450,7 @@ a.control-link {
 
       > strong {
         @apply text-sm px-0.5 flex-grow cursor-pointer font-normal
-        select-none;
+        select-none whitespace-nowrap overflow-hidden text-ellipsis;
       }
 
       > .ui__button {

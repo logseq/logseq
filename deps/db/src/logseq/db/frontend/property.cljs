@@ -567,6 +567,11 @@
                                              :schema {:type :map
                                                       :hide? true
                                                       :public? false}}
+     :logseq.property.asset/align {:title "Asset alignment"
+                                   :schema {:type :keyword
+                                            :hide? true
+                                            :public? false}
+                                   :queryable? false}
      :logseq.property.fsrs/due {:title "Due"
                                 :schema
                                 {:type :datetime
@@ -614,6 +619,26 @@
                                       :schema {:type :entity
                                                :hide? true}
                                       :queryable? true}
+     :logseq.property/deleted-at {:title "Deleted at"
+                                  :schema {:type :datetime
+                                           :hide? true
+                                           :public? false}}
+     :logseq.property/deleted-by-ref {:title "Deleted by"
+                                      :schema {:type :entity
+                                               :hide? true
+                                               :public? false}}
+     :logseq.property.recycle/original-parent {:title "Recycle original parent"
+                                               :schema {:type :node
+                                                        :hide? true
+                                                        :public? false}}
+     :logseq.property.recycle/original-page {:title "Recycle original page"
+                                             :schema {:type :node
+                                                      :hide? true
+                                                      :public? false}}
+     :logseq.property.recycle/original-order {:title "Recycle original order"
+                                              :schema {:type :string
+                                                       :hide? true
+                                                       :public? false}}
      :logseq.property.reaction/emoji-id {:title "Reaction emoji"
                                          :schema {:type :string
                                                   :public? false
@@ -694,7 +719,8 @@
     "logseq.property.code" "logseq.property.repeat"
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"
     "logseq.property.user" "logseq.property.history" "logseq.property.embedding"
-    "logseq.property.reaction" "logseq.property.sync" "logseq.property.publish"})
+    "logseq.property.reaction" "logseq.property.sync" "logseq.property.publish"
+    "logseq.property.recycle"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"
@@ -753,6 +779,7 @@
   (when db
     (when-let [property (d/entity db property-id)]
       (some->> (:block/_closed-value-property property)
+               (remove entity-util/recycled?)
                (sort-by :block/order)))))
 
 (defn closed-value-content
@@ -887,7 +914,7 @@
 
                   :else
                   false)))
-            values)))
+            (remove entity-util/recycled? values))))
 
 (defn lookup
   "Get the property value by a built-in property's db-ident from coll"

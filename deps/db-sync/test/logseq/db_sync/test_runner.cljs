@@ -1,5 +1,6 @@
 (ns logseq.db-sync.test-runner
   (:require [cljs.test :as ct]
+            [logseq.db-sync.checksum-test]
             [logseq.db-sync.common-test]
             [logseq.db-sync.index-test]
             [logseq.db-sync.node-adapter-test]

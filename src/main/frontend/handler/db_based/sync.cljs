@@ -11,6 +11,7 @@
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db-sync.malli-schema :as db-sync-schema]
+            [logseq.db-sync.snapshot :as snapshot]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
@@ -31,60 +32,12 @@
   (or config/db-sync-http-base
       (ws->http-base config/db-sync-ws-url)))
 
-(def ^:private snapshot-text-decoder (js/TextDecoder.))
-
 (defn- ->uint8 [data]
   (cond
     (instance? js/Uint8Array data) data
     (instance? js/ArrayBuffer data) (js/Uint8Array. data)
     (string? data) (.encode (js/TextEncoder.) data)
     :else (js/Uint8Array. data)))
-
-(defn- decode-snapshot-rows [payload]
-  (sqlite-util/read-transit-str (.decode snapshot-text-decoder (->uint8 payload))))
-
-(defn- frame-len [^js data offset]
-  (let [view (js/DataView. (.-buffer data) offset 4)]
-    (.getUint32 view 0 false)))
-
-(defn- concat-bytes
-  [^js a ^js b]
-  (cond
-    (nil? a) b
-    (nil? b) a
-    :else
-    (let [out (js/Uint8Array. (+ (.-byteLength a) (.-byteLength b)))]
-      (.set out a 0)
-      (.set out b (.-byteLength a))
-      out)))
-
-(defn- parse-framed-chunk
-  [buffer chunk]
-  (let [data (concat-bytes buffer chunk)
-        total (.-byteLength data)]
-    (loop [offset 0
-           rows []]
-      (if (< (- total offset) 4)
-        {:rows rows
-         :buffer (when (< offset total)
-                   (.slice data offset total))}
-        (let [len (frame-len data offset)
-              next-offset (+ offset 4 len)]
-          (if (<= next-offset total)
-            (let [payload (.slice data (+ offset 4) next-offset)
-                  decoded (decode-snapshot-rows payload)]
-              (recur next-offset (into rows decoded)))
-            {:rows rows
-             :buffer (.slice data offset total)}))))))
-
-(defn- finalize-framed-buffer
-  [buffer]
-  (if (or (nil? buffer) (zero? (.-byteLength buffer)))
-    []
-    (let [{:keys [rows buffer]} (parse-framed-chunk nil buffer)]
-      (if (and (seq rows) (or (nil? buffer) (zero? (.-byteLength buffer))))
-        rows
-        (throw (ex-info "incomplete framed buffer" {:buffer buffer :rows rows}))))))
 
 (defn- gzip-bytes?
   [^js payload]
@@ -114,10 +67,60 @@
 (defn- <snapshot-response-bytes
   [^js resp]
   (p/let [buf (.arrayBuffer resp)
-          payload (->uint8 buf)]
-    (if (gzip-bytes? payload)
-      (<decompress-gzip-bytes payload)
-      payload)))
+          chunk (->uint8 buf)]
+    (if (gzip-bytes? chunk)
+      (<decompress-gzip-bytes chunk)
+      chunk)))
+
+(defn- response-body-stream
+  [^js resp]
+  (let [encoding (some-> resp .-headers (.get "content-encoding"))]
+    (cond
+      (nil? (.-body resp))
+      nil
+
+      (= "gzip" encoding)
+      (when (exists? js/DecompressionStream)
+        (.pipeThrough (.-body resp) (js/DecompressionStream. "gzip")))
+
+      :else
+      (.-body resp))))
+
+(defn- <flush-datom-batches!
+  [datoms batch-size on-batch]
+  (p/loop [remaining datoms]
+    (if (>= (count remaining) batch-size)
+      (let [batch (subvec remaining 0 batch-size)
+            rest-datoms (subvec remaining batch-size)]
+        (p/let [_ (on-batch batch)]
+          (p/recur rest-datoms)))
+      remaining)))
+
+(defn- <stream-snapshot-datom-batches!
+  [^js resp batch-size on-batch]
+  (if-let [stream (response-body-stream resp)]
+    (let [reader (.getReader stream)]
+      (p/loop [buffer nil
+               pending []]
+        (p/let [result (.read reader)]
+          (if (.-done result)
+            (let [pending (if (and buffer (pos? (.-byteLength buffer)))
+                            (into pending (snapshot/finalize-datoms-jsonl-buffer buffer))
+                            pending)]
+              (if (seq pending)
+                (p/let [_ (on-batch pending)]
+                  {:chunk-count 1})
+                {:chunk-count 0}))
+            (let [{datoms :datoms next-buffer :buffer} (snapshot/parse-datoms-jsonl-chunk buffer (->uint8 (.-value result)))
+                  pending (into pending datoms)]
+              (p/let [pending (<flush-datom-batches! pending batch-size on-batch)]
+                (p/recur next-buffer pending)))))))
+    (p/let [snapshot-bytes (<snapshot-response-bytes resp)
+            datoms (vec (snapshot/finalize-datoms-jsonl-buffer snapshot-bytes))]
+      (if (seq datoms)
+        (p/let [_ (on-batch datoms)]
+          {:chunk-count 1})
+        {:chunk-count 0}))))
 
 (defn- auth-headers []
   (when-let [token (state/get-auth-id-token)]
@@ -181,26 +184,21 @@
         coerced))
     body))
 
-(defn- graph-in-remote-list?
+(defn- remote-graph
   [repo]
-  (some #(= repo (:url %)) (state/get-rtc-graphs)))
+  (some #(when (= repo (:url %)) %) (state/get-rtc-graphs)))
 
 (defn- graph-has-local-rtc-id?
   [repo]
   (boolean (some-> (db/get-db repo)
                    ldb/get-graph-rtc-uuid)))
 
-(defn- remote-graphs-unknown?
-  []
-  (not= false (:rtc/loading-graphs? @state/state)))
-
 (defn- should-start-rtc?
   [repo]
-  (or (graph-in-remote-list? repo)
-      ;; During startup, remote graph list might not be fetched yet.
-      ;; If local DB already has graph UUID, start optimistically to reduce cold-start latency.
-      (and (remote-graphs-unknown?)
-           (graph-has-local-rtc-id? repo))))
+  (and (not (true? (:rtc/uploading? @state/state)))
+       (let [graph (remote-graph repo)]
+         (and (some? graph)
+              (not= false (:graph-ready-for-use? graph))))))
 
 (defn- normalize-graph-e2ee?
   [graph-e2ee?]
@@ -278,17 +276,21 @@
 
 (defn <rtc-create-graph!
   ([repo]
-   (<rtc-create-graph! repo true))
+   (<rtc-create-graph! repo true true))
   ([repo graph-e2ee?]
+   (<rtc-create-graph! repo graph-e2ee? true))
+  ([repo graph-e2ee? graph-ready-for-use?]
    (let [schema-version (some-> (ldb/get-graph-schema-version (db/get-db)) :major str)
          graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
+         graph-ready-for-use? (not= false graph-ready-for-use?)
          base (http-base)]
      (if base
        (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
                body (coerce-http-request :graphs/create
                                          {:graph-name (string/replace repo config/db-version-prefix "")
                                           :schema-version schema-version
-                                          :graph-e2ee? graph-e2ee?})
+                                          :graph-e2ee? graph-e2ee?
+                                          :graph-ready-for-use? graph-ready-for-use?})
                result (if (nil? body)
                         (p/rejected (ex-info "db-sync invalid create-graph body"
                                              {:repo repo}))
@@ -351,31 +353,44 @@
                            (throw (ex-info "non-integer remote-tx when downloading graph"
                                            {:graph graph-name
                                             :remote-tx remote-tx})))
-                       resp (js/fetch (str base "/sync/" graph-uuid "/snapshot/stream")
+                       snapshot-resp (fetch-json (str base "/sync/" graph-uuid "/snapshot/download")
+                                                 {:method "GET"}
+                                                 {:response-schema :sync/snapshot-download})
+                       resp (js/fetch (:url snapshot-resp)
                                       (clj->js (with-auth-headers {:method "GET"})))
-                       total-bytes (when-let [raw (some-> resp .-headers (.get "content-length"))]
-                                     (let [parsed (js/parseInt raw 10)]
-                                       (when-not (js/isNaN parsed) parsed)))
                        _ (state/pub-event!
                           [:rtc/log {:type :rtc.log/download
                                      :sub-type :download-progress
                                      :graph-uuid graph-uuid
-                                     :message (str "Start downloading graph snapshot, file size: " total-bytes)}])]
+                                     :message "Start downloading graph snapshot"}])]
                  (when-not (.-ok resp)
                    (throw (ex-info "snapshot download failed"
                                    {:graph graph-name
                                     :status (.-status resp)})))
-                 (p/let [snapshot-bytes (<snapshot-response-bytes resp)
-                         rows (finalize-framed-buffer snapshot-bytes)]
-                   (state/pub-event!
-                    [:rtc/log {:type :rtc.log/download
-                               :sub-type :download-completed
-                               :graph-uuid graph-uuid
-                               :message "Graph snapshot downloaded"}])
-                   (when (seq rows)
-                     (state/<invoke-db-worker :thread-api/db-sync-import-kvs-rows
-                                              graph rows true graph-uuid remote-tx graph-e2ee?))
-                   (count rows))))
+                 (let [import-id* (atom nil)
+                       ensure-import! (fn []
+                                        (if-let [import-id @import-id*]
+                                          (p/resolved import-id)
+                                          (p/let [{:keys [import-id]} (state/<invoke-db-worker :thread-api/db-sync-import-prepare
+                                                                                               graph true graph-uuid graph-e2ee?)]
+                                            (reset! import-id* import-id)
+                                            import-id)))]
+                   (p/let [_ (<stream-snapshot-datom-batches!
+                              resp
+                              25000
+                              (fn [datoms]
+                                (p/let [import-id (ensure-import!)]
+                                  (state/<invoke-db-worker :thread-api/db-sync-import-datoms-chunk
+                                                           datoms graph-uuid import-id))))
+                           _ (state/pub-event!
+                              [:rtc/log {:type :rtc.log/download
+                                         :sub-type :download-completed
+                                         :graph-uuid graph-uuid
+                                         :message "Graph snapshot downloaded"}])
+                           _ (when-let [import-id @import-id*]
+                               (state/<invoke-db-worker :thread-api/db-sync-import-finalize
+                                                        graph graph-uuid remote-tx import-id))]
+                     true))))
            (p/rejected (ex-info "db-sync missing graph info"
                                 {:type :db-sync/invalid-graph
                                  :graph-uuid graph-uuid
@@ -400,7 +415,8 @@
                   result (mapv (fn [graph]
                                  (let [graph-e2ee? (if (contains? graph :graph-e2ee?)
                                                      (normalize-graph-e2ee? (:graph-e2ee? graph))
-                                                     true)]
+                                                     true)
+                                       graph-ready-for-use? (not= false (:graph-ready-for-use? graph))]
                                    (merge
                                     {:url (str config/db-version-prefix (:graph-name graph))
                                      :GraphName (:graph-name graph)
@@ -408,9 +424,10 @@
                                      :GraphUUID (:graph-id graph)
                                      :rtc-graph? true
                                      :graph-e2ee? graph-e2ee?
+                                     :graph-ready-for-use? graph-ready-for-use?
                                      :graph<->user-user-type (:role graph)
                                      :graph<->user-grant-by-user (:invited-by graph)}
-                                    (dissoc graph :graph-id :graph-name :schema-version :role :invited-by))))
+                                    (dissoc graph :graph-id :graph-name :schema-version :role :invited-by :graph-ready-for-use?))))
                                graphs)]
             (state/set-state! :rtc/graphs result)
             (repo-handler/refresh-repos!)
@@ -485,10 +502,19 @@
 
 (defn <rtc-upload-graph!
   [repo graph-e2ee?]
-  (p/let [graph-id (<rtc-create-graph! repo graph-e2ee?)]
+  (p/let [graph-id (<rtc-create-graph! repo graph-e2ee? false)]
     (when (nil? graph-id)
       (throw (ex-info "graph id doesn't exist when uploading to server" {:repo repo})))
     (p/do!
      (state/<invoke-db-worker :thread-api/db-sync-upload-graph repo)
+     (<get-remote-graphs)
+     (<rtc-start! repo))))
+
+(defn <rtc-create-graph-and-start-sync!
+  [repo graph-e2ee?]
+  (p/let [graph-id (<rtc-create-graph! repo graph-e2ee? true)]
+    (when (nil? graph-id)
+      (throw (ex-info "graph id doesn't exist when creating remote graph" {:repo repo})))
+    (p/do!
      (<get-remote-graphs)
      (<rtc-start! repo))))

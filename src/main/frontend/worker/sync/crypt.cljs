@@ -503,22 +503,39 @@
   [aes-key rows-batch]
   (p/all (map #(<decrypt-snapshot-row aes-key %) rows-batch)))
 
-(defn <encrypt-datoms
+(defn <decrypt-snapshot-datoms-batch
   [aes-key datoms]
-  (let [batch-size 5000
-        batches (partition-all batch-size datoms)]
-    (p/loop [remaining batches
-             result []]
-      (if (empty? remaining)
-        result
-        (p/let [batch (first remaining)
-                encrypted (p/all (map (fn [datom]
-                                        (if (contains? sync-const/encrypt-attr-set (:a datom))
-                                          (p/let [v' (<encrypt-text-value aes-key (:v datom))]
-                                            (assoc datom :v v'))
-                                          (p/resolved datom)))
-                                      batch))]
-          (p/recur (rest remaining) (into result encrypted)))))))
+  (p/all
+   (map (fn [{:keys [a v] :as datom}]
+          (if (contains? sync-const/encrypt-attr-set a)
+            (p/let [v' (<decrypt-text-value aes-key v)]
+              (assoc datom :v v'))
+            (p/resolved datom)))
+        datoms)))
+
+(defn <encrypt-datoms
+  ([aes-key datoms]
+   (<encrypt-datoms aes-key datoms nil))
+  ([aes-key datoms progress-f]
+   (let [batch-size 5000
+         total-count (count datoms)
+         batches (partition-all batch-size datoms)]
+     (p/loop [remaining batches
+              result []
+              encrypted-count 0]
+       (if (empty? remaining)
+         result
+         (p/let [batch (first remaining)
+                 encrypted (p/all (map (fn [datom]
+                                         (if (contains? sync-const/encrypt-attr-set (:a datom))
+                                           (p/let [v' (<encrypt-text-value aes-key (:v datom))]
+                                             (assoc datom :v v'))
+                                           (p/resolved datom)))
+                                       batch))]
+           (let [encrypted-count' (+ encrypted-count (count batch))]
+             (when progress-f
+               (progress-f encrypted-count' total-count))
+             (p/recur (rest remaining) (into result encrypted) encrypted-count'))))))))
 
 (defn- <re-encrypt-private-key
   [encrypted-private-key-str old-password new-password]

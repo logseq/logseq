@@ -424,8 +424,6 @@
                             :else
                             nil))))
                     tx-data)]
-      (when (seq tx-data')
-        (prn :debug ::revert-built-in-block-updates :tx-data (distinct tx-data')))
       (distinct tx-data'))))
 
 (defn- compute-extra-tx-data
@@ -480,43 +478,44 @@
   "Compute extra tx-data and block/refs, should ensure it's a pure function and
   doesn't call `d/transact!` or `ldb/transact!`."
   [{:keys [db-after tx-meta _tx-data] :as tx-report}]
-  (when-not (or (:temp-conn? tx-meta) (:sync-download-graph? tx-meta))
-    (ensure-journal-page-protected-attrs-not-updated! tx-report)
-    (let [extra-tx-data (compute-extra-tx-data tx-report)
-          tx-report* (if (seq extra-tx-data)
-                       (let [result (d/with db-after extra-tx-data)]
-                         (assoc tx-report
-                                :tx-data (concat (:tx-data tx-report) (:tx-data result))
-                                :db-after (:db-after result)))
-                       tx-report)
-          {:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report*)
-          deleted-blocks (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report*))
-          deleted-block-ids (set (map :db/id deleted-blocks))
-          blocks' (remove (fn [b] (deleted-block-ids (:db/id b))) blocks)
-          block-refs (when (seq blocks')
-                       (rebuild-block-refs tx-report* blocks'))
-          tx-id-data (let [db-after (:db-after tx-report*)
-                           updated-blocks (remove (fn [b] (contains? deleted-block-ids (:db/id b)))
-                                                  (concat pages blocks))
-                           tx-id (get-in tx-report* [:tempids :db/current-tx])]
-                       (keep (fn [b]
-                               (when-let [db-id (:db/id b)]
-                                 (when (:block/uuid (d/entity db-after db-id))
-                                   {:db/id db-id
-                                    :block/tx-id tx-id}))) updated-blocks))
-          block-refs-tx-id-data (concat block-refs tx-id-data)
-          replace-tx-report (when (seq block-refs-tx-id-data)
-                              (d/with (:db-after tx-report*) block-refs-tx-id-data))
-          tx-report' (or replace-tx-report tx-report*)
-          full-tx-data (-> (concat (:tx-data tx-report*)
-                                   (:tx-data replace-tx-report))
-                           ldb/remove-conflict-datoms)]
-      (assoc tx-report'
-             :tx-data full-tx-data
-             :tx-meta tx-meta
-             :db-before (:db-before tx-report)
-             :db-after (or (:db-after tx-report')
-                           (:db-after tx-report))))))
+  (or
+   (when-not (:sync-download-graph? tx-meta)
+     (ensure-journal-page-protected-attrs-not-updated! tx-report)
+     (let [extra-tx-data (compute-extra-tx-data tx-report)
+           tx-report* (if (seq extra-tx-data)
+                        (let [result (d/with db-after extra-tx-data)]
+                          (assoc tx-report
+                                 :tx-data (concat (:tx-data tx-report) (:tx-data result))
+                                 :db-after (:db-after result)))
+                        tx-report)
+           {:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report*)
+           deleted-blocks (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report*))
+           deleted-block-ids (set (map :db/id deleted-blocks))
+           blocks' (remove (fn [b] (deleted-block-ids (:db/id b))) blocks)
+           block-refs (when (seq blocks')
+                        (rebuild-block-refs tx-report* blocks'))
+           tx-id-data (let [db-after (:db-after tx-report*)
+                            updated-blocks (remove (fn [b] (contains? deleted-block-ids (:db/id b)))
+                                                   (concat pages blocks))
+                            tx-id (get-in tx-report* [:tempids :db/current-tx])]
+                        (keep (fn [b]
+                                (when-let [db-id (:db/id b)]
+                                  (when (:block/uuid (d/entity db-after db-id))
+                                    {:db/id db-id
+                                     :block/tx-id tx-id}))) updated-blocks))
+           block-refs-tx-id-data (concat block-refs tx-id-data)
+           replace-tx-report (when (seq block-refs-tx-id-data)
+                               (d/with (:db-after tx-report*) block-refs-tx-id-data))
+           tx-report' (or replace-tx-report tx-report*)
+           full-tx-data (concat (:tx-data tx-report*)
+                                (:tx-data replace-tx-report))]
+       (assoc tx-report'
+              :tx-data full-tx-data
+              :tx-meta tx-meta
+              :db-before (:db-before tx-report)
+              :db-after (or (:db-after tx-report')
+                            (:db-after tx-report)))))
+   tx-report))
 
 (defn- invoke-hooks-default
   [{:keys [tx-meta] :as tx-report} context]

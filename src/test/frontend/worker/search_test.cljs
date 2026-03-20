@@ -182,6 +182,13 @@
                   ldb/class-instance? (fn [_ _] true)]
       (is (false? (#'search/code-block? :code-class {:logseq.property.node/display-type :code}))))))
 
+(deftest hidden-entity-includes-recycled-entities
+  (testing "recycled roots are hidden"
+    (is (true? (#'search/hidden-entity? {:logseq.property/deleted-at 1}))))
+
+  (testing "entities on recycled pages are hidden"
+    (is (true? (#'search/hidden-entity? {:block/page {:logseq.property/deleted-at 1}})))))
+
 (deftest search-blocks-aux-bind-count
   (testing "namespace match SQL keeps bind count aligned"
     (let [sql "select id, page, title, rank from blocks_fts where title match ? or title match ? order by rank limit ?"

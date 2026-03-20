@@ -151,6 +151,22 @@
       (is (= ["Alice"]
              (map :block/title (:entities (first results))))))))
 
+(deftest get-bidirectional-properties-ignores-recycled-entities
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:friend {:logseq.property/type :node
+                                     :build/property-classes [:Person]}}
+               :classes {:Person {:build/properties {:logseq.property.class/enable-bidirectional? true}}}
+               :pages-and-blocks
+               [{:page {:block/title "Alice"
+                        :build/tags [:Person]
+                        :build/properties {:friend [:build/page {:block/title "Bob"}]}}}
+                {:page {:block/title "Bob"}}]})
+        alice (db-test/find-page-by-title @conn "Alice")
+        target (db-test/find-page-by-title @conn "Bob")]
+    (d/transact! conn [{:db/id (:db/id alice)
+                        :logseq.property/deleted-at 1}])
+    (is (empty? (ldb/get-bidirectional-properties @conn (:db/id target))))))
+
 (defn- bidirectional-perf-conn
   [n property-titles]
   (let [target-page {:page {:block/title "Target"}}

@@ -75,7 +75,13 @@
    ["65.20" {:properties [:logseq.property.class/bidirectional-property-title :logseq.property.class/enable-bidirectional?]}]
    ["65.21" {:properties [:logseq.property.sync/large-title-object]}]
    ["65.22" {:properties [:logseq.property.reaction/emoji-id
-                          :logseq.property.reaction/target]}]])
+                          :logseq.property.reaction/target]}]
+   ["65.23" {:properties [:logseq.property.asset/align]}]
+   ["65.24" {:properties [:logseq.property/deleted-at
+                          :logseq.property/deleted-by-ref
+                          :logseq.property.recycle/original-parent
+                          :logseq.property.recycle/original-page
+                          :logseq.property.recycle/original-order]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

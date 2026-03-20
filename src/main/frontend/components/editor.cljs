@@ -33,7 +33,6 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [react-draggable]
             [rum.core :as rum]))
 
 (defonce no-matched-commands [["No matched commands" [[:editor/move-cursor-to-end]]]])
@@ -245,8 +244,8 @@
        (when (and db-tag?
                   (not (string/blank? q))
                   (not= "page" (string/lower-case q)))
-         [:p.px-1.opacity-50.text-sm
-          [:code (if util/mac? "Cmd+Enter" "Ctrl+Enter")]
+         [:p.px-1.opacity-50.text-sm.flex.flex-row.items-center.gap-2
+          (shui/shortcut "mod+enter")
           [:span " to display this tag inline instead of at the end of this node."]])])))
 
 (rum/defcs page-search < rum/reactive
