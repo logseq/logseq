@@ -276,6 +276,10 @@ exports.electronMaker = async () => {
     stdio: 'inherit',
   })
 
+  cp.execSync('yarn webpack-app-build', {
+    stdio: 'inherit',
+  })
+
   const pkgPath = path.join(outputPath, 'package.json')
   const pkg = require(pkgPath)
   const version = fs.readFileSync(
