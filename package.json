@@ -149,7 +149,6 @@
         "fs": "0.0.1-security",
         "fs-extra": "^11.3.4",
         "fuse.js": "7.1.0",
-        "grapheme-splitter": "1.0.4",
         "graphology": "0.26.0",
         "hnswlib-wasm": "^0.8.2",
         "html2canvas": "^1.4.1",
