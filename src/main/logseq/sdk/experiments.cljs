@@ -46,6 +46,20 @@
      (keyword pid) key (reduce #(assoc %1 %2 (aget opts (name %2))) {}
                                [:title :type :mode :subs :render]))))
 
+(defn ^:export register_block_properties_renderer
+  [pid key ^js opts]
+  (when-let [^js _pl (plugin-handler/get-plugin-inst pid)]
+    (let [clj-opts (reduce (fn [r k]
+                             (let [v (aget opts (name k))]
+                               (if (some? v)
+                                 (assoc r k (if (= :when k)
+                                              (js->clj v :keywordize-keys true)
+                                              v))
+                                 r)))
+                           {} [:when :mode :priority :subs :render])]
+      (plugin-handler/register-block-properties-renderer
+       (keyword pid) key clj-opts))))
+
 (defn ^:export register_extensions_enhancer
   [pid type enhancer]
   (when-let [^js _pl (and (fn? enhancer) (plugin-handler/get-plugin-inst pid))]

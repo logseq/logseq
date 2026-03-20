@@ -3,6 +3,18 @@ import { PluginLocal } from '../LSPlugin.core'
 import { safeSnakeCase } from '../common'
 
 /**
+ * Declarative condition for matching a block's properties map.
+ * Operators: has, equals, in, not, any, all.
+ */
+export type BlockPropertiesCondition =
+  | { has: string }
+  | { equals: [string, any] }
+  | { in: [string, Array<any>] }
+  | { not: BlockPropertiesCondition }
+  | { any: Array<BlockPropertiesCondition> }
+  | { all: Array<BlockPropertiesCondition> }
+
+/**
  * WARN: These are some experience features and might be adjusted at any time.
  * These unofficial plugins that use these APIs are temporarily
  * may not be supported on the Marketplace.
@@ -143,6 +155,36 @@ export class LSPluginExperiments {
     )
   }
 
+  /**
+   * Register a custom renderer for the block properties area.
+   * The renderer is shown when the block's properties match the `when` condition.
+   *
+   * @param key Unique key for this renderer (scoped to the plugin).
+   * @param opts Renderer options.
+   * @param opts.when Optional condition; if omitted, always matches.
+   * @param opts.mode "prepend" | "append" (default) | "replace".
+   * @param opts.priority Higher number wins when multiple replace renderers match.
+   * @param opts.subs Reserved subscription list for future reactive updates.
+   * @param opts.render React function component receiving `{ blockId, properties }`.
+   */
+  registerBlockPropertiesRenderer(
+    key: string,
+    opts: {
+      when?: BlockPropertiesCondition
+      mode?: 'prepend' | 'append' | 'replace'
+      priority?: number
+      subs?: Array<string>
+      render: (props: { blockId: string; properties: Record<string, any> }) => any
+    }
+  ) {
+    return this.invokeExperMethod(
+      'registerBlockPropertiesRenderer',
+      this.ctx.baseInfo.id,
+      key,
+      opts
+    )
+  }
+
   registerExtensionsEnhancer<T = any>(
     type: 'katex' | 'codemirror',
     enhancer: (v: T) => Promise<any>
@@ -168,7 +210,7 @@ export class LSPluginExperiments {
 
   ensureHostScope(): any {
     try {
-      const _ = window.top?.document
+      window.top?.document
     } catch (_e) {
       console.error('Can not access host scope!')
     }

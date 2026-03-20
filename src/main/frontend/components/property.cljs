@@ -15,6 +15,7 @@
             [frontend.db.model :as db-model]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.route :as route-handler]
             [frontend.mixins :as mixins]
@@ -755,19 +756,44 @@
            (rum/with-key (new-property block opts) (str id "-add-property")))
 
          :else
-         (let [remove-properties #{:logseq.property/icon :logseq.property/query}
-               properties' (->> (remove (fn [[k _v]] (contains? remove-properties k))
-                                        full-properties)
-                                (remove (fn [[k _v]] (= k :logseq.property.class/properties))))
-               page? (entity-util/page? block)
-               class? (entity-util/class? block)]
+         (let [remove-properties   #{:logseq.property/icon :logseq.property/query}
+               properties'         (->> (remove (fn [[k _v]] (contains? remove-properties k))
+                                                full-properties)
+                                        (remove (fn [[k _v]] (= k :logseq.property.class/properties))))
+               page?               (entity-util/page? block)
+               class?              (entity-util/class? block)
+               plugin-properties   (->> (concat full-properties hidden-properties)
+                                        (remove (fn [[k _v]] (= k :logseq.property.class/properties)))
+                                        (into {}))
+               plugin-renderers    (when (and config/lsp-enabled? (not class?))
+                                     (plugin-handler/get-matched-block-properties-renderers plugin-properties))
+               prepend-renderers   (filter #(= "prepend" (:mode %)) plugin-renderers)
+               replace-renderer    (first (filter #(= "replace" (:mode %)) plugin-renderers))
+               append-renderers    (remove #(contains? #{"prepend" "replace"} (:mode %)) plugin-renderers)
+               props-for-plugin    (when (seq plugin-renderers)
+                                     (clj->js {:blockId    (str (:block/uuid block))
+                                               :properties (into {} (map (fn [[k v]] [(subs (str k) 1) v])
+                                                                         plugin-properties))}))]
            [:div.ls-properties-area
             {:id id
              :class (util/classnames [{:ls-page-properties page?}])
              :tab-index 0}
             [:<>
-             (properties-section block properties' opts)
-             (bidirectional-properties-section bidirectional-properties)
+             (mapv (fn [r]
+                     (when (fn? (:render r))
+                       (rum/with-key
+                        (js/React.createElement (:render r) props-for-plugin)
+                        (str "plugin-prepend-" (:key r)))))
+                   prepend-renderers)
+
+             (if replace-renderer
+               (when (fn? (:render replace-renderer))
+                 (rum/with-key
+                  (js/React.createElement (:render replace-renderer) props-for-plugin)
+                  (str "plugin-replace-" (:key replace-renderer))))
+               [:<>
+                (properties-section block properties' opts)
+                (bidirectional-properties-section bidirectional-properties)])
 
              (when-not class?
                (hidden-properties-cp block hidden-properties
@@ -775,6 +801,13 @@
 
              (when (and page? (not class?))
                (rum/with-key (new-property block opts) (str id "-add-property")))
+
+             (mapv (fn [r]
+                     (when (fn? (:render r))
+                       (rum/with-key
+                        (js/React.createElement (:render r) props-for-plugin)
+                        (str "plugin-append-" (:key r)))))
+                   append-renderers)
 
              (when class?
                (let [properties (->> (:logseq.property.class/properties block)
@@ -792,3 +825,4 @@
                    (hidden-properties-cp block hidden-properties
                                          (assoc opts :root-block? root-block?))
                    (rum/with-key (new-property block opts') (str id "-class-add-property"))]]))]])))]))
+

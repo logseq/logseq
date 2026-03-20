@@ -393,6 +393,20 @@
                (fnil assoc {}) key (merge opts {:pid pid}))
         true))))
 
+(defn unregister-plugin-resource
+  [pid type key]
+  (when-let [pid (keyword pid)]
+    (when-let [type (and key (keyword type))]
+      (let [path [:plugin/installed-resources pid type]]
+        (swap! state/state
+               (fn [state]
+                 (let [resources (get-in state path)
+                       resources' (some-> resources (dissoc key))]
+                   (if (seq resources')
+                     (assoc-in state path resources')
+                     (medley/dissoc-in state path)))))
+        true))))
+
 (defn unregister-plugin-resources
   [pid]
   (when-let [pid (keyword pid)]
@@ -432,10 +446,14 @@
   [type *providers]
   (fn [pid key {subs' :subs :keys [render] :as opts}]
     (when-let [key (and key (keyword key))]
-      (register-plugin-resources pid type
+      (let [pid (keyword pid)]
+        (register-plugin-resources pid type
                                  (merge opts {:key key :subs subs' :render render}))
-      (swap! *providers conj pid)
-      #(swap! *providers disj pid))))
+        (swap! *providers conj pid)
+        #(do
+           (unregister-plugin-resource pid type key)
+           (when-not (seq (state/get-plugin-resources-with-type pid type))
+             (swap! *providers disj pid)))))))
 
 (defn- create-local-renderer-getter
   ([type *providers] (create-local-renderer-getter type *providers false))
@@ -512,6 +530,48 @@
                                     (or (some-> (:key %) (name) (= key))
                                         (some-> (:key %) (str) (string/includes? (str "." key))))
                                     (some->> type (name) (= (:type %)))))))
+
+;; Block properties area renderer
+(defn match-block-properties-condition
+  "Match a declarative condition map against a block's properties map.
+   condition is a Clojure map like {:has \"ident\"}, {:equals [\"ident\" val]}, etc.
+   properties-map is a map of keyword db-idents -> values."
+  [condition properties-map]
+  (if (nil? condition)
+    true
+    (let [op  (some-> condition first key)
+          arg (some-> condition first val)]
+      (case op
+        :has    (contains? properties-map (keyword arg))
+        :equals (let [[prop-key expected] arg]
+                  (= (get properties-map (keyword prop-key)) expected))
+        :in     (let [[prop-key coll] arg]
+                  (contains? (set coll) (get properties-map (keyword prop-key))))
+        :not    (not (match-block-properties-condition arg properties-map))
+        :any    (some  #(match-block-properties-condition % properties-map) arg)
+        :all    (every? #(match-block-properties-condition % properties-map) arg)
+        true))))
+
+(defonce *block-properties-renderer-providers (atom #{}))
+
+(def register-block-properties-renderer
+  ;; [pid key payload]  payload keys: :when :mode :priority :subs :render
+  (create-local-renderer-register
+   :block-properties-renderers *block-properties-renderer-providers))
+
+(def get-block-properties-renderers
+  ;; [] - get all
+  (create-local-renderer-getter
+   :block-properties-renderers *block-properties-renderer-providers true))
+
+(defn get-matched-block-properties-renderers
+  "Return all registered block-properties renderers whose :when condition
+   matches the given properties-map.  Sorted by :priority descending."
+  [properties-map]
+  (when-let [rs (get-block-properties-renderers nil)]
+    (->> rs
+         (filter #(match-block-properties-condition (:when %) properties-map))
+         (sort-by #(- (or (:priority %) 0))))))
 
 (defn select-a-plugin-theme
   [pid]
