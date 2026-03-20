@@ -34,7 +34,7 @@
           (:block/uuid first-block)))))
 
 (rum/defcs custom-query-inner < rum/static
-  [state {:keys [dsl-query?] :as config} {:keys [query breadcrumb-show?]}
+  [state {:keys [dsl-query?] :as config} {:keys [query breadcrumb-show? group-collapsed?]}
    {:keys [query-error-atom
            current-block
            view-f
@@ -81,6 +81,7 @@
                                               breadcrumb-show?
                                               true)
                           :group-by-page? blocks-grouped-by-page?
+                          :group-collapsed? group-collapsed?
                           :ref? true)
                    {:style {:margin-top "0.25rem"
                             :margin-left "0.25rem"}})
