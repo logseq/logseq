@@ -1244,20 +1244,13 @@
     remark "^13.0.0"
     unist-util-find-all-after "^3.0.2"
 
-"@tabler/icons-react@^2.47.0":
+"@tabler/icons-react@2.47.0":
   version "2.47.0"
   resolved "https://registry.yarnpkg.com/@tabler/icons-react/-/icons-react-2.47.0.tgz#b704e7ae98f95be8bd6e938b4b2e84cd20b0cf31"
   integrity sha512-iqly2FvCF/qUbgmvS8E40rVeYY7laltc5GUjRxQj59DuX0x/6CpKHTXt86YlI2whg4czvd/c8Ce8YR08uEku0g==
   dependencies:
     "@tabler/icons" "2.47.0"
     prop-types "^15.7.2"
-
-"@tabler/icons-webfont@^2.47.0":
-  version "2.47.0"
-  resolved "https://registry.yarnpkg.com/@tabler/icons-webfont/-/icons-webfont-2.47.0.tgz#4b4303170d1ed616140044848d6ef99cc993abf9"
-  integrity sha512-yfV9zDal0iYDmyGz4BS9IlhaaMydtLdyOrY2UAZToP65sVWj7AFIi6symNzsoBaX867xAZWVHdKcocah0BfSog==
-  dependencies:
-    "@tabler/icons" "2.47.0"
 
 "@tabler/icons@2.47.0":
   version "2.47.0"

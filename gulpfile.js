@@ -125,7 +125,6 @@ const common = {
       () => gulp.src('node_modules/inter-ui/web/*.*').
         pipe(gulp.dest(path.join(outputPath, 'css', 'web'))),
       () => gulp.src([
-        'node_modules/@tabler/icons-webfont/fonts/**',
         'node_modules/katex/dist/fonts/*.woff2',
       ]).pipe(gulp.dest(path.join(outputPath, 'css', 'fonts'))),
       () => gulp.src([
@@ -150,7 +149,6 @@ const common = {
       () => gulp.src('node_modules/inter-ui/web/*.*').
         pipe(gulp.dest(path.join(outputPath, 'mobile', 'css', 'web'))),
       () => gulp.src([
-        'node_modules/@tabler/icons-webfont/fonts/**',
         'node_modules/katex/dist/fonts/*.woff2',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'css', 'fonts'))),
     )(...params)

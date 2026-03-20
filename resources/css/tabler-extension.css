@@ -8,7 +8,7 @@
 
  @font-face {
   font-family: 'tabler-icons-extension';
-  src: url('../fonts/tabler-icons-extension.woff2?mxgthk') format('woff2');
+  src: url('./fonts/tabler-icons-extension.woff2?mxgthk') format('woff2');
   font-style: normal;
   font-weight: 400;
 }
