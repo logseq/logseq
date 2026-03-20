@@ -61,7 +61,7 @@
 .left-sidebar-inner {
   &.as-container {
     @apply relative h-full pt-3 overflow-y-auto overflow-x-hidden transition-transform;
-    @apply transform-gpu translate-x-[-100%] z-[3] antialiased;
+    @apply transform-gpu translate-x-[-100%] z-[3];
 
     width: var(--ls-left-sidebar-sm-width);
     background-color: var(--left-sidebar-bg-color);
