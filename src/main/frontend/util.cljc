@@ -765,6 +765,7 @@
    (defn react
      [ref]
      (when ref
+       #_{:clj-kondo/ignore [:private-call]}
        (if rum/*reactions*
          (rum/react ref)
          @ref))))
