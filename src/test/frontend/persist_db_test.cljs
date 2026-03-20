@@ -1,5 +1,5 @@
 (ns frontend.persist-db-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require [cljs.test :refer [async deftest is use-fixtures]]
             [electron.ipc :as ipc]
             [frontend.persist-db.browser :as browser]
             [frontend.persist-db :as persist-db]
@@ -8,6 +8,7 @@
             [frontend.storage :as storage]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (defrecord FakeRemote [repo wrapped-worker]
@@ -34,11 +35,34 @@
   (<import-db [_ _repo _data]
     (p/resolved true)))
 
+(defonce ^:private *previous-runtime-state (atom nil))
+
+(defn- save-runtime-state!
+  []
+  (reset! *previous-runtime-state
+          {:remote-db @persist-db/remote-db
+           :remote-repo @persist-db/remote-repo
+           :db-worker @state/*db-worker
+           :transact-fn @ldb/*transact-fn}))
+
+(defn- restore-runtime-state!
+  []
+  (let [{:keys [remote-db remote-repo db-worker transact-fn]} @*previous-runtime-state]
+    (reset! persist-db/remote-db remote-db)
+    (reset! persist-db/remote-repo remote-repo)
+    (reset! state/*db-worker db-worker)
+    (reset! ldb/*transact-fn transact-fn)
+    (reset! *previous-runtime-state nil)))
+
+(use-fixtures :each {:before save-runtime-state!
+                     :after restore-runtime-state!})
+
 (defn- reset-runtime-state!
   []
   (reset! persist-db/remote-db nil)
   (reset! persist-db/remote-repo nil)
-  (reset! state/*db-worker nil))
+  (reset! state/*db-worker nil)
+  (reset! ldb/*transact-fn nil))
 
 (deftest electron-fetch-init-data-starts-remote-runtime
   (async done
