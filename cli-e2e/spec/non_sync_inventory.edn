@@ -1,0 +1,108 @@
+{:excluded-command-prefixes ["sync" "login" "logout"]
+ :scopes
+ {:global
+  {:options ["--help"
+             "--version"
+             "--config"
+             "--graph"
+             "--data-dir"
+             "--output"
+             "--verbose"]}
+
+  :graph
+  {:commands ["graph list"
+              "graph create"
+              "graph switch"
+              "graph remove"
+              "graph validate"
+              "graph info"
+              "graph export"
+              "graph import"]
+   :options ["--fix"
+             "--type"
+             "--file"
+             "--input"]}
+
+  :list
+  {:commands ["list page"
+              "list tag"
+              "list property"]
+   :options ["--expand"
+             "--fields"
+             "--limit"
+             "--offset"
+             "--sort"
+             "--order"
+             "--journal-only"
+             "--with-properties"
+             "--with-extends"
+             "--with-classes"
+             "--with-type"]}
+
+  :upsert
+  {:commands ["upsert block"
+              "upsert page"
+              "upsert tag"
+              "upsert property"]
+   :options ["--id"
+             "--uuid"
+             "--target-id"
+             "--target-uuid"
+             "--target-page"
+             "--pos"
+             "--content"
+             "--blocks-file"
+             "--status"
+             "--update-tags"
+             "--update-properties"
+             "--remove-tags"
+             "--remove-properties"
+             "--page"
+             "--name"
+             "--type"
+             "--cardinality"
+             "--hide"
+             "--public"]}
+
+  :remove
+  {:commands ["remove block"
+              "remove page"
+              "remove tag"
+              "remove property"]
+   :options ["--id"
+             "--uuid"
+             "--name"]}
+
+  :query
+  {:commands ["query"
+              "query list"]
+   :options ["--query"
+             "--name"
+             "--inputs"]}
+
+  :show
+  {:commands ["show"]
+   :options ["--id"
+             "--uuid"
+             "--page"
+             "--linked-references"
+             "--level"
+             "stdin:--id"]}
+
+  :server
+  {:commands ["server list"
+              "server status"
+              "server start"
+              "server stop"
+              "server restart"]
+   :options ["--graph"]}
+
+  :doctor
+  {:commands ["doctor"]
+   :options ["--dev-script"]}
+
+  :completion
+  {:commands ["completion"]
+   :options ["bash"
+             "zsh"
+             "--shell"]}}}

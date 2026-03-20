@@ -189,6 +189,10 @@
            (shell "clojure" "-M:cljs" "compile" "db-worker-node")
            (apply shell "node" "./static/db-worker-node.js" *command-line-args*))}
 
+  dev:cli-e2e
+  {:doc "Run shell-first CLI end-to-end tests"
+   :task (apply shell {:shutdown nil} "bb" "-f" "cli-e2e/bb.edn" "test" *command-line-args*)}
+
   lint:dev
   logseq.tasks.dev.lint/dev
 

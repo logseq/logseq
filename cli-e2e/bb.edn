@@ -1,0 +1,29 @@
+{:paths ["src" "test"]
+ :deps {cheshire/cheshire {:mvn/version "5.12.0"}}
+ :tasks
+ {:requires ([babashka.cli :as cli]
+             [logseq.cli.e2e.main :as main]
+             [logseq.cli.e2e.test-runner :as test-runner])
+  :init (def cli-opts
+          (cli/parse-opts
+           *command-line-args*
+           {:alias {:i :include}
+            :coerce {:include []
+                     :skip-build :boolean
+                     :verbose :boolean}}))
+
+  unit-test
+  {:doc "Run internal cli-e2e harness unit tests"
+   :task (test-runner/run! cli-opts)}
+
+  build
+  {:doc "Compile required CLI artifacts and verify expected outputs exist"
+   :task (main/build! cli-opts)}
+
+  list-cases
+  {:doc "List declared cli-e2e case ids"
+   :task (main/list-cases! cli-opts)}
+
+  test
+  {:doc "Run cli-e2e cases with build preflight unless --skip-build is provided"
+   :task (main/test! cli-opts)}}}

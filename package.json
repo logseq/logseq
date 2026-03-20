@@ -113,6 +113,8 @@
         "db-worker-node:bundle:normalize": "node ./scripts/build-db-worker-node-bundle.mjs",
         "db-worker-node:release:bundle": "run-s db-worker-node:release db-worker-node:ncc db-worker-node:bundle:normalize",
         "db-worker-node:compile:bundle": "run-s db-worker-node:compile db-worker-node:ncc db-worker-node:bundle:normalize",
+        "cli:e2e": "bb dev:cli-e2e",
+        "cli:e2e:skip-build": "bb dev:cli-e2e --skip-build",
         "cljs:dev-release-app": "clojure -M:cljs release app db-worker db-worker-node inference-worker --config-merge \"{:closure-defines {frontend.config/DEV-RELEASE true}}\"",
         "cljs:dev-release-electron": "clojure -M:cljs release app db-worker db-worker-node inference-worker electron --debug --config-merge \"{:closure-defines {frontend.config/DEV-RELEASE true}}\" && clojure -M:cljs release publishing",
         "cljs:debug": "clojure -M:cljs release app db-worker db-worker-node inference-worker --debug",

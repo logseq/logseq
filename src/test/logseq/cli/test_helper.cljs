@@ -14,17 +14,3 @@
     (-> (f)
         (p/finally (fn []
                      (gobj/set obj prop original))))))
-
-(defn with-stderr-write-capture
-  "Capture writes to `process.stderr.write` for the duration of an async body.
-
-  Calls `f` with an atom containing the accumulated stderr output."
-  [f]
-  (let [stderr (.-stderr js/process)
-        buffer (atom "")]
-    (with-js-property-override stderr "write"
-      (fn [chunk]
-        (swap! buffer str chunk)
-        true)
-      (fn []
-        (f buffer)))))
