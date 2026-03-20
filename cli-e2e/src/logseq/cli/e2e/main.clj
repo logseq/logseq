@@ -34,6 +34,8 @@
   (preflight/run! {:skip-build skip-build
                    :run-command run-command})
     (let [selected-cases (select-cases cases opts)
+          _ (when (and targeted-run? (:verbose opts))
+              (println "Selected" (count selected-cases) "cases:" (string/join ", " (map :id selected-cases))))
           coverage-result (when-not targeted-run?
                             (coverage/coverage-report inventory selected-cases))]
       (when (and coverage-result
@@ -44,7 +46,9 @@
       {:status :ok
        :cases selected-cases
        :coverage coverage-result
-       :results (mapv #(run-case % {:run-command run-command}) selected-cases)})))
+       :results (mapv #(do
+                         (when (:verbose opts) (println "Running case" (pr-str (:id %)) "..."))
+                         (run-case % {:run-command run-command})) selected-cases)})))
 
 (defn build!
   [opts]

@@ -57,6 +57,7 @@ jobs:
         uses: DeLaGuardo/setup-clojure@13.5
         with:
           cli: ${{ env.CLOJURE_VERSION }}
+          bb: ${{ env.BABASHKA_VERSION }}
 
       - name: Clojure cache
         uses: actions/cache@v4
@@ -90,6 +91,9 @@ jobs:
 
       - name: Run ClojureScript integration tests
         run: yarn cljs:run-integration-test
+
+      - name: Run CLI E2E tests
+        run: bb dev:cli-e2e --verbose --skip-build
 
   lint:
     runs-on: ubuntu-22.04
