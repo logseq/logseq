@@ -916,7 +916,10 @@
                   (.on "reset-custom-theme" (fn [^js themes]
                                               (let [themes (bean/->clj themes)
                                                     custom-theme (dissoc themes :mode)
-                                                    mode (:mode themes)]
+                                                    ;; Fall back to the user's current theme so that
+                                                    ;; installing a non-theme plugin does not flash
+                                                    ;; the UI back to light mode (#12434).
+                                                    mode (or (:mode themes) (:ui/theme @state/state))]
                                                 (state/set-custom-theme! {:light (if (nil? (:light custom-theme)) {:mode "light"} (:light custom-theme))
                                                                           :dark (if (nil? (:dark custom-theme)) {:mode "dark"} (:dark custom-theme))})
                                                 (state/set-theme-mode! mode))))
