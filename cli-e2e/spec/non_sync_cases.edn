@@ -1,0 +1,507 @@
+[
+ {:id "global-help"
+  :cmd "{{cli}} --help"
+  :expect {:exit 0
+           :stdout-contains ["Usage: logseq <command> [options]"
+                             "graph create"
+                             "completion"]}
+  :covers {:options {:global ["--help"]}}
+  :tags [:global :smoke]}
+
+ {:id "global-version"
+  :cmd "{{cli}} --version"
+  :expect {:exit 0
+           :stdout-contains ["Build time:" "Revision:"]}
+  :covers {:options {:global ["--version"]}}
+  :tags [:global :smoke]}
+
+ {:id "verbose-graph-list-json"
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json --verbose graph list"
+  :expect {:exit 0
+           :stderr-contains [":cli/parsed-options"]
+           :stdout-json-paths {[:status] "ok"}}
+  :covers {:commands ["graph list"]
+           :options {:global ["--config" "--data-dir" "--output" "--verbose"]}}
+  :tags [:global :graph]}
+
+ {:id "graph-create-and-info-json"
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null && {{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph info --graph {{graph-arg}}"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :graph] "{{graph}}"}}
+  :covers {:commands ["graph create" "graph info"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:graph :smoke]}
+
+ {:id "graph-list-human"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output human graph list"
+  :expect {:exit 0
+           :stdout-contains ["{{graph}}"]}
+  :covers {:commands ["graph list"]
+           :options {:global ["--config" "--data-dir" "--output"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:graph]}
+
+ {:id "graph-list-edn"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output edn graph list"
+  :expect {:exit 0
+           :stdout-edn-paths {[:status] :ok
+                              [:data :graphs] ["{{graph}}"]}}
+  :covers {:commands ["graph list"]
+           :options {:global ["--config" "--data-dir" "--output"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:graph]}
+
+ {:id "graph-switch-json"
+  :vars {:other-graph "graph-two"
+         :other-graph-arg "graph-two"}
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{other-graph-arg}} >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph switch --graph {{other-graph-arg}}"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :message] "switched to graph-two"}}
+  :covers {:commands ["graph switch"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"
+            "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{other-graph-arg}}"]
+  :tags [:graph]}
+
+ {:id "graph-validate-fix-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph validate --graph {{graph-arg}} --fix"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :result :errors] nil}}
+  :covers {:commands ["graph validate"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :graph ["--fix"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:graph]}
+
+ {:id "graph-export-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page ExportHome >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph export --graph {{graph-arg}} --type edn --file {{export-path-arg}}"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"}
+           :stdout-contains ["{{export-path}}"]}
+  :covers {:commands ["graph export"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :graph ["--type" "--file"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:graph]}
+
+ {:id "graph-import-json"
+  :vars {:source-graph "source-graph"
+         :source-graph-arg "source-graph"}
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{source-graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{source-graph-arg}} --page ImportSeed >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph export --graph {{source-graph-arg}} --type edn --file {{export-path-arg}} >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}}"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"}
+           :stdout-contains ["imported edn from" "{{export-path}}"]}
+  :covers {:commands ["graph import"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :graph ["--type" "--input"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{source-graph-arg}}"
+            "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:graph]}
+
+ {:id "page-upsert-and-list-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null && {{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list page --graph {{graph-arg}} --fields title,id --sort updated-at --order desc --limit 1"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :items 0 :title] "Home"}}
+  :covers {:commands ["upsert page" "list page"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :upsert ["--page"]
+                     :list ["--fields" "--limit" "--sort" "--order"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:upsert :list :smoke]}
+
+ {:id "block-upsert-and-show-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --content 'Alpha block' >/dev/null && {{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json show --graph {{graph-arg}} --page Home --level 2 --linked-references false"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :root :children 0 :title] "Alpha block"}}
+  :covers {:commands ["upsert block" "show"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :upsert ["--target-page" "--content"]
+                     :show ["--page" "--level" "--linked-references"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:upsert :show :smoke]}
+
+ {:id "tag-upsert-and-list-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name TagOne >/dev/null && {{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list tag --graph {{graph-arg}} --with-properties --sort updated-at --order desc --limit 1"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :items 0 :title] "TagOne"}}
+  :covers {:commands ["upsert tag" "list tag"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :upsert ["--name"]
+                     :list ["--with-properties" "--sort" "--order" "--limit"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:upsert :list]}
+
+ {:id "property-upsert-and-list-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name score --type number --cardinality one >/dev/null && {{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list property --graph {{graph-arg}} --with-type --sort updated-at --order desc --limit 1"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :items 0 :title] "score"
+                               [:data :items 0 :type] "number"}}
+  :covers {:commands ["upsert property" "list property"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :upsert ["--name" "--type" "--cardinality"]
+                     :list ["--with-type" "--sort" "--order" "--limit"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:upsert :list]}
+
+ {:id "list-tag-expand-offset-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name TagA >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name TagB >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list tag --graph {{graph-arg}} --expand --with-extends --sort updated-at --order desc --offset 0 --limit 20"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"}
+           :stdout-contains ["TagA" "TagB"]}
+  :covers {:commands ["list tag"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :list ["--expand" "--with-extends" "--offset" "--sort" "--order" "--limit"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:list]}
+
+ {:id "list-property-classes-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name alpha --type number --cardinality one >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name beta --type number --cardinality one >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list property --graph {{graph-arg}} --with-classes --sort updated-at --order desc --offset 0 --limit 20"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"}
+           :stdout-contains ["alpha" "beta"]}
+  :covers {:commands ["list property"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :list ["--with-classes" "--sort" "--order" "--offset" "--limit"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:list]}
+
+ {:id "list-page-journal-only-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list page --graph {{graph-arg}} --journal-only"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :items] []}}
+  :covers {:commands ["list page"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :list ["--journal-only"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:list]}
+
+ {:id "block-upsert-blocks-file-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --content 'Anchor block' >/dev/null"
+          "printf '[{:block/title \"Inserted from file\"}]' > {{export-path-arg}}"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output human upsert block --graph {{graph-arg}} --target-id \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Anchor block\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\" --blocks-file {{export-path-arg}} --pos sibling >/dev/null && {{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output human show --graph {{graph-arg}} --page Home"
+  :expect {:exit 0
+           :stdout-contains ["Inserted from file"]}
+  :covers {:commands ["upsert block"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :upsert ["--blocks-file" "--target-id" "--pos"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:upsert]}
+
+ {:id "block-upsert-target-uuid-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --content 'Anchor block' >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output human upsert block --graph {{graph-arg}} --target-uuid \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?uuid . :where [?e :block/title \"Anchor block\"] [?e :block/uuid ?uuid]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\" --content 'Inserted by uuid' >/dev/null && {{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output human show --graph {{graph-arg}} --page Home"
+  :expect {:exit 0
+           :stdout-contains ["Inserted by uuid"]}
+  :covers {:commands ["upsert block"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :upsert ["--target-uuid"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:upsert]}
+
+ {:id "block-upsert-update-id-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --content 'Alpha block' >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output human upsert block --graph {{graph-arg}} --id \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Alpha block\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\" --content 'Updated by id' --status doing --update-tags '[:logseq.class/Quote-block]' --update-properties '{:logseq.property/publishing-public? true}' >/dev/null && {{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output human show --graph {{graph-arg}} --page Home"
+  :expect {:exit 0
+           :stdout-contains ["Updated by id"]}
+  :covers {:commands ["upsert block"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :upsert ["--id" "--status" "--update-tags" "--update-properties"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:upsert]}
+
+ {:id "block-upsert-update-uuid-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --content 'Alpha block' --update-tags '[:logseq.class/Quote-block]' --update-properties '{:logseq.property/publishing-public? true}' >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output human upsert block --graph {{graph-arg}} --uuid \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?uuid . :where [?e :block/title \"Alpha block\"] [?e :block/uuid ?uuid]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\" --content 'Updated by uuid' --remove-tags '[:logseq.class/Quote-block]' --remove-properties '[:logseq.property/publishing-public?]' >/dev/null && {{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output human show --graph {{graph-arg}} --page Home"
+  :expect {:exit 0
+           :stdout-contains ["Updated by uuid"]}
+  :covers {:commands ["upsert block"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :upsert ["--uuid" "--remove-tags" "--remove-properties"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:upsert]}
+
+ {:id "property-upsert-update-id-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name score --type number --cardinality one >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --id \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list property --graph {{graph-arg}} --fields title,id --limit 200 --sort updated-at --order desc | python3 -c 'import sys,json; print(next(item[\"id\"] for item in json.load(sys.stdin)[\"data\"][\"items\"] if item[\"title\"] == \"score\"))')\" --hide true --public false"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"}}
+  :covers {:commands ["upsert property"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :upsert ["--id" "--hide" "--public"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:upsert]}
+
+ {:id "query-custom-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --content 'Alpha block' >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?title . :where [?b :block/title ?title] [(= ?title \"Alpha block\")]]'"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :result] "Alpha block"}}
+  :covers {:commands ["query"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :query ["--query"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:query]}
+
+ {:id "query-named-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --name recent-updated --inputs '[1]'"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"}}
+  :covers {:commands ["query"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :query ["--name" "--inputs"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:query]}
+
+ {:id "query-list-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json query list --graph {{graph-arg}}"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :queries 0 :name] "block-search"}}
+  :covers {:commands ["query list"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:query]}
+
+ {:id "show-id-human"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --content 'Alpha block' >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}} --output human show --id \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}} --output human query --query '[:find ?e . :where [?e :block/title \"Alpha block\"]]')\""
+  :expect {:exit 0
+           :stdout-contains ["Alpha block"]}
+  :covers {:commands ["show"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :show ["--id"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:show]}
+
+ {:id "show-uuid-human"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --content 'Alpha block' >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}} --output human show --uuid \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}} --output json query --query '[:find ?uuid . :where [?e :block/title \"Alpha block\"] [?e :block/uuid ?uuid]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\""
+  :expect {:exit 0
+           :stdout-contains ["Alpha block"]}
+  :covers {:commands ["show"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :show ["--uuid"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:show]}
+
+ {:id "show-stdin-id-human"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --content 'Alpha block' >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}} --output human query --query '[:find [?e ...] :in $ ?q :where [?e :block/title ?title] [(clojure.string/includes? ?title ?q)]]' --inputs '[\"Alpha\"]' | {{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}} --output human show --id"
+  :expect {:exit 0
+           :stdout-contains ["Alpha block"]}
+  :covers {:commands ["show"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :show ["stdin:--id"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:show :pipe]}
+
+ {:id "remove-page-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json remove page --graph {{graph-arg}} --name Home"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :result] true}}
+  :covers {:commands ["remove page"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :remove ["--name"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:remove]}
+
+ {:id "graph-remove-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}} >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph remove --graph {{graph-arg}}"
+  :expect {:exit 1
+           :stdout-contains ["graph-not-removed"]}
+  :covers {:commands ["graph remove"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]}}
+  :tags [:graph :remove]}
+
+ {:id "remove-block-uuid-human"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --content 'Alpha block' >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output human remove block --graph {{graph-arg}} --uuid \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?uuid . :where [?e :block/title \"Alpha block\"] [?e :block/uuid ?uuid]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\" >/dev/null && {{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output human show --graph {{graph-arg}} --page Home --linked-references false"
+  :expect {:exit 0
+           :stdout-not-contains ["Alpha block"]}
+  :covers {:commands ["remove block"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :remove ["--uuid"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:remove]}
+
+ {:id "remove-tag-id-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name TagOne >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json remove tag --graph {{graph-arg}} --id \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list tag --graph {{graph-arg}} --fields title,id --limit 200 --sort updated-at --order desc | python3 -c 'import sys,json; print(next(item[\"id\"] for item in json.load(sys.stdin)[\"data\"][\"items\"] if item[\"title\"] == \"TagOne\"))')\" >/dev/null && {{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list tag --graph {{graph-arg}} --fields title,id"
+  :expect {:exit 0
+           :stdout-not-contains ["TagOne"]}
+  :covers {:commands ["remove tag"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :remove ["--id"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:remove]}
+
+ {:id "remove-property-id-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name score --type number --cardinality one >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json remove property --graph {{graph-arg}} --id \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list property --graph {{graph-arg}} --fields title,id --limit 200 --sort updated-at --order desc | python3 -c 'import sys,json; print(next(item[\"id\"] for item in json.load(sys.stdin)[\"data\"][\"items\"] if item[\"title\"] == \"score\"))')\" >/dev/null && {{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list property --graph {{graph-arg}} --fields title,id"
+  :expect {:exit 0
+           :stdout-not-contains ["score"]}
+  :covers {:commands ["remove property"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :remove ["--id"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:remove]}
+
+ {:id "server-status-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server status --graph {{graph-arg}}"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :repo] "{{graph}}"
+                               [:data :status] "ready"}}
+  :covers {:commands ["server status"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :server ["--graph"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:server]}
+
+ {:id "server-list-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server list"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :servers 0 :repo] "{{graph}}"}}
+  :covers {:commands ["server list"]
+           :options {:global ["--config" "--data-dir" "--output"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:server]}
+
+ {:id "server-restart-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server restart --graph {{graph-arg}}"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :repo] "{{graph}}"
+                               [:data :owned?] true}}
+  :covers {:commands ["server restart"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :server ["--graph"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:server]}
+
+ {:id "server-stop-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :repo] "{{graph}}"}}
+  :covers {:commands ["server stop"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :server ["--graph"]}}
+  :tags [:server]}
+
+ {:id "server-start-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}} >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server start --graph {{graph-arg}}"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :repo] "{{graph}}"
+                               [:data :owned?] true}}
+  :covers {:commands ["server start"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :server ["--graph"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:server]}
+
+ {:id "completion-zsh"
+  :cmd "{{cli}} completion zsh"
+  :expect {:exit 0
+           :stdout-contains ["#compdef logseq"
+                             "Auto-generated by `logseq completion zsh`"]}
+  :covers {:commands ["completion"]
+           :options {:completion ["zsh"]}}
+  :tags [:completion :smoke]}
+
+ {:id "completion-bash-flag"
+  :cmd "{{cli}} completion --shell bash"
+  :expect {:exit 0
+           :stdout-contains ["Auto-generated by `logseq completion bash`"
+                             "_logseq_json_names_bash"]}
+  :covers {:commands ["completion"]
+           :options {:completion ["--shell" "bash"]}}
+  :tags [:completion]}
+
+ {:id "completion-invalid-shell"
+  :cmd "{{cli}} completion fish"
+  :expect {:exit 1
+           :stdout-contains ["unsupported shell: fish"]}
+  :covers {:commands ["completion"]}
+  :tags [:completion]}
+
+ {:id "doctor-dev-script-json"
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json doctor --dev-script"
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :status] "ok"
+                               [:data :checks 0 :id] "db-worker-script"}
+           :stdout-contains ["static/db-worker-node.js"]}
+  :covers {:commands ["doctor"]
+           :options {:global ["--config" "--data-dir" "--output"]
+                     :doctor ["--dev-script"]}}
+  :tags [:doctor :smoke]}
+]
