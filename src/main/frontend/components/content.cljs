@@ -32,7 +32,7 @@
 
 ;; TODO i18n support
 
-(rum/defc custom-context-menu-content
+(rum/defc ^:large-vars/cleanup-todo custom-context-menu-content
   []
   (let [[set-icon-sub-menu-open? set-icon-sub-menu-open] (rum/use-state false)]
     [:<>
