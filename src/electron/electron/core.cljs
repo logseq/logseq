@@ -1,7 +1,7 @@
 (ns electron.core
   (:require ["/electron/utils" :as js-utils]
             ["electron" :refer [BrowserWindow Menu app protocol ipcMain dialog shell] :as electron]
-            ["electron-deeplink" :refer [Deeplink]]
+
             ["os" :as os]
             ["path" :as node-path]
             [cljs-bean.core :as bean]
@@ -56,9 +56,20 @@
     (when (= (str LSP_SCHEME ":") (.-protocol parsed-url))
       (logseq-url-handler win parsed-url))))
 
-(defn setup-interceptor! [^js app']
-  (.setAsDefaultProtocolClient app' LSP_SCHEME)
+(defn- register-default-protocol-client!
+  "Register Logseq as the default handler for the custom protocol.
+   Windows dev runs launched through the Electron binary need the entry
+   script path passed explicitly so the OS can relaunch the same app."
+  [^js app']
+  (if (and utils/win32? (.-defaultApp js/process))
+    (let [main-script (aget (.-argv js/process) 1)
+          args (if main-script
+                 #js [(.resolve node-path main-script)]
+                 #js [])]
+      (.setAsDefaultProtocolClient app' LSP_SCHEME (.-execPath js/process) args))
+    (.setAsDefaultProtocolClient app' LSP_SCHEME)))
 
+(defn setup-interceptor! [_app]
   (.registerFileProtocol
    protocol FILE_ASSETS_SCHEME
    (fn [^js request callback]
@@ -219,20 +230,26 @@
         menu (.buildFromTemplate Menu (clj->js template))]
     (.setApplicationMenu Menu menu)))
 
+(defn- find-deeplink-url
+  "Extract a deeplink URL from a sequence of command-line argument strings."
+  [args]
+  (some #(when (string/starts-with? % (str LSP_SCHEME ":")) %) args))
+
 (defn- setup-deeplink! []
-  ;; Works for Deeplink v1.0.9
-  ;; :mainWindow is only used for handling window restoring on second-instance,
-  ;; But we already handle window restoring without deeplink.
-  ;; https://github.com/glawson/electron-deeplink/blob/73d58edcde3d0e80b1819cd68a0c6e837a9c9258/src/index.ts#L150-L155
-  (-> (Deeplink. #js
-                  {:app app
-                   :mainWindow nil
-                   :protocol LSP_SCHEME
-                   :isDev dev?})
-      (.on "received"
-           (fn [url]
-             (when-let [win @*win]
-               (open-url-handler win url))))))
+  ;; macOS: app fires open-url for custom-protocol links when the app is already running
+  (.on app "open-url"
+       (fn [^js event url]
+         (.preventDefault event)
+         (when-let [win @*win]
+           (open-url-handler win url)))))
+
+(defn- handle-initial-deeplink!
+  "On Windows/Linux, the protocol URL is passed as a command-line argument
+   on the first launch. Call this after the main window is ready."
+  [win]
+  (when-not mac?
+    (when-let [url (find-deeplink-url (rest (js->clj (.-argv js/process))))]
+      (open-url-handler win url))))
 
 (defn- on-app-ready!
   [^js app']
@@ -254,6 +271,9 @@
            (js-utils/disableXFrameOptions win)
 
            (db/ensure-graphs-dir!)
+
+           ;; Windows/Linux: handle deeplink URL passed on first launch via argv
+           (handle-initial-deeplink! win)
 
            (vreset! *setup-fn
                     (fn []
@@ -316,13 +336,17 @@
                                           :bypassCSP       false
                                           :supportFetchAPI false}}]))
 
+      (register-default-protocol-client! app)
       (set-app-menu!)
       (setup-deeplink!)
 
       (.on app "second-instance"
-           (fn [_event _commandLine _workingDirectory]
+           (fn [_event ^js command-line _working-directory]
              (when-let [window @*win]
-               (win/switch-to-window! window))))
+               (win/switch-to-window! window)
+               ;; Windows/Linux: deeplink URL may appear in subsequent-instance commandLine
+               (when-let [url (find-deeplink-url (rest (js->clj command-line)))]
+                 (open-url-handler window url)))))
 
       (.on app "window-all-closed" (fn []
                                      (logger/debug "window-all-closed" "Quitting...")

@@ -27,7 +27,6 @@
     "abort-controller": "3.0.0",
     "command-exists": "1.2.9",
     "diff-match-patch": "1.0.5",
-    "electron-deeplink": "1.0.10",
     "electron-dl": "4.0.0",
     "electron-log": "5.4.3",
     "electron-squirrel-startup": "1.0.1",
