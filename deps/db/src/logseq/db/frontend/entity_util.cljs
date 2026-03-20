@@ -87,8 +87,14 @@
            (recycled-parent? (:block/parent entity) #{}))))))
 
 (defn object?
+  "Given a map, check if it is a tagged block"
   [node]
   (seq (:block/tags node)))
+
+(defn normal-block?
+  "Given a map, check if it is a block (works both for pages and normal blocks, but doesnt include 'reaction' or 'property history' blocks)"
+  [entity]
+  (and (:block/uuid entity) (:block/title entity)))
 
 (defn get-entity-types
   "Get entity types from :block/tags"
