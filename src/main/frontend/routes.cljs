@@ -11,6 +11,7 @@
             [frontend.components.repo :as repo]
             [frontend.components.settings :as settings]
             [frontend.components.user.login :as login]
+            [frontend.components.repl :as repl]
             [frontend.config :as config]
             [logseq.shui.demo :as shui]))
 
@@ -80,4 +81,9 @@
    (when config/dev?
      ["/ui"
       {:name :ui
-       :view shui/page}])])
+       :view shui/page}])
+
+   (when config/dev?
+     ["/repl"
+      {:name :repl
+       :view repl/repl-page}])])
