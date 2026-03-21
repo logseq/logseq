@@ -9,12 +9,15 @@
 - `src/electron/` is Electron-specific code.
 - `src/test/` contains unit tests.
 - `deps/` contains internal dependencies/modules.
-- `clj-e2e/` contains end-to-end tests.
+- `clj-e2e/` contains app end-to-end tests (Playwright + Clojure test runner).
+- `cli-e2e/` contains shell-first end-to-end tests for compiled `logseq-cli` and `db-worker-node`.
 
 ## Build, Test, and Development Commands
 - `bb dev:lint-and-test` runs linters and unit tests.
 - `bb dev:test -v <namespace/testcase-name>` runs a single unit test (example: `bb dev:test -v logseq.some-test/foo`).
-- E2E tests live in `clj-e2e/`; run them from that directory if needed.
+- App E2E tests live in `clj-e2e/`; run from that directory with `bb test` (or `bb -f clj-e2e/bb.edn test` from repo root).
+- CLI E2E tests live in `cli-e2e/`; run with `bb -f cli-e2e/bb.edn test --skip-build` (or `bb -f cli-e2e/bb.edn build` first when needed).
+- If a request says only “e2e”, clarify whether it targets `clj-e2e/` or `cli-e2e/` before planning changes.
 
 ## Coding Style & Naming Conventions
 - ClojureScript keywords are defined via `logseq.common.defkeywords/defkeyword`; use existing keywords and add new ones in the shared definitions.
