@@ -276,9 +276,62 @@
 
     nil))
 
-(defn- derive-inverse-outliner-ops
-  [db-before tx-meta]
+(defn- created-block-uuids-from-tx-data
+  [tx-data]
+  (->> tx-data
+       (keep (fn [item]
+               (cond
+                 (and (map? item) (:block/uuid item))
+                 (:block/uuid item)
+
+                 (and (some? (:a item))
+                      (= :block/uuid (:a item))
+                      (true? (:added item))
+                      (uuid? (:v item)))
+                 (:v item)
+
+                 (and (vector? item)
+                      (= :db/add (first item))
+                      (>= (count item) 4)
+                      (= :block/uuid (nth item 2))
+                      (uuid? (nth item 3)))
+                 (nth item 3)
+
+                 :else
+                 nil)))
+       distinct
+       vec))
+
+(defn- canonicalize-history-outliner-op
+  [db tx-data [op args :as op-entry]]
+  (case op
+    :insert-blocks
+    (let [[blocks target-id opts] args
+          created-uuids (created-block-uuids-from-tx-data tx-data)
+          blocks' (if (and (not (:keep-uuid? opts))
+                           (= (count blocks) (count created-uuids)))
+                    (mapv (fn [block uuid]
+                            (assoc block :block/uuid uuid))
+                          blocks
+                          created-uuids)
+                    blocks)]
+      [:insert-blocks [blocks'
+                       (stable-entity-ref db target-id)
+                       (assoc (dissoc (or opts {}) :outliner-op)
+                              :keep-uuid? true)]])
+
+    op-entry))
+
+(defn- canonicalize-history-outliner-ops
+  [db tx-data tx-meta]
   (some->> (:outliner-ops tx-meta)
+           (map #(canonicalize-history-outliner-op db tx-data %))
+           vec
+           seq))
+
+(defn- derive-inverse-outliner-ops
+  [db-before forward-outliner-ops]
+  (some->> forward-outliner-ops
            (map (fn [[op args :as op-entry]]
                   (case op
                     :save-block
@@ -301,11 +354,11 @@
            seq))
 
 (defn- ensure-history-action-metadata
-  [{:keys [db-before tx-meta] :as data}]
-  (let [forward-outliner-ops (some-> (:outliner-ops tx-meta) vec seq)
-        inverse-outliner-ops (derive-inverse-outliner-ops db-before tx-meta)]
+  [{:keys [db-before db-after tx-data tx-meta] :as data}]
+  (let [forward-outliner-ops (canonicalize-history-outliner-ops db-after tx-data tx-meta)
+        inverse-outliner-ops (derive-inverse-outliner-ops db-before forward-outliner-ops)]
     (cond-> (-> data
-                (dissoc :db-before)
+                (dissoc :db-before :db-after)
                 (assoc
                  :db-sync/tx-id (or (:db-sync/tx-id tx-meta) (random-uuid))))
       forward-outliner-ops
@@ -323,6 +376,7 @@
   (let [forward-outliner-ops' (if undo? inverse-outliner-ops forward-outliner-ops)
         inverse-outliner-ops' (if undo? forward-outliner-ops inverse-outliner-ops)]
     (cond-> (-> tx-meta
+                (dissoc :db-sync/tx-id)
                 (assoc
                  :gen-undo-ops? false
                  :undo? undo?
@@ -572,6 +626,7 @@
                            :tx-meta tx-meta
                            :added-ids added-ids
                            :retracted-ids retracted-ids
+                           :db-after db-after
                            :db-before db-before})
             op (->> [(when editor-info [::record-editor-info editor-info])
                      [::db-transact

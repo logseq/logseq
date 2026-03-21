@@ -76,7 +76,7 @@
        (remove (fn [[_op e]]
                  (contains? rtc-const/ignore-entities-when-init-upload e)))))
 
-(declare stable-entity-ref ref-attr? replay-canonical-outliner-op! canonicalize-outliner-ops)
+(declare stable-entity-ref ref-attr? worker-ref-attr? replay-canonical-outliner-op! canonicalize-outliner-ops)
 
 (defn reverse-tx-data [_db-before db-after tx-data]
   (->> tx-data
@@ -344,6 +344,21 @@
        distinct
        vec))
 
+(defn- maybe-rewrite-delete-block-ids
+  [db tx-data ids]
+  (let [ids' (stable-id-coll db ids)
+        created-uuids (created-block-uuids-from-tx-data tx-data)
+        unresolved-created-lookups? (and (seq created-uuids)
+                                         (= (count ids') (count created-uuids))
+                                         (every? (fn [id]
+                                                   (and (vector? id)
+                                                        (= :block/uuid (first id))
+                                                        (nil? (d/entity db id))))
+                                                 ids'))]
+    (if unresolved-created-lookups?
+      (mapv (fn [uuid] [:block/uuid uuid]) created-uuids)
+      ids')))
+
 (defn- canonicalize-semantic-outliner-op
   [db tx-data [op args]]
   (case op
@@ -390,7 +405,7 @@
 
     :delete-blocks
     (let [[ids opts] args]
-      [:delete-blocks [(stable-id-coll db ids) opts]])
+      [:delete-blocks [(maybe-rewrite-delete-block-ids db tx-data ids) opts]])
 
     :create-page
     (let [[title opts] args
@@ -589,14 +604,13 @@
        (not (:redo? tx-meta))
        (not= :batch-import-edn (:outliner-op tx-meta))))
 
-(defn- persist-local-tx! [repo db-before tx-data normalized-tx-data reversed-datoms tx-meta]
+(defn- persist-local-tx! [repo db-before db-after tx-data normalized-tx-data reversed-datoms tx-meta]
   (when-let [conn (client-ops-conn repo)]
     (let [tx-id (or (:db-sync/tx-id tx-meta) (random-uuid))
           now (.now js/Date)
-          graph-db (some-> (worker-state/get-datascript-conn repo) deref)
-          outliner-ops (canonicalize-outliner-ops graph-db tx-meta tx-data)
+          outliner-ops (canonicalize-outliner-ops db-after tx-meta tx-data)
           inverse-outliner-ops (canonicalize-explicit-outliner-ops
-                                graph-db
+                                db-after
                                 tx-data
                                 (or (:db-sync/inverse-outliner-ops tx-meta)
                                     (build-worker-inverse-outliner-ops db-before outliner-ops)))
@@ -686,7 +700,10 @@
             tx-meta' (cond-> (merge {:local-tx? true
                                      :gen-undo-ops? false
                                      :persist-op? true}
-                                    tx-meta)
+                                    (dissoc tx-meta :db-sync/tx-id))
+                       (seq ops)
+                       (assoc :outliner-ops (vec ops))
+
                        (:outliner-op action)
                        (assoc :outliner-op (:outliner-op action))
 
@@ -1176,7 +1193,7 @@
         (let [normalized (normalize-tx-data db-after db-before tx-data)
               reversed-datoms (reverse-tx-data db-before db-after tx-data)]
           (when (seq normalized)
-            (persist-local-tx! repo db-before tx-data normalized reversed-datoms tx-meta)
+            (persist-local-tx! repo db-before db-after tx-data normalized reversed-datoms tx-meta)
             (when-let [client @worker-state/*db-sync-client]
               (when (= repo (:repo client))
                 (let [send-queue (:send-queue client)]

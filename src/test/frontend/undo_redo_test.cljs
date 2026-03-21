@@ -290,6 +290,69 @@
         (is (= child-uuid
                (get-in data [:db-sync/inverse-outliner-ops 0 1 0 :block/uuid])))))))
 
+(deftest undo-history-records-forward-ops-for-editor-save-block-test
+  (testing "editor/save-block! keeps forward semantic ops so redo can replay save-block"
+    (undo-redo/clear-history! test-db)
+    (let [conn (db/get-db test-db false)
+          {:keys [child-uuid]} (seed-page-parent-child!)]
+      (editor/save-block! test-db child-uuid "saved via editor")
+      (let [undo-op (last (get @undo-redo/*undo-ops test-db))
+            data (some #(when (= ::undo-redo/db-transact (first %))
+                          (second %))
+                       undo-op)]
+        (is (= :save-block (ffirst (:db-sync/forward-outliner-ops data))))
+        (is (= child-uuid
+               (get-in data [:db-sync/forward-outliner-ops 0 1 0 :block/uuid])))
+        (is (= "saved via editor"
+               (get-in data [:db-sync/forward-outliner-ops 0 1 0 :block/title])))
+        (is (= "saved via editor"
+               (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))
+
+(deftest undo-redo-action-meta-drops-original-tx-id-test
+  (testing "undo/redo-generated tx-meta should keep source-tx-id without reusing the original tx-id"
+    (let [tx-id (random-uuid)
+          data {:tx-meta {:outliner-op :save-block
+                          :db-sync/tx-id tx-id}
+                :db-sync/tx-id tx-id
+                :db-sync/forward-outliner-ops [[:save-block [{:block/uuid (random-uuid)
+                                                              :block/title "hello"} nil]]]
+                :db-sync/inverse-outliner-ops [[:save-block [{:block/uuid (random-uuid)
+                                                              :block/title ""} nil]]]}
+          tx-meta (#'undo-redo/undo-redo-action-meta data false)]
+      (is (nil? (:db-sync/tx-id tx-meta)))
+      (is (= tx-id (:db-sync/source-tx-id tx-meta))))))
+
+(deftest undo-history-canonicalizes-insert-block-uuids-test
+  (testing "undo history uses the created block uuid for insert semantic ops"
+    (undo-redo/clear-history! test-db)
+    (let [conn (db/get-db test-db false)
+          {:keys [page-uuid]} (seed-page-parent-child!)
+          page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))
+          requested-uuid (random-uuid)]
+      (outliner-op/apply-ops! conn
+                              [[:insert-blocks [[{:block/title "semantic insert"
+                                                  :block/uuid requested-uuid}]
+                                                page-id
+                                                {:sibling? false}]]]
+                              {:client-id (:client-id @state/state)
+                               :local-tx? true})
+      (let [inserted-id (d/q '[:find ?e .
+                               :in $ ?title
+                               :where
+                               [?e :block/title ?title]]
+                             @conn
+                             "semantic insert")
+            inserted (d/entity @conn inserted-id)
+            inserted-uuid (:block/uuid inserted)
+            undo-op (last (get @undo-redo/*undo-ops test-db))
+            data (some #(when (= ::undo-redo/db-transact (first %))
+                          (second %))
+                       undo-op)]
+        (is (= inserted-uuid
+               (get-in data [:db-sync/forward-outliner-ops 0 1 0 0 :block/uuid])))
+        (is (= inserted-uuid
+               (second (first (get-in data [:db-sync/inverse-outliner-ops 0 1 0])))))))))
+
 (deftest undo-conflict-clears-history-test
   (testing "undo clears history when reverse tx is unsafe"
     (undo-redo/clear-history! test-db)
