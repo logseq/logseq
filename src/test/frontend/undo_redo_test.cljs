@@ -268,6 +268,28 @@
         (finally
           (d/unlisten! conn ::capture-tx-meta))))))
 
+(deftest undo-history-records-semantic-action-metadata-test
+  (testing "undo history stores a logical action id and semantic forward/inverse ops"
+    (undo-redo/clear-history! test-db)
+    (let [conn (db/get-db test-db false)
+          {:keys [child-uuid]} (seed-page-parent-child!)]
+      (outliner-op/apply-ops! conn
+                              [[:save-block [{:block/uuid child-uuid
+                                              :block/title "semantic-save"} {}]]]
+                              {:client-id (:client-id @state/state)
+                               :local-tx? true})
+      (let [undo-op (last (get @undo-redo/*undo-ops test-db))
+            data (some #(when (= ::undo-redo/db-transact (first %))
+                          (second %))
+                       undo-op)]
+        (is (uuid? (:db-sync/tx-id data)))
+        (is (= :save-block (ffirst (:db-sync/forward-outliner-ops data))))
+        (is (= :save-block (ffirst (:db-sync/inverse-outliner-ops data))))
+        (is (= child-uuid
+               (get-in data [:db-sync/forward-outliner-ops 0 1 0 :block/uuid])))
+        (is (= child-uuid
+               (get-in data [:db-sync/inverse-outliner-ops 0 1 0 :block/uuid])))))))
+
 (deftest undo-conflict-clears-history-test
   (testing "undo clears history when reverse tx is unsafe"
     (undo-redo/clear-history! test-db)
