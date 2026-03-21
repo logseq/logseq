@@ -12,7 +12,7 @@
   org.clj-commons/digest
   {:mvn/version "1.4.100"}
   cheshire/cheshire
-  {:mvn/version "6.1.0"}}
+  {:mvn/version "6.2.0"}}
  :pods
  {clj-kondo/clj-kondo {:version "2026.01.19"}
   org.babashka/fswatcher {:version "0.0.7"}

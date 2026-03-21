@@ -19,7 +19,7 @@
  ;; since this is how its normally run in the app but this requires more setup
  ;; with karma, shadow-cljs.edn and headless mode on CI
  {:test {:extra-paths ["test"]
-         :extra-deps  {olical/cljs-test-runner   {:mvn/version "3.8.0"}
+         :extra-deps  {olical/cljs-test-runner   {:mvn/version "3.8.1"}
                        org.clojure/clojurescript {:mvn/version "1.11.132"}
                        logseq/outliner {:local/root "../outliner"}}
          :main-opts   ["-m" "cljs-test-runner.main"]}
