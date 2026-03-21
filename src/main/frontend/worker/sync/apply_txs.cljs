@@ -15,6 +15,7 @@
             [frontend.worker.sync.presence :as sync-presence]
             [frontend.worker.sync.transport :as sync-transport]
             [lambdaisland.glogi :as log]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db-sync.order :as sync-order]
             [logseq.db.common.normalize :as db-normalize]
@@ -171,6 +172,9 @@
     :delete-property-value
     :batch-delete-property-value
     :create-property-text-block
+    :upsert-property
+    :class-add-property
+    :class-remove-property
     :upsert-closed-value
     :add-existing-values-to-closed-values
     :delete-closed-value})
@@ -327,6 +331,50 @@
                  uuid')))
            grouped))))
 
+(defn- created-db-ident-from-tx-data
+  [tx-data]
+  (or
+   (some (fn [item]
+           (when (and (map? item)
+                      (qualified-keyword? (:db/ident item)))
+             (:db/ident item)))
+         tx-data)
+   (some (fn [item]
+           (when (and (map? item)
+                      (= :db/ident (:a item))
+                      (qualified-keyword? (:v item)))
+             (:v item)))
+         tx-data)
+   (some (fn [item]
+           (when (and (vector? item)
+                      (keyword? (nth item 1 nil))
+                      (= :db/ident (nth item 1 nil))
+                      (qualified-keyword? (nth item 2 nil)))
+             (nth item 2)))
+         tx-data)
+   (some (fn [item]
+           (when (and (vector? item)
+                      (= :db/add (first item))
+                      (>= (count item) 4)
+                      (= :db/ident (nth item 2))
+                      (qualified-keyword? (nth item 3)))
+             (nth item 3)))
+         tx-data)))
+
+(defn- property-ident-by-title
+  [db property-name]
+  (some-> (d/q '[:find ?ident .
+                 :in $ ?title
+                 :where
+                 [?e :block/title ?title]
+                 [?e :block/tags :logseq.class/Property]
+                 [?e :db/ident ?ident]]
+               db
+               property-name)
+          (as-> ident
+                (when (qualified-keyword? ident)
+                  ident))))
+
 (defn- maybe-rewrite-delete-block-ids
   [db tx-data ids]
   (let [ids' (stable-id-coll db ids)
@@ -465,6 +513,21 @@
     (let [[block-id property-id value opts] args]
       [:create-property-text-block [(stable-entity-ref db block-id) (stable-entity-ref db property-id) value opts]])
 
+    :upsert-property
+    (let [[property-id schema opts] args
+          property-id' (or (stable-entity-ref db property-id)
+                           (property-ident-by-title db (:property-name opts))
+                           (created-db-ident-from-tx-data tx-data))]
+      [:upsert-property [property-id' schema opts]])
+
+    :class-add-property
+    (let [[class-id property-id] args]
+      [:class-add-property [(stable-entity-ref db class-id) (stable-entity-ref db property-id)]])
+
+    :class-remove-property
+    (let [[class-id property-id] args]
+      [:class-remove-property [(stable-entity-ref db class-id) (stable-entity-ref db property-id)]])
+
     :upsert-closed-value
     (let [[property-id opts] args]
       [:upsert-closed-value [property-id opts]])
@@ -564,6 +627,14 @@
                       (when page-uuid
                         [:delete-page [page-uuid {}]]))
 
+                    :upsert-property
+                    (let [[property-id _schema _opts] args
+                          property-before (when (qualified-keyword? property-id)
+                                            (d/entity db-before property-id))]
+                      (when (and (qualified-keyword? property-id)
+                                 (nil? property-before))
+                        [:delete-page [(common-uuid/gen-uuid :db-ident-block-uuid property-id) {}]]))
+
                     nil)))
            (remove nil?)
            (mapcat #(if (and (sequential? %)
@@ -659,7 +730,9 @@
     (let [tx-id (or (:db-sync/tx-id tx-meta) (random-uuid))
           now (.now js/Date)
           outliner-ops (canonicalize-outliner-ops db-after tx-meta tx-data)
-          built-inverse-outliner-ops (build-worker-inverse-outliner-ops db-before outliner-ops)
+          built-inverse-outliner-ops (some-> (build-worker-inverse-outliner-ops db-before outliner-ops)
+                                             seq
+                                             vec)
           inverse-outliner-ops (if (has-replace-empty-target-insert-op? outliner-ops)
                                  built-inverse-outliner-ops
                                  (if-let [explicit-inverse-outliner-ops (:db-sync/inverse-outliner-ops tx-meta)]
@@ -739,10 +812,16 @@
 
 (defn- history-action-ops
   [{:keys [forward-outliner-ops inverse-outliner-ops outliner-ops]} undo?]
-  (let [semantic-undo-supported-forward-ops
+  (let [usable-ops (fn [ops]
+                     (let [ops' (some-> ops seq vec)]
+                       (when (and (seq ops')
+                                  (not= canonical-transact-op ops'))
+                         ops')))
+        semantic-undo-supported-forward-ops
         #{:save-block
           :insert-blocks
           :create-page
+          :upsert-property
           :move-blocks-up-down
           :indent-outdent-blocks}
         semantic-undo-complete? (and (seq inverse-outliner-ops)
@@ -753,14 +832,29 @@
               (when semantic-undo-complete?
                 inverse-outliner-ops)
               forward-outliner-ops)]
-    (or (some-> ops seq vec)
-        (when (and (not undo?)
-                   (not= canonical-transact-op outliner-ops))
-          (some-> outliner-ops seq vec)))))
+    (or (usable-ops ops)
+        (when-not undo?
+          (usable-ops outliner-ops)))))
 
 (defn- history-action-tx-data
   [{:keys [tx reversed-tx]} undo?]
   (some-> (if undo? reversed-tx tx) seq vec))
+
+(defn- apply-history-action-tx!
+  [conn tx-data tx-meta]
+  (try
+    (d/with @conn tx-data {:outliner-op :transact
+                           :persist-op? false})
+    (ldb/transact! conn tx-data tx-meta)
+    {:applied? true :source :raw-tx}
+    (catch :default error
+      (log/debug :db-sync/drop-history-action-raw-tx
+                 {:reason :invalid-history-action-tx
+                  :tx-meta tx-meta
+                  :error error})
+      {:applied? false
+       :reason :invalid-history-action-tx
+       :error error})))
 
 (defn apply-history-action!
   [repo tx-id undo? tx-meta]
@@ -791,19 +885,28 @@
                                        (:inverse-outliner-ops action)))))]
         (cond
           (seq ops)
-          (do
+          (try
             (ldb/batch-transact!
              conn
              tx-meta'
              (fn [row-conn _*batch-tx-data]
                (doseq [op ops]
                  (replay-canonical-outliner-op! row-conn op))))
-            {:applied? true :source :semantic-ops})
+            {:applied? true :source :semantic-ops}
+            (catch :default error
+              (log/debug :db-sync/drop-history-action-semantic-ops
+                         {:reason :invalid-history-action-ops
+                          :repo repo
+                          :tx-id tx-id
+                          :undo? undo?
+                          :ops ops
+                          :error error})
+              {:applied? false
+               :reason :invalid-history-action-ops
+               :error error}))
 
           (seq tx-data)
-          (do
-            (ldb/transact! conn tx-data tx-meta')
-            {:applied? true :source :raw-tx})
+          (apply-history-action-tx! conn tx-data tx-meta')
 
           :else
           {:applied? false :reason :unsupported-history-action}))
@@ -1129,6 +1232,15 @@
 
     :create-property-text-block
     (apply outliner-property/create-property-text-block! conn args)
+
+    :upsert-property
+    (apply outliner-property/upsert-property! conn args)
+
+    :class-add-property
+    (apply outliner-property/class-add-property! conn args)
+
+    :class-remove-property
+    (apply outliner-property/class-remove-property! conn args)
 
     :upsert-closed-value
     (apply outliner-property/upsert-closed-value! conn args)
