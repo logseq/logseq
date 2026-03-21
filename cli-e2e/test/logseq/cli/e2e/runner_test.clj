@@ -34,6 +34,28 @@
     (is (= "graph-info" (:id result)))
     (is (= "main command" (get-in result [:result :cmd])))))
 
+(deftest run-case-includes-command-phase-metadata-when-detailed
+  (let [calls (atom [])]
+    (runner/run-case!
+     {:id "graph-info"
+      :setup ["setup one" "setup two"]
+      :cmd "main command"
+      :cleanup ["cleanup one"]
+      :expect {:exit 0}}
+     {:context {}
+      :detailed-log? true
+      :run-command (fn [{:keys [cmd phase step-index step-total case-id throw?] :as opts}]
+                     (swap! calls conj (select-keys opts [:cmd :phase :step-index :step-total :case-id :throw?]))
+                     {:cmd cmd
+                      :exit 0
+                      :out ""
+                      :err ""})})
+    (is (= [{:cmd "setup one" :phase :setup :step-index 1 :step-total 2 :case-id "graph-info" :throw? true}
+            {:cmd "setup two" :phase :setup :step-index 2 :step-total 2 :case-id "graph-info" :throw? true}
+            {:cmd "main command" :phase :main :step-index 1 :step-total 1 :case-id "graph-info" :throw? false}
+            {:cmd "cleanup one" :phase :cleanup :step-index 1 :step-total 1 :case-id "graph-info" :throw? false}]
+           @calls))))
+
 (deftest run-case-validates-json-paths-and-nonzero-exit
   (let [result (runner/run-case!
                 {:id "invalid-shell"

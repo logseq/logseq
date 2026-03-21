@@ -162,33 +162,52 @@
          (:vars case)))
 
 (defn- run-command!
-  [command context {:keys [run-command stdin allow-failure]}]
+  [command context {:keys [run-command stdin allow-failure phase step-index step-total case-id]}]
   (run-command {:cmd (render-string command context)
                 :dir (paths/repo-root)
                 :stdin (some-> stdin (render-string context))
+                :phase phase
+                :step-index step-index
+                :step-total step-total
+                :case-id case-id
                 :throw? (not allow-failure)}))
 
 (defn run-case!
-  [case {:keys [run-command]
+  [case {:keys [run-command detailed-log?]
          :or {run-command shell/run!}
          :as opts}]
   (let [context (case-context case opts)
         rendered (render-case case context)
+        case-id (:id rendered)
+        cleanup-commands (vec (:cleanup rendered))
+        setup-commands (vec (:setup rendered))
         cleanup! (fn []
-                   (doseq [command (:cleanup rendered)]
+                   (doseq [[idx command] (map-indexed vector cleanup-commands)]
                      (try
                        (run-command! command context {:run-command run-command
-                                                      :allow-failure true})
+                                                      :allow-failure true
+                                                      :phase (when detailed-log? :cleanup)
+                                                      :step-index (inc idx)
+                                                      :step-total (count cleanup-commands)
+                                                      :case-id case-id})
                        (catch Exception _
                          nil))))]
-    (doseq [command (:setup rendered)]
-      (run-command! command context {:run-command run-command}))
+    (doseq [[idx command] (map-indexed vector setup-commands)]
+      (run-command! command context {:run-command run-command
+                                     :phase (when detailed-log? :setup)
+                                     :step-index (inc idx)
+                                     :step-total (count setup-commands)
+                                     :case-id case-id}))
     (try
       (let [result (run-command! (:cmd rendered) context {:run-command run-command
                                                           :stdin (:stdin rendered)
-                                                          :allow-failure true})]
+                                                          :allow-failure true
+                                                          :phase (when detailed-log? :main)
+                                                          :step-index 1
+                                                          :step-total 1
+                                                          :case-id case-id})]
         (assert-result! rendered result)
-        {:id (:id rendered)
+        {:id case-id
          :status :ok
          :cmd (:cmd result)
          :result result

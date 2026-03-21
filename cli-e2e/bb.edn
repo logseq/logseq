@@ -7,8 +7,10 @@
   :init (def cli-opts
           (cli/parse-opts
            *command-line-args*
-           {:alias {:i :include}
+           {:alias {:i :include
+                    :h :help}
             :coerce {:include []
+                     :help :boolean
                      :skip-build :boolean
                      :verbose :boolean}}))
 
