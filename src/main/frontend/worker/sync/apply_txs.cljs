@@ -370,15 +370,35 @@
     (let [[blocks target-id opts] args
           created-uuids (created-block-uuids-from-tx-data tx-data)
           blocks' (mapv #(sanitize-insert-block-payload db %) blocks)
-          blocks' (if (and (not (:keep-uuid? opts))
-                           (= (count blocks') (count created-uuids)))
+          target-ref (stable-entity-ref db target-id)
+          target-uuid (when (and (vector? target-ref)
+                                 (= :block/uuid (first target-ref)))
+                        (second target-ref))
+          blocks' (cond
+                    (and (:replace-empty-target? opts)
+                         target-uuid
+                         (seq blocks'))
+                    (let [[fst-block & rst-blocks] blocks']
+                      (into [(assoc fst-block :block/uuid target-uuid)]
+                            (if (and (not (:keep-uuid? opts))
+                                     (= (count rst-blocks) (count created-uuids)))
+                              (map (fn [block uuid]
+                                     (assoc block :block/uuid uuid))
+                                   rst-blocks
+                                   created-uuids)
+                              rst-blocks)))
+
+                    (and (not (:keep-uuid? opts))
+                         (= (count blocks') (count created-uuids)))
                     (mapv (fn [block uuid]
                             (assoc block :block/uuid uuid))
                           blocks'
                           created-uuids)
+
+                    :else
                     blocks')]
       [:insert-blocks [blocks'
-                       (stable-entity-ref db target-id)
+                       target-ref
                        (assoc (dissoc (or opts {}) :outliner-op)
                               :keep-uuid? true)]])
 
@@ -532,14 +552,28 @@
                       (worker-build-inverse-save-block db-before block opts))
 
                     :insert-blocks
-                    (let [[blocks _target-id _opts] args
-                          ids (->> blocks
-                                   (keep (fn [block]
-                                           (when-let [u (:block/uuid block)]
-                                             [:block/uuid u])))
-                                   vec)]
-                      (when (seq ids)
-                        [:delete-blocks [ids {}]]))
+                    (let [[blocks _target-id opts] args]
+                      (if (:replace-empty-target? opts)
+                        (let [[fst-block & rst-blocks] blocks
+                              delete-ids (->> rst-blocks
+                                              (keep (fn [block]
+                                                      (when-let [u (:block/uuid block)]
+                                                        [:block/uuid u])))
+                                              vec)
+                              restore-target-op (when fst-block
+                                                  (worker-build-inverse-save-block db-before fst-block nil))]
+                          (concat
+                           (when (seq delete-ids)
+                             [[:delete-blocks [delete-ids {}]]])
+                           (when restore-target-op
+                             [restore-target-op])))
+                        (let [ids (->> blocks
+                                       (keep (fn [block]
+                                               (when-let [u (:block/uuid block)]
+                                                 [:block/uuid u])))
+                                       vec)]
+                          (when (seq ids)
+                            [[:delete-blocks [ids {}]]]))))
 
                     :create-page
                     (let [[_title opts] args
@@ -549,8 +583,19 @@
 
                     nil)))
            (remove nil?)
+           (mapcat #(if (and (sequential? %)
+                             (sequential? (first %)))
+                      %
+                      [%]))
            vec
            seq))
+
+(defn- has-replace-empty-target-insert-op?
+  [forward-ops]
+  (some (fn [[op [_blocks _target-id opts]]]
+          (and (= :insert-blocks op)
+               (:replace-empty-target? opts)))
+        forward-ops))
 
 (defn- canonicalize-explicit-outliner-ops
   [db tx-data ops]
@@ -570,6 +615,28 @@
 
     :else
     nil))
+
+(defn- patch-inverse-delete-block-ops
+  [inverse-outliner-ops forward-outliner-ops]
+  (let [forward-insert-ops* (atom (->> forward-outliner-ops
+                                       reverse
+                                       (filter #(= :insert-blocks (first %)))
+                                       vec))]
+    (mapv (fn [[op args :as inverse-op]]
+            (if (and (= :delete-blocks op)
+                     (seq @forward-insert-ops*))
+              (let [[_ [blocks _target-id _opts]] (first @forward-insert-ops*)
+                    ids (->> blocks
+                             (keep (fn [block]
+                                     (when-let [uuid (:block/uuid block)]
+                                       [:block/uuid uuid])))
+                             vec)]
+                (swap! forward-insert-ops* subvec 1)
+                (if (seq ids)
+                  [:delete-blocks [ids (second args)]]
+                  inverse-op))
+              inverse-op))
+          inverse-outliner-ops)))
 
 (defn- canonicalize-outliner-ops
   [db tx-meta tx-data]
@@ -609,11 +676,18 @@
     (let [tx-id (or (:db-sync/tx-id tx-meta) (random-uuid))
           now (.now js/Date)
           outliner-ops (canonicalize-outliner-ops db-after tx-meta tx-data)
-          inverse-outliner-ops (canonicalize-explicit-outliner-ops
-                                db-after
-                                tx-data
-                                (or (:db-sync/inverse-outliner-ops tx-meta)
-                                    (build-worker-inverse-outliner-ops db-before outliner-ops)))
+          built-inverse-outliner-ops (build-worker-inverse-outliner-ops db-before outliner-ops)
+          inverse-outliner-ops (if (has-replace-empty-target-insert-op? outliner-ops)
+                                 built-inverse-outliner-ops
+                                 (if-let [explicit-inverse-outliner-ops (:db-sync/inverse-outliner-ops tx-meta)]
+                                   (some-> (canonicalize-explicit-outliner-ops
+                                            db-after
+                                            tx-data
+                                            explicit-inverse-outliner-ops)
+                                           (patch-inverse-delete-block-ops outliner-ops)
+                                           seq
+                                           vec)
+                                   built-inverse-outliner-ops))
           inferred-outliner-ops?' (inferred-outliner-ops? tx-meta)]
       (ldb/transact! conn [{:db-sync/tx-id tx-id
                             :db-sync/normalized-tx-data normalized-tx-data
@@ -682,9 +756,23 @@
 
 (defn- history-action-ops
   [{:keys [forward-outliner-ops inverse-outliner-ops outliner-ops]} undo?]
-  (let [ops (if undo? inverse-outliner-ops forward-outliner-ops)]
+  (let [semantic-undo-supported-forward-ops
+        #{:save-block
+          :insert-blocks
+          :create-page
+          :move-blocks-up-down
+          :indent-outdent-blocks}
+        semantic-undo-complete? (and (seq inverse-outliner-ops)
+                                     (every? (fn [[op]]
+                                               (contains? semantic-undo-supported-forward-ops op))
+                                             forward-outliner-ops))
+        ops (if undo?
+              (when semantic-undo-complete?
+                inverse-outliner-ops)
+              forward-outliner-ops)]
     (or (some-> ops seq vec)
-        (when-not (= canonical-transact-op outliner-ops)
+        (when (and (not undo?)
+                   (not= canonical-transact-op outliner-ops))
           (some-> outliner-ops seq vec)))))
 
 (defn- history-action-tx-data
