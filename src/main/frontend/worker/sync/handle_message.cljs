@@ -95,7 +95,11 @@
 (defn- pending-local-tx?
   [repo]
   (when-let [conn (client-ops-conn repo)]
-    (boolean (first (d/datoms @conn :avet :db-sync/created-at)))))
+    (boolean
+     (some (fn [datom]
+             (let [ent (d/entity @conn (:e datom))]
+               (not= false (:db-sync/pending? ent))))
+           (d/datoms @conn :avet :db-sync/created-at)))))
 
 (defn- checksum-compare-ready?
   [repo client local-t remote-t]
