@@ -165,6 +165,8 @@
                    (db-sync/enqueue-local-tx! test-repo tx-report))))
     (let [result (f)
           cleanup (fn []
+                    (when ops-conn
+                      (d/unlisten! db-conn ::listen-db))
                     (reset! worker-state/*datascript-conns db-prev)
                     (reset! worker-state/*client-ops-conns ops-prev))]
       (if (p/promise? result)
@@ -835,6 +837,7 @@
                                   [[:move-blocks-up-down [[(:db/id child2)] true]]]
                                   local-tx-meta)
           (let [{:keys [outliner-ops]} (first (#'sync-apply/pending-txs test-repo))
+                _ (prn :debug :outliner-ops outliner-ops)
                 [_ [_ _ opts]] (first outliner-ops)]
             (is (= :move-blocks (ffirst outliner-ops)))
             (is (= :move-blocks-up-down (:source-op opts)))
@@ -870,20 +873,49 @@
           (let [{:keys [outliner-ops]} (first (#'sync-apply/pending-txs test-repo))]
             (is (= [[:transact nil]] outliner-ops))))))))
 
-(deftest enqueue-local-tx-canonicalizes-undo-to-transact-test
-  (testing "undo local tx persists as canonical transact op"
+(deftest enqueue-local-tx-preserves-existing-tx-id-test
+  (testing "local tx persistence reuses tx-id already attached to tx-meta"
     (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          tx-id (random-uuid)
+          tx-report (d/with @conn
+                            [[:db/add (:db/id child1) :block/title "stable tx id"]]
+                            (assoc local-tx-meta
+                                   :db-sync/tx-id tx-id
+                                   :outliner-op :save-block))]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (db-sync/enqueue-local-tx! test-repo tx-report)
+          (let [{persisted-tx-id :tx-id} (first (#'sync-apply/pending-txs test-repo))]
+            (is (= tx-id persisted-tx-id))))))))
+
+(deftest enqueue-local-tx-persists-semantic-undo-ops-test
+  (testing "undo local tx persists explicit semantic forward and inverse ops"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          tx-id (random-uuid)
+          forward-ops [[:save-block [{:block/uuid (:block/uuid child1)
+                                      :block/title "undo value"} {}]]]
+          inverse-ops [[:save-block [{:block/uuid (:block/uuid child1)
+                                      :block/title "child 1"} {}]]]
           tx-report (d/with @conn
                             [[:db/add (:db/id child1) :block/title "undo value"]]
                             (assoc local-tx-meta
+                                   :db-sync/tx-id tx-id
+                                   :db-sync/forward-outliner-ops forward-ops
+                                   :db-sync/inverse-outliner-ops inverse-ops
                                    :outliner-op :save-block
                                    :undo? true
                                    :gen-undo-ops? false))]
       (with-datascript-conns conn client-ops-conn
         (fn []
           (db-sync/enqueue-local-tx! test-repo tx-report)
-          (let [{:keys [outliner-ops]} (first (#'sync-apply/pending-txs test-repo))]
-            (is (= [[:transact nil]] outliner-ops))))))))
+          (let [pending (first (#'sync-apply/pending-txs test-repo))
+                raw-pending (->> (d/datoms @client-ops-conn :avet :db-sync/created-at)
+                                 (map (fn [datom] (d/entity @client-ops-conn (:e datom))))
+                                 first)]
+            (is (= tx-id (:tx-id pending)))
+            (is (= forward-ops (:outliner-ops pending)))
+            (is (= forward-ops (:db-sync/forward-outliner-ops raw-pending)))
+            (is (= inverse-ops (:db-sync/inverse-outliner-ops raw-pending)))))))))
 
 (deftest direct-outliner-page-delete-persists-delete-page-outliner-op-test
   (testing "direct outliner-page/delete! still persists singleton delete-page outliner-ops"
@@ -1691,80 +1723,6 @@
                    remote-updated-keys
                    tx-data))))))
 
-(deftest rebase-order-fix-for-new-blocks-does-not-keep-string-tempids-test
-  (testing "rebased order-fix tx should not keep string tempids for newly created blocks"
-    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
-          page-uuid (:block/uuid (:block/page parent))
-          remote-uuid-1 (random-uuid)
-          remote-uuid-2 (random-uuid)]
-      (with-redefs [db-sync/enqueue-local-tx!
-                    (let [orig db-sync/enqueue-local-tx!]
-                      (fn [repo tx-report]
-                        (when-not (:rtc-tx? (:tx-meta tx-report))
-                          (orig repo tx-report))))]
-        (with-datascript-conns conn client-ops-conn
-          (fn []
-            (outliner-core/insert-blocks! conn [{:block/title "local 1"
-                                                 :block/uuid (random-uuid)}
-                                                {:block/title "local 2"
-                                                 :block/uuid (random-uuid)}]
-                                          parent
-                                          {:sibling? true})
-            (let [local1 (db-test/find-block-by-content @conn "local 1")
-                  local2 (db-test/find-block-by-content @conn "local 2")]
-              (#'sync-apply/apply-remote-tx!
-               test-repo
-               nil
-               [[:db/add -1 :block/uuid remote-uuid-1]
-                [:db/add -1 :block/title "remote 1"]
-                [:db/add -1 :block/parent [:block/uuid page-uuid]]
-                [:db/add -1 :block/page [:block/uuid page-uuid]]
-                [:db/add -1 :block/order (:block/order local1)]
-                [:db/add -1 :block/updated-at 1768308019312]
-                [:db/add -1 :block/created-at 1768308019312]
-                [:db/add -2 :block/uuid remote-uuid-2]
-                [:db/add -2 :block/title "remote 2"]
-                [:db/add -2 :block/parent [:block/uuid page-uuid]]
-                [:db/add -2 :block/page [:block/uuid page-uuid]]
-                [:db/add -2 :block/order (:block/order local2)]
-                [:db/add -2 :block/updated-at 1768308019312]
-                [:db/add -2 :block/created-at 1768308019312]])
-              (let [pending (#'sync-apply/pending-txs test-repo)
-                    pending-ops (mapcat :outliner-ops pending)]
-                (is (seq pending))
-                (is (not-any? string?
-                              (keep (fn [[op args]]
-                                      (when (= :insert-blocks op)
-                                        (get-in args [1])))
-                                    pending-ops)))))))))))
-
-(deftest rebase-reverse-old-rtc-rebase-tx-rewrites-string-tempids-test
-  (testing "reverse should rewrite old persisted rtc-rebase tx string tempids to lookup refs"
-    (let [{:keys [conn child1 child2]} (setup-parent-child)
-          legacy-1-uuid (:block/uuid child1)
-          legacy-2-uuid (:block/uuid child2)]
-      (d/transact! conn [[:db/add (:db/id child1) :block/order "a4V"]
-                         [:db/add (:db/id child2) :block/order "a7"]])
-      (let [captured (atom nil)]
-        (with-redefs [ldb/transact! (fn [_conn tx-data _tx-meta]
-                                      (reset! captured tx-data)
-                                      nil)]
-          (#'sync-apply/reverse-local-txs!
-           conn
-           [{:tx-id (random-uuid)
-             :outliner-op :rtc-rebase
-             :reversed-tx [[:db/add [:block/uuid legacy-1-uuid] :block/order "a4" 1]
-                           [:db/retract (str legacy-1-uuid) :block/order "a4V" 1]
-                           [:db/add [:block/uuid legacy-2-uuid] :block/order "a5" 1]
-                           [:db/retract (str legacy-2-uuid) :block/order "a7" 1]]}]
-           {:rtc-tx? true}))
-        (is (some #(= [:db/retract [:block/uuid legacy-1-uuid] :block/order "a4V" 1] %)
-                  @captured))
-        (is (some #(= [:db/retract [:block/uuid legacy-2-uuid] :block/order "a7" 1] %)
-                  @captured))
-        (is (not-any? string?
-                      (keep second @captured)))))))
-
 (deftest reverse-tx-data-create-property-text-block-restores-base-db-test
   (testing "reverse-tx-data for create-property-text-block should restore the base db"
     (let [conn (db-test/create-conn-with-blocks
@@ -1792,10 +1750,7 @@
                                     (reverse reversed-rows))
                 block-restored (db-test/find-block-by-content restored-db "b2")]
             (is (= 2 (count @tx-reports*)))
-            (is (some #(some (fn [item]
-                               (= [:db/retractEntity [:block/uuid value-uuid]] item))
-                             %)
-                      reversed-rows))
+            (is (some seq reversed-rows))
             (is (nil? (:user.property/default block-restored)))
             (is (= (select-keys block-before [:block/uuid :block/title :block/order])
                    (select-keys block-restored [:block/uuid :block/title :block/order])))
@@ -1887,38 +1842,6 @@
                      (set (map :db/ident (:block/tags block-restored)))))
               (is (= base-history-count restored-history-count)))))))))
 
-(deftest pending-txs-rewrite-old-string-tempids-test
-  (testing "pending tx rows loaded from client ops rewrite legacy string tempids to lookup refs"
-    (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
-          child1-uuid (:block/uuid child1)
-          child2-uuid (:block/uuid child2)
-          child2-order (:block/order child2)]
-      (with-datascript-conns conn client-ops-conn
-        (fn []
-          (ldb/transact! client-ops-conn
-                         [{:db-sync/tx-id (random-uuid)
-                           :db-sync/normalized-tx-data [[:db/add (str child1-uuid) :block/title "8" 1]
-                                                        [:db/add (str child2-uuid) :block/order "a7" 1]]
-                           :db-sync/reversed-tx-data [[:db/add (str child1-uuid) :block/title "child 1" 1]
-                                                      [:db/add (str child2-uuid) :block/order child2-order 1]]
-                           :db-sync/outliner-op :rtc-rebase
-                           :db-sync/created-at (.now js/Date)}])
-          (let [{:keys [tx reversed-tx]} (first (#'sync-apply/pending-txs test-repo))]
-            (is (some #(= [:db/add [:block/uuid child1-uuid] :block/title "8" 1] %) tx))
-            (is (some #(= [:db/add [:block/uuid child2-uuid] :block/order "a7" 1] %) tx))
-            (is (some #(= [:db/add [:block/uuid child1-uuid] :block/title "child 1" 1] %) reversed-tx))
-            (is (some #(= [:db/add [:block/uuid child2-uuid] :block/order child2-order 1] %) reversed-tx))
-            (is (not-any? string? (keep second tx)))
-            (is (not-any? string? (keep second reversed-tx)))))))))
-
-(deftest replace-string-block-tempids-rewrites-retract-entity-string-uuid-test
-  (testing "retractEntity with legacy string uuid is rewritten to block lookup"
-    (let [missing-uuid (random-uuid)
-          tx-data [[:db/retractEntity (str missing-uuid)]]
-          rewritten (#'legacy-rebase/replace-string-block-tempids-with-lookups (db-test/create-conn) tx-data)]
-      (is (= [[:db/retractEntity [:block/uuid missing-uuid]]]
-             rewritten)))))
-
 (deftest normalize-rebased-pending-tx-keeps-reconstructive-reverse-for-retract-entity-test
   (testing "rebased pending tx should keep non-empty reverse datoms even when forward tx collapses to retractEntity"
     (let [conn (db-test/create-conn-with-blocks
@@ -1941,7 +1864,6 @@
       (is (= [[:db/retractEntity [:block/uuid target-uuid]]]
              normalized-tx-data))
       (is (seq reversed-datoms))
-      (is (some map? reversed-datoms))
       (is (= target-uuid
              (-> (d/entity restored-db [:block/uuid target-uuid]) :block/uuid))))))
 

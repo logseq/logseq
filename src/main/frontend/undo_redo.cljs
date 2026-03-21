@@ -7,6 +7,7 @@
             [lambdaisland.glogi :as log]
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.db :as ldb]
+            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.outliner.recycle :as outliner-recycle]
             [logseq.undo-redo-validate :as undo-validate]
             [malli.core :as m]
@@ -36,7 +37,10 @@
        [:tx-meta [:map {:closed false}
                   [:outliner-op :keyword]]]
        [:added-ids [:set :int]]
-       [:retracted-ids [:set :int]]]]]
+       [:retracted-ids [:set :int]]
+       [:db-sync/tx-id {:optional true} :uuid]
+       [:db-sync/forward-outliner-ops {:optional true} [:sequential :any]]
+       [:db-sync/inverse-outliner-ops {:optional true} [:sequential :any]]]]]
 
     [::record-editor-info
      [:cat :keyword
@@ -54,6 +58,19 @@
 (defonce max-stack-length 100)
 (defonce *undo-ops (atom {}))
 (defonce *redo-ops (atom {}))
+
+(def ^:private transient-block-keys
+  #{:db/id
+    :block/tx-id
+    :block/created-at
+    :block/updated-at
+    :block/meta
+    :block/unordered
+    :block/level
+    :block.temp/ast-title
+    :block.temp/ast-body
+    :block.temp/load-status
+    :block.temp/has-children?})
 
 (defn clear-history!
   [repo]
@@ -150,6 +167,182 @@
 (defn- empty-redo-stack?
   [repo]
   (empty? (get @*redo-ops repo)))
+
+(defn- stable-entity-ref
+  [db x]
+  (cond
+    (qualified-keyword? x)
+    x
+
+    (and (vector? x) (= 2 (count x)))
+    x
+
+    (map? x)
+    (or (when-let [u (:block/uuid x)]
+          [:block/uuid u])
+        (:db/ident x)
+        (some-> x :db/id (stable-entity-ref db))
+        x)
+
+    (and (integer? x) (not (neg? x)))
+    (if-let [ent (d/entity db x)]
+      (or (when-let [u (:block/uuid ent)]
+            [:block/uuid u])
+          (:db/ident ent)
+          x)
+      x)
+
+    :else
+    x))
+
+(defn- stable-ref-value
+  [db v]
+  (cond
+    (set? v) (set (map #(stable-entity-ref db %) v))
+    (sequential? v) (mapv #(stable-entity-ref db %) v)
+    :else (stable-entity-ref db v)))
+
+(defn- ref-attr?
+  [db a]
+  (= :db.type/ref (:db/valueType (d/entity db a))))
+
+(defn- block-entity
+  [db block]
+  (cond
+    (map? block)
+    (or (when-let [uuid (:block/uuid block)]
+          (d/entity db [:block/uuid uuid]))
+        (when-let [db-id (:db/id block)]
+          (d/entity db db-id)))
+
+    (integer? block)
+    (d/entity db block)
+
+    (vector? block)
+    (d/entity db block)
+
+    :else
+    nil))
+
+(defn- save-block-keys
+  [block]
+  (->> (keys block)
+       (remove transient-block-keys)
+       (remove #(= :db/other-tx %))
+       (remove nil?)))
+
+(defn- build-inverse-save-block
+  [db-before block opts]
+  (when-let [before-ent (block-entity db-before block)]
+    (let [uuid (:block/uuid before-ent)
+          keys-to-restore (save-block-keys block)
+          inverse-block (reduce
+                         (fn [m k]
+                           (let [v (get before-ent k)]
+                             (assoc m k
+                                    (if (ref-attr? db-before k)
+                                      (stable-ref-value db-before v)
+                                      v))))
+                         {:block/uuid uuid}
+                         keys-to-restore)]
+      [:save-block [inverse-block opts]])))
+
+(defn- property-ref-value
+  [db property-id value]
+  (let [property-type (some-> (d/entity db property-id) :logseq.property/type)]
+    (if (contains? db-property-type/all-ref-property-types property-type)
+      (stable-ref-value db value)
+      value)))
+
+(defn- block-property-value
+  [db block-id property-id]
+  (some-> (d/entity db block-id) (get property-id) (property-ref-value db property-id)))
+
+(defn- build-inverse-property-op
+  [db-before [op args]]
+  (case op
+    :set-block-property
+    (let [[block-id property-id _value] args
+          before-value (block-property-value db-before block-id property-id)]
+      (if (nil? before-value)
+        [:remove-block-property [(stable-entity-ref db-before block-id) property-id]]
+        [:set-block-property [(stable-entity-ref db-before block-id) property-id before-value]]))
+
+    :remove-block-property
+    (let [[block-id property-id] args
+          before-value (block-property-value db-before block-id property-id)]
+      (when (some? before-value)
+        [:set-block-property [(stable-entity-ref db-before block-id) property-id before-value]]))
+
+    nil))
+
+(defn- derive-inverse-outliner-ops
+  [db-before tx-meta]
+  (some->> (:outliner-ops tx-meta)
+           (map (fn [[op args :as op-entry]]
+                  (case op
+                    :save-block
+                    (let [[block opts] args]
+                      (build-inverse-save-block db-before block opts))
+
+                    :insert-blocks
+                    (let [[blocks _target-id _opts] args
+                          ids (->> blocks
+                                   (keep (fn [block]
+                                           (when-let [u (:block/uuid block)]
+                                             [:block/uuid u])))
+                                   vec)]
+                      (when (seq ids)
+                        [:delete-blocks [ids {}]]))
+
+                    (build-inverse-property-op db-before op-entry))))
+           (remove nil?)
+           vec
+           seq))
+
+(defn- ensure-history-action-metadata
+  [{:keys [db-before tx-meta] :as data}]
+  (let [forward-outliner-ops (some-> (:outliner-ops tx-meta) vec seq)
+        inverse-outliner-ops (derive-inverse-outliner-ops db-before tx-meta)]
+    (cond-> (-> data
+                (dissoc :db-before)
+                (assoc
+                 :db-sync/tx-id (or (:db-sync/tx-id tx-meta) (random-uuid))))
+      forward-outliner-ops
+      (assoc :db-sync/forward-outliner-ops (vec forward-outliner-ops))
+
+      inverse-outliner-ops
+      (assoc :db-sync/inverse-outliner-ops (vec inverse-outliner-ops)))))
+
+(defn- undo-redo-action-meta
+  [{:keys [tx-meta]
+    source-tx-id :db-sync/tx-id
+    forward-outliner-ops :db-sync/forward-outliner-ops
+    inverse-outliner-ops :db-sync/inverse-outliner-ops}
+   undo?]
+  (let [forward-outliner-ops' (if undo? inverse-outliner-ops forward-outliner-ops)
+        inverse-outliner-ops' (if undo? forward-outliner-ops inverse-outliner-ops)]
+    (cond-> (-> tx-meta
+                (assoc
+                 :gen-undo-ops? false
+                 :undo? undo?
+                 :redo? (not undo?)
+                 :db-sync/source-tx-id source-tx-id))
+      (seq forward-outliner-ops')
+      (assoc :db-sync/forward-outliner-ops (vec forward-outliner-ops'))
+
+      (seq inverse-outliner-ops')
+      (assoc :db-sync/inverse-outliner-ops (vec inverse-outliner-ops')))))
+
+(defn- apply-history-action-from-worker!
+  [repo data undo? tx-meta]
+  (when-let [tx-id (:db-sync/tx-id data)]
+    (state/<invoke-db-worker
+     :thread-api/apply-history-action
+     repo
+     tx-id
+     undo?
+     tx-meta)))
 
 (defn- reverse-datoms
   [conn datoms schema added-ids retracted-ids undo? redo?]
@@ -264,14 +457,8 @@
         (let [{:keys [tx-data tx-meta] :as data} (some #(when (= ::db-transact (first %))
                                                           (second %)) op)]
           (when (seq tx-data)
-            (let [reversed-tx-data (cond-> (get-reversed-datoms conn undo? data tx-meta)
-                                     undo?
-                                     reverse)
-                  tx-meta' (-> tx-meta
-                               (assoc
-                                :gen-undo-ops? false
-                                :undo? undo?
-                                :redo? (not undo?)))
+            (let [tx-meta' (undo-redo-action-meta data undo?)
+                  tx-id (:db-sync/tx-id data)
                   handler (fn handler []
                             ((if undo? push-redo-op push-undo-op) repo op)
                             (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) op)
@@ -282,35 +469,55 @@
                                                                                               (last editor-cursors)))]))]
                               {:undo? undo?
                                :editor-cursors editor-cursors
-                               :block-content block-content}))]
-              (if (seq reversed-tx-data)
-                (if (undo-validate/valid-undo-redo-tx? conn reversed-tx-data)
-                  (if util/node-test?
-                    (try
-                      (ldb/transact! conn reversed-tx-data tx-meta')
-                      (handler)
-                      (catch :default e
-                        (log/error ::undo-redo-failed e)
-                        (clear-history! repo)
-                        (if undo? ::empty-undo-stack ::empty-redo-stack)))
-                    (->
-                     (p/do!
-                      ;; async write to the master worker
-                      (ldb/transact! repo reversed-tx-data tx-meta')
-                      (handler))
-                     (p/catch (fn [e]
-                                (log/error ::undo-redo-failed e)
-                                (clear-history! repo)))))
-                  (do
-                    (log/warn ::undo-redo-skip-invalid-op
-                              {:undo? undo?
-                               :outliner-op (:outliner-op tx-meta)})
-                    (undo-redo-aux repo undo?)))
-                (do
-                  (log/warn ::undo-redo-skip-conflicted-op
-                            {:undo? undo?
-                             :outliner-op (:outliner-op tx-meta)})
-                  (undo-redo-aux repo undo?))))))))
+                               :block-content block-content}))
+                  run-local-path (fn []
+                                   (let [reversed-tx-data (cond-> (get-reversed-datoms conn undo? data tx-meta)
+                                                            undo?
+                                                            reverse)]
+                                     (if (seq reversed-tx-data)
+                                       (if (undo-validate/valid-undo-redo-tx? conn reversed-tx-data)
+                                         (if util/node-test?
+                                           (try
+                                             (ldb/transact! conn reversed-tx-data tx-meta')
+                                             (handler)
+                                             (catch :default e
+                                               (log/error ::undo-redo-failed e)
+                                               (clear-history! repo)
+                                               (if undo? ::empty-undo-stack ::empty-redo-stack)))
+                                           (throw (ex-info "browser undo/redo must go through db worker"
+                                                           {:type :undo-redo/browser-direct-db-write-disallowed
+                                                            :repo repo})))
+                                         (do
+                                           (log/warn ::undo-redo-skip-invalid-op
+                                                     {:undo? undo?
+                                                      :outliner-op (:outliner-op tx-meta)})
+                                           (undo-redo-aux repo undo?)))
+                                       (do
+                                         (log/warn ::undo-redo-skip-conflicted-op
+                                                   {:undo? undo?
+                                                    :outliner-op (:outliner-op tx-meta)})
+                                         (undo-redo-aux repo undo?)))))]
+              (if util/node-test?
+                (run-local-path)
+                (->
+                 (p/let [worker-result (if tx-id
+                                         (apply-history-action-from-worker! repo data undo? tx-meta')
+                                         (p/resolved {:applied? false
+                                                      :reason :missing-history-action-id}))]
+                   (if (:applied? worker-result)
+                     (handler)
+                     (do
+                       (log/error ::undo-redo-worker-action-unavailable
+                                  {:undo? undo?
+                                   :repo repo
+                                   :tx-id tx-id
+                                   :result worker-result})
+                       (clear-history! repo)
+                       (if undo? ::empty-undo-stack ::empty-redo-stack))))
+                 (p/catch (fn [e]
+                            (log/error ::undo-redo-worker-failed e)
+                            (clear-history! repo)
+                            (if undo? ::empty-undo-stack ::empty-redo-stack))))))))))
 
     (when ((if undo? empty-undo-stack? empty-redo-stack?) repo)
       (if undo? ::empty-undo-stack ::empty-redo-stack))))
@@ -360,12 +567,15 @@
             tx-data' (vec tx-data)
             editor-info @state/*editor-info
             _ (reset! state/*editor-info nil)
+            history-data (ensure-history-action-metadata
+                          {:tx-data tx-data'
+                           :tx-meta tx-meta
+                           :added-ids added-ids
+                           :retracted-ids retracted-ids
+                           :db-before db-before})
             op (->> [(when editor-info [::record-editor-info editor-info])
                      [::db-transact
-                      {:tx-data tx-data'
-                       :tx-meta tx-meta
-                       :added-ids added-ids
-                       :retracted-ids retracted-ids}]]
+                      history-data]]
                     (remove nil?)
                     vec)]
         ;; A new local edit invalidates any redo history.

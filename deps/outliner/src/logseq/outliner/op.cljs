@@ -154,6 +154,73 @@
 
 (def ^:private ops-validator (m/validator ops-schema))
 
+(defn- stable-id
+  [db x]
+  (cond
+    (map? x)
+    (or (when-let [u (:block/uuid x)] [:block/uuid u])
+        (:db/ident x)
+        (some-> x :db/id (stable-id db)))
+
+    (and (integer? x) (not (neg? x)))
+    (if-let [ent (d/entity db x)]
+      (or (when-let [u (:block/uuid ent)] [:block/uuid u])
+          (:db/ident ent)
+          x)
+      x)
+
+    :else
+    x))
+
+(defn- inverse-save-block-op
+  [db [block opts]]
+  (when-let [before-ent (or (when-let [u (:block/uuid block)]
+                              (d/entity db [:block/uuid u]))
+                            (when-let [db-id (:db/id block)]
+                              (d/entity db db-id)))]
+    [:save-block [(merge {:block/uuid (:block/uuid before-ent)}
+                         (select-keys before-ent (keys (dissoc block :db/id))))
+                  opts]]))
+
+(defn- inverse-op
+  [db [op args]]
+  (case op
+    :save-block
+    (inverse-save-block-op db args)
+
+    :insert-blocks
+    (let [[blocks _target-id _opts] args
+          ids (->> blocks
+                   (keep (fn [block]
+                           (when-let [u (:block/uuid block)]
+                             [:block/uuid u])))
+                   vec)]
+      (when (seq ids)
+        [:delete-blocks [ids {}]]))
+
+    :create-page
+    (let [[_title opts] args]
+      (when-let [u (:uuid opts)]
+        [:delete-page [u {}]]))
+
+    :move-blocks-up-down
+    (let [[ids up?] args]
+      [:move-blocks-up-down [ids (not up?)]])
+
+    :indent-outdent-blocks
+    (let [[ids indent? opts] args]
+      [:indent-outdent-blocks [ids (not indent?) opts]])
+
+    nil))
+
+(defn- inverse-ops
+  [db ops]
+  (->> ops
+       reverse
+       (keep #(inverse-op db %))
+       vec
+       seq))
+
 (defn- reaction-user-id
   [reaction]
   (:db/id (:logseq.property/created-by-ref reaction)))
@@ -310,12 +377,17 @@
 (defn apply-ops!
   [conn ops opts]
   (assert (ops-validator ops) ops)
-  (let [single-op-outliner-op (when (= 1 (count ops))
+  (let [db @conn
+        single-op-outliner-op (when (= 1 (count ops))
                                 (first (first ops)))
+        inverse-ops' (inverse-ops db ops)
         opts' (cond-> (assoc opts
                              :transact-opts {:conn conn}
                              :local-tx? true
-                             :outliner-ops ops)
+                             :outliner-ops ops
+                             :db-sync/tx-id (or (:db-sync/tx-id opts) (random-uuid)))
+                (seq inverse-ops')
+                (assoc :db-sync/inverse-outliner-ops inverse-ops')
                 (and single-op-outliner-op
                      (nil? (:outliner-op opts)))
                 (assoc :outliner-op single-op-outliner-op))

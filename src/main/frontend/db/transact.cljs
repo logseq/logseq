@@ -21,10 +21,18 @@
           (p/resolve! response result))))
     response))
 
+(defn- ensure-local-op-tx-id
+  [tx-meta]
+  (cond-> (or tx-meta {})
+    (nil? (:db-sync/tx-id tx-meta))
+    (assoc :db-sync/tx-id (random-uuid))))
+
 (defn transact [worker-transact repo tx-data tx-meta]
-  (let [tx-meta' (assoc tx-meta
+  (let [tx-meta' (-> tx-meta
+                     ensure-local-op-tx-id
+                     (assoc
                         ;; not from remote (rtc)
-                        :local-tx? true)]
+                      :local-tx? true))]
     (worker-call (fn async-request []
                    (worker-transact repo tx-data tx-meta')))))
 
@@ -33,9 +41,11 @@
   (when (seq ops)
     (if util/node-test?
       (outliner-op/apply-ops! conn ops opts)
-      (let [opts' (assoc opts
-                         :client-id (:client-id @state/state)
-                         :local-tx? true)
+      (let [opts' (-> opts
+                      ensure-local-op-tx-id
+                      (assoc
+                       :client-id (:client-id @state/state)
+                       :local-tx? true))
             request #(frontend.state/<invoke-db-worker
                       :thread-api/apply-outliner-ops
                       (frontend.state/get-current-repo)

@@ -826,15 +826,13 @@
 
 (defn ^:api ^:large-vars/cleanup-todo delete-blocks
   "Delete blocks from the tree."
-  [db blocks opts]
-  (let [{:keys [hard-retract?]} opts
-        top-level-blocks (filter-top-level-blocks db blocks)
+  [db blocks _opts]
+  (let [top-level-blocks (filter-top-level-blocks db blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
         top-level-blocks* (get-top-level-blocks top-level-blocks non-consecutive?)
-        top-level-blocks (->> top-level-blocks*
-                              (remove :logseq.property/built-in?)
-                              (remove ldb/page?))
+        top-level-blocks (remove :logseq.property/built-in? top-level-blocks*)
         txs-state (ds/new-outliner-txs-state)
+        block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) top-level-blocks)
         start-block (first top-level-blocks)
         end-block (last top-level-blocks)
         delete-one-block? (or (= 1 (count top-level-blocks)) (= start-block end-block))]
@@ -852,15 +850,6 @@
                                                (:db/id (:logseq.property/default-value from-property)))
                                          (not (:block/closed-value-property start-block)))]
         (cond
-          hard-retract?
-          (let [block-ids (->> top-level-blocks
-                               (mapcat (fn [block]
-                                         (map :db/id (ldb/get-block-and-children db (:block/uuid block)
-                                                                                 {:include-property-block? true}))))
-                               distinct)
-                tx-data (map (fn [id] [:db/retractEntity id]) block-ids)]
-            (when (seq tx-data) (swap! txs-state concat tx-data)))
-
           (and delete-one-block? default-value-property?)
           (let [datoms (d/datoms db :avet (:db/ident from-property) (:db/id start-block))
                 tx-data (map (fn [d] {:db/id (:e d)
@@ -868,8 +857,9 @@
             (when (seq tx-data) (swap! txs-state concat tx-data)))
 
           :else
-          (swap! txs-state concat
-                 (outliner-recycle/recycle-blocks-tx-data db top-level-blocks opts)))))
+          (doseq [id block-ids]
+            (let [node (d/entity db id)]
+              (otree/-del node txs-state db))))))
     {:tx-data @txs-state}))
 
 (defn- move-to-original-position?
@@ -953,11 +943,15 @@
       (let [parents' (->> (ldb/get-block-parents db (:block/uuid target-block) {})
                           (map :db/id)
                           (set))
-            move-parents-to-child? (some parents' (map :db/id blocks))]
+            move-parents-to-child? (some parents' (map :db/id blocks))
+            op-entry [:move-blocks [(map :db/id top-level-blocks)
+                                    (:db/id target-block)
+                                    opts]]]
         (when-not move-parents-to-child?
           (ldb/batch-transact!
            conn
-           {:outliner-op :move-blocks}
+           {:outliner-op :move-blocks
+            :outliner-ops [op-entry]}
            (fn [conn]
              (doseq [[idx block] (map vector (range (count blocks)) blocks)]
                (let [first-block? (zero? idx)
