@@ -31,6 +31,7 @@
             [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.log-and-state :as rtc-log-and-state]
             [frontend.worker.thread-atom]
+            [frontend.worker.undo-redo :as worker-undo-redo]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
@@ -640,6 +641,38 @@
   (assert (some? repo))
   (worker-state/set-db-latest-tx-time! repo)
   (sync-apply/apply-history-action! repo tx-id undo? tx-meta))
+
+(def-thread-api :thread-api/undo-redo-set-pending-editor-info
+  [repo editor-info]
+  (worker-undo-redo/set-pending-editor-info! repo editor-info)
+  nil)
+
+(def-thread-api :thread-api/undo-redo-record-editor-info
+  [repo editor-info]
+  (worker-undo-redo/record-editor-info! repo editor-info)
+  nil)
+
+(def-thread-api :thread-api/undo-redo-record-ui-state
+  [repo ui-state-str]
+  (worker-undo-redo/record-ui-state! repo ui-state-str)
+  nil)
+
+(def-thread-api :thread-api/undo-redo-undo
+  [repo]
+  (worker-undo-redo/undo repo))
+
+(def-thread-api :thread-api/undo-redo-redo
+  [repo]
+  (worker-undo-redo/redo repo))
+
+(def-thread-api :thread-api/undo-redo-clear-history
+  [repo]
+  (worker-undo-redo/clear-history! repo)
+  nil)
+
+(def-thread-api :thread-api/undo-redo-get-debug-state
+  [repo]
+  (worker-undo-redo/get-debug-state repo))
 
 (def-thread-api :thread-api/get-initial-data
   [repo opts]
