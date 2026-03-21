@@ -17,7 +17,6 @@
             [frontend.persist-db :as persist-db]
             [frontend.search :as search]
             [frontend.state :as state]
-            [frontend.undo-redo :as undo-redo]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
             [logseq.db.frontend.schema :as db-schema]
@@ -52,10 +51,7 @@
 (defn start-repo-db-if-not-exists!
   [repo & {:as opts}]
   (state/set-current-repo! repo)
-  (db/start-db-conn! repo (assoc opts
-                                 :db-graph? true
-                                 :listen-handler (fn [conn]
-                                                   (undo-redo/listen-db-changes! repo conn)))))
+  (db/start-db-conn! repo (assoc opts :db-graph? true)))
 
 (defn restore-and-setup-repo!
   "Restore the db of a graph from the persisted data, and setup. Create a new
