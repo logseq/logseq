@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "mldoc": "^1.5.9",
-    "sanitize-filename": "1.6.3"
+    "sanitize-filename": "1.6.4"
   },
   "scripts": {
     "test": "nbb-logseq -cp test -m nextjournal.test-runner",
