@@ -19,6 +19,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.tabs :as tabs-handler]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.search :as search]
@@ -667,13 +668,13 @@
                        create-class?
                        (db-page-handler/<create-class! class
                                                        {:redirect? false})
-                       create-page? (page-handler/<create! input {:redirect? true
-                                                                  :edit? false}))]
+                       create-page? (page-handler/<create! @!input {:redirect? false}))]
         (shui/dialog-close! :ls-dialog-cmdk)
-        (when create-page?
-          (page-handler/edit-page-when-present! (or (:block/uuid result) input)))
-        (when (and create-class? result)
-          (state/pub-event! [:dialog/show-block result {:tag-dialog? true}]))))))
+        (cond
+          (and create-class? result)
+          (state/pub-event! [:dialog/show-block result {:tag-dialog? true}])
+          (and create-page? result)
+          (tabs-handler/open-tab-by-page! (:block/uuid result) {:new-tab? true})))))
 
 (defn- get-filter-user-input
   [input]
