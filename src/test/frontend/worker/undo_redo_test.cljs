@@ -6,6 +6,7 @@
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.undo-redo :as worker-undo-redo]
+            [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.op :as outliner-op]))
 
@@ -94,13 +95,39 @@
      :child-uuid child-uuid}))
 
 (defn- save-block-title!
-  [conn block-uuid title]
-  (d/transact! conn
-               [[:db/add [:block/uuid block-uuid] :block/title title]]
-               (local-tx-meta
-                {:outliner-op :save-block
-                 :outliner-ops [[:save-block [{:block/uuid block-uuid
-                                               :block/title title} {}]]]})))
+  ([conn block-uuid title]
+   (save-block-title! conn block-uuid title (random-uuid)))
+  ([conn block-uuid title tx-id]
+   (d/transact! conn
+                [[:db/add [:block/uuid block-uuid] :block/title title]]
+                (local-tx-meta
+                 {:db-sync/tx-id tx-id
+                  :outliner-op :save-block
+                  :outliner-ops [[:save-block [{:block/uuid block-uuid
+                                                :block/title title} {}]]]}))))
+
+(deftest undo-missing-history-action-row-clears-history-test
+  (testing "worker undo treats missing tx-id action row as unavailable and clears history"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          client-ops-conn (get @worker-state/*client-ops-conns test-repo)
+          {:keys [child-uuid]} (seed-page-parent-child!)
+          tx-id-1 (random-uuid)
+          tx-id-2 (random-uuid)]
+      (save-block-title! conn child-uuid "v1" tx-id-1)
+      (save-block-title! conn child-uuid "v2" tx-id-2)
+      (is (= "v2" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+      (is (= 2 (count (get @worker-undo-redo/*undo-ops test-repo))))
+      (when-let [tx-ent (d/entity @client-ops-conn [:db-sync/tx-id tx-id-2])]
+        (ldb/transact! client-ops-conn [[:db/retractEntity (:db/id tx-ent)]]))
+      (let [undo-result (worker-undo-redo/undo test-repo)]
+        (is (= ::worker-undo-redo/empty-undo-stack undo-result))
+        (is (= "v2" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+        (is (empty? (get @worker-undo-redo/*undo-ops test-repo)))
+        (is (empty? (get @worker-undo-redo/*redo-ops test-repo))))
+      (let [redo-result (worker-undo-redo/redo test-repo)]
+        (is (= ::worker-undo-redo/empty-redo-stack redo-result))
+        (is (= "v2" (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))
 
 (deftest undo-records-only-local-txs-test
   (testing "undo history records only local txs"

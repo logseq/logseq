@@ -1,5 +1,6 @@
 (ns frontend.worker.db-sync-test
   (:require [cljs.test :refer [deftest is testing async]]
+            [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.crypt :as crypt]
@@ -911,6 +912,26 @@
                      (get-in (#'sync-apply/pending-tx-by-id test-repo tx-id)
                              [:forward-outliner-ops 0 1 0 :block/title]))))))))))
 
+(deftest apply-history-action-invalid-raw-tx-returns-unapplied-test
+  (testing "invalid raw history tx replay returns an explicit unapplied result instead of throwing"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          tx-id (random-uuid)
+          invalid-tx [[:db/unknown 1 :block/title "bad"]]]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (ldb/transact! client-ops-conn
+                         [{:db-sync/tx-id tx-id
+                           :db-sync/pending? true
+                           :db-sync/created-at (.now js/Date)
+                           :db-sync/outliner-op :transact
+                           :db-sync/outliner-ops [[:transact nil]]
+                           :db-sync/forward-outliner-ops [[:transact nil]]
+                           :db-sync/normalized-tx-data invalid-tx
+                           :db-sync/reversed-tx-data []}])
+          (let [result (#'sync-apply/apply-history-action! test-repo tx-id false {})]
+            (is (= false (:applied? result)))
+            (is (= :invalid-history-action-tx (:reason result)))))))))
+
 (deftest enqueue-local-tx-persists-semantic-undo-ops-test
   (testing "undo local tx persists explicit semantic forward and inverse ops"
     (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
@@ -1171,6 +1192,55 @@
                      (some-> (d/entity @conn [:block/uuid task-uuid])
                              :logseq.property/status
                              :db/ident))))))))))
+
+(deftest apply-history-action-redo-replays-upsert-property-test
+  (testing "apply-history-action should undo/redo creating a new property page"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "seed"}]}]})
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          property-name "custom_prop_x"
+          property-page-ids (fn [db]
+                              (set (d/q '[:find [?e ...]
+                                          :where
+                                          [?e :block/tags :logseq.class/Property]]
+                                        db)))]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (let [before-ids (property-page-ids @conn)]
+            (outliner-op/apply-ops! conn
+                                    [[:upsert-property [nil
+                                                        {:logseq.property/type :default}
+                                                        {:property-name property-name}]]]
+                                    local-tx-meta)
+            (let [after-ids (property-page-ids @conn)
+                  created-id (first (seq (set/difference after-ids before-ids)))
+                  created-ident (some-> (d/entity @conn created-id) :db/ident)
+                  created-uuid (some-> (d/entity @conn created-id) :block/uuid)
+                  {:keys [tx-id]} (first (#'sync-apply/pending-txs test-repo))]
+              (is (some? created-id))
+              (is (keyword? created-ident))
+              (is (uuid? created-uuid))
+              (is (some? (d/entity @conn created-id)))
+              (let [pending (#'sync-apply/pending-tx-by-id test-repo tx-id)]
+                (is (= :upsert-property
+                       (ffirst (:forward-outliner-ops pending))))
+                (is (= created-ident
+                       (get-in pending [:forward-outliner-ops 0 1 0])))
+                (is (= :delete-page
+                       (ffirst (:inverse-outliner-ops pending))))
+                (is (= created-uuid
+                       (get-in pending [:inverse-outliner-ops 0 1 0]))
+                    (pr-str pending)))
+              (is (= true
+                     (:applied? (#'sync-apply/apply-history-action! test-repo tx-id true {}))))
+              (is (nil? (d/entity @conn created-ident)))
+              (is (= true
+                     (:applied? (#'sync-apply/apply-history-action! test-repo tx-id false {}))))
+              (let [restored (d/entity @conn created-ident)]
+                (is (some? restored))
+                (is (= created-uuid (:block/uuid restored)))))))))))
 
 (deftest apply-history-action-redo-replays-block-concat-test
   (testing "block concat history should undo via reversed tx and redo cleanly"

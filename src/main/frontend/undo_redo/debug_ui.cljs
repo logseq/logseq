@@ -2,7 +2,6 @@
   "Debug UI for undo/redo history"
   (:require [fipp.edn :as fipp]
             [frontend.handler.history :as history-handler]
-            [frontend.hooks :as hooks]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.undo-redo :as undo-redo]
@@ -110,10 +109,6 @@
                      (-> (undo-redo/<get-debug-state repo)
                          (.then #(reset! history* %))))
                    nil)
-        _ (hooks/use-effect! (fn []
-                               (refresh!)
-                               js/undefined)
-                             [repo])
         undo-stack (or (:undo-ops @history*) [])
         redo-stack (or (:redo-ops @history*) [])
         expanded?* (::expanded state)
