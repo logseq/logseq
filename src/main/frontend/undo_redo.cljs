@@ -256,7 +256,10 @@
 
 (defn- block-property-value
   [db block-id property-id]
-  (some-> (d/entity db block-id) (get property-id) (property-ref-value db property-id)))
+  (some->>
+   (some-> (d/entity db block-id)
+           (get property-id))
+   (property-ref-value db property-id)))
 
 (defn- build-inverse-property-op
   [db-before [op args]]
@@ -308,15 +311,35 @@
     :insert-blocks
     (let [[blocks target-id opts] args
           created-uuids (created-block-uuids-from-tx-data tx-data)
-          blocks' (if (and (not (:keep-uuid? opts))
-                           (= (count blocks) (count created-uuids)))
+          target-ref (stable-entity-ref db target-id)
+          target-uuid (when (and (vector? target-ref)
+                                 (= :block/uuid (first target-ref)))
+                        (second target-ref))
+          blocks' (cond
+                    (and (:replace-empty-target? opts)
+                         target-uuid
+                         (seq blocks))
+                    (let [[fst-block & rst-blocks] blocks]
+                      (into [(assoc fst-block :block/uuid target-uuid)]
+                            (if (and (not (:keep-uuid? opts))
+                                     (= (count rst-blocks) (count created-uuids)))
+                              (map (fn [block uuid]
+                                     (assoc block :block/uuid uuid))
+                                   rst-blocks
+                                   created-uuids)
+                              rst-blocks)))
+
+                    (and (not (:keep-uuid? opts))
+                         (= (count blocks) (count created-uuids)))
                     (mapv (fn [block uuid]
                             (assoc block :block/uuid uuid))
                           blocks
                           created-uuids)
+
+                    :else
                     blocks)]
       [:insert-blocks [blocks'
-                       (stable-entity-ref db target-id)
+                       target-ref
                        (assoc (dissoc (or opts {}) :outliner-op)
                               :keep-uuid? true)]])
 
@@ -339,17 +362,35 @@
                       (build-inverse-save-block db-before block opts))
 
                     :insert-blocks
-                    (let [[blocks _target-id _opts] args
-                          ids (->> blocks
-                                   (keep (fn [block]
-                                           (when-let [u (:block/uuid block)]
-                                             [:block/uuid u])))
-                                   vec)]
-                      (when (seq ids)
-                        [:delete-blocks [ids {}]]))
+                    (let [[blocks _target-id opts] args]
+                      (if (:replace-empty-target? opts)
+                        (let [[fst-block & rst-blocks] blocks
+                              delete-ids (->> rst-blocks
+                                              (keep (fn [block]
+                                                      (when-let [u (:block/uuid block)]
+                                                        [:block/uuid u])))
+                                              vec)
+                              restore-target-op (when fst-block
+                                                  (build-inverse-save-block db-before fst-block nil))]
+                          (concat
+                           (when (seq delete-ids)
+                             [[:delete-blocks [delete-ids {}]]])
+                           (when restore-target-op
+                             [restore-target-op])))
+                        (let [ids (->> blocks
+                                       (keep (fn [block]
+                                               (when-let [u (:block/uuid block)]
+                                                 [:block/uuid u])))
+                                       vec)]
+                          (when (seq ids)
+                            [[:delete-blocks [ids {}]]]))))
 
                     (build-inverse-property-op db-before op-entry))))
            (remove nil?)
+           (mapcat #(if (and (sequential? %)
+                             (sequential? (first %)))
+                      %
+                      [%]))
            vec
            seq))
 
@@ -640,4 +681,7 @@
 (defn listen-db-changes!
   [repo conn]
   (d/listen! conn ::gen-undo-ops
-             (fn [tx-report] (gen-undo-ops! repo tx-report))))
+             (fn [tx-report]
+               (when-not (:db-before tx-report)
+                 (throw (ex-info "no-db" {})))
+               (gen-undo-ops! repo tx-report))))

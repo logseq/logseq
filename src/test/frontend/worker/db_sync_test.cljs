@@ -1141,6 +1141,71 @@
             (is (= "child 1 inline edit"
                    (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))))
 
+(deftest apply-history-action-redo-replays-status-property-test
+  (testing "apply-history-action should redo a status property change"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "task"
+                             :build/properties {:status "Todo"}}]}]})
+          client-ops-conn (d/create-conn client-op/schema-in-db)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (let [task (db-test/find-block-by-content @conn "task")
+                task-uuid (:block/uuid task)]
+            (outliner-property/set-block-property! conn
+                                                   (:db/id task)
+                                                   :logseq.property/status
+                                                   "Doing")
+            (let [{:keys [tx-id]} (first (#'sync-apply/pending-txs test-repo))]
+              (is (= true
+                     (:applied? (#'sync-apply/apply-history-action! test-repo tx-id true {}))))
+              (is (= :logseq.property/status.todo
+                     (some-> (d/entity @conn [:block/uuid task-uuid])
+                             :logseq.property/status
+                             :db/ident)))
+              (is (= true
+                     (:applied? (#'sync-apply/apply-history-action! test-repo tx-id false {}))))
+              (is (= :logseq.property/status.doing
+                     (some-> (d/entity @conn [:block/uuid task-uuid])
+                             :logseq.property/status
+                             :db/ident))))))))))
+
+(deftest apply-history-action-redo-replays-block-concat-test
+  (testing "block concat history should undo via reversed tx and redo cleanly"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "hellohello"}
+                            {:block/title "hello"}]}]})
+          client-ops-conn (d/create-conn client-op/schema-in-db)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (let [left (db-test/find-block-by-content @conn "hellohello")
+                right (db-test/find-block-by-content @conn "hello")
+                left-uuid (:block/uuid left)
+                right-uuid (:block/uuid right)]
+            (outliner-op/apply-ops! conn
+                                    [[:delete-blocks [[(:db/id right)]
+                                                      {:deleted-by-uuid (random-uuid)}]]
+                                     [:save-block [{:block/uuid left-uuid
+                                                    :block/title "hellohellohello"} nil]]]
+                                    local-tx-meta)
+            (let [{:keys [tx-id]} (first (#'sync-apply/pending-txs test-repo))]
+              (is (= "hellohellohello"
+                     (:block/title (d/entity @conn [:block/uuid left-uuid]))))
+              (is (nil? (d/entity @conn [:block/uuid right-uuid])))
+              (is (= true
+                     (:applied? (#'sync-apply/apply-history-action! test-repo tx-id true {}))))
+              (is (= "hellohello"
+                     (:block/title (d/entity @conn [:block/uuid left-uuid]))))
+              (is (some? (d/entity @conn [:block/uuid right-uuid])))
+              (is (= true
+                     (:applied? (#'sync-apply/apply-history-action! test-repo tx-id false {}))))
+              (is (= "hellohellohello"
+                     (:block/title (d/entity @conn [:block/uuid left-uuid]))))
+              (is (nil? (d/entity @conn [:block/uuid right-uuid]))))))))))
+
 (deftest apply-history-action-redo-replays-save-then-insert-test
   (testing "apply-history-action should redo a combined save-block then insert-block history action"
     (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
@@ -1177,6 +1242,63 @@
                    (:block/title (d/entity @conn [:block/uuid child-uuid]))))
             (is (= "inserted after save"
                    (:block/title (d/entity @conn [:block/uuid inserted-uuid']))))))))))
+
+(deftest apply-history-action-redo-replays-paste-into-empty-target-test
+  (testing "redo should replay paste into an empty target block without invalid rebase op"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "first"}
+                            {:block/title ""}]}]})
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          empty-target (db-test/find-block-by-content @conn "")
+          empty-target-uuid (:block/uuid empty-target)
+          parent-uuid (random-uuid)
+          copied-blocks [{:block/uuid parent-uuid
+                          :block/title "paste parent"}
+                         {:block/uuid (random-uuid)
+                          :block/title "paste child"
+                          :block/parent [:block/uuid parent-uuid]}]]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-op/apply-ops! conn
+                                  [[:insert-blocks [copied-blocks
+                                                    (:db/id empty-target)
+                                                    {:sibling? true
+                                                     :outliner-op :paste
+                                                     :replace-empty-target? true}]]]
+                                  local-tx-meta)
+          (let [pending (first (#'sync-apply/pending-txs test-repo))
+                {:keys [tx-id]} pending
+                pasted-id (d/q '[:find ?e .
+                                 :in $ ?title
+                                 :where
+                                 [?e :block/title ?title]]
+                               @conn
+                               "paste parent")
+                pasted-child-id (d/q '[:find ?e .
+                                       :in $ ?title
+                                       :where
+                                       [?e :block/title ?title]]
+                                     @conn
+                                     "paste child")
+                pasted (d/entity @conn pasted-id)
+                pasted-uuid (:block/uuid pasted)
+                pasted-child-uuid (:block/uuid (d/entity @conn pasted-child-id))]
+            (is (some #(and (= :save-block (first %))
+                            (= empty-target-uuid (get-in % [1 0 :block/uuid])))
+                      (:inverse-outliner-ops pending)))
+            (is (= true
+                   (:applied? (#'sync-apply/apply-history-action! test-repo tx-id true {}))))
+            (let [restored-target (d/entity @conn [:block/uuid empty-target-uuid])]
+              (is (some? restored-target))
+              (is (= "" (:block/title restored-target))))
+            (is (nil? (d/entity @conn [:block/uuid pasted-child-uuid])))
+            (is (= true
+                   (:applied? (#'sync-apply/apply-history-action! test-repo tx-id false {}))))
+            (let [redone (d/entity @conn [:block/uuid pasted-uuid])]
+              (is (some? redone))
+              (is (= "paste parent" (:block/title redone))))))))))
 
 (deftest direct-outliner-core-insert-blocks-persists-insert-blocks-outliner-op-test
   (testing "direct outliner-core/insert-blocks! still persists singleton insert-blocks outliner-ops"
