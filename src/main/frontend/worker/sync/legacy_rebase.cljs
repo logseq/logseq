@@ -4,7 +4,6 @@
   (:require [datascript.core :as d]
             [logseq.db :as ldb]
             [logseq.db.common.normalize :as db-normalize]
-            [logseq.db.frontend.schema :as db-schema]
             [logseq.outliner.recycle :as outliner-recycle]))
 
 (defn get-lookup-id
@@ -198,69 +197,6 @@
     (and (number? e) (not (neg? e))) (or (:block/uuid (d/entity db e)) e)
     :else e))
 
-(defn remote-updated-attr-keys
-  [db tx-data]
-  (->> tx-data
-       (keep (fn [item]
-               (when (and (vector? item)
-                          (>= (count item) 4)
-                          (contains? #{:db/add :db/retract} (first item)))
-                 [(canonical-entity-id db (second item))
-                  (nth item 2)])))
-       set))
-
-(defn- resolve-string-block-tempid
-  [db x]
-  (when (and db (string? x))
-    (when-let [block-uuid (parse-uuid x)]
-      (when (d/entity db [:block/uuid block-uuid])
-        [:block/uuid block-uuid]))))
-
-(defn- string-block-uuid->lookup
-  [x]
-  (when (string? x)
-    (when-let [block-uuid (parse-uuid x)]
-      [:block/uuid block-uuid])))
-
-(defn replace-string-block-tempids-with-lookups
-  [db tx-data]
-  (if db
-    (let [created-string-entity-ids (->> tx-data
-                                         (keep (fn [item]
-                                                 (when (and (vector? item)
-                                                            (= :db/add (first item))
-                                                            (>= (count item) 4)
-                                                            (string? (second item))
-                                                            (= :block/uuid (nth item 2)))
-                                                   (second item))))
-                                         set)
-          replace-entity (fn [entity]
-                           (if (contains? created-string-entity-ids entity)
-                             entity
-                             (or (string-block-uuid->lookup entity)
-                                 (resolve-string-block-tempid db entity)
-                                 entity)))]
-      (mapv (fn [item]
-              (if (and (vector? item) (>= (count item) 2))
-                (let [op (first item)
-                      entity' (replace-entity (second item))
-                      has-value? (>= (count item) 4)
-                      attr (nth item 2 nil)
-                      value (when has-value? (nth item 3))
-                      value' (if (and has-value?
-                                      (contains? db-schema/ref-type-attributes attr))
-                               (replace-entity value)
-                               value)]
-                  (cond-> item
-                    (and (contains? #{:db/add :db/retract :db/retractEntity} op)
-                         (not= (second item) entity'))
-                    (assoc 1 entity')
-                    (and has-value? (not= value value'))
-                    (assoc 3 value')))
-                item))
-            tx-data))
-    tx-data))
-
 (defn drop-remote-conflicted-local-tx
   [db remote-updated-keys tx-data]
   (if (seq remote-updated-keys)
@@ -404,15 +340,3 @@
                                (move-missing-location-blocks-to-recycle db)
                                drop-orphaning-parent-retracts)]
     sanitized-tx-data))
-
-(defn get-remote-deleted-properties
-  [{:keys [db-before db-after tx-data]}]
-  (when (and db-before db-after)
-    (->> tx-data
-         (keep (fn [d]
-                 (when-let [e (and (= :db/ident (:a d))
-                                   (false? (:added d))
-                                   (d/entity db-before (:e d)))]
-                   (when (and (ldb/property? e) (nil? (d/entity db-after (:db/ident e))))
-                     e))))
-         distinct)))

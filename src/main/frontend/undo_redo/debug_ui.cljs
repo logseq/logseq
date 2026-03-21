@@ -2,6 +2,7 @@
   "Debug UI for undo/redo history"
   (:require [fipp.edn :as fipp]
             [frontend.handler.history :as history-handler]
+            [frontend.hooks :as hooks]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.undo-redo :as undo-redo]
@@ -99,12 +100,22 @@
 (rum/defcs undo-redo-debug-ui < rum/reactive
   (rum/local #{} ::expanded)
   (rum/local false ::filter-ui-state?)
+  (rum/local nil ::history)
   [state]
   (let [repo (state/sub :git/current-repo)
-        undo-stacks (rum/react undo-redo/*undo-ops)
-        redo-stacks (rum/react undo-redo/*redo-ops)
-        undo-stack (get undo-stacks repo [])
-        redo-stack (get redo-stacks repo [])
+        history* (::history state)
+        _ (rum/react history*)
+        refresh! (fn []
+                   (when repo
+                     (-> (undo-redo/<get-debug-state repo)
+                         (.then #(reset! history* %))))
+                   nil)
+        _ (hooks/use-effect! (fn []
+                               (refresh!)
+                               js/undefined)
+                             [repo])
+        undo-stack (or (:undo-ops @history*) [])
+        redo-stack (or (:redo-ops @history*) [])
         expanded?* (::expanded state)
         filter-ui-state?* (::filter-ui-state? state)
         filter-ui-state? @filter-ui-state?*
@@ -122,21 +133,30 @@
        {:size :sm
         :disabled (or (nil? repo) (empty? undo-stack))
         :on-click (fn [e]
-                    (history-handler/undo! e))}
+                    (history-handler/undo! e)
+                    (js/setTimeout refresh! 0))}
        (shui/tabler-icon "arrow-back-up") "undo")
       (shui/button
        {:size :sm
         :disabled (or (nil? repo) (empty? redo-stack))
         :on-click (fn [e]
-                    (history-handler/redo! e))}
+                    (history-handler/redo! e)
+                    (js/setTimeout refresh! 0))}
        (shui/tabler-icon "arrow-forward-up") "redo")
       (shui/button
        {:size :sm
         :variant :outline
         :disabled (nil? repo)
         :on-click (fn [_]
-                    (undo-redo/clear-history! repo))}
+                    (undo-redo/clear-history! repo)
+                    (js/setTimeout refresh! 0))}
        (shui/tabler-icon "trash") "clear-history")
+      (shui/button
+       {:size :sm
+        :variant :outline
+        :disabled (nil? repo)
+        :on-click (fn [_] (refresh!))}
+       (shui/tabler-icon "refresh") "refresh")
       (shui/button
        {:size :sm
         :variant (if filter-ui-state? :default :outline)

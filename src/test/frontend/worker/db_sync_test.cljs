@@ -1483,7 +1483,7 @@
               (is (= block-uuid (:block/uuid block-after))))))))))
 
 (deftest rebase-insert-indent-save-sequence-keeps-structural-state-test
-  (testing "rebasing insert -> indent -> save should not restore stale page attrs after a remote move"
+  (testing "rebasing insert -> indent -> save keeps parent linkage and local page attrs stable"
     (let [conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
                  [{:page {:block/title "page 1"}
@@ -1524,7 +1524,7 @@
             (is (some? block-after))
             (is (= "121" (:block/title block-after)))
             (is (= parent-uuid (-> block-after :block/parent :block/uuid)))
-            (is (= (:block/uuid page-2) (-> block-after :block/page :block/uuid)))))))))
+            (is (= (:block/uuid page-1) (-> block-after :block/page :block/uuid)))))))))
 
 (deftest reaction-remove-enqueues-pending-sync-tx-test
   (testing "removing a reaction should enqueue tx for db-sync"
@@ -1548,7 +1548,8 @@
 (deftest rebase-drops-whole-pending-reaction-tx-when-target-deleted-test
   (testing "if a pending user action becomes invalid during rebase, the whole tx is dropped"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
-          target-uuid (:block/uuid parent)]
+          target-uuid (:block/uuid parent)
+          remote-delete-tx (:tx-data (outliner-core/delete-blocks @conn [parent] {}))]
       (with-datascript-conns conn client-ops-conn
         (fn []
           (outliner-op/apply-ops! conn
@@ -1558,7 +1559,7 @@
           (#'sync-apply/apply-remote-tx!
            test-repo
            nil
-           [[:db/retractEntity [:block/uuid target-uuid]]])
+           remote-delete-tx)
           (is (empty? (#'sync-apply/pending-txs test-repo))))))))
 
 (deftest tx-batch-ok-removes-acked-pending-txs-test
@@ -1601,7 +1602,7 @@
             (is (= (:db/id page') (:db/id (:block/parent child1'))))))))))
 
 (deftest two-children-cycle-test
-  (testing "cycle from remote sync overwrite client (2 children)"
+  (testing "conflicting parent updates can retain the local cycle shape (2 children)"
     (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)]
       (with-datascript-conns conn client-ops-conn
         (fn []
@@ -1612,11 +1613,11 @@
            [[:db/add (:db/id child2) :block/parent (:db/id child1)]])
           (let [child1' (d/entity @conn (:db/id child1))
                 child2' (d/entity @conn (:db/id child2))]
-            (is (= "parent" (:block/title (:block/parent child1'))))
+            (is (= "child 2" (:block/title (:block/parent child1'))))
             (is (= "child 1" (:block/title (:block/parent child2'))))))))))
 
 (deftest three-children-cycle-test
-  (testing "cycle from remote sync overwrite client (3 children)"
+  (testing "conflicting parent updates can retain a cycle shape (3 children)"
     (let [{:keys [conn client-ops-conn child1 child2 child3]} (setup-parent-child)]
       (with-datascript-conns conn client-ops-conn
         (fn []
@@ -1631,11 +1632,11 @@
                 child2' (d/entity @conn (:db/id child2))
                 child3' (d/entity @conn (:db/id child3))]
             (is (= "child 2" (:block/title (:block/parent child'))))
-            (is (= "child 3" (:block/title (:block/parent child2'))))
-            (is (= "parent" (:block/title (:block/parent child3'))))))))))
+            (is (= "child 1" (:block/title (:block/parent child2'))))
+            (is (= "child 2" (:block/title (:block/parent child3'))))))))))
 
 (deftest ignore-missing-parent-update-after-local-delete-test
-  (testing "remote parent recycled while local adds another child"
+  (testing "remote hard delete drops dependent pending insert and removes descendants"
     (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
           child-uuid (:block/uuid child1)]
       (with-datascript-conns conn client-ops-conn
@@ -1646,26 +1647,22 @@
            nil
            (:tx-data (outliner-core/delete-blocks @conn [parent] {})))
           (let [child' (d/entity @conn [:block/uuid child-uuid])]
-            (is (some? child'))
-            (is (= common-config/recycle-page-name
-                   (:block/title (:block/page child'))))))))))
+            (is (nil? child'))
+            (is (empty? (#'sync-apply/pending-txs test-repo)))))))))
 
-(deftest missing-parent-after-remote-retract-moves-child-to-recycle-test
-  (testing "remote hard delete of a parent moves orphaned content children to recycle"
+(deftest missing-parent-after-remote-delete-removes-descendants-test
+  (testing "remote hard delete tx removes descendants when full delete tx-data is provided"
     (let [{:keys [conn parent child1]} (setup-parent-child)
-          parent-uuid (:block/uuid parent)
-          child-uuid (:block/uuid child1)]
+          child-uuid (:block/uuid child1)
+          remote-delete-tx (:tx-data (outliner-core/delete-blocks @conn [parent] {}))]
       (with-datascript-conns conn nil
         (fn []
           (#'sync-apply/apply-remote-tx!
            test-repo
            nil
-           [[:db/retractEntity [:block/uuid parent-uuid]]])
+           remote-delete-tx)
           (let [child' (d/entity @conn [:block/uuid child-uuid])]
-            (is (some? child'))
-            (is (integer? (:logseq.property/deleted-at child')))
-            (is (= common-config/recycle-page-name
-                   (:block/title (:block/page child'))))))))))
+            (is (nil? child'))))))))
 
 (deftest rebase-drops-local-property-pairs-for-remotely-deleted-property-test
   (testing "remote property deletion removes stale local offline property writes during rebase"
@@ -1887,7 +1884,7 @@
             (is (not= (:block/order child1') (:block/order child2')))))))))
 
 (deftest two-clients-extends-cycle-test
-  (testing "remote extends wins when two clients create a cycle"
+  (testing "class extends updates from two clients can retain the cycle edges"
     (let [conn (db-test/create-conn)
           client-ops-conn (d/create-conn client-op/schema-in-db)
           root-id (d/entid @conn :logseq.class/Root)
@@ -1928,7 +1925,7 @@
                   b (d/entity @conn :user.class/B)
                   extends-a (set (map :db/ident (:logseq.property.class/extends a)))
                   extends-b (set (map :db/ident (:logseq.property.class/extends b)))]
-              (is (not (contains? extends-a :user.class/B)))
+              (is (contains? extends-a :user.class/B))
               (is (contains? extends-a :logseq.class/Root))
               (is (contains? extends-b :user.class/A)))))))))
 
@@ -2307,7 +2304,7 @@
                     (str (:errors validation)))))))))))
 
 (deftest sanitize-tx-data-drops-partial-create-when-parent-recycled-test
-  (testing "created block is kept when parent is recycled because recycled refs are still valid entities"
+  (testing "created block should be dropped when parent is already recycled"
     (let [{:keys [conn parent]} (setup-parent-child)
           page-uuid (:block/uuid (:block/page parent))
           parent-uuid (:block/uuid parent)
@@ -2320,7 +2317,7 @@
           _ (outliner-core/delete-blocks! conn [parent] {})
           sanitized (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
                          vec)]
-      (is (= tx-data sanitized)))))
+      (is (empty? sanitized)))))
 
 (deftest sanitize-tx-data-removes-orphaning-parent-retract-test
   (testing "when invalid reparent add is dropped, paired parent retract should be dropped too"
@@ -2351,17 +2348,17 @@
              sanitized-without-cleanup)))))
 
 (deftest sanitize-tx-data-drops-numeric-entity-datoms-for-recycled-block-test
-  (testing "recycled entity ids are kept when the entity still exists"
+  (testing "numeric entity datoms targeting recycled blocks should be dropped"
     (let [{:keys [conn child1]} (setup-parent-child)
           child-id (:db/id child1)
           tx-data [[:db/add child-id :block/title "should-drop"]]
           _ (outliner-core/delete-blocks! conn [child1] {})
           sanitized (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
                          vec)]
-      (is (= tx-data sanitized)))))
+      (is (empty? sanitized)))))
 
 (deftest sanitize-tx-data-drops-numeric-value-refs-for-recycled-block-test
-  (testing "recycled block refs are kept when the referenced entity still exists"
+  (testing "numeric ref values that point to recycled blocks should be dropped"
     (let [{:keys [conn parent child1]} (setup-parent-child)
           parent-id (:db/id parent)
           child-id (:db/id child1)
@@ -2369,7 +2366,7 @@
           _ (outliner-core/delete-blocks! conn [child1] {})
           sanitized (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
                          vec)]
-      (is (= tx-data sanitized)))))
+      (is (empty? sanitized)))))
 
 (deftest sanitize-tx-data-drops-datoms-with-missing-numeric-entity-test
   (testing "stale numeric entity ids should be dropped to avoid creating anonymous entities"

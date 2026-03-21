@@ -8,6 +8,7 @@
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
+            [frontend.worker.undo-redo :as worker-undo-redo]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -62,6 +63,10 @@
   [_ {:keys [repo]} tx-report]
   (db-sync/handle-local-tx! repo tx-report))
 
+(defmethod listen-db-changes :undo-redo
+  [_ {:keys [repo]} tx-report]
+  (worker-undo-redo/gen-undo-ops! repo tx-report))
+
 (defn- remove-old-embeddings-and-reset-new-updates!
   [conn tx-data tx-meta]
   (let [;; Remove old :logseq.property.embedding/hnsw-label-updated-at when importing a graph
@@ -94,7 +99,7 @@
                (fn listen-db-changes!-inner
                  [{:keys [tx-data tx-meta] :as tx-report}]
                  (when-not (:batch-tx? @conn)
-                   ;; (remove-old-embeddings-and-reset-new-updates! conn tx-data tx-meta)
+                   (remove-old-embeddings-and-reset-new-updates! conn tx-data tx-meta)
                    (when (and (seq tx-data) (not (:mark-embedding? tx-meta)))
                      (let [tx-report' (if sync-db-to-main-thread?
                                         (sync-db-to-main-thread repo conn tx-report)

@@ -1,6 +1,7 @@
 (ns frontend.worker.sync.apply-txs
   "Pending tx and remote tx application helpers for db sync."
   (:require [clojure.set :as set]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
@@ -85,7 +86,7 @@
                  [(if added :db/retract :db/add) e a v t])))
        (db-normalize/replace-attr-retract-with-retract-entity-v2 db-after)))
 
-(defn- normalize-rebased-pending-tx
+(defn normalize-rebased-pending-tx
   [{:keys [db-before db-after tx-data]}]
   {:normalized-tx-data (normalize-tx-data db-after db-before tx-data)
    :reversed-datoms (reverse-tx-data db-before db-after tx-data)})
@@ -326,24 +327,6 @@
                  uuid')))
            grouped))))
 
-(defn- any-created-block-uuids-from-tx-data
-  [tx-data]
-  (->> tx-data
-       (keep (fn [item]
-               (cond
-                 (and (map? item) (:block/uuid item))
-                 (:block/uuid item)
-
-                 (and (some? (:a item))
-                      (= :block/uuid (:a item))
-                      (true? (:added item))
-                      (uuid? (:v item)))
-                 (:v item)
-
-                 :else nil)))
-       distinct
-       vec))
-
 (defn- maybe-rewrite-delete-block-ids
   [db tx-data ids]
   (let [ids' (stable-id-coll db ids)
@@ -359,7 +342,7 @@
       (mapv (fn [uuid] [:block/uuid uuid]) created-uuids)
       ids')))
 
-(defn- canonicalize-semantic-outliner-op
+(defn- ^:large-vars/cleanup-todo canonicalize-semantic-outliner-op
   [db tx-data [op args]]
   (case op
     :save-block
@@ -1017,7 +1000,7 @@
         v)
       v)))
 
-(defn- replay-canonical-outliner-op!
+(defn- ^:large-vars/cleanup-todo replay-canonical-outliner-op!
   [conn [op args]]
   (case op
     :save-block
@@ -1090,6 +1073,11 @@
 
     :set-block-property
     (let [[block-eid property-id v] args
+          block (d/entity @conn block-eid)
+          property (d/entity @conn property-id)
+          _ (when-not (and block property)
+              (invalid-rebase-op! op {:args args
+                                      :reason :missing-block-or-property}))
           v' (replay-property-value @conn property-id v)]
       (when (and (stable-entity-ref-like? v) (nil? v'))
         (invalid-rebase-op! op {:args args}))
@@ -1100,6 +1088,12 @@
 
     :batch-set-property
     (let [[block-ids property-id v opts] args
+          property (d/entity @conn property-id)
+          _ (when-not (and property
+                           (seq block-ids)
+                           (every? #(some? (d/entity @conn %)) block-ids))
+              (invalid-rebase-op! op {:args args
+                                      :reason :missing-block-or-property}))
           v' (replay-property-value @conn property-id v)]
       (when (and (stable-entity-ref-like? v) (nil? v'))
         (invalid-rebase-op! op {:args args}))
@@ -1110,6 +1104,11 @@
 
     :delete-property-value
     (let [[block-eid property-id property-value] args
+          block (d/entity @conn block-eid)
+          property (d/entity @conn property-id)
+          _ (when-not (and block property)
+              (invalid-rebase-op! op {:args args
+                                      :reason :missing-block-or-property}))
           property-value' (replay-property-value @conn property-id property-value)]
       (when (and (stable-entity-ref-like? property-value) (nil? property-value'))
         (invalid-rebase-op! op {:args args}))
@@ -1117,6 +1116,12 @@
 
     :batch-delete-property-value
     (let [[block-eids property-id property-value] args
+          property (d/entity @conn property-id)
+          _ (when-not (and property
+                           (seq block-eids)
+                           (every? #(some? (d/entity @conn %)) block-eids))
+              (invalid-rebase-op! op {:args args
+                                      :reason :missing-block-or-property}))
           property-value' (replay-property-value @conn property-id property-value)]
       (when (and (stable-entity-ref-like? property-value) (nil? property-value'))
         (invalid-rebase-op! op {:args args}))
@@ -1157,15 +1162,30 @@
        (fn [row-conn _*batch-tx-data]
          (if (= [[:transact nil]] outliner-ops)
            (when-let [tx-data (seq (:tx local-tx))]
+             ;; Preflight first to avoid noisy transact stack traces for known stale refs.
+             (try
+               (d/with @row-conn tx-data {:outliner-op :transact
+                                          :persist-op? false})
+               (catch :default error
+                 (invalid-rebase-op! :transact
+                                     {:reason :invalid-transact
+                                      :error-message (ex-message error)})))
              (ldb/transact! row-conn tx-data {:outliner-op :transact
                                               :persist-op? false}))
            (doseq [op outliner-ops]
              (replay-canonical-outliner-op! row-conn op)))))
       (catch :default error
-        (log/warn :db-sync/drop-op-driven-pending-tx
-                  {:tx-id (:tx-id local-tx)
-                   :outliner-ops outliner-ops
-                   :error error})
+        (let [drop-log {:tx-id (:tx-id local-tx)
+                        :outliner-ops outliner-ops
+                        :error error}
+              expected-drop? (or (= "invalid rebase op" (ex-message error))
+                                 (string/includes? (or (ex-message error) "")
+                                                   "doesn't exist yet")
+                                 (string/includes? (or (ex-message error) "")
+                                                   "Nothing found for entity id"))]
+          (if expected-drop?
+            (log/debug :db-sync/drop-op-driven-pending-tx drop-log)
+            (log/warn :db-sync/drop-op-driven-pending-tx drop-log)))
         nil))))
 
 (defn- rebase-local-txs!

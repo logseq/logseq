@@ -5,7 +5,6 @@
             [frontend.db.conn :as db-conn]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
-            [frontend.undo-redo :as undo-redo]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [promesa.core :as p]))
@@ -28,7 +27,6 @@
                                                 :initial-data initial-data}))
                    (js/console.error e)
                    (throw e)))
-          _ (undo-redo/listen-db-changes! repo conn)
           db-name (db-conn/get-repo-path repo)
           _ (swap! db-conn/conns assoc db-name conn)
           end-time (t/now)]

@@ -48,7 +48,9 @@
                        old-state (f prev)
                        new-state (f current)]
                    (when (not= new-state old-state)
-                     (undo-redo/record-ui-state! (state/get-current-repo) (ldb/write-transit-str {:old-state old-state :new-state new-state}))))))))
+                     (let [repo (state/get-current-repo)
+                           ui-state-str (ldb/write-transit-str {:old-state old-state :new-state new-state})]
+                       (undo-redo/record-ui-state! repo ui-state-str))))))))
 
 (defn transact!
   [repo tx-data tx-meta]

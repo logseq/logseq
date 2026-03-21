@@ -1,9 +1,8 @@
-(ns frontend.undo-redo
+(ns frontend.worker.undo-redo
   "Undo redo new implementation"
   (:require [datascript.core :as d]
-            [frontend.db :as db]
-            [frontend.state :as state]
-            [frontend.util :as util]
+            [frontend.worker.state :as worker-state]
+            [frontend.worker.sync.apply-txs :as sync-apply]
             [lambdaisland.glogi :as log]
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.db :as ldb]
@@ -11,8 +10,7 @@
             [logseq.outliner.recycle :as outliner-recycle]
             [logseq.undo-redo-validate :as undo-validate]
             [malli.core :as m]
-            [malli.util :as mu]
-            [promesa.core :as p]))
+            [malli.util :as mu]))
 
 (defkeywords
   ::record-editor-info {:doc "record current editor and cursor"}
@@ -58,6 +56,7 @@
 (defonce max-stack-length 100)
 (defonce *undo-ops (atom {}))
 (defonce *redo-ops (atom {}))
+(defonce *pending-editor-info (atom {}))
 
 (def ^:private transient-block-keys
   #{:db/id
@@ -74,15 +73,21 @@
 
 (defn clear-history!
   [repo]
-  (try
-    (state/<invoke-db-worker :thread-api/undo-redo-clear-history repo)
-    (catch :default e
-      (if (= "db-worker has not been initialized" (ex-message e))
-        (do
-          (swap! *undo-ops dissoc repo)
-          (swap! *redo-ops dissoc repo)
-          nil)
-        (throw e)))))
+  (swap! *undo-ops assoc repo [])
+  (swap! *redo-ops assoc repo [])
+  (swap! *pending-editor-info dissoc repo))
+
+(defn set-pending-editor-info!
+  [repo editor-info]
+  (if editor-info
+    (swap! *pending-editor-info assoc repo editor-info)
+    (swap! *pending-editor-info dissoc repo)))
+
+(defn- take-pending-editor-info!
+  [repo]
+  (let [editor-info (get @*pending-editor-info repo)]
+    (swap! *pending-editor-info dissoc repo)
+    editor-info))
 
 (defn- conj-op
   [col op]
@@ -436,15 +441,10 @@
       (seq inverse-outliner-ops')
       (assoc :db-sync/inverse-outliner-ops (vec inverse-outliner-ops')))))
 
-(defn- apply-history-action-from-worker!
+(defn- apply-history-action!
   [repo data undo? tx-meta]
   (when-let [tx-id (:db-sync/tx-id data)]
-    (state/<invoke-db-worker
-     :thread-api/apply-history-action
-     repo
-     tx-id
-     undo?
-     tx-meta)))
+    (sync-apply/apply-history-action! repo tx-id undo? tx-meta)))
 
 (defn- reverse-datoms
   [conn datoms schema added-ids retracted-ids undo? redo?]
@@ -543,10 +543,10 @@
                                     (remove nil?))))]
     reversed-tx-data))
 
-(defn undo-redo-aux
+(defn- undo-redo-aux
   [repo undo?]
   (if-let [op (not-empty ((if undo? pop-undo-op pop-redo-op) repo))]
-    (let [conn (db/get-db repo false)]
+    (let [conn (worker-state/get-datascript-conn repo)]
       (cond
         (= ::ui-state (ffirst op))
         (do
@@ -578,17 +578,13 @@
                                                             reverse)]
                                      (if (seq reversed-tx-data)
                                        (if (undo-validate/valid-undo-redo-tx? conn reversed-tx-data)
-                                         (if util/node-test?
-                                           (try
-                                             (ldb/transact! conn reversed-tx-data tx-meta')
-                                             (handler)
-                                             (catch :default e
-                                               (log/error ::undo-redo-failed e)
-                                               (clear-history! repo)
-                                               (if undo? ::empty-undo-stack ::empty-redo-stack)))
-                                           (throw (ex-info "browser undo/redo must go through db worker"
-                                                           {:type :undo-redo/browser-direct-db-write-disallowed
-                                                            :repo repo})))
+                                         (try
+                                           (ldb/transact! conn reversed-tx-data tx-meta')
+                                           (handler)
+                                           (catch :default e
+                                             (log/error ::undo-redo-failed e)
+                                             (clear-history! repo)
+                                             (if undo? ::empty-undo-stack ::empty-redo-stack)))
                                          (do
                                            (log/warn ::undo-redo-skip-invalid-op
                                                      {:undo? undo?
@@ -599,67 +595,57 @@
                                                    {:undo? undo?
                                                     :outliner-op (:outliner-op tx-meta)})
                                          (undo-redo-aux repo undo?)))))]
-              (if util/node-test?
-                (run-local-path)
-                (->
-                 (p/let [worker-result (if tx-id
-                                         (apply-history-action-from-worker! repo data undo? tx-meta')
-                                         (p/resolved {:applied? false
-                                                      :reason :missing-history-action-id}))]
-                   (if (:applied? worker-result)
-                     (handler)
-                     (do
-                       (log/error ::undo-redo-worker-action-unavailable
-                                  {:undo? undo?
-                                   :repo repo
-                                   :tx-id tx-id
-                                   :result worker-result})
-                       (clear-history! repo)
-                       (if undo? ::empty-undo-stack ::empty-redo-stack))))
-                 (p/catch (fn [e]
-                            (log/error ::undo-redo-worker-failed e)
-                            (clear-history! repo)
-                            (if undo? ::empty-undo-stack ::empty-redo-stack))))))))))
+              (if tx-id
+                (try
+                  (let [worker-result (apply-history-action! repo data undo? tx-meta')]
+                    (if (:applied? worker-result)
+                      (handler)
+                      (do
+                        (log/error ::undo-redo-worker-action-unavailable
+                                   {:undo? undo?
+                                    :repo repo
+                                    :tx-id tx-id
+                                    :result worker-result})
+                        (clear-history! repo)
+                        (if undo? ::empty-undo-stack ::empty-redo-stack))))
+                  (catch :default e
+                    (log/error ::undo-redo-worker-failed e)
+                    (clear-history! repo)
+                    (if undo? ::empty-undo-stack ::empty-redo-stack)))
+                (run-local-path)))))))
 
     (when ((if undo? empty-undo-stack? empty-redo-stack?) repo)
       (if undo? ::empty-undo-stack ::empty-redo-stack))))
 
 (defn undo
   [repo]
-  (try
-    (state/<invoke-db-worker :thread-api/undo-redo-undo repo)
-    (catch :default e
-      (if (= "db-worker has not been initialized" (ex-message e))
-        (p/resolved (undo-redo-aux repo true))
-        (throw e)))))
+  (undo-redo-aux repo true))
 
 (defn redo
   [repo]
-  (try
-    (state/<invoke-db-worker :thread-api/undo-redo-redo repo)
-    (catch :default e
-      (if (= "db-worker has not been initialized" (ex-message e))
-        (p/resolved (undo-redo-aux repo false))
-        (throw e)))))
+  (undo-redo-aux repo false))
 
 (defn record-editor-info!
   [repo editor-info]
-  (state/<invoke-db-worker :thread-api/undo-redo-record-editor-info repo editor-info))
+  (when editor-info
+    (swap! *undo-ops
+           update repo
+           (fn [stack]
+             (if (seq stack)
+               (update stack (dec (count stack))
+                       (fn [op]
+                         (conj (vec op) [::record-editor-info editor-info])))
+               stack)))))
 
 (defn record-ui-state!
   [repo ui-state-str]
   (when ui-state-str
-    (state/<invoke-db-worker :thread-api/undo-redo-record-ui-state repo ui-state-str)))
-
-(defn <get-debug-state
-  [repo]
-  (state/<invoke-db-worker :thread-api/undo-redo-get-debug-state repo))
+    (push-undo-op repo [[::ui-state ui-state-str]])))
 
 (defn gen-undo-ops!
   [repo {:keys [tx-data tx-meta db-after db-before]}]
   (let [{:keys [outliner-op local-tx?]} tx-meta]
     (when (and
-           (= (:client-id tx-meta) (:client-id @state/state))
            (true? local-tx?)
            outliner-op
            (not (false? (:gen-undo-ops? tx-meta)))
@@ -674,8 +660,8 @@
                         (fn [id] (and (nil? (d/entity db-before id)) (d/entity db-after id)))
                         all-ids))
             tx-data' (vec tx-data)
-            editor-info @state/*editor-info
-            _ (reset! state/*editor-info nil)
+            editor-info (or (:undo-redo/editor-info tx-meta)
+                            (take-pending-editor-info! repo))
             history-data (ensure-history-action-metadata
                           {:tx-data tx-data'
                            :tx-meta tx-meta
@@ -691,3 +677,9 @@
         ;; A new local edit invalidates any redo history.
         (swap! *redo-ops assoc repo [])
         (push-undo-op repo op)))))
+
+(defn get-debug-state
+  [repo]
+  {:undo-ops (get @*undo-ops repo [])
+   :redo-ops (get @*redo-ops repo [])
+   :pending-editor-info (get @*pending-editor-info repo)})
