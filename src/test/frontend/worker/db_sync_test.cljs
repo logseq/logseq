@@ -34,6 +34,7 @@
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
+            [logseq.outliner.recycle :as outliner-recycle]
             [promesa.core :as p]))
 
 (def ^:private test-repo "test-db-sync-repo")
@@ -1299,6 +1300,122 @@
             (let [redone (d/entity @conn [:block/uuid pasted-uuid])]
               (is (some? redone))
               (is (= "paste parent" (:block/title redone))))))))))
+
+(deftest apply-history-action-redo-replays-insert-save-delete-sequence-test
+  (testing "history actions replay insert -> save -> recycle-delete in undo/redo order"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          inserted-uuid (random-uuid)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-op/apply-ops! conn
+                                  [[:insert-blocks [[{:block/title "draft"
+                                                      :block/uuid inserted-uuid}]
+                                                    (:db/id parent)
+                                                    {:sibling? false}]]]
+                                  local-tx-meta)
+          (let [inserted (db-test/find-block-by-content @conn "draft")
+                inserted-uuid' (:block/uuid inserted)]
+            (outliner-op/apply-ops! conn
+                                    [[:save-block [{:block/uuid inserted-uuid'
+                                                    :block/title "published"} {}]]]
+                                    local-tx-meta)
+            (outliner-core/delete-blocks! conn
+                                          [(d/entity @conn [:block/uuid inserted-uuid'])]
+                                          {})
+            (let [pending (#'sync-apply/pending-txs test-repo)
+                  insert-action (some #(when (= :insert-blocks (:outliner-op %)) %) pending)
+                  save-action (some #(when (= :save-block (:outliner-op %)) %) pending)
+                  delete-action (some #(when (= :delete-blocks (:outliner-op %)) %) pending)]
+              (is (some? insert-action))
+              (is (some? save-action))
+              (is (some? delete-action))
+              (is (nil? (d/entity @conn [:block/uuid inserted-uuid'])))
+
+              (is (= true
+                     (:applied? (#'sync-apply/apply-history-action! test-repo
+                                                                    (:tx-id delete-action)
+                                                                    true
+                                                                    {}))))
+              (is (= "published"
+                     (:block/title (d/entity @conn [:block/uuid inserted-uuid']))))
+
+              (is (= true
+                     (:applied? (#'sync-apply/apply-history-action! test-repo
+                                                                    (:tx-id save-action)
+                                                                    true
+                                                                    {}))))
+              (is (= "draft"
+                     (:block/title (d/entity @conn [:block/uuid inserted-uuid']))))
+
+              (is (= true
+                     (:applied? (#'sync-apply/apply-history-action! test-repo
+                                                                    (:tx-id save-action)
+                                                                    false
+                                                                    {}))))
+              (is (= "published"
+                     (:block/title (d/entity @conn [:block/uuid inserted-uuid']))))
+
+              (is (= true
+                     (:applied? (#'sync-apply/apply-history-action! test-repo
+                                                                    (:tx-id delete-action)
+                                                                    false
+                                                                    {}))))
+              (is (nil? (d/entity @conn [:block/uuid inserted-uuid']))))))))))
+
+(deftest apply-history-action-undo-keeps-working-after-remote-non-structural-update-test
+  (testing "undo/redo of local semantic save still works after a remote metadata-only update"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          child-id (:db/id child1)
+          child-uuid (:block/uuid child1)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-op/apply-ops! conn
+                                  [[:save-block [{:block/uuid child-uuid
+                                                  :block/title "local-2"} {}]]]
+                                  local-tx-meta)
+          (let [{:keys [tx-id]} (first (#'sync-apply/pending-txs test-repo))]
+            (#'sync-apply/apply-remote-tx!
+             test-repo
+             nil
+             [[:db/add child-id :block/updated-at 12345]])
+            (is (= true
+                   (:applied? (#'sync-apply/apply-history-action! test-repo tx-id true {}))))
+            (is (= "child 1"
+                   (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+            (is (= true
+                   (:applied? (#'sync-apply/apply-history-action! test-repo tx-id false {}))))
+            (is (= "local-2"
+                   (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))))
+
+(deftest apply-history-action-undo-restores-soft-delete-via-recycle-tx-test
+  (testing "history action undo restores a recycled block created from recycle tx-data"
+    (let [{:keys [conn client-ops-conn child1 parent]} (setup-parent-child)
+          child-uuid (:block/uuid child1)
+          page-uuid (some-> parent :block/page :block/uuid)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (let [recycle-tx (outliner-recycle/recycle-blocks-tx-data
+                            @conn
+                            [(d/entity @conn [:block/uuid child-uuid])]
+                            {})
+                _ (ldb/transact! conn recycle-tx (assoc local-tx-meta :outliner-op :delete-blocks))
+                delete-action (->> (#'sync-apply/pending-txs test-repo)
+                                   (filter #(= :delete-blocks (:outliner-op %)))
+                                   last)
+                recycled (d/entity @conn [:block/uuid child-uuid])]
+            (is (some? delete-action))
+            (is (= common-config/recycle-page-name
+                   (some-> recycled :block/page :block/title)))
+            (is (integer? (:logseq.property/deleted-at recycled)))
+
+            (is (= true
+                   (:applied? (#'sync-apply/apply-history-action! test-repo
+                                                                  (:tx-id delete-action)
+                                                                  true
+                                                                  {}))))
+            (let [restored (d/entity @conn [:block/uuid child-uuid])]
+              (is (= page-uuid (some-> restored :block/page :block/uuid)))
+              (is (nil? (:logseq.property/deleted-at restored))))))))))
 
 (deftest direct-outliner-core-insert-blocks-persists-insert-blocks-outliner-op-test
   (testing "direct outliner-core/insert-blocks! still persists singleton insert-blocks outliner-ops"
