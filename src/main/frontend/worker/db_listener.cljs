@@ -20,7 +20,6 @@
     (->> tx-meta
          (remove (fn [[k v]]
                    (or (= :error-handler k)
-                       (= :outliner-ops k)
                        (fn? v))))
          (into {}))))
 
