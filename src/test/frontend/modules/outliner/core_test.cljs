@@ -530,11 +530,7 @@
 
         (is (= [5] (get-children 4)))
 
-        (let [recycled (get-block 3)
-              recycle-page (db/get-page "Recycle")]
-          (is (some? recycled))
-          (is (integer? (:logseq.property/deleted-at recycled)))
-          (is (= (:db/id recycle-page) (:db/id (:block/page recycled)))))))))
+        (is (nil? (get-block 3)))))))
 
 (deftest test-bocks-with-level
   (testing "blocks with level"

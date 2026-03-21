@@ -34,7 +34,11 @@
                         ;; not from remote (rtc)
                       :local-tx? true))]
     (worker-call (fn async-request []
-                   (worker-transact repo tx-data tx-meta')))))
+                   (p/do!
+                    (state/<invoke-db-worker :thread-api/undo-redo-set-pending-editor-info
+                                             repo
+                                             (state/get-editor-info))
+                    (worker-transact repo tx-data tx-meta'))))))
 
 (defn apply-outliner-ops
   [conn ops opts]
@@ -51,4 +55,10 @@
                       (frontend.state/get-current-repo)
                       ops
                       opts')]
-        (frontend.db.transact/worker-call request)))))
+        (frontend.db.transact/worker-call
+         (fn []
+           (p/do!
+            (state/<invoke-db-worker :thread-api/undo-redo-set-pending-editor-info
+                                     (frontend.state/get-current-repo)
+                                     (state/get-editor-info))
+            (request))))))))
