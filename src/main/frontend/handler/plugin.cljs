@@ -942,7 +942,15 @@
                                                v))))
                                         ((fn [perfs]
                                            (doseq [perf perfs]
-                                             (state/pub-event! [:plugin/loader-perf-tip (bean/->clj perf)])))))))))
+                                             (state/pub-event! [:plugin/loader-perf-tip (bean/->clj perf)]))))))
+                                 ;; Auto-uninstall deprecated logseq-tabs plugin now that we have built-in tabs
+                                 (when (get-in @state/state [:plugin/installed-plugins :logseq-tabs])
+                                   (when (util/electron?)
+                                     (ipc/ipc :uninstallMarketPlugin "logseq-tabs"))
+                                   (notification/show!
+                                    "The logseq-tabs plugin has been automatically uninstalled. Logseq now has built-in tabs support!"
+                                    :success
+                                    false)))))
 
               default-plugins (get-user-default-plugins)
               [plugins0, plugins-async] (if (and (seq default-plugins)
