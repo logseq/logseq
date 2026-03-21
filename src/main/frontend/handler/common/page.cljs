@@ -38,7 +38,7 @@
 (defn <create!
   ([title]
    (<create! title {}))
-  ([title {:keys [redirect? today-journal?]
+  ([title {:keys [redirect? today-journal? class?]
            :or   {redirect? true}
            :as options}]
    (when (string? title)
@@ -64,24 +64,27 @@
                              :error)
          :else
          (when-not (string/blank? title')
-           (p/let [options' (cond-> (update options :tags concat (:block/tags parsed-result))
-                              (nil? (:split-namespace? options))
-                              (assoc :split-namespace? true))
-                   [_page-name page-uuid] (ui-outliner-tx/transact!
-                                           {:outliner-op :create-page}
-                                           (outliner-op/create-page! title' options'))
-                   page (db/get-page (or page-uuid title'))]
-             (when redirect?
-               (route-handler/redirect-to-page! page-uuid)
-               (when-not today-journal?
-                 (js/setTimeout
-                  (fn []
-                    (when-let [block-add-button (->> (dom/sel ".block-add-button")
-                                                     (filter #(= (str (:db/id page)) (dom/attr % "parentblockid")))
-                                                     first)]
-                      (.click block-add-button)))
-                  200)))
-             page)))))))
+           (p/let [existing-page (when-not class? (db/get-page title'))]
+             (if existing-page
+               existing-page
+               (p/let [options' (cond-> (update options :tags concat (:block/tags parsed-result))
+                                  (nil? (:split-namespace? options))
+                                  (assoc :split-namespace? true))
+                       [_page-name page-uuid] (ui-outliner-tx/transact!
+                                               {:outliner-op :create-page}
+                                               (outliner-op/create-page! title' options'))
+                       page (db/get-page (or page-uuid title'))]
+                 (when redirect?
+                   (route-handler/redirect-to-page! page-uuid)
+                   (when-not today-journal?
+                     (js/setTimeout
+                      (fn []
+                        (when-let [block-add-button (->> (dom/sel ".block-add-button")
+                                                         (filter #(= (str (:db/id page)) (dom/attr % "parentblockid")))
+                                                         first)]
+                          (.click block-add-button)))
+                      200)))
+                 page)))))))))
 
 ;; favorite fns
 ;; ============

@@ -1,13 +1,14 @@
 (ns frontend.undo-redo
   "Undo redo new implementation"
-  (:require [clojure.set :as set]
-            [datascript.core :as d]
+  (:require [datascript.core :as d]
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.db :as ldb]
+            [logseq.outliner.recycle :as outliner-recycle]
+            [logseq.undo-redo-validate :as undo-validate]
             [malli.core :as m]
             [malli.util :as mu]
             [promesa.core :as p]))
@@ -56,7 +57,6 @@
 
 (defn clear-history!
   [repo]
-  (prn :debug :clear-undo-history repo)
   (swap! *undo-ops assoc repo [])
   (swap! *redo-ops assoc repo []))
 
@@ -151,26 +151,6 @@
   [repo]
   (empty? (get @*redo-ops repo)))
 
-(defn- get-moved-blocks
-  [e->datoms]
-  (->>
-   (keep (fn [[e datoms]]
-           (when (some
-                  (fn [k]
-                    (and (some (fn [d] (and (= k (:a d)) (:added d))) datoms)
-                         (some (fn [d] (and (= k (:a d)) (not (:added d)))) datoms)))
-                  [:block/parent :block/order])
-             e)) e->datoms)
-   (set)))
-
-(defn- other-children-exist?
-  "return true if there are other children existing(not included in `ids`)"
-  [entity ids]
-  (seq
-   (set/difference
-    (set (map :db/id (:block/_parent entity)))
-    ids)))
-
 (defn- reverse-datoms
   [conn datoms schema added-ids retracted-ids undo? redo?]
   (keep
@@ -186,70 +166,87 @@
          [op e a v])))
    datoms))
 
-(defn- block-moved-and-target-deleted?
-  [conn e->datoms e moved-blocks tx-data]
-  (let [datoms (get e->datoms e)]
-    (and (moved-blocks e)
-         (let [b (d/entity @conn e)
-               cur-parent (:db/id (:block/parent b))
-               move-datoms (filter (fn [d] (contains? #{:block/parent} (:a d))) datoms)]
-           (when cur-parent
-             (let [before-parent (some (fn [d] (when (and (= :block/parent (:a d)) (not (:added d))) (:v d))) move-datoms)
-                   not-exists-in-current-db (nil? (d/entity @conn before-parent))
-                   ;; reverse tx-data will add parent before back
-                   removed-before-parent (some (fn [d] (and (= :block/uuid (:a d))
-                                                            (= before-parent (:e d))
-                                                            (not (:added d)))) tx-data)]
-               (and before-parent
-                    not-exists-in-current-db
-                    (not removed-before-parent))))))))
+(defn- datom-attr
+  [datom]
+  (or (nth datom 1 nil)
+      (:a datom)))
+
+(defn- datom-value
+  [datom]
+  (or (nth datom 2 nil)
+      (:v datom)))
+
+(defn- datom-added?
+  [datom]
+  (let [value (nth datom 4 nil)]
+    (if (some? value)
+      value
+      (:added datom))))
+
+(defn- reversed-move-target-ref
+  [datoms attr undo?]
+  (some (fn [datom]
+          (let [a (datom-attr datom)
+                v (datom-value datom)
+                added (datom-added? datom)]
+            (when (and (= a attr)
+                       (if undo? (not added) added))
+              v)))
+        datoms))
+
+(defn- reversed-structural-target-conflicted?
+  [conn e->datoms undo?]
+  (some (fn [[_e datoms]]
+          (let [target-parent (reversed-move-target-ref datoms :block/parent undo?)
+                target-page (reversed-move-target-ref datoms :block/page undo?)
+                parent-ent (when (int? target-parent) (d/entity @conn target-parent))
+                page-ent (when (int? target-page) (d/entity @conn target-page))]
+            (or (and target-parent
+                     (or (nil? parent-ent)
+                         (ldb/recycled? parent-ent)))
+                (and target-page
+                     (or (nil? page-ent)
+                         (ldb/recycled? page-ent))))))
+        e->datoms))
 
 (defn get-reversed-datoms
-  [conn undo? {:keys [tx-data added-ids retracted-ids] :as op} tx-meta]
-  (try
-    (let [redo? (not undo?)
-          e->datoms (->> (if redo? tx-data (reverse tx-data))
-                         (group-by :e))
-          schema (:schema @conn)
-          moved-blocks (get-moved-blocks e->datoms)]
-      (->>
-       (mapcat
-        (fn [[e datoms]]
-          (let [entity (d/entity @conn e)]
-            (cond
-              ;; new children blocks have been added
-              (and
-               (not (:local-tx? tx-meta))
-               (or (and (contains? retracted-ids e) redo?
-                        (other-children-exist? entity retracted-ids)) ; redo delete-blocks
-                   (and (contains? added-ids e) undo?                 ; undo insert-blocks
-                        (other-children-exist? entity added-ids))))
-              (throw (ex-info "Children still exists"
-                              (merge op {:error :block-children-exists
-                                         :undo? undo?})))
+  [conn undo? {:keys [tx-data added-ids retracted-ids]} tx-meta]
+  (let [recycle-restore-tx (when (and undo?
+                                      (= :delete-blocks (:outliner-op tx-meta)))
+                             (->> tx-data
+                                  (keep (fn [datom]
+                                          (let [e (or (nth datom 0 nil)
+                                                      (:e datom))
+                                                a (datom-attr datom)
+                                                added (datom-added? datom)]
+                                            (when (and added
+                                                       (= :logseq.property/deleted-at a))
+                                              (d/entity @conn e)))))
+                                  (mapcat #(outliner-recycle/restore-tx-data @conn %))
+                                  seq))
+        redo? (not undo?)
+        e->datoms (->> (if redo? tx-data (reverse tx-data))
+                       (group-by :e))
+        schema (:schema @conn)
+        structural-target-conflicted? (and undo?
+                                           (reversed-structural-target-conflicted? conn e->datoms undo?))
+        reversed-tx-data (if structural-target-conflicted?
+                           nil
+                           (or (some-> recycle-restore-tx reverse seq)
+                               (->> (mapcat
+                                     (fn [[e datoms]]
+                                       (cond
+                                         (and undo? (contains? added-ids e))
+                                         [[:db/retractEntity e]]
 
-              ;; block has been moved or target got deleted by another client
-              (block-moved-and-target-deleted? conn e->datoms e moved-blocks tx-data)
-              (throw (ex-info "This block has been moved or its target has been deleted"
-                              (merge op {:error :block-moved-or-target-deleted
-                                         :undo? undo?})))
+                                         (and redo? (contains? retracted-ids e))
+                                         [[:db/retractEntity e]]
 
-              ;; The entity should be deleted instead of retracting its attributes
-              (and entity
-                   (or (and (contains? retracted-ids e) redo?) ; redo delete-blocks
-                       (and (contains? added-ids e) undo?)))   ; undo insert-blocks
-              [[:db/retractEntity e]]
-
-              :else
-              (reverse-datoms conn datoms schema added-ids retracted-ids undo? redo?))))
-        e->datoms)
-       (remove nil?)))
-    (catch :default e
-      (prn :debug :undo-redo :error (:error (ex-data e)))
-      (when-not (contains? #{:block-moved-or-target-deleted
-                             :block-children-exists}
-                           (:error (ex-data e)))
-        (throw e)))))
+                                         :else
+                                         (reverse-datoms conn datoms schema added-ids retracted-ids undo? redo?)))
+                                     e->datoms)
+                                    (remove nil?))))]
+    reversed-tx-data))
 
 (defn- undo-redo-aux
   [repo undo?]
@@ -271,7 +268,6 @@
                                      undo?
                                      reverse)
                   tx-meta' (-> tx-meta
-                               (dissoc :batch-tx/batch-tx-mode?)
                                (assoc
                                 :gen-undo-ops? false
                                 :undo? undo?
@@ -288,28 +284,35 @@
                                :editor-cursors editor-cursors
                                :block-content block-content}))]
               (if (seq reversed-tx-data)
-                (if util/node-test?
-                  (try
-                    (ldb/transact! conn reversed-tx-data tx-meta')
-                    (handler)
-                    (catch :default e
-                      (log/error ::undo-redo-failed e)
-                      (clear-history! repo)
-                      (if undo? ::empty-undo-stack ::empty-redo-stack)))
-                  (->
-                   (p/do!
-                    ;; async write to the master worker
-                    (ldb/transact! repo reversed-tx-data tx-meta')
-                    (handler))
-                   (p/catch (fn [e]
-                              (log/error ::undo-redo-failed e)
-                              (clear-history! repo)))))
+                (if (undo-validate/valid-undo-redo-tx? conn reversed-tx-data)
+                  (if util/node-test?
+                    (try
+                      (ldb/transact! conn reversed-tx-data tx-meta')
+                      (handler)
+                      (catch :default e
+                        (log/error ::undo-redo-failed e)
+                        (clear-history! repo)
+                        (if undo? ::empty-undo-stack ::empty-redo-stack)))
+                    (->
+                     (p/do!
+                      ;; async write to the master worker
+                      (ldb/transact! repo reversed-tx-data tx-meta')
+                      (handler))
+                     (p/catch (fn [e]
+                                (log/error ::undo-redo-failed e)
+                                (clear-history! repo)))))
+                  (do
+                    (log/warn ::undo-redo-skip-invalid-op
+                              {:undo? undo?
+                               :outliner-op (:outliner-op tx-meta)})
+                    (undo-redo-aux repo undo?)))
                 (do
-                  (clear-history! repo)
-                  (if undo? ::empty-undo-stack ::empty-redo-stack))))))))
+                  (log/warn ::undo-redo-skip-conflicted-op
+                            {:undo? undo?
+                             :outliner-op (:outliner-op tx-meta)})
+                  (undo-redo-aux repo undo?))))))))
 
     (when ((if undo? empty-undo-stack? empty-redo-stack?) repo)
-      (prn (str "No further " (if undo? "undo" "redo") " information"))
       (if undo? ::empty-undo-stack ::empty-redo-stack))))
 
 (defn undo
@@ -341,7 +344,7 @@
   (let [{:keys [outliner-op local-tx?]} tx-meta]
     (when (and
            (= (:client-id tx-meta) (:client-id @state/state))
-           local-tx?
+           (true? local-tx?)
            outliner-op
            (not (false? (:gen-undo-ops? tx-meta)))
            (not (:create-today-journal? tx-meta)))
@@ -365,6 +368,8 @@
                        :retracted-ids retracted-ids}]]
                     (remove nil?)
                     vec)]
+        ;; A new local edit invalidates any redo history.
+        (swap! *redo-ops assoc repo [])
         (push-undo-op repo op)))))
 
 (defn listen-db-changes!

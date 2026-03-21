@@ -60,7 +60,6 @@
             [frontend.mobile.intent :as mobile-intent]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
-            [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.reaction :as reaction]
             [frontend.security :as security]
             [frontend.state :as state]
@@ -203,11 +202,24 @@
             (on-dimensions (.-naturalWidth img) (.-naturalHeight img))))
     (set! (.-src img) url)))
 
+(defn- normalize-asset-align
+  [asset-align]
+  (cond
+    (keyword? asset-align) asset-align
+    (string? asset-align) (case asset-align
+                            "left" :left
+                            "center" :center
+                            "right" :right
+                            nil)
+    :else nil))
+
 (defonce *resizing-image? (atom false))
+
 (rum/defc ^:large-vars/cleanup-todo asset-container
   [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text]}]
   (let [asset-width (:logseq.property.asset/width asset-block)
-        asset-height (:logseq.property.asset/height asset-block)]
+        asset-height (:logseq.property.asset/height asset-block)
+        asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))]
     (hooks/use-effect!
      (fn []
        (when (:block/uuid asset-block)
@@ -276,7 +288,13 @@
                                       :repo (state/get-current-repo)
                                       :href src
                                       :title title
-                                      :full-text full-text})))))))]
+                                      :full-text full-text})))))))
+                handle-set-align!
+                (fn [align]
+                  (when-let [asset-id (:block/uuid asset-block)]
+                    (property-handler/set-block-property! asset-id
+                                                          :logseq.property.asset/align
+                                                          align)))]
             (when asset-block
               [:.asset-action-bar {:aria-hidden "true"}
                (shui/dropdown-menu
@@ -289,6 +307,33 @@
                    :class "h-6 w-6"}
                   (shui/tabler-icon "dots-vertical")))
                 (shui/dropdown-menu-content
+                 (shui/dropdown-menu-sub
+                  (shui/dropdown-menu-sub-trigger
+                   [:span.flex.items-center.gap-1
+                    (ui/icon "layout-align-left") (t :asset/align)])
+                  (shui/dropdown-menu-sub-content
+                   (shui/dropdown-menu-item
+                    {:on-click #(handle-set-align! :left)}
+                    [:span.flex.items-center.gap-2
+                     (ui/icon "layout-align-left")
+                     (t :asset/align-left)
+                     (when (or (nil? asset-align) (= asset-align :left))
+                       (ui/icon "check"))])
+                   (shui/dropdown-menu-item
+                    {:on-click #(handle-set-align! :center)}
+                    [:span.flex.items-center.gap-2
+                     (ui/icon "layout-align-center")
+                     (t :asset/align-center)
+                     (when (= asset-align :center)
+                       (ui/icon "check"))])
+                   (shui/dropdown-menu-item
+                    {:on-click #(handle-set-align! :right)}
+                    [:span.flex.items-center.gap-2
+                     (ui/icon "layout-align-right")
+                     (t :asset/align-right)
+                     (when (= asset-align :right)
+                       (ui/icon "check"))])))
+
                  (shui/dropdown-menu-item
                   {:on-click handle-copy!}
                   [:span.flex.items-center.gap-1
@@ -302,6 +347,7 @@
                                    (js/window.apis.openExternal image-src)))}
                     [:span.flex.items-center.gap-1
                      (ui/icon "folder-pin") (t (if local? :asset/show-in-folder :asset/open-in-browser))]))
+
                  (when-not config/publishing?
                    [:<>
                     (shui/dropdown-menu-separator)
@@ -319,6 +365,7 @@
   (let [breadcrumb? (:breadcrumb? config)
         positioned? (:property-position config)
         asset-block (:asset-block config)
+        asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))
         width (:width metadata)
         *width (get state ::size)
         width (or @*width width)
@@ -335,30 +382,42 @@
             (:table-view? config)
             (not resizable?))
       asset-container-cp
-      [:div.ls-resize-image.rounded-md
-       asset-container-cp
-       (resize-image-handles
-        (fn [k ^js event]
-          (let [dx (.-dx event)
-                ^js target (.-target event)]
+      [:div.ls-resize-inner.w-full.select-none
+       {:on-double-click (fn [^js e]
+                           (let [^js target (.-target e)
+                                 ^js container (.closest target ".ls-resize-inner")]
+                             (when (or container (= target container))
+                               (when-let [block-uuid (or (:block/uuid config)
+                                                         (some-> config :block :block/uuid))]
+                                 (editor-handler/select-block! block-uuid)))))}
+       [:div.ls-resize-image.rounded-md
+        {:class (case asset-align
+                  :center "align-center"
+                  :right "align-right"
+                  "align-left")}
+        asset-container-cp
+        (resize-image-handles
+         (fn [k ^js event]
+           (let [dx (.-dx event)
+                 ^js target (.-target event)]
 
-            (case k
-              :start
-              (let [c (.closest target ".ls-resize-image")]
-                (reset! *width (.-offsetWidth c))
-                (reset! *resizing-image? true))
-              :move
-              (let [width' (+ @*width dx)]
-                (when (or (> width' 60)
-                          (not (neg? dx)))
-                  (reset! *width width')))
-              :end
-              (let [width' @*width]
-                (when (and width' @*resizing-image?)
-                  (when-let [block-id (or (:block/uuid config)
-                                          (some-> config :block (:block/uuid)))]
-                    (editor-handler/resize-image! config block-id metadata full-text {:width width'})))
-                (reset! *resizing-image? false))))))])))
+             (case k
+               :start
+               (let [c (.closest target ".ls-resize-image")]
+                 (reset! *width (.-offsetWidth c))
+                 (reset! *resizing-image? true))
+               :move
+               (let [width' (+ @*width dx)]
+                 (when (or (> width' 60)
+                           (not (neg? dx)))
+                   (reset! *width width')))
+               :end
+               (let [width' @*width]
+                 (when (and width' @*resizing-image?)
+                   (when-let [block-id (or (:block/uuid config)
+                                           (some-> config :block (:block/uuid)))]
+                     (editor-handler/resize-image! config block-id metadata full-text {:width width'})))
+                 (reset! *resizing-image? false))))))]])))
 
 (rum/defc audio-cp
   ([src] (audio-cp src nil))
@@ -611,6 +670,7 @@
    page-entity children label]
   (let [*mouse-down? (::mouse-down? state)
         tag? (:tag? config)
+        recycled? (ldb/recycled? page-entity)
         page-name (when (:block/title page-entity)
                     (util/page-name-sanity-lc (:block/title page-entity)))
         untitled? (when page-name
@@ -623,8 +683,10 @@
        :class (cond->
                (if tag? "tag" "page-ref")
                 (:property? config) (str " page-property-key block-property")
+                recycled? (str " line-through opacity-70")
                 untitled? (str " opacity-50"))
        :data-ref page-name
+       :title (when recycled? "Deleted")
        :draggable true
        :on-drag-start (fn [e]
                         (editor-handler/block->data-transfer! page-name e true))
@@ -2292,12 +2354,12 @@
                                  {:key "Go to tag"
                                   :on-click #(route-handler/redirect-to-page! (:block/uuid tag))}
                                  (str "Go to #" (:block/title tag))
-                                 (shui/dropdown-menu-shortcut (shortcut-utils/decorate-binding "mod+click")))
+                                 (ui/dropdown-shortcut "mod+click"))
                                 (shui/dropdown-menu-item
                                  {:key "Open tag in sidebar"
                                   :on-click #(state/sidebar-add-block! (state/get-current-repo) (:db/id tag) :page)}
                                  "Open in sidebar"
-                                 (shui/dropdown-menu-shortcut (shortcut-utils/decorate-binding "shift+click")))
+                                 (ui/dropdown-shortcut "shift+click"))
                                 (when-not (ldb/private-tags (:db/ident tag))
                                   (shui/dropdown-menu-item
                                    {:key "Remove tag"
@@ -3161,6 +3223,7 @@
        :ref #(when (nil? @*ref) (reset! *ref %))
        :data-collapsed (and collapsed? has-child?)
        :class (str (when selected? "selected")
+                   (when (ldb/recycled? block) " line-through opacity-70")
                    (when order-list? " is-order-list")
                    (when (string/blank? title) " is-blank")
                    (when original-block " embed-block"))

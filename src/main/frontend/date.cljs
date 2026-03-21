@@ -69,6 +69,10 @@
   []
   (journal-name))
 
+(defn today-name
+  []
+  (tf/unparse mmm-do-yyyy-formatter (t/today)))
+
 (defn tomorrow
   []
   (journal-name (t/plus (start-of-day (tl/local-now)) (t/days 1))))

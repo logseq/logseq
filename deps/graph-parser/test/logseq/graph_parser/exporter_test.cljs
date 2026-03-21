@@ -7,6 +7,7 @@
             [datascript.core :as d]
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
+            [logseq.common.path :as path]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
@@ -47,6 +48,37 @@
        first
        (d/entity db)))
 
+(defn- ordered-children
+  [block]
+  (->> (:block/_parent block)
+       (remove :logseq.property/created-from-property)
+       (sort-by :block/order)
+       vec))
+
+(defn- block-tree-with-properties
+  [block]
+  {:title (:block/title block)
+   :properties (dissoc (db-test/readable-properties block) :block/tags)
+   :children (mapv block-tree-with-properties (ordered-children block))})
+
+(defn- find-template-by-title
+  [db title]
+  (some->> (d/q '[:find [?b ...]
+                  :in $ ?title
+                  :where
+                  [?b :block/title ?title]
+                  [?b :block/tags :logseq.class/Template]]
+                db title)
+           first
+           (d/entity db)))
+
+(defn- template-content-trees
+  [db title]
+  (some->> (find-template-by-title db title)
+           ordered-children
+           (mapv block-tree-with-properties)))
+
+
 (defn- build-graph-files
   "Given a file graph directory, return all files including assets and adds relative paths
    on ::rpath since paths are absolute by default and exporter needs relative paths for
@@ -54,8 +86,8 @@
   [dir*]
   (let [dir (node-path/resolve dir*)]
     (->> (common-graph/get-files dir)
-         (concat (when (fs/existsSync (node-path/join dir* "assets"))
-                   (common-graph/readdir (node-path/join dir* "assets"))))
+         (concat (when (fs/existsSync (path/path-join dir* "assets"))
+                   (common-graph/readdir (path/path-join dir* "assets"))))
          (mapv #(hash-map :path %
                           ::rpath (node-path/relative dir* %))))))
 
@@ -173,10 +205,88 @@
      "assets/subdir/partydino.gif"]
     "[[FIRST UUID]] and [[UUID]]"))
 
+(deftest extract-template-blocks
+  (let [page-uuid (random-uuid)
+        parent-uuid (random-uuid)
+        child-uuid (random-uuid)
+        include-children-only-uuid (random-uuid)
+        child-only-1-uuid (random-uuid)
+        child-only-2-uuid (random-uuid)
+        blocks [{:block/uuid parent-uuid
+                 :block/title "source parent"
+                 :block/page [:block/uuid page-uuid]
+                 :block/parent {:block/uuid page-uuid}
+                 :block/order "a"
+                 :block/properties {:template "  trimmed template  "
+                                    :name ""}
+                 :block/properties-text-values {:template "  trimmed template  "
+                                                :name ""}
+                 :block/properties-order [:template :name]}
+                {:block/uuid child-uuid
+                 :block/title "child"
+                 :block/page [:block/uuid page-uuid]
+                 :block/parent [:block/uuid parent-uuid]
+                 :block/order "b"
+                 :block/properties {:template "nested child"
+                                    :name "child default"}
+                 :block/properties-text-values {:template "nested child"
+                                                :name "child default"}
+                 :block/properties-order [:template :name]}
+                {:block/uuid include-children-only-uuid
+                 :block/title "exclude source block"
+                 :block/page [:block/uuid page-uuid]
+                 :block/parent {:block/uuid page-uuid}
+                 :block/order "c"
+                 :block/properties {:template "children only"
+                                    :template-including-parent false}
+                 :block/properties-text-values {:template "children only"
+                                                :template-including-parent "false"}
+                 :block/properties-order [:template :template-including-parent]}
+                {:block/uuid child-only-1-uuid
+                 :block/title "first child"
+                 :block/page [:block/uuid page-uuid]
+                 :block/parent [:block/uuid include-children-only-uuid]
+                 :block/order "d"}
+                {:block/uuid child-only-2-uuid
+                 :block/title "second child"
+                 :block/page [:block/uuid page-uuid]
+                 :block/parent [:block/uuid include-children-only-uuid]
+                 :block/order "e"}]
+        {:keys [blocks preserve-empty-properties-uuids]}
+        (#'gp-exporter/handle-template-blocks blocks)]
+    (testing "template roots replace source blocks"
+      (is (= ["trimmed template"
+              "source parent"
+              "nested child"
+              "child"
+              "children only"
+              "first child"
+              "second child"]
+             (mapv :block/title blocks)))
+      (is (= #{parent-uuid child-uuid include-children-only-uuid child-only-1-uuid child-only-2-uuid}
+             (set/intersection preserve-empty-properties-uuids
+                               #{parent-uuid child-uuid include-children-only-uuid child-only-1-uuid child-only-2-uuid}))))
+
+    (testing "template roots use trimmed names and include parent content when configured"
+      (is (= #{"trimmed template" "nested child" "children only"}
+             (->> blocks
+                  (filter #(some #{:logseq.class/Template} (:block/tags %)))
+                  (map :block/title)
+                  set)))
+      (is (= ["source parent"]
+             (->> blocks
+                  (remove #(some #{:logseq.class/Template} (:block/tags %)))
+                  (filter #(= [:block/uuid parent-uuid] (:block/parent %)))
+                  (map :block/title))))
+      (is (= 2
+             (count (set/difference preserve-empty-properties-uuids
+                                    #{parent-uuid child-uuid include-children-only-uuid child-only-1-uuid child-only-2-uuid})))
+          "in-place template content blocks are marked to preserve empty properties"))))
+
 (deftest-async ^:integration export-docs-graph-with-convert-all-tags
   (p/let [file-graph-dir "test/resources/docs-0.10.12"
-          start-time (cljs.core/system-time)
           _ (docs-graph-helper/clone-docs-repo-if-not-exists file-graph-dir "v0.10.12")
+          start-time (cljs.core/system-time)
           conn (db-test/create-conn)
           _ (db-pipeline/add-listener conn)
           {:keys [import-state]}
@@ -216,12 +326,16 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.property/deadline
-      (is (= 33 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 34 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 9 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
       (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
+      (is (= 1 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Cards]] @conn))))
+      (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Code-block]] @conn))))
+      (is (= 1 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Math-block]] @conn))))
+      (is (= 9 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Template]] @conn))))
       (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Quote-block]] @conn))))
       (is (= 7 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Pdf-annotation]] @conn))))
 
@@ -237,7 +351,7 @@
                   #_(map #(select-keys % [:block/title :block/tags]))
                   count))
           "Correct number of pages with block content")
-      (is (= 15 (->> @conn
+      (is (= 16 (->> @conn
                      (d/q '[:find [?ident ...]
                             :where [?b :block/tags :logseq.class/Tag] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
                      count))
@@ -264,7 +378,7 @@
               set))))
 
     (testing "user properties"
-      (is (= 21
+      (is (= 23
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident]) ...]
                          :where [?b :block/tags :logseq.class/Property]])
@@ -330,11 +444,6 @@
       (is (= [(:db/id (db-test/find-block-by-content @conn "original block"))]
              (mapv :db/id (:block/refs (db-test/find-block-by-content @conn #"ref to"))))
           "block with a block-ref has correct :block/refs")
-
-      (let [b (db-test/find-block-by-content @conn #"MEETING TITLE")]
-        (is (= {}
-               (and b (db-test/readable-properties b)))
-            ":template properties are ignored to not invalidate its property types"))
 
       (is (= 20221126
              (-> (db-test/readable-properties (db-test/find-block-by-content @conn "only deadline"))
@@ -413,10 +522,106 @@
              (:block/title (db-test/find-block-by-content @conn #"tasks with todo")))
           "Advanced query has custom title migrated")
 
-      ;; Cards
+      ;; Card
       (is (= {:block/tags [:logseq.class/Card]}
              (db-test/readable-properties (db-test/find-block-by-content @conn "card 1")))
           "None of the card properties are imported since they are deprecated")
+
+      ;; Cards (flashcard browser)
+      (is (= {:block/tags [:logseq.class/Cards]
+              :logseq.property/query "(tags #Card)"}
+             (db-test/readable-properties (find-block-by-property-value @conn :logseq.property/query "(tags #Card)")))
+          "cards macro block has correct Cards class and query property")
+
+      ;; Math blocks
+      (is (= {:block/tags [:logseq.class/Math-block]
+              :logseq.property.node/display-type :math}
+             (db-test/readable-properties (db-test/find-block-by-content @conn "E=mc^2")))
+          "Math block has correct Math-block class and display-type")
+      (is (= "E=mc^2" (:block/title (db-test/find-block-by-content @conn "E=mc^2")))
+          "Math block title has delimiters stripped")
+
+      ;; Templates
+      (is (= #{"meeting"
+               "title-only-no-children"
+               "properties-only-no-children"
+               "title-only-with-children"
+               "empty-title-with-children"
+               "children-only"
+               "nested-father"
+               "nested-child-1"
+               "nested-child-2"}
+             (->> (d/q '[:find [?title ...]
+                         :where
+                         [?b :block/tags :logseq.class/Template]
+                         [?b :block/title ?title]]
+                       @conn)
+                  set))
+          "All template definitions are imported as Template blocks")
+      (let [journal-uuid (:block/uuid (db-test/find-journal-by-journal-day @conn 20240216))
+            template-page-uuids (->> (d/q '[:find [?page-uuid ...]
+                                            :where
+                                            [?b :block/tags :logseq.class/Template]
+                                            [?b :block/page ?page]
+                                            [?page :block/uuid ?page-uuid]]
+                                          @conn)
+                                     set)]
+        (is (= #{journal-uuid} template-page-uuids)
+            "All template blocks are created on their source journal page"))
+      (is (= [{:title "MEETING TITLE"
+               :properties {:user.property/participants #{"TODO"}}
+               :children []}]
+             (template-content-trees @conn "meeting")))
+      (is (= [{:title "TITLE"
+               :properties {}
+               :children []}]
+             (template-content-trees @conn "title-only-no-children")))
+      (is (= [{:title ""
+               :properties {:user.property/name ""
+                            :user.property/author ""}
+               :children []}]
+             (template-content-trees @conn "properties-only-no-children")))
+      (is (= [{:title "TITLE"
+               :properties {}
+               :children [{:title "intro" :properties {} :children []}
+                          {:title "notes" :properties {} :children []}]}]
+             (template-content-trees @conn "title-only-with-children")))
+      (is (= [{:title ""
+               :properties {}
+               :children [{:title "intro" :properties {} :children []}
+                          {:title "notes" :properties {} :children []}]}]
+             (template-content-trees @conn "empty-title-with-children")))
+      (is (= [{:title "intro" :properties {} :children []}
+              {:title "notes" :properties {} :children []}]
+             (template-content-trees @conn "children-only")))
+      (is (= [{:title "it's a template with nested templates"
+               :properties {:user.property/name "you named it"}
+               :children [{:title "nested-child-1"
+                           :properties {}
+                           :children [{:title "child-1"
+                                       :properties {:user.property/name ""}
+                                       :children [{:title "child-1-1"
+                                                   :properties {:user.property/name ""}
+                                                   :children []}]}]}
+                          {:title "nested-child-2"
+                           :properties {}
+                           :children [{:title "child-2-1"
+                                       :properties {:user.property/name ""}
+                                       :children []}]}
+                          {:title "child-3"
+                           :properties {:user.property/name ""}
+                           :children []}]}]
+             (template-content-trees @conn "nested-father")))
+      (is (= [{:title "child-1"
+               :properties {:user.property/name ""}
+               :children [{:title "child-1-1"
+                           :properties {:user.property/name ""}
+                           :children []}]}]
+             (template-content-trees @conn "nested-child-1")))
+      (is (= [{:title "child-2-1"
+               :properties {:user.property/name ""}
+               :children []}]
+             (template-content-trees @conn "nested-child-2")))
 
       ;; Assets
       (is (= {:block/tags [:logseq.class/Asset]
@@ -652,9 +857,12 @@
       (is (= :node
              (:logseq.property/type (d/entity @conn :user.property/finishedat)))
           ":date property to :node value changes to :node")
-      (is (= :node
+      (is (= :default
              (:logseq.property/type (d/entity @conn :user.property/participants)))
-          ":node property to :date value remains :node")
+          "template values cause participants to remain a :default property")
+      (is (= #{"[[Feb 7th, 2024]]"}
+             (:user.property/participants (db-test/readable-properties (db-test/find-block-by-content @conn #"test :node -> :date"))))
+          ":default participants property keeps the imported text value")
 
       (is (= :default
              (:logseq.property/type (d/entity @conn :user.property/description)))
@@ -807,7 +1015,7 @@
 
 (deftest-async export-files-with-tag-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_07.md" "pages/Interstellar.md"])
+          files (mapv #(path/path-join file-graph-dir %) ["journals/2024_02_07.md" "pages/Interstellar.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:tag-classes ["movie"]})]
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
@@ -833,7 +1041,7 @@
 
 (deftest-async export-files-with-property-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %)
+          files (mapv #(path/path-join file-graph-dir %)
                       ["journals/2024_02_23.md" "pages/url.md" "pages/Whiteboard___Tool.md"
                        "pages/Whiteboard___Arrow_head_toggle.md"
                        "pages/Library.md"])
@@ -880,7 +1088,8 @@
 
 (deftest-async export-files-with-remove-inline-tags
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_07.md"])
+          files (mapv #(path/path-join file-graph-dir %) ["journals/2024_02_07.md"
+                                                          "journals/2026_01_27.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:remove-inline-tags? false :convert-all-tags? true})]
 
@@ -888,11 +1097,14 @@
         "Created graph has no validation errors")
     (is (string/starts-with? (:block/title (db-test/find-block-by-content @conn #"Inception"))
                              "Inception #Movie")
-        "block with tag preserves inline tag")))
+        "block with tag preserves inline tag")
+    (is (string/includes? (:block/title (db-test/find-block-by-content @conn #"block with multi word tag"))
+                          "#[[another test]]")
+        "block with multi word tag preserves inline tag")))
 
 (deftest-async export-files-with-ignored-properties
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %) ["ignored/icon-page.md"])
+          files (mapv #(path/path-join file-graph-dir %) ["ignored/icon-page.md"])
           conn (db-test/create-conn)
           {:keys [import-state]} (import-files-to-db files conn {})]
     (is (= 2
@@ -901,7 +1113,7 @@
 
 (deftest-async export-files-with-property-parent-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_11_26.md"
+          files (mapv #(path/path-join file-graph-dir %) ["journals/2024_11_26.md"
                                                           "pages/CreativeWork.md" "pages/Movie.md" "pages/type.md"
                                                           "pages/Whiteboard___Tool.md" "pages/Whiteboard___Arrow_head_toggle.md"
                                                           "pages/Property.md" "pages/url.md"])
@@ -929,7 +1141,7 @@
 (deftest-async export-files-with-property-pages-disabled
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           ;; any page with properties
-          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_01_17.md"])
+          files (mapv #(path/path-join file-graph-dir %) ["journals/2024_01_17.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:user-config {:property-pages/enabled? false
                                                           :property-pages/excludelist #{:prop-string}}})]
@@ -944,3 +1156,228 @@
     (is (= "yyyy-MM-dd"
            (:logseq.property.journal/title-format (d/entity @conn :logseq.class/Journal)))
         "title format set correctly by config")))
+
+(deftest split-title-by-code-fences
+  (let [split-fn #'gp-exporter/split-title-by-code-fences]
+    (testing "standalone code fence with language"
+      (is (= {:text-parts []
+              :code-segs [{:text "it's an individual code snippet with language tag"
+                           :lang "markdown"}]}
+             (split-fn "```markdown\nit's an individual code snippet with language tag\n```"))))
+
+    (testing "standalone code fence without language"
+      (is (= {:text-parts []
+              :code-segs [{:text "it's an individual code snippet without language tag"
+                           :lang nil}]}
+             (split-fn "```\nit's an individual code snippet without language tag\n```"))))
+
+    (testing "one code fence with leading text"
+      (is (= {:text-parts ["before code snippet"]
+              :code-segs [{:text "echo \"ok\"\nexit"
+                           :lang nil}]}
+             (split-fn "before code snippet\n```\necho \"ok\"\nexit\n```"))))
+
+    (testing "one code fence with leading and trailing text"
+      (is (= {:text-parts ["before code snippet" "after code snippet"]
+              :code-segs [{:text "echo \"ok\"\nexit"
+                           :lang "bash"}]}
+             (split-fn "before code snippet\n```bash\necho \"ok\"\nexit\n```\nafter code snippet"))))
+
+    (testing "one code fence followed by trailing text"
+      (is (= {:text-parts ["after code snippet"]
+              :code-segs [{:text "echo \"ok\"\nexit"
+                           :lang "bash"}]}
+             (split-fn "```bash\necho \"ok\"\nexit\n```\nafter code snippet"))))
+
+    (testing "multiple code fences mixed with text"
+      (is (= {:text-parts ["before code snippet" "middle" "after code snippet"]
+              :code-segs [{:text "echo \"ok\"\nexit"
+                           :lang "bash"}
+                          {:text "echo \"bye\"\nexit"
+                           :lang "bash"}]}
+             (split-fn "before code snippet\n```bash\necho \"ok\"\nexit\n```\nmiddle\n```bash\necho \"bye\"\nexit\n```\nafter code snippet"))))
+
+    (testing "edge: one code fence followed by opening fence without closing fence"
+      (is (= {:text-parts ["echo \"missing end fence\""] ;; no "```bash" ahead, it's fine as is; let's leave it
+              :code-segs [{:text "echo \"ok\"\nexit"
+                           :lang "bash"}]}
+             (split-fn "```bash\necho \"ok\"\nexit\n```\n```bash\necho \"missing end fence\""))))
+
+    (testing "edge: pure multiple code fences with no extra text"
+      (let [{:keys [text-parts code-segs]} (split-fn "```markdown\n1st code snippet with language tag\n```\n```\n2nd code snippet without language tag\n```")]
+        (is (and (empty? text-parts) (> (count code-segs) 1)) "not pure single code and no mixed content")))
+
+    (testing "edge: opening fence without closing fence"
+      (let [title "```bash\necho \"missing end fence\""
+            {:keys [text-parts code-segs]} (split-fn title)]
+        (is (and (= (count text-parts) 1) (not= (first text-parts) title) (empty? code-segs)) "not pure single code and no mixed content")))
+
+    (testing "edge: plain text without any code fence"
+      (is (= {:text-parts ["plain text only"]
+              :code-segs []}
+             (split-fn "plain text only"))))
+
+    (testing "edge: empty title"
+      (is (= {:text-parts [""]
+              :code-segs []}
+             (split-fn ""))))))
+
+(deftest-async export-files-with-extract-code-snippet
+  (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          files (mapv #(path/path-join file-graph-dir %) ["journals/2026_03_01.md"])
+          conn (db-test/create-conn)
+          _ (import-files-to-db files conn {:extract-code-snippets? true})
+          journal-page-eid (d/q '[:find ?p . :where [?p :block/journal-day 20260301]] @conn)
+          top-blocks (->> (d/q '[:find [?b ...]
+                                 :in $ ?page
+                                 :where
+                                 [?b :block/page ?page]
+                                 [?b :block/parent ?page]]
+                               @conn journal-page-eid)
+                          (map #(d/entity @conn %))
+                          (sort-by :block/order)
+                          vec)
+          get-direct-children (fn [block]
+                                (->> (d/q '[:find [?c ...]
+                                            :in $ ?parent
+                                            :where [?c :block/parent ?parent]]
+                                          @conn (:db/id block))
+                                     (map #(d/entity @conn %))))]
+
+    (testing "standalone code block with language tag"
+      (let [b (nth top-blocks 0)]
+        (is (= "it's an individual code snippet with language tag" (:block/title b))
+            "Standalone code block title has fences stripped")
+        (is (= 0 (count (get-direct-children b)))
+            "Standalone code block has no children")
+        (is (= #{:logseq.class/Code-block} (set (map :db/ident (:block/tags b))))
+            "Standalone code block is tagged as Code-block")
+        (is (= "markdown" (:logseq.property.code/lang b))
+            "Standalone code block has markdown language property")))
+
+    (testing "standalone code block without language tag"
+      (let [b (nth top-blocks 1)]
+        (is (= "it's an individual code snippet without language tag" (:block/title b))
+            "Standalone code block title has fences stripped")
+        (is (= 0 (count (get-direct-children b)))
+            "Standalone code block has no children")
+        (is (= #{:logseq.class/Code-block} (set (map :db/ident (:block/tags b))))
+            "Standalone code block is tagged as Code-block")
+        (is (= nil (:logseq.property.code/lang b))
+            "Standalone code block has no language property")))
+
+    (testing "text before code snippet"
+      (let [b (nth top-blocks 2)
+            children (get-direct-children b)]
+        (is (= "before code snippet" (:block/title b))
+            "Block title has text only without code")
+        (is (= 1 (count children))
+            "Block has 1 code child")
+        (is (= "echo \"ok\"\nexit" (:block/title (first children)))
+            "Child code block has correct content without fence markers")
+        (is (= #{:logseq.class/Code-block} (set (map :db/ident (:block/tags (first children)))))
+            "Child block is tagged as Code-block")
+        (is (= nil (:logseq.property.code/lang (first children)))
+            "Child block has no language property")))
+
+    (testing "text before and after code snippet"
+      (let [b (nth top-blocks 3)
+            children (get-direct-children b)]
+        (is (= "before code snippet\nafter code snippet" (:block/title b))
+            "Block title has text only without code")
+        (is (= 1 (count children))
+            "Block has 1 code child")
+        (is (= "echo \"ok\"\nexit" (:block/title (first children)))
+            "Child code block has correct content without fence markers")
+        (is (= #{:logseq.class/Code-block} (set (map :db/ident (:block/tags (first children)))))
+            "Child block is tagged as Code-block")
+        (is (= "bash" (:logseq.property.code/lang (first children)))
+            "Child block has bash language property")))
+
+    (testing "code snippet before text"
+      (let [b (nth top-blocks 4)
+            children (get-direct-children b)]
+        (is (= "after code snippet" (:block/title b))
+            "Block title has text only without code")
+        (is (= 1 (count children))
+            "Block has 1 code child")
+        (is (= "echo \"ok\"\nexit" (:block/title (first children)))
+            "Child code block has correct content without fence markers")
+        (is (= #{:logseq.class/Code-block} (set (map :db/ident (:block/tags (first children)))))
+            "Child block is tagged as Code-block")
+        (is (= "bash" (:logseq.property.code/lang (first children)))
+            "Child block has bash language property")))
+
+    (testing "multiple code snippets mixed with text"
+      (let [b (nth top-blocks 5)
+            children (sort-by :block/order (get-direct-children b))]
+        (is (= "before code snippet\nmiddle\nafter code snippet" (:block/title b))
+            "Block title has all text parts without code")
+        (is (= 2 (count children))
+            "Block has 2 code children")
+        (is (= "echo \"ok\"\nexit" (:block/title (first children)))
+            "First child code block has correct content without fence markers")
+        (is (= "echo \"bye\"\nexit" (:block/title (second children)))
+            "Second child code block has correct content without fence markers")
+        (is (every? #(= #{:logseq.class/Code-block} (set (map :db/ident (:block/tags %)))) children)
+            "Both child blocks are tagged as Code-block")
+        (is (every? #(= "bash" (:logseq.property.code/lang %)) children)
+            "Both child blocks have bash language property")))))
+
+(deftest-async export-files-without-extract-code-snippet
+  (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          files (mapv #(path/path-join file-graph-dir %) ["journals/2026_03_01.md"])
+          conn (db-test/create-conn)
+          _ (import-files-to-db files conn {:extract-code-snippets? false})
+          journal-page-eid (d/q '[:find ?p . :where [?p :block/journal-day 20260301]] @conn)
+          top-blocks (->> (d/q '[:find [?b ...]
+                                 :in $ ?page
+                                 :where
+                                 [?b :block/page ?page]
+                                 [?b :block/parent ?page]]
+                               @conn journal-page-eid)
+                          (map #(d/entity @conn %))
+                          (sort-by :block/order)
+                          vec)
+          get-direct-children (fn [block]
+                                (->> (d/q '[:find [?c ...]
+                                            :in $ ?parent
+                                            :where [?c :block/parent ?parent]]
+                                          @conn (:db/id block))
+                                     (map #(d/entity @conn %))))]
+
+    (testing "standalone code block with language tag is still tagged as Code-block"
+      (let [b (nth top-blocks 0)]
+        (is (= "it's an individual code snippet with language tag" (:block/title b))
+            "Standalone code block title has fences stripped")
+        (is (= 0 (count (get-direct-children b)))
+            "Standalone code block has no children")
+        (is (= #{:logseq.class/Code-block} (set (map :db/ident (:block/tags b))))
+            "Standalone code block is tagged as Code-block")
+        (is (= "markdown" (:logseq.property.code/lang b))
+            "Standalone code block has markdown language property")))
+
+    (testing "standalone code block without language tag is still tagged as Code-block"
+      (let [b (nth top-blocks 1)]
+        (is (= "it's an individual code snippet without language tag" (:block/title b))
+            "Standalone code block title has fences stripped")
+        (is (= 0 (count (get-direct-children b)))
+            "Standalone code block has no children")
+        (is (= #{:logseq.class/Code-block} (set (map :db/ident (:block/tags b))))
+            "Standalone code block is tagged as Code-block")
+        (is (= nil (:logseq.property.code/lang b))
+            "Standalone code block has no language property")))
+
+    (testing "mixed-content block is NOT extracted into children when extract-code-snippets? is false"
+      (let [b (nth top-blocks 2)]
+        (is (= 0 (count (get-direct-children b)))
+            "Block with text before code has no children extracted")
+        (is (string/includes? (:block/title b) "```")
+            "Block title retains raw code fence markup")))
+
+    (testing "another mixed-content block is NOT extracted when extract-code-snippets? is false"
+      (let [b (nth top-blocks 3)]
+        (is (= 0 (count (get-direct-children b)))
+            "Block with text surrounding code has no children extracted")
+        (is (string/includes? (:block/title b) "```")
+            "Block title retains raw code fence markup")))))

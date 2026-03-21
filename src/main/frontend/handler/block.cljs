@@ -6,6 +6,7 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
+            [frontend.handler.notification :as notification]
             [frontend.handler.property.util :as pu]
             [frontend.mobile.haptics :as haptics]
             [frontend.modules.outliner.op :as outliner-op]
@@ -94,8 +95,9 @@
 (defn block-unique-title
   "Multiple pages/objects may have the same `:block/title`.
    Notice: this doesn't prevent for pages/objects that have the same tag or created by different clients."
-  [block & {:keys [with-tags? alias]
-            :or {with-tags? true}}]
+  [block & {:keys [with-tags? alias truncate?]
+            :or {with-tags? true
+                 truncate? true}}]
   (if (ldb/built-in? block)
     (:block/title block)
     (let [block-e (cond
@@ -105,16 +107,20 @@
                     (db/entity [:block/uuid (:block/uuid block)])
                     :else
                     block)
-          tags (remove (fn [t]
-                         (or (some-> (:block/raw-title block-e) (ldb/inline-tag? t))
-                             (ldb/private-tags (:db/ident t))))
-                       (map (fn [tag] (if (number? tag) (db/entity tag) tag)) (:block/tags block)))
-          title (cond
-                  (ldb/class? block)
-                  (ldb/get-class-title-with-extends block)
-
-                  (and with-tags? (seq tags))
-                  (str (:block/title block)
+          class? (ldb/class? block)
+          tags (when (and with-tags? (not class?))
+                 (remove (fn [t]
+                           (or (some-> (:block/raw-title block-e) (ldb/inline-tag? t))
+                               (ldb/private-tags (:db/ident t))))
+                         (map (fn [tag] (if (number? tag) (db/entity tag) tag)) (:block/tags block))))
+          base-title (if class?
+                       (ldb/get-class-title-with-extends block)
+                       (:block/title block))
+          trunc-title (if (and truncate? base-title (> (count base-title) 256))
+                        (subs base-title 0 256)
+                        base-title)
+          title (if (seq tags)
+                  (str (or trunc-title "")
                        " "
                        (string/join
                         ", "
@@ -122,10 +128,9 @@
                                 (when-let [title (:block/title tag)]
                                   (str "#" title)))
                               tags)))
-                  :else
-                  (:block/title block))]
+                  trunc-title)]
       (when title
-        (str (subs title 0 256)
+        (str title
              (when alias
                (str " -> alias: " alias)))))))
 
@@ -145,29 +150,31 @@
                 :as opts}]
   (when (and (not config/publishing?) (:block/uuid block))
     (let [repo (state/get-current-repo)]
-      (p/do!
-       (db-async/<get-block repo (:db/id block) {:children? false})
-       (when save-code-editor? (state/pub-event! [:editor/save-code-editor]))
-       (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
-         (state/clear-edit! {:clear-editing-block? false}))
-       (when-let [block-id (:block/uuid block)]
-         (let [block (or (db/entity [:block/uuid block-id]) block)
-               content (or custom-content (:block/title block) "")
-               content-length (count content)
-               text-range (cond
-                            (vector? pos)
-                            (text-range-by-lst-fst-line content pos)
+      (when-let [block-id (:block/uuid block)]
+        (let [block (or (db/entity [:block/uuid block-id]) block)]
+          (if (ldb/recycled? block)
+            (notification/show! "Recycle is read-only." :warning)
+            (p/do!
+             (db-async/<get-block repo (:db/id block) {:children? false})
+             (when save-code-editor? (state/pub-event! [:editor/save-code-editor]))
+             (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
+               (state/clear-edit! {:clear-editing-block? false}))
+             (let [content (or custom-content (:block/title block) "")
+                   content-length (count content)
+                   text-range (cond
+                                (vector? pos)
+                                (text-range-by-lst-fst-line content pos)
 
-                            (and (> tail-len 0) (>= (count content) tail-len))
-                            (subs content 0 (- (count content) tail-len))
+                                (and (> tail-len 0) (>= (count content) tail-len))
+                                (subs content 0 (- (count content) tail-len))
 
-                            (or (= :max pos) (<= content-length pos))
-                            content
+                                (or (= :max pos) (<= content-length pos))
+                                content
 
-                            :else
-                            (subs content 0 pos))]
-           (state/clear-selection!)
-           (edit-block-aux repo block content text-range (assoc opts :pos pos))))))))
+                                :else
+                                (subs content 0 pos))]
+               (state/clear-selection!)
+               (edit-block-aux repo block content text-range (assoc opts :pos pos))))))))))
 
 (defn- get-original-block-by-dom
   [node]

@@ -99,7 +99,7 @@ jobs:
           key: ${{ runner.os }}-clojure-lib-${{ hashFiles('**/deps.edn') }}
 
       - name: Setup clojure
-        uses: DeLaGuardo/setup-clojure@10.1
+        uses: DeLaGuardo/setup-clojure@13.5
         with:
           cli: ${{ env.CLOJURE_VERSION }}
 
@@ -302,7 +302,8 @@ jobs:
         run: |
           mkdir builds
           mv static\out\make\squirrel.windows\x64\*.nupkg  builds\Logseq-win-x64-${{ steps.ref.outputs.version }}-full.nupkg
-          mv static\out\make\zip\win32\x64\*.exe           builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
+          mv static\out\make\squirrel.windows\x64\*.exe    builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
+          mv static\out\make\zip\win32\x64\*.zip           builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.zip
           mv static\out\make\wix\x64\Logseq.msi            builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.msi
           mv static\out\make\squirrel.windows\x64\RELEASES builds\RELEASES
 
@@ -324,7 +325,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: logseq-win64-builds
+          name: logseq-win-x64-builds
           path: builds
 
   build-windows-arm64:
@@ -367,7 +368,8 @@ jobs:
         run: |
           mkdir builds
           mv static\out\make\squirrel.windows\arm64\*.nupkg  builds\Logseq-win-arm64-${{ steps.ref.outputs.version }}-full.nupkg
-          mv static\out\make\zip\win32\arm64\*.exe           builds\Logseq-win-arm64-${{ steps.ref.outputs.version }}.exe
+          mv static\out\make\squirrel.windows\arm64\*.exe    builds\Logseq-win-arm64-${{ steps.ref.outputs.version }}.exe
+          mv static\out\make\zip\win32\arm64\*.zip           builds\Logseq-win-arm64-${{ steps.ref.outputs.version }}.zip
           mv static\out\make\wix\arm64\Logseq.msi            builds\Logseq-win-arm64-${{ steps.ref.outputs.version }}.msi
           mv static\out\make\squirrel.windows\arm64\RELEASES builds\RELEASES
 
@@ -590,7 +592,7 @@ jobs:
       - name: Download The Windows Artifact x64
         uses: actions/download-artifact@v4
         with:
-          name: logseq-win64-builds
+          name: logseq-win-x64-builds
           path: ./
 
       - name: Download The Windows Artifact arm64

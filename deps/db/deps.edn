@@ -1,11 +1,11 @@
 {:deps
  ;; These nbb-logseq deps are kept in sync with https://github.com/logseq/nbb-logseq/blob/main/bb.edn
  {datascript/datascript {:git/url "https://github.com/logseq/datascript" ;; fork
-                         :sha     "ff5a7d5326e2546f40146e4a489343f557519bc3"}
+                         :sha     "f91fec561ee2c11d6bf323feae365e9033585411"}
   ;; datascript/datascript                 {:local/root "../../../../datascript"}
   datascript-transit/datascript-transit {:mvn/version "0.3.0"
                                          :exclusions [datascript/datascript]}
-  cljs-bean/cljs-bean         {:mvn/version "1.5.0"}
+  cljs-bean/cljs-bean         {:mvn/version "1.9.0"}
   com.cognitect/transit-cljs   {:mvn/version "0.8.280"}
   org.flatland/ordered         {:mvn/version "1.15.11"}
 

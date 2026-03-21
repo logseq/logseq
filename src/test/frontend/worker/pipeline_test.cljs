@@ -5,41 +5,6 @@
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]))
 
-(deftest remove-conflict-datoms-test
-  (testing "remove-conflict-datoms (1)"
-    (let [datoms [[1 :a 1 1]
-                  [1 :a 1 1]
-                  [1 :a 2 1]
-                  [2 :a 1 1]]]
-      (is (= (set [[1 :a 1 1]
-                   [1 :a 2 1]
-                   [2 :a 1 1]])
-             (set (ldb/remove-conflict-datoms datoms))))))
-  (testing "check block/tags"
-    (let [datoms [[163 :block/tags 2 536870930 true]
-                  [163 :block/tags 136 536870930 true]
-                  [163 :block/tags 136 536870930 false]]]
-      (is (= (set [[163 :block/tags 2 536870930 true]
-                   [163 :block/tags 136 536870930 false]])
-             (set (ldb/remove-conflict-datoms datoms))))))
-  (testing "check block/refs"
-    (let [datoms [[176 :block/refs 177 536871080 true]
-                  [158 :block/refs 21 536871082 false]
-                  [158 :block/refs 137 536871082 false]
-                  [158 :block/refs 137 536871082 true]
-                  [158 :block/refs 21 536871082 true]
-                  [176 :block/refs 177 536871082 false]
-                  [176 :block/refs 177 536871082 true]
-                  [177 :block/refs 136 536871082 true]
-                  [177 :block/refs 21 536871082 true]]]
-      (is (= (set [[176 :block/refs 177 536871080 true]
-                   [158 :block/refs 137 536871082 true]
-                   [158 :block/refs 21 536871082 true]
-                   [176 :block/refs 177 536871082 true]
-                   [177 :block/refs 136 536871082 true]
-                   [177 :block/refs 21 536871082 true]])
-             (set (ldb/remove-conflict-datoms datoms)))))))
-
 (deftest test-built-in-page-updates-that-should-be-reverted
   (let [conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
@@ -123,3 +88,58 @@
 
     ;; return global fn back to previous behavior
     (ldb/register-transact-pipeline-fn! identity)))
+
+(deftest journal-name-title-updates-throw-in-transact-pipeline-test
+  (let [conn (db-test/create-conn-with-blocks
+              {:pages-and-blocks [{:page {:build/journal 20250203}}
+                                  {:page {:block/title "page1"}}]})
+        journal (db-test/find-journal-by-journal-day @conn 20250203)
+        page1 (ldb/get-page @conn "page1")
+        run-pipeline (fn [tx-data]
+                       (worker-pipeline/transact-pipeline
+                        (d/with @conn tx-data)))]
+    (testing "updating journal :block/title should throw"
+      (let [error (try
+                    (run-pipeline [{:db/id (:db/id journal)
+                                    :block/title "journal title changed"}])
+                    nil
+                    (catch :default e
+                      e))]
+        (is (some? error))
+        (is (= :journal-page-protected-attr-updated (:type (ex-data error))))
+        (is (= :block/title (:attr (ex-data error))))))
+
+    (testing "updating journal :block/name should throw"
+      (let [error (try
+                    (run-pipeline [{:db/id (:db/id journal)
+                                    :block/name "journal-name-changed"}])
+                    nil
+                    (catch :default e
+                      e))]
+        (is (some? error))
+        (is (= :journal-page-protected-attr-updated (:type (ex-data error))))
+        (is (= :block/name (:attr (ex-data error))))))
+
+    (testing "updating journal protected attrs via :db/add should throw"
+      (let [title-error (try
+                          (run-pipeline [[:db/add (:db/id journal) :block/title "journal-title-via-datom"]])
+                          nil
+                          (catch :default e
+                            e))
+            name-error (try
+                         (run-pipeline [[:db/add (:db/id journal) :block/name "journal-name-via-datom"]])
+                         nil
+                         (catch :default e
+                           e))]
+        (is (some? title-error))
+        (is (= :journal-page-protected-attr-updated (:type (ex-data title-error))))
+        (is (= :block/title (:attr (ex-data title-error))))
+        (is (some? name-error))
+        (is (= :journal-page-protected-attr-updated (:type (ex-data name-error))))
+        (is (= :block/name (:attr (ex-data name-error))))))
+
+    (testing "updating non-journal page title should be allowed"
+      (let [result (run-pipeline [{:db/id (:db/id page1)
+                                   :block/title "page1-renamed"}])]
+        (is (= "page1-renamed"
+               (:block/title (d/entity (:db-after result) (:db/id page1)))))))))

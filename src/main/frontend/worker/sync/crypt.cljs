@@ -14,6 +14,7 @@
             [promesa.core :as p]))
 
 (defonce ^:private *graph->aes-key (atom {}))
+(defonce ^:private *user-rsa-key-pair-inflight (atom {}))
 (defonce ^:private e2ee-store (delay (idb-keyval/newStore "localforage" "keyvaluepairs" 2)))
 (defonce ^:private e2ee-password-file "e2ee-password")
 (defonce ^:private native-env?
@@ -150,7 +151,7 @@
   [k]
   (assert (and k @e2ee-store))
   (p/let [r (idb-keyval/get k @e2ee-store)]
-    (js->clj r :keywordize-keys true)))
+    (some-> r (js->clj :keywordize-keys true))))
 
 (defn- <set-item!
   [k value]
@@ -166,11 +167,65 @@
   [graph-id]
   (str "rtc-encrypted-aes-key###" graph-id))
 
+(defn- user-rsa-key-pair-idb-key
+  [user-id]
+  (str "rtc-user-rsa-key-pair###" user-id))
+
 (defn <fetch-user-rsa-key-pair-raw
   [base]
   (fetch-json (str base "/e2ee/user-keys")
               {:method "GET"}
               {:response-schema :e2ee/user-keys}))
+
+(defn- user-rsa-key-pair-valid?
+  [{:keys [public-key encrypted-private-key]}]
+  (and (string? public-key)
+       (string? encrypted-private-key)))
+
+(defn- <set-user-rsa-key-pair-to-idb!
+  [base user-id pair]
+  (when (and (string? base)
+             (string? user-id)
+             (user-rsa-key-pair-valid? pair))
+    (<set-item! (user-rsa-key-pair-idb-key user-id)
+                (ldb/write-transit-str pair)))
+  pair)
+
+(defn- <get-user-rsa-key-pair-from-idb
+  [base user-id]
+  (when (and (string? base) (string? user-id))
+    (p/let [pair-str (<get-item (user-rsa-key-pair-idb-key user-id))
+            pair (ldb/read-transit-str pair-str)]
+      (when (user-rsa-key-pair-valid? pair)
+        pair))))
+
+(defn- <clear-user-rsa-key-pair-cache!
+  [base user-id]
+  (let [k [base user-id]]
+    (swap! *user-rsa-key-pair-inflight dissoc k)
+    (when (and (string? base) (string? user-id))
+      (<clear-item! (user-rsa-key-pair-idb-key user-id)))))
+
+(defn- <get-user-rsa-key-pair-raw
+  [base]
+  (let [user-id (get-user-uuid)]
+    (when-not (and (string? base) (string? user-id))
+      (fail-fast :db-sync/missing-field {:base base :user-id user-id :field :user-rsa-key-pair}))
+    (let [k [base user-id]]
+      (if-let [inflight (get @*user-rsa-key-pair-inflight k)]
+        inflight
+        (let [task (-> (p/let [cached (<get-user-rsa-key-pair-from-idb base user-id)]
+                         (if cached
+                           cached
+                           (p/let [pair (<fetch-user-rsa-key-pair-raw base)]
+                             (if (user-rsa-key-pair-valid? pair)
+                               (p/let [_ (<set-user-rsa-key-pair-to-idb! base user-id pair)]
+                                 pair)
+                               pair))))
+                       (p/finally (fn []
+                                    (swap! *user-rsa-key-pair-inflight dissoc k))))]
+          (swap! *user-rsa-key-pair-inflight assoc k task)
+          task)))))
 
 (defn <upload-user-rsa-key-pair!
   [base public-key encrypted-private-key]
@@ -179,17 +234,18 @@
                                    :encrypted-private-key encrypted-private-key})]
     (when (nil? body)
       (fail-fast :db-sync/invalid-field {:type :e2ee/user-keys :body body}))
-    (fetch-json (str base "/e2ee/user-keys")
-                {:method "POST"
-                 :headers {"content-type" "application/json"}
-                 :body (js/JSON.stringify (clj->js body))}
-                {:response-schema :e2ee/user-keys})))
+    (p/let [pair (fetch-json (str base "/e2ee/user-keys")
+                             {:method "POST"
+                              :headers {"content-type" "application/json"}
+                              :body (js/JSON.stringify (clj->js body))}
+                             {:response-schema :e2ee/user-keys})
+            user-id (get-user-uuid)
+            _ (<set-user-rsa-key-pair-to-idb! base user-id pair)]
+      pair)))
 
 (defn- <ensure-user-rsa-key-pair-raw
   [base]
-  (p/let [existing (-> (<fetch-user-rsa-key-pair-raw base)
-                       (p/catch (fn [error]
-                                  (throw error))))]
+  (p/let [existing (<get-user-rsa-key-pair-raw base)]
     (if (and (string? (:public-key existing))
              (string? (:encrypted-private-key existing)))
       existing
@@ -250,6 +306,33 @@
                  :body (js/JSON.stringify (clj->js body))}
                 {:response-schema :e2ee/graph-aes-key})))
 
+(defn- <load-user-rsa-key-material
+  [base user-id graph-id]
+  (letfn [(<load-once []
+            (p/let [{:keys [public-key encrypted-private-key]} (<ensure-user-rsa-key-pair-raw base)
+                    _ (when-not (and (string? public-key) (string? encrypted-private-key))
+                        (fail-fast :db-sync/missing-field
+                                   {:base base
+                                    :user-id user-id
+                                    :graph-id graph-id
+                                    :field :user-rsa-key-pair}))
+                    public-key' (<import-public-key public-key)
+                    private-key' (<decrypt-private-key encrypted-private-key)]
+              {:public-key public-key'
+               :private-key private-key'}))]
+    (-> (<load-once)
+        (p/catch (fn [error]
+                   (-> (p/let [_ (<clear-user-rsa-key-pair-cache! base user-id)]
+                         (<load-once))
+                       (p/catch (fn [retry-error]
+                                  (log/warn :db-sync/user-rsa-key-cache-invalid
+                                            {:base base
+                                             :user-id user-id
+                                             :graph-id graph-id
+                                             :first-error error
+                                             :retry-error retry-error})
+                                  (throw retry-error)))))))))
+
 (defn <ensure-graph-aes-key
   [repo graph-id]
   (if-not (graph-e2ee? repo)
@@ -260,9 +343,7 @@
             user-id (get-user-uuid)]
         (when-not (and (string? base) (string? user-id))
           (fail-fast :db-sync/missing-field {:base base :user-id user-id :graph-id graph-id}))
-        (p/let [{:keys [public-key encrypted-private-key]} (<ensure-user-rsa-key-pair-raw base)
-                public-key' (when (string? public-key) (<import-public-key public-key))
-                private-key' (when (string? encrypted-private-key) (<decrypt-private-key encrypted-private-key))
+        (p/let [{:keys [public-key private-key]} (<load-user-rsa-key-material base user-id graph-id)
                 local-encrypted (when graph-id
                                   (<get-item (graph-encrypted-aes-key-idb-key graph-id)))
                 remote-encrypted (when (and (nil? local-encrypted) graph-id)
@@ -271,9 +352,9 @@
                                        (ldb/read-transit-str encrypted-aes-key))))
                 encrypted-aes-key (or local-encrypted remote-encrypted)
                 aes-key (if encrypted-aes-key
-                          (crypt/<decrypt-aes-key private-key' encrypted-aes-key)
+                          (crypt/<decrypt-aes-key private-key encrypted-aes-key)
                           (p/let [aes-key (crypt/<generate-aes-key)
-                                  encrypted (crypt/<encrypt-aes-key public-key' aes-key)
+                                  encrypted (crypt/<encrypt-aes-key public-key aes-key)
                                   encrypted-str (ldb/write-transit-str encrypted)
                                   _ (<upsert-graph-encrypted-aes-key! base graph-id encrypted-str)
                                   _ (<set-item! (graph-encrypted-aes-key-idb-key graph-id) encrypted)]
@@ -289,7 +370,7 @@
         aes-key-k (graph-encrypted-aes-key-idb-key graph-id)]
     (when-not (and (string? base) (string? graph-id))
       (fail-fast :db-sync/missing-field {:base base :graph-id graph-id}))
-    (p/let [{:keys [public-key encrypted-private-key]} (<fetch-user-rsa-key-pair-raw base)]
+    (p/let [{:keys [public-key encrypted-private-key]} (<get-user-rsa-key-pair-raw base)]
       (<clear-item! aes-key-k)
       (when-not (and (string? public-key) (string? encrypted-private-key))
         (fail-fast :db-sync/missing-field {:graph-id graph-id :field :user-rsa-key-pair}))
@@ -422,22 +503,39 @@
   [aes-key rows-batch]
   (p/all (map #(<decrypt-snapshot-row aes-key %) rows-batch)))
 
-(defn <encrypt-datoms
+(defn <decrypt-snapshot-datoms-batch
   [aes-key datoms]
-  (let [batch-size 5000
-        batches (partition-all batch-size datoms)]
-    (p/loop [remaining batches
-             result []]
-      (if (empty? remaining)
-        result
-        (p/let [batch (first remaining)
-                encrypted (p/all (map (fn [datom]
-                                        (if (contains? sync-const/encrypt-attr-set (:a datom))
-                                          (p/let [v' (<encrypt-text-value aes-key (:v datom))]
-                                            (assoc datom :v v'))
-                                          (p/resolved datom)))
-                                      batch))]
-          (p/recur (rest remaining) (into result encrypted)))))))
+  (p/all
+   (map (fn [{:keys [a v] :as datom}]
+          (if (contains? sync-const/encrypt-attr-set a)
+            (p/let [v' (<decrypt-text-value aes-key v)]
+              (assoc datom :v v'))
+            (p/resolved datom)))
+        datoms)))
+
+(defn <encrypt-datoms
+  ([aes-key datoms]
+   (<encrypt-datoms aes-key datoms nil))
+  ([aes-key datoms progress-f]
+   (let [batch-size 5000
+         total-count (count datoms)
+         batches (partition-all batch-size datoms)]
+     (p/loop [remaining batches
+              result []
+              encrypted-count 0]
+       (if (empty? remaining)
+         result
+         (p/let [batch (first remaining)
+                 encrypted (p/all (map (fn [datom]
+                                         (if (contains? sync-const/encrypt-attr-set (:a datom))
+                                           (p/let [v' (<encrypt-text-value aes-key (:v datom))]
+                                             (assoc datom :v v'))
+                                           (p/resolved datom)))
+                                       batch))]
+           (let [encrypted-count' (+ encrypted-count (count batch))]
+             (when progress-f
+               (progress-f encrypted-count' total-count))
+             (p/recur (rest remaining) (into result encrypted) encrypted-count'))))))))
 
 (defn- <re-encrypt-private-key
   [encrypted-private-key-str old-password new-password]
@@ -451,7 +549,7 @@
   (let [base (e2ee-base)]
     (when-not (string? base)
       (fail-fast :db-sync/missing-field {:base base :user-uuid user-uuid}))
-    (p/let [{:keys [public-key encrypted-private-key]} (<fetch-user-rsa-key-pair-raw base)]
+    (p/let [{:keys [public-key encrypted-private-key]} (<get-user-rsa-key-pair-raw base)]
       (when-not (and (string? public-key) (string? encrypted-private-key))
         (fail-fast :db-sync/missing-field {:base base :user-uuid user-uuid :field :user-rsa-key-pair}))
       (p/let [encrypted-private-key' (<re-encrypt-private-key encrypted-private-key old-password new-password)
@@ -464,7 +562,7 @@
   (let [base (e2ee-base)]
     (when-not (string? base)
       (fail-fast :db-sync/missing-field {:base base}))
-    (p/let [{:keys [public-key encrypted-private-key]} (<fetch-user-rsa-key-pair-raw base)]
+    (p/let [{:keys [public-key encrypted-private-key]} (<get-user-rsa-key-pair-raw base)]
       (when (and public-key encrypted-private-key)
         {:public-key public-key
          :encrypted-private-key encrypted-private-key}))))
@@ -474,7 +572,7 @@
   (let [base (e2ee-base)]
     (when-not (string? base)
       (fail-fast :db-sync/missing-field {:base base}))
-    (p/let [existing (<fetch-user-rsa-key-pair-raw base)]
+    (p/let [existing (<get-user-rsa-key-pair-raw base)]
       (when-not (and (string? (:public-key existing))
                      (string? (:encrypted-private-key existing)))
         (p/let [{:keys [publicKey privateKey]} (crypt/<generate-rsa-key-pair)

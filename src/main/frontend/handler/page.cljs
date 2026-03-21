@@ -17,7 +17,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.ui :as ui-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
@@ -32,10 +32,30 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.graph-parser.text :as text]
+            [logseq.outliner.recycle :as outliner-recycle]
             [promesa.core :as p]))
 
 (def <create! page-common-handler/<create!)
 (def <delete! page-common-handler/<delete!)
+
+(defn get-recycle-page
+  []
+  (db/get-page common-config/recycle-page-name))
+
+(defn open-recycle!
+  []
+  (when-let [page (get-recycle-page)]
+    (route-handler/redirect-to-page! (:block/uuid page))))
+
+(defn restore-recycled!
+  [root-uuid]
+  (when-let [root (db/entity [:block/uuid root-uuid])]
+    (when-let [tx-data (seq (outliner-recycle/restore-tx-data (db/get-db) root))]
+      (p/do!
+       (ui-outliner-tx/transact!
+        {:outliner-op :restore-recycled}
+        (outliner-op/transact! tx-data nil))
+       true))))
 
 (defn <unfavorite-page!
   [page-name]
@@ -258,16 +278,14 @@
                (not config/publishing?))
       (when-let [title (date/today)]
         (state/set-today! title)
-        (let [today-page (util/page-name-sanity-lc title)
-              create-f (fn []
-                         (p/let [result (<create! title {:redirect? false
-                                                         :split-namespace? false
-                                                         :today-journal? true})]
-                           (ui-handler/re-render-root!)
-                           (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})
-                           result))]
-          (when-not (db/get-page today-page)
-            (create-f)))))))
+        (p/let [today-page (util/page-name-sanity-lc title)
+                page (ldb/get-journal-page (db/get-db) (date/today-name))]
+          (when-not page
+            (p/let [result (<create! title {:redirect? false
+                                            :split-namespace? false
+                                            :today-journal? true})]
+              (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})
+              result)))))))
 
 (defn open-today-in-sidebar
   []

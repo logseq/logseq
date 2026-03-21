@@ -106,7 +106,7 @@
 
           & + div {
             display: flex;
-            align-items: center;
+            align-items: start;
             min-height: 24px;
             user-select: none;
 
@@ -240,6 +240,12 @@
     .keyboard-shortcut {
       @apply relative -top-[3px];
     }
+  }
+}
+
+#appearance_settings {
+  &.cp__settings-appearance-modal-inner {
+    @apply w-auto p-5 shadow-none m-0;
   }
 }
 
@@ -459,16 +465,12 @@ svg.cmd {
 body[data-settings-tab=keymap] {
   .cp__settings-inner {
     > article {
-      @apply p-0;
+      @apply p-0 min-w-0 overflow-x-hidden;
 
       > header {
         @apply px-4 pt-[22px] pb-2 h-auto;
       }
     }
-  }
-
-  .ui__dialog-content[label=app-settings] {
-    @apply max-w-none;
   }
 }
 

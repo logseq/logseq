@@ -1,3 +1,8 @@
+## 0.4.3
+* Add `--roundtrip` option to `export-edn` command
+* Fix `list` command to only display DB graphs
+* Fix `validate` command not working with latest schema
+
 ## 0.4.2
 * Add `--help` to all commands as an alternative to `help [command]`
 * Add `--validate` option to `export-edn` command

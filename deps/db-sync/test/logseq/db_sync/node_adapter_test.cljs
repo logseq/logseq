@@ -56,10 +56,11 @@
                  (is (= true (aget sync-health-body "ok"))))
                (p/let [tx-data [{:block/uuid (random-uuid)
                                  :block/content "hello"}]
-                       txs (protocol/tx->transit tx-data)
+                       tx-entry {:tx (protocol/tx->transit tx-data)
+                                 :outliner-op :save-block}
                        tx-resp (post-json (str base-url "/sync/" graph-id "/tx/batch")
                                           {:t-before 0
-                                           :txs txs})
+                                           :txs [tx-entry]})
                        tx-body (parse-json tx-resp)
                        pull-resp (get-json (str base-url "/sync/" graph-id "/pull?since=0"))
                        pull-body (parse-json pull-resp)]
@@ -69,7 +70,9 @@
                  (testing "pull"
                    (is (.-ok pull-resp))
                    (is (= "pull/ok" (aget pull-body "type")))
-                   (is (pos? (count (aget pull-body "txs")))))
+                   (is (pos? (count (aget pull-body "txs"))))
+                   (is (= "save-block"
+                          (aget (aget pull-body "txs" 0) "outliner-op"))))
                  (p/then (stop!) (fn [] (done))))))))
 
 #_(deftest node-adapter-websocket-test

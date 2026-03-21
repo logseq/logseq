@@ -193,6 +193,9 @@
    {:alias :P
     :coerce []
     :desc "List of properties whose values convert to a parent class"}
+   :extract-code-snippets?
+   {:alias :C
+    :desc "Extract code fence(s) to #Code"}
    :validate
    {:alias :V
     :desc "Validate db after creation"}})

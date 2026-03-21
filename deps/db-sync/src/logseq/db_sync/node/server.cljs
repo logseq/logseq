@@ -14,6 +14,7 @@
             [logseq.db-sync.platform.core :as platform]
             [logseq.db-sync.platform.node :as platform-node]
             [logseq.db-sync.worker.auth :as auth]
+            [logseq.db-sync.worker.handler.sync :as sync-handler]
             [logseq.db-sync.worker.handler.ws :as ws-handler]
             [logseq.db-sync.worker.http :as worker-http]
             [logseq.db-sync.worker.presence :as presence]
@@ -49,6 +50,15 @@
   (let [state (.-state ctx)]
     (when-let [remove-ws (.-removeWebSocket state)]
       (remove-ws socket))))
+
+(defn- reject-ws-upgrade!
+  [^js socket status reason]
+  (.write socket
+          (str "HTTP/1.1 " status " Conflict\r\n"
+               "Connection: close\r\n"
+               "Content-Type: application/json\r\n\r\n"
+               "{\"error\":\"" reason "\"}"))
+  (.destroy socket))
 
 (defn- handle-ws-connection
   [ctx env request ^js socket]
@@ -115,11 +125,14 @@
                (if (and graph-id (seq graph-id))
                  (p/let [allowed? (access-allowed? env graph-id request)]
                    (if allowed?
-                     (.handleUpgrade wss req socket head
-                                     (fn [ws-socket]
-                                       (let [ctx (graph/get-or-create-graph registry deps graph-id)]
-                                         (attach-ws! ctx ws-socket)
-                                         (handle-ws-connection ctx env request ws-socket))))
+                     (let [ctx (graph/get-or-create-graph registry deps graph-id)]
+                       (p/let [ready-for-sync? (sync-handler/<ready-for-sync? ctx graph-id)]
+                         (if ready-for-sync?
+                           (.handleUpgrade wss req socket head
+                                           (fn [ws-socket]
+                                             (attach-ws! ctx ws-socket)
+                                             (handle-ws-connection ctx env request ws-socket)))
+                           (reject-ws-upgrade! socket 409 "graph not ready"))))
                      (.destroy socket)))
                  (.destroy socket)))))
       (p/let [_ (js/Promise.

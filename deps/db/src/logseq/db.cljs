@@ -181,7 +181,6 @@
        (if-let [transact-fn @*transact-fn]
          (transact-fn repo-or-conn tx-data tx-meta)
          (transact-sync repo-or-conn tx-data tx-meta))))))
-(def remove-conflict-datoms db-normalize/remove-conflict-datoms)
 
 (defn transact-with-temp-conn!
   "Validate db and store once for a batch transaction, the `temp` conn can still load data from disk,
@@ -208,7 +207,6 @@
         ;; transact tx-data to `conn` and validate db
         (let [tx-data' (->>
                         tx-data
-                        remove-conflict-datoms
                         (db-normalize/replace-attr-retract-with-retract-entity temp-after-db))]
           (transact! conn tx-data' tx-meta))))))
 
@@ -219,6 +217,7 @@
 (def closed-value? entity-util/closed-value?)
 (def journal? entity-util/journal?)
 (def hidden? entity-util/hidden?)
+(def recycled? entity-util/recycled?)
 (def object? entity-util/object?)
 (def asset? entity-util/asset?)
 (def public-built-in-property? db-property/public-built-in-property?)
@@ -670,11 +669,36 @@
   (d/q '[:find ?e ?a
          :in $ ?v
          :where
-         [?e ?a ?v]
+         [?c :logseq.property.class/enable-bidirectional? ?c-enable?]
+         [(true? ?c-enable?)]
+         [?ea :logseq.property/classes ?c]
          [?ea :db/ident ?a]
-         [?ea :logseq.property/classes]]
+         [?e ?a ?v]]
        db
        v))
+
+(defn- add-entity
+  [acc class-id entity]
+  (if class-id
+    (update acc class-id (fnil conj #{}) entity)
+    acc))
+
+(defn- build-bidirectional-property-group
+  [db [class-id entities]]
+  (let [class (d/entity db class-id)]
+    (when (true? (:logseq.property.class/enable-bidirectional? class))
+      (let [custom-title (when-let [custom (:logseq.property.class/bidirectional-property-title class)]
+                           (if (string? custom)
+                             custom
+                             (db-property/property-value-content custom)))
+            title (if (string/blank? custom-title)
+                    (common-plural/plural (:block/title class))
+                    custom-title)]
+        {:title title
+         :class (-> (into {} class)
+                    (assoc :db/id (:db/id class)))
+         :entities (->> entities
+                        (sort-by :block/created-at))}))))
 
 (defn get-bidirectional-properties
   "Given a target entity id, returns a seq of maps with:
@@ -683,41 +707,33 @@
    * :entities - node entities that reference the target via ref properties"
   [db target-id]
   (when (and db target-id (d/entity db target-id))
-    (let [add-entity
-          (fn [acc class-id entity]
-            (if class-id
-              (update acc class-id (fnil conj #{}) entity)
-              acc))]
+    (let [*attr->bidirectional? (volatile! {})
+          bidirectional-property-attr-cached?
+          (fn [attr]
+            (let [cache @*attr->bidirectional?]
+              (if (contains? cache attr)
+                (get cache attr)
+                (let [result (bidirectional-property-attr? db attr)]
+                  (vswap! *attr->bidirectional? assoc attr result)
+                  result))))]
       (->> (get-ea-by-v db target-id)
            (keep (fn [[e a]]
-                   (when (bidirectional-property-attr? db a)
+                   (when (bidirectional-property-attr-cached? a)
                      (when-let [entity (d/entity db e)]
                        (when (and (not= (:db/id entity) target-id)
+                                  (not (entity-util/recycled? entity))
                                   (not (entity-util/class? entity))
                                   (not (entity-util/property? entity)))
                          (let [classes (filter entity-util/class? (:block/tags entity))]
                            (when (seq classes)
                              (keep (fn [class-ent]
-                                     (when-not (built-in? class-ent)
+                                     (when (and (not (built-in? class-ent))
+                                                (not (entity-util/recycled? class-ent)))
                                        [(:db/id class-ent) entity]))
                                    classes))))))))
            (mapcat identity)
            (reduce (fn [acc [class-ent entity]]
                      (add-entity acc class-ent entity))
                    {})
-           (keep (fn [[class-id entities]]
-                   (let [class (d/entity db class-id)]
-                     (when (true? (:logseq.property.class/enable-bidirectional? class))
-                       (let [custom-title (when-let [custom (:logseq.property.class/bidirectional-property-title class)]
-                                            (if (string? custom)
-                                              custom
-                                              (db-property/property-value-content custom)))
-                             title (if (string/blank? custom-title)
-                                     (common-plural/plural (:block/title class))
-                                     custom-title)]
-                         {:title title
-                          :class (-> (into {} class)
-                                     (assoc :db/id (:db/id class)))
-                          :entities (->> entities
-                                         (sort-by :block/created-at))})))))
+           (keep (partial build-bidirectional-property-group db))
            (sort-by (comp :block/created-at :class))))))

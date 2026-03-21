@@ -68,8 +68,7 @@
                         (ws/send! ws {:type "error" :message "server error"}))))
   (webSocketClose [this ws _code _reason]
                   (presence/remove-presence! this ws)
-                  (presence/broadcast-online-users! this)
-                  (log/info :db-sync/ws-closed true))
+                  (presence/broadcast-online-users! this))
   (webSocketError [this ws error]
                   (presence/remove-presence! this ws)
                   (presence/broadcast-online-users! this)

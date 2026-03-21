@@ -19,7 +19,7 @@
                                                     :extract-fn :block/title})
           items (keep (fn [block]
                         (if (:page? block)
-                          (assoc (cmdk/page-item repo block input) :page? true)
+                          (assoc (cmdk/page-item repo block nil input) :page? true)
                           (cmdk/block-item repo block nil input))) blocks)]
     items))
 

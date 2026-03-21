@@ -13,9 +13,10 @@
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.outliner.batch-tx :include-macros true :as batch-tx]
             [logseq.outliner.datascript :as ds]
             [logseq.outliner.pipeline :as outliner-pipeline]
+            [logseq.outliner.recycle :as outliner-recycle]
+            [logseq.outliner.transaction :as outliner-tx]
             [logseq.outliner.tree :as otree]
             [logseq.outliner.validate :as outliner-validate]
             [malli.core :as m]
@@ -560,7 +561,7 @@
                       (if keep-uuid?
                         block-uuids
                         (repeatedly common-uuid/gen-uuid)))
-        uuids (if (and (not keep-uuid?) replace-empty-target?)
+        uuids (if replace-empty-target?
                 (assoc uuids (:block/uuid (first blocks)) (:block/uuid target-block))
                 uuids)
         id->new-uuid (->> (map (fn [block] (when-let [id (:db/id block)]
@@ -796,13 +797,15 @@
 
 (defn ^:api ^:large-vars/cleanup-todo delete-blocks
   "Delete blocks from the tree."
-  [db blocks]
-  (let [top-level-blocks (filter-top-level-blocks db blocks)
+  [db blocks opts]
+  (let [{:keys [hard-retract?]} opts
+        top-level-blocks (filter-top-level-blocks db blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
         top-level-blocks* (get-top-level-blocks top-level-blocks non-consecutive?)
-        top-level-blocks (remove :logseq.property/built-in? top-level-blocks*)
+        top-level-blocks (->> top-level-blocks*
+                              (remove :logseq.property/built-in?)
+                              (remove ldb/page?))
         txs-state (ds/new-outliner-txs-state)
-        block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) top-level-blocks)
         start-block (first top-level-blocks)
         end-block (last top-level-blocks)
         delete-one-block? (or (= 1 (count top-level-blocks)) (= start-block end-block))]
@@ -820,6 +823,15 @@
                                                (:db/id (:logseq.property/default-value from-property)))
                                          (not (:block/closed-value-property start-block)))]
         (cond
+          hard-retract?
+          (let [block-ids (->> top-level-blocks
+                               (mapcat (fn [block]
+                                         (map :db/id (ldb/get-block-and-children db (:block/uuid block)
+                                                                                 {:include-property-block? true}))))
+                               distinct)
+                tx-data (map (fn [id] [:db/retractEntity id]) block-ids)]
+            (when (seq tx-data) (swap! txs-state concat tx-data)))
+
           (and delete-one-block? default-value-property?)
           (let [datoms (d/datoms db :avet (:db/ident from-property) (:db/id start-block))
                 tx-data (map (fn [d] {:db/id (:e d)
@@ -827,9 +839,8 @@
             (when (seq tx-data) (swap! txs-state concat tx-data)))
 
           :else
-          (doseq [id block-ids]
-            (let [node (d/entity db id)]
-              (otree/-del node txs-state db))))))
+          (swap! txs-state concat
+                 (outliner-recycle/recycle-blocks-tx-data db top-level-blocks opts)))))
     {:tx-data @txs-state}))
 
 (defn- move-to-original-position?
@@ -915,7 +926,7 @@
                           (set))
             move-parents-to-child? (some parents' (map :db/id blocks))]
         (when-not move-parents-to-child?
-          (batch-tx/with-batch-tx-mode conn {:outliner-op :move-blocks}
+          (outliner-tx/with-temp-conn-batch conn {:outliner-op :move-blocks}
             (doseq [[idx block] (map vector (range (count blocks)) blocks)]
               (let [first-block? (zero? idx)
                     sibling? (if first-block? sibling? true)
@@ -1067,8 +1078,8 @@
                     opts
                     (assoc opts :outliner-op :insert-blocks)))))
 
-(let [f (fn [conn blocks _opts]
-          (delete-blocks @conn blocks))]
+(let [f (fn [conn blocks opts]
+          (delete-blocks @conn blocks opts))]
   (defn delete-blocks!
     [conn blocks opts]
     (op-transact! :delete-blocks f conn blocks opts)))

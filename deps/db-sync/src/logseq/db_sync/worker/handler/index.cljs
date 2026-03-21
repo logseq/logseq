@@ -13,11 +13,37 @@
       (log/error :db-sync/index-db-missing {:binding "DB"}))
     db))
 
+(defn- admin-token-valid?
+  [request ^js env]
+  (let [expected (aget env "DB_SYNC_ADMIN_TOKEN")
+        actual (.get (.-headers request) "x-db-sync-admin-token")]
+    (and (string? expected)
+         (seq expected)
+         (= expected actual))))
+
+(defn- <delete-graph-do! [^js env ^js url graph-id]
+  (let [^js namespace (.-LOGSEQ_SYNC_DO env)
+        do-id (.idFromName namespace graph-id)
+        stub (.get namespace do-id)
+        reset-url (str (.-origin url) "/admin/reset")]
+    (p/let [resp (.fetch stub (js/Request. reset-url #js {:method "DELETE"}))]
+      (when-not (.-ok resp)
+        (throw (ex-info "graph DO delete failed"
+                        {:graph-id graph-id
+                         :status (.-status resp)})))
+      resp)))
+
+(defn- <delete-graph! [db ^js env ^js url graph-id]
+  (p/do!
+   (index/<graph-delete-metadata! db graph-id)
+   (<delete-graph-do! env url graph-id)
+   (index/<graph-delete-index-entry! db graph-id)))
+
 (defn ^:large-vars/cleanup-todo handle [{:keys [db ^js env request url claims route]}]
   (let [path-params (:path-params route)
         graph-id (:graph-id path-params)
         member-id (:member-id path-params)
-        user-id (aget claims "sub")]
+        user-id (some-> claims (aget "sub"))]
     (case (:handler route)
       :graphs/list
       (if (string? user-id)
@@ -41,15 +67,17 @@
                      (http/bad-request "invalid body")
 
                      :else
-                     (p/let [{:keys [graph-name schema-version graph-e2ee?]} body
+                     (p/let [{:keys [graph-name schema-version graph-e2ee? graph-ready-for-use?]} body
                              graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))
+                             graph-ready-for-use? (if (nil? graph-ready-for-use?) true (true? graph-ready-for-use?))
                              name-exists? (index/<graph-name-exists? db graph-name user-id)]
                        (if name-exists?
                          (http/bad-request "duplicate graph name")
-                         (p/let [_ (index/<index-upsert! db graph-id graph-name user-id schema-version graph-e2ee?)
+                         (p/let [_ (index/<index-upsert! db graph-id graph-name user-id schema-version graph-e2ee? graph-ready-for-use?)
                                  _ (index/<graph-member-upsert! db graph-id user-id "manager" user-id)]
                            (http/json-response :graphs/create {:graph-id graph-id
-                                                               :graph-e2ee? graph-e2ee?})))))))))
+                                                               :graph-e2ee? graph-e2ee?
+                                                               :graph-ready-for-use? graph-ready-for-use?})))))))))
 
       :graphs/access
       (cond
@@ -173,13 +201,14 @@
         (p/let [owns? (index/<user-has-access-to-graph? db graph-id user-id)]
           (if (not owns?)
             (http/forbidden)
-            (p/let [_ (index/<index-delete! db graph-id)]
-              (let [^js namespace (.-LOGSEQ_SYNC_DO env)
-                    do-id (.idFromName namespace graph-id)
-                    stub (.get namespace do-id)
-                    reset-url (str (.-origin url) "/admin/reset")]
-                (.fetch stub (js/Request. reset-url #js {:method "DELETE"})))
+            (p/let [_ (<delete-graph! db env url graph-id)]
               (http/json-response :graphs/delete {:graph-id graph-id :deleted true})))))
+
+      :admin-graphs/delete
+      (if (seq graph-id)
+        (p/let [_ (<delete-graph! db env url graph-id)]
+          (http/json-response :graphs/delete {:graph-id graph-id :deleted true}))
+        (http/bad-request "missing graph id"))
 
       :e2ee/user-keys-get
       (if (string? user-id)
@@ -297,36 +326,149 @@
         (http/error-response "server error" 500)
 
         :else
-        (p/let [claims (auth/auth-claims request env)
-                _ (when claims
-                    (index/<user-upsert! db claims))
-                route (routes/match-route method path)
-                response (cond
-                           (nil? claims)
-                           (http/unauthorized)
+        (let [route (routes/match-route method path)]
+          (cond
+            (nil? route)
+            (http/not-found)
 
-                           route
-                           (handle {:db db
-                                    :env env
-                                    :request request
-                                    :url url
-                                    :claims claims
-                                    :route route})
+            (= :admin-graphs/delete (:handler route))
+            (if (admin-token-valid? request env)
+              (handle {:db db
+                       :env env
+                       :request request
+                       :url url
+                       :claims nil
+                       :route route})
+              (http/unauthorized))
 
-                           :else
-                           (http/not-found))]
-          response))
+            :else
+            (p/let [claims (auth/auth-claims request env)
+                    _ (when claims
+                        (index/<user-upsert! db claims))]
+              (if (nil? claims)
+                (http/unauthorized)
+                (handle {:db db
+                         :env env
+                         :request request
+                         :url url
+                         :claims claims
+                         :route route}))))))
       (catch :default error
         (js/console.error "DEBUG handle-fetch error:" error)
         (log/error :db-sync/index-error error)
         (http/error-response (str "server error: " error) 500)))))
 
-(defn graph-access-response [request env graph-id]
+(def ^:private graph-access-cache-ttl-ms 5000)
+(def ^:private graph-access-cache-capacity 256)
+(defonce ^:private *graph-access-cache (atom {}))
+
+(defn- now-ms []
+  (.now js/Date))
+
+(defn- unauthorized-timing [jwt-verify-ms]
+  {:access-ok? false
+   :cache-hit? false
+   :jwt-verify-ms jwt-verify-ms
+   :access-query-ms 0
+   :access-check-ms jwt-verify-ms})
+
+(defn- fresh-cache?
+  [cached-at current-ms]
+  (and (number? cached-at)
+       (< (- current-ms cached-at) graph-access-cache-ttl-ms)))
+
+(defn- lookup-graph-access-cache
+  [graph-id token current-ms]
+  (let [cache-key [graph-id token]]
+    (when-let [{:keys [allowed? cached-at]} (get @*graph-access-cache cache-key)]
+      (if (fresh-cache? cached-at current-ms)
+        {:allowed? allowed?}
+        (do
+          (swap! *graph-access-cache dissoc cache-key)
+          nil)))))
+
+(defn- prune-graph-access-cache
+  [cache current-ms]
+  (let [fresh (into {}
+                    (filter (fn [[_ {:keys [cached-at]}]]
+                              (fresh-cache? cached-at current-ms)))
+                    cache)]
+    (if (<= (count fresh) graph-access-cache-capacity)
+      fresh
+      (let [drop-count (- (count fresh) graph-access-cache-capacity)]
+        (->> fresh
+             (sort-by (comp :cached-at val))
+             (drop drop-count)
+             (into {}))))))
+
+(defn- cache-graph-access!
+  [graph-id token allowed? current-ms]
+  (let [cache-key [graph-id token]]
+    (swap! *graph-access-cache
+           (fn [cache]
+             (-> cache
+                 (assoc cache-key {:allowed? allowed? :cached-at current-ms})
+                 (prune-graph-access-cache current-ms))))))
+
+(defn graph-access-response-with-timing
+  [request env graph-id]
   (let [token (auth/token-from-request request)
-        url (js/URL. (.-url request))
-        access-url (str (.-origin url) "/graphs/" graph-id "/access")
-        headers (js/Headers. (.-headers request))
-        index-self #js {:env env :d1 (aget env "DB")}]
-    (when (string? token)
-      (.set headers "authorization" (str "Bearer " token)))
-    (handle-fetch index-self (js/Request. access-url #js {:method "GET" :headers headers}))))
+        db (aget env "DB")]
+    (cond
+      (or (not (string? token))
+          (not (seq token)))
+      (p/resolved {:response (http/unauthorized)
+                   :timing (unauthorized-timing 0)})
+
+      (nil? db)
+      (p/resolved {:response (http/error-response "server error" 500)
+                   :timing {:access-ok? false
+                            :cache-hit? false}})
+
+      :else
+      (let [current-ms (now-ms)]
+        (if-let [{:keys [allowed?]} (lookup-graph-access-cache graph-id token current-ms)]
+          (p/resolved {:response (if allowed?
+                                   (http/json-response :graphs/access {:ok true})
+                                   (http/forbidden))
+                       :timing {:access-ok? allowed?
+                                :cache-hit? true
+                                :jwt-verify-ms 0
+                                :access-query-ms 0
+                                :access-check-ms 0}})
+          (let [jwt-start-ms (now-ms)]
+            (->
+             (p/let [claims (auth/auth-claims request env)
+                     jwt-end-ms (now-ms)
+                     jwt-verify-ms (- jwt-end-ms jwt-start-ms)]
+               (if (nil? claims)
+                 {:response (http/unauthorized)
+                  :timing (unauthorized-timing jwt-verify-ms)}
+                 (let [user-id (aget claims "sub")]
+                   (if-not (string? user-id)
+                     {:response (http/unauthorized)
+                      :timing (unauthorized-timing jwt-verify-ms)}
+                     (p/let [query-start-ms (now-ms)
+                             access? (index/<user-has-access-to-graph? db graph-id user-id)
+                             query-end-ms (now-ms)
+                             access-query-ms (- query-end-ms query-start-ms)
+                             access-check-ms (+ jwt-verify-ms access-query-ms)
+                             _ (cache-graph-access! graph-id token (true? access?) query-end-ms)
+                             response (if access?
+                                        (http/json-response :graphs/access {:ok true})
+                                        (http/forbidden))]
+                       {:response response
+                        :timing {:access-ok? (true? access?)
+                                 :cache-hit? false
+                                 :jwt-verify-ms jwt-verify-ms
+                                 :access-query-ms access-query-ms
+                                 :access-check-ms access-check-ms}})))))
+             (p/catch (fn [error]
+                        (log/error :db-sync/index-error error)
+                        (p/resolved {:response (http/error-response (str "server error: " error) 500)
+                                     :timing {:access-ok? false
+                                              :cache-hit? false}}))))))))))
+
+(defn graph-access-response [request env graph-id]
+  (p/let [{:keys [response]} (graph-access-response-with-timing request env graph-id)]
+    response))

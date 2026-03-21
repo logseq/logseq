@@ -5,7 +5,7 @@
                                          :sha     "5d672bf84ed944414b9f61eeb83808ead7be9127"}
 
   datascript/datascript                 {:git/url "https://github.com/logseq/datascript" ;; fork
-                                         :sha     "ff5a7d5326e2546f40146e4a489343f557519bc3"}
+                                         :sha     "f91fec561ee2c11d6bf323feae365e9033585411"}
   ;; datascript/datascript                 {:local/root "../../datascript"}
 
   datascript-transit/datascript-transit {:mvn/version "0.3.0"}
@@ -13,7 +13,7 @@
   funcool/promesa                       {:mvn/version "11.0.678"}
   medley/medley                         {:mvn/version "1.4.0"}
   metosin/reitit-frontend               {:mvn/version "0.3.10"}
-  cljs-bean/cljs-bean                   {:mvn/version "1.5.0"}
+  cljs-bean/cljs-bean                   {:mvn/version "1.9.0"}
   prismatic/dommy                       {:mvn/version "1.1.0"}
   org.clojure/core.match                {:mvn/version "1.0.0"}
   com.andrewmcveigh/cljs-time           {:git/url "https://github.com/logseq/cljs-time" ;; fork
@@ -44,7 +44,6 @@
   metosin/malli                         {:mvn/version "0.16.1"}
   com.cognitect/transit-cljs            {:mvn/version "0.8.280"}
   missionary/missionary                 {:mvn/version "b.46"}
-  meander/epsilon                       {:mvn/version "0.0.650"}
 
   io.github.open-spaced-repetition/cljc-fsrs {:git/sha "eeef3520df664e51c3d0ba2031ec2ba071635442"
                                               :git/url "https://github.com/open-spaced-repetition/cljc-fsrs"}

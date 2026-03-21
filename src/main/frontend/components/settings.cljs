@@ -221,7 +221,8 @@
                 true)]]
    (when (not (or (util/mobile?) (mobile-util/native-platform?)))
      [:div {:style {:text-align "right"}}
-      (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-brackets))])])
+      (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-brackets)
+                                   :shortcut-id :ui/toggle-brackets)])])
 
 (defn toggle-wide-mode-row [t wide-mode?]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
@@ -235,7 +236,8 @@
                 true)]]
    (when (not (or (util/mobile?) (mobile-util/native-platform?)))
      [:div {:style {:text-align "right"}}
-      (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-wide-mode))])])
+      (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-wide-mode)
+                                   :shortcut-id :ui/toggle-wide-mode)])])
 
 (defn editor-font-family-row [t {:keys [type global]}]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4
@@ -321,7 +323,9 @@
     (row-with-button-action {:left-label (t :right-side-bar/switch-theme (string/capitalize switch-theme))
                              :-for       "toggle_theme"
                              :action     pick-theme
-                             :desc       (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))})))
+                             :desc       (ui/render-keyboard-shortcut
+                                          (shortcut-helper/gen-shortcut-seq :ui/toggle-theme)
+                                          :shortcut-id :ui/toggle-theme)})))
 
 (rum/defc accent-color-row < rum/reactive
   [_in-modal?]
@@ -361,7 +365,8 @@
        :-for "toggle_radix_theme"
        :desc (when-not _in-modal?
                [:span.pl-6 (ui/render-keyboard-shortcut
-                            (shortcut-helper/gen-shortcut-seq :ui/customize-appearance))])
+                            (shortcut-helper/gen-shortcut-seq :ui/customize-appearance)
+                            :shortcut-id :ui/customize-appearance)])
        :stretch (boolean _in-modal?)
        :action pick-theme})
      [:div.text-sm.opacity-50.mt-1
@@ -369,7 +374,7 @@
 
 (rum/defc appearance < rum/reactive
   []
-  [:div#appearance_settings.cp__settings-appearance-modal-inner.w-96.p-4.shadow-xl
+  [:div#appearance_settings.cp__settings-appearance-modal-inner
    (theme-modes-row t)
    (editor-font-family-row t (state/sub :ui/editor-font))
    (toggle-wide-mode-row t (state/sub :ui/wide-mode?))
@@ -933,8 +938,8 @@
     (hooks/use-effect!
      #(c.m/run-task*
        (m/sp
-        (c.m/<? (rtc-handler/<rtc-get-users-info))
-        (set-loading! false)))
+         (c.m/<? (rtc-handler/<rtc-get-users-info))
+         (set-loading! false)))
      [])
     [:div.flex.flex-col.gap-2.mt-4
      {:on-key-press (fn [e]
