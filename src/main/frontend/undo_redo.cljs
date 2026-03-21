@@ -74,15 +74,20 @@
 
 (defn clear-history!
   [repo]
-  (try
-    (state/<invoke-db-worker :thread-api/undo-redo-clear-history repo)
-    (catch :default e
-      (if (= "db-worker has not been initialized" (ex-message e))
-        (do
-          (swap! *undo-ops dissoc repo)
-          (swap! *redo-ops dissoc repo)
-          nil)
-        (throw e)))))
+  (if util/node-test?
+    (do
+      (swap! *undo-ops dissoc repo)
+      (swap! *redo-ops dissoc repo)
+      nil)
+    (try
+      (state/<invoke-db-worker :thread-api/undo-redo-clear-history repo)
+      (catch :default e
+        (if (= "db-worker has not been initialized" (ex-message e))
+          (do
+            (swap! *undo-ops dissoc repo)
+            (swap! *redo-ops dissoc repo)
+            nil)
+          (throw e))))))
 
 (defn- conj-op
   [col op]
@@ -626,21 +631,25 @@
 
 (defn undo
   [repo]
-  (try
-    (state/<invoke-db-worker :thread-api/undo-redo-undo repo)
-    (catch :default e
-      (if (= "db-worker has not been initialized" (ex-message e))
-        (p/resolved (undo-redo-aux repo true))
-        (throw e)))))
+  (if util/node-test?
+    (p/resolved (undo-redo-aux repo true))
+    (try
+      (state/<invoke-db-worker :thread-api/undo-redo-undo repo)
+      (catch :default e
+        (if (= "db-worker has not been initialized" (ex-message e))
+          (p/resolved (undo-redo-aux repo true))
+          (throw e))))))
 
 (defn redo
   [repo]
-  (try
-    (state/<invoke-db-worker :thread-api/undo-redo-redo repo)
-    (catch :default e
-      (if (= "db-worker has not been initialized" (ex-message e))
-        (p/resolved (undo-redo-aux repo false))
-        (throw e)))))
+  (if util/node-test?
+    (p/resolved (undo-redo-aux repo false))
+    (try
+      (state/<invoke-db-worker :thread-api/undo-redo-redo repo)
+      (catch :default e
+        (if (= "db-worker has not been initialized" (ex-message e))
+          (p/resolved (undo-redo-aux repo false))
+          (throw e))))))
 
 (defn record-editor-info!
   [repo editor-info]
