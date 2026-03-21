@@ -837,7 +837,6 @@
                                   [[:move-blocks-up-down [[(:db/id child2)] true]]]
                                   local-tx-meta)
           (let [{:keys [outliner-ops]} (first (#'sync-apply/pending-txs test-repo))
-                _ (prn :debug :outliner-ops outliner-ops)
                 [_ [_ _ opts]] (first outliner-ops)]
             (is (= :move-blocks (ffirst outliner-ops)))
             (is (= :move-blocks-up-down (:source-op opts)))
@@ -887,6 +886,29 @@
           (db-sync/enqueue-local-tx! test-repo tx-report)
           (let [{persisted-tx-id :tx-id} (first (#'sync-apply/pending-txs test-repo))]
             (is (= tx-id persisted-tx-id))))))))
+
+(deftest apply-history-action-does-not-reuse-original-tx-id-test
+  (testing "undo/redo history actions should not overwrite the original pending tx row"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          child-uuid (:block/uuid child1)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-op/apply-ops! conn
+                                  [[:save-block [{:block/uuid child-uuid
+                                                  :block/title "hello"} nil]]]
+                                  local-tx-meta)
+          (let [{:keys [tx-id]} (first (#'sync-apply/pending-txs test-repo))]
+            (is (= true
+                   (:applied? (#'sync-apply/apply-history-action! test-repo
+                                                                  tx-id
+                                                                  true
+                                                                  {:db-sync/tx-id tx-id}))))
+            (let [pending (#'sync-apply/pending-txs test-repo)]
+              (is (= 2 (count pending)))
+              (is (= 2 (count (distinct (map :tx-id pending)))))
+              (is (= "hello"
+                     (get-in (#'sync-apply/pending-tx-by-id test-repo tx-id)
+                             [:forward-outliner-ops 0 1 0 :block/title]))))))))))
 
 (deftest enqueue-local-tx-persists-semantic-undo-ops-test
   (testing "undo local tx persists explicit semantic forward and inverse ops"
@@ -1067,6 +1089,94 @@
         (let [block' (d/entity @conn [:block/uuid (:block/uuid block)])]
           (is (= #{"page y"}
                  (set (map :block/name (:user.property/x7 block'))))))))))
+
+(deftest apply-history-action-redo-replays-insert-blocks-test
+  (testing "apply-history-action should redo an inserted block from semantic history"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          requested-uuid (random-uuid)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-op/apply-ops! conn
+                                  [[:insert-blocks [[{:block/title "history insert"
+                                                      :block/uuid requested-uuid}]
+                                                    (:db/id parent)
+                                                    {:sibling? false}]]]
+                                  local-tx-meta)
+          (let [pending (first (#'sync-apply/pending-txs test-repo))
+                inserted (db-test/find-block-by-content @conn "history insert")
+                inserted-uuid (:block/uuid inserted)
+                {:keys [tx-id]} pending]
+            (is (= inserted-uuid
+                   (get-in pending [:outliner-ops 0 1 0 0 :block/uuid])))
+            (is (= inserted-uuid
+                   (second (first (get-in pending [:inverse-outliner-ops 0 1 0])))))
+            (is (= true
+                   (:applied? (#'sync-apply/apply-history-action! test-repo tx-id true {}))))
+            (is (nil? (d/entity @conn [:block/uuid inserted-uuid])))
+            (is (= true
+                   (:applied? (#'sync-apply/apply-history-action! test-repo tx-id false {}))))
+            (let [inserted* (d/entity @conn [:block/uuid inserted-uuid])]
+              (is (some? inserted*))
+              (is (= "history insert" (:block/title inserted*)))
+              (is (= (:block/uuid parent)
+                     (some-> inserted* :block/parent :block/uuid))))))))))
+
+(deftest apply-history-action-redo-replays-save-block-test
+  (testing "apply-history-action should redo an inline block edit from semantic history"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          child-uuid (:block/uuid child1)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-op/apply-ops! conn
+                                  [[:save-block [{:block/uuid child-uuid
+                                                  :block/title "child 1 inline edit"} {}]]]
+                                  local-tx-meta)
+          (let [{:keys [tx-id]} (first (#'sync-apply/pending-txs test-repo))]
+            (is (= true
+                   (:applied? (#'sync-apply/apply-history-action! test-repo tx-id true {}))))
+            (is (= "child 1"
+                   (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+            (is (= true
+                   (:applied? (#'sync-apply/apply-history-action! test-repo tx-id false {}))))
+            (is (= "child 1 inline edit"
+                   (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))))
+
+(deftest apply-history-action-redo-replays-save-then-insert-test
+  (testing "apply-history-action should redo a combined save-block then insert-block history action"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          child-uuid (:block/uuid child1)
+          child-id (:db/id child1)
+          inserted-uuid (random-uuid)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-op/apply-ops! conn
+                                  [[:save-block [{:block/uuid child-uuid
+                                                  :block/title "child 1 edited"} {}]]
+                                   [:insert-blocks [[{:block/title "inserted after save"
+                                                      :block/uuid inserted-uuid}]
+                                                    child-id
+                                                    {:sibling? true}]]]
+                                  local-tx-meta)
+          (let [{:keys [tx-id]} (first (#'sync-apply/pending-txs test-repo))
+                inserted-id (d/q '[:find ?e .
+                                   :in $ ?title
+                                   :where
+                                   [?e :block/title ?title]]
+                                 @conn
+                                 "inserted after save")
+                inserted (d/entity @conn inserted-id)
+                inserted-uuid' (:block/uuid inserted)]
+            (is (= true
+                   (:applied? (#'sync-apply/apply-history-action! test-repo tx-id true {}))))
+            (is (= "child 1"
+                   (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+            (is (nil? (d/entity @conn [:block/uuid inserted-uuid'])))
+            (is (= true
+                   (:applied? (#'sync-apply/apply-history-action! test-repo tx-id false {}))))
+            (is (= "child 1 edited"
+                   (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+            (is (= "inserted after save"
+                   (:block/title (d/entity @conn [:block/uuid inserted-uuid']))))))))))
 
 (deftest direct-outliner-core-insert-blocks-persists-insert-blocks-outliner-op-test
   (testing "direct outliner-core/insert-blocks! still persists singleton insert-blocks outliner-ops"
