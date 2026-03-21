@@ -437,10 +437,28 @@
                                           :else nil)
                                deleting-entities (filter
                                                   (fn [value]
-                                                    (and
-                                                     (:logseq.property/created-from-property value)
-                                                     (not (or (entity-util/page? value) (ldb/closed-value? value)))
-                                                     (empty? (set/difference (set (map :e (d/datoms @conn :avet (:db/ident property) (:db/id value)))) block-id-set))))
+                                                    (let [value-referrers*
+                                                          (d/q '[:find [?e ...]
+                                                                 :in $ ?property-id ?value-id
+                                                                 :where
+                                                                 [?e ?property-id ?value-id]]
+                                                               @conn
+                                                               (:db/ident property)
+                                                               (:db/id value))
+                                                          value-referrers
+                                                          (cond
+                                                            (nil? value-referrers*)
+                                                            #{}
+
+                                                            (coll? value-referrers*)
+                                                            (set value-referrers*)
+
+                                                            :else
+                                                            #{value-referrers*})]
+                                                      (and
+                                                       (:logseq.property/created-from-property value)
+                                                       (not (or (entity-util/page? value) (ldb/closed-value? value)))
+                                                       (empty? (set/difference value-referrers block-id-set)))))
                                                   entities)
                                retract-blocks-tx (when (seq deleting-entities)
                                                    (:tx-data (outliner-core/delete-blocks @conn deleting-entities {})))]
@@ -602,9 +620,21 @@
                     ref? (db-property-type/all-ref-property-types property-type)
                     existing-value (get block property-id)
                     many? (= :db.cardinality/many (:db/cardinality property))
+                    many-ref-value-ids (fn [value]
+                                         (->> (cond
+                                                (nil? value) []
+                                                (de/entity? value) [value]
+                                                (sequential? value) value
+                                                :else [value])
+                                              (map (fn [item]
+                                                     (if (de/entity? item)
+                                                       (:db/id item)
+                                                       item)))
+                                              set))
                     value-matches? (if ref?
                                      (if (and many? (coll? v'))
-                                       (= (set (map :db/id existing-value)) (set v'))
+                                       (= (many-ref-value-ids existing-value)
+                                          (many-ref-value-ids v'))
                                        (= existing-value v'))
                                      (= existing-value v'))]
                 (throw-error-if-self-value block v' ref?)
