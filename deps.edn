@@ -26,7 +26,7 @@
   hiccups/hiccups                       {:mvn/version "0.3.0"}
   tongue/tongue                         {:mvn/version "0.4.4"}
   org.clojure/core.async                {:mvn/version "1.8.741"}
-  thheller/shadow-cljs                  {:mvn/version "2.28.23"}
+  thheller/shadow-cljs                  {:mvn/version "3.3.6"}
   expound/expound                       {:mvn/version "0.9.0"}
   com.lambdaisland/glogi                {:git/url "https://github.com/lambdaisland/glogi"
                                          :git/sha "30328a045141717aadbbb693465aed55f0904976"}
