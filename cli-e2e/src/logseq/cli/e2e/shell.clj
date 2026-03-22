@@ -40,7 +40,7 @@
                                   :out out-stream
                                   :err err-stream}
                                  "/bin/bash"
-                                 "-lc"
+                                 "-c"
                                  cmd)]
     {:exit (:exit result 0)
      :out (utf8-string out-payload)
