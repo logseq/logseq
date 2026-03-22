@@ -2,8 +2,7 @@
   (:require [clojure.test :refer [deftest is]]
             [frontend.state :as state]
             [frontend.undo-redo :as undo-redo]
-            [frontend.util :as util]
-            [promesa.core :as p]))
+            [frontend.util :as util]))
 
 ;; ADR 0013 note: this namespace keeps main-thread coordination coverage only.
 ;; Worker-owned DB-history recording/replay tests belong under src/test/frontend/worker/.
@@ -67,20 +66,9 @@
         repo "repo-node"]
     (with-redefs [util/node-test? true
                   state/<invoke-db-worker invoke!]
-      (is (p/promise? (undo-redo/undo repo)))
-      (is (p/promise? (undo-redo/redo repo)))
+      (is (= :frontend.undo-redo/empty-undo-stack
+             (undo-redo/undo repo)))
+      (is (= :frontend.undo-redo/empty-redo-stack
+             (undo-redo/redo repo)))
       (is (nil? (undo-redo/clear-history! repo)))
       (is (empty? @calls)))))
-
-(deftest undo-redo-action-meta-drops-original-tx-id-test
-  (let [tx-id (random-uuid)
-        data {:tx-meta {:outliner-op :save-block
-                        :db-sync/tx-id tx-id}
-              :db-sync/tx-id tx-id
-              :db-sync/forward-outliner-ops [[:save-block [{:block/uuid (random-uuid)
-                                                            :block/title "hello"} nil]]]
-              :db-sync/inverse-outliner-ops [[:save-block [{:block/uuid (random-uuid)
-                                                            :block/title ""} nil]]]}
-        tx-meta (#'undo-redo/undo-redo-action-meta data false)]
-    (is (nil? (:db-sync/tx-id tx-meta)))
-    (is (= tx-id (:db-sync/source-tx-id tx-meta)))))
