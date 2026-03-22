@@ -72,3 +72,20 @@
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))
       (is (string/includes? (get-in result [:error :message]) "id")))))
+
+(deftest test-merge-fetched-property-value
+  (let [merge-value #'show-command/merge-fetched-property-value]
+    (testing "first value is kept as scalar"
+      (is (= "Step 1" (merge-value nil "Step 1"))))
+
+    (testing "second distinct value upgrades scalar to vector"
+      (is (= ["Step 1" "Step 2"]
+             (merge-value "Step 1" "Step 2"))))
+
+    (testing "additional values are appended"
+      (is (= ["Step 1" "Step 2" "Step 3"]
+             (merge-value ["Step 1" "Step 2"] "Step 3"))))
+
+    (testing "duplicate values are deduplicated"
+      (is (= ["Step 1" "Step 2"]
+             (merge-value ["Step 1" "Step 2"] "Step 2"))))))

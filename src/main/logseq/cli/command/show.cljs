@@ -595,6 +595,16 @@
                      {}))))
     (p/resolved {})))
 
+(defn- merge-fetched-property-value
+  [existing value]
+  (cond
+    (nil? existing) value
+    (= existing value) existing
+    (sequential? existing) (if (some #(= % value) existing)
+                             existing
+                             (conj (vec existing) value))
+    :else [existing value]))
+
 (defn- fetch-user-properties
   [config repo block-ids]
   (if (seq block-ids)
@@ -613,7 +623,7 @@
           (p/let [rows (transport/invoke config :thread-api/q false
                                          [repo [props-query ids (vec property-idents)]])]
             (reduce (fn [acc [block-id attr value]]
-                      (update acc block-id assoc attr value))
+                      (update-in acc [block-id attr] merge-fetched-property-value value))
                     {}
                     rows))
           {})))
