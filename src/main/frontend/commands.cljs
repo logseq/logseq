@@ -185,9 +185,10 @@
 
 (defn- headings
   []
-  (mapv (fn [level]
-          (let [heading (str "Heading " level)]
-            [heading (->heading level) heading (str "h-" level) "Heading"])) (range 1 7)))
+  (into [["Normal text" (->heading nil) "Clear heading and set to normal text" :icon/text "Heading"]]
+        (mapv (fn [level]
+                (let [heading (str "Heading " level)]
+                  [heading (->heading level) heading (str "h-" level) "Heading"])) (range 1 7))))
 
 (defonce *latest-matched-command (atom ""))
 (defonce *matched-commands (atom nil))
