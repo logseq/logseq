@@ -1,5 +1,6 @@
 (ns logseq.cli.e2e.main
   (:require [clojure.set :as set]
+            [logseq.cli.e2e.cleanup :as cleanup]
             [logseq.cli.e2e.coverage :as coverage]
             [logseq.cli.e2e.manifests :as manifests]
             [logseq.cli.e2e.preflight :as preflight]
@@ -102,6 +103,54 @@
   [_opts]
   (doseq [{:keys [id]} (manifests/load-cases)]
     (println id)))
+
+(defn- print-cleanup-help!
+  []
+  (println "Usage: bb -f cli-e2e/bb.edn cleanup [options]")
+  (println)
+  (println "Options:")
+  (println "  -h, --help           Show this help and exit")
+  (println "      --dry-run        Scan and report only; do not kill/delete")
+  (println)
+  (println "Cleanups performed:")
+  (println "  - Terminate cli-e2e db-worker-node processes")
+  (println "  - Remove cli-e2e temp graph directories")
+  (flush))
+
+(defn cleanup!
+  [opts]
+  (if (:help opts)
+    (do
+      (print-cleanup-help!)
+      {:status :help})
+    (let [dry-run? (boolean (:dry-run opts))
+          cleanup-opts (cond-> {}
+                         dry-run? (assoc :dry-run true))
+          processes (cleanup/cleanup-db-worker-processes! cleanup-opts)
+          temp-graphs (cleanup/cleanup-temp-graph-dirs! cleanup-opts)]
+      (println "==> Running cli-e2e cleanup")
+      (if dry-run?
+        (do
+          (println (format "[dry-run] db-worker-node processes: found %d, would kill %d"
+                           (count (:found-pids processes))
+                           (count (:would-kill-pids processes))))
+          (println (format "[dry-run] temp graph directories: found %d, would remove %d"
+                           (count (:found-dirs temp-graphs))
+                           (count (:would-remove-dirs temp-graphs)))))
+        (do
+          (println (format "db-worker-node processes: found %d, killed %d, failed %d"
+                           (count (:found-pids processes))
+                           (count (:killed-pids processes))
+                           (count (:failed-pids processes))))
+          (println (format "temp graph directories: found %d, removed %d, failed %d"
+                           (count (:found-dirs temp-graphs))
+                           (count (:removed-dirs temp-graphs))
+                           (count (:failed-dirs temp-graphs))))))
+      (flush)
+      {:status :ok
+       :dry-run? dry-run?
+       :processes processes
+       :temp-graphs temp-graphs})))
 
 (defn- print-failure-details!
   [error]
