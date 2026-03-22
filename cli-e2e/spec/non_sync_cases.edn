@@ -246,6 +246,20 @@
   :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
   :tags [:upsert]}
 
+ {:id "block-upsert-update-id-custom-many-property-json"
+  :vars {:prop-name "Reproducible steps"}
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name '{{prop-name}}' --type default --cardinality many --public true >/dev/null"]
+  :cmd "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page Home --content 'Alpha block' >/dev/null && {{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --id \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Alpha block\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\" --update-properties '{\"{{prop-name}}\" [\"Step 1\" \"Step 2\" \"Step 3\"]}' >/dev/null && {{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output human show --graph {{graph-arg}} --id \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json query --graph {{graph-arg}} --query '[:find ?e . :where [?e :block/title \"Alpha block\"]]' | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"result\"])')\""
+  :expect {:exit 0
+           :stdout-contains ["{{prop-name}}" "Step 1" "Step 2" "Step 3"]}
+  :covers {:commands ["upsert block" "show"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :upsert ["--id" "--target-page" "--content" "--update-properties"]
+                     :show ["--id"]}}
+  :tags [:upsert :show]}
+
  {:id "block-upsert-update-uuid-json"
   :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
           "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"
