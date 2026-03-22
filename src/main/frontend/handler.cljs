@@ -141,7 +141,11 @@
       (el/listen!))
 
     (i18n/start)
-    (instrument/init)
+
+    ;; Defer analytics/error tracking — not needed for first render
+    (if (exists? js/requestIdleCallback)
+      (js/requestIdleCallback #(instrument/init))
+      (js/setTimeout #(instrument/init) 2000))
 
     (react/run-custom-queries-when-idle!)
 

@@ -346,6 +346,15 @@
                                   :outline-style :solid
                                   :opacity (if active? 1 0.5)}
                           :variant :text
+                          ;; Live preview: show accent color on hover
+                          :on-mouse-enter (fn [_e]
+                                           (some-> js/document.documentElement
+                                                   (.setAttribute "data-color"
+                                                                  (if none? "" (name color)))))
+                          :on-mouse-leave (fn [_e]
+                                           (some-> js/document.documentElement
+                                                   (.setAttribute "data-color"
+                                                                  (or (name (or color-accent :logseq)) "logseq"))))
                           :on-click (fn [_e] (state/set-color-accent! color))}
                          [:strong
                           {:class (if none? "h-0.5 w-full bg-red-700"

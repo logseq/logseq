@@ -84,6 +84,7 @@
 
 (defn- search-emojis
   [q]
+  (ui/ensure-emoji-init!)
   (p/let [result (.search SearchIndex q)]
     (bean/->clj result)))
 

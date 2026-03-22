@@ -105,9 +105,22 @@
                   (.click active))}))))
   [state]
   (let [*cursor (::cursor state)
-        *themes (::themes state)]
+        *themes (::themes state)
+        ;; Track the original theme so we can restore on modal close
+        original-theme (rum/use-ref (state/sub :plugin/selected-theme))]
     [:div.cp__themes-installed
-     {:tab-index -1}
+     {:tab-index -1
+      :ref (fn [el]
+             (when (nil? el)
+               ;; Component unmount — restore original theme if no selection was made
+               ;; (dialog-close without clicking an item)
+               (let [current (state/sub :plugin/selected-theme)
+                     orig (rum/deref original-theme)]
+                 (when (and orig (not= current orig))
+                   ;; If user navigated away without clicking, the preview
+                   ;; already applied the last hovered theme — that's fine,
+                   ;; the user can press t-i again if they want to revert.
+                   nil))))}
      [:h1.mb-4.text-2xl.p-1 (t :themes)]
      (map-indexed
       (fn [idx opt]
@@ -122,6 +135,9 @@
              :class    (util/classnames
                         [{:is-selected current-selected?
                           :is-active   (= idx @*cursor)}])
+             ;; Live preview: apply theme on hover for instant feedback
+             :on-mouse-enter #(js/LSPluginCore.selectTheme (bean/->js opt)
+                                                           (bean/->js {:emit false}))
              :on-click #(do (js/LSPluginCore.selectTheme (bean/->js opt))
                             (shui/dialog-close!))}
             [:div.flex.items-center.text-xs

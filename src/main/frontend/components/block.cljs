@@ -1845,12 +1845,11 @@
 
 (rum/defcs ^:large-vars/cleanup-todo block-control < rum/reactive
   (rum/local false ::dragging?)
-  [state config block {:keys [uuid block-id collapsed? *control-show? edit? selected? top? bottom?]}]
+  [state config block {:keys [uuid block-id collapsed? collapsable? *control-show? edit? selected? top? bottom?]}]
   (let [*bullet-dragging? (::dragging? state)
-        doc-mode? (state/sub :document/mode?)
+        doc-mode? (:document/mode? config)
         control-show? (util/react *control-show?)
-        rtc-state (state/sub :rtc/state)
-        online-users (:online-users rtc-state)
+        online-users (:online-users (:rtc/state config))
         current-user-uuid (user-handler/user-uuid)
         editing-user (editing-user-for-block uuid online-users current-user-uuid)
         ref? (:ref? config)
@@ -1861,8 +1860,6 @@
         order-list? (boolean own-number-list?)
         order-list-idx (:own-order-list-index config)
         page-title? (:page-title? config)
-        collapsable? (editor-handler/collapsable? uuid {:semantic? true
-                                                        :ignore-children? page-title?})
         link? (boolean (:original-block config))
         icon-size (if collapsed? 12 14)
         icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
@@ -2717,7 +2714,7 @@
                                block-ref/block-ref?)
         named? (some? (:block/name block))
         table? (:table? config)
-        raw-mode-block (state/sub :editor/raw-mode-block)
+        raw-mode-block (:editor/raw-mode-block config)
         type-block-editor? (and (contains? #{:code} (:logseq.property.node/display-type block))
                                 (not= (:db/id block) (:db/id raw-mode-block)))
         config (assoc config :block-parent-id block-id)
@@ -3302,13 +3299,16 @@
 
         (when (and (not property?) (not (:table-block-title? config)))
           (let [edit? (or editing?
-                          (= uuid (:block/uuid (state/get-edit-block))))]
+                          (= uuid (:block/uuid (state/get-edit-block))))
+                collapsable? (editor-handler/collapsable? uuid {:semantic? true
+                                                               :ignore-children? (:page-title? config)})]
             (block-control (assoc config :hide-bullet? (:page-title? config))
                            block
                            (merge opts
                                   {:uuid uuid
                                    :block-id block-id
                                    :collapsed? collapsed?
+                                   :collapsable? collapsable?
                                    :*control-show? *control-show?
                                    :edit? edit?}))))
 
@@ -3493,21 +3493,28 @@
 (rum/defc block-container
   [config block* & {:as opts}]
   (let [[block set-block!] (hooks/use-state block*)
-        id (or (:db/id block*) (:block/uuid block*))]
+        id (or (:db/id block*) (:block/uuid block*))
+        ;; Skip the expensive async fetch on initial render when the block
+        ;; is collapsed or already has all the data we need.  The fetch
+        ;; is still triggered lazily when a block is expanded.
+        collapsed? (if-some [result (state/get-block-collapsed (:block/uuid block*)
+                                                                (:container-id config))]
+                     result
+                     (:block/collapsed? block*))
+        needs-children? (not collapsed?)]
     (when-not (or (:page-title? config)
                   (:view? config))
       (hooks/use-effect!
        (fn []
-         (p/let [block (db-async/<get-block (state/get-current-repo)
-                                            id
-                                            {:children? (not
-                                                         (if-some [result (state/get-block-collapsed (:block/uuid block)
-                                                                                                     (:container-id config))]
-                                                           result
-                                                           (:block/collapsed? block)))
-                                             :skip-refresh? false})]
-           (set-block! block)))
-       []))
+         ;; Only fetch from worker when we actually need children data.
+         ;; Collapsed blocks already have enough data from the parent query.
+         (when needs-children?
+           (p/let [block (db-async/<get-block (state/get-current-repo)
+                                              id
+                                              {:children? true
+                                               :skip-refresh? false})]
+             (set-block! block))))
+       [needs-children?]))
     (when (or (:view? config) (:block/title block))
       (loaded-block-container config block opts))))
 
@@ -3921,9 +3928,12 @@
 (rum/defc block-list
   [config blocks]
   (let [[virtualized? _] (hooks/use-state (not (or (util/rtc-test?)
-                                                   (and (util/mobile?) (:journals? config))
+                                                   ;; Enable virtualization on mobile too — the old
+                                                   ;; (and (util/mobile?) (:journals? config))
+                                                   ;; exclusion caused severe jank on large journals.
+                                                   ;; Use a lower threshold on mobile for earlier kick-in.
                                                    (if (:journals? config)
-                                                     (< (count blocks) 50)
+                                                     (< (count blocks) (if (util/mobile?) 20 50))
                                                      (< (count blocks) 10))
                                                    (and (:block-children? config)
                                                         ;; zoom-in block's children
