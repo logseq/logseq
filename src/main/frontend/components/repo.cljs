@@ -460,8 +460,8 @@
                    e)))
     (p/resolved nil)))
 
-(rum/defc new-db-graph
-  []
+(rum/defc new-db-graph-inner
+  [rtc-group?]
   (let [[creating-db? set-creating-db?] (hooks/use-state false)
         [cloud? set-cloud?] (hooks/use-state false)
         [graph-e2ee? set-graph-e2ee?] (hooks/use-state true)
@@ -519,7 +519,7 @@
        :placeholder "your graph name"
        :on-key-down submit!
        :autoComplete "off"})
-     (when (user-handler/rtc-group?)
+     (when rtc-group?
        [:div.flex.flex-col
         [:div.flex.flex-row.items-center.gap-1
          (shui/checkbox
@@ -550,3 +550,8 @@
       (if creating-db?
         (ui/loading "Creating graph")
         "Submit"))]))
+
+(rum/defc new-db-graph < rum/reactive
+  []
+  (let [rtc-group? (user-handler/rtc-group?)]
+    (new-db-graph-inner rtc-group?)))
