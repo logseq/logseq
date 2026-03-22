@@ -10,4 +10,6 @@ Shell-first end-to-end tests for logseq CLI.
 - Run cli-e2e cases with build preflight unless --skip-build is provided: `bb test`
   - `bb test --help` for more help info
 
-
+## Clean up
+- Execute cleanup: terminate stale db-worker-node processes and remove cli-e2e temp graph directories: `bb cleanup`
+- Preview cleanup actions only (no kill/delete): `bb cleanup --dry-run`

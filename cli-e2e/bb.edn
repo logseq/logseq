@@ -11,6 +11,7 @@
                     :h :help}
             :coerce {:include []
                      :help :boolean
+                     :dry-run :boolean
                      :skip-build :boolean
                      :verbose :boolean}}))
 
@@ -28,4 +29,8 @@
 
   test
   {:doc "Run cli-e2e cases with build preflight unless --skip-build is provided"
-   :task (main/test! cli-opts)}}}
+   :task (main/test! cli-opts)}
+
+  cleanup
+  {:doc "Terminate cli-e2e db-worker-node processes and remove temp graph dirs"
+   :task (main/cleanup! cli-opts)}}}
