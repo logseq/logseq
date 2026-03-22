@@ -1,6 +1,7 @@
 (ns logseq.cli.e2e.main-test
   (:require [clojure.string :as string]
             [clojure.test :refer [deftest is testing]]
+            [logseq.cli.e2e.cleanup :as cleanup]
             [logseq.cli.e2e.main :as main]))
 
 (def sample-cases
@@ -189,3 +190,54 @@
     (is (string/includes? output "==> Detailed case logging enabled (--case global-help)"))
     (is (string/includes? output "    [main] $ node static/logseq-cli.js --help"))
     (is (true? (:stream-output? @command-opts)))))
+
+(deftest cleanup-help-prints-usage
+  (let [output (with-out-str (main/cleanup! {:help true}))]
+    (is (string/includes? output "Usage: bb -f cli-e2e/bb.edn cleanup"))
+    (is (string/includes? output "Terminate cli-e2e db-worker-node processes"))
+    (is (string/includes? output "--dry-run"))))
+
+(deftest cleanup-prints-summary-and-returns-status
+  (with-redefs [cleanup/cleanup-db-worker-processes! (fn [_] {:found-pids [101 202]
+                                                               :killed-pids [101]
+                                                               :failed-pids [202]})
+                cleanup/cleanup-temp-graph-dirs! (fn [_] {:found-dirs ["/tmp/logseq-cli-e2e-a/graphs"
+                                                                        "/tmp/logseq-cli-e2e-b/graphs"]
+                                                           :removed-dirs ["/tmp/logseq-cli-e2e-a/graphs"]
+                                                           :failed-dirs ["/tmp/logseq-cli-e2e-b/graphs"]})]
+    (let [result (atom nil)
+          output (with-out-str
+                   (reset! result (main/cleanup! {})))]
+      (is (= :ok (:status @result)))
+      (is (= [101] (get-in @result [:processes :killed-pids])))
+      (is (= ["/tmp/logseq-cli-e2e-a/graphs"] (get-in @result [:temp-graphs :removed-dirs])))
+      (is (string/includes? output "db-worker-node processes: found 2, killed 1, failed 1"))
+      (is (string/includes? output "temp graph directories: found 2, removed 1, failed 1")))))
+
+(deftest cleanup-dry-run-prints-summary-and-passes-option
+  (let [process-opts (atom nil)
+        dir-opts (atom nil)]
+    (with-redefs [cleanup/cleanup-db-worker-processes! (fn [opts]
+                                                          (reset! process-opts opts)
+                                                          {:dry-run? true
+                                                           :found-pids [101 202]
+                                                           :would-kill-pids [101 202]
+                                                           :killed-pids []
+                                                           :failed-pids []})
+                  cleanup/cleanup-temp-graph-dirs! (fn [opts]
+                                                     (reset! dir-opts opts)
+                                                     {:dry-run? true
+                                                      :found-dirs ["/tmp/logseq-cli-e2e-a/graphs"]
+                                                      :would-remove-dirs ["/tmp/logseq-cli-e2e-a/graphs"]
+                                                      :removed-dirs []
+                                                      :failed-dirs []})]
+      (let [result (atom nil)
+            output (with-out-str
+                     (reset! result (main/cleanup! {:dry-run true})))]
+        (is (= {:dry-run true} @process-opts))
+        (is (= {:dry-run true} @dir-opts))
+        (is (= :ok (:status @result)))
+        (is (true? (get-in @result [:processes :dry-run?])))
+        (is (true? (get-in @result [:temp-graphs :dry-run?])))
+        (is (string/includes? output "[dry-run] db-worker-node processes: found 2, would kill 2"))
+        (is (string/includes? output "[dry-run] temp graph directories: found 1, would remove 1"))))))
