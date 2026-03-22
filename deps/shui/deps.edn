@@ -1,6 +1,6 @@
 {:paths ["src"]
  :deps
- {org.clojure/clojure                   {:mvn/version "1.11.1"}
+ {org.clojure/clojure                   {:mvn/version "1.12.4"}
   org.clojure/clojurescript             {:mvn/version "1.11.132"}
   funcool/promesa                       {:mvn/version "11.0.678"}
   rum/rum                               {:git/url "https://github.com/logseq/rum" ;; fork
