@@ -20,7 +20,7 @@
  ;; with karma, shadow-cljs.edn and headless mode on CI
  {:test {:extra-paths ["test"]
          :extra-deps  {olical/cljs-test-runner   {:mvn/version "3.8.1"}
-                       org.clojure/clojurescript {:mvn/version "1.11.132"}
+                       org.clojure/clojurescript {:mvn/version "1.12.134"}
                        logseq/outliner {:local/root "../outliner"}}
          :main-opts   ["-m" "cljs-test-runner.main"]}
 
