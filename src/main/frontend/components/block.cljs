@@ -1845,12 +1845,11 @@
 
 (rum/defcs ^:large-vars/cleanup-todo block-control < rum/reactive
   (rum/local false ::dragging?)
-  [state config block {:keys [uuid block-id collapsed? *control-show? edit? selected? top? bottom?]}]
+  [state config block {:keys [uuid block-id collapsed? collapsable? *control-show? edit? selected? top? bottom?]}]
   (let [*bullet-dragging? (::dragging? state)
-        doc-mode? (state/sub :document/mode?)
+        doc-mode? (:document/mode? config)
         control-show? (util/react *control-show?)
-        rtc-state (state/sub :rtc/state)
-        online-users (:online-users rtc-state)
+        online-users (:online-users (:rtc/state config))
         current-user-uuid (user-handler/user-uuid)
         editing-user (editing-user-for-block uuid online-users current-user-uuid)
         ref? (:ref? config)
@@ -1861,8 +1860,6 @@
         order-list? (boolean own-number-list?)
         order-list-idx (:own-order-list-index config)
         page-title? (:page-title? config)
-        collapsable? (editor-handler/collapsable? uuid {:semantic? true
-                                                        :ignore-children? page-title?})
         link? (boolean (:original-block config))
         icon-size (if collapsed? 12 14)
         icon (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
@@ -2717,7 +2714,7 @@
                                block-ref/block-ref?)
         named? (some? (:block/name block))
         table? (:table? config)
-        raw-mode-block (state/sub :editor/raw-mode-block)
+        raw-mode-block (:editor/raw-mode-block config)
         type-block-editor? (and (contains? #{:code} (:logseq.property.node/display-type block))
                                 (not= (:db/id block) (:db/id raw-mode-block)))
         config (assoc config :block-parent-id block-id)
@@ -3302,13 +3299,16 @@
 
         (when (and (not property?) (not (:table-block-title? config)))
           (let [edit? (or editing?
-                          (= uuid (:block/uuid (state/get-edit-block))))]
+                          (= uuid (:block/uuid (state/get-edit-block))))
+                collapsable? (editor-handler/collapsable? uuid {:semantic? true
+                                                               :ignore-children? (:page-title? config)})]
             (block-control (assoc config :hide-bullet? (:page-title? config))
                            block
                            (merge opts
                                   {:uuid uuid
                                    :block-id block-id
                                    :collapsed? collapsed?
+                                   :collapsable? collapsable?
                                    :*control-show? *control-show?
                                    :edit? edit?}))))
 
