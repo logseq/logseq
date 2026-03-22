@@ -868,7 +868,7 @@
 
               :else
               (let [tx-data (build-closed-value-tx @conn property resolved-value opts)]
-                (transact-with-op! conn tx-data {:outliner-op :save-block})
+                (transact-with-op! conn tx-data {:outliner-op :insert-blocks})
                 (when (seq description)
                   (if-let [desc-ent (and id (:logseq.property/description (d/entity db [:block/uuid id])))]
                     (transact-with-op! conn

@@ -45,7 +45,9 @@
 
 (def ^:private ui-entry-tags
   #{::undo-redo/ui-state
-    ::undo-redo/record-editor-info})
+    ::undo-redo/record-editor-info
+    :frontend.worker.undo-redo/ui-state
+    :frontend.worker.undo-redo/record-editor-info})
 
 (defn- ui-entry-item?
   [item]

@@ -1,6 +1,7 @@
 (ns frontend.worker.sync.apply-txs
   "Pending tx and remote tx application helpers for db sync."
-  (:require [clojure.set :as set]
+  (:require [cljs.pprint :as pprint]
+            [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.shared-service :as shared-service]
@@ -78,7 +79,12 @@
        (remove (fn [[_op e]]
                  (contains? rtc-const/ignore-entities-when-init-upload e)))))
 
-(declare stable-entity-ref ref-attr? worker-ref-attr? replay-canonical-outliner-op! canonicalize-outliner-ops)
+(declare stable-entity-ref
+         ref-attr?
+         worker-ref-attr?
+         replay-canonical-outliner-op!
+         canonicalize-outliner-ops
+         invalid-rebase-op!)
 
 (defn reverse-tx-data [_db-before db-after tx-data]
   (->> tx-data
@@ -275,6 +281,14 @@
   [db ids]
   (mapv #(stable-entity-ref db %) ids))
 
+(defn- resolve-move-target
+  [db ids]
+  (when-let [first-block (some->> ids first (d/entity db))]
+    (if-let [left-sibling (ldb/get-left-sibling first-block)]
+      [(:db/id left-sibling) true]
+      (when-let [parent (:block/parent first-block)]
+        [(:db/id parent) false]))))
+
 (defn- stable-property-value
   [db property-id v]
   (let [property-type (some-> (d/entity db property-id) :logseq.property/type)]
@@ -435,24 +449,50 @@
 
     :move-blocks-up-down
     (let [[ids up?] args]
-      [:move-blocks [(stable-id-coll db ids)
-                     nil
-                     {:source-op :move-blocks-up-down
-                      :up? up?}]])
+      (if-let [[target-id sibling?] (resolve-move-target db ids)]
+        [:move-blocks [(stable-id-coll db ids)
+                       (stable-entity-ref db target-id)
+                       {:sibling? sibling?}]]
+        [:move-blocks [(stable-id-coll db ids)
+                       nil
+                       {:source-op :move-blocks-up-down
+                        :up? up?}]]))
 
     :indent-outdent-blocks
     (let [[ids indent? opts] args]
-      [:move-blocks [(stable-id-coll db ids)
-                     nil
-                     (assoc (dissoc (or opts {}) :outliner-op)
-                            :source-op :indent-outdent-blocks
-                            :indent? indent?)]])
+      (if (and (false? indent?)
+               (not (true? (:logical-outdenting? opts))))
+        [:transact nil]
+        (if-let [[target-id sibling?] (resolve-move-target db ids)]
+          [:move-blocks [(stable-id-coll db ids)
+                         (stable-entity-ref db target-id)
+                         (assoc (dissoc (or opts {}) :outliner-op :source-op :indent? :up?)
+                                :sibling? sibling?)]]
+          [:move-blocks [(stable-id-coll db ids)
+                         nil
+                         (assoc (dissoc (or opts {}) :outliner-op)
+                                :source-op :indent-outdent-blocks
+                                :indent? indent?)]])))
 
     :move-blocks
     (let [[ids target-id opts] args]
-      [:move-blocks [(stable-id-coll db ids)
-                     (stable-entity-ref db target-id)
-                     (dissoc (or opts {}) :outliner-op)]])
+      (if (and (nil? target-id)
+               (= :indent-outdent-blocks (:source-op opts))
+               (false? (:indent? opts))
+               (not (true? (:logical-outdenting? opts))))
+        [:transact nil]
+        (if (or target-id (not (contains? #{:move-blocks-up-down :indent-outdent-blocks} (:source-op opts))))
+          [:move-blocks [(stable-id-coll db ids)
+                         (stable-entity-ref db target-id)
+                         (dissoc (or opts {}) :outliner-op)]]
+          (if-let [[derived-target-id sibling?] (resolve-move-target db ids)]
+            [:move-blocks [(stable-id-coll db ids)
+                           (stable-entity-ref db derived-target-id)
+                           (assoc (dissoc (or opts {}) :outliner-op :source-op :indent? :up?)
+                                  :sibling? sibling?)]]
+            [:move-blocks [(stable-id-coll db ids)
+                           nil
+                           (dissoc (or opts {}) :outliner-op)]]))))
 
     :delete-blocks
     (let [[ids opts] args]
@@ -588,61 +628,274 @@
                          keys-to-restore)]
       [:save-block [inverse-block opts]])))
 
-(defn- build-worker-inverse-outliner-ops
-  [db-before forward-ops]
-  (some->> forward-ops
-           (map (fn [[op args]]
-                  (case op
-                    :save-block
-                    (let [[block opts] args]
-                      (worker-build-inverse-save-block db-before block opts))
+(defn- worker-property-ref-value
+  [db property-id value]
+  (let [property-type (some-> (d/entity db property-id) :logseq.property/type)]
+    (if (contains? db-property-type/all-ref-property-types property-type)
+      (sanitize-ref-value db value)
+      value)))
 
-                    :insert-blocks
-                    (let [[blocks _target-id opts] args]
-                      (if (:replace-empty-target? opts)
-                        (let [[fst-block & rst-blocks] blocks
-                              delete-ids (->> rst-blocks
-                                              (keep (fn [block]
-                                                      (when-let [u (:block/uuid block)]
-                                                        [:block/uuid u])))
-                                              vec)
-                              restore-target-op (when fst-block
-                                                  (worker-build-inverse-save-block db-before fst-block nil))]
-                          (concat
-                           (when (seq delete-ids)
-                             [[:delete-blocks [delete-ids {}]]])
-                           (when restore-target-op
-                             [restore-target-op])))
-                        (let [ids (->> blocks
-                                       (keep (fn [block]
-                                               (when-let [u (:block/uuid block)]
-                                                 [:block/uuid u])))
-                                       vec)]
-                          (when (seq ids)
-                            [[:delete-blocks [ids {}]]]))))
+(defn- worker-block-property-value
+  [db block-id property-id]
+  (when-let [value (some-> (d/entity db block-id)
+                           (get property-id))]
+    (worker-property-ref-value db property-id value)))
 
-                    :create-page
-                    (let [[_title opts] args
-                          page-uuid (:uuid opts)]
-                      (when page-uuid
-                        [:delete-page [page-uuid {}]]))
+(defn- worker-inverse-property-op
+  [db-before op args]
+  (case op
+    :set-block-property
+    (let [[block-id property-id _value] args
+          before-value (worker-block-property-value db-before block-id property-id)
+          block-ref (stable-entity-ref db-before block-id)]
+      (if (nil? before-value)
+        [:remove-block-property [block-ref property-id]]
+        [:set-block-property [block-ref property-id before-value]]))
 
-                    :upsert-property
-                    (let [[property-id _schema _opts] args
-                          property-before (when (qualified-keyword? property-id)
-                                            (d/entity db-before property-id))]
-                      (when (and (qualified-keyword? property-id)
-                                 (nil? property-before))
-                        [:delete-page [(common-uuid/gen-uuid :db-ident-block-uuid property-id) {}]]))
+    :remove-block-property
+    (let [[block-id property-id] args
+          before-value (worker-block-property-value db-before block-id property-id)
+          block-ref (stable-entity-ref db-before block-id)]
+      (when (some? before-value)
+        [:set-block-property [block-ref property-id before-value]]))
 
-                    nil)))
-           (remove nil?)
-           (mapcat #(if (and (sequential? %)
-                             (sequential? (first %)))
-                      %
-                      [%]))
+    :batch-set-property
+    (let [[block-ids property-id _value _opts] args]
+      (->> block-ids
+           (keep (fn [block-id]
+                   (let [before-value (worker-block-property-value db-before block-id property-id)
+                         block-ref (stable-entity-ref db-before block-id)]
+                     (if (nil? before-value)
+                       [:remove-block-property [block-ref property-id]]
+                       [:set-block-property [block-ref property-id before-value]]))))
            vec
            seq))
+
+    :batch-remove-property
+    (let [[block-ids property-id _opts] args]
+      (->> block-ids
+           (keep (fn [block-id]
+                   (let [before-value (worker-block-property-value db-before block-id property-id)
+                         block-ref (stable-entity-ref db-before block-id)]
+                     (when (some? before-value)
+                       [:set-block-property [block-ref property-id before-value]]))))
+           vec
+           seq))
+
+    nil))
+
+(defn- worker-build-insert-block-payload
+  [db-before ent]
+  (when-let [uuid (:block/uuid ent)]
+    (->> (worker-save-block-keys ent)
+         (remove #(string/starts-with? (name %) "_"))
+         (reduce (fn [m k]
+                   (let [v (get ent k)]
+                     (assoc m k
+                            (if (worker-ref-attr? db-before k)
+                              (sanitize-ref-value db-before v)
+                              v))))
+                 {:block/uuid uuid}))))
+
+(defn- selected-block-roots
+  [db-before ids]
+  (let [entities (reduce (fn [acc id]
+                           (if-let [ent (d/entity db-before id)]
+                             (if (some #(= (:db/id %) (:db/id ent)) acc)
+                               acc
+                               (conj acc ent))
+                             acc))
+                         []
+                         ids)
+        selected-ids (set (map :db/id entities))
+        has-selected-ancestor? (fn [ent]
+                                 (loop [parent (:block/parent ent)]
+                                   (if-let [parent-id (some-> parent :db/id)]
+                                     (if (contains? selected-ids parent-id)
+                                       true
+                                       (recur (:block/parent parent)))
+                                     false)))]
+    (->> entities
+         (remove has-selected-ancestor?)
+         vec)))
+
+(defn- block-restore-target
+  [ent]
+  (if-let [left-sibling (ldb/get-left-sibling ent)]
+    [(:db/id left-sibling) true]
+    (or
+     (some-> ent :block/parent :db/id (#(vector % false)))
+     (some-> ent :block/page :db/id (#(vector % false))))))
+
+(defn- build-block-insert-op
+  [db-before {:keys [blocks target-id sibling?]}]
+  [:insert-blocks [blocks
+                   (stable-entity-ref db-before target-id)
+                   {:sibling? (boolean sibling?)
+                    :keep-uuid? true
+                    :keep-block-order? true}]])
+
+(defn- delete-root->restore-plan
+  [db-before root]
+  (let [root-uuid (:block/uuid root)
+        blocks (when root-uuid
+                 (->> (ldb/get-block-and-children db-before root-uuid)
+                      (keep #(worker-build-insert-block-payload db-before %))
+                      vec))
+        [target-id sibling?] (block-restore-target root)]
+    (when (and (seq blocks)
+               (some? target-id))
+      {:blocks blocks
+       :target-id target-id
+       :sibling? sibling?})))
+
+(defn- worker-build-inverse-delete-blocks
+  [db-before ids]
+  (let [roots (selected-block-roots db-before ids)
+        plans (mapv #(delete-root->restore-plan db-before %) roots)]
+    (when (and (seq roots)
+               (every? some? plans))
+      (->> plans
+           (mapv #(build-block-insert-op db-before %))
+           seq))))
+
+(defn- page-top-level-blocks
+  [page]
+  (let [page-id (:db/id page)]
+    (->> (:block/_page page)
+         (filter #(= page-id (some-> % :block/parent :db/id)))
+         ldb/sort-by-order
+         vec)))
+
+(defn- entity->save-op
+  [db-before ent]
+  (worker-build-inverse-save-block db-before (into {} ent) nil))
+
+(defn- worker-build-inverse-delete-page
+  [db-before page-uuid]
+  (when-let [page (d/entity db-before [:block/uuid page-uuid])]
+    (let [page-save-op (entity->save-op db-before page)
+          hard-retract? (or (ldb/class? page) (ldb/property? page))]
+      (if hard-retract?
+        (let [create-op [:create-page [(:block/title page)
+                                       {:uuid page-uuid
+                                        :redirect? false
+                                        :split-namespace? true
+                                        :tags ()}]]
+              root-plans (mapv #(delete-root->restore-plan db-before %) (page-top-level-blocks page))]
+          (when (every? some? root-plans)
+            (cond-> [create-op]
+              page-save-op
+              (conj page-save-op)
+              (seq root-plans)
+              (into (mapv #(build-block-insert-op db-before %) root-plans)))))
+        (let [block-save-ops (->> (:block/_page page)
+                                  (keep #(entity->save-op db-before %))
+                                  vec)]
+          (cond-> []
+            page-save-op
+            (conj page-save-op)
+            (seq block-save-ops)
+            (into block-save-ops)))))))
+
+(defn- build-worker-inverse-outliner-ops
+  [db-before forward-ops]
+  (when (seq forward-ops)
+    (let [inverse-entries
+          (mapv (fn [[op args]]
+                  (let [inverse-entry
+                        (case op
+                          :save-block
+                          (let [[block opts] args]
+                            (worker-build-inverse-save-block db-before block opts))
+
+                          :insert-blocks
+                          (let [[blocks _target-id opts] args]
+                            (if (:replace-empty-target? opts)
+                              (let [[fst-block & rst-blocks] blocks
+                                    delete-ids (->> rst-blocks
+                                                    (keep (fn [block]
+                                                            (when-let [u (:block/uuid block)]
+                                                              [:block/uuid u])))
+                                                    vec)
+                                    restore-target-op (when fst-block
+                                                        (worker-build-inverse-save-block db-before fst-block nil))]
+                                (concat
+                                 (when (seq delete-ids)
+                                   [[:delete-blocks [delete-ids {}]]])
+                                 (when restore-target-op
+                                   [restore-target-op])))
+                              (let [ids (->> blocks
+                                             (keep (fn [block]
+                                                     (when-let [u (:block/uuid block)]
+                                                       [:block/uuid u])))
+                                             vec)]
+                                (when (seq ids)
+                                  [[:delete-blocks [ids {}]]]))))
+
+                          :move-blocks
+                          (let [[ids _target-id _opts] args]
+                            (when-let [[inverse-target-id sibling?] (resolve-move-target db-before ids)]
+                              [:move-blocks [(stable-id-coll db-before ids)
+                                             (stable-entity-ref db-before inverse-target-id)
+                                             {:sibling? sibling?}]]))
+
+                          :delete-blocks
+                          (let [[ids _opts] args]
+                            (worker-build-inverse-delete-blocks db-before ids))
+
+                          :create-page
+                          (let [[_title opts] args]
+                            (when-let [page-uuid (:uuid opts)]
+                              [:delete-page [page-uuid {}]]))
+
+                          :delete-page
+                          (let [[page-uuid _opts] args]
+                            (worker-build-inverse-delete-page db-before page-uuid))
+
+                          :set-block-property
+                          (worker-inverse-property-op db-before op args)
+
+                          :remove-block-property
+                          (worker-inverse-property-op db-before op args)
+
+                          :batch-set-property
+                          (worker-inverse-property-op db-before op args)
+
+                          :batch-remove-property
+                          (worker-inverse-property-op db-before op args)
+
+                          :class-add-property
+                          (let [[class-id property-id] args]
+                            [:class-remove-property [(stable-entity-ref db-before class-id)
+                                                     (stable-entity-ref db-before property-id)]])
+
+                          :class-remove-property
+                          (let [[class-id property-id] args]
+                            [:class-add-property [(stable-entity-ref db-before class-id)
+                                                  (stable-entity-ref db-before property-id)]])
+
+                          :upsert-property
+                          (let [[property-id _schema _opts] args]
+                            (when (qualified-keyword? property-id)
+                              [:delete-page [(common-uuid/gen-uuid :db-ident-block-uuid property-id) {}]]))
+
+                          nil)]
+                    (if (and (sequential? inverse-entry)
+                             (empty? inverse-entry))
+                      nil
+                      inverse-entry)))
+                forward-ops)]
+      ;; Any missing inverse entry means the whole semantic inverse is incomplete.
+      ;; Use raw reversed tx instead of partially replaying.
+      (when (every? some? inverse-entries)
+        (some->> inverse-entries
+                 (mapcat #(if (and (sequential? %)
+                                   (sequential? (first %)))
+                            %
+                            [%]))
+                 vec
+                 seq)))))
 
 (defn- has-replace-empty-target-insert-op?
   [forward-ops]
@@ -651,21 +904,25 @@
                (:replace-empty-target? opts)))
         forward-ops))
 
+(defn- contains-transact-op?
+  [ops]
+  (some (fn [[op]]
+          (= :transact op))
+        ops))
+
 (defn- canonicalize-explicit-outliner-ops
   [db tx-data ops]
   (cond
     (nil? ops)
     nil
 
-    (= canonical-transact-op ops)
-    canonical-transact-op
-
     (seq ops)
-    (if (every? (fn [[op]]
-                  (contains? semantic-outliner-ops op))
-                ops)
-      (mapv #(canonicalize-semantic-outliner-op db tx-data %) ops)
-      canonical-transact-op)
+    (do
+      (when-not (every? (fn [[op]]
+                          (contains? semantic-outliner-ops op))
+                        ops)
+        (throw (ex-info "Not every op is semantic" {:ops ops})))
+      (mapv #(canonicalize-semantic-outliner-op db tx-data %) ops))
 
     :else
     nil))
@@ -692,31 +949,85 @@
               inverse-op))
           inverse-outliner-ops)))
 
+(defn- patch-forward-delete-block-op-ids
+  [db-before outliner-ops]
+  (some->> outliner-ops
+           (mapv (fn [[op args :as op-entry]]
+                   (if (= :delete-blocks op)
+                     (let [[ids opts] args]
+                       [:delete-blocks [(stable-id-coll db-before ids) opts]])
+                     op-entry)))
+           seq
+           vec))
+
 (defn- canonicalize-outliner-ops
   [db tx-meta tx-data]
   (let [explicit-forward-ops (:db-sync/forward-outliner-ops tx-meta)
         outliner-ops (:outliner-ops tx-meta)]
     (cond
       (seq explicit-forward-ops)
-      (or (canonicalize-explicit-outliner-ops db tx-data explicit-forward-ops)
-          canonical-transact-op)
+      (canonicalize-explicit-outliner-ops db tx-data explicit-forward-ops)
 
-      (or (:undo? tx-meta)
-          (:redo? tx-meta)
-          (= :batch-import-edn (:outliner-op tx-meta)))
-      canonical-transact-op
+      ;; (or (:undo? tx-meta)
+      ;;     (:redo? tx-meta)
+      ;;     (= :batch-import-edn (:outliner-op tx-meta)))
+      ;; canonical-transact-op
 
       (seq outliner-ops)
-      (or (canonicalize-explicit-outliner-ops db tx-data outliner-ops)
-          canonical-transact-op)
+      (if (every? (fn [[op]]
+                    (contains? semantic-outliner-ops op))
+                  outliner-ops)
+        (canonicalize-explicit-outliner-ops db tx-data outliner-ops)
+        canonical-transact-op)
 
       (= :transact (:outliner-op tx-meta))
-      canonical-transact-op
-
-      ;; Fallback for local txs that bypassed apply-outliner-ops and therefore
-      ;; never attached semantic op data.
-      :else
       canonical-transact-op)))
+
+(defn- derive-history-outliner-ops
+  [db-before db-after tx-data tx-meta]
+  (let [forward-outliner-ops (patch-forward-delete-block-op-ids
+                              db-before
+                              (canonicalize-outliner-ops db-after tx-meta tx-data))
+        forward-outliner-ops (some-> forward-outliner-ops seq vec)
+        built-inverse-outliner-ops (some-> (build-worker-inverse-outliner-ops db-before forward-outliner-ops)
+                                           seq
+                                           vec)
+        explicit-inverse-outliner-ops (some-> (canonicalize-explicit-outliner-ops db-after tx-data (:db-sync/inverse-outliner-ops tx-meta))
+                                              (patch-inverse-delete-block-ops forward-outliner-ops)
+                                              seq
+                                              vec)
+        inverse-outliner-ops (if (has-replace-empty-target-insert-op? forward-outliner-ops)
+                               built-inverse-outliner-ops
+                               (cond
+                                 (seq built-inverse-outliner-ops)
+                                 built-inverse-outliner-ops
+
+                                 (nil? explicit-inverse-outliner-ops)
+                                 nil
+
+                                 ;; Treat explicit transact placeholder as "no semantic inverse".
+                                 ;; Keep nil so semantic replay must fail-fast when required.
+                                 (= canonical-transact-op explicit-inverse-outliner-ops)
+                                 nil
+
+                                 :else
+                                 explicit-inverse-outliner-ops))
+        inverse-outliner-ops (some-> inverse-outliner-ops seq vec)]
+    {:forward-outliner-ops forward-outliner-ops
+     :inverse-outliner-ops inverse-outliner-ops}))
+
+(defn build-history-action-metadata
+  [{:keys [db-before db-after tx-data tx-meta] :as data}]
+  (let [{:keys [forward-outliner-ops inverse-outliner-ops]}
+        (derive-history-outliner-ops db-before db-after tx-data tx-meta)]
+    (cond-> (-> data
+                (dissoc :db-before :db-after)
+                (assoc :db-sync/tx-id (or (:db-sync/tx-id tx-meta) (random-uuid))))
+      (seq forward-outliner-ops)
+      (assoc :db-sync/forward-outliner-ops forward-outliner-ops)
+
+      (seq inverse-outliner-ops)
+      (assoc :db-sync/inverse-outliner-ops inverse-outliner-ops))))
 
 (defn- inferred-outliner-ops?
   [tx-meta]
@@ -729,21 +1040,9 @@
   (when-let [conn (client-ops-conn repo)]
     (let [tx-id (or (:db-sync/tx-id tx-meta) (random-uuid))
           now (.now js/Date)
-          outliner-ops (canonicalize-outliner-ops db-after tx-meta tx-data)
-          built-inverse-outliner-ops (some-> (build-worker-inverse-outliner-ops db-before outliner-ops)
-                                             seq
-                                             vec)
-          inverse-outliner-ops (if (has-replace-empty-target-insert-op? outliner-ops)
-                                 built-inverse-outliner-ops
-                                 (if-let [explicit-inverse-outliner-ops (:db-sync/inverse-outliner-ops tx-meta)]
-                                   (some-> (canonicalize-explicit-outliner-ops
-                                            db-after
-                                            tx-data
-                                            explicit-inverse-outliner-ops)
-                                           (patch-inverse-delete-block-ops outliner-ops)
-                                           seq
-                                           vec)
-                                   built-inverse-outliner-ops))
+          {:keys [forward-outliner-ops inverse-outliner-ops]}
+          (derive-history-outliner-ops db-before db-after tx-data tx-meta)
+          outliner-ops forward-outliner-ops
           inferred-outliner-ops?' (inferred-outliner-ops? tx-meta)]
       (ldb/transact! conn [{:db-sync/tx-id tx-id
                             :db-sync/normalized-tx-data normalized-tx-data
@@ -810,31 +1109,22 @@
   [repo]
   (remove-pending-txs! repo (mapv :tx-id (pending-txs repo))))
 
+(defn- usable-history-ops
+  [ops]
+  (let [ops' (some-> ops seq vec)]
+    (when (and (seq ops')
+               (not= canonical-transact-op ops'))
+      ops')))
+
+(defn- semantic-op-stream?
+  [ops]
+  (boolean (seq (usable-history-ops ops))))
+
 (defn- history-action-ops
-  [{:keys [forward-outliner-ops inverse-outliner-ops outliner-ops]} undo?]
-  (let [usable-ops (fn [ops]
-                     (let [ops' (some-> ops seq vec)]
-                       (when (and (seq ops')
-                                  (not= canonical-transact-op ops'))
-                         ops')))
-        semantic-undo-supported-forward-ops
-        #{:save-block
-          :insert-blocks
-          :create-page
-          :upsert-property
-          :move-blocks-up-down
-          :indent-outdent-blocks}
-        semantic-undo-complete? (and (seq inverse-outliner-ops)
-                                     (every? (fn [[op]]
-                                               (contains? semantic-undo-supported-forward-ops op))
-                                             forward-outliner-ops))
-        ops (if undo?
-              (when semantic-undo-complete?
-                inverse-outliner-ops)
-              forward-outliner-ops)]
-    (or (usable-ops ops)
-        (when-not undo?
-          (usable-ops outliner-ops)))))
+  [{:keys [forward-outliner-ops inverse-outliner-ops]} undo?]
+  (if undo?
+    (usable-history-ops inverse-outliner-ops)
+    (usable-history-ops forward-outliner-ops)))
 
 (defn- history-action-tx-data
   [{:keys [tx reversed-tx]} undo?]
@@ -843,10 +1133,16 @@
 (defn- apply-history-action-tx!
   [conn tx-data tx-meta]
   (try
-    (d/with @conn tx-data {:outliner-op :transact
-                           :persist-op? false})
-    (ldb/transact! conn tx-data tx-meta)
-    {:applied? true :source :raw-tx}
+    (let [tx-meta' (-> tx-meta
+                       (assoc :outliner-op :transact)
+                       (dissoc :outliner-ops
+                               :real-outliner-op
+                               :db-sync/forward-outliner-ops
+                               :db-sync/inverse-outliner-ops))]
+      (d/with @conn tx-data {:outliner-op :transact
+                             :persist-op? false})
+      (ldb/transact! conn tx-data tx-meta')
+      {:applied? true :source :raw-tx})
     (catch :default error
       (log/debug :db-sync/drop-history-action-raw-tx
                  {:reason :invalid-history-action-tx
@@ -860,7 +1156,8 @@
   [repo tx-id undo? tx-meta]
   (if-let [conn (worker-state/get-datascript-conn repo)]
     (if-let [action (pending-tx-by-id repo tx-id)]
-      (let [ops (history-action-ops action undo?)
+      (let [semantic-forward? (semantic-op-stream? (:forward-outliner-ops action))
+            ops (history-action-ops action undo?)
             tx-data (history-action-tx-data action undo?)
             tx-meta' (cond-> (merge {:local-tx? true
                                      :gen-undo-ops? false
@@ -883,7 +1180,29 @@
                        (assoc :db-sync/inverse-outliner-ops
                               (vec (if undo? (:forward-outliner-ops action)
                                        (:inverse-outliner-ops action)))))]
+        (prn :debug ::apply-history-action!)
+        (pprint/pprint (select-keys action [:tx-id :outliner-op :forward-outliner-ops :inverse-outliner-ops]))
         (cond
+          (and semantic-forward?
+               (not (seq ops)))
+          (fail-fast :db-sync/missing-history-action-semantic-ops
+                     {:repo repo
+                      :tx-id tx-id
+                      :undo? undo?
+                      :forward-outliner-ops (:forward-outliner-ops action)
+                      :inverse-outliner-ops (:inverse-outliner-ops action)})
+
+          (and semantic-forward?
+               (contains-transact-op? (if undo? (:inverse-outliner-ops action)
+                                          (:forward-outliner-ops action))))
+          (fail-fast :db-sync/invalid-history-action-semantic-ops
+                     {:reason :contains-transact-op
+                      :repo repo
+                      :tx-id tx-id
+                      :undo? undo?
+                      :ops (if undo? (:inverse-outliner-ops action)
+                               (:forward-outliner-ops action))})
+
           (seq ops)
           (try
             (ldb/batch-transact!
@@ -894,16 +1213,33 @@
                  (replay-canonical-outliner-op! row-conn op))))
             {:applied? true :source :semantic-ops}
             (catch :default error
-              (log/debug :db-sync/drop-history-action-semantic-ops
-                         {:reason :invalid-history-action-ops
-                          :repo repo
-                          :tx-id tx-id
-                          :undo? undo?
-                          :ops ops
-                          :error error})
-              {:applied? false
-               :reason :invalid-history-action-ops
-               :error error}))
+              (if semantic-forward?
+                (fail-fast :db-sync/invalid-history-action-semantic-ops
+                           {:reason :invalid-history-action-ops
+                            :repo repo
+                            :tx-id tx-id
+                            :undo? undo?
+                            :ops ops
+                            :error error})
+                (do
+                  (log/debug :db-sync/drop-history-action-semantic-ops
+                             {:reason :invalid-history-action-ops
+                              :repo repo
+                              :tx-id tx-id
+                              :undo? undo?
+                              :ops ops
+                              :error error})
+                  {:applied? false
+                   :reason :invalid-history-action-ops
+                   :error error}))))
+
+          (and semantic-forward?
+               (seq tx-data))
+          (fail-fast :db-sync/semantic-history-action-no-raw-fallback
+                     {:repo repo
+                      :tx-id tx-id
+                      :undo? undo?
+                      :tx-data tx-data})
 
           (seq tx-data)
           (apply-history-action-tx! conn tx-data tx-meta')
@@ -992,25 +1328,14 @@
 
 (defn- reverse-history-action!
   [conn local-txs index local-tx temp-tx-meta]
-  (let [inverse-outliner-ops (seq (:inverse-outliner-ops local-tx))
-        tx-data (seq (:reversed-tx local-tx))]
-    (cond
-      inverse-outliner-ops
-      (ldb/batch-transact!
-       conn
-       (assoc (local-tx-debug-meta temp-tx-meta local-txs index local-tx :reverse)
-              :outliner-ops (vec inverse-outliner-ops))
-       (fn [row-conn _*batch-tx-data]
-         (doseq [op inverse-outliner-ops]
-           (replay-canonical-outliner-op! row-conn op))))
-
-      tx-data
-      (ldb/transact! conn
-                     tx-data
-                     (local-tx-debug-meta temp-tx-meta local-txs index local-tx :reverse))
-
-      :else
-      nil)))
+  (if-let [tx-data (seq (:reversed-tx local-tx))]
+    (ldb/transact! conn
+                   tx-data
+                   (local-tx-debug-meta temp-tx-meta local-txs index local-tx :reverse))
+    (invalid-rebase-op! :reverse-history-action
+                        {:reason :missing-reversed-tx-data
+                         :tx-id (:tx-id local-tx)
+                         :outliner-op (:outliner-op local-tx)})))
 
 (defn- transact-remote-txs!
   [conn remote-txs temp-tx-meta]
