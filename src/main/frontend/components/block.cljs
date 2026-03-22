@@ -3493,21 +3493,28 @@
 (rum/defc block-container
   [config block* & {:as opts}]
   (let [[block set-block!] (hooks/use-state block*)
-        id (or (:db/id block*) (:block/uuid block*))]
+        id (or (:db/id block*) (:block/uuid block*))
+        ;; Skip the expensive async fetch on initial render when the block
+        ;; is collapsed or already has all the data we need.  The fetch
+        ;; is still triggered lazily when a block is expanded.
+        collapsed? (if-some [result (state/get-block-collapsed (:block/uuid block*)
+                                                                (:container-id config))]
+                     result
+                     (:block/collapsed? block*))
+        needs-children? (not collapsed?)]
     (when-not (or (:page-title? config)
                   (:view? config))
       (hooks/use-effect!
        (fn []
-         (p/let [block (db-async/<get-block (state/get-current-repo)
-                                            id
-                                            {:children? (not
-                                                         (if-some [result (state/get-block-collapsed (:block/uuid block)
-                                                                                                     (:container-id config))]
-                                                           result
-                                                           (:block/collapsed? block)))
-                                             :skip-refresh? false})]
-           (set-block! block)))
-       []))
+         ;; Only fetch from worker when we actually need children data.
+         ;; Collapsed blocks already have enough data from the parent query.
+         (when needs-children?
+           (p/let [block (db-async/<get-block (state/get-current-repo)
+                                              id
+                                              {:children? true
+                                               :skip-refresh? false})]
+             (set-block! block))))
+       [needs-children?]))
     (when (or (:view? config) (:block/title block))
       (loaded-block-container config block opts))))
 
@@ -3921,9 +3928,12 @@
 (rum/defc block-list
   [config blocks]
   (let [[virtualized? _] (hooks/use-state (not (or (util/rtc-test?)
-                                                   (and (util/mobile?) (:journals? config))
+                                                   ;; Enable virtualization on mobile too — the old
+                                                   ;; (and (util/mobile?) (:journals? config))
+                                                   ;; exclusion caused severe jank on large journals.
+                                                   ;; Use a lower threshold on mobile for earlier kick-in.
                                                    (if (:journals? config)
-                                                     (< (count blocks) 50)
+                                                     (< (count blocks) (if (util/mobile?) 20 50))
                                                      (< (count blocks) 10))
                                                    (and (:block-children? config)
                                                         ;; zoom-in block's children
