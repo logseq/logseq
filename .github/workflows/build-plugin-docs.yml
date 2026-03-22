@@ -22,16 +22,21 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'yarn'
-          cache-dependency-path: logseq/yarn.lock
+          cache: 'pnpm'
+          cache-dependency-path: logseq/libs/pnpm-lock.yaml
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.0
 
       - name: Install dependencies
         working-directory: logseq/libs
-        run: yarn install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Build documentation
         working-directory: logseq/libs
-        run: yarn build:docs
+        run: pnpm build:docs
 
       - name: Checkout plugins repository
         uses: actions/checkout@v4

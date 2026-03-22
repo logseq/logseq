@@ -70,30 +70,30 @@
   dev:cli
   {:doc "Run CLI with current deps/db code. Commands with JS deps are not usable e.g. mcp-server"
    :task (apply shell {:dir "deps/db"}
-                "yarn nbb-logseq -cp src:../cli/src:../graph-parser/src:../outliner/src -m logseq.cli" *command-line-args*)}
+                "pnpm exec nbb-logseq -cp src:../cli/src:../graph-parser/src:../outliner/src -m logseq.cli" *command-line-args*)}
   dev:query
   {:doc "Query a DB graph's datascript db"
    :requires ([babashka.fs :as fs])
    :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
-                "yarn -s nbb-logseq script/query.cljs" *command-line-args*)}
+                "pnpm exec nbb-logseq script/query.cljs" *command-line-args*)}
 
   dev:transact
   {:doc "Transact against a DB graph's datascript db"
    :requires ([babashka.fs :as fs])
    :task (apply shell {:dir "deps/outliner" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
-                "yarn -s nbb-logseq script/transact.cljs" *command-line-args*)}
+                "pnpm exec nbb-logseq script/transact.cljs" *command-line-args*)}
 
   dev:create
   {:doc "Create a DB graph given a sqlite.build EDN file"
    :requires ([babashka.fs :as fs])
    :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
-                "yarn -s nbb-logseq -cp src:../outliner/src:script script/create_graph.cljs" *command-line-args*)}
+                "pnpm exec nbb-logseq -cp src:../outliner/src:script script/create_graph.cljs" *command-line-args*)}
 
   dev:import
   {:doc "Import a file graph to db graph"
    :requires ([babashka.fs :as fs])
    :task (apply shell {:dir "deps/graph-parser" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
-                "yarn -s nbb-logseq -cp src:../outliner/src script/db_import.cljs" *command-line-args*)}
+                "pnpm exec nbb-logseq -cp src:../outliner/src script/db_import.cljs" *command-line-args*)}
 
   dev:import-many
   {:doc "Import multiple file graphs to db graphs"
@@ -103,17 +103,17 @@
   {:doc "Write db's datoms to a file"
    :requires ([babashka.fs :as fs])
    :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
-                "yarn -s nbb-logseq script/dump_datoms.cljs"
+                "pnpm exec nbb-logseq script/dump_datoms.cljs"
                 *command-line-args*)}
 
   dev:diff-datoms
   logseq.tasks.dev/diff-datoms
 
-  dev:npx-cap-run-ios
-  logseq.tasks.dev.mobile/npx-cap-run-ios
+  dev:cap-run-ios
+  logseq.tasks.dev.mobile/cap-run-ios
 
   -dev:ios-app
-  {:depends [dev:app-watch dev:npx-cap-run-ios]}
+  {:depends [dev:app-watch dev:cap-run-ios]}
 
   dev:ios-app
   {:doc "iOS development environment"
@@ -122,11 +122,11 @@
   release:ios-app
   logseq.tasks.dev.mobile/run-ios-release
 
-  dev:npx-cap-run-android
-  logseq.tasks.dev.mobile/npx-cap-run-android
+  dev:cap-run-android
+  logseq.tasks.dev.mobile/cap-run-android
 
   -dev:android-app
-  {:depends [dev:app-watch dev:npx-cap-run-android]}
+  {:depends [dev:app-watch dev:cap-run-android]}
 
   dev:android-app
   {:doc "Android development environment"

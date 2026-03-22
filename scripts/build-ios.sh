@@ -5,19 +5,19 @@ set -ex
 unset LOGSEQ_APP_SERVER_URL
 export ENABLE_FILE_SYNC_PRODUCTION=true
 
-# yarn clean
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 yarn install --force
+# pnpm clean
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pnpm install --frozen-lockfile
 
 rm -rv public/static || true
 rm -rv ios/App/App/public || true
 
-yarn release-app
+pnpm release-app
 
 rsync -avz --exclude node_modules --exclude '*.js.map' --exclude android ./static/ ./public/static/
 
-npx cap sync ios
+pnpm exec cap sync ios
 
-npx cap open ios
+pnpm exec cap open ios
 
 echo "step 1(Xcode). Product > Archive (device should be Any iOS Device)"
 

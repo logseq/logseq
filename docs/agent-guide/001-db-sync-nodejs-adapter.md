@@ -1,4 +1,4 @@
-# DB Sync Node.js Adapter Implementation Plan
+﻿# DB Sync Node.js Adapter Implementation Plan
 
 Goal: Build a Node.js server adapter for DB sync so users can self-host without Cloudflare dependencies.
 Architecture: Reuse the existing db-sync core logic and route handlers while introducing a platform abstraction layer that swaps Cloudflare APIs for Node.js equivalents.
@@ -84,7 +84,7 @@ Run the Node adapter integration tests.
 
 ```bash
 cd deps/db-sync
-npm run test:node-adapter
+pnpm test:node-adapter
 ```
 
 Expected result is a zero exit code and logs that the Node adapter started and all tests passed.

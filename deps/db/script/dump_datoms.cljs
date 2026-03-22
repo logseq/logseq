@@ -1,7 +1,7 @@
   (ns dump-datoms
     "A script that dumps all eavt datoms to a specified edn file
 
-     $ yarn -s nbb-logseq script/dump_datoms.cljs db-name datoms.edn"
+     $ pnpm exec nbb-logseq script/dump_datoms.cljs db-name datoms.edn"
     (:require ["fs" :as fs]
               ["path" :as node-path]
               [clojure.pprint :as pprint]

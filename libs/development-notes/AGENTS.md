@@ -1,4 +1,4 @@
-# AGENTS.md - Logseq Plugin Development Guide
+﻿# AGENTS.md - Logseq Plugin Development Guide
 
 ## Overview
 
@@ -522,10 +522,10 @@ git clone https://github.com/logseq/logseq-plugin-samples
 cd logseq-plugin-samples/logseq-slash-commands
 
 # Install dependencies
-npm install  # or yarn
+pnpm install
 
 # Build
-npm run build
+pnpm build
 ```
 
 ### Loading in Logseq

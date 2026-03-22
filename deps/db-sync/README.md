@@ -1,4 +1,4 @@
-# Logseq DB Sync (deps/db-sync)
+﻿# Logseq DB Sync (deps/db-sync)
 
 This package contains the DB sync server code and tests used by Logseq.
 It includes the Cloudflare Worker implementation and a Node.js adapter for self-hosting.
@@ -13,7 +13,7 @@ It includes the Cloudflare Worker implementation and a Node.js adapter for self-
 
 ```bash
 cd deps/db-sync
-yarn watch
+pnpm watch
 
 # open another terminal
 cd deps/db-sync/worker
@@ -39,8 +39,8 @@ Show the graphs available to a production user by `username` or `user id`:
 
 ```bash
 cd deps/db-sync
-yarn show-graphs-for-user --username alice
-yarn show-graphs-for-user --user-id us-east-1:example-user-id
+pnpm show-graphs-for-user --username alice
+pnpm show-graphs-for-user --user-id us-east-1:example-user-id
 ```
 
 The script uses `worker/wrangler.toml`, runs against the remote D1 binding `DB`,
@@ -50,8 +50,8 @@ Delete the graphs owned by a production user after an explicit confirmation:
 
 ```bash
 cd deps/db-sync
-yarn delete-graphs-for-user --username alice
-yarn delete-graphs-for-user --user-id us-east-1:example-user-id
+pnpm delete-graphs-for-user --username alice
+pnpm delete-graphs-for-user --user-id us-east-1:example-user-id
 ```
 
 The delete script shows the owned graphs first and requires typing `DELETE`
@@ -65,7 +65,7 @@ Build the adapter:
 
 ```bash
 cd deps/db-sync
-npm run build:node-adapter
+pnpm build:node-adapter
 ```
 
 Run the adapter with Cognito auth:
@@ -84,7 +84,7 @@ Run db-sync tests (includes Node adapter tests):
 
 ```bash
 cd deps/db-sync
-npm run test:node-adapter
+pnpm test:node-adapter
 ```
 
 ## Environment Variables

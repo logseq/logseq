@@ -36,9 +36,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'yarn'
+          cache: 'pnpm'
           cache-dependency-path: |
-            yarn.lock
+            pnpm-lock.yaml
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.0
 
       - name: Set up Clojure
         uses: DeLaGuardo/setup-clojure@13.5
@@ -70,15 +75,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-shadow-cljs-
 
-      - name: Fetch yarn deps
-        run: yarn install
+      - name: Fetch pnpm deps
+        run: pnpm install
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
 
       # NOTE: require the app to be build with DEV-RELEASE flag
       - name: Prepare E2E test build
         run: |
-          yarn gulp:build && clojure -M:cljs release app db-worker inference-worker --config-merge "{:closure-defines {frontend.config/DEV-RELEASE true}}" --debug && yarn webpack-app-build
+          pnpm gulp:build && clojure -M:cljs release app db-worker inference-worker --config-merge "{:closure-defines {frontend.config/DEV-RELEASE true}}" --debug && pnpm webpack-app-build
 
       - name: Run e2e tests
         run: cd clj-e2e && timeout 30m bb dev

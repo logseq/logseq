@@ -1,16 +1,17 @@
 {
   "name": "@logseq/db",
   "version": "1.0.0",
+  "packageManager": "pnpm@10.30.0",
   "private": true,
   "devDependencies": {
-    "@logseq/nbb-logseq": "github:logseq/nbb-logseq#feat-db-v33",
+    "@logseq/nbb-logseq": "git+https://github.com/logseq/nbb-logseq.git#feat-db-v33",
     "fs-extra": "^11.3.4"
   },
   "dependencies": {
     "better-sqlite3": "^12.8.0"
   },
   "scripts": {
-    "test": "yarn nbb-logseq -cp test -m nextjournal.test-runner",
-    "test-v": "yarn nbb-logseq -cp test -m logseq.db.test-runner"
+    "test": "pnpm exec nbb-logseq -cp test -m nextjournal.test-runner",
+    "test-v": "pnpm exec nbb-logseq -cp test -m logseq.db.test-runner"
   }
 }

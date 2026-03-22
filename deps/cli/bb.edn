@@ -13,7 +13,7 @@
   {:doc "Copy over latest nbb deps to vendor/ and make CLI independent of nbb.edn"
    :requires ([babashka.fs :as fs])
    :task (do
-           (shell "yarn nbb-logseq -e :load-deps")
+           (shell "pnpm exec nbb-logseq -e :load-deps")
            (let [nbb-cache-dir (or (first (fs/list-dir ".nbb/.cache"))
                                    (throw (ex-info "No nbb cache directory found" {})))]
              (fs/delete-tree "vendor/src")

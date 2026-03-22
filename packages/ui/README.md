@@ -1,4 +1,4 @@
-## Logseq UI
+﻿## Logseq UI
 
 Logseq UI components based on shadcn UI.
 
@@ -9,7 +9,7 @@ Logseq UI components based on shadcn UI.
 It is recommended to install through CLI mode.
 
 ```shell
-npx shadcn-ui@latest add button
+pnpm dlx shadcn-ui@latest add button
 ```
 
 ### Credits
