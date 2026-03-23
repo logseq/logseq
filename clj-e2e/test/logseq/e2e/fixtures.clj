@@ -84,6 +84,7 @@
     (w/with-page-open p)              ; use with-page-open to close playwright instance
     (binding [custom-report/*pw-contexts* #{ctx}
               *pw-ctx* ctx]
+      (.addInitScript ctx "localStorage.setItem('preferred-language', '\"en\"')")
       (f)
       (.close (.browser *pw-ctx*)))))
 

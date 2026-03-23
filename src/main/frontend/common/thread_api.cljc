@@ -8,7 +8,7 @@
 #?(:cljs
    (def *thread-apis (volatile! {})))
 
-#_:clj-kondo/ignore
+#_{:clojure-lsp/ignore [:clojure-lsp/unused-public-var]}
 (defmacro defkeyword [& _args])
 
 (defmacro def-thread-api

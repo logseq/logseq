@@ -3,13 +3,12 @@
   (:require #?(:clj [clojure.java.io :as io])
             #?(:clj [instaparse.core :as insta]
                :cljs [instaparse.core :as insta :refer-macros [defparser]])
-
             #?(:cljs [rum.core :as rum])
-
             #?(:cljs [shadow.resource :as rc])
             [bignumber.js :as bn]
             [clojure.string :as string]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [instaparse.transform :as insta-transform]))
 
 #?(:cljs (set! *warn-on-infer* false))
 
@@ -40,7 +39,7 @@
    (range 2 (inc n))))
 
 (defn eval* [env ast]
-  (insta/transform
+  (insta-transform/transform
    {:number     (comp bn/BigNumber #(string/replace % "," ""))
     :percent    (fn percent [a] (-> a (.dividedBy 100.00)))
     :scientific bn/BigNumber
