@@ -25,6 +25,7 @@
             [logseq.outliner.op.construct :as op-construct]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
+            [logseq.outliner.recycle :as outliner-recycle]
             [medley.core :as medley]
             [promesa.core :as p]))
 
@@ -738,6 +739,28 @@
     :delete-page
     (let [[page-uuid opts] args]
       (outliner-page/delete! conn page-uuid (assoc (or opts {}) :persist-op? false)))
+
+    :restore-recycled
+    (let [[root-id] args
+          root-ref (cond
+                     (and (vector? root-id)
+                          (= :block/uuid (first root-id)))
+                     root-id
+
+                     (uuid? root-id)
+                     [:block/uuid root-id]
+
+                     :else
+                     root-id)
+          root (d/entity @conn root-ref)
+          tx-data (when root
+                    (seq (outliner-recycle/restore-tx-data @conn root)))]
+      (when-not tx-data
+        (invalid-rebase-op! op {:args args
+                                :reason :invalid-restore-target}))
+      (ldb/transact! conn tx-data
+                     {:outliner-op :restore-recycled
+                      :persist-op? false}))
 
     :set-block-property
     (let [[block-eid property-id v] args
