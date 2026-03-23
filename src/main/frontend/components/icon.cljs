@@ -3047,10 +3047,11 @@
                        existing-value (get-in current-icon [:data :value])
                        existing-alignment (get-in current-icon [:data :alignment])
                        existing-color (get-in current-icon [:data :color])
+                       selected-color (:selected-color opts)
                        existing-mode (get-in current-icon [:data :mode])]
                    (reset! (::text-value s) (or existing-value (derive-initials title)))
                    (reset! (::alignment s) (or existing-alignment "center"))
-                   (reset! (::color s) existing-color)
+                   (reset! (::color s) (or existing-color selected-color))
                    (reset! (::mode s) (or existing-mode "initials"))
                    s))
    :will-unmount (fn [s]
@@ -3324,6 +3325,7 @@
                     :on-delete #(on-chosen nil)
                     :del-btn? del-btn?
                     :current-icon normalized-icon-value
+                    :selected-color @*color
                     :page-title page-title})
 
       ;; Default - Level 1: Icon Picker view
