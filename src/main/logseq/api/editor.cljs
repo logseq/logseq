@@ -188,8 +188,7 @@
   [block-uuid-or-page-name]
   (p/let [repo (state/get-current-repo)
           block (db-async/<get-block repo (str block-uuid-or-page-name)
-                                     {:children? true
-                                      :include-collapsed-children? true})
+                                     {:include-collapsed-children? true})
           _ (when-let [page-id (:db/id (:block/page block))]
               (when-let [page-uuid (:block/uuid (db/entity page-id))]
                 (db-async/<get-block repo page-uuid)))]
@@ -278,8 +277,7 @@
 
 (def get_block
   (fn [id ^js opts]
-    (p/let [block (db-async/<get-block (state/get-current-repo) id {:children? true
-                                                                    :include-collapsed-children? true})]
+    (p/let [block (db-async/<get-block (state/get-current-repo) id {:include-collapsed-children? true})]
       (api-block/get_block (:db/id block) (or opts #js {:includePage true})))))
 
 (def get_current_block
