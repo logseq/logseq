@@ -40,6 +40,7 @@
   (sync-presence/sync-counts
    {:get-datascript-conn worker-state/get-datascript-conn
     :get-client-ops-conn worker-state/get-client-ops-conn
+    :get-pending-local-tx-count client-op/get-pending-local-tx-count
     :get-unpushed-asset-ops-count client-op/get-unpushed-asset-ops-count
     :get-local-tx client-op/get-local-tx
     :get-graph-uuid client-op/get-graph-uuid
