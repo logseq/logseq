@@ -561,6 +561,9 @@
     (number? v)
     v
 
+    (uuid? v)
+    (some-> (d/entity db [:block/uuid v]) :db/id)
+
     (or (vector? v) (qualified-keyword? v))
     (some-> (d/entity db v) :db/id)
 
@@ -682,7 +685,9 @@
 
     :set-block-property
     (let [[block-eid property-id v] args
-          block (d/entity @conn block-eid)
+          block-eid' (or (replay-entity-id-value @conn block-eid)
+                         block-eid)
+          block (d/entity @conn block-eid')
           property (d/entity @conn property-id)
           _ (when-not (and block property)
               (invalid-rebase-op! op {:args args
@@ -690,7 +695,7 @@
           v' (replay-property-value @conn property-id v)]
       (when (and (stable-entity-ref-like? v) (nil? v'))
         (invalid-rebase-op! op {:args args}))
-      (outliner-property/set-block-property! conn block-eid property-id v'))
+      (outliner-property/set-block-property! conn block-eid' property-id v'))
 
     :remove-block-property
     (apply outliner-property/remove-block-property! conn args)
