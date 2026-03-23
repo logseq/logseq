@@ -380,6 +380,7 @@
                    (replay-canonical-outliner-op! row-conn op))))
               {:applied? true :source :semantic-ops}
               (catch :default error
+                (log/error ::db-transact-failed error)
                 (if semantic-forward?
                   (fail-fast :db-sync/invalid-history-action-semantic-ops
                              {:reason :invalid-history-action-ops
@@ -630,10 +631,24 @@
       (when (empty? blocks)
         (invalid-rebase-op! op {:args args}))
       (when (seq blocks)
-        (let [target-block (d/entity @conn target-id)]
-          (when-not target-block
+        (let [opts' (or opts {})
+              sibling? (:sibling? opts')
+              fallback-target (:fallback-target opts')
+              target-block (d/entity @conn target-id)
+              use-fallback? (and sibling?
+                                 (nil? target-block)
+                                 (some? fallback-target))
+              target-block' (if use-fallback?
+                              (d/entity @conn fallback-target)
+                              target-block)
+              move-opts (cond-> (-> opts'
+                                    (dissoc :fallback-target)
+                                    (assoc :persist-op? false))
+                          use-fallback?
+                          (assoc :sibling? false))]
+          (when-not target-block'
             (invalid-rebase-op! op {:args args}))
-          (outliner-core/move-blocks! conn blocks target-block (assoc (or opts {}) :persist-op? false)))))
+          (outliner-core/move-blocks! conn blocks target-block' move-opts))))
 
     :move-blocks-up-down
     (let [[ids up?] args
@@ -804,10 +819,9 @@
                    (handle-local-tx! repo tx-report)))}))
 
 (defn- fix-tx!
-  [conn remote-tx-report rebase-tx-report tx-meta]
+  [conn rebase-tx-report tx-meta]
   (sync-order/fix-duplicate-orders! conn
-                                    (mapcat :tx-data [remote-tx-report
-                                                      rebase-tx-report])
+                                    (:tx-data rebase-tx-report)
                                     tx-meta))
 
 (defn- apply-remote-tx-with-local-changes!
@@ -817,16 +831,14 @@
     (ldb/batch-transact!
      conn
      batch-tx-meta
-     (fn [conn] (reverse-local-txs! conn local-txs {:rtc-tx? true})))
+     (fn [conn]
+       (reverse-local-txs! conn local-txs {:rtc-tx? true})
+       (transact-remote-txs! conn remote-txs batch-tx-meta)))
 
-    (let [remote-tx-report (ldb/batch-transact!
-                            conn
-                            batch-tx-meta
-                            (fn [conn]
-                              (transact-remote-txs! conn remote-txs batch-tx-meta)))
-          _ (remove-pending-txs! repo (map :tx-id local-txs))
-          rebase-tx-report (rebase-local-txs! repo conn local-txs batch-tx-meta)]
-      (fix-tx! conn remote-tx-report rebase-tx-report {:outliner-op :rebase-fix}))))
+    (remove-pending-txs! repo (map :tx-id local-txs))
+
+    (let [rebase-tx-report (rebase-local-txs! repo conn local-txs batch-tx-meta)]
+      (fix-tx! conn rebase-tx-report {:outliner-op :rebase-fix}))))
 
 (defn- apply-remote-tx-without-local-changes!
   [{:keys [conn remote-txs temp-tx-meta]}]
