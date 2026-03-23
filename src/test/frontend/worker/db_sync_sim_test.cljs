@@ -1972,7 +1972,7 @@
         steps
         (recur (inc steps))))))
 
-(deftest ^:long all-core-outliner-ops-local-undo-redo-random-sim-test
+(deftest ^:long ^:large-vars/cleanup-todo all-core-outliner-ops-local-undo-redo-random-sim-test
   (testing "local randomized stress simulation runs weighted ops and keeps undo-all/redo-all roundtrips valid"
     (let [seed (or (env-seed) default-seed)
           rng (make-rng seed)
@@ -2046,25 +2046,25 @@
                   (str "failed to prepare undo stack seed=" seed))
 
               (let [max-stack-steps (+ (* 2 local-undo-redo-run-count) 5000)]
-                (dotimes [cycle local-undo-redo-full-cycle-runs]
+                (dotimes [cycle-idx local-undo-redo-full-cycle-runs]
                   (let [undo-steps (undo-all! repo-a max-stack-steps)
                         issues-after-undo (db-issues @conn)]
                     (is (pos? undo-steps)
-                        (str "expected undo steps cycle=" cycle " seed=" seed))
+                        (str "expected undo steps cycle=" cycle-idx " seed=" seed))
                     (is (empty? issues-after-undo)
-                        (str "db issues after undo-all cycle=" cycle " seed=" seed
+                        (str "db issues after undo-all cycle=" cycle-idx " seed=" seed
                              " " (pr-str issues-after-undo)))
                     (assert-no-invalid-tx! seed history repro)
                     (let [redo-steps (redo-all! repo-a max-stack-steps)
                           issues-after-redo (db-issues @conn)
                           attrs-after-redo (block-attr-map @conn)]
                       (is (pos? redo-steps)
-                          (str "expected redo steps cycle=" cycle " seed=" seed))
+                          (str "expected redo steps cycle=" cycle-idx " seed=" seed))
                       (is (empty? issues-after-redo)
-                          (str "db issues after redo-all cycle=" cycle " seed=" seed
+                          (str "db issues after redo-all cycle=" cycle-idx " seed=" seed
                                " " (pr-str issues-after-redo)))
                       (is (seq attrs-after-redo)
-                          (str "db should not be empty after redo-all cycle=" cycle
+                          (str "db should not be empty after redo-all cycle=" cycle-idx
                                " seed=" seed))
                       (assert-no-invalid-tx! seed history repro)))))
 

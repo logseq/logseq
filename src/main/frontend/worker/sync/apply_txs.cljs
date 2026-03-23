@@ -314,7 +314,7 @@
        :reason :invalid-history-action-tx
        :error error})))
 
-(defn apply-history-action!
+(defn ^:large-vars/cleanup-todo apply-history-action!
   [repo tx-id undo? tx-meta]
   (let [debug-data {:tx-id tx-id
                     :undo? undo?
