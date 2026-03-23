@@ -107,6 +107,22 @@
                   :outliner-ops [[:save-block [{:block/uuid block-uuid
                                                 :block/title title} {}]]]}))))
 
+(defn- undo-all!
+  []
+  (loop [results []]
+    (let [result (worker-undo-redo/undo test-repo)]
+      (if (= ::worker-undo-redo/empty-undo-stack result)
+        results
+        (recur (conj results result))))))
+
+(defn- redo-all!
+  []
+  (loop [results []]
+    (let [result (worker-undo-redo/redo test-repo)]
+      (if (= ::worker-undo-redo/empty-redo-stack result)
+        results
+        (recur (conj results result))))))
+
 (deftest undo-missing-history-action-row-clears-history-test
   (testing "worker undo treats missing tx-id action row as unavailable and clears history"
     (worker-undo-redo/clear-history! test-repo)
@@ -259,6 +275,30 @@
         (is (nil? (:logseq.property.recycle/original-parent restored-page)))
         (is (nil? (:logseq.property.recycle/original-page restored-page)))
         (is (nil? (:logseq.property.recycle/original-order restored-page)))))))
+
+(deftest redo-create-page-restores-recycled-page-test
+  (testing "redoing create-page should restore recycled page instead of keeping it recycled"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          page-title "redo create page alpha"]
+      (outliner-op/apply-ops! conn
+                              [[:create-page [page-title {:redirect? false
+                                                          :split-namespace? true
+                                                          :tags ()}]]]
+                              (local-tx-meta {:client-id "test-client"}))
+      (let [created-page (db-test/find-page-by-title @conn page-title)]
+        (is (some? created-page))
+        (is (false? (ldb/recycled? created-page))))
+
+      (is (seq (undo-all!)))
+      (let [deleted-page (db-test/find-page-by-title @conn page-title)]
+        (is (some? deleted-page))
+        (is (true? (ldb/recycled? deleted-page))))
+
+      (is (seq (redo-all!)))
+      (let [page-after-redo (db-test/find-page-by-title @conn page-title)]
+        (is (some? page-after-redo))
+        (is (false? (ldb/recycled? page-after-redo)))))))
 
 (deftest undo-history-records-forward-ops-for-save-block-test
   (testing "worker save-block history keeps semantic forward ops for redo replay"
