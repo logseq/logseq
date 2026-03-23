@@ -318,3 +318,17 @@
           (op-construct/derive-history-outliner-ops @conn db-after tx-data tx-meta)]
       (is (= op-construct/canonical-transact-op forward-outliner-ops))
       (is (nil? inverse-outliner-ops)))))
+
+(deftest build-history-action-metadata-non-semantic-outliner-op-does-not-throw-test
+  (testing "non-semantic outliner-op with transact placeholder should not fail strict semantic validation"
+    (let [conn (db-test/create-conn-with-blocks {:pages-and-blocks []})
+          tx-meta {:outliner-op :restore-recycled
+                   :outliner-ops [[:transact nil]]}
+          result (op-construct/build-history-action-metadata
+                  {:db-before @conn
+                   :db-after @conn
+                   :tx-data []
+                   :tx-meta tx-meta})]
+      (is (= op-construct/canonical-transact-op
+             (:db-sync/forward-outliner-ops result)))
+      (is (nil? (:db-sync/inverse-outliner-ops result))))))

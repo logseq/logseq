@@ -8,7 +8,8 @@
             [frontend.worker.undo-redo :as worker-undo-redo]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
-            [logseq.outliner.op :as outliner-op]))
+            [logseq.outliner.op :as outliner-op]
+            [logseq.outliner.op.construct :as op-construct]))
 
 (def ^:private test-repo "test-worker-undo-redo")
 
@@ -168,6 +169,25 @@
                (get-in data [:db-sync/forward-outliner-ops 0 1 0 :block/uuid])))
         (is (= child-uuid
                (get-in data [:db-sync/inverse-outliner-ops 0 1 0 :block/uuid])))))))
+
+(deftest undo-history-allows-non-semantic-outliner-op-test
+  (testing "non-semantic outliner-op with transact placeholder should not fail undo metadata construction"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          {:keys [child-uuid]} (seed-page-parent-child!)]
+      (d/transact! conn
+                   [[:db/add [:block/uuid child-uuid] :block/title "restored child"]]
+                   (local-tx-meta
+                    {:client-id "test-client"
+                     :outliner-op :restore-recycled
+                     :outliner-ops [[:transact nil]]}))
+      (let [undo-op (last (get @worker-undo-redo/*undo-ops test-repo))
+            data (some #(when (= ::worker-undo-redo/db-transact (first %))
+                          (second %))
+                       undo-op)]
+        (is (= op-construct/canonical-transact-op
+               (:db-sync/forward-outliner-ops data)))
+        (is (nil? (:db-sync/inverse-outliner-ops data)))))))
 
 (deftest undo-history-canonicalizes-insert-block-uuids-test
   (testing "worker undo history uses the created block uuid for insert semantic ops"

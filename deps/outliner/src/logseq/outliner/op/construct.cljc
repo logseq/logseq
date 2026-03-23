@@ -930,8 +930,7 @@
   [{:keys [db-before db-after tx-data tx-meta] :as data}]
   (let [{:keys [forward-outliner-ops inverse-outliner-ops]}
         (derive-history-outliner-ops db-before db-after tx-data tx-meta)]
-    (when (and (:outliner-op tx-meta)
-               (not= (:outliner-op tx-meta) :transact)
+    (when (and (contains? semantic-outliner-ops (:outliner-op tx-meta))
                (or
                 (empty? forward-outliner-ops)
                 (empty? inverse-outliner-ops)))
