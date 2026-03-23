@@ -938,8 +938,7 @@
       (log/error ::invalid-outliner-ops {:tx-meta tx-meta
                                          :forward-outliner-ops forward-outliner-ops
                                          :inverse-outliner-ops inverse-outliner-ops})
-      (throw (ex-info "Invalid outliner-ops"
-                      {:tx-meta tx-meta})))
+      (throw (ex-info "Invalid outliner-ops" {:tx-meta tx-meta})))
     ;; (pprint/pprint
     ;;  {:forward-outliner-ops forward-outliner-ops
     ;;   :inverse-outliner-ops inverse-outliner-ops})
