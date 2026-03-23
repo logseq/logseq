@@ -209,19 +209,6 @@
     }
   }
 
-  .color-picker {
-    @apply rounded-md w-[24px] h-[24px] overflow-hidden flex relative p-0;
-
-    > strong {
-      @apply w-[18px] h-[18px] rounded-full absolute opacity-90
-      hover:opacity-100 font-normal text-sm;
-
-      .ui__icon {
-        @apply opacity-90 scale-90;
-      }
-    }
-  }
-
   /* Keyboard navigation highlights — React-props-driven via CSS classes */
   button.is-highlighted {
     background-color: var(--lx-accent-04) !important;
@@ -245,12 +232,103 @@
   }
 }
 
-.color-picker-presets {
-  @apply flex flex-row gap-[2px];
+/* ── Color Picker Trigger (shared: tab-bar + text-picker topbar) ── */
+.color-picker-trigger {
+  @apply w-6 h-6 rounded-full p-0 flex items-center justify-center
+  cursor-pointer border-0 bg-transparent;
+  transition: box-shadow 150ms, opacity 150ms;
 
-  .it {
-    @apply w-[18px] h-[18px] overflow-hidden p-0
-    opacity-90 hover:opacity-100 active:opacity-80;
+  &:hover {
+    box-shadow: 0 0 0 2px var(--rx-gray-07);
+  }
+
+  .color-picker-fill {
+    @apply w-5 h-5 rounded-full block;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  }
+
+  .color-picker-empty {
+    @apply w-5 h-5 rounded-full relative overflow-hidden;
+    background-color: var(--rx-gray-05);
+
+    /* CSS-only diagonal slash — matches .swatch-empty treatment */
+    &::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 1.5px;
+      height: 141%;
+      background-color: var(--rx-gray-09);
+      border-radius: 1px;
+      transform: translate(-50%, -50%) rotate(45deg);
+    }
+
+    .ui__icon {
+      display: none;
+    }
+  }
+}
+
+/* ── Color Picker Popup Swatches ── */
+.color-picker-presets {
+  @apply flex flex-row gap-0.5 p-1;
+
+  /* Hit target 28px, fill 24px, gap 2px → 30px center-to-center.
+     Selection ring via box-shadow on fill: 1px bg spacer + 1.5px accent
+     = 2.5px beyond fill edge → 29px ring diameter, 0.5px clearance. */
+  .color-swatch {
+    @apply w-7 h-7 rounded-full p-0 flex items-center justify-center
+    cursor-pointer border-0 bg-transparent;
+    transition: transform 120ms;
+
+    &:hover { transform: scale(1.1); }
+    &:active { transform: scale(0.95); }
+    /* Suppress hover scale when selected so ring doesn't overflow into neighbors */
+    &.is-selected:hover { transform: none; }
+
+    .swatch-fill {
+      @apply w-6 h-6 rounded-full block;
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+      transition: box-shadow 120ms;
+    }
+
+    &.is-selected .swatch-fill {
+      box-shadow:
+        inset 0 0 0 1px rgba(0, 0, 0, 0.08),
+        0 0 0 1px var(--lx-gray-02),
+        0 0 0 2.5px var(--lx-accent-09);
+    }
+
+    .swatch-empty {
+      @apply w-6 h-6 rounded-full relative overflow-hidden;
+      background-color: var(--rx-gray-05);
+      transition: box-shadow 120ms;
+
+      /* CSS-only diagonal slash — centered reliably without SVG viewBox quirks */
+      &::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 1.5px;
+        height: 141%;
+        background-color: var(--rx-gray-09);
+        border-radius: 1px;
+        transform: translate(-50%, -50%) rotate(45deg);
+      }
+
+      /* Hide the SVG icon if still present in markup */
+      .ui__icon {
+        display: none;
+      }
+    }
+
+    &.is-selected .swatch-empty {
+      box-shadow:
+        0 0 0 1px var(--lx-gray-02),
+        0 0 0 2.5px var(--lx-accent-09);
+    }
   }
 }
 
@@ -753,19 +831,6 @@
 
 .text-picker-actions {
   @apply flex items-center gap-1;
-
-  .color-picker {
-    @apply rounded-md w-[24px] h-[24px] overflow-hidden flex relative p-0;
-
-    > strong {
-      @apply w-[18px] h-[18px] rounded-full absolute opacity-90
-      hover:opacity-100 font-normal text-sm;
-
-      .ui__icon {
-        @apply opacity-90 scale-90;
-      }
-    }
-  }
 }
 
 .text-picker-body {

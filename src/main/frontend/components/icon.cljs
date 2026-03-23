@@ -2994,25 +2994,27 @@
   (let [[color, set-color!] (rum/use-state @*color)
         *el (rum/use-ref nil)
         content-fn (fn []
-                     ;; Use Radix color variables for consistency with design system
-                     (let [colors [(colors/variable :gray :10)
+                     (let [colors [nil
+                                   (colors/variable :gray :10)
                                    (colors/variable :indigo :10)
                                    (colors/variable :cyan :10)
                                    (colors/variable :green :10)
                                    (colors/variable :orange :10)
                                    (colors/variable :tomato :10)
                                    (colors/variable :pink :10)
-                                   (colors/variable :red :10)
-                                   nil]]
+                                   (colors/variable :red :10)]]
                        [:div.color-picker-presets
                         (for [c colors]
-                          (shui/button
-                           {:on-click (fn [] (set-color! c)
+                          [:button.color-swatch
+                           {:key (or c "none")
+                            :class (when (= c color) "is-selected")
+                            :on-click (fn [] (set-color! c)
                                         (some-> on-select! (apply [c]))
-                                        (shui/popup-hide!))
-                            :size :sm :variant :outline
-                            :class "it" :style {:background-color c}}
-                           (if c "" (shui/tabler-icon "minus" {:class "scale-75 opacity-70"}))))]))]
+                                        (shui/popup-hide!))}
+                           (if c
+                             [:span.swatch-fill {:style {:background-color c}}]
+                             [:span.swatch-empty
+                              (shui/tabler-icon "slash" {:size 14})])])]))]
     (hooks/use-effect!
      (fn []
        (when-let [^js picker (some-> (rum/deref *el) (.closest ".cp__emoji-icon-picker"))]
@@ -3022,13 +3024,13 @@
        (reset! *color color))
      [color])
 
-    (shui/button {:size :sm
-                  :ref *el
-                  :class "color-picker"
-                  :on-click (fn [^js e] (shui/popup-show! (.-target e) content-fn {:content-props {:side "bottom" :side-offset 6}}))
-                  :variant :outline}
-                 [:strong {:style {:color (or color "inherit")}}
-                  (shui/tabler-icon "palette")])))
+    [:button.color-picker-trigger
+     {:ref *el
+      :on-click (fn [^js e] (shui/popup-show! (.-target e) content-fn {:content-props {:side "bottom" :side-offset 6}}))}
+     (if color
+       [:span.color-picker-fill {:style {:background-color color}}]
+       [:span.color-picker-empty
+        (shui/tabler-icon "slash" {:size 12})])]))
 
 (rum/defcs text-picker < rum/reactive
   (rum/local nil ::text-value)
