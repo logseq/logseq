@@ -23,10 +23,7 @@
    repo]
   (when (get-datascript-conn repo)
     (let [pending-local (when-let [conn (client-ops-conn get-client-ops-conn repo)]
-                          (count
-                           (filter #(not= false (:db-sync/pending? %))
-                                   (map (fn [datom] (d/entity @conn (:e datom)))
-                                        (d/datoms @conn :avet :db-sync/created-at)))))
+                          (count (d/datoms @conn :avet :db-sync/pending? true)))
           pending-asset (get-unpushed-asset-ops-count repo)
           local-tx (get-local-tx repo)
           remote-tx (get latest-remote-tx repo)
