@@ -186,11 +186,6 @@
          :error {:code :invalid-options
                  :message (str "invalid status: " (:status options))}}
 
-        (and (not has-target?) (not has-updates?))
-        {:ok? false
-         :error {:code :invalid-options
-                 :message "target or update/remove options are required"}}
-
         (not (:ok? update-tags-result))
         update-tags-result
 
@@ -202,6 +197,11 @@
 
         (not (:ok? remove-properties-result))
         remove-properties-result
+
+        (and (not has-target?) (not has-updates?))
+        {:ok? false
+         :error {:code :invalid-options
+                 :message "target or update/remove options are required"}}
 
         :else
         {:ok? true
