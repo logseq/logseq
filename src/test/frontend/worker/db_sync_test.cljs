@@ -1165,6 +1165,36 @@
           (is (= before-title
                  (:block/title (d/entity @conn [:block/uuid child-uuid])))))))))
 
+(deftest apply-history-action-save-block-ignores-stale-db-id-when-uuid-exists-test
+  (testing "semantic save-block replay should resolve by uuid and ignore stale db/id"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          tx-id (random-uuid)
+          child-uuid (:block/uuid child1)
+          stale-db-id 99999999
+          new-title "semantic replay with stale db id"]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (ldb/transact! client-ops-conn
+                         [{:db-sync/tx-id tx-id
+                           :db-sync/pending? true
+                           :db-sync/created-at (.now js/Date)
+                           :db-sync/outliner-op :save-block
+                           :db-sync/outliner-ops [[:save-block [{:db/id stale-db-id
+                                                                 :block/uuid child-uuid
+                                                                 :block/title new-title}
+                                                                {}]]]
+                           :db-sync/forward-outliner-ops [[:save-block [{:db/id stale-db-id
+                                                                         :block/uuid child-uuid
+                                                                         :block/title new-title}
+                                                                        {}]]]
+                           :db-sync/normalized-tx-data []
+                           :db-sync/reversed-tx-data []}])
+          (let [result (#'sync-apply/apply-history-action! test-repo tx-id false {})]
+            (is (= true (:applied? result)))
+            (is (= :semantic-ops (:source result)))
+            (is (= new-title
+                   (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))))
+
 (deftest reverse-local-txs-uses-reversed-tx-data-test
   (testing "rebase reverse uses reversed tx-data even when semantic inverse ops are missing"
     (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)

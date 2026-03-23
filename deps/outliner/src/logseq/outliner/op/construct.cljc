@@ -1,14 +1,14 @@
 (ns logseq.outliner.op.construct
   "Construct canonical forward and reverse outliner ops for history actions."
-  (:require [clojure.string :as string]
+  (:require #?(:org.babashka/nbb [logseq.common.log :as log]
+               :default [lambdaisland.glogi :as log])
+            [cljs.pprint :as pprint]
+            [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.property.type :as db-property-type]
-            [cljs.pprint :as pprint]
-            #?(:org.babashka/nbb [logseq.common.log :as log]
-               :default [lambdaisland.glogi :as log])))
+            [logseq.db.frontend.property.type :as db-property-type]))
 
 (def ^:private semantic-outliner-ops
   #{:save-block
@@ -918,9 +918,9 @@
                                          :inverse-outliner-ops inverse-outliner-ops})
       (throw (ex-info "Invalid outliner-ops"
                       {:tx-meta tx-meta})))
-    (pprint/pprint
-     {:forward-outliner-ops forward-outliner-ops
-      :inverse-outliner-ops inverse-outliner-ops})
+    ;; (pprint/pprint
+    ;;  {:forward-outliner-ops forward-outliner-ops
+    ;;   :inverse-outliner-ops inverse-outliner-ops})
 
     (cond-> (-> data
                 (dissoc :db-before :db-after)
