@@ -17,6 +17,7 @@
             [frontend.worker.sync.handle-message :as sync-handle-message]
             [frontend.worker.sync.large-title :as sync-large-title]
             [frontend.worker.sync.legacy-rebase :as legacy-rebase]
+            [frontend.worker.sync.presence :as sync-presence]
             [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
             [frontend.worker.sync.upload :as sync-upload]
             [frontend.worker.undo-redo :as worker-undo-redo]
@@ -322,6 +323,30 @@
               {:user/uuid "u2" :user/name "Bob" :user/editing-block-uuid "block-2"}]
              @(:online-users client)))
       (is (= 1 (count @broadcasts))))))
+
+(deftest sync-counts-counts-only-true-pending-local-ops-test
+  (testing "pending-local should count only rows with :db-sync/pending? true"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (ldb/transact! client-ops-conn
+                         [{:db-sync/tx-id (random-uuid)
+                           :db-sync/created-at 1
+                           :db-sync/pending? false}
+                          {:db-sync/tx-id (random-uuid)
+                           :db-sync/created-at 2}
+                          {:db-sync/tx-id (random-uuid)
+                           :db-sync/created-at 3
+                           :db-sync/pending? true}])
+          (let [counts (sync-presence/sync-counts
+                        {:get-datascript-conn worker-state/get-datascript-conn
+                         :get-client-ops-conn worker-state/get-client-ops-conn
+                         :get-unpushed-asset-ops-count client-op/get-unpushed-asset-ops-count
+                         :get-local-tx (constantly 0)
+                         :get-graph-uuid (constantly nil)
+                         :latest-remote-tx {}}
+                        test-repo)]
+            (is (= 1 (:pending-local counts)))))))))
 
 (deftest upload-graph-metadata-write-is-not-persisted-as-local-sync-tx-test
   (let [captured (atom nil)
@@ -879,8 +904,86 @@
             (is (contains? opts :sibling?))
             (is (nil? (:source-op opts)))))))))
 
+(deftest indent-outdent-direct-outdent-last-child-builds-forward-and-inverse-move-history-test
+  (testing "direct outdent on last child builds concrete move forward/inverse ops with ui outliner-op metadata"
+    (let [{:keys [conn client-ops-conn parent child2 child3]} (setup-parent-child)
+          tx-meta (assoc local-tx-meta :outliner-op :move-blocks)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-op/apply-ops! conn
+                                  [[:indent-outdent-blocks [[(:db/id child3)] false {:parent-original nil
+                                                                                     :logical-outdenting? nil}]]]
+                                  tx-meta)
+          (let [source-row (first (#'sync-apply/pending-txs test-repo))
+                forward-ops (:forward-outliner-ops source-row)
+                inverse-ops (:inverse-outliner-ops source-row)]
+            (is (= :move-blocks (ffirst forward-ops)))
+            (is (= [[:block/uuid (:block/uuid child3)]]
+                   (get-in forward-ops [0 1 0])))
+            (is (= [:block/uuid (:block/uuid parent)]
+                   (get-in forward-ops [0 1 1])))
+            (is (= true (get-in forward-ops [0 1 2 :sibling?])))
+            (is (= :move-blocks (ffirst inverse-ops)))
+            (is (= [[:block/uuid (:block/uuid child3)]]
+                   (get-in inverse-ops [0 1 0])))
+            (is (= [:block/uuid (:block/uuid child2)]
+                   (get-in inverse-ops [0 1 1])))
+            (is (= true (get-in inverse-ops [0 1 2 :sibling?])))))))))
+
+(deftest indent-outdent-direct-outdent-with-right-sibling-persists-semantic-move-history-test
+  (testing "direct outdent with right siblings persists concrete semantic move forward/inverse ops"
+    (let [{:keys [conn client-ops-conn parent child1 child2]} (setup-parent-child)
+          tx-meta (assoc local-tx-meta :outliner-op :move-blocks)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-op/apply-ops! conn
+                                  [[:indent-outdent-blocks [[(:db/id child2)] false {:parent-original nil
+                                                                                     :logical-outdenting? nil}]]]
+                                  tx-meta)
+          (let [source-row (first (#'sync-apply/pending-txs test-repo))
+                forward-ops (:forward-outliner-ops source-row)
+                inverse-ops (:inverse-outliner-ops source-row)]
+            (is (= :move-blocks (ffirst forward-ops)))
+            (is (= [[:block/uuid (:block/uuid child2)]]
+                   (get-in forward-ops [0 1 0])))
+            (is (= [:block/uuid (:block/uuid parent)]
+                   (get-in forward-ops [0 1 1])))
+            (is (= true (get-in forward-ops [0 1 2 :sibling?])))
+            (is (= :move-blocks (ffirst inverse-ops)))
+            (is (= [[:block/uuid (:block/uuid child2)]]
+                   (get-in inverse-ops [0 1 0])))
+            (is (= [:block/uuid (:block/uuid child1)]
+                   (get-in inverse-ops [0 1 1])))
+            (is (= true (get-in inverse-ops [0 1 2 :sibling?])))))))))
+
+(deftest indent-outdent-direct-outdent-undo-restores-right-sibling-parent-test
+  (testing "undo after direct outdent restores right sibling parent to original parent"
+    (let [{:keys [conn client-ops-conn parent child2 child3]} (setup-parent-child)
+          parent-uuid (:block/uuid parent)
+          child2-uuid (:block/uuid child2)
+          child3-uuid (:block/uuid child3)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-op/apply-ops! conn
+                                  [[:indent-outdent-blocks [[(:db/id child2)] false {:parent-original nil
+                                                                                     :logical-outdenting? nil}]]]
+                                  local-tx-meta)
+          (let [source-row (first (#'sync-apply/pending-txs test-repo))
+                source-tx-id (:tx-id source-row)
+                child3-after-outdent (d/entity @conn [:block/uuid child3-uuid])]
+            (is (= child2-uuid
+                   (:block/uuid (:block/parent child3-after-outdent))))
+            (let [undo-result (#'sync-apply/apply-history-action! test-repo source-tx-id true {})
+                  child2-after-undo (d/entity @conn [:block/uuid child2-uuid])
+                  child3-after-undo (d/entity @conn [:block/uuid child3-uuid])]
+              (is (= true (:applied? undo-result)))
+              (is (= parent-uuid
+                     (:block/uuid (:block/parent child2-after-undo))))
+              (is (= parent-uuid
+                     (:block/uuid (:block/parent child3-after-undo)))))))))))
+
 (deftest indent-outdent-undo-enqueues-concrete-move-blocks-history-test
-  (testing "indent-outdent outdent-path persists as transact and undo/redo replays without invalid entities"
+  (testing "indent-outdent outdent-path persists concrete semantic move history and undo/redo replays without invalid entities"
     (let [{:keys [conn client-ops-conn child2]} (setup-parent-child)
           prev-invalid-callback @ldb/*transact-invalid-callback
           invalid-payload* (atom nil)]
@@ -899,7 +1002,7 @@
                   source-tx-id (:tx-id source-row)
                   undo-result (#'sync-apply/apply-history-action! test-repo source-tx-id true {})
                   redo-result (#'sync-apply/apply-history-action! test-repo source-tx-id false {})]
-              (is (= [[:transact nil]] (:forward-outliner-ops source-row)))
+              (is (= :move-blocks (ffirst (:forward-outliner-ops source-row))))
               (is (= true (:applied? undo-result)))
               (is (= true (:applied? redo-result)))
               (is (nil? @invalid-payload*))
@@ -1081,8 +1184,8 @@
             (is (= "raw reverse"
                    (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))))
 
-(deftest enqueue-local-tx-collapses-mixed-transact-fallback-outliner-ops-test
-  (testing "mixed canonical outliner ops collapse to singleton transact marker for unsafe redo"
+(deftest enqueue-local-tx-keeps-mixed-semantic-outliner-ops-test
+  (testing "mixed semantic outliner ops stay semantic and preserve op ordering"
     (let [{:keys [conn client-ops-conn child2]} (setup-parent-child)
           block-id (:db/id child2)
           block-uuid (:block/uuid child2)
@@ -1100,7 +1203,10 @@
         (fn []
           (db-sync/enqueue-local-tx! test-repo tx-report)
           (let [{:keys [outliner-ops]} (first (#'sync-apply/pending-txs test-repo))]
-            (is (= [[:transact nil]] outliner-ops))))))))
+            (is (= :save-block (ffirst outliner-ops)))
+            (is (= :move-blocks (first (second outliner-ops))))
+            (is (= [[:block/uuid block-uuid]]
+                   (get-in outliner-ops [1 1 0])))))))))
 
 (deftest apply-history-action-redo-fails-fast-on-transact-placeholder-test
   (testing "redo fails fast when semantic ops contain transact placeholder to avoid silent partial replay"
@@ -1708,6 +1814,67 @@
             (is (= true
                    (:applied? (#'sync-apply/apply-history-action! test-repo
                                                                   (:tx-id delete-action)
+                                                                  true
+                                                                  {}))))
+            (let [restored-a (d/entity @conn [:block/uuid a-child-uuid])
+                  restored-b (d/entity @conn [:block/uuid b-child-uuid])]
+              (is (= parent-a-uuid (some-> restored-a :block/parent :block/uuid)))
+              (is (= parent-b-uuid (some-> restored-b :block/parent :block/uuid))))))))))
+
+(deftest move-blocks-multi-parent-builds-per-root-inverse-history-test
+  (testing "move-blocks across different source parents builds per-root inverse move ops"
+    (let [{:keys [conn client-ops-conn parent-b a-child-1 b-child-1 parent-a]} (setup-two-parents)
+          a-child-uuid (:block/uuid a-child-1)
+          b-child-uuid (:block/uuid b-child-1)
+          parent-a-uuid (:block/uuid parent-a)
+          parent-b-uuid (:block/uuid parent-b)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-op/apply-ops! conn
+                                  [[:move-blocks [[(:db/id a-child-1)
+                                                   (:db/id b-child-1)]
+                                                  (:db/id parent-b)
+                                                  {:sibling? false}]]]
+                                  local-tx-meta)
+          (let [move-action (->> (#'sync-apply/pending-txs test-repo)
+                                 (filter #(= :move-blocks (:outliner-op %)))
+                                 last)
+                inverse-ops (:inverse-outliner-ops move-action)]
+            (is (some? move-action))
+            (is (= 2 (count inverse-ops)))
+            (is (some #(and (= :move-blocks (first %))
+                            (= [[:block/uuid a-child-uuid]] (get-in % [1 0]))
+                            (= [:block/uuid parent-a-uuid] (get-in % [1 1]))
+                            (= false (get-in % [1 2 :sibling?])))
+                      inverse-ops))
+            (is (some #(and (= :move-blocks (first %))
+                            (= [[:block/uuid b-child-uuid]] (get-in % [1 0]))
+                            (= [:block/uuid parent-b-uuid] (get-in % [1 1]))
+                            (= false (get-in % [1 2 :sibling?])))
+                      inverse-ops))))))))
+
+(deftest apply-history-action-undo-restores-multi-parent-move-via-semantic-inverse-test
+  (testing "history action undo restores moved roots to original parents when roots span multiple parents"
+    (let [{:keys [conn client-ops-conn parent-b a-child-1 b-child-1 parent-a]} (setup-two-parents)
+          a-child-uuid (:block/uuid a-child-1)
+          b-child-uuid (:block/uuid b-child-1)
+          parent-a-uuid (:block/uuid parent-a)
+          parent-b-uuid (:block/uuid parent-b)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-op/apply-ops! conn
+                                  [[:move-blocks [[(:db/id a-child-1)
+                                                   (:db/id b-child-1)]
+                                                  (:db/id parent-b)
+                                                  {:sibling? false}]]]
+                                  local-tx-meta)
+          (let [move-action (->> (#'sync-apply/pending-txs test-repo)
+                                 (filter #(= :move-blocks (:outliner-op %)))
+                                 last)]
+            (is (some? move-action))
+            (is (= true
+                   (:applied? (#'sync-apply/apply-history-action! test-repo
+                                                                  (:tx-id move-action)
                                                                   true
                                                                   {}))))
             (let [restored-a (d/entity @conn [:block/uuid a-child-uuid])
