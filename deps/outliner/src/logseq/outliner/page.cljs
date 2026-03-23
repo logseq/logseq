@@ -48,7 +48,7 @@
 (defn- build-page-retract-tx
   "Build cleanup tx-data for deleting a schema page.
    This is pure and can be reused by sync repair."
-  [db page & [{:keys [include-page-retract?]
+  [db page & [{:keys [include-page-retract? today-page?]
                :or {include-page-retract? true}}]]
   (let [page-id (:db/id page)
         page-blocks-tx-data (->> (:block/_page page)
@@ -66,11 +66,13 @@
         page-tx (when (and include-page-retract?
                            (d/entity db page-id))
                   [[:db/retractEntity page-id]])]
-    (concat page-blocks-tx-data
-            property-pair-tx-data
-            restore-class-parent-tx
-            (db-refs->page page)
-            page-tx)))
+    (if today-page?
+      page-blocks-tx-data
+      (concat page-blocks-tx-data
+              property-pair-tx-data
+              restore-class-parent-tx
+              (db-refs->page page)
+              page-tx))))
 
 (defn delete!
   "Deletes a page. Returns true if able to delete page. If unable to delete,
@@ -97,16 +99,13 @@
                       (assoc :real-outliner-op :rename-page))]
         ;; TODO: maybe we should add $$$favorites to built-in pages?
         (cond
-          today-page?
-          false
-
           (or (ldb/built-in? page) (ldb/hidden? page))
           (do
             (error-handler {:msg "Built-in page cannot be deleted"})
             false)
 
-          (or (ldb/class? page) (ldb/property? page))
-          (let [tx-data (build-page-retract-tx @conn page)]
+          (or (ldb/class? page) (ldb/property? page) today-page?)
+          (let [tx-data (build-page-retract-tx @conn page {:today-page? today-page?})]
             (ldb/transact! conn tx-data tx-meta)
             true)
 
