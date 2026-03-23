@@ -98,55 +98,73 @@
   "Common image extensions to try when asset-type is unknown"
   ["png" "jpg" "jpeg" "gif" "webp" "svg" "bmp" "ico"])
 
-(defn- try-load-image-with-extensions!
-  "Try loading image with common extensions until one works"
-  [asset-uuid extensions *url *error *loaded-for]
-  (if (empty? extensions)
-    ;; No more extensions to try, mark as error
-    (reset! *error true)
-    ;; Try current extension
-    (let [ext (first extensions)
-          file (str asset-uuid "." ext)
-          asset-path (path/path-join (str "../" common-config/local-assets-dir) file)]
-      (-> (assets-handler/<make-asset-url asset-path)
-          (p/then (fn [url]
-                    ;; Success! Store the URL
-                    (reset! *loaded-for [asset-uuid ext])
-                    (reset! *url url)))
-          (p/catch (fn [_]
-                     ;; Failed, try next extension
-                     (try-load-image-with-extensions! asset-uuid (rest extensions) *url *error *loaded-for)))))))
-
-(defn- load-image-url!
-  "Load image URL for an asset, updating the url/error atoms.
-   If asset-type is nil, tries common image extensions."
-  [asset-uuid asset-type *url *error *loaded-for]
-  (when (and asset-uuid
-             (not= @*loaded-for [asset-uuid asset-type]))
-    (reset! *loaded-for [asset-uuid asset-type])
+(defn- <load-asset-url!
+  "Resolve an asset blob URL, retrying on transient failures (e.g. db-worker not ready).
+   When asset-type is nil and :try-extensions? is true, tries common image extensions.
+   Pass :*load-id atom (per-component) to guard against stale retries overwriting a newer load.
+   Without :*load-id, no staleness check is performed (safe for single-load components)."
+  [*url *error asset-uuid asset-type {:keys [max-retries delay-ms try-extensions? *load-id]
+                                      :or {max-retries 3 delay-ms 1000 try-extensions? false}}]
+  (let [load-id (when *load-id (swap! *load-id inc))
+        stale? (if *load-id
+                 #(not= load-id @*load-id)
+                 (constantly false))]
     (reset! *url nil)
     (reset! *error false)
-    (js/console.log "[DEBUG load-image-url!]" (pr-str {:uuid asset-uuid :type asset-type}))
-    (if asset-type
-      ;; Known extension - load directly
+    (if (and (not asset-type) try-extensions?)
+      ;; Unknown extension — try common ones sequentially
+      (do
+        (js/console.log "[DEBUG <load-asset-url!] trying extensions" (pr-str {:uuid asset-uuid :load-id load-id}))
+        (letfn [(try-ext [exts attempt]
+                  (if (empty? exts)
+                    (when-not (stale?)
+                      (js/console.error "[DEBUG <load-asset-url!] all extensions failed" (pr-str {:uuid asset-uuid :load-id load-id}))
+                      (reset! *error true))
+                    (let [ext (first exts)
+                          file (str asset-uuid "." ext)
+                          asset-path (path/path-join (str "../" common-config/local-assets-dir) file)]
+                      (-> (assets-handler/<make-asset-url asset-path)
+                          (p/then (fn [url]
+                                    (when-not (stale?)
+                                      (js/console.log "[DEBUG <load-asset-url!] OK via ext" (pr-str {:uuid asset-uuid :ext ext :load-id load-id :url (subs (str url) 0 80)}))
+                                      (reset! *error false)
+                                      (reset! *url url))))
+                          (p/catch (fn [err]
+                                     (if (stale?)
+                                       (js/console.log "[DEBUG <load-asset-url!] stale, aborting" (pr-str {:uuid asset-uuid :load-id load-id}))
+                                       ;; If this was a worker-not-ready error and we have retries left, delay and retry same ext
+                                       (if (and (< attempt max-retries)
+                                                (string/includes? (str err) "not been initialized"))
+                                         (js/setTimeout #(try-ext exts (inc attempt)) delay-ms)
+                                         ;; Otherwise try next extension
+                                         (try-ext (rest exts) 0)))))))))]
+          (try-ext common-image-extensions 0)))
+      ;; Known extension — retry with delay on failure
       (let [file (str asset-uuid "." asset-type)
             asset-path (path/path-join (str "../" common-config/local-assets-dir) file)]
-        (js/console.log "[DEBUG load-image-url!] path=" asset-path)
-        (-> (assets-handler/<make-asset-url asset-path)
-            (p/then (fn [url]
-                      (js/console.log "[DEBUG load-image-url!] OK" (pr-str {:uuid asset-uuid :url (subs (str url) 0 80)}))
-                      (reset! *url url)))
-            (p/catch (fn [err]
-                       (js/console.error "[DEBUG load-image-url!] FAILED" (pr-str {:uuid asset-uuid :type asset-type :error (str err)}))
-                       (reset! *error true)))))
-      ;; Unknown extension - try common ones
-      (do (js/console.log "[DEBUG load-image-url!] no asset-type, trying extensions" (pr-str {:uuid asset-uuid}))
-          (try-load-image-with-extensions! asset-uuid common-image-extensions *url *error *loaded-for)))))
+        (js/console.log "[DEBUG <load-asset-url!]" (pr-str {:uuid asset-uuid :type asset-type :path asset-path :load-id load-id}))
+        (letfn [(attempt [n]
+                  (-> (assets-handler/<make-asset-url asset-path)
+                      (p/then (fn [url]
+                                (when-not (stale?)
+                                  (js/console.log "[DEBUG <load-asset-url!] OK" (pr-str {:uuid asset-uuid :attempt n :load-id load-id :url (subs (str url) 0 80)}))
+                                  (reset! *error false)
+                                  (reset! *url url))))
+                      (p/catch (fn [err]
+                                 (if (stale?)
+                                   (js/console.log "[DEBUG <load-asset-url!] stale, aborting" (pr-str {:uuid asset-uuid :load-id load-id}))
+                                   (do
+                                     (js/console.error "[DEBUG <load-asset-url!] FAILED" (pr-str {:uuid asset-uuid :attempt n :max max-retries :load-id load-id :error (str err)}))
+                                     (if (< n max-retries)
+                                       (js/setTimeout #(attempt (inc n)) delay-ms)
+                                       (reset! *error true))))))))]
+          (attempt 0))))))
 
 (rum/defcs image-icon-cp < rum/reactive
   (rum/local nil ::url)
   (rum/local false ::error)
   (rum/local nil ::loaded-uuid)
+  (rum/local 0 ::load-id)
   {:did-mount (fn [state]
                 (let [[asset-uuid asset-type-arg _opts] (:rum/args state)
                       asset-type (or asset-type-arg
@@ -154,24 +172,24 @@
                       *url (::url state)
                       *error (::error state)
                       *loaded-uuid (::loaded-uuid state)]
-                  ;; Only load if not already loaded for this uuid
                   (when (and asset-uuid (not= @*loaded-uuid asset-uuid))
                     (reset! *loaded-uuid asset-uuid)
-                    (load-image-url! asset-uuid asset-type *url *error (atom nil))))
+                    (<load-asset-url! *url *error asset-uuid asset-type
+                                      {:try-extensions? (nil? asset-type)
+                                       :*load-id (::load-id state)})))
                 state)
    :did-update (fn [state]
                  (let [[asset-uuid asset-type-arg _opts] (:rum/args state)
                        *loaded-uuid (::loaded-uuid state)]
-                   ;; Only reload if asset-uuid changed
                    (when (and asset-uuid (not= @*loaded-uuid asset-uuid))
                      (let [asset-type (or asset-type-arg
                                           (get-asset-type-from-db asset-uuid))
                            *url (::url state)
                            *error (::error state)]
                        (reset! *loaded-uuid asset-uuid)
-                       (reset! *url nil)
-                       (reset! *error false)
-                       (load-image-url! asset-uuid asset-type *url *error (atom nil)))))
+                       (<load-asset-url! *url *error asset-uuid asset-type
+                                         {:try-extensions? (nil? asset-type)
+                                          :*load-id (::load-id state)}))))
                  state)}
   "Renders an image icon by loading the asset URL asynchronously.
    Tries common extensions if asset-type is unknown.
@@ -195,6 +213,9 @@
        [:img
         {:src url
          :loading "lazy"
+         :on-error (fn [_e]
+                     (reset! (::url state) nil)
+                     (reset! (::error state) true))
          :style {:width "100%"
                  :height "100%"
                  :object-fit "contain"
@@ -208,20 +229,28 @@
   (rum/local nil ::url)
   (rum/local false ::error)
   (rum/local nil ::loaded-for)
+  (rum/local 0 ::load-id)
   {:did-mount (fn [state]
                 (let [[asset-uuid asset-type _avatar-data _opts] (:rum/args state)
                       *url (::url state)
                       *error (::error state)
                       *loaded-for (::loaded-for state)]
-                  (load-image-url! asset-uuid asset-type *url *error *loaded-for))
+                  (when (and asset-uuid (not= @*loaded-for [asset-uuid asset-type]))
+                    (reset! *loaded-for [asset-uuid asset-type])
+                    (<load-asset-url! *url *error asset-uuid asset-type
+                                      {:try-extensions? (nil? asset-type)
+                                       :*load-id (::load-id state)})))
                 state)
    :did-update (fn [state]
                  (let [[asset-uuid asset-type _avatar-data _opts] (:rum/args state)
                        *loaded-for (::loaded-for state)]
-                   (when (not= @*loaded-for [asset-uuid asset-type])
+                   (when (and asset-uuid (not= @*loaded-for [asset-uuid asset-type]))
                      (let [*url (::url state)
                            *error (::error state)]
-                       (load-image-url! asset-uuid asset-type *url *error *loaded-for))))
+                       (reset! *loaded-for [asset-uuid asset-type])
+                       (<load-asset-url! *url *error asset-uuid asset-type
+                                         {:try-extensions? (nil? asset-type)
+                                          :*load-id (::load-id state)}))))
                  state)}
   "Renders an avatar with an image, with initials as fallback.
    Uses shui/avatar for circular display with object-fit: cover."
@@ -1085,12 +1114,12 @@
        :on-click (fn [e]
                    (on-chosen e {:type :emoji
                                  :id emoji-id
-                                 :name emoji-name}))
+                                 :name emoji-name}))}
        (not (nil? hover))
        (assoc :on-mouse-over #(reset! hover {:type :emoji
                                              :id emoji-id
                                              :name emoji-name})
-              :on-mouse-out #())})
+              :on-mouse-out #()))
      [:em-emoji {:id emoji-id
                  :style {:line-height 1}}]]))
 
@@ -1113,12 +1142,12 @@
        :on-click (fn [e]
                    (on-chosen e {:type :text
                                  :data (cond-> {:value text-value}
-                                         text-color (assoc :color text-color))}))
+                                         text-color (assoc :color text-color))}))}
        (not (nil? hover))
        (assoc :on-mouse-over #(reset! hover {:type :text
                                              :data (cond-> {:value text-value}
                                                      text-color (assoc :color text-color))})
-              :on-mouse-out #())})
+              :on-mouse-out #()))
      display-text]))
 
 (rum/defc avatar-cp < rum/static
@@ -1144,13 +1173,13 @@
                    (on-chosen e {:type :avatar
                                  :data {:value avatar-value
                                         :backgroundColor backgroundColor
-                                        :color color}}))
+                                        :color color}}))}
        (not (nil? hover))
        (assoc :on-mouse-over #(reset! hover {:type :avatar
                                              :data {:value avatar-value
                                                     :backgroundColor backgroundColor
                                                     :color color}})
-              :on-mouse-out #())})
+              :on-mouse-out #()))
      (shui/avatar
       {:class "w-7 h-7"}
       (shui/avatar-fallback
@@ -1505,25 +1534,7 @@
         (shui/tabler-icon "photo" {:size 16 :style {:color "var(--lx-gray-11)"}})]]
       [:span.custom-tab-item-label "Image"]]]))
 
-(defn- <load-asset-url!
-  "Try to resolve an asset URL, retrying up to `max-retries` times with `delay-ms` between attempts."
-  [*url *error asset-uuid asset-type {:keys [max-retries delay-ms]
-                                      :or {max-retries 3 delay-ms 1000}}]
-  (let [file (str asset-uuid "." asset-type)
-        asset-path (path/path-join (str "../" common-config/local-assets-dir) file)]
-    (js/console.log "[DEBUG <load-asset-url!]" (pr-str {:uuid asset-uuid :type asset-type :path asset-path}))
-    (letfn [(attempt [n]
-              (-> (assets-handler/<make-asset-url asset-path)
-                  (p/then (fn [url]
-                            (js/console.log "[DEBUG <load-asset-url!] OK" (pr-str {:uuid asset-uuid :attempt n :url (subs (str url) 0 80)}))
-                            (reset! *error false)
-                            (reset! *url url)))
-                  (p/catch (fn [err]
-                             (js/console.error "[DEBUG <load-asset-url!] FAILED" (pr-str {:uuid asset-uuid :attempt n :max max-retries :error (str err)}))
-                             (if (< n max-retries)
-                               (js/setTimeout #(attempt (inc n)) delay-ms)
-                               (reset! *error true))))))]
-      (attempt 0))))
+;; <load-asset-url! is defined near the top of the file (unified loader with retry + extension guessing)
 
 (rum/defcs image-asset-item < rum/reactive
   (rum/local nil ::url)
@@ -1789,7 +1800,8 @@
         images (rum/react *images)
         loading? (rum/react *loading?)
         avatar-mode? (some? avatar-context)
-        skip-confirm? (get-web-image-skip-confirm)]
+        skip-confirm? (get-web-image-skip-confirm)
+        web-expanded? (get (rum/react *section-states) "Web images" true)]
     ;; Don't render section if no query or empty results after loading
     (when-not (and (not loading?) (empty? images) (not (string/blank? query)))
       [:div.pane-section.web-images-section
@@ -1797,7 +1809,8 @@
        [:div.section-header-row
         (section-header {:title "Web images"
                          :count (when-not loading? (count images))
-                         :expanded? true})
+                         :expanded? web-expanded?
+                         :on-toggle #(swap! *section-states update "Web images" (fn [v] (if (nil? v) false (not v))))})
         (shui/tooltip-provider
          {:delay-duration 200}
          (shui/tooltip
@@ -1810,46 +1823,47 @@
            [:span "Images from Wikipedia Commons. Check licensing before commercial use."])))]
 
        ;; Image grid
-       [:div.asset-picker-grid.web-images-row
-        {:class (when avatar-mode? "avatar-mode")}
-        (if loading?
-          ;; Loading skeletons
-          (for [i (range 5)]
-            [:div.web-image-placeholder {:key (str "skeleton-" i)}
-             (shui/skeleton {:class "w-full h-full rounded"})])
-          ;; Actual images
-          (for [web-image images]
-            (rum/with-key
-              (web-image-item
-               web-image
-               {:on-click (fn [e img]
-                            (if skip-confirm?
-                              ;; Skip confirmation, save immediately
-                              (on-select e img true)
-                              ;; Show confirmation popover
-                              (do
-                                (when on-popover-change (on-popover-change true))
-                                (shui/popup-show!
-                                 (.-target e)
-                                 (fn [{:keys [id]}]
-                                   (web-image-confirm-pane
-                                    {:web-image img
-                                     :avatar-context avatar-context
-                                     :on-close (fn []
-                                                 (when on-popover-change (on-popover-change false))
-                                                 (shui/popup-hide! id))
-                                     :on-save (fn [confirmed-img]
-                                                (when on-popover-change (on-popover-change false))
-                                                (shui/popup-hide! id)
-                                                (on-select e confirmed-img false))}))
-                                 {:align :center
-                                  :side "top"
-                                  :content-props {:class "web-image-confirm-popup"
-                                                  :sideOffset 8}
-                                  :on-after-hide (fn []
-                                                   (when on-popover-change (on-popover-change false)))}))))
-                :avatar-mode? avatar-mode?})
-              (str "web-" (:url web-image)))))]])))
+       (when web-expanded?
+         [:div.asset-picker-grid.web-images-row
+          {:class (when avatar-mode? "avatar-mode")}
+          (if loading?
+            ;; Loading skeletons
+            (for [i (range 5)]
+              [:div.web-image-placeholder {:key (str "skeleton-" i)}
+               (shui/skeleton {:class "w-full h-full rounded"})])
+            ;; Actual images
+            (for [web-image images]
+              (rum/with-key
+                (web-image-item
+                 web-image
+                 {:on-click (fn [e img]
+                              (if skip-confirm?
+                                ;; Skip confirmation, save immediately
+                                (on-select e img true)
+                                ;; Show confirmation popover
+                                (do
+                                  (when on-popover-change (on-popover-change true))
+                                  (shui/popup-show!
+                                   (.-target e)
+                                   (fn [{:keys [id]}]
+                                     (web-image-confirm-pane
+                                      {:web-image img
+                                       :avatar-context avatar-context
+                                       :on-close (fn []
+                                                   (when on-popover-change (on-popover-change false))
+                                                   (shui/popup-hide! id))
+                                       :on-save (fn [confirmed-img]
+                                                  (when on-popover-change (on-popover-change false))
+                                                  (shui/popup-hide! id)
+                                                  (on-select e confirmed-img false))}))
+                                   {:align :center
+                                    :side "top"
+                                    :content-props {:class "web-image-confirm-popup"
+                                                    :sideOffset 8}
+                                    :on-after-hide (fn []
+                                                     (when on-popover-change (on-popover-change false)))}))))
+                  :avatar-mode? avatar-mode?})
+                (str "web-" (:url web-image)))))])])))
 
 ;; ============================================================================
 ;; URL Asset Pane (Popover content for "Add asset via URL")
@@ -2348,22 +2362,27 @@
                                                      used-assets)))
                                ;; No current selection, just show recently used
                                (take 5 used-assets))
-           recently-used-count (count recently-used-row)]
+           recently-used-count (count recently-used-row)
+           section-states (rum/react *section-states)
+           recently-used-expanded? (get section-states "Recently used" true)
+           available-expanded? (get section-states "Available assets" true)]
        [:div.bd.bd-scroll
         ;; "Recently used" section - shows current + recently used in one row (only when not searching)
         (when (and (seq recently-used-row) (string/blank? search-q))
           [:div.pane-section
            (section-header {:title "Recently used"
                             :count recently-used-count
-                            :expanded? true})
-           [:div.asset-picker-grid.recently-used-row
-            {:class (when avatar-mode? "avatar-mode")}
-            (for [asset recently-used-row]
-              (rum/with-key
-                (image-asset-item asset {:on-chosen on-chosen
-                                         :avatar-context avatar-context
-                                         :selected? (= (str (:block/uuid asset)) current-asset-uuid)})
-                (str "recent-" (:block/uuid asset))))]])
+                            :expanded? recently-used-expanded?
+                            :on-toggle #(swap! *section-states update "Recently used" (fn [v] (if (nil? v) false (not v))))})
+           (when recently-used-expanded?
+             [:div.asset-picker-grid.recently-used-row
+              {:class (when avatar-mode? "avatar-mode")}
+              (for [asset recently-used-row]
+                (rum/with-key
+                  (image-asset-item asset {:on-chosen on-chosen
+                                           :avatar-context avatar-context
+                                           :selected? (= (str (:block/uuid asset)) current-asset-uuid)})
+                  (str "recent-" (:block/uuid asset))))])])
 
         ;; "Web images" section - Wikipedia Commons images
         (when-not (string/blank? effective-web-query)
@@ -2377,35 +2396,37 @@
         [:div.pane-section
          (section-header {:title "Available assets"
                           :count asset-count
-                          :expanded? true})
+                          :expanded? available-expanded?
+                          :on-toggle #(swap! *section-states update "Available assets" (fn [v] (if (nil? v) false (not v))))})
 
          ;; Asset grid
-         [:div.asset-picker-grid
-          {:class (when avatar-mode? "avatar-mode")}
-          (cond
-            loading?
-            [:div.flex.flex-col.items-center.justify-center.h-32.text-gray-08
-             [:div.animate-spin (shui/tabler-icon "loader-2" {:size 32})]
-             [:span.text-sm.mt-2 "Loading assets..."]]
+         (when available-expanded?
+           [:div.asset-picker-grid
+            {:class (when avatar-mode? "avatar-mode")}
+            (cond
+              loading?
+              [:div.flex.flex-col.items-center.justify-center.h-32.text-gray-08
+               [:div.animate-spin (shui/tabler-icon "loader-2" {:size 32})]
+               [:span.text-sm.mt-2 "Loading assets..."]]
 
-            (seq filtered-assets)
-            (for [asset filtered-assets]
-              (rum/with-key
-                (image-asset-item asset {:on-chosen on-chosen
-                                         :avatar-context avatar-context
-                                         :selected? (= (str (:block/uuid asset)) current-asset-uuid)})
-                (str (:block/uuid asset))))
+              (seq filtered-assets)
+              (for [asset filtered-assets]
+                (rum/with-key
+                  (image-asset-item asset {:on-chosen on-chosen
+                                           :avatar-context avatar-context
+                                           :selected? (= (str (:block/uuid asset)) current-asset-uuid)})
+                  (str (:block/uuid asset))))
 
-            :else
-            (if (and (seq assets) (not (string/blank? search-q)))
-              ;; Search returned no results
-              [:div.asset-picker-empty
-               (shui/tabler-icon "search-off" {:size 32})
-               [:span.text-sm "No matching images"]]
-              ;; No assets uploaded yet
-              [:div.asset-picker-empty
-               (shui/tabler-icon "photo" {:size 32})
-               [:span.text-sm "No images yet"]]))]]])
+              :else
+              (if (and (seq assets) (not (string/blank? search-q)))
+                ;; Search returned no results
+                [:div.asset-picker-empty
+                 (shui/tabler-icon "search-off" {:size 32})
+                 [:span.text-sm "No matching images"]]
+                ;; No assets uploaded yet
+                [:div.asset-picker-empty
+                 (shui/tabler-icon "photo" {:size 32})
+                 [:span.text-sm "No images yet"]]))])]])
 
      ;; Action buttons (floating at bottom) - using shui buttons
      [:div.asset-picker-actions
