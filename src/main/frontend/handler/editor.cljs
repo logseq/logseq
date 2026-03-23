@@ -1982,10 +1982,8 @@
    (insert-template! element-id db-id {}))
   ([element-id db-id {:keys [target] :as opts}]
    (let [repo (state/get-current-repo)]
-     (p/let [block (db-async/<pull repo db-id)
-             block (when (:block/uuid block)
-                     (db-async/<get-block repo (:block/uuid block)
-                                          {:children? true}))]
+     (p/let [block (db-async/<get-block repo db-id
+                                        {:include-collapsed-children? true})]
        (when (:db/id block)
          (let [journal? (ldb/journal? target)
                target (or target (state/get-edit-block))
@@ -3111,8 +3109,7 @@
                         (:block/uuid page-entity)))
             repo (state/get-current-repo)
             _ (db-async/<get-block repo (or block-id page-id)
-                                   {:children? true
-                                    :include-collapsed-children? true})
+                                   {:include-collapsed-children? true})
             entity (db/entity [:block/uuid (or block-id page-id)])
             result (or (:block/_page entity)
                        (rest (db/get-block-and-children repo (:block/uuid entity))))
@@ -3188,8 +3185,7 @@
 (defn expand-block! [block-id & {:keys [skip-db-collpsing?]}]
   (let [repo (state/get-current-repo)]
     (p/do!
-     (db-async/<get-block repo block-id {:children? true
-                                         :include-collapsed-children? true})
+     (db-async/<get-block repo block-id {:include-collapsed-children? true})
      (when-not (or skip-db-collpsing? (skip-collapsing-in-db?))
        (set-blocks-collapsed! [block-id] false))
      (state/set-collapsed-block! block-id false))))
