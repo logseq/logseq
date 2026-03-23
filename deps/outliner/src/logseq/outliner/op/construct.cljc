@@ -13,6 +13,7 @@
 (def ^:private semantic-outliner-ops
   #{:save-block
     :insert-blocks
+    :apply-template
     :move-blocks
     :move-blocks-up-down
     :indent-outdent-blocks
@@ -46,7 +47,8 @@
     :block.temp/ast-title
     :block.temp/ast-body
     :block.temp/load-status
-    :block.temp/has-children?})
+    :block.temp/has-children?
+    :logseq.property/created-by-ref})
 
 (def rebase-refs-key :db-sync.rebase/refs)
 (def canonical-transact-op [[:transact nil]])
@@ -262,6 +264,41 @@
        distinct
        vec))
 
+(defn- canonicalize-insert-blocks-op
+  [db tx-data args]
+  (let [[blocks target-id opts] args
+        created-uuids (created-block-uuids-from-tx-data tx-data)
+        blocks* (mapv #(sanitize-insert-block-payload db %) blocks)
+        target-ref (stable-entity-ref db target-id)
+        blocks* (cond
+                  (and (:replace-empty-target? opts)
+                       (not (:keep-uuid? opts))
+                       (seq blocks*))
+                  (let [[fst-block & rst-blocks] blocks*
+                        created-rst-uuids created-uuids]
+                    (into [fst-block]
+                          (if (and (seq created-rst-uuids)
+                                   (= (count rst-blocks) (count created-rst-uuids)))
+                            (map (fn [block uuid]
+                                   (assoc block :block/uuid uuid))
+                                 rst-blocks
+                                 created-rst-uuids)
+                            rst-blocks)))
+
+                  (and (not (:keep-uuid? opts))
+                       (= (count blocks*) (count created-uuids)))
+                  (mapv (fn [block uuid]
+                          (assoc block :block/uuid uuid))
+                        blocks*
+                        created-uuids)
+
+                  :else
+                  blocks*)]
+    [blocks*
+     target-ref
+     (assoc (dissoc (or opts {}) :outliner-op)
+            :keep-uuid? true)]))
+
 (defn- canonical-move-op-for-block
   [db block-id opts]
   (when-let [[target-id sibling?] (resolve-move-target db [block-id])]
@@ -294,36 +331,22 @@
       [:save-block [(sanitize-block-payload db block) opts]])
 
     :insert-blocks
-    (let [[blocks target-id opts] args
-          created-uuids (created-block-uuids-from-tx-data tx-data)
-          blocks' (mapv #(sanitize-insert-block-payload db %) blocks)
+    [:insert-blocks
+     (canonicalize-insert-blocks-op db tx-data args)]
+
+    :apply-template
+    (let [[template-id target-id opts] args
+          template-ref (stable-entity-ref db template-id)
           target-ref (stable-entity-ref db target-id)
-          blocks' (cond
-                    (and (:replace-empty-target? opts)
-                         (seq blocks'))
-                    (let [[fst-block & rst-blocks] blocks']
-                      (into [fst-block]
-                            (if (and (not (:keep-uuid? opts))
-                                     (= (count rst-blocks) (count created-uuids)))
-                              (map (fn [block uuid]
-                                     (assoc block :block/uuid uuid))
-                                   rst-blocks
-                                   created-uuids)
-                              rst-blocks)))
-
-                    (and (not (:keep-uuid? opts))
-                         (= (count blocks') (count created-uuids)))
-                    (mapv (fn [block uuid]
-                            (assoc block :block/uuid uuid))
-                          blocks'
-                          created-uuids)
-
-                    :else
-                    blocks')]
-      [:insert-blocks [blocks'
-                       target-ref
-                       (assoc (dissoc (or opts {}) :outliner-op)
-                              :keep-uuid? true)]])
+          opts' (assoc (dissoc opts
+                               :template-blocks
+                               :template-id
+                               :outliner-op)
+                       :keep-uuid? true)]
+      (when-not (and template-ref target-ref)
+        (throw (ex-info "Invalid apply-template args"
+                        {:args args})))
+      [:apply-template [template-ref target-ref opts']])
 
     :move-blocks-up-down
     (let [[ids up?] args]
@@ -672,8 +695,45 @@
         ;; Use restore semantics instead of save-block to retract recycle markers.
         [:restore-recycled [page-uuid]]))))
 
+(defn- insert-like-delete-ids
+  [db-before db-after blocks]
+  (->> blocks
+       (keep (fn [block]
+               (when-let [u (:block/uuid block)]
+                 [:block/uuid u])))
+       (filter (fn [eid]
+                 (and
+                  (nil? (d/entity db-before eid))
+                  (d/entity db-after eid))))
+       vec))
+
+(defn- restore-target-insert-op
+  [db-before db-after target-id opts]
+  (when (:replace-empty-target? opts)
+    (when-let [target-ref (stable-entity-ref db-before target-id)]
+      (when (d/entity db-after target-ref)
+        (when-let [target (d/entity db-before target-ref)]
+          (build-inverse-save-block db-before target opts))))))
+
+(defn- build-inverse-insert-like
+  [db-before db-after args]
+  (let [[blocks target-id opts] args
+        delete-ids (insert-like-delete-ids db-before db-after blocks)
+        restore-op (restore-target-insert-op db-before db-after target-id opts)]
+    (prn :debug :delete-ids delete-ids
+         :restore-op restore-op)
+    (cond-> []
+      (seq delete-ids)
+      (conj [:delete-blocks [delete-ids {}]])
+
+      restore-op
+      (conj restore-op)
+
+      :always
+      seq)))
+
 (defn- build-strict-inverse-outliner-ops
-  [db-before forward-ops]
+  [db-before db-after forward-ops]
   (when (seq forward-ops)
     (let [inverse-entries
           (mapv (fn [[op args]]
@@ -684,28 +744,10 @@
                             (build-inverse-save-block db-before block opts))
 
                           :insert-blocks
-                          (let [[blocks _target-id opts] args]
-                            (if (:replace-empty-target? opts)
-                              (let [[fst-block & rst-blocks] blocks
-                                    delete-ids (->> rst-blocks
-                                                    (keep (fn [block]
-                                                            (when-let [u (:block/uuid block)]
-                                                              [:block/uuid u])))
-                                                    vec)
-                                    restore-target-op (when fst-block
-                                                        (build-inverse-save-block db-before fst-block nil))]
-                                (concat
-                                 (when (seq delete-ids)
-                                   [[:delete-blocks [delete-ids {}]]])
-                                 (when restore-target-op
-                                   [restore-target-op])))
-                              (let [ids (->> blocks
-                                             (keep (fn [block]
-                                                     (when-let [u (:block/uuid block)]
-                                                       [:block/uuid u])))
-                                             vec)]
-                                (when (seq ids)
-                                  [[:delete-blocks [ids {}]]]))))
+                          (build-inverse-insert-like db-before db-after args)
+
+                          :apply-template
+                          (build-inverse-insert-like db-before db-after args)
 
                           :move-blocks
                           (let [[ids _target-id _opts] args]
@@ -798,7 +840,7 @@
 (defn- has-replace-empty-target-insert-op?
   [forward-ops]
   (some (fn [[op [_blocks _target-id opts]]]
-          (and (= :insert-blocks op)
+          (and (contains? #{:insert-blocks :apply-template} op)
                (:replace-empty-target? opts)))
         forward-ops))
 
@@ -837,7 +879,7 @@
   [inverse-outliner-ops forward-outliner-ops]
   (let [forward-insert-ops* (atom (->> forward-outliner-ops
                                        reverse
-                                       (filter #(= :insert-blocks (first %)))
+                                       (filter #(contains? #{:insert-blocks :apply-template} (first %)))
                                        vec))]
     (mapv (fn [[op args :as inverse-op]]
             (if (and (= :delete-blocks op)
@@ -895,7 +937,7 @@
                                         (some (fn [[op]] (= :transact op)) forward-outliner-ops))
                                  canonical-transact-op
                                  forward-outliner-ops))
-        built-inverse-outliner-ops (some-> (build-strict-inverse-outliner-ops db-before forward-outliner-ops)
+        built-inverse-outliner-ops (some-> (build-strict-inverse-outliner-ops db-before db-after forward-outliner-ops)
                                            seq
                                            vec)
         explicit-inverse-outliner-ops (some-> (canonicalize-explicit-outliner-ops db-after tx-data (:db-sync/inverse-outliner-ops tx-meta))
@@ -925,8 +967,13 @@
 (defn build-history-action-metadata
   [{:keys [db-before db-after tx-data tx-meta] :as data}]
   (let [{:keys [forward-outliner-ops inverse-outliner-ops]}
-        (derive-history-outliner-ops db-before db-after tx-data tx-meta)]
-    (when (and (contains? semantic-outliner-ops (:outliner-op tx-meta))
+        (derive-history-outliner-ops db-before db-after tx-data tx-meta)
+        semantic-ops-explicit?
+        (or (seq (:outliner-ops tx-meta))
+            (seq (:db-sync/forward-outliner-ops tx-meta))
+            (seq (:db-sync/inverse-outliner-ops tx-meta)))]
+    (when (and semantic-ops-explicit?
+               (contains? semantic-outliner-ops (:outliner-op tx-meta))
                (not= :restore-recycled (:outliner-op tx-meta))
                (or
                 (empty? forward-outliner-ops)
