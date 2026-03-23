@@ -5,7 +5,10 @@
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.property.type :as db-property-type]))
+            [logseq.db.frontend.property.type :as db-property-type]
+            [cljs.pprint :as pprint]
+            #?(:org.babashka/nbb [logseq.common.log :as log]
+               :default [lambdaisland.glogi :as log])))
 
 (def ^:private semantic-outliner-ops
   #{:save-block
@@ -249,6 +252,39 @@
       (mapv (fn [uuid] [:block/uuid uuid]) created-uuids)
       ids')))
 
+(defn- moved-block-ids-from-tx-data
+  [tx-data]
+  (->> tx-data
+       (keep (fn [[e a _v _t added?]]
+               (when (and (= :block/parent a) (true? added?))
+                 e)))
+       distinct
+       vec))
+
+(defn- canonical-move-op-for-block
+  [db block-id opts]
+  (when-let [[target-id sibling?] (resolve-move-target db [block-id])]
+    [:move-blocks [[(stable-entity-ref db block-id)]
+                   (stable-entity-ref db target-id)
+                   (assoc (dissoc (or opts {}) :outliner-op)
+                          :sibling? sibling?)]]))
+
+(defn- canonicalize-indent-outdent-op
+  [db tx-data ids indent? opts]
+  (let [moved-ids (moved-block-ids-from-tx-data tx-data)]
+    (if (seq moved-ids)
+      (let [move-ops (->> moved-ids
+                          (keep #(canonical-move-op-for-block db % opts))
+                          vec)]
+        (if (= (count moved-ids) (count move-ops))
+          move-ops
+          [[:indent-outdent-blocks [(stable-id-coll db ids)
+                                    indent?
+                                    opts]]]))
+      [[:indent-outdent-blocks [(stable-id-coll db ids)
+                                indent?
+                                opts]]])))
+
 (defn- ^:large-vars/cleanup-todo canonicalize-semantic-outliner-op
   [db tx-data [op args]]
   (case op
@@ -294,50 +330,19 @@
 
     :move-blocks-up-down
     (let [[ids up?] args]
-      (if-let [[target-id sibling?] (resolve-move-target db ids)]
-        [:move-blocks [(stable-id-coll db ids)
-                       (stable-entity-ref db target-id)
-                       {:sibling? sibling?}]]
-        [:move-blocks [(stable-id-coll db ids)
-                       nil
-                       {:source-op :move-blocks-up-down
-                        :up? up?}]]))
+      [:move-blocks-up-down
+       [(stable-id-coll db ids)
+        up?]])
 
     :indent-outdent-blocks
     (let [[ids indent? opts] args]
-      (if (and (false? indent?)
-               (not (true? (:logical-outdenting? opts))))
-        [:transact nil]
-        (if-let [[target-id sibling?] (resolve-move-target db ids)]
-          [:move-blocks [(stable-id-coll db ids)
-                         (stable-entity-ref db target-id)
-                         (assoc (dissoc (or opts {}) :outliner-op :source-op :indent? :up?)
-                                :sibling? sibling?)]]
-          [:move-blocks [(stable-id-coll db ids)
-                         nil
-                         (assoc (dissoc (or opts {}) :outliner-op)
-                                :source-op :indent-outdent-blocks
-                                :indent? indent?)]])))
+      (canonicalize-indent-outdent-op db tx-data ids indent? opts))
 
     :move-blocks
     (let [[ids target-id opts] args]
-      (if (and (nil? target-id)
-               (= :indent-outdent-blocks (:source-op opts))
-               (false? (:indent? opts))
-               (not (true? (:logical-outdenting? opts))))
-        [:transact nil]
-        (if (or target-id (not (contains? #{:move-blocks-up-down :indent-outdent-blocks} (:source-op opts))))
-          [:move-blocks [(stable-id-coll db ids)
-                         (stable-entity-ref db target-id)
-                         (dissoc (or opts {}) :outliner-op)]]
-          (if-let [[derived-target-id sibling?] (resolve-move-target db ids)]
-            [:move-blocks [(stable-id-coll db ids)
-                           (stable-entity-ref db derived-target-id)
-                           (assoc (dissoc (or opts {}) :outliner-op :source-op :indent? :up?)
-                                  :sibling? sibling?)]]
-            [:move-blocks [(stable-id-coll db ids)
-                           nil
-                           (dissoc (or opts {}) :outliner-op)]]))))
+      [:move-blocks [(stable-id-coll db ids)
+                     (stable-entity-ref db target-id)
+                     opts]])
 
     :delete-blocks
     (let [[ids opts] args]
@@ -607,6 +612,24 @@
            (mapv #(to-insert-op db-before %))
            seq))))
 
+(defn- move-root->restore-op
+  [db-before root]
+  (let [root-id (:db/id root)
+        [target-id sibling?] (block-restore-target root)]
+    (when (and (some? root-id)
+               (some? target-id))
+      [:move-blocks [[(stable-entity-ref db-before root-id)]
+                     (stable-entity-ref db-before target-id)
+                     {:sibling? (boolean sibling?)}]])))
+
+(defn- build-inverse-move-blocks
+  [db-before ids]
+  (let [roots (selected-block-roots db-before ids)
+        restore-ops (mapv #(move-root->restore-op db-before %) roots)]
+    (when (and (seq roots)
+               (every? some? restore-ops))
+      (seq restore-ops))))
+
 (defn- page-top-level-blocks
   [page]
   (let [page-id (:db/id page)]
@@ -683,10 +706,19 @@
 
                           :move-blocks
                           (let [[ids _target-id _opts] args]
-                            (when-let [[inverse-target-id sibling?] (resolve-move-target db-before ids)]
-                              [:move-blocks [(stable-id-coll db-before ids)
-                                             (stable-entity-ref db-before inverse-target-id)
-                                             {:sibling? sibling?}]]))
+                            (build-inverse-move-blocks db-before ids))
+
+                          :indent-outdent-blocks
+                          (let [[ids indent? opts] args]
+                            [:indent-outdent-blocks [(stable-id-coll db-before ids)
+                                                     (not indent?)
+                                                     opts]])
+
+                          :move-blocks-up-down
+                          (let [[ids up?] args]
+                            [:move-blocks-up-down
+                             [(stable-id-coll db-before ids)
+                              (not up?)]])
 
                           :delete-blocks
                           (let [[ids _opts] args]
@@ -770,7 +802,15 @@
                           (contains? semantic-outliner-ops op))
                         ops)
         (throw (ex-info "Not every op is semantic" {:ops ops})))
-      (mapv #(canonicalize-semantic-outliner-op db tx-data %) ops))
+      (->> ops
+           (mapcat (fn [op]
+                     (let [canonicalized-op (canonicalize-semantic-outliner-op db tx-data op)]
+                       (if (and (sequential? canonicalized-op)
+                                (sequential? (first canonicalized-op))
+                                (keyword? (ffirst canonicalized-op)))
+                         canonicalized-op
+                         [canonicalized-op]))))
+           vec))
 
     :else
     nil))
@@ -823,7 +863,7 @@
         (canonicalize-explicit-outliner-ops db tx-data outliner-ops)
         canonical-transact-op)
 
-      (= :transact (:outliner-op tx-meta))
+      (contains? #{:transact :batch-import-edn} (:outliner-op tx-meta))
       canonical-transact-op)))
 
 (defn derive-history-outliner-ops
@@ -868,6 +908,20 @@
   [{:keys [db-before db-after tx-data tx-meta] :as data}]
   (let [{:keys [forward-outliner-ops inverse-outliner-ops]}
         (derive-history-outliner-ops db-before db-after tx-data tx-meta)]
+    (when (and (:outliner-op tx-meta)
+               (not= (:outliner-op tx-meta) :transact)
+               (or
+                (empty? forward-outliner-ops)
+                (empty? inverse-outliner-ops)))
+      (log/error ::invalid-outliner-ops {:tx-meta tx-meta
+                                         :forward-outliner-ops forward-outliner-ops
+                                         :inverse-outliner-ops inverse-outliner-ops})
+      (throw (ex-info "Invalid outliner-ops"
+                      {:tx-meta tx-meta})))
+    (pprint/pprint
+     {:forward-outliner-ops forward-outliner-ops
+      :inverse-outliner-ops inverse-outliner-ops})
+
     (cond-> (-> data
                 (dissoc :db-before :db-after)
                 (assoc :db-sync/tx-id (or (:db-sync/tx-id tx-meta) (random-uuid))))
