@@ -1610,6 +1610,70 @@
             (is (= "child 1 inline edit"
                    (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))))
 
+(deftest apply-history-action-redo-replays-save-block-with-late-created-query-ref-test
+  (testing "redo should replay save-block when referenced query block is created by a later semantic save-block"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "source"}]}]})
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          tx-id (random-uuid)
+          query-block-uuid (random-uuid)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (let [source (db-test/find-block-by-content @conn "source")
+                source-uuid (:block/uuid source)
+                source-page-uuid (:block/uuid (:block/page source))]
+            (is (some? (d/entity @conn [:block/uuid source-uuid])))
+            (ldb/transact! client-ops-conn
+                           [{:db-sync/tx-id tx-id
+                             :db-sync/pending? true
+                             :db-sync/created-at (.now js/Date)
+                             :db-sync/outliner-op :save-block
+                             :db-sync/forward-outliner-ops
+                             [[:save-block [{:block/uuid source-uuid
+                                             :logseq.property/query [:block/uuid query-block-uuid]}
+                                            nil]]
+                              [:save-block [{:block/uuid query-block-uuid
+                                             :block/title ""
+                                             :block/parent [:block/uuid source-page-uuid]
+                                             :block/page [:block/uuid source-page-uuid]
+                                             :block/order "a0"}
+                                            nil]]]
+                             :db-sync/inverse-outliner-ops
+                             [[:remove-block-property [[:block/uuid source-uuid]
+                                                       :logseq.property/query]]
+                              [:delete-blocks [[[:block/uuid query-block-uuid]]
+                                               {}]]]
+                             :db-sync/normalized-tx-data []
+                             :db-sync/reversed-tx-data []}])
+            (is (= true
+                   (:applied? (#'sync-apply/apply-history-action! test-repo tx-id false {}))))
+            (let [parent' (d/entity @conn [:block/uuid source-uuid])
+                  query-block (d/entity @conn [:block/uuid query-block-uuid])]
+              (is (some? query-block))
+              (is (= query-block-uuid
+                     (some-> parent' :logseq.property/query :block/uuid))))))))))
+
+(deftest replay-save-block-creates-missing-block-when-structure-present-test
+  (testing "replay save-block should create missing block when parent/page attrs are present"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "seed"}]}]})
+          seed (db-test/find-block-by-content @conn "seed")
+          page-uuid (:block/uuid (:block/page seed))
+          block-uuid (random-uuid)]
+      (is (some? (#'sync-apply/replay-canonical-outliner-op!
+                  conn
+                  [:save-block [{:block/uuid block-uuid
+                                 :block/title ""
+                                 :block/parent [:block/uuid page-uuid]
+                                 :block/page [:block/uuid page-uuid]
+                                 :block/order "a0"}
+                                nil]])))
+      (is (some? (d/entity @conn [:block/uuid block-uuid]))))))
+
 (deftest apply-history-action-redo-replays-status-property-test
   (testing "apply-history-action should redo a status property change"
     (let [conn (db-test/create-conn-with-blocks
