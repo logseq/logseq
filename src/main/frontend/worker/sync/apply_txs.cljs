@@ -22,6 +22,7 @@
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.op :as outliner-op]
             [logseq.outliner.op.construct :as op-construct]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
@@ -684,6 +685,21 @@
                                     (mapv #(rewrite-block-title-with-retracted-refs db %) blocks)
                                     target-block
                                     (assoc (or opts {}) :persist-op? false)))
+
+    :apply-template
+    (let [[template-id target-id opts] args
+          template-id' (replay-entity-id-value @conn template-id)
+          target-id' (replay-entity-id-value @conn target-id)]
+      (when-not (and (int? template-id') (int? target-id'))
+        (invalid-rebase-op! op {:args args
+                                :reason :missing-template-or-target-block}))
+      (outliner-op/apply-ops!
+       conn
+       [[:apply-template [template-id'
+                          target-id'
+                          (assoc (or opts {}) :persist-op? false)]]]
+       {:persist-op? false
+        :gen-undo-ops? false}))
 
     :move-blocks
     (let [[ids target-id opts] args
