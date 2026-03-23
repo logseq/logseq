@@ -3529,9 +3529,9 @@
         (ui-outliner-tx/transact!
          {:outliner-op :save-block}
          (property-handler/set-block-property! (:db/id block) :block/tags :logseq.class/Query)
-         (save-block-inner! block "" {})
          (when query-block
-           (save-block-inner! query-block current-query {}))))))))
+           (save-block-inner! query-block current-query {}))
+         (save-block-inner! block "" {})))))))
 
 (defn quick-add-ensure-new-block-exists!
   []
