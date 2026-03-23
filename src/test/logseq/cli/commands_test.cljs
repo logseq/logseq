@@ -2205,18 +2205,14 @@
          (let [ops* (atom nil)
                action {:type :upsert-block :mode :create :repo "demo"
                        :update-tags [:tag/new]
-                       :remove-tags [:tag/old]
-                       :update-properties {:logseq.property/deadline "2026-01-25T12:00:00Z"}
-                       :remove-properties [:logseq.property/publishing-public?]}]
+                       :update-properties {:logseq.property/deadline "2026-01-25T12:00:00Z"}}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
                                add-command/execute-add-block (fn [_ _] (p/resolved {:status :ok :data {:result [11 12]}}))
                                add-command/resolve-tags (fn [_ _ tags]
                                                           (p/resolved (cond (= tags [:tag/new]) [{:db/id 101}]
-                                                                            (= tags [:tag/old]) [{:db/id 202}]
                                                                             :else nil)))
                                add-command/resolve-properties (fn [_ _ properties & _] (p/resolved properties))
-                               add-command/resolve-property-identifiers (fn [_ _ properties & _] (p/resolved properties))
                                transport/invoke (fn [_ method _ args]
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
@@ -2230,9 +2226,7 @@
                  (p/let [result (commands/execute action {})]
                    (is (= :ok (:status result)))
                    (is (= [11 12] (get-in result [:data :result])))
-                   (is (= [[:batch-delete-property-value [[11 12] :block/tags 202]]
-                           [:batch-remove-property [[11 12] :logseq.property/publishing-public?]]
-                           [:batch-set-property [[11 12] :block/tags 101 {}]]
+                   (is (= [[:batch-set-property [[11 12] :block/tags 101 {}]]
                            [:batch-set-property [[11 12] :logseq.property/deadline "2026-01-25T12:00:00Z" {}]]]
                           @ops*))))
                (p/catch (fn [e] (is false (str "unexpected error: " e))))

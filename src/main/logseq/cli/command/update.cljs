@@ -44,10 +44,13 @@
       "--pos sibling is only valid for block targets"
 
       (and (seq pos) (empty? target-selectors))
-      "--pos is only for adding which requires a target option"
+      "--pos is only valid when a target option is provided"
 
       (and (empty? target-selectors) (not has-updates?))
       "target or update/remove options are required"
+
+      (or (:blocks opts) (:blocks-file opts))
+      "--blocks and --blocks-file are only for create mode"
 
       :else
       nil)))

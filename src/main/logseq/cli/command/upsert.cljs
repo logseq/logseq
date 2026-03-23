@@ -10,9 +10,9 @@
             [promesa.core :as p]))
 
 (def ^:private upsert-block-spec
-  {:id {:desc "Source block db/id (forces update mode)"
+  {:id {:desc "Source block db/id (forces update mode) [update only]"
         :coerce :long}
-   :uuid {:desc "Source block UUID (forces update mode)"
+   :uuid {:desc "Source block UUID (forces update mode) [update only]"
           :validate {:pred (comp parse-uuid str)
                      :ex-msg (constantly "Option uuid must be a valid UUID string")}}
    :target-id {:desc "Target block db/id"
@@ -25,26 +25,26 @@
    :pos {:desc "Position. Default: create=last-child, update=first-child"
          :validate #{"first-child" "last-child" "sibling"}}
    :content {:desc "Block content (create inserts; update rewrites source block content)"}
-   :blocks {:desc "EDN vector of blocks for create mode"}
-   :blocks-file {:desc "EDN file of blocks for create mode"
+   :blocks {:desc "EDN vector of blocks [create only]"}
+   :blocks-file {:desc "EDN file of blocks [create only]"
                  :complete :file}
-   :status {:desc "Task status (create/update)"
+   :status {:desc "Set task status"
             :validate #{"todo" "doing" "done" "now" "later" "wait" "waiting"
                         "backlog" "canceled" "cancelled" "in-review" "in-progress"}}
    :update-tags {:desc "Tags to add/update (EDN vector)"}
    :update-properties {:desc "Properties to add/update (EDN map)"}
-   :remove-tags {:desc "Tags to remove (EDN vector)"}
-   :remove-properties {:desc "Properties to remove (EDN vector)"}})
+   :remove-tags {:desc "Tags to remove (EDN vector) [update only]"}
+   :remove-properties {:desc "Properties to remove (EDN vector) [update only]"}})
 
 (def ^:private upsert-page-spec
-  {:id {:desc "Target page db/id (forces update mode)"
+  {:id {:desc "Target page db/id (forces update mode) [update only]"
         :coerce :long}
    :page {:desc "Page name"
           :complete :pages}
    :update-tags {:desc "Tags to add/update (EDN vector)"}
    :update-properties {:desc "Properties to add/update (EDN map)"}
-   :remove-tags {:desc "Tags to remove (EDN vector)"}
-   :remove-properties {:desc "Properties to remove (EDN vector)"}})
+   :remove-tags {:desc "Tags to remove (EDN vector) [update only]"}
+   :remove-properties {:desc "Properties to remove (EDN vector) [update only]"}})
 
 (def ^:private upsert-tag-spec
   {:id {:desc "Target tag db/id (forces update mode)"
@@ -67,7 +67,8 @@
 (def entries
   [(core/command-entry ["upsert" "block"] :upsert-block "Upsert block" upsert-block-spec
                        {:examples ["logseq upsert block --graph my-graph --target-page Home --content \"New block\""
-                                   "logseq upsert block --graph my-graph --id 123 --content \"Updated content\""]})
+                                   "logseq upsert block --graph my-graph --id 123 --content \"Updated content\""
+                                   "logseq upsert block --graph my-graph --id 123 --target-page Home"]})
    (core/command-entry ["upsert" "page"] :upsert-page "Upsert page" upsert-page-spec
                        {:examples ["logseq upsert page --graph my-graph --page Home --update-tags '[\"project\"]'"]})
    (core/command-entry ["upsert" "tag"] :upsert-tag "Upsert tag" upsert-tag-spec
@@ -162,10 +163,6 @@
             update-tags-result (add-command/parse-tags-option (:update-tags options))
             update-properties-result (add-command/parse-properties-option
                                       (:update-properties options)
-                                      {:allow-non-built-in? true})
-            remove-tags-result (add-command/parse-tags-vector-option (:remove-tags options))
-            remove-properties-result (add-command/parse-properties-vector-option
-                                      (:remove-properties options)
                                       {:allow-non-built-in? true})]
         (cond
           (not (:ok? create-result))
@@ -177,12 +174,6 @@
           (not (:ok? update-properties-result))
           update-properties-result
 
-          (not (:ok? remove-tags-result))
-          remove-tags-result
-
-          (not (:ok? remove-properties-result))
-          remove-properties-result
-
           :else
           (-> create-result
               (update :action
@@ -191,9 +182,7 @@
                             (assoc :type :upsert-block
                                    :mode :create
                                    :update-tags (:value update-tags-result)
-                                   :update-properties (:value update-properties-result)
-                                   :remove-tags (:value remove-tags-result)
-                                   :remove-properties (:value remove-properties-result)))))))))))
+                                   :update-properties (:value update-properties-result)))))))))))
 
 (defn build-page-action
   [options repo]
@@ -511,22 +500,15 @@
   (if (seq block-ids)
     (p/let [cfg (cli-server/ensure-server! config (:repo action))
             update-tags (add-command/resolve-tags cfg (:repo action) (:update-tags action))
-            remove-tags (add-command/resolve-tags cfg (:repo action) (:remove-tags action))
             update-properties (add-command/resolve-properties
                                cfg (:repo action) (:update-properties action)
                                {:allow-non-built-in? true})
-            remove-properties (add-command/resolve-property-identifiers
-                               cfg (:repo action) (:remove-properties action)
-                               {:allow-non-built-in? true})
             update-property-idents (keys (or update-properties {}))
             _ (ensure-property-identifiers-exist! cfg (:repo action) update-property-idents)
-            _ (ensure-property-identifiers-exist! cfg (:repo action) remove-properties)
             ops (append-tag-and-property-ops []
                                              block-ids
                                              {:update-tag-ids (->> update-tags (map :db/id) (remove nil?) distinct vec)
-                                              :remove-tag-ids (->> remove-tags (map :db/id) (remove nil?) distinct vec)
-                                              :update-properties update-properties
-                                              :remove-properties remove-properties})]
+                                              :update-properties update-properties})]
       (when (seq ops)
         (transport/invoke cfg :thread-api/apply-outliner-ops false
                           [(:repo action) ops {}])))
