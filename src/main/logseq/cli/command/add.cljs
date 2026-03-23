@@ -463,7 +463,12 @@
         {:ok? true :value value}
         {:ok? false :message "date property expects a date string"})
 
-      (contains? #{:entity :page :class :property :node :default :any} type)
+      (= type :default)
+      (if (or (string? value) (keyword? value))
+        {:ok? true :value value}
+        {:ok? false :message "default property expects a string value or keyword"})
+
+      (contains? #{:entity :page :class :property :node :any} type)
       {:ok? true :value value}
 
       :else
@@ -868,7 +873,7 @@
                                                                        {:code :invalid-property :property k}))))
                                               {:keys [ok? value message]} (normalize-property-values property v)]
                                         (when-not ok?
-                                          (throw (ex-info "invalid property value"
+                                          (throw (ex-info (str "invalid value for property " (pr-str (name k)) ": " message)
                                                           {:code :invalid-property-value
                                                            :property ident
                                                            :message message})))

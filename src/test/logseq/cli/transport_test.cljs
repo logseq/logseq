@@ -85,6 +85,29 @@
                           (is false (str "unexpected error: " e))
                           (done)))))))
 
+(deftest test-request-error-includes-body
+  (async done
+         (-> (p/let [{:keys [url stop!]} (start-server
+                                           (fn [_req ^js res]
+                                             (.writeHead res 500 #js {"Content-Type" "text/plain"})
+                                             (.end res "property type mismatch")))]
+               (p/catch
+                (transport/request {:method "GET"
+                                    :url (str url "/fail")
+                                    :timeout-ms 1000})
+                (fn [e]
+                  (is (= :http-error (-> (ex-data e) :code)))
+                  (is (= "property type mismatch" (-> (ex-data e) :body)))
+                  (is (re-find #"500" (ex-message e))
+                      "error message includes status code")
+                  (is (re-find #"property type mismatch" (ex-message e))
+                      "error message includes response body")))
+               (p/let [_ (stop!)] true))
+             (p/then (fn [_] (done)))
+             (p/catch (fn [e]
+                        (is false (str "unexpected error: " e))
+                        (done))))))
+
 (deftest test-request-timeout
   (async done
          (-> (p/let [{:keys [url stop!]} (start-server
