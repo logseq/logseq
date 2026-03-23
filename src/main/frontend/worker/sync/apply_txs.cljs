@@ -602,6 +602,10 @@
         v)
       v)))
 
+(defn- replay-entity-id-coll
+  [db ids]
+  (mapv #(or (replay-entity-id-value db %) %) ids))
+
 (defn- ^:large-vars/cleanup-todo replay-canonical-outliner-op!
   [conn [op args]]
   (case op
@@ -702,19 +706,22 @@
 
     :batch-set-property
     (let [[block-ids property-id v opts] args
+          block-ids' (replay-entity-id-coll @conn block-ids)
           property (d/entity @conn property-id)
           _ (when-not (and property
-                           (seq block-ids)
-                           (every? #(some? (d/entity @conn %)) block-ids))
+                           (seq block-ids')
+                           (every? #(some? (d/entity @conn %)) block-ids'))
               (invalid-rebase-op! op {:args args
                                       :reason :missing-block-or-property}))
           v' (replay-property-value @conn property-id v)]
       (when (and (stable-entity-ref-like? v) (nil? v'))
         (invalid-rebase-op! op {:args args}))
-      (outliner-property/batch-set-property! conn block-ids property-id v' opts))
+      (outliner-property/batch-set-property! conn block-ids' property-id v' opts))
 
     :batch-remove-property
-    (apply outliner-property/batch-remove-property! conn args)
+    (let [[block-ids property-id] args
+          block-ids' (replay-entity-id-coll @conn block-ids)]
+      (outliner-property/batch-remove-property! conn block-ids' property-id))
 
     :delete-property-value
     (let [[block-eid property-id property-value] args
@@ -730,16 +737,17 @@
 
     :batch-delete-property-value
     (let [[block-eids property-id property-value] args
+          block-eids' (replay-entity-id-coll @conn block-eids)
           property (d/entity @conn property-id)
           _ (when-not (and property
-                           (seq block-eids)
-                           (every? #(some? (d/entity @conn %)) block-eids))
+                           (seq block-eids')
+                           (every? #(some? (d/entity @conn %)) block-eids'))
               (invalid-rebase-op! op {:args args
                                       :reason :missing-block-or-property}))
           property-value' (replay-property-value @conn property-id property-value)]
       (when (and (stable-entity-ref-like? property-value) (nil? property-value'))
         (invalid-rebase-op! op {:args args}))
-      (outliner-property/batch-delete-property-value! conn block-eids property-id property-value'))
+      (outliner-property/batch-delete-property-value! conn block-eids' property-id property-value'))
 
     :create-property-text-block
     (apply outliner-property/create-property-text-block! conn args)
