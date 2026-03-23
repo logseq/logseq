@@ -48,7 +48,8 @@
     :block.temp/ast-body
     :block.temp/load-status
     :block.temp/has-children?
-    :logseq.property/created-by-ref})
+    :logseq.property/created-by-ref
+    :logseq.property.embedding/hnsw-label-updated-at})
 
 (def rebase-refs-key :db-sync.rebase/refs)
 (def canonical-transact-op [[:transact nil]])
@@ -279,16 +280,22 @@
                     (into [fst-block]
                           (if (and (seq created-rst-uuids)
                                    (= (count rst-blocks) (count created-rst-uuids)))
-                            (map (fn [block uuid]
-                                   (assoc block :block/uuid uuid))
+                            (map (fn [block block-uuid]
+                                   (assoc block
+                                          :block/uuid block-uuid
+                                          :block/parent (let [parent (:block/parent (d/entity db [:block/uuid block-uuid]))]
+                                                          [:block/uuid (:block/uuid parent)])))
                                  rst-blocks
                                  created-rst-uuids)
                             rst-blocks)))
 
                   (and (not (:keep-uuid? opts))
                        (= (count blocks*) (count created-uuids)))
-                  (mapv (fn [block uuid]
-                          (assoc block :block/uuid uuid))
+                  (mapv (fn [block block-uuid]
+                          (assoc block
+                                 :block/uuid block-uuid
+                                 :block/parent (let [parent (:block/parent (d/entity db [:block/uuid block-uuid]))]
+                                                 [:block/uuid (:block/uuid parent)])))
                         blocks*
                         created-uuids)
 
