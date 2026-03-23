@@ -238,6 +238,28 @@
         (is (map? redo-result))
         (is (= "local-1" (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))
 
+(deftest undo-delete-page-restores-page-out-of-recycle-test
+  (testing "undoing delete-page should restore page and clear recycle marker"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          {:keys [page-uuid]} (seed-page-parent-child!)]
+      (outliner-op/apply-ops! conn
+                              [[:delete-page [page-uuid {}]]]
+                              (local-tx-meta {:client-id "test-client"}))
+      (let [deleted-page (d/entity @conn [:block/uuid page-uuid])]
+        (is (some? deleted-page))
+        (is (true? (ldb/recycled? deleted-page))))
+      (let [undo-result (worker-undo-redo/undo test-repo)
+            restored-page (d/entity @conn [:block/uuid page-uuid])]
+        (is (map? undo-result))
+        (is (some? restored-page))
+        (is (false? (ldb/recycled? restored-page)))
+        (is (nil? (:block/parent restored-page)))
+        (is (nil? (:logseq.property/deleted-at restored-page)))
+        (is (nil? (:logseq.property.recycle/original-parent restored-page)))
+        (is (nil? (:logseq.property.recycle/original-page restored-page)))
+        (is (nil? (:logseq.property.recycle/original-order restored-page)))))))
+
 (deftest undo-history-records-forward-ops-for-save-block-test
   (testing "worker save-block history keeps semantic forward ops for redo replay"
     (worker-undo-redo/clear-history! test-repo)
