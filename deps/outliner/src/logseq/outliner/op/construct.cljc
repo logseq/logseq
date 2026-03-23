@@ -123,7 +123,7 @@
   [db block]
   (let [block' (sanitize-block-payload db block)]
     (if (map? block')
-      (dissoc block' :block/parent :block/page :block/order)
+      (dissoc block' :block/page :block/order)
       block')))
 
 (defn- stable-id-coll
@@ -298,15 +298,11 @@
           created-uuids (created-block-uuids-from-tx-data tx-data)
           blocks' (mapv #(sanitize-insert-block-payload db %) blocks)
           target-ref (stable-entity-ref db target-id)
-          target-uuid (when (and (vector? target-ref)
-                                 (= :block/uuid (first target-ref)))
-                        (second target-ref))
           blocks' (cond
                     (and (:replace-empty-target? opts)
-                         target-uuid
                          (seq blocks'))
                     (let [[fst-block & rst-blocks] blocks']
-                      (into [(assoc fst-block :block/uuid target-uuid)]
+                      (into [fst-block]
                             (if (and (not (:keep-uuid? opts))
                                      (= (count rst-blocks) (count created-uuids)))
                               (map (fn [block uuid]
