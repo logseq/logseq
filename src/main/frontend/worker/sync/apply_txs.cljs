@@ -25,6 +25,7 @@
             [logseq.outliner.op.construct :as op-construct]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
+            [medley.core :as medley]
             [promesa.core :as p]))
 
 (defonce *repo->latest-remote-tx (atom {}))
@@ -487,8 +488,8 @@
     outliner-op (assoc :outliner-op outliner-op)))
 
 (defn- local-tx-debug-meta
-  [temp-tx-meta local-txs index local-tx op]
-  (cond-> (assoc temp-tx-meta
+  [tx-meta local-txs index local-tx op]
+  (cond-> (assoc tx-meta
                  :op op
                  :local-tx-index (inc index)
                  :local-tx-count (count local-txs))
@@ -601,17 +602,16 @@
   [conn [op args]]
   (case op
     :save-block
-    (let [[block opts] args]
-      (let [db @conn
-            lookup-ref [:block/uuid (:block/uuid block)]
-            ent (when lookup-ref (d/entity db lookup-ref))]
-        (when-not (some? ent)
-          (invalid-rebase-op! op {:args args}))
-        (let [block' (dissoc block :db/id)]
-          (outliner-core/save-block! conn
-                                     (rewrite-block-title-with-retracted-refs db block')
-                                     (assoc (or opts {}) :persist-op? false))))
-      true)
+    (let [[block opts] args
+          db @conn
+          lookup-ref [:block/uuid (:block/uuid block)]
+          ent (when lookup-ref (d/entity db lookup-ref))]
+      (when-not (some? ent)
+        (invalid-rebase-op! op {:args args}))
+      (let [block' (dissoc block :db/id)]
+        (outliner-core/save-block! conn
+                                   (rewrite-block-title-with-retracted-refs db block')
+                                   (assoc (or opts {}) :persist-op? false))))
 
     :insert-blocks
     (let [[blocks target-id opts] args
@@ -622,8 +622,7 @@
       (outliner-core/insert-blocks! conn
                                     (mapv #(rewrite-block-title-with-retracted-refs db %) blocks)
                                     target-block
-                                    (assoc (or opts {}) :persist-op? false))
-      true)
+                                    (assoc (or opts {}) :persist-op? false)))
 
     :move-blocks
     (let [[ids target-id opts] args
@@ -634,8 +633,7 @@
         (let [target-block (d/entity @conn target-id)]
           (when-not target-block
             (invalid-rebase-op! op {:args args}))
-          (outliner-core/move-blocks! conn blocks target-block (assoc (or opts {}) :persist-op? false)))
-        true))
+          (outliner-core/move-blocks! conn blocks target-block (assoc (or opts {}) :persist-op? false)))))
 
     :move-blocks-up-down
     (let [[ids up?] args
@@ -649,8 +647,7 @@
       (when (empty? blocks)
         (invalid-rebase-op! op {:args args}))
       (when (seq blocks)
-        (outliner-core/indent-outdent-blocks! conn blocks indent? opts))
-      true)
+        (outliner-core/indent-outdent-blocks! conn blocks indent? opts)))
 
     :delete-blocks
     (let [[ids opts] args
@@ -658,20 +655,15 @@
       (when (empty? blocks)
         (invalid-rebase-op! op {:args args}))
       (when (seq blocks)
-        (outliner-core/delete-blocks! conn blocks (assoc (or opts {}) :persist-op? false)))
-      true)
+        (outliner-core/delete-blocks! conn blocks (assoc (or opts {}) :persist-op? false))))
 
     :create-page
-    (do
-      (let [[title opts] args]
-        (outliner-page/create! conn title (assoc (or opts {}) :persist-op? false)))
-      true)
+    (let [[title opts] args]
+      (outliner-page/create! conn title (assoc (or opts {}) :persist-op? false)))
 
     :delete-page
-    (do
-      (let [[page-uuid opts] args]
-        (outliner-page/delete! conn page-uuid (assoc (or opts {}) :persist-op? false)))
-      true)
+    (let [[page-uuid opts] args]
+      (outliner-page/delete! conn page-uuid (assoc (or opts {}) :persist-op? false)))
 
     :set-block-property
     (let [[block-eid property-id v] args
@@ -755,13 +747,12 @@
                                 :args args
                                 :tx-data tx-data})
       (when-let [tx-data (seq tx-data)]
-        (ldb/transact! conn tx-data {:outliner-op :transact})
-        true))))
+        (ldb/transact! conn tx-data {:outliner-op :transact})))))
 
 (defn- rebase-op-driven-local-tx!
-  [conn local-txs index local-tx temp-tx-meta]
+  [conn local-txs index local-tx tx-meta]
   (let [outliner-ops (:outliner-ops local-tx)
-        replay-meta (assoc (local-tx-debug-meta temp-tx-meta local-txs index local-tx :rebase)
+        replay-meta (assoc (local-tx-debug-meta tx-meta local-txs index local-tx :rebase)
                            :db-sync/tx-id (:tx-id local-tx)
                            :db-sync/forward-outliner-ops (:forward-outliner-ops local-tx)
                            :db-sync/inverse-outliner-ops (:inverse-outliner-ops local-tx)
@@ -770,21 +761,21 @@
       (ldb/batch-transact!
        conn
        replay-meta
-       (fn [row-conn _*batch-tx-data]
+       (fn [conn]
          (if (= [[:transact nil]] outliner-ops)
            (when-let [tx-data (seq (:tx local-tx))]
              ;; Preflight first to avoid noisy transact stack traces for known stale refs.
              (try
-               (d/with @row-conn tx-data {:outliner-op :transact
-                                          :persist-op? false})
+               (d/with @conn tx-data {:outliner-op :transact
+                                      :persist-op? false})
                (catch :default error
                  (invalid-rebase-op! :transact
                                      {:reason :invalid-transact
                                       :error-message (ex-message error)})))
-             (ldb/transact! row-conn tx-data {:outliner-op :transact
-                                              :persist-op? false}))
+             (ldb/transact! conn tx-data {:outliner-op :transact
+                                          :persist-op? false}))
            (doseq [op outliner-ops]
-             (replay-canonical-outliner-op! row-conn op)))))
+             (replay-canonical-outliner-op! conn op)))))
       (catch :default error
         (let [drop-log {:tx-id (:tx-id local-tx)
                         :outliner-ops outliner-ops
@@ -799,14 +790,18 @@
             (log/warn :db-sync/drop-op-driven-pending-tx drop-log)))
         nil))))
 
+(declare handle-local-tx!)
 (defn- rebase-local-txs!
-  [conn local-txs temp-tx-meta]
-  (->> local-txs
-       (map-indexed
-        (fn [index local-tx]
-          (rebase-op-driven-local-tx! conn local-txs index local-tx temp-tx-meta)))
-       (keep identity)
-       vec))
+  [repo conn local-txs tx-meta]
+  (ldb/batch-transact!
+   conn
+   tx-meta
+   (fn [conn]
+     (doseq [[idx local-tx] (medley/indexed local-txs)]
+       (rebase-op-driven-local-tx! conn local-txs idx local-tx {})))
+   {:listen-db (fn [tx-report]
+                 (when (seq (:tx-data tx-report))
+                   (handle-local-tx! repo tx-report)))}))
 
 (defn- fix-tx!
   [conn remote-tx-report rebase-tx-report tx-meta]
@@ -829,12 +824,8 @@
                             batch-tx-meta
                             (fn [conn]
                               (transact-remote-txs! conn remote-txs batch-tx-meta)))
-          tx-meta {:local-tx? true
-                   :gen-undo-ops? false
-                   :persist-op? true}
           _ (remove-pending-txs! repo (map :tx-id local-txs))
-          rebase-result (rebase-local-txs! conn local-txs tx-meta)
-          rebase-tx-report (combine-tx-reports rebase-result)]
+          rebase-tx-report (rebase-local-txs! repo conn local-txs batch-tx-meta)]
       (fix-tx! conn remote-tx-report rebase-tx-report {:outliner-op :rebase-fix}))))
 
 (defn- apply-remote-tx-without-local-changes!
@@ -908,7 +899,7 @@
    "enqueue-local-tx!"
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (when-not (or (:rtc-tx? tx-meta)
-                   (:batch-tx? @conn)
+                   (and (:batch-tx? @conn) (not= :rebase (:op tx-meta)))
                    (:mark-embedding? tx-meta))
        (when (seq tx-data)
          (let [normalized (normalize-tx-data db-after db-before tx-data)
