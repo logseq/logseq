@@ -292,22 +292,26 @@
                                   :block/uuid)
         existing-page-by-journal-uuid (when (uuid? journal-page-uuid)
                                         (d/entity db [:block/uuid journal-page-uuid]))
-        existing-page-id (some->> existing-names-page
-                                  (filter #(try (when-let [e (and class-ident-namespace? (d/entity db %))]
-                                                  (let [ns' (namespace (:db/ident e))]
-                                                    (= (str ns') class-ident-namespace)))
-                                                (catch :default _ false)))
-                                  (first))
+        existing-page-id (if class-ident-namespace?
+                           (some->> existing-names-page
+                                    (filter #(try (when-let [e (d/entity db %)]
+                                                    (let [ns' (namespace (:db/ident e))]
+                                                      (= (str ns') class-ident-namespace)))
+                                                  (catch :default _ false)))
+                                    (first))
+                           (first existing-names-page))
         existing-page (or (some->> existing-page-id (d/entity db))
                           existing-page-by-journal-uuid)]
     (if (and existing-page
              (or (:block/journal-day existing-page)
-                 (not (:block/parent existing-page))))
+                 (not (:block/parent existing-page))
+                 (ldb/recycled? existing-page)))
       (let [tx-meta {:persist-op? persist-op?
                      :outliner-op :save-block}]
-        (if (and class?
-                 (not (ldb/class? existing-page))
-                 (ldb/internal-page? existing-page))
+        (cond
+          (and class?
+               (not (ldb/class? existing-page))
+               (ldb/internal-page? existing-page))
           ;; Convert existing page to class
           (let [tx-data [(merge (db-class/build-new-class db
                                                           (select-keys existing-page [:block/title :block/uuid :block/created-at])
@@ -319,7 +323,20 @@
              :tx-data tx-data
              :page-uuid (:block/uuid existing-page)
              :title (:block/title existing-page)})
+
+          (ldb/recycled? existing-page)
+          (let [options' (assoc options :uuid (:block/uuid existing-page))
+                tx-meta' (outliner-tx-meta/ensure-outliner-ops
+                          {:persist-op? persist-op?
+                           :outliner-op :create-page}
+                          [:create-page [title options']])]
+            {:tx-meta tx-meta'
+             :tx-data (outliner-recycle/restore-tx-data db existing-page)
+             :page-uuid (:block/uuid existing-page)
+             :title (:block/title existing-page)})
+
           ;; Just return existing page info
+          :else
           {:page-uuid (:block/uuid existing-page)
            :title (:block/title existing-page)}))
       (let [page (gp-block/page-name->map title db true date-formatter
