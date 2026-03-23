@@ -1,5 +1,5 @@
 (ns logseq.cli.command.add
-  "Add-related CLI commands."
+  "Add-related CLI commands. Used by upsert to provide create mode"
   (:require ["fs" :as fs]
             [cljs-time.coerce :as tc]
             [cljs.reader :as reader]
@@ -8,8 +8,8 @@
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
             [logseq.common.util :as common-util]
-            [logseq.common.util.page-ref :as page-ref]
             [logseq.common.util.date-time :as date-time-util]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.property :as db-property]
@@ -608,6 +608,9 @@
 
       (and has-blocks? (or has-tags? has-properties?))
       "tags and properties cannot be combined with --blocks or --blocks-file"
+
+      (or (:remove-tags opts) (:remove-properties opts))
+      "--remove-tags and --remove-properties are only for update mode"
 
       :else
       nil)))
