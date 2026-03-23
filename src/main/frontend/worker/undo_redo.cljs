@@ -52,13 +52,14 @@
 
 (def ^:private undo-op-validator (m/validator [:sequential undo-op-item-schema]))
 
-(defonce max-stack-length 100)
+(defonce max-stack-length 250)
 (defonce *undo-ops (atom {}))
 (defonce *redo-ops (atom {}))
 (defonce *pending-editor-info (atom {}))
 
 (defn clear-history!
   [repo]
+  (prn :debug ::clear-history!)
   (swap! *undo-ops assoc repo [])
   (swap! *redo-ops assoc repo [])
   (swap! *pending-editor-info dissoc repo))
@@ -427,8 +428,6 @@
                       history-data]]
                     (remove nil?)
                     vec)]
-        ;; A new local edit invalidates any redo history.
-        (swap! *redo-ops assoc repo [])
         (push-undo-op repo op)))))
 
 (defn get-debug-state

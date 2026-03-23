@@ -192,7 +192,7 @@
            should-inc-pending? (not= true (:db-sync/pending? existing-ent))
            now (.now js/Date)
            {:keys [forward-outliner-ops inverse-outliner-ops]}
-           (worker-util/profile "derive-history-outliner-ops" (doall (derive-history-outliner-ops db-before db-after tx-data tx-meta)))
+           (worker-util/profile "derive-history-outliner-ops" (derive-history-outliner-ops db-before db-after tx-data tx-meta))
            outliner-ops forward-outliner-ops
            inferred-outliner-ops?' (inferred-outliner-ops? tx-meta)]
        (ldb/transact! conn [{:db-sync/tx-id tx-id
