@@ -1427,6 +1427,63 @@
           (is (= #{"page y"}
                  (set (map :block/name (:user.property/x7 block'))))))))))
 
+(deftest replay-batch-set-property-converts-raw-uuid-ids-to-eids-test
+  (testing "replay should resolve raw uuid block ids for batch-set-property"
+    (let [graph {:properties {:heading {:db/ident :logseq.property/heading
+                                        :logseq.property/type :number
+                                        :db/cardinality :db.cardinality/one}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "local object"}]}]}
+          conn (db-test/create-conn-with-blocks graph)
+          block (db-test/find-block-by-content @conn "local object")
+          block-ref [:block/uuid (:block/uuid block)]]
+      (is (some? (#'sync-apply/replay-canonical-outliner-op!
+                  conn
+                  [:batch-set-property [[(:block/uuid block)]
+                                        :logseq.property/heading
+                                        2
+                                        nil]])))
+      (is (= 2
+             (:logseq.property/heading (d/entity @conn block-ref)))))))
+
+(deftest apply-history-action-redo-replays-batch-set-property-with-raw-uuid-ids-test
+  (testing "redo should replay batch-set-property when semantic op stores raw uuid block ids"
+    (let [graph {:properties {:heading {:db/ident :logseq.property/heading
+                                        :logseq.property/type :number
+                                        :db/cardinality :db.cardinality/one}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "local object"}]}]}
+          conn (db-test/create-conn-with-blocks graph)
+          client-ops-conn (d/create-conn client-op/schema-in-db)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (let [block (db-test/find-block-by-content @conn "local object")
+                block-uuid (:block/uuid block)
+                block-ref [:block/uuid block-uuid]
+                action-tx-id (random-uuid)]
+            (ldb/transact! client-ops-conn
+                           [{:db-sync/tx-id action-tx-id
+                             :db-sync/pending? true
+                             :db-sync/forward-outliner-ops
+                             [[:batch-set-property [[block-uuid]
+                                                    :logseq.property/heading
+                                                    2
+                                                    nil]]]
+                             :db-sync/inverse-outliner-ops
+                             [[:batch-remove-property [[block-ref]
+                                                       :logseq.property/heading]]]
+                             :db-sync/normalized-tx-data []
+                             :db-sync/reversed-tx-data []}])
+            (is (= true
+                   (:applied? (#'sync-apply/apply-history-action! test-repo action-tx-id false {}))))
+            (is (= 2
+                   (:logseq.property/heading (d/entity @conn block-ref))))
+            (is (= true
+                   (:applied? (#'sync-apply/apply-history-action! test-repo action-tx-id true {}))))
+            (is (nil? (:logseq.property/heading (d/entity @conn block-ref))))))))))
+
 (deftest replay-set-block-property-converts-lookup-ref-to-eid-test
   (testing "replay should resolve stable lookup refs back to entity ids for set-block-property"
     (let [graph {:properties {:x7 {:logseq.property/type :page
