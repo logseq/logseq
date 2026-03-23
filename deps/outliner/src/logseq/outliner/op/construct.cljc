@@ -752,6 +752,21 @@
                           :batch-remove-property
                           (inverse-property-op db-before op args)
 
+                          :create-property-text-block
+                          (let [[_block-id _property-id _value opts] args
+                                new-block-id (:new-block-id opts)
+                                new-block-ref (cond
+                                                (vector? new-block-id)
+                                                new-block-id
+
+                                                (uuid? new-block-id)
+                                                [:block/uuid new-block-id]
+
+                                                :else
+                                                (stable-entity-ref db-before new-block-id))]
+                            (when new-block-ref
+                              [:delete-blocks [[new-block-ref] {}]]))
+
                           :class-add-property
                           (let [[class-id property-id] args]
                             [:class-remove-property [(stable-entity-ref db-before class-id)

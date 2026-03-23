@@ -824,6 +824,7 @@
                                     (:tx-data rebase-tx-report)
                                     tx-meta))
 
+;; TODO: batch sync db to main thread
 (defn- apply-remote-tx-with-local-changes!
   [{:keys [repo conn local-txs remote-txs]}]
   (let [batch-tx-meta {:rtc-tx? true
