@@ -16,14 +16,17 @@
 (defn sync-counts
   [{:keys [get-datascript-conn
            get-client-ops-conn
+           get-pending-local-tx-count
            get-unpushed-asset-ops-count
            get-local-tx
            get-graph-uuid
            latest-remote-tx]}
    repo]
   (when (get-datascript-conn repo)
-    (let [pending-local (when-let [conn (client-ops-conn get-client-ops-conn repo)]
-                          (count (d/datoms @conn :avet :db-sync/created-at)))
+    (let [pending-local (if get-pending-local-tx-count
+                          (get-pending-local-tx-count repo)
+                          (when-let [conn (client-ops-conn get-client-ops-conn repo)]
+                            (count (d/datoms @conn :avet :db-sync/pending? true))))
           pending-asset (get-unpushed-asset-ops-count repo)
           local-tx (get-local-tx repo)
           remote-tx (get latest-remote-tx repo)

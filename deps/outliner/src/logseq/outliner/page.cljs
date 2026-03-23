@@ -19,6 +19,7 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.text :as text]
             [logseq.outliner.recycle :as outliner-recycle]
+            [logseq.outliner.tx-meta :as outliner-tx-meta]
             [logseq.outliner.validate :as outliner-validate]))
 
 (defn- db-refs->page
@@ -47,7 +48,7 @@
 (defn- build-page-retract-tx
   "Build cleanup tx-data for deleting a schema page.
    This is pure and can be reused by sync repair."
-  [db page & [{:keys [include-page-retract?]
+  [db page & [{:keys [include-page-retract? today-page?]
                :or {include-page-retract? true}}]]
   (let [page-id (:db/id page)
         page-blocks-tx-data (->> (:block/_page page)
@@ -65,11 +66,13 @@
         page-tx (when (and include-page-retract?
                            (d/entity db page-id))
                   [[:db/retractEntity page-id]])]
-    (concat page-blocks-tx-data
-            property-pair-tx-data
-            restore-class-parent-tx
-            (db-refs->page page)
-            page-tx)))
+    (if today-page?
+      page-blocks-tx-data
+      (concat page-blocks-tx-data
+              property-pair-tx-data
+              restore-class-parent-tx
+              (db-refs->page page)
+              page-tx))))
 
 (defn delete!
   "Deletes a page. Returns true if able to delete page. If unable to delete,
@@ -86,23 +89,23 @@
     (when-let [page (d/entity @conn [:block/uuid page-uuid])]
       (let [today-page? (when-let [day (:block/journal-day page)]
                           (= (date-time-util/ms->journal-day (js/Date.)) day))
-            tx-meta (cond-> {:outliner-op :delete-page
-                             :deleted-page (:block/title page)
-                             :persist-op? persist-op?}
+            tx-meta (cond-> (outliner-tx-meta/ensure-outliner-ops
+                             {:outliner-op :delete-page
+                              :deleted-page (:block/title page)
+                              :persist-op? persist-op?}
+                             [:delete-page [page-uuid {:deleted-by-uuid deleted-by-uuid
+                                                       :now-ms now-ms}]])
                       rename?
                       (assoc :real-outliner-op :rename-page))]
         ;; TODO: maybe we should add $$$favorites to built-in pages?
         (cond
-          today-page?
-          false
-
           (or (ldb/built-in? page) (ldb/hidden? page))
           (do
             (error-handler {:msg "Built-in page cannot be deleted"})
             false)
 
-          (or (ldb/class? page) (ldb/property? page))
-          (let [tx-data (build-page-retract-tx @conn page)]
+          (or (ldb/class? page) (ldb/property? page) today-page?)
+          (let [tx-data (build-page-retract-tx @conn page {:today-page? today-page?})]
             (ldb/transact! conn tx-data tx-meta)
             true)
 
@@ -343,8 +346,10 @@
                      ;; transact doesn't support entities
                      (remove de/entity? parents')
                      page-txs)
-                tx-meta (cond-> {:persist-op? persist-op?
-                                 :outliner-op :create-page}
+                tx-meta (cond-> (outliner-tx-meta/ensure-outliner-ops
+                                 {:persist-op? persist-op?
+                                  :outliner-op :create-page}
+                                 [:create-page [title options]])
                           today-journal?
                           (assoc :create-today-journal? true
                                  :today-journal-name title))]

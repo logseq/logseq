@@ -19,18 +19,19 @@
             [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.embedding :as embedding]
             [frontend.worker.export :as worker-export]
-            [frontend.worker.handler.page :as worker-page]
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.publish]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
+            [frontend.worker.sync.apply-txs :as sync-apply]
             [frontend.worker.sync.asset-db-listener]
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.log-and-state :as rtc-log-and-state]
             [frontend.worker.thread-atom]
+            [frontend.worker.undo-redo :as worker-undo-redo]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
@@ -50,7 +51,6 @@
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.gc :as sqlite-gc]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.recycle :as outliner-recycle]
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
@@ -636,6 +636,44 @@
         (log/error ::worker-transact-failed e)
         (throw e)))))
 
+(def-thread-api :thread-api/apply-history-action
+  [repo tx-id undo? tx-meta]
+  (assert (some? repo))
+  (worker-state/set-db-latest-tx-time! repo)
+  (sync-apply/apply-history-action! repo tx-id undo? tx-meta))
+
+(def-thread-api :thread-api/undo-redo-set-pending-editor-info
+  [repo editor-info]
+  (worker-undo-redo/set-pending-editor-info! repo editor-info)
+  nil)
+
+(def-thread-api :thread-api/undo-redo-record-editor-info
+  [repo editor-info]
+  (worker-undo-redo/record-editor-info! repo editor-info)
+  nil)
+
+(def-thread-api :thread-api/undo-redo-record-ui-state
+  [repo ui-state-str]
+  (worker-undo-redo/record-ui-state! repo ui-state-str)
+  nil)
+
+(def-thread-api :thread-api/undo-redo-undo
+  [repo]
+  (worker-undo-redo/undo repo))
+
+(def-thread-api :thread-api/undo-redo-redo
+  [repo]
+  (worker-undo-redo/redo repo))
+
+(def-thread-api :thread-api/undo-redo-clear-history
+  [repo]
+  (worker-undo-redo/clear-history! repo)
+  nil)
+
+(def-thread-api :thread-api/undo-redo-get-debug-state
+  [repo]
+  (worker-undo-redo/get-debug-state repo))
+
 (def-thread-api :thread-api/get-initial-data
   [repo opts]
   (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -1110,36 +1148,6 @@
             dbs (ldb/read-transit-str r)]
       (p/all (map #(.unsafeUnlinkDB this (:name %)) dbs)))))
 
-(defn- delete-page!
-  [conn page-uuid opts]
-  (let [error-handler (fn [{:keys [msg]}]
-                        (worker-util/post-message :notification
-                                                  [[:div [:p msg]] :error]))]
-    (worker-page/delete! conn page-uuid (merge opts {:error-handler error-handler}))))
-
-(defn- create-page!
-  [conn title options]
-  (try
-    (worker-page/create! conn title options)
-    (catch :default e
-      (js/console.error e)
-      (throw e))))
-
-(defn- outliner-register-op-handlers!
-  []
-  (outliner-op/register-op-handlers!
-   {:create-page (fn [conn [title options]]
-                   (create-page! conn title options))
-    :rename-page (fn [conn [page-uuid new-title]]
-                   (if (string/blank? new-title)
-                     (throw (ex-info "Page name shouldn't be blank" {:block/uuid page-uuid
-                                                                     :block/title new-title}))
-                     (outliner-core/save-block! conn
-                                                {:block/uuid page-uuid
-                                                 :block/title new-title})))
-    :delete-page (fn [conn [page-uuid opts]]
-                   (delete-page! conn page-uuid opts))}))
-
 (defn- on-become-master
   [repo start-opts]
   (js/Promise.
@@ -1232,7 +1240,6 @@
     (log/set-levels {:glogi/root :info})
     (log/add-handler worker-state/log-append!)
     (check-worker-scope!)
-    (outliner-register-op-handlers!)
     (js/setInterval #(.postMessage js/self "keepAliveResponse") (* 1000 25))
     (Comlink/expose proxy-object)
     (let [^js wrapped-main-thread* (Comlink/wrap js/self)

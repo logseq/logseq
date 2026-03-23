@@ -194,7 +194,7 @@
       :else
       nil)))
 
-(defn- restore-tx-data
+(defn restore-tx-data
   [db root]
   (when-let [{:keys [parent page order]} (restore-target db root)]
     (let [subtree (when-not (ldb/page? root)

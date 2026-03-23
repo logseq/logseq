@@ -28,6 +28,7 @@
   (sync-presence/sync-counts
    {:get-datascript-conn worker-state/get-datascript-conn
     :get-client-ops-conn worker-state/get-client-ops-conn
+    :get-pending-local-tx-count client-op/get-pending-local-tx-count
     :get-unpushed-asset-ops-count client-op/get-unpushed-asset-ops-count
     :get-local-tx client-op/get-local-tx
     :get-graph-uuid client-op/get-graph-uuid
@@ -95,7 +96,11 @@
 (defn- pending-local-tx?
   [repo]
   (when-let [conn (client-ops-conn repo)]
-    (boolean (first (d/datoms @conn :avet :db-sync/created-at)))))
+    (boolean
+     (some (fn [datom]
+             (let [ent (d/entity @conn (:e datom))]
+               (not= false (:db-sync/pending? ent))))
+           (d/datoms @conn :avet :db-sync/created-at)))))
 
 (defn- checksum-compare-ready?
   [repo client local-t remote-t]

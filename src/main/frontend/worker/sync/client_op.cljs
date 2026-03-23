@@ -28,6 +28,7 @@
                                   (ma/-fail! ::ops-schema (select-keys % [:value])))))
 
 (def ^:private asset-op-types #{:update-asset :remove-asset})
+(defonce *repo->pending-local-tx-count (atom {}))
 
 (def schema-in-db
   "TODO: rename this db-name from client-op to client-metadata+op.
@@ -41,7 +42,12 @@
    :db-sync/checksum {:db/index true}
    :db-sync/tx-id {:db/unique :db.unique/identity}
    :db-sync/created-at {:db/index true}
+   :db-sync/pending? {:db/index true}
    :db-sync/outliner-op {}
+   :db-sync/outliner-ops {}
+   :db-sync/forward-outliner-ops {}
+   :db-sync/inverse-outliner-ops {}
+   :db-sync/inferred-outliner-ops? {}
    :db-sync/tx-data {}
    :db-sync/normalized-tx-data {}
    :db-sync/reversed-tx-data {}})
@@ -100,6 +106,24 @@
     (let [r (:v (first (d/datoms @conn :avet :local-tx)))]
       ;; (assert (some? r))
       r)))
+
+(defn get-pending-local-tx-count
+  [repo]
+  (if-let [cached (get @*repo->pending-local-tx-count repo)]
+    cached
+    (let [count' (if-let [conn (worker-state/get-client-ops-conn repo)]
+                   (count (d/datoms @conn :avet :db-sync/pending? true))
+                   0)]
+      (swap! *repo->pending-local-tx-count assoc repo count')
+      count')))
+
+(defn adjust-pending-local-tx-count!
+  [repo delta]
+  (swap! *repo->pending-local-tx-count
+         (fn [m]
+           (let [base (or (get m repo) 0)
+                 next (max 0 (+ base delta))]
+             (assoc m repo next)))))
 
 (defn get-local-checksum
   [repo]

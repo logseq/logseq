@@ -1,10 +1,12 @@
 (ns logseq.outliner.op
   "Transact outliner ops"
-  (:require [datascript.core :as d]
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
             [logseq.outliner.transaction :as outliner-tx]
             [malli.core :as m]))
@@ -152,8 +154,6 @@
 
 (def ^:private ops-validator (m/validator ops-schema))
 
-(defonce ^:private *op-handlers (atom {}))
-
 (defn- reaction-user-id
   [reaction]
   (:db/id (:logseq.property/created-by-ref reaction)))
@@ -185,10 +185,6 @@
           (ldb/transact! conn [reaction-tx]
                          {:outliner-op :toggle-reaction})
           true)))))
-
-(defn register-op-handlers!
-  [handlers]
-  (reset! *op-handlers handlers))
 
 (defn- import-edn-data
   [conn *result export-map {:keys [tx-meta] :as import-options}]
@@ -275,26 +271,41 @@
     :class-remove-property
     (apply outliner-property/class-remove-property! conn args)
 
-    :upsert-closed-value
+    :upsert-closed-value ; don't support undo/redo
     (apply outliner-property/upsert-closed-value! conn args)
 
-    :delete-closed-value
+    :delete-closed-value ; don't support undo/redo
     (apply outliner-property/delete-closed-value! conn args)
 
-    :add-existing-values-to-closed-values
+    :add-existing-values-to-closed-values ; don't support undo/redo
     (apply outliner-property/add-existing-values-to-closed-values! conn args)
 
-    :batch-import-edn
+    :batch-import-edn                   ; don't support undo/redo
     (apply import-edn-data conn *result args)
 
-    :transact
+    :transact                           ; don't support undo/redo
     (apply ldb/transact! conn args)
+
+    :create-page
+    (let [[title options] args]
+      (reset! *result (outliner-page/create! conn title (or options {}))))
+
+    :rename-page
+    (let [[page-uuid new-title] args]
+      (if (string/blank? new-title)
+        (throw (ex-info "Page name shouldn't be blank" {:block/uuid page-uuid
+                                                        :block/title new-title}))
+        (outliner-core/save-block! conn
+                                   {:block/uuid page-uuid
+                                    :block/title new-title})))
+
+    :delete-page
+    (let [[page-uuid opts] args]
+      (outliner-page/delete! conn page-uuid (merge opts opts')))
 
     :toggle-reaction
     (reset! *result (apply toggle-reaction! conn args))
-
-    (when-let [handler (get @*op-handlers op)]
-      (reset! *result (handler conn args)))))
+    nil))
 
 (defn apply-ops!
   [conn ops opts]
@@ -303,7 +314,9 @@
                                 (first (first ops)))
         opts' (cond-> (assoc opts
                              :transact-opts {:conn conn}
-                             :local-tx? true)
+                             :local-tx? true
+                             :outliner-ops ops
+                             :db-sync/tx-id (or (:db-sync/tx-id opts) (random-uuid)))
                 (and single-op-outliner-op
                      (nil? (:outliner-op opts)))
                 (assoc :outliner-op single-op-outliner-op))
