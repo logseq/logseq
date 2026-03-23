@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
 
 # install NodeJS & yarn
-RUN curl -sL https://deb.nodesource.com/setup_18.x | bash -
+RUN curl -sL https://deb.nodesource.com/setup_24.x | bash -
 
 RUN curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | \
     tee /etc/apt/trusted.gpg.d/yarn.gpg && \
@@ -32,7 +32,7 @@ RUN git clone -b master https://github.com/logseq/logseq.git .
 
 RUN yarn config set network-timeout 240000 -g && yarn install
 
-RUN  yarn release 
+RUN  yarn release
 
 # Web App Runner image
 FROM nginx:1.24.0-alpine3.17
