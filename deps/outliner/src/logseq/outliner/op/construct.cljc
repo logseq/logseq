@@ -20,6 +20,7 @@
     :create-page
     :rename-page
     :delete-page
+    :restore-recycled
     :set-block-property
     :remove-block-property
     :batch-set-property
@@ -366,6 +367,10 @@
     (let [[page-uuid opts] args]
       [:delete-page [page-uuid opts]])
 
+    :restore-recycled
+    (let [[root-id] args]
+      [:restore-recycled [root-id]])
+
     :set-block-property
     (let [[block-eid property-id v] args]
       [:set-block-property [(stable-entity-ref db block-eid)
@@ -667,14 +672,9 @@
               (conj page-save-op)
               (seq root-plans)
               (into (mapv #(to-insert-op db-before %) root-plans)))))
-        (let [block-save-ops (->> (:block/_page page)
-                                  (keep #(entity->save-op db-before %))
-                                  vec)]
-          (cond-> []
-            page-save-op
-            (conj page-save-op)
-            (seq block-save-ops)
-            (into block-save-ops)))))))
+        ;; Soft-deleted pages are moved to Recycle with recycle metadata.
+        ;; Use restore semantics instead of save-block to retract recycle markers.
+        [:restore-recycled [page-uuid]]))))
 
 (defn- build-strict-inverse-outliner-ops
   [db-before forward-ops]
@@ -931,6 +931,7 @@
   (let [{:keys [forward-outliner-ops inverse-outliner-ops]}
         (derive-history-outliner-ops db-before db-after tx-data tx-meta)]
     (when (and (contains? semantic-outliner-ops (:outliner-op tx-meta))
+               (not= :restore-recycled (:outliner-op tx-meta))
                (or
                 (empty? forward-outliner-ops)
                 (empty? inverse-outliner-ops)))

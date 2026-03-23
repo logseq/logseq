@@ -177,9 +177,8 @@
             (op-construct/derive-history-outliner-ops
              @conn @conn [] {:outliner-op :delete-page
                              :outliner-ops [[:delete-page [(:block/uuid page) {}]]]})]
-        (is (= :save-block (ffirst inverse-outliner-ops)))
-        (is (= (:block/uuid page)
-               (get-in inverse-outliner-ops [0 1 0 :block/uuid])))))
+        (is (= [[:restore-recycled [(:block/uuid page)]]]
+               inverse-outliner-ops))))
 
     (testing ":set-block-property"
       (let [{:keys [inverse-outliner-ops]}
