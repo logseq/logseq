@@ -189,20 +189,23 @@
   (let [conn-state-before @(:atom conn)
         _ (swap! conn assoc :skip-store? true
                  :batch-tx? true)
-        *batch-tx-data (volatile! [])]
-    (d/listen! conn ::batch-tx
+        *batch-tx-data (volatile! [])
+        listen-keyword (keyword "batch-tx" (str (random-uuid)))]
+    (d/listen! conn listen-keyword
                (fn [{:keys [tx-data] :as tx-report}]
                  (vswap! *batch-tx-data into tx-data)
                  (when (fn? listen-db)
                    (listen-db tx-report))))
-    (batch-tx-fn conn)
-    (d/unlisten! conn ::batch-tx)
-    (let [tx-data @*batch-tx-data]
-      (reset! (:atom conn) conn-state-before)
-      (vreset! *batch-tx-data nil)
-      (when (seq tx-data)
-        ;; transact tx-data to `conn` and validate db
-        (transact! conn tx-data tx-meta)))))
+    (try
+      (batch-tx-fn conn)
+      (let [tx-data @*batch-tx-data]
+        (reset! (:atom conn) conn-state-before)
+        (vreset! *batch-tx-data nil)
+        (when (seq tx-data)
+          ;; transact tx-data to `conn` and validate db
+          (transact! conn tx-data tx-meta)))
+      (finally
+        (d/unlisten! conn listen-keyword)))))
 
 (def page? entity-util/page?)
 (def internal-page? entity-util/internal-page?)
