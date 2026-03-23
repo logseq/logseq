@@ -208,23 +208,25 @@
   (when-let [conn (client-ops-conn repo)]
     (let [db @conn
           datoms (d/datoms db :avet :db-sync/created-at)
-          datoms' (if limit (take limit datoms) datoms)]
-      (->> datoms'
+          take-limit (fn [c]
+                       (if limit (take limit c) c))]
+      (->> datoms
            (map (fn [datom]
                   (d/entity db (:e datom))))
+           (filter (fn [e] (:db-sync/pending? e)))
+           take-limit
            (keep (fn [ent]
-                   (when (not= false (:db-sync/pending? ent))
-                     (let [tx-id (:db-sync/tx-id ent)
-                           tx' (:db-sync/normalized-tx-data ent)
-                           reversed-tx' (:db-sync/reversed-tx-data ent)]
-                       {:tx-id tx-id
-                        :outliner-op (:db-sync/outliner-op ent)
-                        :outliner-ops (:db-sync/outliner-ops ent)
-                        :forward-outliner-ops (:db-sync/forward-outliner-ops ent)
-                        :inverse-outliner-ops (:db-sync/inverse-outliner-ops ent)
-                        :inferred-outliner-ops? (:db-sync/inferred-outliner-ops? ent)
-                        :tx tx'
-                        :reversed-tx reversed-tx'}))))
+                   (let [tx-id (:db-sync/tx-id ent)
+                         tx' (:db-sync/normalized-tx-data ent)
+                         reversed-tx' (:db-sync/reversed-tx-data ent)]
+                     {:tx-id tx-id
+                      :outliner-op (:db-sync/outliner-op ent)
+                      :outliner-ops (:db-sync/outliner-ops ent)
+                      :forward-outliner-ops (:db-sync/forward-outliner-ops ent)
+                      :inverse-outliner-ops (:db-sync/inverse-outliner-ops ent)
+                      :inferred-outliner-ops? (:db-sync/inferred-outliner-ops? ent)
+                      :tx tx'
+                      :reversed-tx reversed-tx'})))
            vec))))
 
 (defn- pending-tx-by-id
@@ -325,8 +327,7 @@
                        (assoc :db-sync/inverse-outliner-ops
                               (vec (if undo? (:forward-outliner-ops action)
                                        (:inverse-outliner-ops action)))))]
-        (prn :debug ::apply-history-action!)
-        (pprint/pprint (select-keys action [:tx-id :outliner-op :forward-outliner-ops :inverse-outliner-ops]))
+        ;; (pprint/pprint (select-keys action [:tx-id :outliner-op :forward-outliner-ops :inverse-outliner-ops]))
         (cond
           (and semantic-forward?
                (not (seq ops)))
@@ -599,29 +600,26 @@
 
     :move-blocks
     (let [[ids target-id opts] args
-          source-op (:source-op opts)
           blocks (keep #(d/entity @conn %) ids)]
-      (when-not (seq blocks)
-        (invalid-rebase-op! op {:args args}))
-      (case source-op
-        :move-blocks-up-down
-        (do
-          (outliner-core/move-blocks-up-down! conn blocks (:up? opts))
-          true)
-
-        :indent-outdent-blocks
-        (do
-          (outliner-core/indent-outdent-blocks! conn
-                                                blocks
-                                                (:indent? opts)
-                                                (assoc (dissoc opts :source-op :indent?) :persist-op? false))
-          true)
-
+      (when (seq blocks)
         (let [target-block (d/entity @conn target-id)]
           (when-not target-block
             (invalid-rebase-op! op {:args args}))
-          (outliner-core/move-blocks! conn blocks target-block (assoc (or opts {}) :persist-op? false))
-          true)))
+          (outliner-core/move-blocks! conn blocks target-block (assoc (or opts {}) :persist-op? false)))
+        true))
+
+    :move-blocks-up-down
+    (let [[ids up?] args
+          blocks (keep #(d/entity @conn %) ids)]
+      (when (seq blocks)
+        (outliner-core/move-blocks-up-down! conn blocks up?)))
+
+    :indent-outdent-blocks
+    (let [[ids indent? opts] args
+          blocks (keep #(d/entity @conn %) ids)]
+      (when (seq blocks)
+        (outliner-core/indent-outdent-blocks! conn blocks indent? opts))
+      true)
 
     :delete-blocks
     (let [[ids opts] args

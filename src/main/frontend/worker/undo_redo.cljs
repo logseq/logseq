@@ -362,7 +362,8 @@
                         (if undo? ::empty-undo-stack ::empty-redo-stack))))
                   (catch :default e
                     (log/error ::undo-redo-worker-failed e)
-                    (clear-history! repo)
+                    (throw e)
+                    ;; (clear-history! repo)
                     (if undo? ::empty-undo-stack ::empty-redo-stack)))
                 (run-local-path)))))))
 

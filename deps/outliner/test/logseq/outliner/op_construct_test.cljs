@@ -3,7 +3,19 @@
             [datascript.core :as d]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.test.helper :as db-test]
+            [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op.construct :as op-construct]))
+
+(defn- run-direct-outdent
+  [conn block]
+  (let [{:keys [tx-data]}
+        (#'outliner-core/indent-outdent-blocks
+         conn [block] false
+         :parent-original nil
+         :logical-outdenting? nil)
+        tx-report (d/with @conn tx-data {})]
+    {:tx-data (:tx-data tx-report)
+     :db-after (:db-after tx-report)}))
 
 (deftest derive-history-outliner-ops-canonicalizes-create-page-and-builds-delete-inverse-test
   (testing "create-page forward op keeps created uuid and reverse op deletes that page"
@@ -250,3 +262,59 @@
                                                                {:property-name "test-inverse"}]]]})]
         (is (= [[:delete-page [expected-page-uuid {}]]]
                inverse-outliner-ops))))))
+
+(deftest build-history-action-metadata-direct-outdent-builds-move-forward-and-inverse-test
+  (testing "direct outdent on last sibling canonicalizes to move-blocks and builds inverse move"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page"}
+                   :blocks [{:block/title "parent"
+                             :build/children [{:block/title "child-1"}
+                                              {:block/title "child-2"}
+                                              {:block/title "child-3"}]}]}]})
+          child-2 (db-test/find-block-by-content @conn "child-2")
+          child-3 (db-test/find-block-by-content @conn "child-3")
+          parent (db-test/find-block-by-content @conn "parent")
+          {:keys [tx-data db-after]} (run-direct-outdent conn child-3)
+          tx-meta {:outliner-op :move-blocks
+                   :outliner-ops [[:indent-outdent-blocks [[(:db/id child-3)]
+                                                           false
+                                                           {:parent-original nil
+                                                            :logical-outdenting? nil}]]]}
+          {:keys [db-sync/forward-outliner-ops db-sync/inverse-outliner-ops]}
+          (op-construct/build-history-action-metadata
+           {:db-before @conn
+            :db-after db-after
+            :tx-data tx-data
+            :tx-meta tx-meta})]
+      (is (= [[:move-blocks [[[:block/uuid (:block/uuid child-3)]]
+                             [:block/uuid (:block/uuid parent)]
+                             {:parent-original nil
+                              :logical-outdenting? nil
+                              :sibling? true}]]]
+             forward-outliner-ops))
+      (is (= [[:move-blocks [[[:block/uuid (:block/uuid child-3)]]
+                             [:block/uuid (:block/uuid child-2)]
+                             {:sibling? true}]]]
+             inverse-outliner-ops)))))
+
+(deftest derive-history-outliner-ops-direct-outdent-with-extra-moved-blocks-falls-back-to-transact-test
+  (testing "direct outdent touching non-selected block ids remains transact placeholder"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page"}
+                   :blocks [{:block/title "parent"
+                             :build/children [{:block/title "child-1"}
+                                              {:block/title "child-2"}
+                                              {:block/title "child-3"}]}]}]})
+          child-2 (db-test/find-block-by-content @conn "child-2")
+          {:keys [tx-data db-after]} (run-direct-outdent conn child-2)
+          tx-meta {:outliner-op :move-blocks
+                   :outliner-ops [[:indent-outdent-blocks [[(:db/id child-2)]
+                                                           false
+                                                           {:parent-original nil
+                                                            :logical-outdenting? nil}]]]}
+          {:keys [forward-outliner-ops inverse-outliner-ops]}
+          (op-construct/derive-history-outliner-ops @conn db-after tx-data tx-meta)]
+      (is (= op-construct/canonical-transact-op forward-outliner-ops))
+      (is (nil? inverse-outliner-ops)))))
