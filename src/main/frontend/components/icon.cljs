@@ -1409,6 +1409,71 @@
                        (string/upper-case (subs word 0 char-count))))]
       (subs initials 0 (min 3 (count initials))))))
 
+(def ^:private abbreviated-stop-words
+  #{"the" "a" "an" "of" "to" "in" "for" "and" "or" "on" "at" "by"
+    "from" "with" "about" "into" "how" "what" "my" "your" "this" "that"})
+
+(defn- normalize-word-boundaries
+  "Pre-process title to split camelCase, snake_case, and kebab-case into spaces."
+  [title]
+  (-> title
+      (string/replace #"\s*\([^)]*\)\s*" " ")
+      (string/replace #"([a-z])([A-Z])" "$1 $2")
+      (string/replace "_" " ")
+      (string/replace #"(\w)-(\w)" "$1 $2")
+      string/trim
+      (string/replace #"\s+" " ")))
+
+(defn derive-abbreviated
+  "Derive abbreviated form from page title (max 8 chars).
+   Returns nil if result equals derive-initials output (to avoid duplicates).
+   Examples: 'Software Engineer' -> 'Soft Eng', 'Math 203' -> 'Math 203'"
+  [title]
+  (when title
+    (let [normalized (normalize-word-boundaries (string/trim title))
+          max-len 8]
+      (when-not (string/blank? normalized)
+        (if (<= (count normalized) max-len)
+          (let [initials (derive-initials title)]
+            (when (not= normalized initials)
+              normalized))
+          (let [words (string/split normalized #"\s+")]
+            (if (<= (count words) 1)
+              (let [result (subs (first words) 0 (min max-len (count (first words))))
+                    initials (derive-initials title)]
+                (when (not= result initials)
+                  result))
+              (let [significant (if (>= (count words) 3)
+                                  (let [filtered (remove #(contains? abbreviated-stop-words
+                                                                     (string/lower-case %))
+                                                         words)]
+                                    (if (>= (count filtered) 2)
+                                      (vec filtered)
+                                      (vec words)))
+                                  (vec words))
+                    w1 (first significant)
+                    w2 (second significant)
+                    joined (str w1 " " w2)
+                    text-budget (dec max-len)
+                    result (if (<= (count joined) max-len)
+                             joined
+                             (cond
+                               (<= (count w1) 3)
+                               (str w1 " " (subs w2 0 (min (count w2)
+                                                           (- text-budget (count w1)))))
+                               (<= (count w2) 3)
+                               (str (subs w1 0 (min (count w1)
+                                                    (- text-budget (count w2))))
+                                    " " w2)
+                               :else
+                               (let [half (js/Math.ceil (/ text-budget 2))
+                                     len1 (min (count w1) half)
+                                     len2 (min (count w2) (- text-budget len1))]
+                                 (str (subs w1 0 len1) " " (subs w2 0 len2)))))
+                    initials (derive-initials title)]
+                (when (not= result initials)
+                  result)))))))))
+
 (rum/defc text-tab-cp
   [*q page-title *color opts]
   (let [query @*q
@@ -2969,6 +3034,9 @@
   (rum/local nil ::text-value)
   (rum/local nil ::alignment)
   (rum/local nil ::color)
+  (rum/local nil ::mode)
+  (rum/local false ::deleted?)
+  (rum/local nil ::persist-timer)
   {:will-mount (fn [s]
                  (let [opts (first (:rum/args s))
                        current-icon (:current-icon opts)
@@ -2978,43 +3046,51 @@
                                          (:block/title)))
                        existing-value (get-in current-icon [:data :value])
                        existing-alignment (get-in current-icon [:data :alignment])
-                       existing-color (get-in current-icon [:data :color])]
+                       existing-color (get-in current-icon [:data :color])
+                       existing-mode (get-in current-icon [:data :mode])]
                    (reset! (::text-value s) (or existing-value (derive-initials title)))
                    (reset! (::alignment s) (or existing-alignment "center"))
                    (reset! (::color s) existing-color)
+                   (reset! (::mode s) (or existing-mode "initials"))
                    s))
    :will-unmount (fn [s]
-                   ;; Persist on unmount
-                   (let [opts (first (:rum/args s))
-                         on-chosen (:on-chosen opts)
-                         *tv (::text-value s)
-                         *al (::alignment s)
-                         *co (::color s)
-                         title (or (:page-title opts)
-                                   (some-> (state/get-current-page)
-                                           (db/get-page)
-                                           (:block/title)))
-                         derived (or (derive-initials title) "?")
-                         text (if (string/blank? @*tv) derived @*tv)
-                         icon-item {:type :text
-                                    :id (str "text-" text)
-                                    :label text
-                                    :data (cond-> {:value text}
-                                            @*co (assoc :color @*co)
-                                            @*al (assoc :alignment @*al))}]
-                     (on-chosen nil icon-item true)
-                     (add-used-item! icon-item))
+                   (when-let [t @(::persist-timer s)]
+                     (js/clearTimeout t))
+                   (when-not @(::deleted? s)
+                     (let [opts (first (:rum/args s))
+                           on-chosen (:on-chosen opts)
+                           *tv (::text-value s)
+                           *al (::alignment s)
+                           *co (::color s)
+                           *md (::mode s)
+                           title (or (:page-title opts)
+                                     (some-> (state/get-current-page)
+                                             (db/get-page)
+                                             (:block/title)))
+                           derived (or (derive-initials title) "?")
+                           text (if (string/blank? @*tv) derived @*tv)
+                           icon-item {:type :text
+                                      :id (str "text-" text)
+                                      :label text
+                                      :data (cond-> {:value text}
+                                              @*co (assoc :color @*co)
+                                              @*al (assoc :alignment @*al)
+                                              @*md (assoc :mode @*md))}]
+                       (on-chosen nil icon-item true)
+                       (add-used-item! icon-item)))
                    s)}
   [state {:keys [on-chosen on-back on-delete del-btn? page-title]}]
   (let [*text-value (::text-value state)
         *alignment (::alignment state)
         *color (::color state)
+        *mode (::mode state)
+        *deleted? (::deleted? state)
         title (or page-title
                   (some-> (state/get-current-page)
                           (db/get-page)
                           (:block/title)))
         derived-initials (or (derive-initials title) "?")
-        ;; Build icon item from current local state
+        derived-abbreviated (derive-abbreviated title)
         build-icon (fn [text-override]
                      (let [text (or text-override
                                     (if (string/blank? @*text-value) derived-initials @*text-value))]
@@ -3023,11 +3099,27 @@
                         :label text
                         :data (cond-> {:value text}
                                 @*color (assoc :color @*color)
-                                @*alignment (assoc :alignment @*alignment))}))
+                                @*alignment (assoc :alignment @*alignment)
+                                @*mode (assoc :mode @*mode))}))
+        *persist-timer (::persist-timer state)
         persist! (fn []
+                   (when-let [t @*persist-timer]
+                     (js/clearTimeout t)
+                     (reset! *persist-timer nil))
                    (let [icon-item (build-icon nil)]
                      (on-chosen nil icon-item true)
-                     (add-used-item! icon-item)))]
+                     (add-used-item! icon-item)))
+        persist-debounced! (fn []
+                             (when-let [t @*persist-timer]
+                               (js/clearTimeout t))
+                             (reset! *persist-timer
+                                     (js/setTimeout #(persist!) 300)))
+        gallery-options (cond-> [{:mode "initials" :text derived-initials :label "Initials"}]
+                          derived-abbreviated
+                          (conj {:mode "abbreviated" :text derived-abbreviated :label "Abbreviated"})
+                          true
+                          (conj {:mode "custom" :text nil :label "Custom"}))
+        current-mode @*mode]
     [:div.text-picker
      ;; Topbar
      [:div.text-picker-topbar
@@ -3047,19 +3139,42 @@
                                                 :label text
                                                 :data (cond-> {:value text}
                                                         c (assoc :color c)
-                                                        @*alignment (assoc :alignment @*alignment))}]
+                                                        @*alignment (assoc :alignment @*alignment)
+                                                        @*mode (assoc :mode @*mode))}]
                                  (on-chosen nil icon-item true))))
         (when del-btn?
           (shui/button {:variant :outline :size :sm :data-action "del"
-                        :on-click on-delete}
+                        :on-click (fn []
+                                    (reset! *deleted? true)
+                                    (on-delete))}
                        (shui/tabler-icon "trash" {:size 17})))]]
       (shui/separator {:class "my-0 opacity-50"})]
 
      ;; Body
      [:div.text-picker-body
-      ;; Preview
-      [:div.text-picker-preview
-       (icon (build-icon nil) {:size 48})]
+      ;; Gallery row — Initials / Abbreviated / Custom
+      [:div.text-picker-gallery
+       (for [{:keys [mode text label]} gallery-options]
+         (let [selected? (= current-mode mode)
+               display-text (if (= mode "custom")
+                              (when-not (string/blank? @*text-value)
+                                @*text-value)
+                              text)]
+           [:button.text-picker-gallery-item
+            {:key mode
+             :class (when selected? "selected")
+             :on-click (fn []
+                         (reset! *mode mode)
+                         (case mode
+                           "initials" (reset! *text-value derived-initials)
+                           "abbreviated" (reset! *text-value derived-abbreviated)
+                           "custom" nil)
+                         (persist!))}
+            [:div.text-picker-gallery-preview
+             (if display-text
+               (icon (build-icon display-text) {:size 36})
+               (shui/tabler-icon "pencil" {:size 20}))]
+            [:span.text-picker-gallery-label label]]))]
 
       (shui/separator {:class "my-0 opacity-50 -mx-3"})
 
@@ -3076,10 +3191,15 @@
           :value @*text-value
           :on-change (fn [e]
                        (let [v (util/evalue e)]
-                         (reset! *text-value v)))
+                         (reset! *text-value v)
+                         (when (not= @*mode "custom")
+                           (reset! *mode "custom"))
+                         (persist-debounced!)))
           :on-blur (fn [_e]
                      (when (string/blank? @*text-value)
-                       (reset! *text-value derived-initials)))})]
+                       (reset! *text-value derived-initials)
+                       (reset! *mode "initials"))
+                     (persist!))})]
 
        ;; Alignment
        [:div.text-picker-section
@@ -3093,7 +3213,8 @@
               :variant (if active? :secondary :outline)
               :size :sm
               :on-click (fn []
-                          (reset! *alignment align))}
+                          (reset! *alignment align)
+                          (persist!))}
              (shui/tabler-icon (str "align-" align) {:size 16}))))]]]]]))
 
 (rum/defcs ^:large-vars/cleanup-todo icon-search < rum/reactive
