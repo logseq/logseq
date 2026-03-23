@@ -37,7 +37,7 @@
        [:<>
         (if backup-folder
           [:div.flex.flex-row.items-center.gap-1.text-sm
-           [:div.opacity-50 (str "Backup folder:")]
+               [:div.opacity-50 "Backup folder:"]
            backup-folder
            (shui/button
             {:variant :ghost

@@ -1,18 +1,19 @@
 (ns logseq.sdk.ui
-  (:require [frontend.handler.notification :as notification]
-            [cljs-bean.core :as bean]
-            [goog.dom :as gdom]
-            [sci.core :as sci]
+  (:require [cljs-bean.core :as bean]
+            [cljs.reader :as reader]
+            [clojure.string :as string]
+            [frontend.handler.notification :as notification]
             [frontend.util :as util]
-            [clojure.string :as string]))
+            [goog.dom :as gdom]
+            [lambdaisland.glogi :as log]))
 
 (defn- parse-hiccup-ui
   [input]
   (when (string? input)
     (try
-      (sci/eval-string input {:preset :termination-safe})
+      (reader/read-string input)
       (catch :default e
-        (js/console.error "[parse hiccup error]" e) input))))
+        (log/error :parse-hiccup-error e) input))))
 
 (defn -show_msg
   ([content] (-show_msg content :success nil))
