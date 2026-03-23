@@ -81,6 +81,11 @@
    (plugin/user-proxy-settings-container agent-opts)
    {:id :https-proxy-panel :center? true :class "lg:max-w-2xl"}))
 
+(defmethod events/handle :go/sync-server-settings [[_]]
+  (shui/dialog-open!
+   (settings/sync-server-url-settings-container)
+   {:id :sync-server-panel :center? true :class "lg:max-w-2xl"}))
+
 (defmethod events/handle :redirect-to-home [_]
   (page-handler/create-today-journal!)
   (when (util/capacitor?)
@@ -331,8 +336,8 @@
          (state/pub-event! [:rtc/sync-app-state])
          (state/<invoke-db-worker :thread-api/set-db-sync-config
                                   {:enabled? true
-                                   :ws-url config/db-sync-ws-url
-                                   :http-base config/db-sync-http-base})
+                                   :ws-url (config/db-sync-ws-url)
+                                   :http-base (config/db-sync-http-base)})
          (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys))
         (p/catch (fn [error]
                    (log/error :db-sync/ensure-user-rsa-keys-failed error)

@@ -50,15 +50,66 @@
 (goog-define ENABLE-DB-SYNC-LOCAL false)
 (defonce db-sync-local? ENABLE-DB-SYNC-LOCAL)
 
-(defonce db-sync-ws-url
+(defonce default-db-sync-ws-url
   (if db-sync-local?
     "ws://127.0.0.1:8787/sync/%s"
     "wss://api.logseq.io/sync/%s"))
 
-(defonce db-sync-http-base
+(defonce default-db-sync-http-base
   (if db-sync-local?
     "http://127.0.0.1:8787"
     "https://api.logseq.io"))
+
+(defn get-custom-sync-server-url
+  "Read the user-configured custom sync server URL from localStorage.
+   Returns nil when not set or empty."
+  []
+  (when-not util/node-test?
+    (let [v (.getItem js/localStorage "sync-server-url")]
+      (when (and (string? v) (not (string/blank? v)))
+        v))))
+
+(defn set-custom-sync-server-url!
+  "Persist the custom sync server URL to localStorage. Pass nil or empty string to clear."
+  [url]
+  (when-not util/node-test?
+    (if (or (nil? url) (string/blank? url))
+      (.removeItem js/localStorage "sync-server-url")
+      (.setItem js/localStorage "sync-server-url" (string/trim url)))))
+
+(defn valid-sync-server-url?
+  "Return true when `url` looks like a valid HTTP(S) base URL."
+  [url]
+  (and (string? url)
+       (re-find #"^https?://" url)))
+
+(defn custom-url->ws-url
+  "Derive a WebSocket sync URL from a custom HTTP base URL. Pure function."
+  [custom-url]
+  (let [scheme (if (string/starts-with? custom-url "https") "wss" "ws")
+        base (-> custom-url
+                 (string/replace #"^https?://" "")
+                 (string/replace #"/+$" ""))]
+    (str scheme "://" base "/sync/%s")))
+
+(defn custom-url->http-base
+  "Normalize a custom HTTP base URL by stripping trailing slashes. Pure function."
+  [custom-url]
+  (string/replace custom-url #"/+$" ""))
+
+(defn db-sync-ws-url
+  "Return the WebSocket sync URL. Uses custom server when configured, otherwise the default."
+  []
+  (if-let [custom (get-custom-sync-server-url)]
+    (custom-url->ws-url custom)
+    default-db-sync-ws-url))
+
+(defn db-sync-http-base
+  "Return the HTTP base URL for sync. Uses custom server when configured, otherwise the default."
+  []
+  (if-let [custom (get-custom-sync-server-url)]
+    (custom-url->http-base custom)
+    default-db-sync-http-base))
 
 ;; Feature flags
 ;; =============

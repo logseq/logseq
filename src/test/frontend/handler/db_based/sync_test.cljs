@@ -417,6 +417,10 @@
                           (is false (str error))
                           (done)))))))
 
+;; Simulates real-world fetch() behaviour: the body is already decompressed
+;; (plain NDJSON) but the `content-encoding: gzip` header is still present.
+;; The old `response-body-stream` trusted that header and piped through
+;; DecompressionStream again, causing Z_DATA_ERROR: incorrect header check.
 (deftest rtc-download-graph-streams-gzip-snapshot-test
   (async done
          (let [import-calls (atom [])
@@ -428,19 +432,20 @@
                asset-url "http://base/assets/graph-1/snapshot-1.snapshot"
                worker-prev @state/*db-worker]
            (reset! state/*db-worker nil)
-           (-> (p/let [gzip-bytes (<gzip-bytes jsonl-bytes)
-                       stream (bytes->stream gzip-bytes 3)]
+           (-> (p/let [stream (bytes->stream jsonl-bytes 3)]
                  (set! js/fetch
                        (fn [url opts]
                          (let [method (or (aget opts "method") "GET")]
                            (cond
                              (and (= url asset-url) (= method "GET"))
+                             ;; Body is plain NDJSON but header still says gzip —
+                             ;; exactly what browsers/Node do after auto-decompression.
                              (js/Promise.resolve
                               #js {:ok true
                                    :status 200
                                    :headers #js {:get (fn [header]
                                                         (case header
-                                                          "content-length" (str (.-byteLength gzip-bytes))
+                                                          "content-length" (str (.-byteLength jsonl-bytes))
                                                           "content-encoding" "gzip"
                                                           nil))}
                                    :body stream
