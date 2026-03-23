@@ -7,7 +7,6 @@
                      ["@capacitor/clipboard" :as CapacitorClipboard]
                      ["@capacitor/core" :refer [Capacitor]]
                      ["@capacitor/status-bar" :refer [^js StatusBar Style]]
-                     ["grapheme-splitter" :as GraphemeSplitter]
                      ["path-complete-extname" :as pathCompleteExtname]
                      ["semver" :as semver]
                      [cljs-bean.core :as bean]
@@ -337,10 +336,21 @@
     (.-selectionDirection input)))
 
 #?(:cljs
+   (defonce ^:private ^js grapheme-segmenter
+     (when (gobj/getValueByKeys js/globalThis "Intl" "Segmenter")
+       (js/Intl.Segmenter. "und" #js {:granularity "grapheme"}))))
+
+#?(:cljs
+   (defn- split-grapheme-clusters
+     [s]
+     (if grapheme-segmenter
+       (mapv #(.-segment ^js %) (js/Array.from (.segment grapheme-segmenter s)))
+       (vec (js/Array.from s)))))
+
+#?(:cljs
    (defn split-graphemes
      [s]
-     (let [^js splitter (GraphemeSplitter.)]
-       (.splitGraphemes splitter s))))
+     (split-grapheme-clusters s)))
 
 #?(:cljs
    (defn get-graphemes-pos
@@ -348,8 +358,7 @@
 
       multi-char count as 1, like emoji characters"
      [s from-index]
-     (let [^js splitter (GraphemeSplitter.)]
-       (.countGraphemes splitter (subs s 0 from-index)))))
+     (count (split-grapheme-clusters (subs s 0 from-index)))))
 
 #?(:cljs
    (defn get-line-pos
@@ -358,11 +367,10 @@
 
       multi-char count as 1, like emoji characters"
      [s from-newline-index]
-     (let [^js splitter (GraphemeSplitter.)
-           last-newline-pos (string/last-index-of s \newline (dec from-newline-index))
+     (let [last-newline-pos (string/last-index-of s \newline (dec from-newline-index))
            before-last-newline-length (or last-newline-pos -1)
            last-newline-content (subs s (inc before-last-newline-length) from-newline-index)]
-       (.countGraphemes splitter last-newline-content))))
+       (count (split-grapheme-clusters last-newline-content)))))
 
 #?(:cljs
    (defn stop [e]
@@ -595,9 +603,9 @@
        (if-let [input (and (>= len 2) (<= current-pos len)
                            (.substring input (max (- current-pos 20) 0) current-pos))]
          (try
-           (let [^js splitter (GraphemeSplitter.)
-                 ^js input' (.splitGraphemes splitter input)]
-             (- current-pos (.-length (.pop input'))))
+           (if-let [last-grapheme (peek (split-grapheme-clusters input))]
+             (- current-pos (.-length last-grapheme))
+             (dec current-pos))
            (catch :default e
              (js/console.error e)
              (dec current-pos)))
@@ -612,9 +620,9 @@
        (if-let [input (and (>= len 2) (<= current-pos len)
                            (.substr input current-pos 20))]
          (try
-           (let [^js splitter (GraphemeSplitter.)
-                 ^js input (.splitGraphemes splitter input)]
-             (+ current-pos (.-length (.shift input))))
+           (if-let [first-grapheme (first (split-grapheme-clusters input))]
+             (+ current-pos (.-length first-grapheme))
+             (inc current-pos))
            (catch :default e
              (js/console.error e)
              (inc current-pos)))
@@ -757,6 +765,7 @@
    (defn react
      [ref]
      (when ref
+       #_{:clj-kondo/ignore [:private-call]}
        (if rum/*reactions*
          (rum/react ref)
          @ref))))

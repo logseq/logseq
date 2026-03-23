@@ -274,7 +274,7 @@
                                (notification/show!
                                 (str
                                  (if (= :error type) "[Error]" "")
-                                 (str "<" (:id payload) "> ")
+                                 "<" (:id payload) "> "
                                  msg) type)))
 
                            (when-not fake-error?

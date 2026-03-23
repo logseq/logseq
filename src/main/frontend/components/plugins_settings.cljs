@@ -138,7 +138,7 @@
           [:div.code-mode-wrap.pl-3.pr-1.py-1.mb-8.-ml-1
            (let [content' (js/JSON.stringify (bean/->js settings) nil 2)]
              (lazy-editor/editor {:file? false}
-                                 (str "code-edit-lsp-settings")
+                                 "code-edit-lsp-settings"
                                  {:data-lang "json"}
                                  content' {}))
            [:div.flex.justify-end.pt-2.gap-2

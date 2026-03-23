@@ -1,4 +1,4 @@
-import katexPkg from "https://esm.sh/katex@0.16.10?bundle";
+import katexPkg from "https://esm.sh/katex@0.16.38?bundle";
 
 // Core CodeMirror pieces
 import { EditorState } from "https://esm.sh/@codemirror/state@6";

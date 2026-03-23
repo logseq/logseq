@@ -1,12 +1,13 @@
 (ns frontend.inference-worker.inference-worker
   "Worker used for text embedding and vector-db"
+  ;; Turn off false defclass errors
+  {:clj-kondo/config {:linters {:unresolved-symbol {:level :off}}}}
   (:require ["comlink" :as Comlink]
             [frontend.inference-worker.text-embedding :as infer-worker.text-embedding]
             [lambdaisland.glogi.console :as glogi-console]
             [promesa.core :as p]
             [shadow.cljs.modern :refer [defclass]]))
 
-#_{:clj-kondo/ignore [:unresolved-symbol]}
 (defclass InferenceWorker
   (extends js/Object)
   (constructor
@@ -66,7 +67,7 @@
                    (fn [^js e]
                      (glogi-console/install!)
                      (let [port (first (.-ports e))
-                           ^js obj #_{:clj-kondo/ignore [:unresolved-symbol]} (InferenceWorker.)]
+                           ^js obj (InferenceWorker.)]
                        (reset! infer-worker.text-embedding/*port port)
                        (.start port)
                        (Comlink/expose obj port))))

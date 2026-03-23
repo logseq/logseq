@@ -7,8 +7,8 @@
     "mldoc": "^1.5.9"
   },
   "dependencies": {
-    "better-sqlite3": "^12.6.2",
-    "fs-extra": "^11.3.0"
+    "better-sqlite3": "^12.8.0",
+    "fs-extra": "^11.3.4"
   },
   "scripts": {
     "test": "yarn nbb-logseq -cp test -m nextjournal.test-runner"

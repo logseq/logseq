@@ -1,6 +1,5 @@
 (ns frontend.handler.repo
   "System-component-like ns that manages user's repos/graphs"
-  (:refer-clojure :exclude [clone])
   (:require [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.config :as config]

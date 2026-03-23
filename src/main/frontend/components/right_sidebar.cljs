@@ -292,17 +292,17 @@
                             ::init-key (random-uuid)))}
   [state repo idx db-id block-type block-count]
   (let [drag-from (rum/react *drag-from)
-        drag-to (rum/react *drag-to)]
-    (let [collapsed? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
-      (sidebar-item-inner db-id {:repo repo
-                                 :idx idx
-                                 :block-type block-type
-                                 :collapsed? collapsed?
-                                 :drag-from drag-from
-                                 :drag-to drag-to
-                                 :block-count block-count
-                                 :*db-id (::db-id state)
-                                 :init-key (::init-key state)}))))
+        drag-to (rum/react *drag-to)
+        collapsed? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
+    (sidebar-item-inner db-id {:repo repo
+                               :idx idx
+                               :block-type block-type
+                               :collapsed? collapsed?
+                               :drag-from drag-from
+                               :drag-to drag-to
+                               :block-count block-count
+                               :*db-id (::db-id state)
+                               :init-key (::init-key state)})))
 
 (defn- get-page
   [match]
@@ -386,8 +386,8 @@
                                       ratio (.toFixed (/ offset width) 6)
                                       ratio (if (= handler-position :west) (- 1 ratio) ratio)]
                                   (when (and (> ratio min-ratio) (< ratio max-ratio) (not (zero? keyboard-step)))
-                                    (do (add-resizing-class)
-                                        (set-width! ratio)))))))
+                                    (add-resizing-class)
+                                    (set-width! ratio))))))
              (.on "keyup" remove-resizing-class)))
        #())
      [])

@@ -27,7 +27,7 @@
     (send-to-renderer "notification" {:type "error"
                                       :payload (str "Failed to open link. Cannot match graph identifier `" graph-identifier "` to any linked graph.")})
     (send-to-renderer "notification" {:type "error"
-                                      :payload (str "Failed to open link. Missing graph identifier after `logseq://graph/`.")})))
+                                      :payload "Failed to open link. Missing graph identifier after `logseq://graph/`."})))
 
 (defn local-url-handler
   "Given a URL with `graph identifier` as path, `page` (optional) and `block-id`

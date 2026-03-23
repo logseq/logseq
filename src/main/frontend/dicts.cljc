@@ -1,9 +1,10 @@
 (ns ^:bb-compatible frontend.dicts
   "Provides dictionary entries for most of the application"
-  (:require #?(:clj [clojure.edn :as edn])
-            #?@(:bb [[clojure.java.io :as io]]
-                :clj [[clojure.java.io :as io]
-                      [shadow.resource :as rc]]))
+  #?(:bb (:require [clojure.edn :as edn]
+                   [clojure.java.io :as io])
+     :clj (:require [clojure.edn :as edn]
+                    [clojure.java.io :as io]
+                    [shadow.resource :as rc]))
   #?(:cljs (:require-macros [frontend.dicts :refer [edn-resource]])))
 
 #?(:clj (defn resource [file] (slurp (io/resource file))))

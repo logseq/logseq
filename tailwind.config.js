@@ -133,7 +133,7 @@ module.exports = {
     './packages/ui/src/amplify/**/*.{ts,tsx}'
   ],
   safelist: [
-    'bg-black', 'bg-white', 'capitalize-first',
+    'bg-black', 'bg-white',
     { pattern: /bg-(gray|red|yellow|green|blue|orange|indigo|rose|purple|pink)-(100|200|300|400|500|600|700|800|900)/ },
     { pattern: /text-(gray|red|yellow|green|blue|orange|indigo|rose|purple|pink)-(100|200|300|400|500|600|700|800|900)/ },
     { pattern: /columns-([1-9]|1[0-2])|(auto|3xs|2xs|xs|sm|md|lg|xl)|([2-7]xl)/ },
@@ -142,7 +142,6 @@ module.exports = {
     require('@tailwindcss/forms'),
     require('@tailwindcss/typography'),
     require('@tailwindcss/aspect-ratio'),
-    require('tailwind-capitalize-first-letter'),
     require('tailwindcss-animate'),
     exposeColorsToCssVars
   ],

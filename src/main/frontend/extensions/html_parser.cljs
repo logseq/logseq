@@ -206,9 +206,9 @@
                            (let [columns (count (last (first children)))]
                              (str
                               (map-join children)
-                              (str "| " (string/join " | "
-                                                     (repeat columns "----"))
-                                   " |")))
+                              "| "
+                              (string/join " | " (repeat columns "----"))
+                              " |"))
                            :tr
                            (str "| "
                                 (->> (map #(transform-fn % (assoc opts :in-table? true)) children)

@@ -15,6 +15,8 @@ const mobileJsPath = path.join(mobilePath, 'js')
 const sourcePath = path.join(__dirname, 'src/main/frontend')
 const resourceFilePath = path.join(resourcesPath, '**')
 const outputFilePath = path.join(outputPath, '**')
+const rawCopySrc = (globs, options = {}) =>
+  gulp.src(globs, { encoding: false, ...options })
 const staticCleanKeep = new Set([
   'entitlements.plist',
   'forge.config.js',
@@ -76,24 +78,23 @@ const common = {
   },
 
   syncResourceFile () {
-    return gulp.src(resourceFilePath).pipe(gulp.dest(outputPath))
+    return rawCopySrc(resourceFilePath).pipe(gulp.dest(outputPath))
   },
 
   // NOTE: All assets from node_modules are copied to the output directory
   syncAssetFiles (...params) {
     return gulp.series(
-      () => gulp.src([
+      () => rawCopySrc([
         'node_modules/katex/dist/katex.min.js',
         'node_modules/katex/dist/contrib/mhchem.min.js',
         'node_modules/html2canvas/dist/html2canvas.min.js',
         'node_modules/interactjs/dist/interact.min.js',
         'node_modules/photoswipe/dist/umd/*.js',
-        'node_modules/shepherd.js/dist/js/shepherd.min.js',
-        'node_modules/marked/marked.min.js',
+        'node_modules/marked/lib/marked.umd.js',
         'node_modules/@highlightjs/cdn-assets/highlight.min.js',
         'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
         'packages/ui/dist/ui.js',
-        'node_modules/@sqlite.org/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
+        'node_modules/@sqlite.org/sqlite-wasm/dist/sqlite3.wasm',
         'node_modules/react/umd/react.production.min.js',
         'node_modules/react/umd/react.development.js',
         'node_modules/react-dom/umd/react-dom.production.min.js',
@@ -107,32 +108,31 @@ const common = {
         pipe(replace('"@tabler/icons-react"]={},a.react,',
           '"tablerIcons"]={},a.React,')).
         pipe(gulp.dest(path.join(outputPath, 'js'))),
-      () => gulp.src([
+      () => rawCopySrc([
         'node_modules/@glidejs/glide/dist/glide.min.js',
         'node_modules/@glidejs/glide/dist/css/glide.core.min.css',
         'node_modules/@glidejs/glide/dist/css/glide.theme.min.css',
       ]).pipe(gulp.dest(path.join(outputPath, 'js', 'glide'))),
-      () => gulp.src([
+      () => rawCopySrc([
         'node_modules/pdfjs-dist/legacy/build/pdf.mjs',
         'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
         'node_modules/pdfjs-dist/legacy/web/pdf_viewer.mjs',
       ]).pipe(gulp.dest(path.join(outputPath, 'js', 'pdfjs'))),
-      () => gulp.src([
+      () => rawCopySrc([
         'node_modules/pdfjs-dist/cmaps/*.*',
       ]).pipe(gulp.dest(path.join(outputPath, 'js', 'pdfjs', 'cmaps'))),
-      () => gulp.src([
+      () => rawCopySrc([
         'node_modules/inter-ui/inter.css',
       ]).pipe(gulp.dest(path.join(outputPath, 'css'))),
-      () => gulp.src('node_modules/inter-ui/Inter (web)/*.*').
-        pipe(gulp.dest(path.join(outputPath, 'css', 'Inter (web)'))),
-      () => gulp.src([
-        'node_modules/@tabler/icons-webfont/fonts/**',
+      () => rawCopySrc('node_modules/inter-ui/web/*.*').
+        pipe(gulp.dest(path.join(outputPath, 'css', 'web'))),
+      () => rawCopySrc([
         'node_modules/katex/dist/fonts/*.woff2',
       ]).pipe(gulp.dest(path.join(outputPath, 'css', 'fonts'))),
-      () => gulp.src([
+      () => rawCopySrc([
         'node_modules/katex/dist/katex.min.js',
         'node_modules/katex/dist/contrib/mhchem.min.js',
-        'node_modules/marked/marked.min.js',
+        'node_modules/marked/lib/marked.umd.js',
         'node_modules/@highlightjs/cdn-assets/highlight.min.js',
         'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
         'node_modules/react/umd/react.production.min.js',
@@ -143,15 +143,14 @@ const common = {
         'node_modules/interactjs/dist/interact.min.js',
         'node_modules/photoswipe/dist/umd/*.js',
         'packages/ui/dist/ui.js',
-        'node_modules/@sqlite.org/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
+        'node_modules/@sqlite.org/sqlite-wasm/dist/sqlite3.wasm',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'js'))),
-      () => gulp.src([
+      () => rawCopySrc([
         'node_modules/inter-ui/inter.css',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'css'))),
-      () => gulp.src('node_modules/inter-ui/Inter (web)/*.*').
-        pipe(gulp.dest(path.join(outputPath, 'mobile', 'css', 'Inter (web)'))),
-      () => gulp.src([
-        'node_modules/@tabler/icons-webfont/fonts/**',
+      () => rawCopySrc('node_modules/inter-ui/web/*.*').
+        pipe(gulp.dest(path.join(outputPath, 'mobile', 'css', 'web'))),
+      () => rawCopySrc([
         'node_modules/katex/dist/fonts/*.woff2',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'css', 'fonts'))),
     )(...params)
@@ -163,7 +162,7 @@ const common = {
   },
 
   syncAllStatic () {
-    return gulp.src([
+    return rawCopySrc([
       outputFilePath,
       '!' + path.join(outputPath, 'node_modules/**'),
       '!' + path.join(outputPath, 'mobile/**'),

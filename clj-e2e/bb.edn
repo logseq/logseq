@@ -1,5 +1,5 @@
-{:deps {org.babashka/http-server {:mvn/version "0.1.13"}
-        org.babashka/cli {:mvn/version "0.2.23"}}
+{:deps {org.babashka/http-server {:mvn/version "0.1.14"}
+        org.babashka/cli {:mvn/version "0.8.67"}}
  :tasks
  {:requires ([babashka.cli :as cli])
   :init (do

@@ -61,7 +61,7 @@
 	},
 	{
 		"pkg": "@capgo/capacitor-navigation-bar",
-		"classpath": "ee.forgr.capacitor_navigation_bar.NavigationBarPlugin"
+		"classpath": "ee.forgr.capacitor_navigation_bar.CapgoNavigationBarPlugin"
 	},
 	{
 		"pkg": "send-intent",

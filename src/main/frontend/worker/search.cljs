@@ -16,7 +16,10 @@
             [logseq.graph-parser.text :as text]
             [missionary.core :as m]))
 
-(def fuse (aget Fuse "default"))
+(def fuse
+  ;; Fuse 6 exposed the constructor on `default`, while Fuse 7's CJS path returns
+  ;; the constructor directly.
+  (or (aget Fuse "default") Fuse))
 
 ;; TODO: use sqlite for fuzzy search
 ;; maybe https://github.com/nalgeon/sqlean/blob/main/docs/fuzzy.md?

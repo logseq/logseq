@@ -225,10 +225,4 @@
                                              :redef false}}
                :devtools {:before-load frontend.core/stop
                           :after-load frontend.core/start
-                          :preloads [devtools.preload]}}
-
-  :stories-dev {:target :npm-module
-                :entries [logseq.shui.storybook]
-                :output-dir "packages/ui/.storybook/cljs"
-                :devtools {:enabled true}
-                :compiler-options {:optimizations :simple}}}}
+                          :preloads [devtools.preload]}}}}
