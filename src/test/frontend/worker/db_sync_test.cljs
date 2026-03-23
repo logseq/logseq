@@ -1448,6 +1448,60 @@
           (is (= #{"page y"}
                  (set (map :block/name (:user.property/x7 block'))))))))))
 
+(deftest replay-set-block-property-converts-raw-uuid-to-eid-test
+  (testing "replay should resolve raw block uuid ids for set-block-property"
+    (let [graph {:classes {:tag1 {}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "local object"}]}]}
+          conn (db-test/create-conn-with-blocks graph)
+          block (db-test/find-block-by-content @conn "local object")
+          tag-id (:db/id (d/entity @conn :user.class/tag1))
+          tag-uuid (:block/uuid (d/entity @conn tag-id))]
+      (is (some? (#'sync-apply/replay-canonical-outliner-op!
+                  conn
+                  [:set-block-property [(:block/uuid block)
+                                        :block/tags
+                                        [:block/uuid tag-uuid]]])))
+      (let [block' (d/entity @conn [:block/uuid (:block/uuid block)])]
+        (is (= #{tag-id}
+               (set (map :db/id (:block/tags block')))))))))
+
+(deftest apply-history-action-redo-replays-set-block-tags-with-raw-uuid-id-test
+  (testing "redo should replay set-block-property with raw block uuid ids for tags"
+    (let [graph {:classes {:tag1 {}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "local object"}]}]}
+          conn (db-test/create-conn-with-blocks graph)
+          client-ops-conn (d/create-conn client-op/schema-in-db)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (let [block (db-test/find-block-by-content @conn "local object")
+                block-uuid (:block/uuid block)
+                block-ref [:block/uuid block-uuid]
+                tag (d/entity @conn :user.class/tag1)
+                tag-uuid (:block/uuid tag)
+                action-tx-id (random-uuid)]
+            (ldb/transact! client-ops-conn
+                           [{:db-sync/tx-id action-tx-id
+                             :db-sync/pending? true
+                             :db-sync/forward-outliner-ops
+                             [[:set-block-property [block-uuid
+                                                    :block/tags
+                                                    [:block/uuid tag-uuid]]]]
+                             :db-sync/inverse-outliner-ops
+                             [[:remove-block-property [block-ref :block/tags]]]
+                             :db-sync/normalized-tx-data []
+                             :db-sync/reversed-tx-data []}])
+            (is (= true
+                   (:applied? (#'sync-apply/apply-history-action! test-repo action-tx-id false {}))))
+            (is (= #{(:db/id tag)}
+                   (set (map :db/id (:block/tags (d/entity @conn block-ref))))))
+            (is (= true
+                   (:applied? (#'sync-apply/apply-history-action! test-repo action-tx-id true {}))))
+            (is (empty? (:block/tags (d/entity @conn block-ref))))))))))
+
 (deftest apply-history-action-redo-replays-insert-blocks-test
   (testing "apply-history-action should redo an inserted block from semantic history"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
