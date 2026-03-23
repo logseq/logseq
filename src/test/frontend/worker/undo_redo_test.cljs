@@ -123,6 +123,13 @@
         results
         (recur (conj results result))))))
 
+(defn- latest-undo-history-data
+  []
+  (let [undo-op (last (get @worker-undo-redo/*undo-ops test-repo))]
+    (some #(when (= ::worker-undo-redo/db-transact (first %))
+             (second %))
+          undo-op)))
+
 (deftest undo-missing-history-action-row-clears-history-test
   (testing "worker undo treats missing tx-id action row as unavailable and clears history"
     (worker-undo-redo/clear-history! test-repo)
@@ -368,6 +375,180 @@
                (some-> inserted-a :logseq.property/used-template :block/uuid)))
         (is (some? inserted-b))
         (is (= "b" (:block/title inserted-b)))))))
+
+(deftest undo-history-canonicalizes-template-replace-empty-target-to-apply-template-test
+  (testing "template replace-empty-target history uses :apply-template and inverse deletes + restores empty target"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          {:keys [page-uuid]} (seed-page-parent-child!)
+          page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))
+          template-root-uuid (random-uuid)
+          template-a-uuid (random-uuid)
+          template-b-uuid (random-uuid)
+          empty-target-uuid (random-uuid)]
+      (outliner-op/apply-ops!
+       conn
+       [[:insert-blocks [[{:block/uuid template-root-uuid
+                           :block/title "template 1"
+                           :block/tags #{:logseq.class/Template}}
+                          {:block/uuid template-a-uuid
+                           :block/title "a"
+                           :block/parent [:block/uuid template-root-uuid]}
+                          {:block/uuid template-b-uuid
+                           :block/title "b"
+                           :block/parent [:block/uuid template-a-uuid]}]
+                         page-id
+                         {:sibling? false
+                          :keep-uuid? true}]]]
+       (local-tx-meta {:client-id "test-client"}))
+      (outliner-op/apply-ops!
+       conn
+       [[:insert-blocks [[{:block/uuid empty-target-uuid
+                           :block/title ""}]
+                         page-id
+                         {:sibling? false
+                          :keep-uuid? true}]]]
+       (local-tx-meta {:client-id "test-client"}))
+      (let [template-root (d/entity @conn [:block/uuid template-root-uuid])
+            empty-target (d/entity @conn [:block/uuid empty-target-uuid])
+            template-blocks (->> (ldb/get-block-and-children @conn template-root-uuid
+                                                             {:include-property-block? true})
+                                 rest)
+            blocks-to-insert (cons (assoc (first template-blocks)
+                                          :logseq.property/used-template (:db/id template-root))
+                                   (rest template-blocks))]
+        (outliner-op/apply-ops!
+         conn
+         [[:insert-blocks [blocks-to-insert
+                           (:db/id empty-target)
+                           {:sibling? true
+                            :replace-empty-target? true
+                            :insert-template? true}]]]
+         (local-tx-meta {:client-id "test-client"})))
+      (let [data (latest-undo-history-data)
+            inverse-ops (:db-sync/inverse-outliner-ops data)
+            delete-op (some #(when (= :delete-blocks (first %)) %) inverse-ops)
+            restore-empty-op (some #(when (= :insert-blocks (first %)) %) inverse-ops)
+            delete-ids (set (get-in delete-op [1 0]))]
+        (is (= :apply-template (ffirst (:db-sync/forward-outliner-ops data))))
+        (is (contains? delete-ids [:block/uuid empty-target-uuid]))
+        (is (= :insert-blocks (first restore-empty-op)))
+        (is (= empty-target-uuid
+               (get-in restore-empty-op [1 0 0 :block/uuid])))
+        (is (= ""
+               (get-in restore-empty-op [1 0 0 :block/title])))))))
+
+(deftest undo-history-replace-empty-target-insert-restores-empty-target-with-insert-op-test
+  (testing "replace-empty-target insert inverse should delete inserted blocks and reinsert original empty target"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          {:keys [page-uuid]} (seed-page-parent-child!)
+          page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))
+          empty-target-uuid (random-uuid)
+          inserted-root-uuid (random-uuid)
+          inserted-child-uuid (random-uuid)]
+      (outliner-op/apply-ops!
+       conn
+       [[:insert-blocks [[{:block/uuid empty-target-uuid
+                           :block/title ""}]
+                         page-id
+                         {:sibling? false
+                          :keep-uuid? true}]]]
+       (local-tx-meta {:client-id "test-client"}))
+      (let [empty-target (d/entity @conn [:block/uuid empty-target-uuid])]
+        (outliner-op/apply-ops!
+         conn
+         [[:insert-blocks [[{:block/uuid inserted-root-uuid
+                             :block/title "insert root"}
+                            {:block/uuid inserted-child-uuid
+                             :block/title "insert child"
+                             :block/parent [:block/uuid inserted-root-uuid]}]
+                           (:db/id empty-target)
+                           {:sibling? true
+                            :replace-empty-target? true}]]]
+         (local-tx-meta {:client-id "test-client"})))
+      (let [data (latest-undo-history-data)
+            inverse-ops (:db-sync/inverse-outliner-ops data)
+            delete-op (some #(when (= :delete-blocks (first %)) %) inverse-ops)
+            restore-empty-op (some #(when (= :insert-blocks (first %)) %) inverse-ops)
+            delete-ids (set (get-in delete-op [1 0]))]
+        (is (= :insert-blocks (ffirst (:db-sync/forward-outliner-ops data))))
+        (is (contains? delete-ids [:block/uuid empty-target-uuid]))
+        (is (not (some #(= :save-block (first %)) inverse-ops)))
+        (is (= :insert-blocks (first restore-empty-op)))
+        (is (= empty-target-uuid
+               (get-in restore-empty-op [1 0 0 :block/uuid])))
+        (is (= ""
+               (get-in restore-empty-op [1 0 0 :block/title])))))))
+
+(deftest apply-template-op-replays-via-undo-redo-test
+  (testing ":apply-template op can be applied and replayed via undo/redo"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          {:keys [page-uuid]} (seed-page-parent-child!)
+          page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))
+          template-root-uuid (random-uuid)
+          template-a-uuid (random-uuid)
+          template-b-uuid (random-uuid)
+          empty-target-uuid (random-uuid)]
+      (outliner-op/apply-ops!
+       conn
+       [[:insert-blocks [[{:block/uuid template-root-uuid
+                           :block/title "template 1"
+                           :block/tags #{:logseq.class/Template}}
+                          {:block/uuid template-a-uuid
+                           :block/title "a"
+                           :block/parent [:block/uuid template-root-uuid]}
+                          {:block/uuid template-b-uuid
+                           :block/title "b"
+                           :block/parent [:block/uuid template-a-uuid]}]
+                         page-id
+                         {:sibling? false
+                          :keep-uuid? true}]]]
+       (local-tx-meta {:client-id "test-client"}))
+      (outliner-op/apply-ops!
+       conn
+       [[:insert-blocks [[{:block/uuid empty-target-uuid
+                           :block/title ""}]
+                         page-id
+                         {:sibling? false
+                          :keep-uuid? true}]]]
+       (local-tx-meta {:client-id "test-client"}))
+      (let [template-root (d/entity @conn [:block/uuid template-root-uuid])
+            empty-target (d/entity @conn [:block/uuid empty-target-uuid])
+            template-blocks (->> (ldb/get-block-and-children @conn template-root-uuid
+                                                             {:include-property-block? true})
+                                 rest)
+            blocks-to-insert (cons (assoc (first template-blocks)
+                                          :logseq.property/used-template (:db/id template-root))
+                                   (rest template-blocks))]
+        (outliner-op/apply-ops!
+         conn
+         [[:apply-template [(:db/id template-root)
+                            (:db/id empty-target)
+                            {:sibling? true
+                             :replace-empty-target? true
+                             :template-blocks blocks-to-insert}]]]
+         (local-tx-meta {:client-id "test-client"})))
+
+      (let [data (latest-undo-history-data)]
+        (is (= :apply-template (ffirst (:db-sync/forward-outliner-ops data)))))
+
+      (is (seq (undo-all!)))
+      (is (seq (redo-all!)))
+
+      (let [inserted-a-id (d/q '[:find ?b .
+                                 :in $ ?template-uuid
+                                 :where
+                                 [?template :block/uuid ?template-uuid]
+                                 [?b :logseq.property/used-template ?template]
+                                 [?b :block/title "a"]]
+                               @conn
+                               template-root-uuid)
+            inserted-a (when inserted-a-id (d/entity @conn inserted-a-id))
+            inserted-b (some->> inserted-a :block/_parent (filter #(= "b" (:block/title %))) first)]
+        (is (some? inserted-a))
+        (is (some? inserted-b))))))
 
 (deftest undo-history-records-forward-ops-for-save-block-test
   (testing "worker save-block history keeps semantic forward ops for redo replay"

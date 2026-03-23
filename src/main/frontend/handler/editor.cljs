@@ -1982,49 +1982,26 @@
    (insert-template! element-id db-id {}))
   ([element-id db-id {:keys [target] :as opts}]
    (let [repo (state/get-current-repo)]
-     (p/let [block (db-async/<get-block repo db-id
-                                        {:include-collapsed-children? true})]
+     (p/let [block (db-async/<get-block repo db-id {:children? false})]
        (when (:db/id block)
          (let [journal? (ldb/journal? target)
                target (or target (state/get-edit-block))
-               format (get block :block/format :markdown)
-               block-uuid (:block/uuid block)
-               blocks (db/get-block-and-children repo block-uuid {:include-property-block? true})
-               sorted-blocks (let [blocks' (rest blocks)]
-                               (cons
-                                (-> (first blocks')
-                                    (assoc :logseq.property/used-template (:db/id block)))
-                                (rest blocks')))
-               blocks sorted-blocks]
+               format (get block :block/format :markdown)]
            (when element-id
              (insert-command! element-id "" format {:end-pattern commands/command-trigger}))
-           (let [sibling? (:sibling? opts)
-                 sibling?' (cond
-                             (some? sibling?)
-                             sibling?
+           (try
+             (p/let [result (ui-outliner-tx/transact!
+                             {:outliner-op :apply-template
+                              :created-from-journal-template? journal?}
+                             (when-not (string/blank? (state/get-edit-content))
+                               (save-current-block!))
+                             (outliner-op/apply-template! db-id target opts))]
+               (when result (edit-last-block-after-inserted! result)))
 
-                             (db/has-children? (:block/uuid target))
-                             false
-
-                             :else
-                             true)]
-             (when (seq blocks)
-               (try
-                 (p/let [result (ui-outliner-tx/transact!
-                                 {:outliner-op :insert-blocks
-                                  :created-from-journal-template? journal?}
-                                 (when-not (string/blank? (state/get-edit-content))
-                                   (save-current-block!))
-                                 (outliner-op/insert-blocks! blocks target
-                                                             (assoc opts
-                                                                    :sibling? sibling?'
-                                                                    :insert-template? true)))]
-                   (when result (edit-last-block-after-inserted! result)))
-
-                 (catch :default ^js/Error e
-                   (notification/show!
-                    (util/format "Template insert error: %s" (.-message e))
-                    :error)))))))))))
+             (catch :default ^js/Error e
+               (notification/show!
+                (util/format "Template insert error: %s" (.-message e))
+                :error)))))))))
 
 (defn template-on-chosen-handler
   [element-id]

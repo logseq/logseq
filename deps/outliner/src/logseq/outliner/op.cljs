@@ -22,6 +22,10 @@
     [:catn
      [:op :keyword]
      [:args [:tuple ::blocks ::id ::option]]]]
+   [:apply-template
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::id ::id ::option]]]]
    [:delete-blocks
     [:catn
      [:op :keyword]
@@ -203,6 +207,45 @@
           (js/console.error "Unexpected Import EDN error:" e)
           (reset! *result {:error (str "Unexpected Import EDN error: " (pr-str (ex-message e)))}))))))
 
+(defn- apply-insert-blocks-op!
+  [conn *result [blocks target-block-id opts]]
+  (when-let [target-block (d/entity @conn target-block-id)]
+    (let [result (outliner-core/insert-blocks! conn blocks target-block opts)]
+      (reset! *result result))))
+
+(defn- template-children-blocks
+  [db template-id]
+  (when-let [template (d/entity db template-id)]
+    (let [template-blocks (some->> (ldb/get-block-and-children db (:block/uuid template)
+                                                               {:include-property-block? true})
+                                   rest)]
+      (when (seq template-blocks)
+        (cons (assoc (first template-blocks)
+                     :logseq.property/used-template (:db/id template))
+              (rest template-blocks))))))
+
+(defn- apply-template-op!
+  [conn *result [template-id target-block-id opts]]
+  (when-let [target (d/entity @conn target-block-id)]
+    (let [blocks (template-children-blocks @conn template-id)]
+      (when (seq blocks)
+        (let [sibling? (:sibling? opts)
+              sibling?' (cond
+                          (some? sibling?)
+                          sibling?
+
+                          (seq (:block/_parent target))
+                          false
+
+                          :else
+                          true)
+              result (outliner-core/insert-blocks! conn blocks target
+                                                   (assoc opts
+                                                          :sibling? sibling?'
+                                                          :insert-template? true
+                                                          :outliner-op :insert-template-blocks))]
+          (reset! *result result))))))
+
 (defn- ^:large-vars/cleanup-todo apply-op!
   [conn opts' *result [op args]]
   (case op
@@ -211,10 +254,10 @@
     (apply outliner-core/save-block! conn args)
 
     :insert-blocks
-    (let [[blocks target-block-id opts] args]
-      (when-let [target-block (d/entity @conn target-block-id)]
-        (let [result (outliner-core/insert-blocks! conn blocks target-block opts)]
-          (reset! *result result))))
+    (apply-insert-blocks-op! conn *result args)
+
+    :apply-template
+    (apply-template-op! conn *result args)
 
     :delete-blocks
     (let [[block-ids opts] args

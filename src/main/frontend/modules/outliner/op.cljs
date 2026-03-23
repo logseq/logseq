@@ -35,6 +35,12 @@
    (let [id (:db/id target-block)]
      [:insert-blocks [blocks id opts]])))
 
+(defn apply-template!
+  [template-id target-block opts]
+  (op-transact!
+   (let [id (:db/id target-block)]
+     [:apply-template [template-id id opts]])))
+
 (defn delete-blocks!
   [blocks opts]
   (op-transact!
