@@ -73,7 +73,9 @@
                                   :timeout-ms timeout-ms})]
     (if (<= 200 (:status response) 299)
       response
-      (throw (ex-info "http request failed"
+      (throw (ex-info (if (seq (:body response))
+                        (str "http request failed (" (:status response) ")\nhttp response: " (:body response))
+                        (str "http request failed (" (:status response) ")"))
                       {:code :http-error
                        :status (:status response)
                        :body (:body response)})))))

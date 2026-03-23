@@ -91,3 +91,21 @@
                               (is (string/includes? (ex-message e) "NoSuchTag"))))))
              (p/catch (fn [e] (is false (str "unexpected error: " e))))
              (p/finally done))))
+
+(deftest test-coerce-default-property-rejects-non-string
+  (testing "default property type rejects number value"
+    (let [property {:schema {:type :default :cardinality :one}}
+          result (#'add-command/coerce-property-value-basic property 4)]
+      (is (not (:ok? result)))
+      (is (= "default property expects a string value or keyword" (:message result)))))
+
+  (testing "default property type accepts string value"
+    (let [property {:schema {:type :default :cardinality :one}}
+          result (#'add-command/coerce-property-value-basic property "hello")]
+      (is (:ok? result))
+      (is (= "hello" (:value result)))))
+
+  (testing "default property type rejects boolean value"
+    (let [property {:schema {:type :default :cardinality :one}}
+          result (#'add-command/coerce-property-value-basic property true)]
+      (is (not (:ok? result))))))
