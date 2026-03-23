@@ -109,3 +109,20 @@
     (let [property {:schema {:type :default :cardinality :one}}
           result (#'add-command/coerce-property-value-basic property true)]
       (is (not (:ok? result))))))
+
+(deftest test-resolve-date-page-id-rejects-invalid-date
+  (async done
+         (let [mock-invoke (fn [_ _ _ args]
+                             (let [[_ _ lookup] args]
+                               (p/resolved
+                                (if (= lookup :logseq.class/Journal)
+                                  {}
+                                  {}))))]
+           (-> (p/with-redefs [transport/invoke mock-invoke]
+                 (-> (#'add-command/resolve-date-page-id {} "demo" "not a date")
+                     (p/then (fn [_] (is false "expected error for invalid date")))
+                     (p/catch (fn [e]
+                                (is (= :invalid-date (-> e ex-data :code)))
+                                (is (string/includes? (ex-message e) "not a date"))))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))

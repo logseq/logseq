@@ -702,19 +702,20 @@
     (string? value)
     (resolve-page-id config repo value)
     :else
-    (p/rejected (ex-info "node must be a uuid or page name" {:code :invalid-node :value value}))))
+    (p/rejected (ex-info "node must be a number, uuid or page name" {:code :invalid-node :value value}))))
 
 (defn- resolve-date-page-id
   [config repo value]
   (when-not (string? value)
-    (throw (ex-info "date must be a string" {:code :invalid-date :value value})))
+    (throw (ex-info "date property value must be a string" {:code :invalid-date :value value})))
   (p/let [journal (pull-entity config repo [:logseq.property.journal/title-format] :logseq.class/Journal)
           formatter (or (:logseq.property.journal/title-format journal) "MMM do, yyyy")
           formatters (date-time-util/safe-journal-title-formatters formatter)
           journal-day (date-time-util/journal-title->int value formatters)
-          title (or (when journal-day
-                      (date-time-util/int->journal-title journal-day formatter))
-                    value)
+          _ (when-not journal-day
+              (throw (ex-info (str "invalid date property value: " (pr-str value))
+                              {:code :invalid-date :value value})))
+          title (date-time-util/int->journal-title journal-day formatter)
           page (ensure-page! config repo title)]
     (if-let [id (:db/id page)]
       id
@@ -793,22 +794,22 @@
           ident (:db/ident entity)]
     (cond
       (nil? (:db/id entity))
-      (throw (ex-info "property not found"
+      (throw (ex-info (str "property not found: " (pr-str (name property-key)))
                       {:code :property-not-found
                        :property property-key}))
 
       (not (property-entity? entity))
-      (throw (ex-info "target is not a property"
+      (throw (ex-info (str "This is not a property: " (pr-str (name property-key)))
                       {:code :invalid-property-target
                        :property property-key}))
 
       (nil? ident)
-      (throw (ex-info "property not found"
+      (throw (ex-info (str "property not found: " (pr-str (name property-key)))
                       {:code :property-not-found
                        :property property-key}))
 
       (not (property-entity-public? entity))
-      (throw (ex-info "property is not public"
+      (throw (ex-info (str "property is not public: " (pr-str (name property-key)))
                       {:code :property-not-public
                        :property ident}))
 
