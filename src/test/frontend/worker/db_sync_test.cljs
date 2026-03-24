@@ -848,8 +848,6 @@
             (is (= :toggle-reaction (:db-sync/outliner-op (first raw-pending))))
             (is (= :toggle-reaction (:outliner-op (first pending))))
             (is (= [[:transact nil]]
-                   (:db-sync/outliner-ops (first raw-pending))))
-            (is (= [[:transact nil]]
                    (:outliner-ops (first pending))))
             (is (some (fn [tx]
                         (and (vector? tx)
@@ -1135,8 +1133,6 @@
                            :db-sync/pending? true
                            :db-sync/created-at (.now js/Date)
                            :db-sync/outliner-op :save-block
-                           :db-sync/outliner-ops [[:save-block [{:block/uuid missing-uuid
-                                                                 :block/title "broken semantic"} {}]]]
                            :db-sync/forward-outliner-ops [[:save-block [{:block/uuid missing-uuid
                                                                          :block/title "broken semantic"} {}]]]
                            :db-sync/normalized-tx-data tx-data
@@ -1160,10 +1156,6 @@
                            :db-sync/pending? true
                            :db-sync/created-at (.now js/Date)
                            :db-sync/outliner-op :save-block
-                           :db-sync/outliner-ops [[:save-block [{:db/id stale-db-id
-                                                                 :block/uuid child-uuid
-                                                                 :block/title new-title}
-                                                                {}]]]
                            :db-sync/forward-outliner-ops [[:save-block [{:db/id stale-db-id
                                                                          :block/uuid child-uuid
                                                                          :block/title new-title}
@@ -1239,7 +1231,6 @@
                            :db-sync/pending? true
                            :db-sync/created-at (.now js/Date)
                            :db-sync/outliner-op :save-block
-                           :db-sync/outliner-ops forward-ops
                            :db-sync/forward-outliner-ops forward-ops
                            :db-sync/normalized-tx-data tx-data
                            :db-sync/reversed-tx-data reversed-tx-data}])
