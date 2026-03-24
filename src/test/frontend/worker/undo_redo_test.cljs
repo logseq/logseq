@@ -6,6 +6,7 @@
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.undo-redo :as worker-undo-redo]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.op :as outliner-op]
@@ -335,6 +336,75 @@
         (is (nil? (:logseq.property.recycle/original-parent restored-page)))
         (is (nil? (:logseq.property.recycle/original-page restored-page)))
         (is (nil? (:logseq.property.recycle/original-order restored-page)))))))
+
+(deftest undo-delete-page-restores-class-property-and-today-page-test
+  (testing "undoing delete-page restores hard-retracted class/property pages and today page blocks"
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          class-title "undo class page movie"
+          [_ class-uuid] (outliner-op/apply-ops! conn
+                                                 [[:create-page [class-title
+                                                                 {:class? true
+                                                                  :redirect? false
+                                                                  :split-namespace? true
+                                                                  :tags ()}]]]
+                                                 (local-tx-meta {:client-id "test-client"}))
+          _ (outliner-op/apply-ops! conn
+                                    [[:upsert-property [:user.property/undo-rating
+                                                        {:logseq.property/type :number}
+                                                        {:property-name "undo-rating"}]]]
+                                    (local-tx-meta {:client-id "test-client"}))
+          property-page (d/entity @conn :user.property/undo-rating)
+          property-uuid (:block/uuid property-page)
+          today-day (date-time-util/ms->journal-day (js/Date.))
+          today-title (date-time-util/int->journal-title
+                       today-day
+                       (:logseq.property.journal/title-format
+                        (d/entity @conn :logseq.class/Journal)))
+          [_ today-page-uuid] (outliner-op/apply-ops! conn
+                                                      [[:create-page [today-title
+                                                                      {:today-journal? true
+                                                                       :redirect? false
+                                                                       :split-namespace? true
+                                                                       :tags ()}]]]
+                                                      (local-tx-meta {:client-id "test-client"}))
+          today-page-id (:db/id (d/entity @conn [:block/uuid today-page-uuid]))
+          today-child-uuid (random-uuid)
+          _ (outliner-op/apply-ops! conn
+                                    [[:insert-blocks [[{:block/uuid today-child-uuid
+                                                        :block/title "today undo child"}]
+                                                      today-page-id
+                                                      {:sibling? false
+                                                       :keep-uuid? true}]]]
+                                    (local-tx-meta {:client-id "test-client"}))
+          class-ident-before (:db/ident (d/entity @conn [:block/uuid class-uuid]))
+          property-ident-before (:db/ident (d/entity @conn [:block/uuid property-uuid]))]
+      (worker-undo-redo/clear-history! test-repo)
+
+      (outliner-op/apply-ops! conn
+                              [[:delete-page [class-uuid {}]]]
+                              (local-tx-meta {:client-id "test-client"}))
+      (is (nil? (d/entity @conn [:block/uuid class-uuid])))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= class-ident-before
+             (:db/ident (d/entity @conn [:block/uuid class-uuid]))))
+
+      (worker-undo-redo/clear-history! test-repo)
+      (outliner-op/apply-ops! conn
+                              [[:delete-page [property-uuid {}]]]
+                              (local-tx-meta {:client-id "test-client"}))
+      (is (nil? (d/entity @conn :user.property/undo-rating)))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= property-ident-before
+             (:db/ident (d/entity @conn [:block/uuid property-uuid]))))
+
+      (worker-undo-redo/clear-history! test-repo)
+      (outliner-op/apply-ops! conn
+                              [[:delete-page [today-page-uuid {}]]]
+                              (local-tx-meta {:client-id "test-client"}))
+      (is (some? (d/entity @conn [:block/uuid today-page-uuid])))
+      (is (nil? (d/entity @conn [:block/uuid today-child-uuid])))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (some? (d/entity @conn [:block/uuid today-child-uuid]))))))
 
 (deftest redo-create-page-restores-recycled-page-test
   (testing "redoing create-page should restore recycled page instead of keeping it recycled"
