@@ -1,13 +1,12 @@
 (ns logseq.outliner.op.construct
   "Construct canonical forward and reverse outliner ops for history actions."
-  (:require #?(:org.babashka/nbb [logseq.common.log :as log]
-               :default [lambdaisland.glogi :as log])
-            [cljs.pprint :as pprint]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [datascript.core :as d]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]))
 
 (def ^:private semantic-outliner-ops
@@ -669,21 +668,47 @@
 (defn- build-inverse-delete-page
   [db-before page-uuid]
   (when-let [page (d/entity db-before [:block/uuid page-uuid])]
-    (let [page-save-op (entity->save-op db-before page)
-          hard-retract? (or (ldb/class? page) (ldb/property? page))]
-      (if hard-retract?
-        (let [create-op [:create-page [(:block/title page)
-                                       {:uuid page-uuid
-                                        :redirect? false
-                                        :split-namespace? true
-                                        :tags ()}]]
-              root-plans (mapv #(delete-root->restore-plan db-before %) (page-top-level-blocks page))]
-          (when (every? some? root-plans)
-            (cond-> [create-op]
-              page-save-op
-              (conj page-save-op)
-              (seq root-plans)
-              (into (mapv #(to-insert-op db-before %) root-plans)))))
+    (let [class-or-property? (or (ldb/class? page)
+                                 (ldb/property? page))
+          today-page? (when-let [day (:block/journal-day page)]
+                        (= (date-time-util/ms->journal-day (js/Date.)) day))
+          root-plans (mapv #(delete-root->restore-plan db-before %) (page-top-level-blocks page))]
+      (cond
+        class-or-property?
+        (let [page-save-op (entity->save-op db-before (assoc (into {} page) :db/ident (:db/ident page)))
+              create-op (if (ldb/class? page)
+                          (let [class-ident-namespace (some-> (:db/ident page) namespace)]
+                            [:create-page
+                             [(:block/title page)
+                              (cond-> {:uuid page-uuid
+                                       :class? true
+                                       :redirect? false
+                                       :split-namespace? true}
+                                class-ident-namespace
+                                (assoc :class-ident-namespace class-ident-namespace))]])
+                          [:upsert-property
+                           [(:db/ident page)
+                            (db-property/get-property-schema (into {} page))
+                            {:property-name (:block/title page)}]])
+              restore-root-ops (when (every? some? root-plans)
+                                 (mapv #(to-insert-op db-before %) root-plans))]
+          (cond-> []
+            create-op
+            (conj create-op)
+            page-save-op
+            (conj page-save-op)
+            (seq restore-root-ops)
+            (into restore-root-ops)
+            :always
+            seq))
+
+        today-page?
+        (when (every? some? root-plans)
+          (->> root-plans
+               (mapv #(to-insert-op db-before %))
+               seq))
+
+        :else
         ;; Soft-deleted pages are moved to Recycle with recycle metadata.
         ;; Use restore semantics instead of save-block to retract recycle markers.
         [:restore-recycled [page-uuid]]))))
