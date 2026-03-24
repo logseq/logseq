@@ -98,7 +98,7 @@
                              #(compare %2 %1)))]
     [:div.flex.flex-col.gap-1
      [:div.text-sm.text-muted-foreground.mb-4
-      "Deleted pages and blocks stay here until restored or automatically garbage collected after 60 days."]
+      "Deleted pages and blocks stay here until restored or automatically garbage collected after 30 days."]
      (if (seq groups)
        (for [[title roots] groups]
          [:section {:key title}

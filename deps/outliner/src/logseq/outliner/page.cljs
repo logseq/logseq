@@ -22,8 +22,8 @@
             [logseq.outliner.tx-meta :as outliner-tx-meta]
             [logseq.outliner.validate :as outliner-validate]))
 
-(defn- db-refs->page
-  "Replace [[page name]] with page name"
+(defn- page-ref-rewrite-targets
+  "Collect entities that reference `page-entity` via node refs and need title rewrite."
   [page-entity]
   (let [refs (->> (:block/_refs page-entity)
                   ;; remove child or self that refed this page
@@ -31,19 +31,42 @@
                             (or (= (:db/id ref) (:db/id page-entity))
                                 (= (:db/id (:block/page ref)) (:db/id page-entity))))))
         id-ref->page #(db-content/content-id-ref->page % [page-entity])]
-    (when (seq refs)
-      (let [tx-data (mapcat (fn [{:block/keys [raw-title] :as ref}]
-                              ;; block content
-                              (when raw-title
-                                (let [content' (id-ref->page raw-title)
-                                      content-tx (when (not= raw-title content')
-                                                   {:db/id (:db/id ref)
-                                                    :block/title content'})
-                                      tx content-tx]
-                                  (concat
-                                   [[:db/retract (:db/id ref) :block/refs (:db/id page-entity)]]
-                                   (when tx [tx]))))) refs)]
-        tx-data))))
+    (->> refs
+         (keep (fn [{:block/keys [raw-title uuid] :as ref}]
+                 (when raw-title
+                   (let [content' (id-ref->page raw-title)]
+                     (when (not= raw-title content')
+                       (let [remaining-refs (->> (:block/refs ref)
+                                                 (remove (fn [ref']
+                                                           (= (:db/id ref') (:db/id page-entity))))
+                                                 vec)]
+                         {:ref-id (:db/id ref)
+                          :ref-uuid uuid
+                          :title content'
+                          :refs remaining-refs}))))))
+         seq)))
+
+(defn- db-refs->page
+  "Replace [[page name]] with page name."
+  [page-entity]
+  (let [page-id (:db/id page-entity)]
+    (some->> (page-ref-rewrite-targets page-entity)
+             (mapcat (fn [{:keys [ref-id title]}]
+                       [[:db/retract ref-id :block/refs page-id]
+                        {:db/id ref-id
+                         :block/title title}])))))
+
+(defn- db-refs->page-save-ops
+  [page-entity]
+  (some->> (page-ref-rewrite-targets page-entity)
+           (keep (fn [{:keys [ref-uuid title refs]}]
+                   (when ref-uuid
+                     [:save-block [{:block/uuid ref-uuid
+                                    :block/title title
+                                    :block/refs refs}
+                                   {}]])))
+           seq
+           vec))
 
 (defn- build-page-retract-tx
   "Build cleanup tx-data for deleting a schema page.
@@ -110,10 +133,16 @@
             true)
 
           :else
-          (let [tx-data (outliner-recycle/recycle-page-tx-data @conn page {:deleted-by-uuid deleted-by-uuid
-                                                                           :now-ms now-ms})]
+          (let [ref-rewrite-tx-data (db-refs->page page)
+                ref-rewrite-save-ops (db-refs->page-save-ops page)
+                tx-data (concat ref-rewrite-tx-data
+                                (outliner-recycle/recycle-page-tx-data @conn page {:deleted-by-uuid deleted-by-uuid
+                                                                                   :now-ms now-ms}))
+                tx-meta' (cond-> tx-meta
+                           (seq ref-rewrite-save-ops)
+                           (update :outliner-ops (fnil into []) ref-rewrite-save-ops))]
             (when (seq tx-data)
-              (ldb/transact! conn tx-data tx-meta))
+              (ldb/transact! conn tx-data tx-meta'))
             true))))))
 
 (defn- build-page-tx [db properties page {:keys [class? tags class-ident-namespace]}]

@@ -132,10 +132,10 @@
     (page-handler/create-today-journal!)
     (page-handler/<create! page-name opts)))
 
-(defmethod handle :page/deleted [[_ page-name tx-meta]]
+(defmethod handle :page/deleted [[_ page-name _tx-meta]]
   (when page-name
     (when-not (util/mobile?)
-      (page-common-handler/after-page-deleted! page-name tx-meta))))
+      (page-common-handler/after-page-deleted! page-name))))
 
 (defmethod handle :page/renamed [[_ repo data]]
   (when-not (util/mobile?)
