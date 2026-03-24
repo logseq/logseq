@@ -577,7 +577,7 @@
       (transact-with-op! conn tx-data
                          {:outliner-op :save-block}))))
 
-(defn set-block-property!
+(defn ^:large-vars/cleanup-todo set-block-property!
   "Updates a block property's value for an existing property-id and block.  If
   property is a ref type, automatically handles a raw property value i.e. you
   can pass \"value\" instead of the property value entity. Also handle db

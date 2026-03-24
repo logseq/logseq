@@ -2,6 +2,7 @@
   "Construct canonical forward and reverse outliner ops for history actions."
   (:require [clojure.string :as string]
             [datascript.core :as d]
+            [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
@@ -50,8 +51,8 @@
     :logseq.property/created-by-ref
     :logseq.property.embedding/hnsw-label-updated-at})
 
-(def rebase-refs-key :db-sync.rebase/refs)
-(def canonical-transact-op [[:transact nil]])
+(def ^:api rebase-refs-key :db-sync.rebase/refs)
+(def ^:api canonical-transact-op [[:transact nil]])
 
 (defn- stable-entity-ref
   [db x]
@@ -79,9 +80,9 @@
 (defn- sanitize-block-refs
   [refs]
   (->> refs
-       (keep (fn [ref]
-               (when (:block/uuid ref)
-                 (select-keys ref [:block/uuid :block/title]))))
+       (keep (fn [ref-entity]
+               (when (:block/uuid ref-entity)
+                 (select-keys ref-entity [:block/uuid :block/title]))))
        vec))
 
 (defn- ref-attr?
@@ -113,7 +114,7 @@
 (defn rewrite-block-title-with-retracted-refs
   [db block]
   (let [refs (get block rebase-refs-key)
-        retracted-refs (remove (fn [ref] (d/entity db [:block/uuid (:block/uuid ref)])) refs)
+        retracted-refs (remove (fn [ref-entity] (d/entity db [:block/uuid (:block/uuid ref-entity)])) refs)
         block' (if (seq retracted-refs)
                  (update block :block/title
                          (fn [title]
@@ -252,7 +253,7 @@
                                                         (nil? (d/entity db id))))
                                                  ids'))]
     (if unresolved-created-lookups?
-      (mapv (fn [uuid] [:block/uuid uuid]) created-uuids)
+      (mapv (fn [block-uuid] [:block/uuid block-uuid]) created-uuids)
       ids')))
 
 (defn- moved-block-ids-from-tx-data
@@ -468,8 +469,8 @@
   [db block]
   (cond
     (map? block)
-    (or (when-let [uuid (:block/uuid block)]
-          (d/entity db [:block/uuid uuid]))
+    (or (when-let [block-uuid (:block/uuid block)]
+          (d/entity db [:block/uuid block-uuid]))
         (when-let [db-id (:db/id block)]
           (d/entity db db-id)))
 
@@ -557,7 +558,7 @@
 
 (defn- build-insert-block-payload
   [db-before ent]
-  (when-let [uuid (:block/uuid ent)]
+  (when-let [block-uuid (:block/uuid ent)]
     (->> (save-block-keys ent)
          (remove #(string/starts-with? (name %) "_"))
          (reduce (fn [m k]
@@ -566,7 +567,7 @@
                             (if (worker-ref-attr? db-before k)
                               (sanitize-ref-value db-before v)
                               v))))
-                 {:block/uuid uuid}))))
+                 {:block/uuid block-uuid}))))
 
 (defn- selected-block-roots
   [db-before ids]
@@ -673,7 +674,7 @@
     (let [class-or-property? (or (ldb/class? page)
                                  (ldb/property? page))
           today-page? (when-let [day (:block/journal-day page)]
-                        (= (date-time-util/ms->journal-day (js/Date.)) day))
+                        (= (date-time-util/ms->journal-day (common-util/time-ms)) day))
           root-plans (mapv #(delete-root->restore-plan db-before %) (page-top-level-blocks page))]
       (cond
         class-or-property?
@@ -745,7 +746,7 @@
       :always
       seq)))
 
-(defn- build-strict-inverse-outliner-ops
+(defn- ^:large-vars/cleanup-todo build-strict-inverse-outliner-ops
   [db-before db-after tx-data forward-ops]
   (when (seq forward-ops)
     (let [inverse-entries
@@ -900,8 +901,8 @@
               (let [[_ [blocks _target-id _opts]] (first @forward-insert-ops*)
                     ids (->> blocks
                              (keep (fn [block]
-                                     (when-let [uuid (:block/uuid block)]
-                                       [:block/uuid uuid])))
+                                     (when-let [block-uuid (:block/uuid block)]
+                                       [:block/uuid block-uuid])))
                              vec)]
                 (swap! forward-insert-ops* subvec 1)
                 (if (seq ids)

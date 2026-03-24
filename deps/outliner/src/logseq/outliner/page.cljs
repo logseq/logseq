@@ -32,18 +32,20 @@
                                 (= (:db/id (:block/page ref)) (:db/id page-entity))))))
         id-ref->page #(db-content/content-id-ref->page % [page-entity])]
     (->> refs
-         (keep (fn [{:block/keys [raw-title uuid] :as ref}]
-                 (when raw-title
-                   (let [content' (id-ref->page raw-title)]
-                     (when (not= raw-title content')
-                       (let [remaining-refs (->> (:block/refs ref)
-                                                 (remove (fn [ref']
-                                                           (= (:db/id ref') (:db/id page-entity))))
-                                                 vec)]
-                         {:ref-id (:db/id ref)
-                          :ref-uuid uuid
-                          :title content'
-                          :refs remaining-refs}))))))
+         (keep (fn [ref]
+                 (let [raw-title (:block/raw-title ref)
+                       block-uuid (:block/uuid ref)]
+                   (when raw-title
+                     (let [content' (id-ref->page raw-title)]
+                       (when (not= raw-title content')
+                         (let [remaining-refs (->> (:block/refs ref)
+                                                   (remove (fn [ref']
+                                                             (= (:db/id ref') (:db/id page-entity))))
+                                                   vec)]
+                           {:ref-id (:db/id ref)
+                            :ref-uuid block-uuid
+                            :title content'
+                            :refs remaining-refs})))))))
          seq)))
 
 (defn- db-refs->page
