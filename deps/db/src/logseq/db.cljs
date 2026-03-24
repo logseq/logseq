@@ -190,6 +190,7 @@
         _ (swap! conn assoc :skip-store? true
                  :batch-tx? true)
         *batch-tx-data (volatile! [])
+        *completed? (volatile! false)
         listen-keyword (keyword "batch-tx" (str (random-uuid)))]
     (d/listen! conn listen-keyword
                (fn [{:keys [tx-data] :as tx-report}]
@@ -200,11 +201,16 @@
       (batch-tx-fn conn)
       (let [tx-data @*batch-tx-data]
         (reset! (:atom conn) conn-state-before)
-        (vreset! *batch-tx-data nil)
         (when (seq tx-data)
           ;; transact tx-data to `conn` and validate db
           (transact! conn tx-data tx-meta)))
+      (vreset! *completed? true)
       (finally
+        ;; Roll back in-memory batch mutations when batch-transact exits via exception.
+        ;; This works for both top-level and nested batch transactions.
+        (when-not @*completed?
+          (reset! (:atom conn) conn-state-before))
+        (vreset! *batch-tx-data nil)
         (d/unlisten! conn listen-keyword)))))
 
 (def page? entity-util/page?)

@@ -35,19 +35,19 @@
 
     :delete-blocks
     (let [[_conn blocks opts] args]
-      [:delete-blocks [(map :db/id blocks) opts]])
+      [:delete-blocks [(mapv :db/id blocks) opts]])
 
     :move-blocks
     (let [[_conn blocks target-block opts] args]
-      [:move-blocks [(map :db/id blocks) (:db/id target-block) opts]])
+      [:move-blocks [(mapv :db/id blocks) (:db/id target-block) opts]])
 
     :move-blocks-up-down
     (let [[_conn blocks up?] args]
-      [:move-blocks-up-down [(map :db/id blocks) up?]])
+      [:move-blocks-up-down [(mapv :db/id blocks) up?]])
 
     :indent-outdent-blocks
     (let [[_conn blocks indent? opts] args]
-      [:indent-outdent-blocks [(map :db/id blocks) indent? opts]])
+      [:indent-outdent-blocks [(mapv :db/id blocks) indent? opts]])
 
     nil))
 
@@ -944,7 +944,7 @@
                           (map :db/id)
                           (set))
             move-parents-to-child? (some parents' (map :db/id blocks))
-            op-entry [:move-blocks [(map :db/id top-level-blocks)
+            op-entry [:move-blocks [(mapv :db/id top-level-blocks)
                                     (:db/id target-block)
                                     opts]]]
         (when-not move-parents-to-child?

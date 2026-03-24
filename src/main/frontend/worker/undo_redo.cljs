@@ -176,6 +176,7 @@
       (dissoc :db-sync/tx-id)
       (assoc
        :gen-undo-ops? false
+       :persist-op? true
        :undo? undo?
        :redo? (not undo?)
        :db-sync/source-tx-id source-tx-id)))
@@ -287,83 +288,145 @@
           op)
     op))
 
+(defn- skippable-worker-error?
+  [error]
+  (= :invalid-history-action-ops (:reason (ex-data error))))
+
+(defn- skippable-worker-result?
+  [undo? {:keys [reason]}]
+  (if undo?
+    (contains? #{:invalid-history-action-ops
+                 :invalid-history-action-tx
+                 :unsupported-history-action}
+               reason)
+    (contains? #{:invalid-history-action-ops}
+               reason)))
+
+(declare undo-redo-aux)
+
+(defn- empty-stack-result
+  [undo?]
+  (if undo? ::empty-undo-stack ::empty-redo-stack))
+
+(defn- push-opposite-op!
+  [repo undo? op]
+  ((if undo? push-redo-op push-undo-op) repo op))
+
+(defn- undo-redo-result
+  [repo conn undo? op op']
+  (push-opposite-op! repo undo? op')
+  (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) op)
+                            (map second))
+        block-content (:block/title (d/entity @conn [:block/uuid (:block-uuid
+                                                                  (if undo?
+                                                                    (first editor-cursors)
+                                                                    (last editor-cursors)))]))]
+    {:undo? undo?
+     :editor-cursors editor-cursors
+     :block-content block-content}))
+
+(defn- skip-op-and-recur
+  [repo undo? allow-worker? log-tag data]
+  (log/warn log-tag (assoc data :undo? undo?))
+  (undo-redo-aux repo undo? allow-worker?))
+
+(defn- run-local-path
+  [repo conn undo? allow-worker? op {:keys [tx-meta] :as data} tx-meta']
+  (let [reversed-tx-data (cond-> (get-reversed-datoms conn undo? data tx-meta)
+                           undo?
+                           reverse)]
+    (cond
+      (empty? reversed-tx-data)
+      (skip-op-and-recur repo undo? allow-worker? ::undo-redo-skip-conflicted-op
+                         {:outliner-op (:outliner-op tx-meta)})
+
+      (not (undo-validate/valid-undo-redo-tx? conn reversed-tx-data))
+      (skip-op-and-recur repo undo? allow-worker? ::undo-redo-skip-invalid-op
+                         {:outliner-op (:outliner-op tx-meta)})
+
+      :else
+      (try
+        (ldb/transact! conn reversed-tx-data tx-meta')
+        (undo-redo-result repo conn undo? op op)
+        (catch :default e
+          (log/error ::undo-redo-failed e)
+          (clear-history! repo)
+          (empty-stack-result undo?))))))
+
+(defn- run-worker-path
+  [repo conn undo? allow-worker? op {:keys [tx-meta] :as data} tx-meta' tx-id]
+  (if-let [apply-action @*apply-history-action!]
+    (try
+      (let [worker-result (apply-action repo tx-id undo? tx-meta')]
+        (cond
+          (:applied? worker-result)
+          (undo-redo-result repo conn undo? op
+                            (if undo?
+                              op
+                              (rebind-op-db-sync-tx-id op (:history-tx-id worker-result))))
+
+          (= :missing-history-action (:reason worker-result))
+          (do
+            (log/warn ::undo-redo-fallback-local-path
+                      {:undo? undo?
+                       :outliner-op (:outliner-op tx-meta)
+                       :tx-id tx-id
+                       :result worker-result})
+            (run-local-path repo conn undo? allow-worker? op data tx-meta'))
+
+          (skippable-worker-result? undo? worker-result)
+          (skip-op-and-recur repo undo? false ::undo-redo-skip-conflicted-op
+                             {:outliner-op (:outliner-op tx-meta)
+                              :tx-id tx-id
+                              :result worker-result})
+
+          :else
+          (do
+            (log/error ::undo-redo-worker-action-unavailable
+                       {:undo? undo?
+                        :repo repo
+                        :tx-id tx-id
+                        :result worker-result})
+            (clear-history! repo)
+            (empty-stack-result undo?))))
+      (catch :default e
+        (if (skippable-worker-error? e)
+          (skip-op-and-recur repo undo? false ::undo-redo-skip-conflicted-op
+                             {:outliner-op (:outliner-op tx-meta)
+                              :tx-id tx-id
+                              :error e})
+          (do
+            (log/error ::undo-redo-worker-failed e)
+            (clear-history! repo)
+            (throw e)
+            (empty-stack-result undo?)))))
+    (run-local-path repo conn undo? allow-worker? op data tx-meta')))
+
+(defn- process-db-op
+  [repo conn undo? allow-worker? op]
+  (let [{:keys [tx-data] :as data} (some #(when (= ::db-transact (first %))
+                                            (second %))
+                                         op)]
+    (when (seq tx-data)
+      (let [tx-meta' (undo-redo-action-meta data undo?)
+            tx-id (:db-sync/tx-id data)]
+        (if (and tx-id allow-worker?)
+          (run-worker-path repo conn undo? allow-worker? op data tx-meta' tx-id)
+          (run-local-path repo conn undo? allow-worker? op data tx-meta'))))))
+
 (defn- undo-redo-aux
-  [repo undo?]
-  (if-let [op (not-empty ((if undo? pop-undo-op pop-redo-op) repo))]
-    (let [conn (worker-state/get-datascript-conn repo)]
-      (cond
-        (= ::ui-state (ffirst op))
-        (do
-          ((if undo? push-redo-op push-undo-op) repo op)
-          (let [ui-state-str (second (first op))]
-            {:undo? undo?
-             :ui-state-str ui-state-str}))
-
-        :else
-        (let [{:keys [tx-data tx-meta] :as data} (some #(when (= ::db-transact (first %))
-                                                          (second %)) op)]
-          (when (seq tx-data)
-            (let [tx-meta' (undo-redo-action-meta data undo?)
-                  tx-id (:db-sync/tx-id data)
-                  handler (fn handler [op']
-                            ((if undo? push-redo-op push-undo-op) repo op')
-                            (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) op)
-                                                      (map second))
-                                  block-content (:block/title (d/entity @conn [:block/uuid (:block-uuid
-                                                                                            (if undo?
-                                                                                              (first editor-cursors)
-                                                                                              (last editor-cursors)))]))]
-                              {:undo? undo?
-                               :editor-cursors editor-cursors
-                               :block-content block-content}))
-                  run-local-path (fn []
-                                   (let [reversed-tx-data (cond-> (get-reversed-datoms conn undo? data tx-meta)
-                                                            undo?
-                                                            reverse)]
-                                     (if (seq reversed-tx-data)
-                                       (if (undo-validate/valid-undo-redo-tx? conn reversed-tx-data)
-                                         (try
-                                           (ldb/transact! conn reversed-tx-data tx-meta')
-                                           (handler op)
-                                           (catch :default e
-                                             (log/error ::undo-redo-failed e)
-                                             (clear-history! repo)
-                                             (if undo? ::empty-undo-stack ::empty-redo-stack)))
-                                         (do
-                                           (log/warn ::undo-redo-skip-invalid-op
-                                                     {:undo? undo?
-                                                      :outliner-op (:outliner-op tx-meta)})
-                                           (undo-redo-aux repo undo?)))
-                                       (do
-                                         (log/warn ::undo-redo-skip-conflicted-op
-                                                   {:undo? undo?
-                                                    :outliner-op (:outliner-op tx-meta)})
-                                         (undo-redo-aux repo undo?)))))]
-              (if tx-id
-                (try
-                  (when-let [apply-action @*apply-history-action!]
-                    (let [worker-result (apply-action repo tx-id undo? tx-meta')]
-                      (if (:applied? worker-result)
-                        (handler (if undo?
-                                   op
-                                   (rebind-op-db-sync-tx-id op (:history-tx-id worker-result))))
-                        (do
-                          (log/error ::undo-redo-worker-action-unavailable
-                                     {:undo? undo?
-                                      :repo repo
-                                      :tx-id tx-id
-                                      :result worker-result})
-                          (clear-history! repo)
-                          (if undo? ::empty-undo-stack ::empty-redo-stack)))))
-                  (catch :default e
-                    (log/error ::undo-redo-worker-failed e)
-                    (throw e)
-                    ;; (clear-history! repo)
-                    (if undo? ::empty-undo-stack ::empty-redo-stack)))
-                (run-local-path)))))))
-
-    (when ((if undo? empty-undo-stack? empty-redo-stack?) repo)
-      (if undo? ::empty-undo-stack ::empty-redo-stack))))
+  ([repo undo?]
+   (undo-redo-aux repo undo? true))
+  ([repo undo? allow-worker?]
+   (if-let [op (not-empty ((if undo? pop-undo-op pop-redo-op) repo))]
+     (if (= ::ui-state (ffirst op))
+       (do
+         (push-opposite-op! repo undo? op)
+         {:undo? undo?
+          :ui-state-str (second (first op))})
+       (process-db-op repo (worker-state/get-datascript-conn repo) undo? allow-worker? op))
+     (when ((if undo? empty-undo-stack? empty-redo-stack?) repo)
+       (empty-stack-result undo?)))))
 
 (defn undo
   [repo]
