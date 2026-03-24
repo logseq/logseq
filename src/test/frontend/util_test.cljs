@@ -2,6 +2,24 @@
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.util :as util]))
 
+(deftest test-split-graphemes
+  (testing "split-graphemes returns individual grapheme clusters"
+    (is (= ["a" "b" "c"] (util/split-graphemes "abc")))
+    (is (= ["😀"] (util/split-graphemes "😀")))
+    (is (= ["a" "😀" "b"] (util/split-graphemes "a😀b")))
+    (is (= ["e\u0301" "x"] (util/split-graphemes "e\u0301x")))
+    (is (= ["中" "文"] (util/split-graphemes "中文")))
+    (is (= [] (util/split-graphemes "")))))
+
+(deftest test-get-graphemes-pos
+  (testing "get-graphemes-pos counts grapheme clusters up to index"
+    (is (= 3 (util/get-graphemes-pos "abc" 3)))
+    (is (= 1 (util/get-graphemes-pos "😀bc" 2)))
+    (is (= 3 (util/get-graphemes-pos "a😀c" 4)))
+    (is (= 1 (util/get-graphemes-pos "e\u0301x" 2)))
+    (is (= 0 (util/get-graphemes-pos "abc" 0)))
+    (is (= 2 (util/get-graphemes-pos "中文字" 2)))))
+
 (deftest test-delete-emoji-current-pos
   (testing "safe current position from end for emoji"
     (is (= 3 (util/safe-dec-current-pos-from-end "abc😀d" 5)))

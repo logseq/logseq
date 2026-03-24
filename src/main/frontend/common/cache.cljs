@@ -2,7 +2,6 @@
   "Utils about cache"
   (:require [cljs.cache :as cache]))
 
-#_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
 ;; (def *profile (volatile! {}))
 
 (defn cache-fn

@@ -1,6 +1,6 @@
 {:paths ["src" "test"]
- :deps {org.babashka/cli {:mvn/version "0.7.53"}
-        slipset/deps-deploy {:mvn/version "0.2.1"}}
+ :deps {org.babashka/cli {:mvn/version "0.8.67"}
+        slipset/deps-deploy {:mvn/version "0.2.2"}}
  :tasks
  {:requires ([babashka.cli :as cli])
   :init (do

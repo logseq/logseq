@@ -1253,57 +1253,52 @@
       (for [operator operators]
         (shui/dropdown-menu-item
          {:on-click (fn []
-                      (let [new-filters (update filters :filters
-                                                (fn [col]
-                                                  (update col idx
-                                                          (fn [[property _old-operator value]]
-                                                            (let [value' (get-filter-with-changed-operator property operator value)]
-                                                              (if value'
-                                                                [property operator value']
-                                                                [property operator]))))))]
-                        (set-filters! new-filters)))}
+                      (set-filters!
+                       (update filters :filters
+                               (fn [col]
+                                 (update col idx
+                                         (fn [[property _old-operator value]]
+                                           (let [value' (get-filter-with-changed-operator property operator value)]
+                                             (if value'
+                                               [property operator value']
+                                               [property operator]))))))))}
          (operator->text operator)))))))
 
 (rum/defc between < rum/static
   [_property [start end] filters set-filters! idx]
-  [:<>
-   (shui/input
-    {:auto-focus true
-     :placeholder "from"
-     :value (str start)
-     :onChange (fn [e]
-                 (let [input-value (util/evalue e)
-                       number-value (when-not (string/blank? input-value)
-                                      (util/safe-parse-float input-value))
-                       value [number-value end]
-                       value (if (every? nil? value) nil value)]
-                   (let [new-filters (update filters :filters
-                                             (fn [col]
-                                               (update col idx
-                                                       (fn [[property operator _old_value]]
-                                                         (if (nil? value)
-                                                           [property operator]
-                                                           [property operator value])))))]
-                     (set-filters! new-filters))))
-     :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})
-   (shui/input
-    {:value (str end)
-     :placeholder "to"
-     :onChange (fn [e]
-                 (let [input-value (util/evalue e)
-                       number-value (when-not (string/blank? input-value)
-                                      (util/safe-parse-float input-value))
-                       value [start number-value]
-                       value (if (every? nil? value) nil value)]
-                   (let [new-filters (update filters :filters
-                                             (fn [col]
-                                               (update col idx
-                                                       (fn [[property operator _old_value]]
-                                                         (if (nil? value)
-                                                           [property operator]
-                                                           [property operator value])))))]
-                     (set-filters! new-filters))))
-     :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})])
+  (let [set-filter-range! (fn [value]
+                            (set-filters!
+                             (update filters :filters
+                                     (fn [col]
+                                       (update col idx
+                                               (fn [[property operator _old_value]]
+                                                 (if (nil? value)
+                                                   [property operator]
+                                                   [property operator value])))))))]
+    [:<>
+     (shui/input
+      {:auto-focus true
+       :placeholder "from"
+       :value (str start)
+       :onChange (fn [e]
+                   (let [input-value (util/evalue e)
+                         number-value (when-not (string/blank? input-value)
+                                        (util/safe-parse-float input-value))
+                         value [number-value end]
+                         value (if (every? nil? value) nil value)]
+                     (set-filter-range! value)))
+       :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})
+     (shui/input
+      {:value (str end)
+       :placeholder "to"
+       :onChange (fn [e]
+                   (let [input-value (util/evalue e)
+                         number-value (when-not (string/blank? input-value)
+                                        (util/safe-parse-float input-value))
+                         value [start number-value]
+                         value (if (every? nil? value) nil value)]
+                     (set-filter-range! value)))
+       :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})]))
 
 (rum/defc ^:large-vars/cleanup-todo filter-value-select < rum/static
   [view-entity {:keys [data-fns] :as table} property value operator idx opts]
@@ -1354,12 +1349,12 @@
                                                        (shui/popup-hide!))
                                                      (let [value' (if many? selected value)
                                                            set-filters-fn (fn [value']
-                                                                            (let [new-filters (update filters :filters
-                                                                                                      (fn [col]
-                                                                                                        (update col idx
-                                                                                                                (fn [[property operator _value]]
-                                                                                                                  [property operator value']))))]
-                                                                              (set-filters! new-filters)))]
+                                                                            (set-filters!
+                                                                             (update filters :filters
+                                                                                     (fn [col]
+                                                                                       (update col idx
+                                                                                               (fn [[property operator _value]]
+                                                                                                 [property operator value']))))))]
                                                        (if (= value "Custom date")
                                                          (shui/popup-show!
                                                           (.-target e)
@@ -1381,12 +1376,12 @@
                               (select/select option)
                               (shui/button {:variant :ghost :size :sm :class "justify-start"
                                             :on-click (fn []
-                                                        (let [new-filters (update filters :filters
-                                                                                  (fn [col]
-                                                                                    (update col idx
-                                                                                            (fn [[property operator _value]]
-                                                                                              [property operator :empty]))))]
-                                                          (set-filters! new-filters)))}
+                                                        (set-filters!
+                                                         (update filters :filters
+                                                                 (fn [col]
+                                                                   (update col idx
+                                                                           (fn [[property operator _value]]
+                                                                             [property operator :empty]))))))}
                                            [:span.opacity-75.hover:opacity-100.font-normal.text-sm
                                             "Empty"])]
                              (select/select option))))
@@ -1424,7 +1419,16 @@
 
 (rum/defc filter-value < rum/static
   [view-entity table property operator value filters set-filters! idx opts]
-  (let [number-operator? (string/starts-with? (name operator) "number-")]
+  (let [number-operator? (string/starts-with? (name operator) "number-")
+        set-filter-value! (fn [input-value number-value]
+                            (set-filters!
+                             (update filters :filters
+                                     (fn [col]
+                                       (update col idx
+                                               (fn [[property operator _value]]
+                                                 (if (and number-operator? (nil? number-value))
+                                                   [property operator]
+                                                   [property operator (or number-value input-value)])))))))]
     (case operator
       :between
       (between property value filters set-filters! idx)
@@ -1434,17 +1438,10 @@
        {:auto-focus false
         :value (or value "")
         :onChange (fn [e]
-                    (let [value (util/evalue e)
-                          number-value (and number-operator? (when-not (string/blank? value)
-                                                               (util/safe-parse-float value)))]
-                      (let [new-filters (update filters :filters
-                                                (fn [col]
-                                                  (update col idx
-                                                          (fn [[property operator _value]]
-                                                            (if (and number-operator? (nil? number-value))
-                                                              [property operator]
-                                                              [property operator (or number-value value)])))))]
-                        (set-filters! new-filters))))
+                    (let [input-value (util/evalue e)
+                          number-value (and number-operator? (when-not (string/blank? input-value)
+                                                               (util/safe-parse-float input-value)))]
+                      (set-filter-value! input-value number-value)))
         :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})
 
       (filter-value-select view-entity table property value operator idx opts))))

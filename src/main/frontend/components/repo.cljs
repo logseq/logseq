@@ -527,7 +527,7 @@
            :checked cloud?
            :on-checked-change
            (fn []
-             (let [v (boolean (not cloud?))]
+             (let [v (not cloud?)]
                (set-cloud? v)))})
          [:label.opacity-70.text-sm
           {:for "rtc-sync"}
@@ -539,7 +539,7 @@
               :checked graph-e2ee?
               :on-checked-change
               (fn []
-                (set-graph-e2ee? (boolean (not graph-e2ee?))))})
+              (set-graph-e2ee? (not graph-e2ee?)))})
             [:label.opacity-70.text-sm
              {:for "rtc-graph-e2ee"}
              "Encrypt graph data"]])]])
