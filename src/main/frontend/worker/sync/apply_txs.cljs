@@ -48,15 +48,16 @@
   (sync-presence/client-ops-conn worker-state/get-client-ops-conn repo))
 
 (defn- sync-counts [repo]
-  (sync-presence/sync-counts
-   {:get-datascript-conn worker-state/get-datascript-conn
-    :get-client-ops-conn worker-state/get-client-ops-conn
-    :get-pending-local-tx-count client-op/get-pending-local-tx-count
-    :get-unpushed-asset-ops-count client-op/get-unpushed-asset-ops-count
-    :get-local-tx client-op/get-local-tx
-    :get-graph-uuid client-op/get-graph-uuid
-    :latest-remote-tx @*repo->latest-remote-tx}
-   repo))
+  (worker-util/profile "sync-counts"
+                       (sync-presence/sync-counts
+                        {:get-datascript-conn worker-state/get-datascript-conn
+                         :get-client-ops-conn worker-state/get-client-ops-conn
+                         :get-pending-local-tx-count client-op/get-pending-local-tx-count
+                         :get-unpushed-asset-ops-count client-op/get-unpushed-asset-ops-count
+                         :get-local-tx client-op/get-local-tx
+                         :get-graph-uuid client-op/get-graph-uuid
+                         :latest-remote-tx @*repo->latest-remote-tx}
+                        repo)))
 
 (defn- broadcast-rtc-state! [client]
   (when client
@@ -197,15 +198,17 @@
        ;;   :inverse-outliner-ops inverse-outliner-ops
        ;;   :tx-id tx-id
        ;;   :existing-action? (some? existing-ent)})
-       (ldb/transact! conn [{:db-sync/tx-id tx-id
-                             :db-sync/normalized-tx-data normalized-tx-data
-                             :db-sync/reversed-tx-data reversed-datoms
-                             :db-sync/pending? true
-                             :db-sync/outliner-op (:outliner-op tx-meta)
-                             :db-sync/forward-outliner-ops forward-outliner-ops
-                             :db-sync/inverse-outliner-ops inverse-outliner-ops
-                             :db-sync/inferred-outliner-ops? inferred-outliner-ops?'
-                             :db-sync/created-at now}])
+       (worker-util/profile
+        "persist tx"
+        (ldb/transact! conn [{:db-sync/tx-id tx-id
+                              :db-sync/normalized-tx-data normalized-tx-data
+                              :db-sync/reversed-tx-data reversed-datoms
+                              :db-sync/pending? true
+                              :db-sync/outliner-op (:outliner-op tx-meta)
+                              :db-sync/forward-outliner-ops forward-outliner-ops
+                              :db-sync/inverse-outliner-ops inverse-outliner-ops
+                              :db-sync/inferred-outliner-ops? inferred-outliner-ops?'
+                              :db-sync/created-at now}]))
        (worker-undo-redo/gen-undo-ops! repo tx-report tx-id
                                        {:apply-history-action! apply-history-action!})
        (when should-inc-pending?
