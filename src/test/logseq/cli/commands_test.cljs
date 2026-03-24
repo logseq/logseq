@@ -1303,10 +1303,16 @@
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
 
-  (testing "show help lists linked references option"
+  (testing "show parses ref-id-footer option"
+    (let [result (commands/parse-args ["show" "--page" "Home" "--ref-id-footer" "false"])]
+      (is (true? (:ok? result)))
+      (is (= false (get-in result [:options :ref-id-footer])))))
+
+  (testing "show help lists linked references and ref-id-footer options"
     (let [summary (:summary (binding [style/*color-enabled?* true]
                               (commands/parse-args ["show" "--help"])))]
-      (is (string/includes? (strip-ansi summary) "--linked-references")))))
+      (is (string/includes? (strip-ansi summary) "--linked-references"))
+      (is (string/includes? (strip-ansi summary) "--ref-id-footer")))))
 
 (deftest test-verb-subcommand-parse-query
   (testing "query shows group help"
