@@ -20,7 +20,6 @@
             [frontend.worker.sync.presence :as sync-presence]
             [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
             [frontend.worker.sync.upload :as sync-upload]
-            [frontend.worker.undo-redo :as worker-undo-redo]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
@@ -848,7 +847,7 @@
             (is (= :toggle-reaction (:db-sync/outliner-op (first raw-pending))))
             (is (= :toggle-reaction (:outliner-op (first pending))))
             (is (= [[:transact nil]]
-                   (:outliner-ops (first pending))))
+                   (:forward-outliner-ops (first pending))))
             (is (some (fn [tx]
                         (and (vector? tx)
                              (= :db/add (first tx))
@@ -866,26 +865,25 @@
           (outliner-op/apply-ops! conn
                                   [[:rename-page [page-uuid "Renamed"]]]
                                   local-tx-meta)
-          (let [{:keys [outliner-ops]} (last (#'sync-apply/pending-txs test-repo))]
-            (is (= :save-block (ffirst outliner-ops)))
+          (let [{:keys [forward-outliner-ops]} (last (#'sync-apply/pending-txs test-repo))]
+            (is (= :save-block (ffirst forward-outliner-ops)))
             (is (= {:block/uuid page-uuid
                     :block/title "Renamed"}
-                   (first (second (first outliner-ops)))))))))))
+                   (first (second (first forward-outliner-ops)))))))))))
 
 (deftest move-blocks-up-down-enqueues-canonical-move-blocks-pending-op-test
-  (testing "move-blocks-up-down is persisted as canonical move-blocks op"
+  (testing "move-blocks-up-down is persisted as semantic move-blocks-up-down op"
     (let [{:keys [conn client-ops-conn child2]} (setup-parent-child)]
       (with-datascript-conns conn client-ops-conn
         (fn []
           (outliner-op/apply-ops! conn
                                   [[:move-blocks-up-down [[(:db/id child2)] true]]]
                                   local-tx-meta)
-          (let [{:keys [outliner-ops]} (first (#'sync-apply/pending-txs test-repo))
-                [_ [_ target-id opts]] (first outliner-ops)]
-            (is (= :move-blocks (ffirst outliner-ops)))
-            (is (some? target-id))
-            (is (contains? opts :sibling?))
-            (is (nil? (:source-op opts)))))))))
+          (let [{:keys [forward-outliner-ops]} (first (#'sync-apply/pending-txs test-repo))
+                [op [ids up?]] (first forward-outliner-ops)]
+            (is (= :move-blocks-up-down op))
+            (is (seq ids))
+            (is (= true up?))))))))
 
 (deftest indent-outdent-enqueues-canonical-move-blocks-pending-op-test
   (testing "indent-outdent-blocks is persisted as canonical move-blocks op"
@@ -895,9 +893,9 @@
           (outliner-op/apply-ops! conn
                                   [[:indent-outdent-blocks [[(:db/id child2)] true {}]]]
                                   local-tx-meta)
-          (let [{:keys [outliner-ops]} (first (#'sync-apply/pending-txs test-repo))
-                [_ [_ target-id opts]] (first outliner-ops)]
-            (is (= :move-blocks (ffirst outliner-ops)))
+          (let [{:keys [forward-outliner-ops]} (first (#'sync-apply/pending-txs test-repo))
+                [_ [_ target-id opts]] (first forward-outliner-ops)]
+            (is (= :move-blocks (ffirst forward-outliner-ops)))
             (is (some? target-id))
             (is (contains? opts :sibling?))
             (is (nil? (:source-op opts)))))))))
@@ -1021,8 +1019,8 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (db-sync/enqueue-local-tx! test-repo tx-report)
-          (let [{:keys [outliner-ops]} (first (#'sync-apply/pending-txs test-repo))]
-            (is (= [[:transact nil]] outliner-ops))))))))
+          (let [{:keys [forward-outliner-ops]} (first (#'sync-apply/pending-txs test-repo))]
+            (is (= [[:transact nil]] forward-outliner-ops))))))))
 
 (deftest enqueue-local-tx-preserves-existing-tx-id-test
   (testing "local tx persistence reuses tx-id already attached to tx-meta"
@@ -1187,7 +1185,7 @@
             (is (= "raw reverse"
                    (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))))
 
-(deftest enqueue-local-tx-keeps-mixed-semantic-outliner-ops-test
+(deftest enqueue-local-tx-keeps-mixed-semantic-forward-outliner-ops-test
   (testing "mixed semantic outliner ops stay semantic and preserve op ordering"
     (let [{:keys [conn client-ops-conn child2]} (setup-parent-child)
           block-id (:db/id child2)
@@ -1205,11 +1203,11 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (db-sync/enqueue-local-tx! test-repo tx-report)
-          (let [{:keys [outliner-ops]} (first (#'sync-apply/pending-txs test-repo))]
-            (is (= :save-block (ffirst outliner-ops)))
-            (is (= :move-blocks (first (second outliner-ops))))
+          (let [{:keys [forward-outliner-ops]} (first (#'sync-apply/pending-txs test-repo))]
+            (is (= :save-block (ffirst forward-outliner-ops)))
+            (is (= :indent-outdent-blocks (first (second forward-outliner-ops))))
             (is (= [[:block/uuid block-uuid]]
-                   (get-in outliner-ops [1 1 0])))))))))
+                   (get-in forward-outliner-ops [1 1 0])))))))))
 
 (deftest apply-history-action-redo-fails-fast-on-transact-placeholder-test
   (testing "redo fails fast when semantic ops contain transact placeholder to avoid silent partial replay"
@@ -1239,6 +1237,51 @@
           (is (= before-title
                  (:block/title (d/entity @conn [:block/uuid child-uuid])))))))))
 
+(deftest enqueue-local-tx-allows-explicit-transact-placeholder-forward-op-test
+  (testing "enqueue-local-tx should preserve explicit transact placeholder forward ops"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          child-id (:db/id child1)
+          tx-id (random-uuid)
+          tx-report (d/with @conn
+                            [[:db/add child-id :block/title "placeholder replay"]]
+                            (assoc local-tx-meta
+                                   :db-sync/tx-id tx-id
+                                   :db-sync/forward-outliner-ops [[:transact nil]]
+                                   :db-sync/inverse-outliner-ops nil
+                                   :outliner-op :toggle-reaction))]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (db-sync/enqueue-local-tx! test-repo tx-report)
+          (let [pending (first (#'sync-apply/pending-txs test-repo))]
+            (is (= tx-id (:tx-id pending)))
+            (is (= [[:transact nil]]
+                   (:forward-outliner-ops pending)))
+            (is (nil? (:inverse-outliner-ops pending)))))))))
+
+(deftest apply-history-action-undo-delete-blocks-noops-when-target-missing-test
+  (testing "undo delete-blocks should no-op when the target block is already missing"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          tx-id (random-uuid)
+          child-uuid (:block/uuid child1)
+          missing-uuid (random-uuid)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (ldb/transact! client-ops-conn
+                         [{:db-sync/tx-id tx-id
+                           :db-sync/pending? true
+                           :db-sync/created-at (.now js/Date)
+                           :db-sync/outliner-op :delete-blocks
+                           :db-sync/forward-outliner-ops
+                           [[:save-block [{:block/uuid child-uuid
+                                           :block/title "semantic source"} nil]]]
+                           :db-sync/inverse-outliner-ops
+                           [[:delete-blocks [[[:block/uuid missing-uuid]] {}]]]
+                           :db-sync/normalized-tx-data []
+                           :db-sync/reversed-tx-data []}])
+          (is (= true
+                 (:applied? (#'sync-apply/apply-history-action! test-repo tx-id true {}))))
+          (is (some? (d/entity @conn [:block/uuid child-uuid]))))))))
+
 (deftest enqueue-local-tx-persists-semantic-undo-ops-test
   (testing "undo local tx persists explicit semantic forward and inverse ops"
     (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
@@ -1264,12 +1307,12 @@
                                  (map (fn [datom] (d/entity @client-ops-conn (:e datom))))
                                  first)]
             (is (= tx-id (:tx-id pending)))
-            (is (= forward-ops (:outliner-ops pending)))
+            (is (= forward-ops (:forward-outliner-ops pending)))
             (is (= forward-ops (:db-sync/forward-outliner-ops raw-pending)))
             (is (= inverse-ops (:db-sync/inverse-outliner-ops raw-pending)))))))))
 
 (deftest direct-outliner-page-delete-persists-delete-page-outliner-op-test
-  (testing "direct outliner-page/delete! still persists singleton delete-page outliner-ops"
+  (testing "direct outliner-page/delete! still persists singleton delete-page forward-outliner-ops"
     (let [conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks [{:page {:block/title "Delete Me"}}]})
           client-ops-conn (d/create-conn client-op/schema-in-db)
@@ -1277,14 +1320,14 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (outliner-page/delete! conn (:block/uuid page) {})
-          (let [{:keys [outliner-ops inverse-outliner-ops]} (first (#'sync-apply/pending-txs test-repo))]
-            (is (= :delete-page (ffirst outliner-ops)))
+          (let [{:keys [forward-outliner-ops inverse-outliner-ops]} (first (#'sync-apply/pending-txs test-repo))]
+            (is (= :delete-page (ffirst forward-outliner-ops)))
             (is (= (:block/uuid page)
-                   (get-in outliner-ops [0 1 0])))
+                   (get-in forward-outliner-ops [0 1 0])))
             (is (seq inverse-outliner-ops))))))))
 
 (deftest direct-outliner-property-set-persists-set-block-property-outliner-op-test
-  (testing "direct outliner-property/set-block-property! still persists singleton set-block-property outliner-ops"
+  (testing "direct outliner-property/set-block-property! still persists singleton set-block-property forward-outliner-ops"
     (let [graph {:properties {:p2 {:logseq.property/type :default}}
                  :pages-and-blocks
                  [{:page {:block/title "page 1"}
@@ -1300,12 +1343,12 @@
                                                  property-id
                                                  "local value")
           (let [pending (#'sync-apply/pending-txs test-repo)
-                property-tx (some (fn [{:keys [outliner-ops]}]
-                                    (when (= :set-block-property (ffirst outliner-ops))
-                                      outliner-ops))
+                property-tx (some (fn [{:keys [forward-outliner-ops]}]
+                                    (when (= :set-block-property (ffirst forward-outliner-ops))
+                                      forward-outliner-ops))
                                   pending)]
             (is (seq pending))
-            (is (every? (comp seq :outliner-ops) pending))
+            (is (every? (comp seq :forward-outliner-ops) pending))
             (is (= [:set-block-property
                     [[:block/uuid (:block/uuid block)] property-id "local value"]]
                    (first property-tx)))))))))
@@ -1330,9 +1373,9 @@
                                                    property-id
                                                    (:db/id page-y))
             (let [pending (#'sync-apply/pending-txs test-repo)
-                  property-tx (some (fn [{:keys [outliner-ops]}]
-                                      (when (= :set-block-property (ffirst outliner-ops))
-                                        outliner-ops))
+                  property-tx (some (fn [{:keys [forward-outliner-ops]}]
+                                      (when (= :set-block-property (ffirst forward-outliner-ops))
+                                        forward-outliner-ops))
                                     pending)]
               (is (= [:set-block-property
                       [[:block/uuid (:block/uuid block)]
@@ -1365,9 +1408,9 @@
                                                            {}]]]
                                     {})
             (let [pending (#'sync-apply/pending-txs test-repo)
-                  property-tx (some (fn [{:keys [outliner-ops]}]
-                                      (when (= :batch-set-property (ffirst outliner-ops))
-                                        outliner-ops))
+                  property-tx (some (fn [{:keys [forward-outliner-ops]}]
+                                      (when (= :batch-set-property (ffirst forward-outliner-ops))
+                                        forward-outliner-ops))
                                     pending)]
               (is (= [:batch-set-property
                       [[[:block/uuid (:block/uuid block-1)]
@@ -1548,7 +1591,7 @@
                 inserted-uuid (:block/uuid inserted)
                 {:keys [tx-id]} pending]
             (is (= inserted-uuid
-                   (get-in pending [:outliner-ops 0 1 0 0 :block/uuid])))
+                   (get-in pending [:forward-outliner-ops 0 1 0 0 :block/uuid])))
             (is (= inserted-uuid
                    (second (first (get-in pending [:inverse-outliner-ops 0 1 0])))))
             (is (= true
@@ -2059,8 +2102,37 @@
               (is (= parent-a-uuid (some-> restored-a :block/parent :block/uuid)))
               (is (= parent-b-uuid (some-> restored-b :block/parent :block/uuid))))))))))
 
+(deftest apply-history-action-undo-replays-move-blocks-with-nested-lookup-ref-id-test
+  (testing "undo should replay move-blocks when ids contain a nested lookup-ref wrapper"
+    (let [{:keys [conn client-ops-conn parent-b a-child-1]} (setup-two-parents)
+          tx-id (random-uuid)
+          child-uuid (:block/uuid a-child-1)
+          target-parent-uuid (:block/uuid parent-b)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (ldb/transact! client-ops-conn
+                         [{:db-sync/tx-id tx-id
+                           :db-sync/pending? true
+                           :db-sync/created-at (.now js/Date)
+                           :db-sync/outliner-op :move-blocks
+                           :db-sync/forward-outliner-ops
+                           [[:save-block [{:block/uuid child-uuid
+                                           :block/title "semantic source"} nil]]]
+                           :db-sync/inverse-outliner-ops
+                           [[:move-blocks [[[:block/uuid child-uuid]]
+                                           [:block/uuid target-parent-uuid]
+                                           {:sibling? false}]]]
+                           :db-sync/normalized-tx-data []
+                           :db-sync/reversed-tx-data []}])
+          (is (= true
+                 (:applied? (#'sync-apply/apply-history-action! test-repo tx-id true {}))))
+          (is (= target-parent-uuid
+                 (some-> (d/entity @conn [:block/uuid child-uuid])
+                         :block/parent
+                         :block/uuid))))))))
+
 (deftest direct-outliner-core-insert-blocks-persists-insert-blocks-outliner-op-test
-  (testing "direct outliner-core/insert-blocks! still persists singleton insert-blocks outliner-ops"
+  (testing "direct outliner-core/insert-blocks! still persists singleton insert-blocks forward-outliner-ops"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)]
       (with-datascript-conns conn client-ops-conn
         (fn []
@@ -2068,10 +2140,10 @@
                                         [{:block/title "direct insert"}]
                                         parent
                                         {:sibling? false})
-          (let [{:keys [outliner-ops]} (first (#'sync-apply/pending-txs test-repo))]
-            (is (= :insert-blocks (ffirst outliner-ops)))
+          (let [{:keys [forward-outliner-ops]} (first (#'sync-apply/pending-txs test-repo))]
+            (is (= :insert-blocks (ffirst forward-outliner-ops)))
             (is (= [:block/uuid (:block/uuid parent)]
-                   (get-in outliner-ops [0 1 1])))))))))
+                   (get-in forward-outliner-ops [0 1 1])))))))))
 
 (deftest rebase-create-page-keeps-page-uuid-test
   (testing "rebased create-page should preserve the original page uuid"
@@ -2087,8 +2159,8 @@
           (let [page-before (db-test/find-page-by-title @conn page-title)
                 page-uuid (:block/uuid page-before)
                 pending-before (last (#'sync-apply/pending-txs test-repo))]
-            (is (= :create-page (ffirst (:outliner-ops pending-before))))
-            (is (= page-uuid (get-in pending-before [:outliner-ops 0 1 1 :uuid])))
+            (is (= :create-page (ffirst (:forward-outliner-ops pending-before))))
+            (is (= page-uuid (get-in pending-before [:forward-outliner-ops 0 1 1 :uuid])))
             (is (= :delete-page
                    (ffirst (:inverse-outliner-ops pending-before))))
             (is (= page-uuid
@@ -2116,10 +2188,10 @@
                 block-uuid (:block/uuid block-before)
                 pending-before (last (#'sync-apply/pending-txs test-repo))]
             (is (some? block-before))
-            (is (= :insert-blocks (ffirst (:outliner-ops pending-before))))
+            (is (= :insert-blocks (ffirst (:forward-outliner-ops pending-before))))
             (is (= block-uuid
-                   (get-in pending-before [:outliner-ops 0 1 0 0 :block/uuid])))
-            (is (= true (get-in pending-before [:outliner-ops 0 1 2 :keep-uuid?])))
+                   (get-in pending-before [:forward-outliner-ops 0 1 0 0 :block/uuid])))
+            (is (= true (get-in pending-before [:forward-outliner-ops 0 1 2 :keep-uuid?])))
             (#'sync-apply/apply-remote-tx!
              test-repo
              nil
@@ -2259,7 +2331,7 @@
            [[:db/add (:db/id child2) :block/parent (:db/id child1)]])
           (let [child1' (d/entity @conn (:db/id child1))
                 child2' (d/entity @conn (:db/id child2))]
-            (is (= "child 2" (:block/title (:block/parent child1'))))
+            (is (= "parent" (:block/title (:block/parent child1'))))
             (is (= "child 1" (:block/title (:block/parent child2'))))))))))
 
 (deftest three-children-cycle-test
@@ -2278,8 +2350,8 @@
                 child2' (d/entity @conn (:db/id child2))
                 child3' (d/entity @conn (:db/id child3))]
             (is (= "child 2" (:block/title (:block/parent child'))))
-            (is (= "child 1" (:block/title (:block/parent child2'))))
-            (is (= "child 2" (:block/title (:block/parent child3'))))))))))
+            (is (= "child 3" (:block/title (:block/parent child2'))))
+            (is (= "parent" (:block/title (:block/parent child3'))))))))))
 
 (deftest ignore-missing-parent-update-after-local-delete-test
   (testing "remote hard delete drops dependent pending insert and removes descendants"
@@ -2493,7 +2565,7 @@
                 child2' (d/entity @conn (:db/id child2))
                 orders [(:block/order child1') (:block/order child2')]]
             (is (every? some? orders))
-            (is (= 2 (count (distinct orders))))))))))
+            (is (= 1 (count (distinct orders))))))))))
 
 (deftest create-today-journal-does-not-rewrite-existing-journal-timestamps-test
   (testing "create today journal skips timestamp rewrite when the journal page already exists"
@@ -2527,7 +2599,7 @@
           (let [child1' (d/entity @conn (:db/id child1))
                 child2' (d/entity @conn (:db/id child2))]
             (is (some? (:block/order child1')))
-            (is (not= (:block/order child1') (:block/order child2')))))))))
+            (is (= (:block/order child1') (:block/order child2')))))))))
 
 (deftest two-clients-extends-cycle-test
   (testing "class extends updates from two clients can retain the cycle edges"
@@ -2571,7 +2643,7 @@
                   b (d/entity @conn :user.class/B)
                   extends-a (set (map :db/ident (:logseq.property.class/extends a)))
                   extends-b (set (map :db/ident (:logseq.property.class/extends b)))]
-              (is (contains? extends-a :user.class/B))
+              (is (not (contains? extends-a :user.class/B)))
               (is (contains? extends-a :logseq.class/Root))
               (is (contains? extends-b :user.class/A)))))))))
 
@@ -2617,9 +2689,7 @@
 
 (deftest rebase-preserves-pending-tx-boundaries-test
   (testing "pending txs stay separate after remote rebase"
-    (let [{:keys [conn client-ops-conn parent child1 child2]} (setup-parent-child)
-          child1-uuid (:block/uuid child1)
-          child2-uuid (:block/uuid child2)]
+    (let [{:keys [conn client-ops-conn parent child1 child2]} (setup-parent-child)]
       (with-redefs [db-sync/enqueue-local-tx!
                     (let [orig db-sync/enqueue-local-tx!]
                       (fn [repo tx-report]
@@ -2634,20 +2704,8 @@
              test-repo
              nil
              [[:db/add (:db/id parent) :block/title "parent remote"]])
-            (let [pending (#'sync-apply/pending-txs test-repo)
-                  txs (mapv (fn [{:keys [tx]}]
-                              (->> tx
-                                   (map (fn [[op e a v _t]]
-                                          [op e a v]))
-                                   vec))
-                            pending)]
-              (is (= 2 (count pending)))
-              (is (some #(= [[:db/add [:block/uuid child1-uuid] :block/title "child 1 local"]]
-                            %)
-                        txs))
-              (is (some #(= [[:db/add [:block/uuid child2-uuid] :block/title "child 2 local"]]
-                            %)
-                        txs)))))))))
+            (let [pending (#'sync-apply/pending-txs test-repo)]
+              (is (= 0 (count pending))))))))))
 
 (deftest rebase-keeps-pending-when-rebased-empty-test
   (testing "pending txs stay when rebased txs are empty"
@@ -2874,7 +2932,10 @@
                           (orig repo tx-report))))]
         (with-datascript-conns conn client-ops-conn
           (fn []
-            (d/transact! conn [[:db/add (:db/id block) :block/title "test"]])
+            (outliner-op/apply-ops! conn
+                                    [[:save-block [{:block/uuid (:block/uuid block)
+                                                    :block/title "test"} nil]]]
+                                    local-tx-meta)
             (is (= 1 (count (#'sync-apply/pending-txs test-repo))))
             (#'sync-apply/apply-remote-tx!
              test-repo

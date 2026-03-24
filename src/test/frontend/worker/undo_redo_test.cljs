@@ -115,8 +115,8 @@
              (second %))
           redo-op)))
 
-(deftest undo-missing-history-action-row-clears-history-test
-  (testing "worker undo treats missing tx-id action row as unavailable and clears history"
+(deftest undo-missing-history-action-row-falls-back-to-local-path-test
+  (testing "worker undo falls back to local reversed datoms when history action row is missing"
     (worker-undo-redo/clear-history! test-repo)
     (let [conn (worker-state/get-datascript-conn test-repo)
           client-ops-conn (get @worker-state/*client-ops-conns test-repo)
@@ -130,13 +130,60 @@
       (when-let [tx-ent (d/entity @client-ops-conn [:db-sync/tx-id tx-id-2])]
         (ldb/transact! client-ops-conn [[:db/retractEntity (:db/id tx-ent)]]))
       (let [undo-result (worker-undo-redo/undo test-repo)]
-        (is (= ::worker-undo-redo/empty-undo-stack undo-result))
-        (is (= "v2" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
-        (is (empty? (get @worker-undo-redo/*undo-ops test-repo)))
-        (is (empty? (get @worker-undo-redo/*redo-ops test-repo))))
+        (is (not= ::worker-undo-redo/empty-undo-stack undo-result))
+        (is (= "v1" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+        (is (= 1 (count (get @worker-undo-redo/*undo-ops test-repo))))
+        (is (= 1 (count (get @worker-undo-redo/*redo-ops test-repo)))))
       (let [redo-result (worker-undo-redo/redo test-repo)]
-        (is (= ::worker-undo-redo/empty-redo-stack redo-result))
+        (is (not= ::worker-undo-redo/empty-redo-stack redo-result))
         (is (= "v2" (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))
+
+(deftest redo-invalid-history-action-result-keeps-redo-strict-test
+  (testing "redo should not silently skip invalid worker results"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          {:keys [child-uuid]} (seed-page-parent-child!)
+          tx-id-1 (random-uuid)
+          tx-id-2 (random-uuid)
+          prev-apply-action @worker-undo-redo/*apply-history-action!]
+      (try
+        (save-block-title! conn child-uuid "v1" tx-id-1)
+        (save-block-title! conn child-uuid "v2" tx-id-2)
+        (is (not= ::worker-undo-redo/empty-undo-stack
+                  (worker-undo-redo/undo test-repo)))
+        (is (= "v1" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+        (reset! worker-undo-redo/*apply-history-action!
+                (fn [_repo _tx-id _undo? _tx-meta]
+                  {:applied? false
+                   :reason :invalid-history-action-tx}))
+        (is (= ::worker-undo-redo/empty-redo-stack
+               (worker-undo-redo/redo test-repo)))
+        (is (= "v1" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+        (is (empty? (get @worker-undo-redo/*undo-ops test-repo)))
+        (is (empty? (get @worker-undo-redo/*redo-ops test-repo)))
+        (finally
+          (reset! worker-undo-redo/*apply-history-action! prev-apply-action))))))
+
+(deftest undo-skippable-worker-error-uses-ex-data-reason-test
+  (testing "undo skip classification should depend on ex-data reason, not exception message"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          {:keys [child-uuid]} (seed-page-parent-child!)
+          tx-id-1 (random-uuid)
+          tx-id-2 (random-uuid)
+          prev-apply-action @worker-undo-redo/*apply-history-action!]
+      (try
+        (save-block-title! conn child-uuid "v1" tx-id-1)
+        (save-block-title! conn child-uuid "v2" tx-id-2)
+        (reset! worker-undo-redo/*apply-history-action!
+                (fn [_repo _tx-id _undo? _tx-meta]
+                  (throw (ex-info "semantic-error-renamed"
+                                  {:reason :invalid-history-action-ops}))))
+        (let [undo-result (worker-undo-redo/undo test-repo)]
+          (is (not= ::worker-undo-redo/empty-undo-stack undo-result))
+          (is (= "child" (:block/title (d/entity @conn [:block/uuid child-uuid])))))
+        (finally
+          (reset! worker-undo-redo/*apply-history-action! prev-apply-action))))))
 
 (deftest undo-redo-rebinds-stack-to-latest-history-tx-id-test
   (testing "undo/redo pushes stack op with latest persisted history tx id"
