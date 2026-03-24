@@ -20,6 +20,8 @@
           :complete :pages}
    :linked-references {:desc "Include linked references (default true)"
                        :coerce :boolean}
+   :ref-id-footer {:desc "Show referenced entity id footer (default true)"
+                   :coerce :boolean}
    :level {:desc "Limit tree depth (default 10)"
            :coerce :long}})
 
@@ -454,12 +456,19 @@
          distinct
          vec)))
 
-(defn- fetch-uuid-labels
+(defn- uuid-entity-label
+  [entity]
+  (let [uuid-str (some-> (:block/uuid entity) str)]
+    (or (:block/title entity)
+        (:block/name entity)
+        uuid-str)))
+
+(defn- fetch-uuid-entities
   [config repo uuid-strings]
   (if (seq uuid-strings)
     (p/let [blocks (p/all (map (fn [uuid-str]
                                  (transport/invoke config :thread-api/pull false
-                                                   [repo [:block/uuid :block/title :block/name]
+                                                   [repo [:db/id :block/uuid :block/title :block/name]
                                                     [:block/uuid (uuid uuid-str)]]))
                                uuid-strings))]
       (->> blocks
@@ -467,7 +476,8 @@
            (map (fn [block]
                   (let [uuid-str (some-> (:block/uuid block) str)]
                     [(string/lower-case uuid-str)
-                     (or (:block/title block) (:block/name block) uuid-str)])))
+                     {:id (:db/id block)
+                      :label (uuid-entity-label block)}])))
            (into {})))
     (p/resolved {})))
 
@@ -847,6 +857,20 @@
            (linked-refs->text refs uuid->label property-titles property-value-labels))
       tree-text)))
 
+(defn- referenced-entity-row
+  [uuid uuid->entity]
+  (let [{:keys [id label]} (get uuid->entity (string/lower-case uuid))
+        id* (or id "-")
+        label* (or label uuid)]
+    (str id* " -> " label*)))
+
+(defn- render-referenced-entities-footer
+  [ordered-uuids uuid->entity]
+  (let [ordered-uuids (vec (distinct (remove string/blank? ordered-uuids)))]
+    (when (seq ordered-uuids)
+      (str "Referenced Entities (" (count ordered-uuids) ")\n"
+           (string/join "\n" (map #(referenced-entity-row % uuid->entity) ordered-uuids))))))
+
 (defn build-action
   [options repo]
   (if-not (seq repo)
@@ -875,6 +899,9 @@
                     :linked-references? (if (contains? options :linked-references)
                                           (:linked-references options)
                                           true)
+                    :ref-id-footer? (if (contains? options :ref-id-footer)
+                                      (:ref-id-footer options)
+                                      true)
                     :uuid (:uuid options)
                     :page (:page options)
                     :level (:level options)}})))))
@@ -890,8 +917,16 @@
                          (or linked-refs {:count 0 :blocks []})
                          {:count 0 :blocks []})
           uuid-refs (collect-uuid-refs tree-data linked-refs*)
-          uuid->label (fetch-uuid-labels config (:repo action) uuid-refs)
-          tree-data (cond-> (assoc tree-data :uuid->label uuid->label)
+          uuid->entity (fetch-uuid-entities config (:repo action) uuid-refs)
+          uuid->label (->> uuid->entity
+                           (keep (fn [[uuid-key {:keys [label]}]]
+                                   (when (seq label)
+                                     [uuid-key label])))
+                           (into {}))
+          tree-data (cond-> (assoc tree-data
+                                   :referenced-uuids uuid-refs
+                                   :uuid->entity uuid->entity
+                                   :uuid->label uuid->label)
                       linked-enabled? (assoc :linked-references linked-refs*))
           tree-data (resolve-uuid-refs-in-tree-data tree-data uuid->label)]
     tree-data))
@@ -938,11 +973,25 @@
        entry))
    tree-data))
 
+(defn- strip-show-internal-data
+  [tree-data]
+  (dissoc tree-data :referenced-uuids :uuid->entity))
+
 (defn- render-tree-text
   [tree-data action]
-  (if (false? (:linked-references? action))
-    (tree->text tree-data)
-    (tree->text-with-linked-refs tree-data)))
+  (let [tree-text (if (false? (:linked-references? action))
+                    (tree->text tree-data)
+                    (tree->text-with-linked-refs tree-data))
+        footer-enabled? (not= false (:ref-id-footer? action))
+        linked-refs (when (not= false (:linked-references? action))
+                      (:linked-references tree-data))
+        ordered-uuids (or (:referenced-uuids tree-data)
+                          (collect-uuid-refs tree-data linked-refs))
+        footer (when footer-enabled?
+                 (render-referenced-entities-footer ordered-uuids (:uuid->entity tree-data)))]
+    (if (seq footer)
+      (str tree-text "\n\n" footer)
+      tree-text)))
 
 (defn- render-tree-text-with-properties
   [config action tree-data]
@@ -981,7 +1030,9 @@
                                          (and ok? (contained? id)))
                                        results))
                   sanitize-tree (fn [tree]
-                                  (strip-block-uuid tree))
+                                  (-> tree
+                                      strip-show-internal-data
+                                      strip-block-uuid))
                   render-result (fn [{:keys [ok? tree id error]}]
                                   (if ok?
                                     (render-tree-text-with-properties cfg action tree)
@@ -1011,13 +1062,17 @@
           (p/let [tree-data (build-tree-data cfg action)]
             (case format
              :edn
-              (let [tree-data (strip-block-uuid tree-data)]
+              (let [tree-data (-> tree-data
+                                  strip-show-internal-data
+                                  strip-block-uuid)]
                 {:status :ok
                  :data tree-data
                  :output-format :edn})
 
              :json
-              (let [tree-data (strip-block-uuid tree-data)]
+              (let [tree-data (-> tree-data
+                                  strip-show-internal-data
+                                  strip-block-uuid)]
                 {:status :ok
                  :data tree-data
                  :output-format :json})
