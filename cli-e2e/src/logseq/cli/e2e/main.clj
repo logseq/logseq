@@ -197,7 +197,7 @@
                         (fn [{:keys [cmd phase step-index step-total] :as command-opts}]
                           (let [prefix (case phase
                                          :setup (format "    [setup %d/%d]" step-index step-total)
-                                         :main "    [main]"
+                                         :main (format "    [main %d/%d]" (or step-index 1) (or step-total 1))
                                          :cleanup (format "    [cleanup %d/%d]" step-index step-total)
                                          "    [command]")]
                             (println (str prefix " $ " cmd))

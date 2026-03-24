@@ -181,6 +181,7 @@
         case-id (:id rendered)
         cleanup-commands (vec (:cleanup rendered))
         setup-commands (vec (:setup rendered))
+        main-commands (vec (:cmds rendered))
         cleanup! (fn []
                    (doseq [[idx command] (map-indexed vector cleanup-commands)]
                      (try
@@ -199,13 +200,22 @@
                                      :step-total (count setup-commands)
                                      :case-id case-id}))
     (try
-      (let [result (run-command! (:cmd rendered) context {:run-command run-command
-                                                          :stdin (:stdin rendered)
-                                                          :allow-failure true
-                                                          :phase (when detailed-log? :main)
-                                                          :step-index 1
-                                                          :step-total 1
-                                                          :case-id case-id})]
+      (let [main-total (count main-commands)
+            _ (when (zero? main-total)
+                (throw (ex-info "Missing case commands"
+                                {:id case-id
+                                 :case rendered})))
+            result (reduce (fn [_ [idx command]]
+                             (let [last-step? (= idx (dec main-total))]
+                               (run-command! command context {:run-command run-command
+                                                              :stdin (when last-step? (:stdin rendered))
+                                                              :allow-failure last-step?
+                                                              :phase (when detailed-log? :main)
+                                                              :step-index (inc idx)
+                                                              :step-total main-total
+                                                              :case-id case-id})))
+                           nil
+                           (map-indexed vector main-commands))]
         (assert-result! rendered result)
         {:id case-id
          :status :ok
