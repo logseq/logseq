@@ -60,7 +60,6 @@
 
 (defn clear-history!
   [repo]
-  (prn :debug ::clear-history!)
   (swap! *undo-ops assoc repo [])
   (swap! *redo-ops assoc repo [])
   (swap! *pending-editor-info dissoc repo))
