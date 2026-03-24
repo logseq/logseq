@@ -15,7 +15,6 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.outliner.datascript :as ds]
             [logseq.outliner.pipeline :as outliner-pipeline]
-            [logseq.outliner.recycle :as outliner-recycle]
             [logseq.outliner.tree :as otree]
             [logseq.outliner.tx-meta :as outliner-tx-meta]
             [logseq.outliner.validate :as outliner-validate]
