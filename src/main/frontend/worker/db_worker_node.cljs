@@ -120,7 +120,8 @@
                                 {:method (or method-kw method-str)
                                  :elapsed-ms (- (js/Date.now) started-at)}))
                     10000)]
-    (-> (.remoteInvoke proxy method-str (boolean direct-pass?) args')
+    ;;  wraps .remoteInvoke so synchronous throws become proper promise rejections with ex-data preserved
+    (-> (p/do! (.remoteInvoke proxy method-str (boolean direct-pass?) args'))
         (p/finally (fn []
                      (js/clearTimeout timeout-id))))))
 
@@ -256,10 +257,20 @@
                                            {:ok true :resultTransit result})))))
                (p/catch (fn [e]
                           (let [data (ex-data e)]
-                            (if (= :repo-locked (:code data))
+                            (cond
+                              (= :repo-locked (:code data))
                               (send-json! res 409 {:ok false
                                                    :error {:code :repo-locked
                                                            :message (or (.-message e) "graph is locked")}})
+
+                              ;; CLI should see same errors that app is seeing
+                              (= :notification (:type data))
+                              (send-json! res 400 {:ok false
+                                                   :error {:code :validation-failed
+                                                           :message (or (get-in data [:payload :message])
+                                                                        (.-message e))}})
+
+                              :else
                               (do
                                 (log/error :db-worker-node-http-invoke-failed e)
                                 (send-json! res 500 {:ok false

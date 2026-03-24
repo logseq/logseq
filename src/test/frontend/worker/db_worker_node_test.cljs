@@ -973,3 +973,40 @@
                               (-> (stop!)
                                   (p/finally (fn [] (done))))
                               (done))))))))
+
+(deftest db-worker-node-validation-error-returns-400
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-validation-error")
+               repo (str "logseq_db_validation_" (subs (str (random-uuid)) 0 8))]
+           (-> (p/let [{:keys [host port stop!]}
+                       (start-daemon! {:data-dir data-dir :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       ;; Find a block to use as target and Journal tag's db/id
+                       journal (invoke host port "thread-api/pull"
+                                       [repo [:db/id] [:db/ident :logseq.class/Journal]])
+                       journal-id (:db/id journal)
+                       blocks (invoke host port "thread-api/q"
+                                      [repo
+                                       ['[:find ?e
+                                          :where
+                                          [?e :block/title]
+                                          [(missing? $ ?e :logseq.property/created-from-property)]
+                                          [(missing? $ ?e :block/name)]]]])
+                       block-id (ffirst blocks)
+                       ;; Try to set the built-in Journal tag on the block
+                       {:keys [status body]}
+                       (invoke-raw host port "thread-api/apply-outliner-ops"
+                                   [repo [[:batch-set-property [[block-id] :block/tags journal-id {}]]] {}])
+                       parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
+                 (is (= 400 status)
+                     "validation errors should return 400, not 500")
+                 (is (false? (:ok parsed)))
+                 (is (string/includes? (get-in parsed [:error :message]) "Can't set tag")
+                     "error message should describe the validation failure"))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))

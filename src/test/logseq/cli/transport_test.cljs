@@ -108,6 +108,30 @@
                         (is false (str "unexpected error: " e))
                         (done))))))
 
+(deftest test-request-400-extracts-api-message
+  (async done
+         (-> (p/let [{:keys [url stop!]} (start-server
+                                           (fn [_req ^js res]
+                                             (.writeHead res 400 #js {"Content-Type" "application/json"})
+                                             (.end res (js/JSON.stringify
+                                                        #js {:ok false
+                                                             :error #js {:code "validation-failed"
+                                                                         :message "Can't set tag with built-in #Journal"}}))))]
+               (p/catch
+                (transport/request {:method "POST"
+                                    :url (str url "/invoke")
+                                    :timeout-ms 1000})
+                (fn [e]
+                  (is (= :http-error (-> (ex-data e) :code)))
+                  (is (= 400 (-> (ex-data e) :status)))
+                  (is (= "Can't set tag with built-in #Journal" (ex-message e))
+                      "error message is the clean API message, not raw JSON")))
+               (p/let [_ (stop!)] true))
+             (p/then (fn [_] (done)))
+             (p/catch (fn [e]
+                        (is false (str "unexpected error: " e))
+                        (done))))))
+
 (deftest test-request-timeout
   (async done
          (-> (p/let [{:keys [url stop!]} (start-server
