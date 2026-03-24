@@ -6,16 +6,16 @@
 
 (def sample-cases
   [{:id "global-help"
-    :cmd "node static/logseq-cli.js --help"
+    :cmds ["node static/logseq-cli.js --help"]
     :covers {:options {:global ["--help"]}}
     :tags [:global :smoke]}
    {:id "graph-create"
-    :cmd "node static/logseq-cli.js graph create --graph demo"
+    :cmds ["node static/logseq-cli.js graph create --graph demo"]
     :covers {:commands ["graph create"]
              :options {:graph ["--type"]}}
     :tags [:graph]}
    {:id "graph-list"
-    :cmd "node static/logseq-cli.js graph list"
+    :cmds ["node static/logseq-cli.js graph list"]
     :covers {:commands ["graph list"]
              :options {:graph ["--file"]}}
     :tags [:graph :smoke]}])
@@ -41,7 +41,7 @@
          #"Missing coverage"
          (main/run! {:inventory complete-inventory
                      :cases [{:id "global-help"
-                              :cmd "node static/logseq-cli.js --help"
+                              :cmds ["node static/logseq-cli.js --help"]
                               :covers {:options {:global ["--help"]}}}]
                      :skip-build true
                      :run-command (fn [_]
@@ -54,14 +54,14 @@
 (deftest run-succeeds-when-coverage-is-complete
   (let [result (main/run! {:inventory complete-inventory
                            :cases [{:id "global-help"
-                                    :cmd "node static/logseq-cli.js --help"
+                                    :cmds ["node static/logseq-cli.js --help"]
                                     :covers {:options {:global ["--help"]}}}
                                    {:id "graph-create"
-                                    :cmd "node static/logseq-cli.js graph create --type markdown"
+                                    :cmds ["node static/logseq-cli.js graph create --type markdown"]
                                     :covers {:commands ["graph create"]
                                              :options {:graph ["--type"]}}}
                                    {:id "graph-list"
-                                    :cmd "node static/logseq-cli.js graph list --file demo.edn"
+                                    :cmds ["node static/logseq-cli.js graph list --file demo.edn"]
                                     :covers {:commands ["graph list"]
                                              :options {:graph ["--file"]}}}]
                            :skip-build true
@@ -76,10 +76,10 @@
   (let [executed (atom [])]
     (let [result (main/run! {:inventory complete-inventory
                              :cases [{:id "global-help"
-                                      :cmd "node static/logseq-cli.js --help"
+                                      :cmds ["node static/logseq-cli.js --help"]
                                       :covers {:options {:global ["--help"]}}}
                                      {:id "graph-create"
-                                      :cmd "node static/logseq-cli.js graph create --graph demo"
+                                      :cmds ["node static/logseq-cli.js graph create --graph demo"]
                                       :covers {:commands ["graph create"]
                                                :options {:graph ["--type"]}}}]
                              :case "global-help"
@@ -131,7 +131,7 @@
                               :run-case (fn [case _opts]
                                           {:id (:id case)
                                            :status :ok
-                                           :cmd (:cmd case)})}))]
+                                           :cmd (last (:cmds case))})}))]
     (is (string/includes? output "==> Running cli-e2e cases"))
     (is (string/includes? output "==> Build preflight: running..."))
     (is (string/includes? output "==> Build preflight: skipped (--skip-build)"))
@@ -169,7 +169,7 @@
         output (with-out-str
                  (main/test! {:inventory complete-inventory
                               :cases [{:id "global-help"
-                                       :cmd "node static/logseq-cli.js --help"
+                                       :cmds ["node static/logseq-cli.js --help"]
                                        :covers {:options {:global ["--help"]}}}]
                               :case "global-help"
                               :skip-build true
@@ -180,7 +180,7 @@
                                               :out "ok"
                                               :err ""})
                               :run-case (fn [case {:keys [run-command]}]
-                                          (let [result (run-command {:cmd (:cmd case)
+                                          (let [result (run-command {:cmd (first (:cmds case))
                                                                      :phase :main
                                                                      :step-index 1
                                                                      :step-total 1})]
@@ -188,7 +188,7 @@
                                              :status :ok
                                              :cmd (:cmd result)}) )}))]
     (is (string/includes? output "==> Detailed case logging enabled (--case global-help)"))
-    (is (string/includes? output "    [main] $ node static/logseq-cli.js --help"))
+    (is (string/includes? output "    [main 1/1] $ node static/logseq-cli.js --help"))
     (is (true? (:stream-output? @command-opts)))))
 
 (deftest cleanup-help-prints-usage
