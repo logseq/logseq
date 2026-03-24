@@ -143,16 +143,14 @@
         (let [key (keyword "db-sync-sim" repo)]
           (d/listen! conn key
                      (fn [tx-report]
-                       (db-sync/enqueue-local-tx! repo tx-report)
-                       (undo-redo/gen-undo-ops!
-                        repo
-                        (-> tx-report
-                            (assoc-in [:tx-meta :client-id] (:client-id @state/state))
-                            (update-in [:tx-meta :local-tx?]
-                                       (fn [local-tx?]
-                                         (if (nil? local-tx?)
-                                           true
-                                           local-tx?)))))))
+                       (let [tx-report' (-> tx-report
+                                            (assoc-in [:tx-meta :client-id] (:client-id @state/state))
+                                            (update-in [:tx-meta :local-tx?]
+                                                       (fn [local-tx?]
+                                                         (if (nil? local-tx?)
+                                                           true
+                                                           local-tx?))))]
+                         (db-sync/enqueue-local-tx! repo tx-report'))))
           (swap! listeners conj [conn key]))))
     (try
       (f)
