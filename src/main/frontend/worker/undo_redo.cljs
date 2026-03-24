@@ -36,7 +36,9 @@
                   [:outliner-op :keyword]]]
        [:added-ids [:set :int]]
        [:retracted-ids [:set :int]]
-       [:db-sync/tx-id {:optional true} :uuid]]]]
+       [:db-sync/tx-id {:optional true} :uuid]
+       [:db-sync/forward-outliner-ops {:optional true} [:sequential :any]]
+       [:db-sync/inverse-outliner-ops {:optional true} [:sequential :any]]]]]
 
     [::record-editor-info
      [:cat :keyword
@@ -388,6 +390,14 @@
   (when ui-state-str
     (push-undo-op repo [[::ui-state ui-state-str]])))
 
+(defn- pending-history-action-ops
+  [repo tx-id]
+  (when (uuid? tx-id)
+    (when-let [conn (get @worker-state/*client-ops-conns repo)]
+      (when-let [ent (d/entity @conn [:db-sync/tx-id tx-id])]
+        {:db-sync/forward-outliner-ops (some-> (:db-sync/forward-outliner-ops ent) seq vec)
+         :db-sync/inverse-outliner-ops (some-> (:db-sync/inverse-outliner-ops ent) seq vec)}))))
+
 (defn gen-undo-ops!
   [repo {:keys [tx-data tx-meta db-after db-before]} tx-id
    {:keys [apply-history-action!]}]
@@ -411,16 +421,24 @@
             tx-data' (vec tx-data)
             editor-info (or (:undo-redo/editor-info tx-meta)
                             (take-pending-editor-info! repo))
-            data (cond->
-                  {:db-sync/tx-id tx-id
-                   :tx-meta (dissoc tx-meta :outliner-ops)
-                   :added-ids added-ids
-                   :retracted-ids retracted-ids
-                   :tx-data tx-data'})
+            {:db-sync/keys [forward-outliner-ops inverse-outliner-ops]}
+            (pending-history-action-ops repo tx-id)
+            data (cond-> {:db-sync/tx-id tx-id
+                          :tx-meta (dissoc tx-meta :outliner-ops)
+                          :added-ids added-ids
+                          :retracted-ids retracted-ids
+                          :tx-data tx-data'}
+                   (seq forward-outliner-ops)
+                   (assoc :db-sync/forward-outliner-ops forward-outliner-ops)
+
+                   (seq inverse-outliner-ops)
+                   (assoc :db-sync/inverse-outliner-ops inverse-outliner-ops))
             op (->> [(when editor-info [::record-editor-info editor-info])
                      [::db-transact data]]
                     (remove nil?)
                     vec)]
+        ;; A new local action invalidates redo history.
+        (swap! *redo-ops assoc repo [])
         (push-undo-op repo op)))))
 
 (defn get-debug-state
