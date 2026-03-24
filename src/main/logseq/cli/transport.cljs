@@ -66,19 +66,26 @@
 
 (defn request
   [{:keys [method url headers body timeout-ms]}]
-  (p/let [response (<raw-request {:method method
-                                  :url url
-                                  :headers headers
-                                  :body body
-                                  :timeout-ms timeout-ms})]
-    (if (<= 200 (:status response) 299)
+  (p/let [{:keys [body status] :as response}
+          (<raw-request {:method method
+                         :url url
+                         :headers headers
+                         :body body
+                         :timeout-ms timeout-ms})]
+    (if (<= 200 status 299)
       response
-      (throw (ex-info (if (seq (:body response))
-                        (str "http request failed (" (:status response) ")\nhttp response: " (:body response))
-                        (str "http request failed (" (:status response) ")"))
-                      {:code :http-error
-                       :status (:status response)
-                       :body (:body response)})))))
+      (let [parsed (when (and (= status 400) (seq body))
+                     (try (js->clj (js/JSON.parse body) :keywordize-keys true)
+                          (catch :default _ nil)))
+            api-message (get-in parsed [:error :message])
+            message (cond
+                      (seq api-message) api-message
+                      (seq body) (str "http request failed (" status ")\nhttp response: " body)
+                      :else (str "http request failed (" status ")"))]
+        (throw (ex-info message
+                        {:code :http-error
+                         :status status
+                         :body body}))))))
 
 (defn invoke
   [{:keys [base-url timeout-ms]}

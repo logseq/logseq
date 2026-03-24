@@ -70,14 +70,14 @@
                    (p/catch (fn [error]
                               (let [data (ex-data error)
                                     message (cond
-                                              (and (= :http-error (:code data)) (seq (:body data)))
-                                              (str "http request failed (" (:status data) "): " (:body data))
+                                              (some? (.-message error))
+                                              (.-message error)
 
                                               (some? (:message data))
                                               (:message data)
 
                                               :else
-                                              (or (.-message error) (str error)))]
+                                              (str error))]
                                 (if (= :data-dir-permission (:code data))
                                   {:exit-code 1
                                    :output (format/format-result {:status :error

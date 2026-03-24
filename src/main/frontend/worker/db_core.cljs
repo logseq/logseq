@@ -1129,7 +1129,9 @@
             :notification
             (do
               (log/error ::apply-outliner-ops-failed e)
-              (shared-service/broadcast-to-clients! :notification [(:message payload) (:type payload) (:clear? payload) (:uid payload) (:timeout payload)]))
+              (shared-service/broadcast-to-clients! :notification [(:message payload) (:type payload) (:clear? payload) (:uid payload) (:timeout payload)])
+              ;; re-throw as CLI needs to see notification
+              (throw e))
             (throw e)))))))
 
 (def-thread-api :thread-api/sync-app-state
