@@ -1,7 +1,9 @@
 (ns logseq.outliner.op-construct-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.common.uuid :as common-uuid]
+            [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op.construct :as op-construct]))
@@ -96,6 +98,50 @@
           expected-page-uuid (common-uuid/gen-uuid :db-ident-block-uuid property-id)]
       (is (= [[:delete-page [expected-page-uuid {}]]]
              inverse-outliner-ops)))))
+
+(deftest derive-history-outliner-ops-builds-delete-page-inverse-for-class-property-and-today-page-test
+  (testing "delete-page inverse restores hard-retracted class/property/today pages with stable db/ident"
+    (let [today (date-time-util/ms->journal-day (js/Date.))
+          conn (db-test/create-conn-with-blocks
+                {:classes {:Movie {}}
+                 :properties {:rating {:logseq.property/type :number}}
+                 :pages-and-blocks [{:page {:build/journal today}
+                                     :blocks [{:block/title "today child"}]}]})
+          class-page (ldb/get-page @conn "Movie")
+          property-page (d/entity @conn :user.property/rating)
+          today-page (db-test/find-journal-by-journal-day @conn today)
+          today-child (db-test/find-block-by-content @conn "today child")
+          class-inverse (:inverse-outliner-ops
+                         (op-construct/derive-history-outliner-ops
+                          @conn @conn [] {:outliner-op :delete-page
+                                          :outliner-ops [[:delete-page [(:block/uuid class-page) {}]]]}))
+          property-inverse (:inverse-outliner-ops
+                            (op-construct/derive-history-outliner-ops
+                             @conn @conn [] {:outliner-op :delete-page
+                                             :outliner-ops [[:delete-page [(:block/uuid property-page) {}]]]}))
+          today-inverse (:inverse-outliner-ops
+                         (op-construct/derive-history-outliner-ops
+                          @conn @conn [] {:outliner-op :delete-page
+                                          :outliner-ops [[:delete-page [(:block/uuid today-page) {}]]]}))]
+      (is (some #(= :create-page (first %)) class-inverse))
+      (is (some #(= :save-block (first %)) class-inverse))
+      (is (= (:db/ident class-page)
+             (get-in (some #(when (= :save-block (first %)) %) class-inverse)
+                     [1 0 :db/ident])))
+
+      (is (some #(= :upsert-property (first %)) property-inverse))
+      (is (some #(= :save-block (first %)) property-inverse))
+      (is (= (:db/ident property-page)
+             (get-in (some #(when (= :save-block (first %)) %) property-inverse)
+                     [1 0 :db/ident])))
+
+      (is (not-any? #(= :restore-recycled (first %)) today-inverse))
+      (let [today-insert-op (some #(when (= :insert-blocks (first %)) %) today-inverse)]
+        (is (some? today-insert-op))
+        (is (= (:block/uuid today-page)
+               (second (get-in today-insert-op [1 1]))))
+        (is (= (:block/uuid today-child)
+               (get-in today-insert-op [1 0 0 :block/uuid])))))))
 
 (deftest derive-history-outliner-ops-builds-inverse-for-all-supported-ops-test
   (let [conn (db-test/create-conn-with-blocks
