@@ -2,26 +2,26 @@
   "Common fns for file and db based page handlers, including create!, delete!
   and favorite fns. This ns should be agnostic of file or db concerns but there
   is still some file-specific tech debt to remove from create!"
-  (:require [clojure.set :as set]
-            [clojure.string :as string]
-            [datascript.core :as d]
-            [dommy.core :as dom]
-            [frontend.db :as db]
-            [frontend.db.conn :as conn]
-            [frontend.handler.config :as config-handler]
-            [frontend.handler.db-based.editor :as db-editor-handler]
-            [frontend.handler.notification :as notification]
-            [frontend.handler.route :as route-handler]
-            [frontend.handler.ui :as ui-handler]
-            [frontend.modules.outliner.op :as outliner-op]
-            [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.state :as state]
-            [frontend.util.page :as page-util]
-            [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db :as ldb]
-            [promesa.core :as p]))
+  (:require
+   [clojure.set :as set]
+   [clojure.string :as string]
+   [datascript.core :as d]
+   [dommy.core :as dom]
+   [frontend.db :as db]
+   [frontend.db.conn :as conn]
+   [frontend.handler.config :as config-handler]
+   [frontend.handler.db-based.editor :as db-editor-handler]
+   [frontend.handler.notification :as notification]
+   [frontend.handler.route :as route-handler]
+   [frontend.handler.ui :as ui-handler]
+   [frontend.modules.outliner.op :as outliner-op]
+   [frontend.modules.outliner.ui :as ui-outliner-tx]
+   [frontend.state :as state]
+   [logseq.common.config :as common-config]
+   [logseq.common.util :as common-util]
+   [logseq.common.util.page-ref :as page-ref]
+   [logseq.db :as ldb]
+   [promesa.core :as p]))
 
 (defn- wrap-tags
   "Tags might have multiple words"

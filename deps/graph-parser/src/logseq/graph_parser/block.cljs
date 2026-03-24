@@ -396,7 +396,7 @@
           original-page-name (cond-> (string/trim original-page-name)
                                db-based?
                                sanitize-hashtag-name)
-          [page page-entity] (cond
+          [page _page-entity] (cond
                                (and original-page-name (string? original-page-name))
                                (page-name-string->map original-page-name db date-formatter
                                                       (assoc options :with-timestamp? with-timestamp?))
@@ -414,7 +414,6 @@
         (if db-based?
           (let [tags (if class? [:logseq.class/Tag]
                          (or (:block/tags page)
-                             (:block/tags page-entity)
                              [:logseq.class/Page]))]
             (assoc page :block/tags tags))
           (assoc page :block/type (or (:block/type page) "page")))))))

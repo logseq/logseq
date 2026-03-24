@@ -4,9 +4,3 @@
 
 (defn error [& msgs]
   (apply js/console.error (map clj->js msgs)))
-
-(defn warn [& msgs]
-  (apply js/console.warn (map clj->js msgs)))
-
-(defn info [& msgs]
-  (apply js/console.info (map clj->js msgs)))
