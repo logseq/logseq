@@ -168,6 +168,12 @@
        (= :block/uuid (first value))
        (uuid? (second value))))
 
+(defn- epoch-ms->iso-string
+  [ms]
+  (try
+    (.toISOString (js/Date. ms))
+    (catch :default _ (str ms))))
+
 (defn- property-value->string
   ([value] (property-value->string value nil))
   ([value labels]
@@ -608,22 +614,28 @@
 (defn- fetch-user-properties
   [config repo block-ids]
   (if (seq block-ids)
-    (let [idents-query '[:find [?a ...]
+    (let [idents-query '[:find ?a ?type
                          :where
                          [?e :db/ident ?a]
                          [(namespace ?a) ?ns]
-                         [(= "user.property" ?ns)]]
+                         [(= "user.property" ?ns)]
+                         [(get-else $ ?e :logseq.property/type :default) ?type]]
           props-query '[:find ?b ?a ?v
                         :in $ [?b ...] [?a ...]
                         :where
                         [?b ?a ?v]]
           ids (vec block-ids)]
-      (p/let [property-idents (transport/invoke config :thread-api/q false [repo [idents-query]])]
+      (p/let [ident-type-pairs (transport/invoke config :thread-api/q false [repo [idents-query]])
+              datetime-idents (set (keep (fn [[a type]] (when (= :datetime type) a)) ident-type-pairs))
+              property-idents (vec (map first ident-type-pairs))]
         (if (seq property-idents)
           (p/let [rows (transport/invoke config :thread-api/q false
-                                         [repo [props-query ids (vec property-idents)]])]
+                                         [repo [props-query ids property-idents]])]
             (reduce (fn [acc [block-id attr value]]
-                      (update-in acc [block-id attr] merge-fetched-property-value value))
+                      (let [value (if (and (number? value) (contains? datetime-idents attr))
+                                    (epoch-ms->iso-string value)
+                                    value)]
+                        (update-in acc [block-id attr] merge-fetched-property-value value)))
                     {}
                     rows))
           {})))
