@@ -16,6 +16,7 @@
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
+            [frontend.util.page :as page-util]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
@@ -157,18 +158,10 @@
 ;; =========
 
 (defn after-page-deleted!
-  [page-name tx-meta]
-    ;; TODO: move favorite && unfavorite to worker too
+  [page-name]
+  ;; TODO: move favorite && unfavorite to worker too
   (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
-    (<db-unfavorite-page! page-block-uuid))
-
-  (when (and (not= :rename-page (:real-outliner-op tx-meta))
-             (= (some-> (state/get-current-page) common-util/page-name-sanity-lc)
-                (common-util/page-name-sanity-lc page-name)))
-    (route-handler/redirect-to-home!))
-
-    ;; TODO: why need this?
-  (ui-handler/re-render-root!))
+    (<db-unfavorite-page! page-block-uuid)))
 
 (defn after-page-renamed!
   [repo {:keys [page-id old-name new-name]}]

@@ -22,6 +22,7 @@
             [frontend.worker.sync.upload :as sync-upload]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db-sync.storage :as sync-storage]
@@ -1325,6 +1326,64 @@
             (is (= (:block/uuid page)
                    (get-in forward-outliner-ops [0 1 0])))
             (is (seq inverse-outliner-ops))))))))
+
+(deftest delete-page-rewrites-node-refs-and-semantic-undo-redo-test
+  (testing "moving a page to recycle rewrites node refs and semantic undo/redo restores and reapplies them"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks [{:page {:block/title "Delete Me"}}
+                                    {:page {:block/title "Ref Page"}
+                                     :blocks [{:block/title "seed"}]}]})
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          page (db-test/find-page-by-title @conn "Delete Me")
+          page-id (:db/id page)
+          page-uuid (:block/uuid page)
+          ref-block (db-test/find-block-by-content @conn "seed")
+          ref-block-uuid (:block/uuid ref-block)
+          node-ref-content (str "ref " (page-ref/->page-ref page-uuid))
+          title-content "ref Delete Me"]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (ldb/transact! conn [{:db/id (:db/id ref-block)
+                                :block/title node-ref-content
+                                :block/refs #{page-id}}])
+          (outliner-page/delete! conn page-uuid {})
+          (let [{:keys [tx-id forward-outliner-ops inverse-outliner-ops]}
+                (->> (#'sync-apply/pending-txs test-repo)
+                     (filter #(= :delete-page (:outliner-op %)))
+                     last)]
+            (is (= :delete-page (ffirst forward-outliner-ops)))
+            (is (some (fn [[op [block]]]
+                        (and (= :save-block op)
+                             (= ref-block-uuid (:block/uuid block))
+                             (= title-content (:block/title block))))
+                      forward-outliner-ops))
+            (is (some (fn [[op [target-page-uuid]]]
+                        (and (= :restore-recycled op)
+                             (= page-uuid target-page-uuid)))
+                      inverse-outliner-ops))
+            (is (some (fn [[op [block]]]
+                        (and (= :save-block op)
+                             (= ref-block-uuid (:block/uuid block))
+                             (= node-ref-content (:block/title block))))
+                      inverse-outliner-ops))
+            (is (= title-content
+                   (:block/raw-title (d/entity @conn [:block/uuid ref-block-uuid]))))
+            (is (not (contains? (set (map :db/id (:block/refs (d/entity @conn [:block/uuid ref-block-uuid]))))
+                                page-id)))
+            (is (= true
+                   (:applied? (#'sync-apply/apply-history-action! test-repo tx-id true {}))))
+            (is (= node-ref-content
+                   (:block/raw-title (d/entity @conn [:block/uuid ref-block-uuid]))))
+            (is (contains? (set (map :db/id (:block/refs (d/entity @conn [:block/uuid ref-block-uuid]))))
+                           page-id))
+            (is (nil? (:logseq.property/deleted-at (d/entity @conn [:block/uuid page-uuid]))))
+            (is (= true
+                   (:applied? (#'sync-apply/apply-history-action! test-repo tx-id false {}))))
+            (is (= title-content
+                   (:block/raw-title (d/entity @conn [:block/uuid ref-block-uuid]))))
+            (is (not (contains? (set (map :db/id (:block/refs (d/entity @conn [:block/uuid ref-block-uuid]))))
+                                page-id)))
+            (is (integer? (:logseq.property/deleted-at (d/entity @conn [:block/uuid page-uuid]))))))))))
 
 (deftest direct-outliner-property-set-persists-set-block-property-outliner-op-test
   (testing "direct outliner-property/set-block-property! still persists singleton set-block-property forward-outliner-ops"

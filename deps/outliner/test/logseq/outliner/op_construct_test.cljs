@@ -327,11 +327,7 @@
                                                            {:parent-original nil
                                                             :logical-outdenting? nil}]]]}
           {:keys [db-sync/forward-outliner-ops db-sync/inverse-outliner-ops]}
-          (op-construct/build-history-action-metadata
-           {:db-before @conn
-            :db-after db-after
-            :tx-data tx-data
-            :tx-meta tx-meta})]
+          (op-construct/derive-history-outliner-ops @conn db-after tx-data tx-meta)]
       (is (= [[:move-blocks [[[:block/uuid (:block/uuid child-3)]]
                              [:block/uuid (:block/uuid parent)]
                              {:parent-original nil
@@ -369,11 +365,7 @@
     (let [conn (db-test/create-conn-with-blocks {:pages-and-blocks []})
           tx-meta {:outliner-op :restore-recycled
                    :outliner-ops [[:transact nil]]}
-          result (op-construct/build-history-action-metadata
-                  {:db-before @conn
-                   :db-after @conn
-                   :tx-data []
-                   :tx-meta tx-meta})]
+          result (op-construct/derive-history-outliner-ops @conn @conn [] tx-meta)]
       (is (= op-construct/canonical-transact-op
              (:db-sync/forward-outliner-ops result)))
       (is (nil? (:db-sync/inverse-outliner-ops result))))))

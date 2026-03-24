@@ -488,7 +488,9 @@
     (let [keys-to-restore (save-block-keys block)
           inverse-block (reduce
                          (fn [m k]
-                           (let [v (get before-ent k)]
+                           (let [v (if (= :block/title k)
+                                     (:block/raw-title before-ent)
+                                     (get before-ent k))]
                              (assoc m k
                                     (if (worker-ref-attr? db-before k)
                                       (sanitize-ref-value db-before v)
