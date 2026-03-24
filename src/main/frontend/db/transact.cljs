@@ -50,15 +50,15 @@
                       (assoc
                        :client-id (:client-id @state/state)
                        :local-tx? true))
-            request #(frontend.state/<invoke-db-worker
+            request #(state/<invoke-db-worker
                       :thread-api/apply-outliner-ops
-                      (frontend.state/get-current-repo)
+                      (state/get-current-repo)
                       ops
                       opts')]
         (frontend.db.transact/worker-call
          (fn []
            (p/do!
             (state/<invoke-db-worker :thread-api/undo-redo-set-pending-editor-info
-                                     (frontend.state/get-current-repo)
+                                     (state/get-current-repo)
                                      (state/get-editor-info))
             (request))))))))
