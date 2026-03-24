@@ -34,8 +34,7 @@
     (reset! worker-state/*client-ops-conns {test-repo client-ops-conn})
     (d/listen! conn ::gen-undo-ops
                (fn [tx-report]
-                 (db-sync/enqueue-local-tx! test-repo tx-report)
-                 (worker-undo-redo/gen-undo-ops! test-repo tx-report)))
+                 (db-sync/enqueue-local-tx! test-repo tx-report)))
     (worker-undo-redo/clear-history! test-repo)
     (try
       (f)
@@ -46,27 +45,6 @@
         (reset! worker-state/*client-ops-conns client-ops-prev)))))
 
 (use-fixtures :each with-worker-conns)
-
-(deftest gen-undo-ops-consumes-pending-editor-info-test
-  (let [conn (worker-state/get-datascript-conn test-repo)
-        block (db-test/find-block-by-content @conn "task")
-        block-uuid (:block/uuid block)
-        tx-report (d/with @conn
-                          [[:db/add (:db/id block) :block/title "updated task"]]
-                          (local-tx-meta
-                           {:outliner-op :save-block
-                            :outliner-ops [[:save-block [{:block/uuid block-uuid
-                                                          :block/title "updated task"} nil]]]}))
-        editor-info {:block-uuid block-uuid
-                     :container-id 1
-                     :start-pos 0
-                     :end-pos 7}]
-    (worker-undo-redo/set-pending-editor-info! test-repo editor-info)
-    (worker-undo-redo/gen-undo-ops! test-repo tx-report)
-    (let [op (last (get @worker-undo-redo/*undo-ops test-repo))]
-      (is (= [::worker-undo-redo/record-editor-info editor-info]
-             (first op)))
-      (is (nil? (get @worker-undo-redo/*pending-editor-info test-repo))))))
 
 (deftest worker-ui-state-roundtrip-test
   (let [ui-state-str "{:old-state {}, :new-state {:route-data {:to :page}}}"]
@@ -130,6 +108,13 @@
              (second %))
           undo-op)))
 
+(defn- latest-redo-history-data
+  []
+  (let [redo-op (last (get @worker-undo-redo/*redo-ops test-repo))]
+    (some #(when (= ::worker-undo-redo/db-transact (first %))
+             (second %))
+          redo-op)))
+
 (deftest undo-missing-history-action-row-clears-history-test
   (testing "worker undo treats missing tx-id action row as unavailable and clears history"
     (worker-undo-redo/clear-history! test-repo)
@@ -152,6 +137,27 @@
       (let [redo-result (worker-undo-redo/redo test-repo)]
         (is (= ::worker-undo-redo/empty-redo-stack redo-result))
         (is (= "v2" (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))
+
+(deftest undo-redo-rebinds-stack-to-latest-history-tx-id-test
+  (testing "undo/redo pushes stack op with latest persisted history tx id"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          client-ops-conn (get @worker-state/*client-ops-conns test-repo)
+          {:keys [child-uuid]} (seed-page-parent-child!)]
+      (save-block-title! conn child-uuid "v1")
+      (let [source-tx-id (:db-sync/tx-id (latest-undo-history-data))]
+        (is (uuid? source-tx-id))
+        (is (not= ::worker-undo-redo/empty-undo-stack
+                  (worker-undo-redo/undo test-repo)))
+        (let [redo-tx-id (:db-sync/tx-id (latest-redo-history-data))]
+          (is (uuid? redo-tx-id))
+          (is (= source-tx-id redo-tx-id))
+          (is (not= ::worker-undo-redo/empty-redo-stack
+                    (worker-undo-redo/redo test-repo)))
+          (let [undo-tx-id (:db-sync/tx-id (latest-undo-history-data))]
+            (is (uuid? undo-tx-id))
+            (is (not= source-tx-id undo-tx-id))
+            (is (some? (d/entity @client-ops-conn [:db-sync/tx-id undo-tx-id])))))))))
 
 (deftest undo-records-only-local-txs-test
   (testing "undo history records only local txs"
@@ -549,6 +555,85 @@
             inserted-b (some->> inserted-a :block/_parent (filter #(= "b" (:block/title %))) first)]
         (is (some? inserted-a))
         (is (some? inserted-b))))))
+
+(deftest apply-template-repeated-undo-redo-uses-latest-history-tx-id-test
+  (testing ":apply-template repeated undo/redo should always undo latest recreated blocks"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          {:keys [page-uuid]} (seed-page-parent-child!)
+          page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))
+          template-root-uuid (random-uuid)
+          template-a-uuid (random-uuid)
+          template-b-uuid (random-uuid)
+          empty-target-uuid (random-uuid)]
+      (outliner-op/apply-ops!
+       conn
+       [[:insert-blocks [[{:block/uuid template-root-uuid
+                           :block/title "template 1"
+                           :block/tags #{:logseq.class/Template}}
+                          {:block/uuid template-a-uuid
+                           :block/title "a"
+                           :block/parent [:block/uuid template-root-uuid]}
+                          {:block/uuid template-b-uuid
+                           :block/title "b"
+                           :block/parent [:block/uuid template-a-uuid]}]
+                         page-id
+                         {:sibling? false
+                          :keep-uuid? true}]]]
+       (local-tx-meta {:client-id "test-client"}))
+      (outliner-op/apply-ops!
+       conn
+       [[:insert-blocks [[{:block/uuid empty-target-uuid
+                           :block/title ""}]
+                         page-id
+                         {:sibling? false
+                          :keep-uuid? true}]]]
+       (local-tx-meta {:client-id "test-client"}))
+      (worker-undo-redo/clear-history! test-repo)
+      (let [template-root (d/entity @conn [:block/uuid template-root-uuid])
+            empty-target (d/entity @conn [:block/uuid empty-target-uuid])
+            template-blocks (->> (ldb/get-block-and-children @conn template-root-uuid
+                                                             {:include-property-block? true})
+                                 rest)
+            blocks-to-insert (cons (assoc (first template-blocks)
+                                          :logseq.property/used-template (:db/id template-root))
+                                   (rest template-blocks))
+            find-inserted-a-id (fn []
+                                 (d/q '[:find ?b .
+                                        :in $ ?template-uuid
+                                        :where
+                                        [?template :block/uuid ?template-uuid]
+                                        [?b :logseq.property/used-template ?template]
+                                        [?b :block/title "a"]]
+                                      @conn
+                                      template-root-uuid))]
+        (outliner-op/apply-ops!
+         conn
+         [[:apply-template [(:db/id template-root)
+                            (:db/id empty-target)
+                            {:sibling? true
+                             :replace-empty-target? true
+                             :template-blocks blocks-to-insert}]]]
+         (local-tx-meta {:client-id "test-client"}))
+        (is (some? (find-inserted-a-id)))
+        (is (not= ::worker-undo-redo/empty-undo-stack
+                  (worker-undo-redo/undo test-repo)))
+        (is (nil? (find-inserted-a-id)))
+        (is (not= ::worker-undo-redo/empty-redo-stack
+                  (worker-undo-redo/redo test-repo)))
+        (let [redo-1-a-id (find-inserted-a-id)]
+          (is (some? redo-1-a-id))
+          (is (not= ::worker-undo-redo/empty-undo-stack
+                    (worker-undo-redo/undo test-repo)))
+          (is (nil? (find-inserted-a-id)))
+          (is (not= ::worker-undo-redo/empty-redo-stack
+                    (worker-undo-redo/redo test-repo)))
+          (let [redo-2-a-id (find-inserted-a-id)]
+            (is (some? redo-2-a-id))
+            (is (not= redo-1-a-id redo-2-a-id))
+            (is (not= ::worker-undo-redo/empty-undo-stack
+                      (worker-undo-redo/undo test-repo)))
+            (is (nil? (find-inserted-a-id)))))))))
 
 (deftest undo-history-records-forward-ops-for-save-block-test
   (testing "worker save-block history keeps semantic forward ops for redo replay"

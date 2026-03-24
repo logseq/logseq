@@ -2,7 +2,6 @@
   "Undo redo new implementation"
   (:require [datascript.core :as d]
             [frontend.worker.state :as worker-state]
-            [frontend.worker.sync.apply-txs :as sync-apply]
             [lambdaisland.glogi :as log]
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.db :as ldb]
@@ -15,6 +14,8 @@
   ::record-editor-info {:doc "record current editor and cursor"}
   ::db-transact {:doc "db tx"}
   ::ui-state {:doc "ui state such as route && sidebar blocks"})
+
+(defonce *apply-history-action! (atom nil))
 
 ;; TODO: add other UI states such as `::ui-updates`.
 (comment
@@ -35,9 +36,7 @@
                   [:outliner-op :keyword]]]
        [:added-ids [:set :int]]
        [:retracted-ids [:set :int]]
-       [:db-sync/tx-id {:optional true} :uuid]
-       [:db-sync/forward-outliner-ops {:optional true} [:sequential :any]]
-       [:db-sync/inverse-outliner-ops {:optional true} [:sequential :any]]]]]
+       [:db-sync/tx-id {:optional true} :uuid]]]]
 
     [::record-editor-info
      [:cat :keyword
@@ -167,37 +166,17 @@
   [repo]
   (empty? (get @*redo-ops repo)))
 
-(defn- ensure-history-action-metadata
-  [{:keys [tx-meta] :as data}]
-  (cond-> (sync-apply/build-history-action-metadata data)
-    (nil? (:db-sync/tx-id tx-meta))
-    (dissoc :db-sync/tx-id)))
-
 (defn- undo-redo-action-meta
   [{:keys [tx-meta]
-    source-tx-id :db-sync/tx-id
-    forward-outliner-ops :db-sync/forward-outliner-ops
-    inverse-outliner-ops :db-sync/inverse-outliner-ops}
+    source-tx-id :db-sync/tx-id}
    undo?]
-  (let [forward-outliner-ops' (if undo? inverse-outliner-ops forward-outliner-ops)
-        inverse-outliner-ops' (if undo? forward-outliner-ops inverse-outliner-ops)]
-    (cond-> (-> tx-meta
-                (dissoc :db-sync/tx-id)
-                (assoc
-                 :gen-undo-ops? false
-                 :undo? undo?
-                 :redo? (not undo?)
-                 :db-sync/source-tx-id source-tx-id))
-      (seq forward-outliner-ops')
-      (assoc :db-sync/forward-outliner-ops (vec forward-outliner-ops'))
-
-      (seq inverse-outliner-ops')
-      (assoc :db-sync/inverse-outliner-ops (vec inverse-outliner-ops')))))
-
-(defn- apply-history-action!
-  [repo data undo? tx-meta]
-  (when-let [tx-id (:db-sync/tx-id data)]
-    (sync-apply/apply-history-action! repo tx-id undo? tx-meta)))
+  (-> tx-meta
+      (dissoc :db-sync/tx-id)
+      (assoc
+       :gen-undo-ops? false
+       :undo? undo?
+       :redo? (not undo?)
+       :db-sync/source-tx-id source-tx-id)))
 
 (defn- reverse-datoms
   [conn datoms schema added-ids retracted-ids undo? redo?]
@@ -296,6 +275,16 @@
                                     (remove nil?))))]
     reversed-tx-data))
 
+(defn- rebind-op-db-sync-tx-id
+  [op history-tx-id]
+  (if (uuid? history-tx-id)
+    (mapv (fn [item]
+            (if (= ::db-transact (first item))
+              [::db-transact (assoc (second item) :db-sync/tx-id history-tx-id)]
+              item))
+          op)
+    op))
+
 (defn- undo-redo-aux
   [repo undo?]
   (if-let [op (not-empty ((if undo? pop-undo-op pop-redo-op) repo))]
@@ -314,8 +303,8 @@
           (when (seq tx-data)
             (let [tx-meta' (undo-redo-action-meta data undo?)
                   tx-id (:db-sync/tx-id data)
-                  handler (fn handler []
-                            ((if undo? push-redo-op push-undo-op) repo op)
+                  handler (fn handler [op']
+                            ((if undo? push-redo-op push-undo-op) repo op')
                             (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) op)
                                                       (map second))
                                   block-content (:block/title (d/entity @conn [:block/uuid (:block-uuid
@@ -333,7 +322,7 @@
                                        (if (undo-validate/valid-undo-redo-tx? conn reversed-tx-data)
                                          (try
                                            (ldb/transact! conn reversed-tx-data tx-meta')
-                                           (handler)
+                                           (handler op)
                                            (catch :default e
                                              (log/error ::undo-redo-failed e)
                                              (clear-history! repo)
@@ -350,17 +339,20 @@
                                          (undo-redo-aux repo undo?)))))]
               (if tx-id
                 (try
-                  (let [worker-result (apply-history-action! repo data undo? tx-meta')]
-                    (if (:applied? worker-result)
-                      (handler)
-                      (do
-                        (log/error ::undo-redo-worker-action-unavailable
-                                   {:undo? undo?
-                                    :repo repo
-                                    :tx-id tx-id
-                                    :result worker-result})
-                        (clear-history! repo)
-                        (if undo? ::empty-undo-stack ::empty-redo-stack))))
+                  (when-let [apply-action @*apply-history-action!]
+                    (let [worker-result (apply-action repo tx-id undo? tx-meta')]
+                      (if (:applied? worker-result)
+                        (handler (if undo?
+                                   op
+                                   (rebind-op-db-sync-tx-id op (:history-tx-id worker-result))))
+                        (do
+                          (log/error ::undo-redo-worker-action-unavailable
+                                     {:undo? undo?
+                                      :repo repo
+                                      :tx-id tx-id
+                                      :result worker-result})
+                          (clear-history! repo)
+                          (if undo? ::empty-undo-stack ::empty-redo-stack)))))
                   (catch :default e
                     (log/error ::undo-redo-worker-failed e)
                     (throw e)
@@ -397,7 +389,10 @@
     (push-undo-op repo [[::ui-state ui-state-str]])))
 
 (defn gen-undo-ops!
-  [repo {:keys [tx-data tx-meta db-after db-before]}]
+  [repo {:keys [tx-data tx-meta db-after db-before]} tx-id
+   {:keys [apply-history-action!]}]
+  (when (nil? @*apply-history-action!)
+    (reset! *apply-history-action! apply-history-action!))
   (let [{:keys [outliner-op local-tx?]} tx-meta]
     (when (and
            (true? local-tx?)
@@ -416,16 +411,14 @@
             tx-data' (vec tx-data)
             editor-info (or (:undo-redo/editor-info tx-meta)
                             (take-pending-editor-info! repo))
-            history-data (ensure-history-action-metadata
-                          {:tx-data tx-data'
-                           :tx-meta tx-meta
-                           :added-ids added-ids
-                           :retracted-ids retracted-ids
-                           :db-after db-after
-                           :db-before db-before})
+            data (cond->
+                  {:db-sync/tx-id tx-id
+                   :tx-meta (dissoc tx-meta :outliner-ops)
+                   :added-ids added-ids
+                   :retracted-ids retracted-ids
+                   :tx-data tx-data'})
             op (->> [(when editor-info [::record-editor-info editor-info])
-                     [::db-transact
-                      history-data]]
+                     [::db-transact data]]
                     (remove nil?)
                     vec)]
         (push-undo-op repo op)))))

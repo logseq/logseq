@@ -25,7 +25,6 @@
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
-            [frontend.worker.sync.apply-txs :as sync-apply]
             [frontend.worker.sync.asset-db-listener]
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.crypt :as sync-crypt]
@@ -635,12 +634,6 @@
         (prn :debug :worker-transact-failed :tx-meta tx-meta :tx-data tx-data)
         (log/error ::worker-transact-failed e)
         (throw e)))))
-
-(def-thread-api :thread-api/apply-history-action
-  [repo tx-id undo? tx-meta]
-  (assert (some? repo))
-  (worker-state/set-db-latest-tx-time! repo)
-  (sync-apply/apply-history-action! repo tx-id undo? tx-meta))
 
 (def-thread-api :thread-api/undo-redo-set-pending-editor-info
   [repo editor-info]
