@@ -446,3 +446,15 @@
   {:undo-ops (get @*undo-ops repo [])
    :redo-ops (get @*redo-ops repo [])
    :pending-editor-info (get @*pending-editor-info repo)})
+
+(defn referenced-history-tx-ids
+  [repo]
+  (->> (concat (get @*undo-ops repo [])
+               (get @*redo-ops repo []))
+       (mapcat identity)
+       (keep (fn [item]
+               (when (= ::db-transact (first item))
+                 (let [tx-id (:db-sync/tx-id (second item))]
+                   (when (uuid? tx-id)
+                     tx-id)))))
+       set))

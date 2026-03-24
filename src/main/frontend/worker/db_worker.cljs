@@ -84,6 +84,8 @@
 (defonce *opfs-pools worker-state/*opfs-pools)
 (defonce *publishing? (atom false))
 (defonce ^:private *search-index-build-ids (atom {}))
+(defonce ^:private *client-ops-cleanup-timers (atom {}))
+(def ^:private client-ops-cleanup-interval-ms (* 3 60 60 1000))
 
 (defn- check-worker-scope!
   []
@@ -179,6 +181,9 @@
 
 (defn- close-db-aux!
   [repo ^Object db ^Object search ^Object client-ops]
+  (when-let [timer (get @*client-ops-cleanup-timers repo)]
+    (js/clearInterval timer))
+  (swap! *client-ops-cleanup-timers dissoc repo)
   (swap! *sqlite-conns dissoc repo)
   (swap! *datascript-conns dissoc repo)
   (swap! *client-ops-conns dissoc repo)
@@ -258,6 +263,23 @@
                                        :kv/value (common-util/time-ms)}]
                      {:skip-validate-db? true}))))
 
+(defn- run-client-ops-cleanup!
+  [repo]
+  (let [protected-tx-ids (worker-undo-redo/referenced-history-tx-ids repo)]
+    (client-op/cleanup-finished-history-ops! repo protected-tx-ids)
+    nil))
+
+(defn- ensure-client-ops-cleanup-timer!
+  [repo]
+  (when (and (not @*publishing?)
+             repo
+             (nil? (get @*client-ops-cleanup-timers repo)))
+    (let [timer (js/setInterval (fn []
+                                  (run-client-ops-cleanup! repo))
+                                client-ops-cleanup-interval-ms)]
+      (swap! *client-ops-cleanup-timers assoc repo timer))
+    nil))
+
 (def ^:private recycle-gc-kv :logseq.kv/recycle-last-gc-at)
 
 (defn- maybe-run-recycle-gc!
@@ -320,6 +342,7 @@
         (swap! *client-ops-conns assoc repo client-ops-conn)
         (when (and (not @*publishing?) (not= client-op/schema-in-db (d/schema @client-ops-conn)))
           (d/reset-schema! client-ops-conn client-op/schema-in-db))
+        (ensure-client-ops-cleanup-timer! repo)
         (let [initial-tx-report (when-not (or initial-data-exists?
                                               (seq datoms)
                                               sync-download-graph?)
