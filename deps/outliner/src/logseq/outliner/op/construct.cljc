@@ -271,36 +271,23 @@
         created-uuids (created-block-uuids-from-tx-data tx-data)
         blocks* (mapv #(sanitize-insert-block-payload db %) blocks)
         target-ref (stable-entity-ref db target-id)
-        blocks* (cond
-                  (and (:replace-empty-target? opts)
-                       (not (:keep-uuid? opts))
-                       (seq blocks*))
-                  (let [[fst-block & rst-blocks] blocks*
-                        created-rst-uuids created-uuids]
-                    (into [fst-block]
-                          (if (and (seq created-rst-uuids)
-                                   (= (count rst-blocks) (count created-rst-uuids)))
-                            (map (fn [block block-uuid]
-                                   (assoc block
-                                          :block/uuid block-uuid
-                                          :block/parent (let [parent (:block/parent (d/entity db [:block/uuid block-uuid]))]
-                                                          [:block/uuid (:block/uuid parent)])))
-                                 rst-blocks
-                                 created-rst-uuids)
-                            rst-blocks)))
-
-                  (and (not (:keep-uuid? opts))
-                       (= (count blocks*) (count created-uuids)))
-                  (mapv (fn [block block-uuid]
-                          (assoc block
-                                 :block/uuid block-uuid
-                                 :block/parent (let [parent (:block/parent (d/entity db [:block/uuid block-uuid]))]
-                                                 [:block/uuid (:block/uuid parent)])))
-                        blocks*
-                        created-uuids)
-
-                  :else
-                  blocks*)]
+        target (d/entity db target-id)
+        block-with-new-id (fn [block block-uuid]
+                            (assoc block
+                                   :block/uuid block-uuid
+                                   :block/parent (let [parent (:block/parent (d/entity db [:block/uuid block-uuid]))]
+                                                   [:block/uuid (:block/uuid parent)])))
+        blocks* (if (seq created-uuids)
+                  (if (and (:replace-empty-target? opts)
+                           (= (inc (count created-uuids)) (count blocks)))
+                    (let [[fst-block & rst-blocks] blocks*
+                          created-rst-uuids created-uuids]
+                      (into [(assoc fst-block :block/uuid (:block/uuid target))]
+                            (if (seq created-rst-uuids)
+                              (map block-with-new-id rst-blocks created-rst-uuids)
+                              rst-blocks)))
+                    (mapv block-with-new-id blocks* created-uuids))
+                  blocks)]
     [blocks*
      target-ref
      (assoc (dissoc (or opts {}) :outliner-op)
