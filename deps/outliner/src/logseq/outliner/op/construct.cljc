@@ -345,11 +345,10 @@
     (let [[template-id target-id opts] args
           template-ref (stable-entity-ref db template-id)
           target-ref (stable-entity-ref db target-id)
-          opts' (assoc (dissoc opts
-                               :template-blocks
-                               :template-id
-                               :outliner-op)
-                       :keep-uuid? true)]
+          opts' (dissoc opts
+                        :template-blocks
+                        :template-id
+                        :outliner-op)]
       (when-not (and template-ref target-ref)
         (throw (ex-info "Invalid apply-template args"
                         {:args args})))
@@ -702,45 +701,38 @@
         ;; Use restore semantics instead of save-block to retract recycle markers.
         [:restore-recycled [page-uuid]]))))
 
-(defn- insert-like-delete-ids
-  [db-before db-after blocks]
-  (->> blocks
-       (keep (fn [block]
-               (when-let [u (:block/uuid block)]
-                 [:block/uuid u])))
-       (filter (fn [eid]
-                 (and
-                  (nil? (d/entity db-before eid))
-                  (d/entity db-after eid))))
-       vec))
-
 (defn- restore-target-insert-op
   [db-before db-after target-id opts]
   (when (:replace-empty-target? opts)
     (when-let [target-ref (stable-entity-ref db-before target-id)]
       (when (d/entity db-after target-ref)
         (when-let [target (d/entity db-before target-ref)]
-          (build-inverse-save-block db-before target opts))))))
+          [[:delete-blocks [[target-ref] {}]]
+           (build-inverse-save-block db-before target opts)])))))
 
 (defn- build-inverse-insert-like
-  [db-before db-after args]
-  (let [[blocks target-id opts] args
-        delete-ids (insert-like-delete-ids db-before db-after blocks)
+  [db-before db-after tx-data args]
+  (let [[_blocks target-id opts] args
+        new-block-eids (keep
+                        (fn [d]
+                          (when (and (= :block/uuid (:a d))
+                                     (:added d)
+                                     (nil? (d/entity db-before (:e d))))
+                            [:block/uuid (:v d)]))
+                        tx-data)
         restore-op (restore-target-insert-op db-before db-after target-id opts)]
-    (prn :debug :delete-ids delete-ids
-         :restore-op restore-op)
     (cond-> []
-      (seq delete-ids)
-      (conj [:delete-blocks [delete-ids {}]])
+      (seq new-block-eids)
+      (conj [:delete-blocks [new-block-eids {}]])
 
       restore-op
-      (conj restore-op)
+      (into restore-op)
 
       :always
       seq)))
 
 (defn- build-strict-inverse-outliner-ops
-  [db-before db-after forward-ops]
+  [db-before db-after tx-data forward-ops]
   (when (seq forward-ops)
     (let [inverse-entries
           (mapv (fn [[op args]]
@@ -751,10 +743,10 @@
                             (build-inverse-save-block db-before block opts))
 
                           :insert-blocks
-                          (build-inverse-insert-like db-before db-after args)
+                          (build-inverse-insert-like db-before db-after tx-data args)
 
                           :apply-template
-                          (build-inverse-insert-like db-before db-after args)
+                          (build-inverse-insert-like db-before db-after tx-data args)
 
                           :move-blocks
                           (let [[ids _target-id _opts] args]
@@ -944,60 +936,35 @@
                                         (some (fn [[op]] (= :transact op)) forward-outliner-ops))
                                  canonical-transact-op
                                  forward-outliner-ops))
-        built-inverse-outliner-ops (some-> (build-strict-inverse-outliner-ops db-before db-after forward-outliner-ops)
+        built-inverse-outliner-ops (some-> (build-strict-inverse-outliner-ops db-before db-after tx-data forward-outliner-ops)
                                            seq
                                            vec)
         explicit-inverse-outliner-ops (some-> (canonicalize-explicit-outliner-ops db-after tx-data (:db-sync/inverse-outliner-ops tx-meta))
                                               (patch-inverse-delete-block-ops forward-outliner-ops)
                                               seq
                                               vec)
-        inverse-outliner-ops (if (has-replace-empty-target-insert-op? forward-outliner-ops)
-                               built-inverse-outliner-ops
-                               (cond
-                                 (seq built-inverse-outliner-ops)
-                                 built-inverse-outliner-ops
+        inverse-outliner-ops (cond
+                               (and (= :apply-template (:outliner-op tx-meta))
+                                    (:undo? tx-meta)
+                                    (seq (:db-sync/inverse-outliner-ops tx-meta)))
+                               (:db-sync/inverse-outliner-ops tx-meta)
 
-                                 (nil? explicit-inverse-outliner-ops)
-                                 nil
+                               (has-replace-empty-target-insert-op? forward-outliner-ops)
+                               built-inverse-outliner-ops
+
+                               (seq built-inverse-outliner-ops)
+                               built-inverse-outliner-ops
+
+                               (nil? explicit-inverse-outliner-ops)
+                               nil
 
                                  ;; Treat explicit transact placeholder as "no semantic inverse".
                                  ;; Keep nil so semantic replay must fail-fast when required.
-                                 (= canonical-transact-op explicit-inverse-outliner-ops)
-                                 nil
+                               (= canonical-transact-op explicit-inverse-outliner-ops)
+                               nil
 
-                                 :else
-                                 explicit-inverse-outliner-ops))
+                               :else
+                               explicit-inverse-outliner-ops)
         inverse-outliner-ops (some-> inverse-outliner-ops seq vec)]
     {:forward-outliner-ops forward-outliner-ops
      :inverse-outliner-ops inverse-outliner-ops}))
-
-(defn build-history-action-metadata
-  [{:keys [db-before db-after tx-data tx-meta] :as data}]
-  (let [{:keys [forward-outliner-ops inverse-outliner-ops]}
-        (derive-history-outliner-ops db-before db-after tx-data tx-meta)
-        semantic-ops-explicit?
-        (or (seq (:outliner-ops tx-meta))
-            (seq (:db-sync/forward-outliner-ops tx-meta))
-            (seq (:db-sync/inverse-outliner-ops tx-meta)))]
-    (when (and semantic-ops-explicit?
-               (contains? semantic-outliner-ops (:outliner-op tx-meta))
-               (not= :restore-recycled (:outliner-op tx-meta))
-               (or
-                (empty? forward-outliner-ops)
-                (empty? inverse-outliner-ops)))
-      (log/error ::invalid-outliner-ops {:tx-meta tx-meta
-                                         :forward-outliner-ops forward-outliner-ops
-                                         :inverse-outliner-ops inverse-outliner-ops})
-      (throw (ex-info "Invalid outliner-ops" {:tx-meta tx-meta})))
-    ;; (pprint/pprint
-    ;;  {:forward-outliner-ops forward-outliner-ops
-    ;;   :inverse-outliner-ops inverse-outliner-ops})
-
-    (cond-> (-> data
-                (dissoc :db-before :db-after)
-                (assoc :db-sync/tx-id (or (:db-sync/tx-id tx-meta) (random-uuid))))
-      (seq forward-outliner-ops)
-      (assoc :db-sync/forward-outliner-ops forward-outliner-ops)
-
-      (seq inverse-outliner-ops)
-      (assoc :db-sync/inverse-outliner-ops inverse-outliner-ops))))

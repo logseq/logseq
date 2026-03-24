@@ -1,6 +1,7 @@
 (ns frontend.worker.sync.apply-txs
   "Pending tx and remote tx application helpers for db sync."
-  (:require [clojure.set :as set]
+  (:require [cljs.pprint :as pprint]
+            [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker-common.util :as worker-util]
@@ -15,6 +16,7 @@
             [frontend.worker.sync.large-title :as sync-large-title]
             [frontend.worker.sync.presence :as sync-presence]
             [frontend.worker.sync.transport :as sync-transport]
+            [frontend.worker.undo-redo :as worker-undo-redo]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db-sync.order :as sync-order]
@@ -170,14 +172,6 @@
   [db block]
   (op-construct/rewrite-block-title-with-retracted-refs db block))
 
-(defn- derive-history-outliner-ops
-  [db-before db-after tx-data tx-meta]
-  (op-construct/derive-history-outliner-ops db-before db-after tx-data tx-meta))
-
-(defn build-history-action-metadata
-  [data]
-  (op-construct/build-history-action-metadata data))
-
 (defn- inferred-outliner-ops?
   [tx-meta]
   (and (nil? (:outliner-ops tx-meta))
@@ -185,7 +179,8 @@
        (not (:redo? tx-meta))
        (not= :batch-import-edn (:outliner-op tx-meta))))
 
-(defn- persist-local-tx! [repo db-before db-after tx-data normalized-tx-data reversed-datoms tx-meta]
+(declare apply-history-action!)
+(defn- persist-local-tx! [repo {:keys [db-before db-after tx-data tx-meta] :as tx-report} normalized-tx-data reversed-datoms]
   (worker-util/profile
    "persist-local-tx!"
    (when-let [conn (client-ops-conn repo)]
@@ -194,23 +189,29 @@
            should-inc-pending? (not= true (:db-sync/pending? existing-ent))
            now (.now js/Date)
            {:keys [forward-outliner-ops inverse-outliner-ops]}
-           (worker-util/profile "derive-history-outliner-ops" (derive-history-outliner-ops db-before db-after tx-data tx-meta))
-           outliner-ops forward-outliner-ops
+           (op-construct/derive-history-outliner-ops db-before db-after tx-data tx-meta)
            inferred-outliner-ops?' (inferred-outliner-ops? tx-meta)]
+       ;; (pprint/pprint
+       ;;  {:undo? (:undo? tx-meta)
+       ;;   :forward-outliner-ops forward-outliner-ops
+       ;;   :inverse-outliner-ops inverse-outliner-ops
+       ;;   :tx-id tx-id
+       ;;   :existing-action? (some? existing-ent)})
        (ldb/transact! conn [{:db-sync/tx-id tx-id
                              :db-sync/normalized-tx-data normalized-tx-data
                              :db-sync/reversed-tx-data reversed-datoms
                              :db-sync/pending? true
                              :db-sync/outliner-op (:outliner-op tx-meta)
-                             :db-sync/outliner-ops outliner-ops
-                             :db-sync/forward-outliner-ops outliner-ops
+                             :db-sync/forward-outliner-ops forward-outliner-ops
                              :db-sync/inverse-outliner-ops inverse-outliner-ops
                              :db-sync/inferred-outliner-ops? inferred-outliner-ops?'
                              :db-sync/created-at now}])
+       (worker-undo-redo/gen-undo-ops! repo tx-report tx-id
+                                       {:apply-history-action! apply-history-action!})
        (when should-inc-pending?
-         (client-op/adjust-pending-local-tx-count! repo 1))
-       (when-let [client (current-client repo)]
-         (broadcast-rtc-state! client))
+         (client-op/adjust-pending-local-tx-count! repo 1)
+         (when-let [client (current-client repo)]
+           (broadcast-rtc-state! client)))
        tx-id))))
 
 (defn pending-txs
@@ -231,7 +232,6 @@
                          reversed-tx' (:db-sync/reversed-tx-data ent)]
                      {:tx-id tx-id
                       :outliner-op (:db-sync/outliner-op ent)
-                      :outliner-ops (:db-sync/outliner-ops ent)
                       :forward-outliner-ops (:db-sync/forward-outliner-ops ent)
                       :inverse-outliner-ops (:db-sync/inverse-outliner-ops ent)
                       :inferred-outliner-ops? (:db-sync/inferred-outliner-ops? ent)
@@ -245,7 +245,6 @@
     (when-let [ent (d/entity @conn [:db-sync/tx-id tx-id])]
       {:tx-id (:db-sync/tx-id ent)
        :outliner-op (:db-sync/outliner-op ent)
-       :outliner-ops (:db-sync/outliner-ops ent)
        :forward-outliner-ops (:db-sync/forward-outliner-ops ent)
        :inverse-outliner-ops (:db-sync/inverse-outliner-ops ent)
        :tx (:db-sync/normalized-tx-data ent)
@@ -297,18 +296,19 @@
 (declare precreate-missing-save-blocks! replay-canonical-outliner-op!)
 
 (defn- apply-history-action-tx!
-  [conn tx-data tx-meta]
+  [conn tx-data tx-meta history-tx-id]
   (try
     (let [tx-meta' (-> tx-meta
                        (assoc :outliner-op :transact)
-                       (dissoc :outliner-ops
-                               :real-outliner-op
+                       (dissoc :real-outliner-op
                                :db-sync/forward-outliner-ops
                                :db-sync/inverse-outliner-ops))]
       (d/with @conn tx-data {:outliner-op :transact
                              :persist-op? false})
       (ldb/transact! conn tx-data tx-meta')
-      {:applied? true :source :raw-tx})
+      {:applied? true
+       :source :raw-tx
+       :history-tx-id history-tx-id})
     (catch :default error
       (log/debug :db-sync/drop-history-action-raw-tx
                  {:reason :invalid-history-action-tx
@@ -328,12 +328,18 @@
         (let [semantic-forward? (semantic-op-stream? (:forward-outliner-ops action))
               ops (history-action-ops action undo?)
               tx-data (history-action-tx-data action undo?)
-              tx-meta' (cond-> (merge {:local-tx? true
-                                       :gen-undo-ops? false
-                                       :persist-op? true}
-                                      (dissoc tx-meta :db-sync/tx-id))
-                         (seq ops)
-                         (assoc :outliner-ops (vec ops))
+              history-tx-id (let [provided-history-tx-id (:db-sync/tx-id tx-meta)]
+                              (if (and (uuid? provided-history-tx-id)
+                                       (not= provided-history-tx-id tx-id))
+                                provided-history-tx-id
+                                (random-uuid)))
+              tx-meta' (cond-> {:local-tx? true
+                                :gen-undo-ops? false
+                                :persist-op? true
+                                :undo? undo?
+                                :db-sync/tx-id history-tx-id
+                                :db-sync/source-tx-id (or (:db-sync/source-tx-id tx-meta)
+                                                          tx-id)}
 
                          (:outliner-op action)
                          (assoc :outliner-op (:outliner-op action))
@@ -349,10 +355,10 @@
                          (assoc :db-sync/inverse-outliner-ops
                                 (vec (if undo? (:forward-outliner-ops action)
                                          (:inverse-outliner-ops action)))))]
-        ;; (prn :debug :outliner-ops)
-        ;; (pprint/pprint (select-keys action [:tx-id :outliner-op :forward-outliner-ops :inverse-outliner-ops]))
-        ;; (prn :debug :tx-meta)
-        ;; (pprint/pprint tx-meta)
+          ;; (prn :debug :outliner-ops)
+          ;; (pprint/pprint (select-keys action [:tx-id :outliner-op :forward-outliner-ops :inverse-outliner-ops]))
+          ;; (prn :debug :tx-meta)
+          ;; (pprint/pprint tx-meta)
           (cond
             (and semantic-forward?
                  (not (seq ops)))
@@ -383,7 +389,9 @@
                  (precreate-missing-save-blocks! row-conn ops)
                  (doseq [op ops]
                    (replay-canonical-outliner-op! row-conn op))))
-              {:applied? true :source :semantic-ops}
+              {:applied? true
+               :source :semantic-ops
+               :history-tx-id history-tx-id}
               (catch :default error
                 (log/error ::db-transact-failed error)
                 (if semantic-forward?
@@ -415,7 +423,7 @@
                         :tx-data tx-data})
 
             (seq tx-data)
-            (apply-history-action-tx! conn tx-data tx-meta')
+            (apply-history-action-tx! conn tx-data tx-meta' history-tx-id)
 
             :else
             {:applied? false :reason :unsupported-history-action
@@ -870,12 +878,11 @@
 
 (defn- rebase-op-driven-local-tx!
   [conn local-txs index local-tx tx-meta]
-  (let [outliner-ops (:outliner-ops local-tx)
-        replay-meta (assoc (local-tx-debug-meta tx-meta local-txs index local-tx :rebase)
+  (let [replay-meta (assoc (local-tx-debug-meta tx-meta local-txs index local-tx :rebase)
                            :db-sync/tx-id (:tx-id local-tx)
                            :db-sync/forward-outliner-ops (:forward-outliner-ops local-tx)
-                           :db-sync/inverse-outliner-ops (:inverse-outliner-ops local-tx)
-                           :outliner-ops outliner-ops)]
+                           :db-sync/inverse-outliner-ops (:inverse-outliner-ops local-tx))
+        outliner-ops (:forward-outliner-ops local-tx)]
     (try
       (ldb/batch-transact!
        conn
@@ -1013,7 +1020,7 @@
   (apply-remote-txs! repo client [{:tx-data tx-data}]))
 
 (defn enqueue-local-tx!
-  [repo {:keys [tx-meta tx-data db-after db-before]}]
+  [repo {:keys [tx-meta tx-data db-after db-before] :as tx-report}]
   (worker-util/profile
    "enqueue-local-tx!"
    (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -1024,7 +1031,7 @@
          (let [normalized (normalize-tx-data db-after db-before tx-data)
                reversed-datoms (reverse-tx-data db-before db-after tx-data)]
            (when (seq normalized)
-             (persist-local-tx! repo db-before db-after tx-data normalized reversed-datoms tx-meta)
+             (persist-local-tx! repo tx-report normalized reversed-datoms)
              (worker-util/profile
               "flush pending"
               (when-let [client @worker-state/*db-sync-client]

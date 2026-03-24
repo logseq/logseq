@@ -8,7 +8,6 @@
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
-            [frontend.worker.undo-redo :as worker-undo-redo]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -62,10 +61,6 @@
 (defmethod listen-db-changes :db-sync
   [_ {:keys [repo]} tx-report]
   (db-sync/handle-local-tx! repo tx-report))
-
-(defmethod listen-db-changes :undo-redo
-  [_ {:keys [repo]} tx-report]
-  (worker-undo-redo/gen-undo-ops! repo tx-report))
 
 (defn- remove-old-embeddings-and-reset-new-updates!
   [conn tx-data tx-meta]

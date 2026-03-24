@@ -65,7 +65,8 @@
                               tx-data))]
               (d/transact! conn tx-data' tx-meta))
 
-            (when-not (= (:client-id tx-meta) (:client-id @state/state))
+            (when (or (not= (:client-id tx-meta) (:client-id @state/state))
+                      (= :apply-template (:outliner-op tx-meta)))
               (update-editing-block-title-if-changed! tx-data))
 
             ;; (when (seq deleted-assets)
