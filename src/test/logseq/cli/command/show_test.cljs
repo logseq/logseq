@@ -3,6 +3,8 @@
             [cljs.test :refer [async deftest is testing]]
             [clojure.string :as string]
             [logseq.cli.command.show :as show-command]
+            [logseq.cli.server :as cli-server]
+            [logseq.cli.style :as style]
             [logseq.cli.transport :as transport]
             [promesa.core :as p]))
 
@@ -118,5 +120,186 @@
                      (is (= 42 (get-in result [10 :user.property/count]))))
                    (testing "string value is left as-is"
                      (is (= "hello" (get-in result [10 :user.property/title]))))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(defn- call-private
+  [sym & args]
+  (when-let [v (get (ns-interns 'logseq.cli.command.show) sym)]
+    (apply @v args)))
+
+(defn- make-show-invoke-mock
+  [{:keys [entities-by-id children-by-page-id uuid-entities linked-refs-by-root-id]}]
+  (fn [_ method _ args]
+    (case method
+      :thread-api/pull
+      (let [[_repo _selector target] args]
+        (cond
+          (number? target)
+          (p/resolved (get entities-by-id target))
+
+          (and (vector? target) (= :block/uuid (first target)))
+          (let [uuid-str (some-> (second target) str string/lower-case)]
+            (p/resolved (get uuid-entities uuid-str)))
+
+          :else
+          (p/resolved nil)))
+
+      :thread-api/q
+      (let [[_repo query-args] args
+            [_query & inputs] query-args]
+        (if (= 1 (count inputs))
+          (let [page-id (first inputs)
+                blocks (get children-by-page-id page-id [])]
+            (p/resolved (mapv vector blocks)))
+          (p/resolved [])))
+
+      :thread-api/get-block-refs
+      (let [[_repo root-id] args]
+        (p/resolved (get linked-refs-by-root-id root-id [])))
+
+      (p/resolved nil))))
+
+(deftest test-render-referenced-entities-footer
+  (let [render-footer (fn [ordered-uuids uuid->entity]
+                        (call-private 'render-referenced-entities-footer ordered-uuids uuid->entity))
+        u1 "11111111-1111-1111-1111-111111111111"
+        u2 "22222222-2222-2222-2222-222222222222"
+        u3 "33333333-3333-3333-3333-333333333333"]
+    (testing "returns nil when no refs"
+      (is (nil? (render-footer [] {}))))
+
+    (testing "renders ordered refs with id and label"
+      (is (= (str "Referenced Entities (2)\n"
+                  "181 -> First child\n"
+                  "179 -> Root task")
+             (render-footer [u1 u2]
+                            {(string/lower-case u1) {:id 181 :label "First child"}
+                             (string/lower-case u2) {:id 179 :label "Root task"}}))))
+
+    (testing "renders fallback rows for missing id/label and unresolved refs"
+      (is (= (str "Referenced Entities (3)\n"
+                  "- -> Broken ref\n"
+                  "88 -> " u2 "\n"
+                  "- -> " u3)
+             (render-footer [u1 u2 u3]
+                            {(string/lower-case u1) {:label "Broken ref"}
+                             (string/lower-case u2) {:id 88}}))))))
+
+(deftest test-build-action-ref-id-footer
+  (testing "ref-id-footer defaults to true"
+    (let [result (show-command/build-action {:id "42"}
+                                            "logseq_db_demo")]
+      (is (true? (:ok? result)))
+      (is (true? (get-in result [:action :ref-id-footer?])))))
+
+  (testing "ref-id-footer false is threaded into action"
+    (let [result (show-command/build-action {:id "42"
+                                             :ref-id-footer false}
+                                            "logseq_db_demo")]
+      (is (true? (:ok? result)))
+      (is (false? (get-in result [:action :ref-id-footer?]))))))
+
+(deftest test-execute-show-human-ref-id-footer-default-enabled
+  (async done
+         (let [resolved-uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+               missing-uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+               invoke-mock (make-show-invoke-mock
+                            {:entities-by-id {1 {:db/id 1
+                                                 :block/title (str "Root [[" resolved-uuid "]] [[" missing-uuid "]]")
+                                                 :block/page {:db/id 100}}}
+                             :children-by-page-id {100 [{:db/id 2
+                                                         :block/title "Child"
+                                                         :block/order 0
+                                                         :block/parent {:db/id 1}}]}
+                             :uuid-entities {(string/lower-case resolved-uuid)
+                                             {:db/id 179
+                                              :block/uuid (uuid resolved-uuid)
+                                              :block/title "Root task"}}})]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                               transport/invoke invoke-mock]
+                 (p/let [result (show-command/execute-show {:type :show
+                                                           :repo "demo"
+                                                           :id 1
+                                                           :linked-references? false}
+                                                          {:output-format nil})
+                         plain (-> result :data :message style/strip-ansi)]
+                   (is (= :ok (:status result)))
+                   (is (string/includes? plain "Referenced Entities (2)"))
+                   (is (string/includes? plain "179 -> Root task"))
+                   (is (string/includes? plain (str "- -> " missing-uuid)))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-show-human-ref-id-footer-multi-id
+  (async done
+         (let [uuid-a "cccccccc-cccc-cccc-cccc-cccccccccccc"
+               uuid-b "dddddddd-dddd-dddd-dddd-dddddddddddd"
+               invoke-mock (make-show-invoke-mock
+                            {:entities-by-id {1 {:db/id 1
+                                                 :block/title "Root A"
+                                                 :block/page {:db/id 101}}
+                                              2 {:db/id 2
+                                                 :block/title "Root B"
+                                                 :block/page {:db/id 102}}}
+                             :children-by-page-id {101 [{:db/id 11
+                                                         :block/title (str "Child A [[" uuid-a "]]")
+                                                         :block/order 0
+                                                         :block/parent {:db/id 1}}]
+                                                   102 [{:db/id 22
+                                                         :block/title (str "Child B [[" uuid-b "]]")
+                                                         :block/order 0
+                                                         :block/parent {:db/id 2}}]}
+                             :uuid-entities {(string/lower-case uuid-a)
+                                             {:db/id 501
+                                              :block/uuid (uuid uuid-a)
+                                              :block/title "Ref A"}
+                                             (string/lower-case uuid-b)
+                                             {:db/id 502
+                                              :block/uuid (uuid uuid-b)
+                                              :block/title "Ref B"}}})]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                               transport/invoke invoke-mock]
+                 (p/let [result (show-command/execute-show {:type :show
+                                                           :repo "demo"
+                                                           :ids [1 2]
+                                                           :multi-id? true
+                                                           :linked-references? false}
+                                                          {:output-format nil})
+                         plain (-> result :data :message style/strip-ansi)
+                         footer-count (count (re-seq #"Referenced Entities \(1\)" plain))]
+                   (is (= :ok (:status result)))
+                   (is (= 2 footer-count))
+                   (is (string/includes? plain "501 -> Ref A"))
+                   (is (string/includes? plain "502 -> Ref B"))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-show-human-ref-id-footer-disabled
+  (async done
+         (let [uuid-a "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+               invoke-mock (make-show-invoke-mock
+                            {:entities-by-id {1 {:db/id 1
+                                                 :block/title "Root"
+                                                 :block/page {:db/id 201}}}
+                             :children-by-page-id {201 [{:db/id 12
+                                                         :block/title (str "Child [[" uuid-a "]]")
+                                                         :block/order 0
+                                                         :block/parent {:db/id 1}}]}
+                             :uuid-entities {(string/lower-case uuid-a)
+                                             {:db/id 601
+                                              :block/uuid (uuid uuid-a)
+                                              :block/title "Ref A"}}})]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                               transport/invoke invoke-mock]
+                 (p/let [result (show-command/execute-show {:type :show
+                                                           :repo "demo"
+                                                           :id 1
+                                                           :linked-references? false
+                                                           :ref-id-footer? false}
+                                                          {:output-format nil})
+                         plain (-> result :data :message style/strip-ansi)]
+                   (is (= :ok (:status result)))
+                   (is (not (string/includes? plain "Referenced Entities (")))))
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
