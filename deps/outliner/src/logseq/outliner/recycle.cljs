@@ -8,7 +8,7 @@
             [logseq.db.common.order :as db-order]))
 
 (def ^:private recycle-page-title "Recycle")
-(def ^:private retention-ms (* 60 24 3600 1000))
+(def ^:private retention-ms (* 30 24 3600 1000))
 (def gc-interval-ms (* 24 3600 1000))
 
 (defn- recycled?
