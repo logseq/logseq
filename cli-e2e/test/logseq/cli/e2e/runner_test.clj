@@ -6,14 +6,14 @@
   (let [rendered (runner/render-case
                   {:id "graph-create"
                    :setup ["{{cli}} --graph {{graph-arg}}"]
-                   :cmd "{{cli}} graph info --graph {{graph-arg}}"
+                   :cmds ["{{cli}} graph info --graph {{graph-arg}}"]
                    :expect {:stdout-json-paths {[:data :graph] "{{graph}}"
                                                 [:status] "ok"}}}
                   {:cli "node /tmp/logseq-cli.js"
                    :graph "demo"
                    :graph-arg "'demo'"})]
     (is (= ["node /tmp/logseq-cli.js --graph 'demo'"] (:setup rendered)))
-    (is (= "node /tmp/logseq-cli.js graph info --graph 'demo'" (:cmd rendered)))
+    (is (= ["node /tmp/logseq-cli.js graph info --graph 'demo'"] (:cmds rendered)))
     (is (= "demo" (get-in rendered [:expect :stdout-json-paths [:data :graph]])))))
 
 (deftest run-case-executes-setup-before-main-command
@@ -21,7 +21,7 @@
         result (runner/run-case!
                 {:id "graph-info"
                  :setup ["setup one" "setup two"]
-                 :cmd "main command"
+                 :cmds ["main command one" "main command two"]
                  :expect {:exit 0}}
                 {:context {}
                  :run-command (fn [{:keys [cmd]}]
@@ -30,16 +30,16 @@
                                  :exit 0
                                  :out ""
                                  :err ""})})]
-    (is (= ["setup one" "setup two" "main command"] @calls))
+    (is (= ["setup one" "setup two" "main command one" "main command two"] @calls))
     (is (= "graph-info" (:id result)))
-    (is (= "main command" (get-in result [:result :cmd])))))
+    (is (= "main command two" (get-in result [:result :cmd])))))
 
 (deftest run-case-includes-command-phase-metadata-when-detailed
   (let [calls (atom [])]
     (runner/run-case!
      {:id "graph-info"
       :setup ["setup one" "setup two"]
-      :cmd "main command"
+      :cmds ["main command one" "main command two"]
       :cleanup ["cleanup one"]
       :expect {:exit 0}}
      {:context {}
@@ -52,14 +52,15 @@
                       :err ""})})
     (is (= [{:cmd "setup one" :phase :setup :step-index 1 :step-total 2 :case-id "graph-info" :throw? true}
             {:cmd "setup two" :phase :setup :step-index 2 :step-total 2 :case-id "graph-info" :throw? true}
-            {:cmd "main command" :phase :main :step-index 1 :step-total 1 :case-id "graph-info" :throw? false}
+            {:cmd "main command one" :phase :main :step-index 1 :step-total 2 :case-id "graph-info" :throw? true}
+            {:cmd "main command two" :phase :main :step-index 2 :step-total 2 :case-id "graph-info" :throw? false}
             {:cmd "cleanup one" :phase :cleanup :step-index 1 :step-total 1 :case-id "graph-info" :throw? false}]
            @calls))))
 
 (deftest run-case-validates-json-paths-and-nonzero-exit
   (let [result (runner/run-case!
                 {:id "invalid-shell"
-                 :cmd "node static/logseq-cli.js completion fish"
+                 :cmds ["node static/logseq-cli.js completion fish"]
                  :expect {:exit 1
                           :stdout-json-paths {[:status] "error"
                                               [:error :code] "invalid-options"}}}
