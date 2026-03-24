@@ -6,7 +6,7 @@
     "@logseq/nbb-logseq": "github:logseq/nbb-logseq#feat-db-v33"
   },
   "dependencies": {
-    "better-sqlite3": "^12.6.2",
+    "better-sqlite3": "^12.8.0",
     "mldoc": "^1.5.9"
   },
   "scripts": {
