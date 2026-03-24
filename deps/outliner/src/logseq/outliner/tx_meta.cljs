@@ -1,4 +1,5 @@
-(ns logseq.outliner.tx-meta)
+(ns logseq.outliner.tx-meta
+  "Helpers for normalizing tx metadata with explicit outliner op entries.")
 
 (def ^:dynamic *outliner-op-entry* nil)
 

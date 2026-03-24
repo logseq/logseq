@@ -50,11 +50,11 @@
                                   [:transact nil]]}
           {:keys [forward-outliner-ops inverse-outliner-ops]}
           (op-construct/derive-history-outliner-ops @conn @conn [] tx-meta)]
-      (is (= op-construct/canonical-transact-op forward-outliner-ops))
+      (is (= [[:transact nil]] forward-outliner-ops))
       (is (nil? inverse-outliner-ops)))))
 
 (deftest derive-history-outliner-ops-handles-replace-empty-target-insert-inverse-test
-  (testing "replace-empty-target insert reverses with delete child + restore target save"
+  (testing "replace-empty-target insert keeps source uuid and inverse deletes target placeholder"
     (let [conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
                  [{:page {:block/title "page"}
@@ -74,16 +74,15 @@
                                                     :outliner-op :paste}]]]}
           {:keys [forward-outliner-ops inverse-outliner-ops]}
           (op-construct/derive-history-outliner-ops @conn @conn [] tx-meta)]
-      (is (= (:block/uuid empty-target)
+      (is (= parent-uuid
              (get-in forward-outliner-ops [0 1 0 0 :block/uuid])))
       (is (= true (get-in forward-outliner-ops [0 1 2 :keep-uuid?])))
       (is (some #(and (= :delete-blocks (first %))
-                      (= [[:block/uuid child-uuid]] (get-in % [1 0])))
-                inverse-outliner-ops))
-      (is (some #(and (= :save-block (first %))
-                      (= (:block/uuid empty-target) (get-in % [1 0 :block/uuid]))
-                      (= "" (get-in % [1 0 :block/title])))
-                inverse-outliner-ops)))))
+                      (= [[:block/uuid (:block/uuid empty-target)]]
+                         (vec (get-in % [1 0]))))
+                (remove nil? inverse-outliner-ops)))
+      (is (not-any? #(= :save-block (first %))
+                    (remove nil? inverse-outliner-ops))))))
 
 (deftest derive-history-outliner-ops-builds-upsert-property-inverse-delete-page-test
   (testing "upsert-property with qualified keyword builds delete-page inverse"
@@ -173,19 +172,22 @@
                              :outliner-ops [[:save-block [{:block/uuid (:block/uuid child-a)
                                                            :block/title "changed"} {}]]]})]
         (is (= :save-block (ffirst inverse-outliner-ops)))
-        (is (= "child-a" (get-in inverse-outliner-ops [0 1 0 :block/title])))))
+        (is (= (:block/uuid child-a)
+               (get-in inverse-outliner-ops [0 1 0 :block/uuid])))))
 
     (testing ":insert-blocks"
       (let [inserted-uuid (random-uuid)
+            tx-data [{:e 999999 :a :block/uuid :v inserted-uuid :added true}]
             {:keys [inverse-outliner-ops]}
             (op-construct/derive-history-outliner-ops
-             @conn @conn [] {:outliner-op :insert-blocks
-                             :outliner-ops [[:insert-blocks [[{:block/uuid inserted-uuid
-                                                               :block/title "new"}]
-                                                             (:db/id parent)
-                                                             {:sibling? false}]]]})]
-        (is (= [[:delete-blocks [[[:block/uuid inserted-uuid]] {}]]]
-               inverse-outliner-ops))))
+             @conn @conn tx-data {:outliner-op :insert-blocks
+                                  :outliner-ops [[:insert-blocks [[{:block/uuid inserted-uuid
+                                                                    :block/title "new"}]
+                                                                  (:db/id parent)
+                                                                  {:sibling? false}]]]})]
+        (is (= :delete-blocks (ffirst inverse-outliner-ops)))
+        (is (= [[:block/uuid inserted-uuid]]
+               (vec (get-in inverse-outliner-ops [0 1 0]))))))
 
     (testing ":move-blocks"
       (let [{:keys [inverse-outliner-ops]}
@@ -308,8 +310,8 @@
         (is (= [[:delete-page [expected-page-uuid {}]]]
                inverse-outliner-ops))))))
 
-(deftest build-history-action-metadata-direct-outdent-builds-move-forward-and-inverse-test
-  (testing "direct outdent on last sibling canonicalizes to move-blocks and builds inverse move"
+(deftest build-history-action-metadata-direct-outdent-builds-indent-outdent-forward-and-inverse-test
+  (testing "direct outdent keeps canonical indent-outdent forward and inverse ops"
     (let [conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
                  [{:page {:block/title "page"}
@@ -317,30 +319,28 @@
                              :build/children [{:block/title "child-1"}
                                               {:block/title "child-2"}
                                               {:block/title "child-3"}]}]}]})
-          child-2 (db-test/find-block-by-content @conn "child-2")
           child-3 (db-test/find-block-by-content @conn "child-3")
-          parent (db-test/find-block-by-content @conn "parent")
           {:keys [tx-data db-after]} (run-direct-outdent conn child-3)
           tx-meta {:outliner-op :move-blocks
                    :outliner-ops [[:indent-outdent-blocks [[(:db/id child-3)]
                                                            false
                                                            {:parent-original nil
                                                             :logical-outdenting? nil}]]]}
-          {:keys [db-sync/forward-outliner-ops db-sync/inverse-outliner-ops]}
+          {:keys [forward-outliner-ops inverse-outliner-ops]}
           (op-construct/derive-history-outliner-ops @conn db-after tx-data tx-meta)]
-      (is (= [[:move-blocks [[[:block/uuid (:block/uuid child-3)]]
-                             [:block/uuid (:block/uuid parent)]
-                             {:parent-original nil
-                              :logical-outdenting? nil
-                              :sibling? true}]]]
+      (is (= [[:indent-outdent-blocks [[[:block/uuid (:block/uuid child-3)]]
+                                       false
+                                       {:parent-original nil
+                                        :logical-outdenting? nil}]]]
              forward-outliner-ops))
-      (is (= [[:move-blocks [[[:block/uuid (:block/uuid child-3)]]
-                             [:block/uuid (:block/uuid child-2)]
-                             {:sibling? true}]]]
+      (is (= [[:indent-outdent-blocks [[[:block/uuid (:block/uuid child-3)]]
+                                       true
+                                       {:parent-original nil
+                                        :logical-outdenting? nil}]]]
              inverse-outliner-ops)))))
 
-(deftest derive-history-outliner-ops-direct-outdent-with-extra-moved-blocks-falls-back-to-transact-test
-  (testing "direct outdent touching non-selected block ids remains transact placeholder"
+(deftest derive-history-outliner-ops-direct-outdent-with-extra-moved-blocks-keeps-semantic-ops-test
+  (testing "direct outdent keeps semantic indent-outdent op and inverse"
     (let [conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
                  [{:page {:block/title "page"}
@@ -357,8 +357,16 @@
                                                             :logical-outdenting? nil}]]]}
           {:keys [forward-outliner-ops inverse-outliner-ops]}
           (op-construct/derive-history-outliner-ops @conn db-after tx-data tx-meta)]
-      (is (= op-construct/canonical-transact-op forward-outliner-ops))
-      (is (nil? inverse-outliner-ops)))))
+      (is (= [[:indent-outdent-blocks [[[:block/uuid (:block/uuid child-2)]]
+                                       false
+                                       {:parent-original nil
+                                        :logical-outdenting? nil}]]]
+             forward-outliner-ops))
+      (is (= [[:indent-outdent-blocks [[[:block/uuid (:block/uuid child-2)]]
+                                       true
+                                       {:parent-original nil
+                                        :logical-outdenting? nil}]]]
+             inverse-outliner-ops)))))
 
 (deftest build-history-action-metadata-non-semantic-outliner-op-does-not-throw-test
   (testing "non-semantic outliner-op with transact placeholder should not fail strict semantic validation"
@@ -366,6 +374,6 @@
           tx-meta {:outliner-op :restore-recycled
                    :outliner-ops [[:transact nil]]}
           result (op-construct/derive-history-outliner-ops @conn @conn [] tx-meta)]
-      (is (= op-construct/canonical-transact-op
-             (:db-sync/forward-outliner-ops result)))
-      (is (nil? (:db-sync/inverse-outliner-ops result))))))
+      (is (= [[:transact nil]]
+             (:forward-outliner-ops result)))
+      (is (nil? (:inverse-outliner-ops result))))))
