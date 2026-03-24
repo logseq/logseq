@@ -81,6 +81,46 @@
        (is (nil? (get @search/fuzzy-search-indices test-repo)))
        (is (nil? (get @worker-state/*sqlite-conns test-repo)))))))
 
+(deftest client-ops-cleanup-timer-starts-once-and-clears-on-close-test
+  (restoring-worker-state
+   (fn []
+     (let [scheduled (atom [])
+           cleared (atom [])
+           original-set-interval js/setInterval
+           original-clear-interval js/clearInterval
+           fake-db #js {:close (fn [] nil)}
+           timer-id #js {:id "timer-1"}]
+       (set! js/setInterval
+             (fn [f interval-ms]
+               (swap! scheduled conj {:fn f :interval-ms interval-ms})
+               timer-id))
+       (set! js/clearInterval
+             (fn [id]
+               (swap! cleared conj id)))
+       (try
+         (reset! worker-state/*sqlite-conns
+                 {test-repo {:db fake-db
+                             :search fake-db
+                             :client-ops fake-db}})
+         (reset! worker-state/*datascript-conns {test-repo :datascript})
+         (reset! worker-state/*client-ops-conns {test-repo :client-ops})
+         (reset! (deref #'db-worker/*client-ops-cleanup-timers) {})
+
+         (#'db-worker/ensure-client-ops-cleanup-timer! test-repo)
+         (#'db-worker/ensure-client-ops-cleanup-timer! test-repo)
+
+         (is (= 1 (count @scheduled)))
+         (is (= (* 3 60 60 1000) (:interval-ms (first @scheduled))))
+         (is (= timer-id (get @(deref #'db-worker/*client-ops-cleanup-timers) test-repo)))
+
+         (db-worker/close-db! test-repo)
+
+         (is (= [timer-id] @cleared))
+         (is (nil? (get @(deref #'db-worker/*client-ops-cleanup-timers) test-repo)))
+         (finally
+           (set! js/setInterval original-set-interval)
+           (set! js/clearInterval original-clear-interval)))))))
+
 (deftest complete-datoms-import-invalidates-existing-search-db-test
   (async done
          (restoring-worker-state
