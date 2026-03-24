@@ -205,3 +205,24 @@
     (let [ent (d/entity @conn [:block/uuid asset-uuid])]
       (when-let [e (:db/id ent)]
         (ldb/transact! conn [[:db/retractEntity e]])))))
+
+(defn cleanup-finished-history-ops!
+  [repo protected-tx-ids]
+  (if-let [conn (worker-state/get-client-ops-conn repo)]
+    (let [protected-tx-ids (set protected-tx-ids)
+          tx-ent-ids (->> (d/datoms @conn :avet :db-sync/tx-id)
+                          (keep (fn [datom]
+                                  (let [tx-id (:v datom)
+                                        ent (d/entity @conn (:e datom))]
+                                    (when (and (uuid? tx-id)
+                                               (false? (:db-sync/pending? ent))
+                                               (not (contains? protected-tx-ids tx-id)))
+                                      (:db/id ent)))))
+                          vec)]
+      (when (seq tx-ent-ids)
+        (ldb/transact! conn
+                       (mapv (fn [ent-id]
+                               [:db/retractEntity ent-id])
+                             tx-ent-ids)))
+      (count tx-ent-ids))
+    0))
