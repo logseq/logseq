@@ -1,9 +1,11 @@
 (ns frontend.worker.db-worker-test
   (:require [cljs.test :refer [async deftest is]]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.thread-api :as thread-api]
             [frontend.worker.a-test-env]
             [frontend.worker.db-worker :as db-worker]
+            [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
@@ -12,6 +14,7 @@
             [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.log-and-state :as rtc-log-and-state]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.frontend.validate :as db-validate]
             [promesa.core :as p]))
 
 (def ^:private test-repo "test-db-worker-repo")
@@ -328,3 +331,54 @@
                       (p/catch (fn [error]
                                  (is false (str error))
                                  (done)))))))))))
+
+(deftest thread-api-validate-db-passes-sync-diagnostics-test
+  (restoring-worker-state
+   (fn []
+     (let [validate (@thread-api/*thread-apis :thread-api/validate-db)
+           conn (d/create-conn db-schema/schema)
+           captured (atom nil)
+           latest-prev @db-sync/*repo->latest-remote-tx]
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (reset! db-sync/*repo->latest-remote-tx {test-repo 11})
+       (try
+         (with-redefs [client-op/get-local-tx (fn [_repo] 7)
+                       client-op/get-local-checksum (fn [_repo] "local-checksum")
+                       worker-db-validate/validate-db (fn [& args]
+                                                        (reset! captured args)
+                                                        {:ok true})]
+           (validate test-repo)
+           (is (= [test-repo
+                   conn
+                   {:local-tx 7
+                    :remote-tx 11
+                    :local-checksum "local-checksum"
+                    :remote-checksum nil}]
+                  @captured)))
+         (finally
+           (reset! db-sync/*repo->latest-remote-tx latest-prev)))))))
+
+(deftest validate-db-notification-includes-sync-diagnostics-test
+  (let [conn (d/create-conn db-schema/schema)
+        notifications (atom [])
+        sync-diagnostics {:local-tx 3
+                          :remote-tx 5
+                          :local-checksum "local-checksum"
+                          :remote-checksum "remote-checksum"}]
+    (with-redefs [db-validate/validate-db! (fn [_db] {:errors nil
+                                                      :datom-count 0
+                                                      :entities []})
+                  db-validate/graph-counts (fn [_db _entities] {})
+                  shared-service/broadcast-to-clients! (fn [topic payload]
+                                                         (swap! notifications conj [topic payload]))]
+      (worker-db-validate/validate-db test-repo conn sync-diagnostics)
+      (let [[topic payload] (first (filter (fn [[topic* _]]
+                                             (= :notification topic*))
+                                           @notifications))
+            [message status] payload]
+        (is (= :notification topic))
+        (is (= :success status))
+        (is (string/includes? message ":local-checksum \"local-checksum\""))
+        (is (string/includes? message ":remote-checksum \"remote-checksum\""))
+        (is (string/includes? message ":local-tx 3"))
+        (is (string/includes? message ":remote-tx 5"))))))
