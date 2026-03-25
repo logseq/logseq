@@ -615,6 +615,10 @@
                       (keep #(build-insert-block-payload db-before %))
                       vec))
         [target-id sibling?] (block-restore-target root)]
+    (when (and target-id
+               (= target-id (d/entity db-before [:block/uuid root-uuid])))
+      (throw (ex-info "delete-root->restore-plan self target"
+                      {:root root})))
     (when (and (seq blocks)
                (some? target-id))
       {:blocks blocks
