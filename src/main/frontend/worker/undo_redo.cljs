@@ -23,6 +23,20 @@
   (sr/defkeyword :gen-undo-ops?
     "tx-meta option, generate undo ops from tx-data when true (default true)"))
 
+(def ^:private selection-editor-info-schema
+  [:map
+   [:selected-block-uuids [:sequential :uuid]]
+   [:selection-direction {:optional true} [:maybe [:enum :up :down]]]])
+
+(def ^:private editor-cursor-info-schema
+  [:map
+   [:block-uuid :uuid]
+   [:container-id [:or :int [:enum :unknown-container]]]
+   [:start-pos [:maybe :int]]
+   [:end-pos [:maybe :int]]
+   [:selected-block-uuids {:optional true} [:sequential :uuid]]
+   [:selection-direction {:optional true} [:maybe [:enum :up :down]]]])
+
 (def ^:private undo-op-item-schema
   (mu/closed-schema
    [:multi {:dispatch first}
@@ -42,11 +56,9 @@
 
     [::record-editor-info
      [:cat :keyword
-      [:map
-       [:block-uuid :uuid]
-       [:container-id [:or :int [:enum :unknown-container]]]
-       [:start-pos [:maybe :int]]
-       [:end-pos [:maybe :int]]]]]
+      [:or
+       editor-cursor-info-schema
+       selection-editor-info-schema]]]
 
     [::ui-state
      [:cat :keyword :string]]]))
@@ -316,10 +328,11 @@
   (push-opposite-op! repo undo? op')
   (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) op)
                             (map second))
-        block-content (:block/title (d/entity @conn [:block/uuid (:block-uuid
-                                                                  (if undo?
-                                                                    (first editor-cursors)
-                                                                    (last editor-cursors)))]))]
+        cursor (if undo?
+                 (first editor-cursors)
+                 (or (last editor-cursors) (first editor-cursors)))
+        block-content (when-let [block-uuid (:block-uuid cursor)]
+                        (:block/title (d/entity @conn [:block/uuid block-uuid])))]
     {:undo? undo?
      :editor-cursors editor-cursors
      :block-content block-content}))

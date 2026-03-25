@@ -86,6 +86,27 @@
                   :outliner-ops [[:save-block [{:block/uuid block-uuid
                                                 :block/title title} {}]]]}))))
 
+(deftest undo-redo-selection-editor-info-roundtrip-test
+  (testing "undo/redo result keeps block selection editor info when no cursor is recorded"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          {:keys [child-uuid]} (seed-page-parent-child!)
+          selection-info {:selected-block-uuids [child-uuid]
+                          :selection-direction :down}]
+      (d/transact! conn
+                   [[:db/add [:block/uuid child-uuid] :block/title "selection-history"]]
+                   (local-tx-meta
+                    {:outliner-op :save-block
+                     :undo-redo/editor-info selection-info
+                     :outliner-ops [[:save-block [{:block/uuid child-uuid
+                                                   :block/title "selection-history"} {}]]]}))
+      (let [undo-result (worker-undo-redo/undo test-repo)]
+        (is (= [selection-info] (:editor-cursors undo-result)))
+        (is (nil? (:block-content undo-result))))
+      (let [redo-result (worker-undo-redo/redo test-repo)]
+        (is (= [selection-info] (:editor-cursors redo-result)))
+        (is (nil? (:block-content redo-result)))))))
+
 (defn- undo-all!
   []
   (loop [results []]

@@ -11,12 +11,21 @@
 
 (defn- restore-cursor!
   [{:keys [editor-cursors block-content undo?]}]
-  (let [{:keys [block-uuid container-id start-pos end-pos]} (if undo? (first editor-cursors) (or (last editor-cursors) (first editor-cursors)))
+  (let [cursor (if undo?
+                 (first editor-cursors)
+                 (or (last editor-cursors) (first editor-cursors)))
+        {:keys [selected-block-uuids selection-direction block-uuid container-id start-pos end-pos]} cursor
+        selected-blocks (when (seq selected-block-uuids)
+                          (->> selected-block-uuids
+                               (mapcat util/get-blocks-by-id)
+                               vec))
         pos (if undo? (or start-pos end-pos) (or end-pos start-pos))]
-    (when-let [block (db/pull [:block/uuid block-uuid])]
-      (editor/edit-block! block pos
-                          {:container-id container-id
-                           :custom-content block-content}))))
+    (if (seq selected-blocks)
+      (state/exit-editing-and-set-selected-blocks! selected-blocks selection-direction)
+      (when-let [block (db/pull [:block/uuid block-uuid])]
+        (editor/edit-block! block pos
+                            {:container-id container-id
+                             :custom-content block-content})))))
 
 (defn- restore-app-state!
   [state]
