@@ -120,8 +120,7 @@
 
 (defn- verify-sync-checksum!
   [repo client local-tx remote-tx remote-checksum context]
-  (when (and (not (sync-crypt/graph-e2ee? repo))
-             (string? remote-checksum)
+  (when (and (string? remote-checksum)
              (checksum-compare-ready? repo client local-tx remote-tx))
     (let [local-checksum (local-sync-checksum repo)]
       (when-not (= local-checksum remote-checksum)
