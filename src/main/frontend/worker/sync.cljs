@@ -49,8 +49,7 @@
 
 (defn update-local-sync-checksum!
   [repo tx-report]
-  (when (and (worker-state/get-client-ops-conn repo)
-             (not (sync-crypt/graph-e2ee? repo)))
+  (when (worker-state/get-client-ops-conn repo)
     (client-op/update-local-checksum
      repo
      (sync-checksum/update-checksum (client-op/get-local-checksum repo) tx-report))))
