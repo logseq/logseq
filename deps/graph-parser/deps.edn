@@ -15,14 +15,5 @@
                                :git/sha "30328a045141717aadbbb693465aed55f0904976"}}
 
  :aliases
- ;; This runs tests with nodejs. Would be nice to run this with in a browser env
- ;; since this is how its normally run in the app but this requires more setup
- ;; with karma, shadow-cljs.edn and headless mode on CI
- {:test {:extra-paths ["test"]
-         :extra-deps  {olical/cljs-test-runner   {:mvn/version "3.8.0"}
-                       org.clojure/clojurescript {:mvn/version "1.11.132"}
-                       logseq/outliner {:local/root "../outliner"}}
-         :main-opts   ["-m" "cljs-test-runner.main"]}
-
-  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2024.09.27"}}
+ {:clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2024.09.27"}}
               :main-opts    ["-m" "clj-kondo.main"]}}}
