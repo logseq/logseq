@@ -144,13 +144,11 @@
       (restore-data-from-addr sql addr))))
 
 (defn- append-tx-for-tx-report
-  [sql {:keys [db-after db-before tx-data tx-meta]}]
+  [sql {:keys [db-after db-before tx-data tx-meta] :as tx-report}]
   (let [new-t (next-t! sql)
         created-at (common/now-ms)
-        checksum (sync-checksum/update-checksum (get-checksum sql)
-                                                {:db-before db-before
-                                                 :db-after db-after
-                                                 :tx-data tx-data})
+        prev-checksum (get-checksum sql)
+        checksum (sync-checksum/update-checksum prev-checksum tx-report)
         normalized-data (->> tx-data
                              (db-normalize/normalize-tx-data db-after db-before))
         ;; _ (prn :debug :tx-data tx-data)
