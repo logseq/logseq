@@ -126,7 +126,7 @@
   [db block]
   (let [block' (sanitize-block-payload db block)]
     (if (map? block')
-      (dissoc block' :block/page :block/order)
+      (dissoc block' :block/page :block/order rebase-refs-key)
       block')))
 
 (defn- stable-id-coll
