@@ -53,12 +53,12 @@
 (defonce db-sync-ws-url
   (if db-sync-local?
     "ws://127.0.0.1:8787/sync/%s"
-    "wss://api.logseq.io/sync/%s"))
+    "wss://api-staging.logseq.io/sync/%s"))
 
 (defonce db-sync-http-base
   (if db-sync-local?
     "http://127.0.0.1:8787"
-    "https://api.logseq.io"))
+    "https://api-staging.logseq.io"))
 
 ;; Feature flags
 ;; =============
