@@ -586,7 +586,8 @@
                (js/console.error e)
                (log/error ::reverse-local-tx-error
                           {:index index
-                           :local-tx local-tx})
+                           :local-tx local-tx
+                           :local-txs local-txs})
                (throw e)))))
         (keep identity)
         vec)))
