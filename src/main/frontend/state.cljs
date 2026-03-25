@@ -2044,11 +2044,18 @@ Similar to re-frame subscriptions"
 
 (defn get-editor-info
   []
-  (when-let [edit-block (get-edit-block)]
-    {:block-uuid (:block/uuid edit-block)
-     :container-id (or @(:editor/container-id @state) :unknown-container)
-     :start-pos @(:editor/start-pos @state)
-     :end-pos (get-edit-pos)}))
+  (let [selected-block-uuids (some-> (get-selection-block-ids) seq vec)
+        selection-info (when selected-block-uuids
+                         {:selected-block-uuids selected-block-uuids
+                          :selection-direction (get-selection-direction)})]
+    (if-let [edit-block (get-edit-block)]
+      (cond-> {:block-uuid (:block/uuid edit-block)
+               :container-id (or @(:editor/container-id @state) :unknown-container)
+               :start-pos @(:editor/start-pos @state)
+               :end-pos (get-edit-pos)}
+        selection-info
+        (merge selection-info))
+      selection-info)))
 
 (defn conj-block-ref!
   [ref-entity]
