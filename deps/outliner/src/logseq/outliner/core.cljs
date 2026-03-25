@@ -162,11 +162,12 @@
                    ;; Update :block/tag to reference ids from :block/refs
                    (map (fn [tag]
                           (if (contains? refs (:block/name tag))
-                            (assoc tag :block/uuid
-                                   (:block/uuid
-                                    (first (filter (fn [r] (= (:block/name tag)
+                            (let [matched-ref (first (filter (fn [r] (= (:block/name tag)
                                                               (:block/name r)))
-                                                   (:block/refs m)))))
+                                                   (:block/refs m)))]
+                              (assoc tag
+                                     :block/uuid (:block/uuid matched-ref)
+                                     :db/ident (:db/ident matched-ref)))
                             tag))
                         tags)
 

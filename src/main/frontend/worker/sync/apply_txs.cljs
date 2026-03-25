@@ -977,13 +977,18 @@
   [{:keys [repo conn local-txs remote-txs]}]
   (let [batch-tx-meta {:rtc-tx? true
                        :with-local-changes? true}]
-    (log/info ::phase :reverse-apply-remote)
+    (log/info ::phase :reverse)
     (ldb/batch-transact!
      conn
-     (assoc batch-tx-meta
-            :reverse-and-apply-remote? true)
+     (assoc batch-tx-meta :reverse? true)
      (fn [conn]
-       (reverse-local-txs! conn local-txs {:rtc-tx? true})
+       (reverse-local-txs! conn local-txs {:rtc-tx? true})))
+
+    (log/info ::phase :apply-remote)
+    (ldb/batch-transact!
+     conn
+     (assoc batch-tx-meta :apply-remote? true)
+     (fn [conn]
        (transact-remote-txs! conn remote-txs batch-tx-meta)))
 
     (log/info ::phase :rebase)
@@ -1070,6 +1075,8 @@
       (when (seq tx-data)
         (let [normalized (normalize-tx-data db-after db-before tx-data)
               reversed-datoms (reverse-tx-data db-before db-after tx-data)]
+          (prn :tx-data tx-data)
+          (prn :reversed-datoms reversed-datoms)
           (when (seq normalized)
             (persist-local-tx! repo tx-report normalized reversed-datoms)
             (when-let [client @worker-state/*db-sync-client]
