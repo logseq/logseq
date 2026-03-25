@@ -977,17 +977,24 @@
   [{:keys [repo conn local-txs remote-txs]}]
   (let [batch-tx-meta {:rtc-tx? true
                        :with-local-changes? true}]
+    (log/info ::phase :reverse-apply-remote)
     (ldb/batch-transact!
      conn
-     batch-tx-meta
+     (assoc batch-tx-meta
+            :reverse-and-apply-remote? true)
      (fn [conn]
        (reverse-local-txs! conn local-txs {:rtc-tx? true})
        (transact-remote-txs! conn remote-txs batch-tx-meta)))
 
+    (log/info ::phase :rebase)
+
     (remove-pending-txs! repo (map :tx-id local-txs))
 
-    (let [rebase-tx-report (rebase-local-txs! repo conn local-txs batch-tx-meta)]
-      (fix-tx! conn rebase-tx-report {:outliner-op :rebase-fix}))))
+    (let [rebase-tx-report (rebase-local-txs! repo conn local-txs
+                                              (assoc batch-tx-meta :rebase? true))]
+      (fix-tx! conn rebase-tx-report {:outliner-op :rebase-fix}))
+
+    (log/info ::phase :apply-remote-tx-with-local-changes-finished)))
 
 (defn- apply-remote-tx-without-local-changes!
   [{:keys [conn remote-txs temp-tx-meta]}]
