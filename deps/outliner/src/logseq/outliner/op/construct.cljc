@@ -51,7 +51,7 @@
     :logseq.property/created-by-ref
     :logseq.property.embedding/hnsw-label-updated-at})
 
-(def ^:api rebase-refs-key :db-sync.rebase/refs)
+(def ^:api rebase-refs-key :block.temp/sync-rebase-refs)
 (def ^:api canonical-transact-op [[:transact nil]])
 
 (defn- stable-entity-ref
