@@ -1075,8 +1075,6 @@
       (when (seq tx-data)
         (let [normalized (normalize-tx-data db-after db-before tx-data)
               reversed-datoms (reverse-tx-data db-before db-after tx-data)]
-          (prn :tx-data tx-data)
-          (prn :reversed-datoms reversed-datoms)
           (when (seq normalized)
             (persist-local-tx! repo tx-report normalized reversed-datoms)
             (when-let [client @worker-state/*db-sync-client]
