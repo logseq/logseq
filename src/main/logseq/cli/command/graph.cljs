@@ -151,7 +151,7 @@
               :import-type import-type
               :input input
               :allow-missing-graph true
-              :require-missing-graph true}}))
+              :require-missing-graph (= import-type "sqlite")}}))
 
 (defn- graph-item->graph-name
   [item]
@@ -304,7 +304,10 @@
 
 (defn execute-graph-import
   [action config]
-  (-> (p/let [_ (cli-server/stop-server! config (:repo action))
+  (-> (p/let [existing-graphs (cli-server/list-graphs config)
+              graph (core/repo->graph (:repo action))
+              new-graph? (not (some #(= graph %) existing-graphs))
+              _ (cli-server/stop-server! config (:repo action))
               cfg (cli-server/ensure-server! config (:repo action))
               import-type (:import-type action)
               input-data (case import-type
@@ -321,4 +324,7 @@
               _ (transport/invoke cfg method direct-pass? [(:repo action) payload])
               _ (cli-server/restart-server! config (:repo action))]
         {:status :ok
-         :data {:message (str "imported " import-type " from " (:input action))}})))
+         :data {:new-graph? new-graph?
+                :message (str (when new-graph?
+                                (str "Created graph " graph "\n"))
+                              "Imported " import-type " from " (:input action))}})))

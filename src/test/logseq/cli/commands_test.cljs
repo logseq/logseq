@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [async deftest is testing]]
             [clojure.string :as string]
             [logseq.cli.command.add :as add-command]
+            [logseq.cli.command.graph :as graph-command]
             [logseq.cli.command.list :as list-command]
             [logseq.cli.command.show :as show-command]
             [logseq.cli.command.sync :as sync-command]
@@ -2409,14 +2410,30 @@
 
 (deftest test-execute-graph-import-rejects-existing-graph
   (async done
-         (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
-                             cli-server/ensure-server! (fn [_ _]
-                                                         (throw (ex-info "should not start server" {})))]
-               (p/let [result (commands/execute {:type :graph-import :repo "logseq_db_demo" :allow-missing-graph true} {})]
-                 (is (= :error (:status result)))
-                 (is (= :graph-exists (get-in result [:error :code])))))
-             (p/catch (fn [e] (is false (str "unexpected error: " e))))
-             (p/finally done))))
+         (let [{:keys [action]} (graph-command/build-import-action "logseq_db_demo" "sqlite" "/tmp/test-db.sqlite")]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                              cli-server/ensure-server! (fn [_ _]
+                                                          (throw (ex-info "should not start server" {})))]
+                (p/let [result (commands/execute action {})]
+                  (is (= :error (:status result)))
+                  (is (= :graph-exists (get-in result [:error :code])))))
+              (p/catch (fn [e] (is false (str "unexpected error: " e))))
+              (p/finally done)))))
+
+(deftest test-execute-graph-import-edn-allows-existing-graph
+  (async done
+         (let [{:keys [action]} (graph-command/build-import-action "logseq_db_demo" "edn" "/tmp/test.edn")]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/stop-server! (fn [_ _] (p/resolved {:ok? true}))
+                               cli-server/restart-server! (fn [_ _] (p/resolved {:ok? true}))
+                               cli-server/ensure-server! (fn [config _] (assoc config :base-url "http://example"))
+                               transport/read-input (fn [_] {:page "Test"})
+                               transport/invoke (fn [_ _ _ _] {:ok true})]
+                 (p/let [result (commands/execute action {})]
+                   (is (= :ok (:status result))
+                       "edn import into existing graph should succeed")))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
 (deftest test-execute-sync-download-rejects-existing-graph
   (async done
