@@ -1,7 +1,10 @@
 (ns frontend.handler.history-test
   (:require [clojure.test :refer [deftest is]]
+            [frontend.db :as db]
+            [frontend.handler.editor :as editor]
             [frontend.handler.history :as history]
             [frontend.state :as state]
+            [frontend.util :as util]
             [logseq.db :as ldb]))
 
 (deftest restore-cursor-and-state-prefers-ui-state-test
@@ -51,3 +54,54 @@
       (is (= 1 (count @cursor-calls)))
       (is (nil? (:ui-state-str (first @cursor-calls))))
       (is (= false (:undo? (first @cursor-calls)))))))
+
+(deftest restore-cursor-prefers-block-selection-test
+  (let [selection-calls (atom [])
+        edit-calls (atom [])]
+    (with-redefs [util/get-blocks-by-id (fn [block-id]
+                                          (case block-id
+                                            #uuid "00000000-0000-0000-0000-000000000001" [:node-1]
+                                            #uuid "00000000-0000-0000-0000-000000000002" [:node-2]
+                                            nil))
+                  state/exit-editing-and-set-selected-blocks! (fn [blocks direction]
+                                                                (swap! selection-calls conj [blocks direction]))
+                  editor/edit-block! (fn [& args]
+                                       (swap! edit-calls conj args))
+                  db/pull (constantly nil)]
+      (#'history/restore-cursor!
+       {:undo? true
+        :editor-cursors [{:selected-block-uuids [#uuid "00000000-0000-0000-0000-000000000001"
+                                                 #uuid "00000000-0000-0000-0000-000000000002"]
+                          :selection-direction :down}]})
+      (is (= [[[:node-1 :node-2] :down]]
+             @selection-calls))
+      (is (empty? @edit-calls)))))
+
+(deftest restore-cursor-selection-falls-back-to-editor-cursor-test
+  (let [selection-calls (atom [])
+        edit-calls (atom [])
+        block-uuid #uuid "00000000-0000-0000-0000-000000000003"]
+    (with-redefs [util/get-blocks-by-id (constantly nil)
+                  state/exit-editing-and-set-selected-blocks! (fn [blocks direction]
+                                                                (swap! selection-calls conj [blocks direction]))
+                  editor/edit-block! (fn [& args]
+                                       (swap! edit-calls conj args))
+                  db/pull (fn [[_lookup-k id]]
+                            (when (= block-uuid id)
+                              {:db/id 42
+                               :block/uuid block-uuid}))]
+      (#'history/restore-cursor!
+       {:undo? false
+        :editor-cursors [{:selected-block-uuids [#uuid "00000000-0000-0000-0000-000000000001"]
+                          :selection-direction :up
+                          :block-uuid block-uuid
+                          :container-id 99
+                          :start-pos 1
+                          :end-pos 3}]})
+      (is (empty? @selection-calls))
+      (is (= [[{:db/id 42
+                :block/uuid block-uuid}
+               3
+               {:container-id 99
+                :custom-content nil}]]
+             @edit-calls)))))
