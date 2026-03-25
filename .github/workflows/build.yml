@@ -80,7 +80,7 @@ jobs:
         run: clojure -M:test compile test
 
       - name: Run ClojureScript query tests against basic query type
-        run: DB_QUERY_TYPE=basic node static/tests.js -r frontend.db.query-dsl-test
+        run: DB_QUERY_TYPE=basic yarn cljs:run-test -r frontend.db.query-dsl-test
 
       - name: Run ClojureScript unit tests
         run: yarn cljs:run-test
