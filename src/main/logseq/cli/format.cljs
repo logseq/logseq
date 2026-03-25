@@ -606,8 +606,8 @@
   (str "Exported " export-type " to " file))
 
 (defn- format-graph-import
-  [{:keys [import-type input]}]
-  (str "Imported " import-type " from " input))
+  [_context {:keys [message]}]
+  message)
 
 (defn- format-graph-action
   [command {:keys [graph]}]
@@ -684,7 +684,7 @@
         :remove-tag (format-remove-tag context)
         :remove-property (format-remove-property context)
         :graph-export (format-graph-export context)
-        :graph-import (format-graph-import context)
+        :graph-import (format-graph-import context data)
         :query (format-query-results (:result data))
         :query-list (format-query-list (:queries data))
         :show (or (:message data) (pr-str data))
