@@ -1020,10 +1020,17 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (worker-export/get-all-page->content @conn options)))
 
+(defn- sync-diagnostics-for-validation
+  [repo]
+  {:local-tx (client-op/get-local-tx repo)
+   :remote-tx (get @db-sync/*repo->latest-remote-tx repo)
+   :local-checksum (client-op/get-local-checksum repo)
+   :remote-checksum (get @db-sync/*repo->latest-remote-checksum repo)})
+
 (def-thread-api :thread-api/validate-db
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (worker-db-validate/validate-db conn)))
+    (worker-db-validate/validate-db repo conn (sync-diagnostics-for-validation repo))))
 
 ;; Returns an export-edn map for given repo. When there's an unexpected error, a map
 ;; with key :export-edn-error is returned
