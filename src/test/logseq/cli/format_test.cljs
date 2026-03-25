@@ -324,7 +324,8 @@
     (let [result (format/format-result {:status :ok
                                         :command :graph-import
                                         :context {:import-type "sqlite"
-                                                  :input "/tmp/import.sqlite"}}
+                                                  :input "/tmp/import.sqlite"}
+                                        :data {:message "Imported sqlite from /tmp/import.sqlite"}}
                                        {:output-format nil})]
       (is (= "Imported sqlite from /tmp/import.sqlite" result)))))
 

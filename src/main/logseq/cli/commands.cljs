@@ -363,8 +363,7 @@
 (defn- ensure-missing-graph
   [action config]
   (if (and (:repo action)
-           (or (:require-missing-graph action)
-               (= :graph-import (:type action))))
+           (:require-missing-graph action))
     (p/let [graphs (cli-server/list-graphs config)
             graph (command-core/repo->graph (:repo action))]
       (if (some #(= graph %) graphs)

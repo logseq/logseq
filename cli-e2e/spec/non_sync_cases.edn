@@ -105,7 +105,7 @@
   :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph import --graph {{graph-arg}} --type edn --input {{export-path-arg}}"]
   :expect {:exit 0
            :stdout-json-paths {[:status] "ok"}
-           :stdout-contains ["imported edn from" "{{export-path}}"]}
+           :stdout-contains ["Imported edn from" "{{export-path}}"]}
   :covers {:commands ["graph import"]
            :options {:global ["--config" "--graph" "--data-dir" "--output"]
                      :graph ["--type" "--input"]}}
