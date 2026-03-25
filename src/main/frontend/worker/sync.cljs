@@ -24,6 +24,7 @@
 (def ^:private ws-stale-timeout-ms 600000)
 
 (defonce *repo->latest-remote-tx sync-apply/*repo->latest-remote-tx)
+(defonce *repo->latest-remote-checksum sync-apply/*repo->latest-remote-checksum)
 (defonce *start-inflight-target (atom nil))
 
 (defn fail-fast

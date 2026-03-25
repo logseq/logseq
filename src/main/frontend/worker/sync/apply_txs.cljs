@@ -31,6 +31,7 @@
             [promesa.core :as p]))
 
 (defonce *repo->latest-remote-tx (atom {}))
+(defonce *repo->latest-remote-checksum (atom {}))
 (defonce *upload-temp-opfs-pool (atom nil))
 
 (defn fail-fast [tag data]
@@ -574,20 +575,21 @@
 (defn reverse-local-txs!
   [conn local-txs temp-tx-meta]
   ;; (prn :debug :local-txs local-txs)
-  (->> local-txs
-       reverse
-       (map-indexed
-        (fn [index local-tx]
-          (try
-            (reverse-history-action! conn local-txs index local-tx temp-tx-meta)
-            (catch :default e
-              (js/console.error e)
-              (log/error ::reverse-local-tx-error
-                         {:index index
-                          :local-tx local-tx})
-              (throw e)))))
-       (keep identity)
-       vec))
+  (doall
+   (->> local-txs
+        reverse
+        (map-indexed
+         (fn [index local-tx]
+           (try
+             (reverse-history-action! conn local-txs index local-tx temp-tx-meta)
+             (catch :default e
+               (js/console.error e)
+               (log/error ::reverse-local-tx-error
+                          {:index index
+                           :local-tx local-tx})
+               (throw e)))))
+        (keep identity)
+        vec)))
 
 (defn- invalid-rebase-op!
   [op data]
@@ -978,18 +980,15 @@
   (let [batch-tx-meta {:rtc-tx? true
                        :with-local-changes? true}]
     (log/info ::phase :reverse)
-    (ldb/batch-transact!
-     conn
-     (assoc batch-tx-meta :reverse? true)
-     (fn [conn]
-       (reverse-local-txs! conn local-txs {:rtc-tx? true})))
+    (reverse-local-txs! conn local-txs {:rtc-tx? true})
 
     (log/info ::phase :apply-remote)
-    (ldb/batch-transact!
-     conn
-     (assoc batch-tx-meta :apply-remote? true)
-     (fn [conn]
-       (transact-remote-txs! conn remote-txs batch-tx-meta)))
+    (transact-remote-txs! conn remote-txs batch-tx-meta)
+    ;; (ldb/batch-transact!
+    ;;  conn
+    ;;  (assoc batch-tx-meta :apply-remote? true)
+    ;;  (fn [conn]
+    ;;    (transact-remote-txs! conn remote-txs batch-tx-meta)))
 
     (log/info ::phase :rebase)
 

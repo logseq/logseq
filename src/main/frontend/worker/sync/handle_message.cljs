@@ -253,6 +253,8 @@
           remote-checksum (:checksum message)]
       (when remote-tx
         (swap! sync-apply/*repo->latest-remote-tx assoc repo remote-tx))
+      (when (contains? message :checksum)
+        (swap! sync-apply/*repo->latest-remote-checksum assoc repo remote-checksum))
       (case (:type message)
         "hello" (handle-hello! repo client local-tx remote-tx remote-checksum)
         "online-users" (handle-online-users! repo client message)
