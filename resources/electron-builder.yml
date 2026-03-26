@@ -30,6 +30,11 @@ dmg:
 
 win:
   icon: icons/logseq.ico
+  azureSignOptions:
+    publisherName: Logseq, Inc.
+    endpoint: https://eus.codesigning.azure.net/
+    certificateProfileName: Logseq
+    codeSigningAccountName: logseqwin
   target:
     - nsis
     - zip
