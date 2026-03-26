@@ -170,9 +170,12 @@
 
 (defn- explicit-transact-forward-op?
   [tx-meta]
-  (let [explicit-forward-ops (some-> (:db-sync/forward-outliner-ops tx-meta)
-                                     seq
-                                     vec)]
+  (let [explicit-forward-ops (or (some-> (:db-sync/forward-outliner-ops tx-meta)
+                                         seq
+                                         vec)
+                                 (some-> (:outliner-ops tx-meta)
+                                         seq
+                                         vec))]
     (and (seq explicit-forward-ops)
          (contains-transact-op? explicit-forward-ops))))
 
@@ -308,8 +311,10 @@
 
 (defn- inline-history-action
   [tx-meta]
-  (let [forward-outliner-ops (:db-sync/forward-outliner-ops tx-meta)
-        inverse-outliner-ops (:db-sync/inverse-outliner-ops tx-meta)]
+  (let [forward-outliner-ops (or (:db-sync/forward-outliner-ops tx-meta)
+                                 (:forward-outliner-ops tx-meta))
+        inverse-outliner-ops (or (:db-sync/inverse-outliner-ops tx-meta)
+                                 (:inverse-outliner-ops tx-meta))]
     (when (and (seq forward-outliner-ops) (seq inverse-outliner-ops))
       {:outliner-op (:outliner-op tx-meta)
        :forward-outliner-ops forward-outliner-ops
@@ -952,10 +957,8 @@
   [{:keys [repo conn local-txs remote-txs]}]
   (let [batch-tx-meta {:rtc-tx? true
                        :with-local-changes? true}]
-    (log/info ::phase :reverse)
     (reverse-local-txs! conn local-txs {:rtc-tx? true})
 
-    (log/info ::phase :apply-remote)
     (transact-remote-txs! conn remote-txs batch-tx-meta)
     ;; (ldb/batch-transact!
     ;;  conn
@@ -963,15 +966,11 @@
     ;;  (fn [conn]
     ;;    (transact-remote-txs! conn remote-txs batch-tx-meta)))
 
-    (log/info ::phase :rebase)
-
     (remove-pending-txs! repo (map :tx-id local-txs))
 
     (let [rebase-tx-report (rebase-local-txs! repo conn local-txs
                                               (assoc batch-tx-meta :rebase? true))]
-      (fix-tx! conn rebase-tx-report {:outliner-op :rebase-fix}))
-
-    (log/info ::phase :apply-remote-tx-with-local-changes-finished)))
+      (fix-tx! conn rebase-tx-report {:outliner-op :rebase-fix}))))
 
 (defn- apply-remote-tx-without-local-changes!
   [{:keys [conn remote-txs temp-tx-meta]}]
