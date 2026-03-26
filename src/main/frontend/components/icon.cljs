@@ -353,7 +353,11 @@
     (shui/button {:size :sm
                   :ref *el
                   :class "color-picker"
-                  :on-click (fn [^js e] (shui/popup-show! (.-target e) content-fn {:content-props {:side-offset 6}}))
+                  :on-pointer-down (fn [^js e]
+                                     (util/stop e)
+                                     (shui/popup-show! (.-target e) content-fn
+                                                       {:id :icons-color-picker
+                                                        :content-props {:side-offset 6}}))
                   :variant :outline}
                  [:strong {:style {:color (or color "inherit")}}
                   (shui/tabler-icon "palette")])))
@@ -365,7 +369,7 @@
   (rum/local nil ::tab)
   {:init (fn [s]
            (assoc s ::color (atom (storage/get :ls-icon-color-preset))))}
-  [state {:keys [on-chosen del-btn? icon-value] :as opts}]
+  [state {:keys [on-chosen del-btn? color-auto-chosen? icon-value] :as opts}]
   (let [*q (::q state)
         *result (::result state)
         *tab (::tab state)
@@ -477,7 +481,8 @@
          (when (and show-tabs? has-icon-tab? (not= :emoji tab))
            (color-picker *color (fn [c]
                                   (when (= :tabler-icon (some-> icon-value :type))
-                                    (on-chosen nil (assoc icon-value :color c) true)))))
+                                    (when (not (false? color-auto-chosen?))
+                                      (on-chosen nil (assoc icon-value :color c) true))))))
 
          ;; action buttons
          (when del-btn?
