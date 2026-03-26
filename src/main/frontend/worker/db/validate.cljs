@@ -219,23 +219,10 @@
                    :db/index true}]
                  {:fix-db? true})))
 
-(defn- normalize-sync-diagnostics
-  [sync-diagnostics]
-  (merge {:local-checksum nil
-          :remote-checksum nil
-          :local-tx nil
-          :remote-tx nil}
-         (select-keys sync-diagnostics [:local-checksum :remote-checksum :local-tx :remote-tx])))
-
-(defn- with-sync-diagnostics
-  [message sync-diagnostics]
-  (str message "\n\n"
-       "Sync diagnostics: " (pr-str (normalize-sync-diagnostics sync-diagnostics))))
-
 (defn validate-db
   ([conn]
    (validate-db nil conn nil))
-  ([_repo conn sync-diagnostics]
+  ([_repo conn _options]
    (fix-extends-cardinality! conn)
    (fix-icon-wrong-type! conn)
    (db-migrate/ensure-built-in-data-exists! conn)
@@ -258,15 +245,11 @@
                                                      {:msg "Validation errors"
                                                       :errors errors}])
          (shared-service/broadcast-to-clients! :notification
-                                               [(with-sync-diagnostics
-                                                  (str "Validation detected " (count errors) " invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed.")
-                                                  sync-diagnostics)
+                                               [(str "Validation detected " (count errors) " invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed.")
                                                 :warning false]))
 
        (shared-service/broadcast-to-clients! :notification
-                                             [(with-sync-diagnostics
-                                                (str "Your graph is valid! " (assoc (db-validate/graph-counts db entities) :datoms datom-count))
-                                                sync-diagnostics)
+                                             [(str "Your graph is valid! " (assoc (db-validate/graph-counts db entities) :datoms datom-count))
                                               :success false]))
      {:errors errors
       :datom-count datom-count

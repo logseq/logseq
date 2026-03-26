@@ -31,8 +31,10 @@
     :get-pending-local-tx-count client-op/get-pending-local-tx-count
     :get-unpushed-asset-ops-count client-op/get-unpushed-asset-ops-count
     :get-local-tx client-op/get-local-tx
+    :get-local-checksum client-op/get-local-checksum
     :get-graph-uuid client-op/get-graph-uuid
-    :latest-remote-tx @sync-apply/*repo->latest-remote-tx}
+    :latest-remote-tx @sync-apply/*repo->latest-remote-tx
+    :latest-remote-checksum @sync-apply/*repo->latest-remote-checksum}
    repo))
 
 (defn- broadcast-rtc-state!
