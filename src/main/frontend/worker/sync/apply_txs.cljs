@@ -304,34 +304,16 @@
     (usable-history-ops inverse-outliner-ops)
     (usable-history-ops forward-outliner-ops)))
 
-(defn- history-action-tx-data
-  [{:keys [tx reversed-tx]} undo?]
-  (some-> (if undo? reversed-tx tx) seq vec))
-
 (declare precreate-missing-save-blocks! replay-canonical-outliner-op!)
 
-(defn- apply-history-action-tx!
-  [conn tx-data tx-meta history-tx-id]
-  (try
-    (let [tx-meta' (-> tx-meta
-                       (assoc :outliner-op :transact)
-                       (dissoc :real-outliner-op
-                               :db-sync/forward-outliner-ops
-                               :db-sync/inverse-outliner-ops))]
-      (d/with @conn tx-data {:outliner-op :transact
-                             :persist-op? false})
-      (ldb/transact! conn tx-data tx-meta')
-      {:applied? true
-       :source :raw-tx
-       :history-tx-id history-tx-id})
-    (catch :default error
-      (log/debug :db-sync/drop-history-action-raw-tx
-                 {:reason :invalid-history-action-tx
-                  :tx-meta tx-meta
-                  :error error})
-      {:applied? false
-       :reason :invalid-history-action-tx
-       :error error})))
+(defn- inline-history-action
+  [tx-meta]
+  (let [forward-outliner-ops (:db-sync/forward-outliner-ops tx-meta)
+        inverse-outliner-ops (:db-sync/inverse-outliner-ops tx-meta)]
+    (when (and (seq forward-outliner-ops) (seq inverse-outliner-ops))
+      {:outliner-op (:outliner-op tx-meta)
+       :forward-outliner-ops forward-outliner-ops
+       :inverse-outliner-ops inverse-outliner-ops})))
 
 (defn ^:large-vars/cleanup-todo apply-history-action!
   [repo tx-id undo? tx-meta]
@@ -339,10 +321,10 @@
                     :undo? undo?
                     :tx-meta tx-meta}]
     (if-let [conn (worker-state/get-datascript-conn repo)]
-      (if-let [action (pending-tx-by-id repo tx-id)]
+      (if-let [action (or (pending-tx-by-id repo tx-id)
+                          (inline-history-action tx-meta))]
         (let [semantic-forward? (semantic-op-stream? (:forward-outliner-ops action))
               ops (history-action-ops action undo?)
-              tx-data (history-action-tx-data action undo?)
               history-tx-id (let [provided-history-tx-id (:db-sync/tx-id tx-meta)]
                               (if (and (uuid? provided-history-tx-id)
                                        (not= provided-history-tx-id tx-id))
@@ -441,20 +423,9 @@
                      :reason :invalid-history-action-ops
                      :error error}))))
 
-            (and semantic-forward?
-                 (seq tx-data))
-            (fail-fast :db-sync/semantic-history-action-no-raw-fallback
-                       {:repo repo
-                        :tx-id tx-id
-                        :undo? undo?
-                        :tx-data tx-data})
-
-            (seq tx-data)
-            (apply-history-action-tx! conn tx-data tx-meta' history-tx-id)
-
             :else
             {:applied? false :reason :unsupported-history-action
-             :debug-data debug-data}))
+             :debug-data (assoc debug-data :action action)}))
         {:applied? false :reason :missing-history-action
          :debug-data debug-data})
       (fail-fast :db-sync/missing-db {:repo repo :op :apply-history-action

@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest is testing use-fixtures]]
             [datascript.core :as d]
             [frontend.worker.a-test-env]
+            [frontend.worker.sync.apply-txs :as sync-apply]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.client-op :as client-op]
@@ -24,6 +25,7 @@
   [f]
   (let [datascript-prev @worker-state/*datascript-conns
         client-ops-prev @worker-state/*client-ops-conns
+        apply-history-action-prev @worker-undo-redo/*apply-history-action!
         conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
                [{:page {:block/title "page 1"}
@@ -33,6 +35,7 @@
         client-ops-conn (d/create-conn client-op/schema-in-db)]
     (reset! worker-state/*datascript-conns {test-repo conn})
     (reset! worker-state/*client-ops-conns {test-repo client-ops-conn})
+    (reset! worker-undo-redo/*apply-history-action! sync-apply/apply-history-action!)
     (d/listen! conn ::gen-undo-ops
                (fn [tx-report]
                  (db-sync/enqueue-local-tx! test-repo tx-report)))
@@ -42,6 +45,7 @@
       (finally
         (d/unlisten! conn ::gen-undo-ops)
         (worker-undo-redo/clear-history! test-repo)
+        (reset! worker-undo-redo/*apply-history-action! apply-history-action-prev)
         (reset! worker-state/*datascript-conns datascript-prev)
         (reset! worker-state/*client-ops-conns client-ops-prev)))))
 
@@ -137,8 +141,8 @@
              (second %))
           redo-op)))
 
-(deftest undo-missing-history-action-row-falls-back-to-local-path-test
-  (testing "worker undo falls back to local reversed datoms when history action row is missing"
+(deftest undo-missing-history-action-row-replays-from-inline-ops-test
+  (testing "undo/redo should replay from inline history ops when pending row is missing"
     (worker-undo-redo/clear-history! test-repo)
     (let [conn (worker-state/get-datascript-conn test-repo)
           client-ops-conn (get @worker-state/*client-ops-conns test-repo)
@@ -149,6 +153,22 @@
       (save-block-title! conn child-uuid "v2" tx-id-2)
       (is (= "v2" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
       (is (= 2 (count (get @worker-undo-redo/*undo-ops test-repo))))
+      (is (seq (:db-sync/forward-outliner-ops (latest-undo-history-data))))
+      (is (seq (:db-sync/inverse-outliner-ops (latest-undo-history-data))))
+      ;; Poison tx-data so undo/redo must not rely on raw datoms.
+      (swap! worker-undo-redo/*undo-ops
+             update test-repo
+             (fn [stack]
+               (update stack
+                       (dec (count stack))
+                       (fn [op]
+                         (mapv (fn [item]
+                                 (if (= ::worker-undo-redo/db-transact (first item))
+                                   [::worker-undo-redo/db-transact
+                                    (assoc (second item)
+                                           :tx-data [(d/datom 1 :block/title "poisoned" 1 true)])]
+                                   item))
+                               op)))))
       (when-let [tx-ent (d/entity @client-ops-conn [:db-sync/tx-id tx-id-2])]
         (ldb/transact! client-ops-conn [[:db/retractEntity (:db/id tx-ent)]]))
       (let [undo-result (worker-undo-redo/undo test-repo)]
@@ -186,8 +206,8 @@
         (finally
           (reset! worker-undo-redo/*apply-history-action! prev-apply-action))))))
 
-(deftest undo-skippable-worker-error-uses-ex-data-reason-test
-  (testing "undo skip classification should depend on ex-data reason, not exception message"
+(deftest undo-skippable-worker-error-does-not-fallback-to-local-tx-test
+  (testing "undo should not fallback to tx-data when worker reports skippable invalid ops"
     (worker-undo-redo/clear-history! test-repo)
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [child-uuid]} (seed-page-parent-child!)
@@ -202,10 +222,36 @@
                   (throw (ex-info "semantic-error-renamed"
                                   {:reason :invalid-history-action-ops}))))
         (let [undo-result (worker-undo-redo/undo test-repo)]
-          (is (not= ::worker-undo-redo/empty-undo-stack undo-result))
-          (is (= "child" (:block/title (d/entity @conn [:block/uuid child-uuid])))))
+          (is (= ::worker-undo-redo/empty-undo-stack undo-result))
+          (is (= "v2" (:block/title (d/entity @conn [:block/uuid child-uuid])))))
         (finally
           (reset! worker-undo-redo/*apply-history-action! prev-apply-action))))))
+
+(deftest undo-row-missing-and-poisoned-tx-data-does-not-clear-history-test
+  (testing "missing pending row with poisoned tx-data should not clear undo history"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          client-ops-conn (get @worker-state/*client-ops-conns test-repo)
+          {:keys [child-uuid]} (seed-page-parent-child!)
+          tx-id (random-uuid)]
+      (save-block-title! conn child-uuid "new-title" tx-id)
+      (swap! worker-undo-redo/*undo-ops
+             update test-repo
+             (fn [stack]
+               (update stack
+                       (dec (count stack))
+                       (fn [op]
+                         (mapv (fn [item]
+                                 (if (= ::worker-undo-redo/db-transact (first item))
+                                   [::worker-undo-redo/db-transact
+                                    (assoc (second item) :tx-data [(d/datom 1 :block/title "poisoned" 1 true)])]
+                                   item))
+                               op)))))
+      (when-let [tx-ent (d/entity @client-ops-conn [:db-sync/tx-id tx-id])]
+        (ldb/transact! client-ops-conn [[:db/retractEntity (:db/id tx-ent)]]))
+      (is (not= ::worker-undo-redo/empty-undo-stack
+                (worker-undo-redo/undo test-repo)))
+      (is (seq (get @worker-undo-redo/*redo-ops test-repo))))))
 
 (deftest undo-redo-rebinds-stack-to-latest-history-tx-id-test
   (testing "undo/redo pushes stack op with latest persisted history tx id"
@@ -813,13 +859,20 @@
     (worker-undo-redo/clear-history! test-repo)
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [page-uuid]} (seed-page-parent-child!)
+          page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))
           inserted-uuid (random-uuid)]
       (d/transact! conn
                    [{:block/uuid inserted-uuid
                      :block/title "inserted"
                      :block/page [:block/uuid page-uuid]
                      :block/parent [:block/uuid page-uuid]}]
-                   (local-tx-meta {:outliner-op :insert-blocks}))
+                   (local-tx-meta
+                    {:client-id "test-client"
+                     :outliner-op :insert-blocks
+                     :outliner-ops [[:insert-blocks [[{:block/title "inserted"
+                                                       :block/uuid inserted-uuid}]
+                                                     page-id
+                                                     {:sibling? false}]]]}))
       (is (some? (d/entity @conn [:block/uuid inserted-uuid])))
       (let [undo-result (worker-undo-redo/undo test-repo)]
         (is (map? undo-result))
