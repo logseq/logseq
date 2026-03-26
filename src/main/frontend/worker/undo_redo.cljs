@@ -171,7 +171,22 @@
 
 (defn- push-opposite-op!
   [repo undo? op]
-  ((if undo? push-redo-op push-undo-op) repo op))
+  (let [sanitize-db-transact
+        (fn [data]
+          ;; Keep undo/redo history op-only. Drop any legacy/raw tx payloads.
+          (dissoc data
+                  :tx
+                  :tx-data
+                  :reversed-tx
+                  :reversed-tx-data
+                  :db-sync/normalized-tx-data
+                  :db-sync/reversed-tx-data))
+        op' (mapv (fn [item]
+                    (if (= ::db-transact (first item))
+                      [::db-transact (sanitize-db-transact (second item))]
+                      item))
+                  op)]
+    ((if undo? push-redo-op push-undo-op) repo op')))
 
 (defn- undo-redo-result
   [repo conn undo? op op']
@@ -250,7 +265,9 @@
           inverse-outliner-ops (:db-sync/inverse-outliner-ops data)
           tx-meta' (-> (undo-redo-action-meta data undo?)
                        (assoc :forward-outliner-ops forward-outliner-ops
-                              :inverse-outliner-ops inverse-outliner-ops))]
+                              :inverse-outliner-ops inverse-outliner-ops
+                              :db-sync/forward-outliner-ops forward-outliner-ops
+                              :db-sync/inverse-outliner-ops inverse-outliner-ops))]
       (run-worker-path repo conn undo? op data tx-meta' tx-id))))
 
 (defn- undo-redo-aux
