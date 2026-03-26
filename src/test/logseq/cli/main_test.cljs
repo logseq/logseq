@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
             [logseq.cli.main :as cli-main]
+            [logseq.cli.test-helper :as test-helper]
             [promesa.core :as p]))
 
 (deftest test-version-output
@@ -31,3 +32,84 @@
     (is (= 0 (result->exit-code {:status :ok})))
     (is (= 1 (result->exit-code {:status :error})))
     (is (= 7 (result->exit-code {:status :error :exit-code 7})))))
+
+(deftest test-profile-output-enabled-for-version
+  (async done
+    (-> (p/let [result (cli-main/run! ["--profile" "--version"] {:exit? false})
+                profile-lines (:profile-lines result)]
+          (is (= 0 (:exit-code result)))
+          (is (string/includes? (:output result) "Build time: test-build-time"))
+          (is (vector? profile-lines))
+          (is (seq profile-lines))
+          (when (seq profile-lines)
+            (is (string/starts-with? (first profile-lines) "[profile] total=")))
+          (is (some #(string/includes? % "cli.parse-args") profile-lines))
+          (is (some #(string/includes? % "cli.total") profile-lines))
+          (done))
+        (p/catch (fn [e]
+                   (is false (str "unexpected error: " e))
+                   (done))))))
+
+(deftest test-profile-output-disabled-by-default
+  (async done
+    (-> (p/let [result (cli-main/run! ["--version"] {:exit? false})]
+          (is (= 0 (:exit-code result)))
+          (is (nil? (:profile-lines result)))
+          (done))
+        (p/catch (fn [e]
+                   (is false (str "unexpected error: " e))
+                   (done))))))
+
+(deftest test-run-profile-lines-enabled
+  (async done
+    (-> (p/let [result (cli-main/run! ["--profile" "--help"] {:exit? false})
+                lines (:profile-lines result)]
+          (is (= 0 (:exit-code result)))
+          (is (seq lines))
+          (when (seq lines)
+            (is (string/starts-with? (first lines) "[profile] total=")))
+          (is (some #(string/includes? % "cli.parse-args count=1") lines))
+          (is (some #(string/includes? % "cli.total count=1") lines))
+          (done))
+        (p/catch (fn [e]
+                   (is false (str "unexpected error: " e))
+                   (done))))))
+
+(deftest test-run-profile-lines-disabled
+  (async done
+    (-> (p/let [result (cli-main/run! ["--help"] {:exit? false})]
+          (is (= 0 (:exit-code result)))
+          (is (nil? (:profile-lines result)))
+          (done))
+        (p/catch (fn [e]
+                   (is false (str "unexpected error: " e))
+                   (done))))))
+
+(deftest test-main-prints-profile-lines-to-stderr
+  (async done
+    (let [stderr-writes (atom [])
+          stdout-lines (atom [])]
+      (-> (test-helper/with-js-property-override
+           (.-stderr js/process)
+           "write"
+           (fn [text]
+             (swap! stderr-writes conj text)
+             true)
+           (fn []
+             (p/with-redefs [cli-main/run! (fn [_args]
+                                             (p/resolved {:exit-code 0
+                                                          :output "ok-output"
+                                                          :profile-lines ["[profile] total=1ms command=help status=ok"
+                                                                          "[profile] cli.total count=1 total=1ms avg=1ms"]}))
+                             println (fn [& args]
+                                       (swap! stdout-lines conj (string/join " " args)))]
+               (cli-main/main "--profile" "--help"))))
+          (p/then (fn [_]
+                    (let [stderr-text (apply str @stderr-writes)]
+                      (is (= ["ok-output"] @stdout-lines))
+                      (is (string/includes? stderr-text "[profile] total=1ms command=help status=ok"))
+                      (is (string/includes? stderr-text "[profile] cli.total count=1 total=1ms avg=1ms"))
+                      (done))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))
+                     (done)))))))

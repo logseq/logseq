@@ -1,5 +1,6 @@
 (ns logseq.cli.transport-test
   (:require [cljs.test :refer [deftest is async testing]]
+            [logseq.cli.profile :as profile]
             [logseq.cli.test-helper :as test-helper]
             [logseq.cli.transport :as transport]
             [logseq.db :as ldb]
@@ -189,6 +190,34 @@
                    (is (= "ok" result))
                    (is (nil? @auth-header))
                    (p/let [_ (stop!)] true)))
+               (p/then (fn [_] (done)))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))
+                          (done)))))))
+
+(deftest test-invoke-records-profile-stage-and-aggregation
+  (async done
+         (let [session (profile/create-session true)]
+           (-> (p/let [{:keys [url stop!]} (start-server
+                                            (fn [_req ^js res]
+                                              (.writeHead res 200 #js {"Content-Type" "application/json"})
+                                              (.end res (js/JSON.stringify #js {:result "ok"}))))
+                       _ (transport/invoke {:base-url url
+                                            :profile-session session}
+                                           :thread-api/q
+                                           true
+                                           ["repo" [:block/title]])
+                       _ (transport/invoke {:base-url url
+                                            :profile-session session}
+                                           :thread-api/q
+                                           true
+                                           ["repo" [:block/title]])
+                       report (profile/report session {:command "query"
+                                                       :status :ok})
+                       by-stage (into {} (map (juxt :stage identity) (:stages report)))]
+                 (is (= 2 (get-in by-stage ["transport.invoke:thread-api/q" :count])))
+                 (is (pos? (get-in by-stage ["transport.invoke:thread-api/q" :total-ms])))
+                 (p/let [_ (stop!)] true))
                (p/then (fn [_] (done)))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))

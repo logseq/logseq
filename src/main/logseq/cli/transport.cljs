@@ -7,6 +7,7 @@
             [clojure.string :as string]
             [lambdaisland.glogi :as log]
             [logseq.cli.log :as cli-log]
+            [logseq.cli.profile :as profile]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -88,7 +89,7 @@
                          :body body}))))))
 
 (defn invoke
-  [{:keys [base-url timeout-ms]}
+  [{:keys [base-url timeout-ms profile-session]}
    method direct-pass? args]
   (let [url (str (string/replace base-url #"/$" "") "/v1/invoke")
         method* (cond
@@ -96,6 +97,7 @@
                   (string? method) method
                   (nil? method) nil
                   :else (str method))
+        stage-key (str "transport.invoke:" method*)
         start-ms (js/Date.now)
         args-preview (cli-log/truncate-preview args)
         payload (if direct-pass?
@@ -106,33 +108,35 @@
                    :directPass false
                    :argsTransit (ldb/write-transit-str args)})
         body (js/JSON.stringify (clj->js payload))]
-    (log/debug :event :cli.transport/invoke
-               :method method*
-               :direct-pass? direct-pass?
-               :args args-preview
-               :url url)
-    (p/let [{:keys [body]} (request {:method "POST"
-                                     :url url
-                                     :headers (base-headers)
-                                     :body body
-                                     :timeout-ms timeout-ms})
-            {:keys [result resultTransit]} (js->clj (js/JSON.parse body) :keywordize-keys true)]
-      (if direct-pass?
-        (let [response-preview (cli-log/truncate-preview result)]
-          (log/debug :event :cli.transport/response
-                     :method method*
-                     :direct-pass? direct-pass?
-                     :elapsed-ms (- (js/Date.now) start-ms)
-                     :response response-preview)
-          result)
-        (let [decoded (ldb/read-transit-str resultTransit)
-              response-preview (cli-log/truncate-preview decoded)]
-          (log/debug :event :cli.transport/response
-                     :method method*
-                     :direct-pass? direct-pass?
-                     :elapsed-ms (- (js/Date.now) start-ms)
-                     :response response-preview)
-          decoded)))))
+    (profile/time! profile-session stage-key
+                   (fn []
+                     (log/debug :event :cli.transport/invoke
+                                :method method*
+                                :direct-pass? direct-pass?
+                                :args args-preview
+                                :url url)
+                     (p/let [{:keys [body]} (request {:method "POST"
+                                                      :url url
+                                                      :headers (base-headers)
+                                                      :body body
+                                                      :timeout-ms timeout-ms})
+                             {:keys [result resultTransit]} (js->clj (js/JSON.parse body) :keywordize-keys true)]
+                       (if direct-pass?
+                         (let [response-preview (cli-log/truncate-preview result)]
+                           (log/debug :event :cli.transport/response
+                                      :method method*
+                                      :direct-pass? direct-pass?
+                                      :elapsed-ms (- (js/Date.now) start-ms)
+                                      :response response-preview)
+                           result)
+                         (let [decoded (ldb/read-transit-str resultTransit)
+                               response-preview (cli-log/truncate-preview decoded)]
+                           (log/debug :event :cli.transport/response
+                                      :method method*
+                                      :direct-pass? direct-pass?
+                                      :elapsed-ms (- (js/Date.now) start-ms)
+                                      :response response-preview)
+                           decoded)))))))
 
 (defn- decode-event
   [{:keys [type payload]}]

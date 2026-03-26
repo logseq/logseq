@@ -415,7 +415,17 @@
   (testing "global output option is accepted"
     (let [result (commands/parse-args ["--output" "json" "graph" "list"])]
       (is (true? (:ok? result)))
-      (is (= "json" (get-in result [:options :output]))))))
+      (is (= "json" (get-in result [:options :output])))))
+
+  (testing "global profile option defaults to absent"
+    (let [result (commands/parse-args ["graph" "list"])]
+      (is (true? (:ok? result)))
+      (is (nil? (get-in result [:options :profile])))))
+
+  (testing "global profile option is accepted as boolean flag"
+    (let [result (commands/parse-args ["--profile" "graph" "list"])]
+      (is (true? (:ok? result)))
+      (is (= true (get-in result [:options :profile]))))))
 
 (deftest test-parse-args-doctor
   (testing "doctor command parses"

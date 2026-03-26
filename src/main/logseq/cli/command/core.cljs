@@ -26,6 +26,8 @@
             :validate #{"human" "json" "edn"}}
    :verbose {:desc "Enable verbose debug logging to stderr"
              :alias :v
+             :coerce :boolean}
+   :profile {:desc "Enable stage timing profile output to stderr"
              :coerce :boolean}})
 
 (defn global-spec
