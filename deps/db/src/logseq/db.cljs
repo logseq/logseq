@@ -201,10 +201,11 @@
       (batch-tx-fn conn)
       (let [tx-data @*batch-tx-data]
         (reset! (:atom conn) conn-state-before)
-        (when (seq tx-data)
+        (let [result (when (seq tx-data)
           ;; transact tx-data to `conn` and validate db
-          (transact! conn tx-data tx-meta)))
-      (vreset! *completed? true)
+                       (transact! conn tx-data tx-meta))]
+          (vreset! *completed? true)
+          result))
       (finally
         ;; Roll back in-memory batch mutations when batch-transact exits via exception.
         ;; This works for both top-level and nested batch transactions.
