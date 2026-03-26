@@ -234,11 +234,26 @@ Output formats:
 - Output formatting is controlled via global `--output`, `:output-format` in config, or `LOGSEQ_CLI_OUTPUT`.
 - Human output is plain text. List/search commands render tables with a final `Count: N` line. For list and search subcommands, the ID column uses `:db/id` (not UUID). If `:db/ident` exists, an `IDENT` column is included. `list property` includes dedicated `TYPE` and `CARDINALITY` columns. Search table columns are `ID` and `TITLE`. Block titles can include multiple lines; multi-line rows align additional lines under the `TITLE` column. Times such as list `UPDATED-AT`/`CREATED-AT` and `graph info` `Created at` are shown in human-friendly relative form. Errors include error codes and may include a `Hint:` line. Use `--output json|edn` for structured output.
 - `sync download` progress lines are streamed to stdout only when progress is enabled. In `json`/`edn` mode, progress is disabled by default unless `--progress true` is provided.
+- JSON machine output preserves namespaced keyword semantics:
+  - Namespaced keyword keys are emitted as canonical string keys in `namespace/name` form (for example `:block/title` -> `"block/title"`).
+  - Unqualified keyword keys remain plain strings (for example `:status` -> `"status"`).
+  - Keyword values are emitted as strings with namespace text preserved when present (for example `:db.cardinality/one` -> `"db.cardinality/one"`).
+  - UUID values are emitted as strings.
 - For `list property`, `TYPE` and cardinality are returned in default output (without `--expand`) for human and structured (`json`/`edn`) formats.
   - Human output renders cardinality as `one` or `many` in the `CARDINALITY` column.
-  - JSON uses `cardinality` with values `"one"` or `"many"`.
+  - JSON keeps namespaced key/value form via `"db/cardinality"` and values like `"db.cardinality/one"` or `"db.cardinality/many"`.
   - EDN keeps `:db/cardinality` (for example `:db.cardinality/one` or `:db.cardinality/many`).
   - When a property omits schema cardinality, CLI treats it as default `one`.
+
+JSON key migration (flat -> namespaced):
+
+| Old JSON key path | New JSON key path |
+| --- | --- |
+| `data.items[].title` | `data.items[].block/title` |
+| `data.items[].id` | `data.items[].db/id` |
+| `data.items[].type` | `data.items[].logseq.property/type` |
+| `data.items[].cardinality` | `data.items[].db/cardinality` |
+| `data.root.children[]` | `data.root.block/children[]` |
 - `upsert page` and `upsert block` return entity ids in `data.result` for JSON/EDN output, and include ids in human output.
   - Human example:
     ```text

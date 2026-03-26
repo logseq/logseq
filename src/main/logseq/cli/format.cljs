@@ -6,12 +6,34 @@
             [logseq.cli.style :as style]
             [logseq.common.util :as common-util]))
 
+(defn- keyword->json-string
+  [kw]
+  (if-let [kw-ns (namespace kw)]
+    (str kw-ns "/" (name kw))
+    (name kw)))
+
+(defn- normalize-json-key
+  [entry-key]
+  (if (keyword? entry-key)
+    (keyword->json-string entry-key)
+    entry-key))
+
+(defn- normalize-json-value
+  [entry]
+  (cond
+    (uuid? entry) (str entry)
+    (keyword? entry) (keyword->json-string entry)
+    :else entry))
+
 (defn- normalize-json
   [value]
   (walk/postwalk (fn [entry]
-                   (if (uuid? entry)
-                     (str entry)
-                     entry))
+                   (cond
+                     (map? entry) (into {}
+                                        (map (fn [[k v]]
+                                               [(normalize-json-key k) v]))
+                                        entry)
+                     :else (normalize-json-value entry)))
                  value))
 
 (defn- normalize-property-cardinality
@@ -25,28 +47,13 @@
     (string? value) (if (#{"one" "many"} value) value "-")
     :else "-"))
 
-(defn- remap-list-property-json-item
-  [item]
-  (if (and (map? item) (contains? item :db/cardinality))
-    (-> item
-        (assoc :cardinality (normalize-property-cardinality (:db/cardinality item)))
-        (dissoc :db/cardinality))
-    item))
-
-(defn- normalize-json-data
-  [command data]
-  (if (and (= command :list-property) (map? data))
-    (update data :items (fn [items]
-                          (mapv remap-list-property-json-item (or items []))))
-    data))
-
 (defn- ->json
   [{:keys [status data error command]}]
   (let [obj (js-obj)]
     (set! (.-status obj) (name status))
     (cond
       (= status :ok)
-      (set! (.-data obj) (clj->js (normalize-json (normalize-json-data command data))))
+      (set! (.-data obj) (clj->js (normalize-json data)))
 
       (= status :error)
       (do

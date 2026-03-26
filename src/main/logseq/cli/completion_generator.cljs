@@ -135,7 +135,7 @@ _logseq_pages() {
   graph=$(_logseq_current_graph)
   if [[ -n \"$graph\" ]]; then
     local -a pages
-    pages=( ${(f)\"$(logseq list page --graph \"$graph\" --output json 2>/dev/null | _logseq_json_names data items title)\"} )
+    pages=( ${(f)\"$(logseq list page --graph \"$graph\" --output json 2>/dev/null | _logseq_json_names data items block/title)\"} )
     compadd -a pages
   fi
 }
@@ -505,7 +505,7 @@ _logseq_graphs_bash() {
 }
 
 _logseq_pages_bash() {
-  logseq list page --graph \"$1\" --output json 2>/dev/null | _logseq_json_names_bash data items title
+  logseq list page --graph \"$1\" --output json 2>/dev/null | _logseq_json_names_bash data items block/title
 }
 
 _logseq_queries_bash() {
