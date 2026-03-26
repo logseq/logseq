@@ -412,7 +412,7 @@ _logseq_multi_values() {
   (let [groups (extract-groups table)
         global-spec (-> table first :spec
                         (select-keys [:help :version :config :graph :data-dir
-                                      :timeout-ms :output :verbose]))
+                                      :timeout-ms :output :verbose :profile]))
         global-keys (set (keys global-spec))
         ;; Collect group names that have subcommands (dispatchers own these)
         group-set (set (group-commands table))
@@ -639,7 +639,7 @@ _logseq_multi_values_bash() {
   (let [groups (extract-groups table)
         global-spec (-> table first :spec
                         (select-keys [:help :version :config :graph :data-dir
-                                      :timeout-ms :output :verbose]))
+                                      :timeout-ms :output :verbose :profile]))
         global-str (bash-global-opts-string global-spec)
         ;; Build case branches
         branches
@@ -869,7 +869,7 @@ _logseq_multi_values_bash() {
   [table]
   (let [global-spec (-> table first :spec
                         (select-keys [:help :version :config :graph :data-dir
-                                      :timeout-ms :output :verbose]))
+                                      :timeout-ms :output :verbose :profile]))
         global-keys (set (keys global-spec))
         ;; Find options with conflicting completions across commands
         varied-keys (find-varied-option-keys table global-keys)

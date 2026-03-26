@@ -37,7 +37,9 @@
     (testing ":config has :complete :file"
       (is (= :file (get-in spec [:config :complete]))))
     (testing ":data-dir has :complete :dir"
-      (is (= :dir (get-in spec [:data-dir :complete]))))))
+      (is (= :dir (get-in spec [:data-dir :complete]))))
+    (testing ":profile is a global boolean flag"
+      (is (= :boolean (get-in spec [:profile :coerce]))))))
 
 (deftest test-list-spec-metadata
   (let [entries list-command/entries
@@ -210,9 +212,12 @@
       (is (string/includes? output "compdef _logseq logseq")))
     (testing "boolean flags emit alias grouping"
       (is (string/includes? output "'{-v,--verbose}'[")))
+    (testing "global profile flag is present in zsh completion"
+      (is (string/includes? output "'--profile[")))
     (testing "global boolean flags do NOT emit --no- negation token"
       (is (not (string/includes? output "--no-verbose")))
-      (is (not (string/includes? output "--no-help"))))
+      (is (not (string/includes? output "--no-help")))
+      (is (not (string/includes? output "--no-profile"))))
     (testing "enum options emit separate long= and short+ specs"
       (is (string/includes? output "--output=[Output format. Default: human]:value:(edn human json)'"))
       (is (string/includes? output "-o[Output format. Default: human]:value:(edn human json)'")))
@@ -298,10 +303,12 @@
       (is (string/includes? output "--type"))
       (is (string/includes? output "--file")))
     (testing "boolean flags appear in wordlist"
-      (is (string/includes? output "--verbose")))
+      (is (string/includes? output "--verbose"))
+      (is (string/includes? output "--profile")))
     (testing "global boolean flags do NOT have --no- variants in wordlist"
       (is (not (string/includes? output "--no-verbose")))
-      (is (not (string/includes? output "--no-help"))))
+      (is (not (string/includes? output "--no-help")))
+      (is (not (string/includes? output "--no-profile"))))
     (testing "enum values use compgen -W"
       (is (re-find #"compgen -W.*edn human json" output)))
     (testing ":complete :file uses compgen -f"
@@ -390,7 +397,7 @@
 (deftest test-bash-find-varied-option-keys
   (let [global-spec (-> full-table first :spec
                         (select-keys [:help :version :config :graph :data-dir
-                                      :timeout-ms :output :verbose]))
+                                      :timeout-ms :output :verbose :profile]))
         global-keys (set (keys global-spec))
         varied (gen/find-varied-option-keys full-table global-keys)]
     (testing "--type is detected as varied"

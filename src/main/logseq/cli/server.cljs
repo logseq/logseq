@@ -9,6 +9,7 @@
             [logseq.common.graph :as common-graph]
             [logseq.common.graph-dir :as graph-dir]
             [logseq.db-worker.daemon :as daemon]
+            [logseq.cli.profile :as profile]
             [promesa.core :as p]))
 
 (defn resolve-data-dir
@@ -142,41 +143,53 @@
   [config repo]
   (let [data-dir (resolve-data-dir config)
         path (lock-path data-dir repo)
-        requester-owner (requester-owner-source config)]
-    (ensure-repo-dir! data-dir repo)
-    (p/let [existing (read-lock path)
-            _ (cleanup-stale-lock! path existing)
-            _ (when (not (fs/existsSync path))
-                (daemon/cleanup-orphan-processes! {:repo repo
-                                                   :data-dir data-dir})
-                (spawn-server! {:repo repo
-                                :data-dir data-dir
-                                :owner-source requester-owner
-                                :create-empty-db? (:create-empty-db? config)})
-                (-> (wait-for-lock path)
-                    (p/catch (fn [e]
-                               (if (= :timeout (:code (ex-data e)))
-                                 (let [orphans (daemon/find-orphan-processes {:repo repo
-                                                                              :data-dir data-dir})
-                                       pids (mapv :pid orphans)]
-                                   (throw (ex-info "db-worker-node failed to create lock"
-                                                   {:code :server-start-timeout-orphan
-                                                    :repo repo
-                                                    :pids pids})))
-                                 (throw e))))))
-            lock (read-lock path)
-            lock (if (and lock
-                          (= :cli requester-owner)
-                          (= :unknown (lock-owner-source lock)))
-                   (rewrite-lock-owner-source! path lock :cli)
-                   lock)]
-      (when-not lock
-        (throw (ex-info "db-worker-node failed to start" {:code :server-start-failed})))
-      (p/let [_ (wait-for-ready lock)]
-        (let [lock-owner (lock-owner-source lock)]
-          (assoc lock
-                 :owner-source lock-owner
-                 :owned? (owner-manageable? requester-owner lock-owner)))))))
+        requester-owner (requester-owner-source config)
+        profile-session (:profile-session config)]
+    (profile/time! profile-session "server.ensure-started"
+                   (fn []
+                     (ensure-repo-dir! data-dir repo)
+                     (p/let [existing (read-lock path)
+                             _ (cleanup-stale-lock! path existing)
+                             _ (when (not (fs/existsSync path))
+                                 (daemon/cleanup-orphan-processes! {:repo repo
+                                                                    :data-dir data-dir})
+                                 (profile/time! profile-session
+                                                "server.spawn-daemon"
+                                                (fn []
+                                                  (spawn-server! {:repo repo
+                                                                  :data-dir data-dir
+                                                                  :owner-source requester-owner
+                                                                  :create-empty-db? (:create-empty-db? config)})))
+                                 (-> (profile/time! profile-session
+                                                    "server.wait-lock"
+                                                    (fn []
+                                                      (wait-for-lock path)))
+                                     (p/catch (fn [e]
+                                                (if (= :timeout (:code (ex-data e)))
+                                                  (let [orphans (daemon/find-orphan-processes {:repo repo
+                                                                                               :data-dir data-dir})
+                                                        pids (mapv :pid orphans)]
+                                                    (throw (ex-info "db-worker-node failed to create lock"
+                                                                    {:code :server-start-timeout-orphan
+                                                                     :repo repo
+                                                                     :pids pids})))
+                                                  (throw e))))))
+                             lock (read-lock path)
+                             lock (if (and lock
+                                           (= :cli requester-owner)
+                                           (= :unknown (lock-owner-source lock)))
+                                    (rewrite-lock-owner-source! path lock :cli)
+                                    lock)]
+                       (when-not lock
+                         (throw (ex-info "db-worker-node failed to start" {:code :server-start-failed})))
+                       (p/let [_ (profile/time! profile-session
+                                                "server.wait-ready"
+                                                (fn []
+                                                  (wait-for-ready lock)))]
+                         (let [lock-owner (lock-owner-source lock)]
+                           (assoc lock
+                                  :owner-source lock-owner
+                                  :owned? (owner-manageable? requester-owner lock-owner)))))))))
 
 (defn ensure-server!
   [config repo]

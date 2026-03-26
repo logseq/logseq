@@ -6,6 +6,7 @@
             ["path" :as node-path]
             [cljs.test :refer [async deftest is]]
             [frontend.test.node-helper :as node-helper]
+            [logseq.cli.profile :as profile]
             [logseq.cli.server :as cli-server]
             [logseq.cli.test-helper :as test-helper]
             [logseq.db-worker.daemon :as daemon]
@@ -266,6 +267,41 @@
                          (is (= (cli-server/resolve-data-dir {:data-dir data-dir})
                                 (:data-dir @captured)))
                          (is (= true (:create-empty-db? @captured)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest ensure-server-records-profile-stages-on-spawn-path
+  (async done
+         (let [data-dir (node-helper/create-tmp-dir "cli-server-profile")
+               repo (str "logseq_db_profile_" (subs (str (random-uuid)) 0 8))
+               session (profile/create-session true)
+               read-lock-calls (atom 0)
+               lock {:repo repo
+                     :pid (.-pid js/process)
+                     :host "127.0.0.1"
+                     :port 9310
+                     :owner-source :cli}]
+           (-> (p/with-redefs [daemon/read-lock (fn [_]
+                                                  (if (= 1 (swap! read-lock-calls inc))
+                                                    nil
+                                                    lock))
+                               daemon/cleanup-stale-lock! (fn [_ _] (p/resolved nil))
+                               daemon/cleanup-orphan-processes! (fn [_] {:orphans [] :killed-pids []})
+                               daemon/spawn-server! (fn [_] nil)
+                               daemon/wait-for-lock (fn [_] (p/resolved true))
+                               daemon/wait-for-ready (fn [_] (p/resolved true))]
+                 (cli-server/ensure-server! {:data-dir data-dir
+                                             :profile-session session}
+                                            repo))
+               (p/then (fn [_]
+                         (let [report (profile/report session {:command "server-start"
+                                                               :status :ok})
+                               by-stage (into {} (map (juxt :stage identity) (:stages report)))]
+                           (is (= 1 (get-in by-stage ["server.ensure-started" :count])))
+                           (is (= 1 (get-in by-stage ["server.spawn-daemon" :count])))
+                           (is (= 1 (get-in by-stage ["server.wait-lock" :count])))
+                           (is (= 1 (get-in by-stage ["server.wait-ready" :count]))))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
