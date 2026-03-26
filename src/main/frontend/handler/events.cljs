@@ -56,6 +56,12 @@
 (defmulti handle first)
 
 (defonce ^:private *search-index-build-timeout (atom nil))
+(def ^:private decrypt-aes-key-failed-notification
+  "Failed to decrypt this graph.")
+
+(defn- decrypt-aes-key-failed?
+  [error]
+  (string/includes? (or (ex-message error) (str error)) "decrypt-aes-key"))
 
 (defn- schedule-search-index-build!
   [repo]
@@ -378,8 +384,8 @@
               (println "RTC download graph failed, error:")
               (log/error :rtc-download-graph-failed e)
               (shui/popup-hide! :download-rtc-graph)
-              ;; TODO: notify error
-              ))))
+              (when (decrypt-aes-key-failed? e)
+                (notification/show! decrypt-aes-key-failed-notification :error false))))))
 
 ;; db-worker -> UI
 (defmethod handle :db/sync-changes [[_ data]]
