@@ -1,14 +1,14 @@
 (ns logseq.cli.main
   "CLI entrypoint for invoking db-worker-node."
   (:refer-clojure :exclude [run!])
-  (:require [logseq.cli.commands :as commands]
+  (:require [lambdaisland.glogi :as log]
+            [logseq.cli.commands :as commands]
             [logseq.cli.config :as config]
             [logseq.cli.data-dir :as data-dir]
             [logseq.cli.format :as format]
             [logseq.cli.log :as cli-log]
             [logseq.cli.profile :as profile]
             [logseq.cli.version :as version]
-            [lambdaisland.glogi :as log]
             [promesa.core :as p]))
 
 (defn- result->exit-code
@@ -44,13 +44,42 @@
                              :status (if (zero? (:exit-code result)) :ok :error)})))
     result))
 
+(defn- handle-unexpected-error
+  "Provide clean, consistent error handling for unexpected errors in run!"
+  [profile-session parsed cfg error]
+  (let [data (ex-data error)
+        message (or (.-message error) (:message error) (str error))]
+    (if (= :data-dir-permission (:code data))
+      (p/resolved
+       (attach-profile-lines
+        profile-session
+        parsed
+        {:exit-code 1
+         :output (profile/time! profile-session "cli.format-result"
+                                (fn []
+                                  (format/format-result {:status :error
+                                                         :error {:code :data-dir-permission
+                                                                 :message message
+                                                                 :path (:path data)}}
+                                                        cfg)))}))
+      (attach-profile-lines
+       profile-session
+       parsed
+       {:exit-code 1
+        :output (profile/time! profile-session "cli.format-result"
+                               (fn []
+                                 (format/format-result {:status :error
+                                                        :error {:code (or (:code data) :exception)
+                                                                :message message}}
+                                                       cfg)))}))))
+
 (defn ^:large-vars/cleanup-todo run!
   ([args] (run! args {}))
   ([args _opts]
    (let [profile-session (profile/create-session (profile-enabled-argv? args))
          parsed (profile/time! profile-session "cli.parse-args"
-                              (fn []
-                                (commands/parse-args args)))]
+                               (fn []
+                                 (commands/parse-args args)))]
      (cond
        (:help? parsed)
        (p/resolved
@@ -119,8 +148,8 @@
                                                                                         [:repo :graph :page :block])}
                                                                  cfg)))}))
                (-> (profile/time! profile-session "cli.execute-action"
-                                 (fn []
-                                   (commands/execute (:action action-result) cfg)))
+                                  (fn []
+                                    (commands/execute (:action action-result) cfg)))
                    (p/then (fn [result]
                              (let [opts (cond-> cfg
                                           (:output-format result)
@@ -132,56 +161,10 @@
                                  :output (profile/time! profile-session "cli.format-result"
                                                         (fn []
                                                           (format/format-result result opts)))}))))
-                   (p/catch (fn [error]
-                              (let [data (ex-data error)
-                                    message (cond
-                                              (some? (.-message error))
-                                              (.-message error)
-
-                                              (some? (:message data))
-                                              (:message data)
-
-                                              :else
-                                              (str error))]
-                                (if (= :data-dir-permission (:code data))
-                                  (attach-profile-lines
-                                   profile-session
-                                   parsed
-                                   {:exit-code 1
-                                    :output (profile/time! profile-session "cli.format-result"
-                                                           (fn []
-                                                             (format/format-result {:status :error
-                                                                                    :error {:code :data-dir-permission
-                                                                                            :message message
-                                                                                            :path (:path data)}}
-                                                                                   cfg)))})
-                                  (attach-profile-lines
-                                   profile-session
-                                   parsed
-                                   {:exit-code 1
-                                    :output (profile/time! profile-session "cli.format-result"
-                                                           (fn []
-                                                             (format/format-result {:status :error
-                                                                                    :error {:code (or (:code data) :exception)
-                                                                                            :message message}}
-                                                                                   cfg)))}))))))))
+                   (p/catch (partial handle-unexpected-error profile-session parsed cfg)))))
            (catch :default error
-             (let [data (ex-data error)
-                   message (or (.-message error) (str error))]
-               (if (= :data-dir-permission (:code data))
-                 (p/resolved
-                  (attach-profile-lines
-                   profile-session
-                   parsed
-                   {:exit-code 1
-                    :output (profile/time! profile-session "cli.format-result"
-                                           (fn []
-                                             (format/format-result {:status :error
-                                                                    :error {:code :data-dir-permission
-                                                                            :message message
-                                                                            :path (:path data)}}
-                                                                   cfg)))}))
-                 (throw error))))))))))
+             ;; Cleanly handle errors especially for commands/build-action which handles error-prone options
+             (handle-unexpected-error profile-session parsed cfg error))))))))
 
 (defn- print-profile-lines!
   [profile-lines]
