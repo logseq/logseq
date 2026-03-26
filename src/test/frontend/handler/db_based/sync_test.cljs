@@ -87,12 +87,16 @@
 (deftest rtc-create-graph-persists-disabled-e2ee-flag-test
   (async done
          (let [fetch-called (atom nil)
-               tx-called (atom nil)]
+               tx-called (atom nil)
+               ensure-calls (atom [])]
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/task--ensure-id&access-token (fn [resolve _reject]
                                                                            (resolve true))
                                db/get-db (fn [] :db)
                                ldb/get-graph-schema-version (fn [_] {:major 65})
+                               state/<invoke-db-worker (fn [& args]
+                                                         (swap! ensure-calls conj args)
+                                                         (p/resolved {:public-key "pk"}))
                                db-sync/fetch-json (fn [url opts _]
                                                     (reset! fetch-called {:url url :opts opts})
                                                     (p/resolved {:graph-id "graph-1"
@@ -110,6 +114,9 @@
                            (is (= "graph-1" graph-id))
                            (is (= "http://base/graphs" (:url @fetch-called)))
                            (is (= false (:graph-e2ee? request-body)))
+                           (is (= [[:thread-api/db-sync-ensure-user-rsa-keys
+                                    {:ensure-server? true}]]
+                                  @ensure-calls))
                            (is (= :logseq.kv/graph-rtc-e2ee?
                                   (get-in tx-data [2 :db/ident])))
                            (is (= false
@@ -122,12 +129,16 @@
 (deftest rtc-create-graph-defaults-e2ee-enabled-test
   (async done
          (let [fetch-called (atom nil)
-               tx-called (atom nil)]
+               tx-called (atom nil)
+               ensure-calls (atom [])]
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/task--ensure-id&access-token (fn [resolve _reject]
                                                                            (resolve true))
                                db/get-db (fn [] :db)
                                ldb/get-graph-schema-version (fn [_] {:major 65})
+                               state/<invoke-db-worker (fn [& args]
+                                                         (swap! ensure-calls conj args)
+                                                         (p/resolved {:public-key "pk"}))
                                db-sync/fetch-json (fn [url opts _]
                                                     (reset! fetch-called {:url url :opts opts})
                                                     (p/resolved {:graph-id "graph-2"}))
@@ -145,6 +156,9 @@
                            (is (= "http://base/graphs" (:url @fetch-called)))
                            (is (= true (:graph-e2ee? request-body)))
                            (is (= true (:graph-ready-for-use? request-body)))
+                           (is (= [[:thread-api/db-sync-ensure-user-rsa-keys
+                                    {:ensure-server? true}]]
+                                  @ensure-calls))
                            (is (= :logseq.kv/graph-rtc-e2ee?
                                   (get-in tx-data [2 :db/ident])))
                            (is (= true
@@ -189,7 +203,9 @@
                                                 js/JSON.parse
                                                 (js->clj :keywordize-keys true))]
                            (is (= false (:graph-ready-for-use? request-body)))
-                           (is (= [[:thread-api/db-sync-upload-graph "logseq_db_demo"]]
+                           (is (= [[:thread-api/db-sync-ensure-user-rsa-keys
+                                    {:ensure-server? true}]
+                                   [:thread-api/db-sync-upload-graph "logseq_db_demo"]]
                                   @upload-calls))
                            (is (= 1 @refresh-calls))
                            (is (= ["logseq_db_demo"] @start-calls))
@@ -309,7 +325,10 @@
 
 (deftest get-remote-graphs-includes-ready-for-use-flag-test
   (async done
-         (let [graphs-state (atom nil)]
+         (let [graphs-state (atom nil)
+               worker-prev @state/*db-worker
+               ensure-calls (atom [])]
+           (reset! state/*db-worker :worker)
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/task--ensure-id&access-token (fn [resolve _reject]
                                                                            (resolve true))
@@ -320,7 +339,11 @@
                                                                            :graph-e2ee? true
                                                                            :graph-ready-for-use? false
                                                                            :created-at 1
-                                                                           :updated-at 2}]}))
+                                                                           :updated-at 2}]
+                                                                 :user-rsa-keys-exists? true}))
+                               state/<invoke-db-worker (fn [& args]
+                                                         (swap! ensure-calls conj args)
+                                                         (p/resolved :ok))
                                state/set-state! (fn [k v]
                                                   (when (= k :rtc/graphs)
                                                     (reset! graphs-state v))
@@ -330,10 +353,42 @@
                (p/then (fn [graphs]
                          (is (= false (:graph-ready-for-use? (first graphs))))
                          (is (= false (:graph-ready-for-use? (first @graphs-state))))
+                         (is (empty? @ensure-calls))
                          (done)))
                (p/catch (fn [error]
                           (is false (str error))
-                          (done)))))))
+                          (done)))
+               (p/finally (fn []
+                            (reset! state/*db-worker worker-prev)))))))
+
+(deftest get-remote-graphs-ensures-user-rsa-keys-when-server-missing-test
+  (async done
+         (let [worker-prev @state/*db-worker
+               ensure-calls (atom [])]
+           (reset! state/*db-worker :worker)
+           (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
+                               user-handler/task--ensure-id&access-token (fn [resolve _reject]
+                                                                           (resolve true))
+                               db-sync/fetch-json (fn [_url _opts _schema]
+                                                    (p/resolved {:graphs []
+                                                                 :user-rsa-keys-exists? false}))
+                               state/<invoke-db-worker (fn [& args]
+                                                         (swap! ensure-calls conj args)
+                                                         (p/resolved {:public-key "pk"}))
+                               state/set-state! (fn [& _] nil)
+                               repo-handler/refresh-repos! (fn [] nil)]
+                 (db-sync/<get-remote-graphs))
+               (p/then (fn [_]
+                         (is (= [[:thread-api/db-sync-ensure-user-rsa-keys
+                                  {:ensure-server? true
+                                   :server-rsa-keys-exists? false}]]
+                                @ensure-calls))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))
+               (p/finally (fn []
+                            (reset! state/*db-worker worker-prev)))))))
 
 (deftest rtc-download-graph-imports-snapshot-once-test
   (async done

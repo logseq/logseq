@@ -47,8 +47,14 @@
     (case (:handler route)
       :graphs/list
       (if (string? user-id)
-        (p/let [graphs (index/<index-list db user-id)]
-          (http/json-response :graphs/list {:graphs graphs}))
+        (p/let [graphs (index/<index-list db user-id)
+                user-rsa-key-pair (index/<user-rsa-key-pair db user-id)
+                user-rsa-keys-exists?
+                (and (string? (:public-key user-rsa-key-pair))
+                     (string? (:encrypted-private-key user-rsa-key-pair)))]
+          (http/json-response :graphs/list
+                              {:graphs graphs
+                               :user-rsa-keys-exists? user-rsa-keys-exists?}))
         (http/unauthorized))
 
       :graphs/create
