@@ -2327,6 +2327,114 @@
               (finally
                 (restore)))))))))
 
+(deftest ^:long two-clients-online-add-vs-delete-with-undo-redo-random-sim-test
+  (testing "both online: client A adds blocks while client B deletes with random undo/redo"
+    (let [seed (or (env-seed) default-seed)
+          rng (make-rng seed)
+          gen-uuid #(rng-uuid rng)
+          ;; scenario-runs (min op-runs 150)
+          scenario-runs 1000
+          base-uuid (gen-uuid)
+          conn-a (db-test/create-conn)
+          conn-b (db-test/create-conn)
+          ops-a (d/create-conn client-op/schema-in-db)
+          ops-b (d/create-conn client-op/schema-in-db)
+          client-a (make-client repo-a)
+          client-b (make-client repo-b)
+          server (make-server)
+          history (atom [])
+          state-a (atom {:pages #{base-uuid} :blocks #{}})
+          state-b (atom {:pages #{base-uuid} :blocks #{}})
+          ops #{:create-block :delete-blocks :delete-block :indent-outdent-blocks :undo :redo}
+          op-weights {:create-block 16
+                      :delete-block 10
+                      :delete-blocks 10
+                      :indent-outdent-blocks 10
+                      :undo 8
+                      :redo 8}
+          a-op-table (build-weighted-op-table ops op-weights :a-add-undo-redo)
+          b-op-table (build-weighted-op-table ops op-weights :b-delete-undo-redo)]
+      (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}
+                        repo-b {:conn conn-b :ops-conn ops-b}}
+        (fn []
+          (let [{:keys [repro restore]} (install-invalid-tx-repro! seed history)
+                clients [{:repo repo-a :conn conn-a :client client-a :online? true :gen-uuid gen-uuid}
+                         {:repo repo-b :conn conn-b :client client-b :online? true :gen-uuid gen-uuid}]
+                refresh-state! (fn [state conn]
+                                 (let [db @conn
+                                       block-uuids (->> (active-block-uuids db)
+                                                        (remove (fn [uuid]
+                                                                  (some-> (d/entity db [:block/uuid uuid])
+                                                                          ldb/page?)))
+                                                        set)]
+                                   (swap! state assoc :pages #{base-uuid}
+                                          :blocks block-uuids)))]
+            (try
+              (reset! db-sync/*repo->latest-remote-tx {})
+              (record-meta! history {:seed seed
+                                     :base-uuid base-uuid
+                                     :phase :two-clients-online-add-vs-delete
+                                     :scenario-runs scenario-runs})
+              (doseq [conn [conn-a conn-b]]
+                (ensure-base-page! conn base-uuid))
+              (doseq [repo [repo-a repo-b]]
+                (client-op/update-local-tx repo 0))
+
+              ;; Bootstrap one local block on A so B has a known deletion target after initial sync.
+              (let [base-a (d/entity @conn-a [:block/uuid base-uuid])
+                    seed-uuid (gen-uuid)]
+                (create-block! conn-a base-a "seed" seed-uuid)
+                (swap! state-a update :blocks conj seed-uuid))
+              (sync-loop! server clients)
+              (refresh-state! state-a conn-a)
+              (refresh-state! state-b conn-b)
+
+              (dotimes [i scenario-runs]
+                (run-ops! rng {:repo repo-a
+                               :conn conn-a
+                               :base-uuid base-uuid
+                               :state state-a
+                               :gen-uuid gen-uuid}
+                          1
+                          history
+                          {:op-table-override a-op-table
+                           :context {:phase :a-add-undo-redo :iter i}})
+                (sync-loop! server clients)
+                (refresh-state! state-a conn-a)
+                (refresh-state! state-b conn-b)
+
+                (run-ops! rng {:repo repo-b
+                               :conn conn-b
+                               :base-uuid base-uuid
+                               :state state-b
+                               :gen-uuid gen-uuid}
+                          1
+                          history
+                          {:op-table-override b-op-table
+                           :context {:phase :b-delete-undo-redo :iter i}})
+                (sync-loop! server clients)
+                (refresh-state! state-a conn-a)
+                (refresh-state! state-b conn-b))
+
+              (sync-loop! server clients)
+              (let [issues-a (db-issues @conn-a)
+                    issues-b (db-issues @conn-b)
+                    attrs-a (block-attr-map @conn-a)
+                    attrs-b (block-attr-map @conn-b)
+                    create-count (op-count history :create-block)
+                    delete-count (+ (op-count history :delete-block)
+                                    (op-count history :delete-blocks))]
+                (is (pos? create-count)
+                    (str "expected create-block ops seed=" seed " history=" (count @history)))
+                (is (pos? delete-count)
+                    (str "expected delete ops seed=" seed " history=" (count @history)))
+                (is (empty? issues-a) (str "db A issues seed=" seed " " (pr-str issues-a)))
+                (is (empty? issues-b) (str "db B issues seed=" seed " " (pr-str issues-b)))
+                (assert-synced-attrs! seed history attrs-a attrs-b attrs-b)
+                (assert-no-invalid-tx! seed history repro))
+              (finally
+                (restore)))))))))
+
 (deftest ^:long ^:large-vars/cleanup-todo three-clients-single-repo-sim-test
   (testing "db-sync convergence with three clients sharing one repo"
     (let [seed (or (env-seed) default-seed)
