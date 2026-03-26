@@ -87,6 +87,7 @@
    "updated-at" :block/updated-at
    "classes" :logseq.property/classes
    "type" :logseq.property/type
+   "cardinality" :db/cardinality
    "description" :logseq.property/description})
 
 (def ^:private list-property-spec

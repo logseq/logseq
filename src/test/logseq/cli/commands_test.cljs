@@ -932,14 +932,16 @@
                                        "--include-built-in"
                                        "--with-classes"
                                        "--with-type"
-                                       "--fields" "name,type"])]
+                                       "--sort" "cardinality"
+                                       "--fields" "name,type,cardinality"])]
       (is (true? (:ok? result)))
       (is (= :list-property (:command result)))
       (is (true? (get-in result [:options :expand])))
       (is (true? (get-in result [:options :include-built-in])))
       (is (true? (get-in result [:options :with-classes])))
       (is (true? (get-in result [:options :with-type])))
-      (is (= "name,type" (get-in result [:options :fields]))))))
+      (is (= "cardinality" (get-in result [:options :sort])))
+      (is (= "name,type,cardinality" (get-in result [:options :fields]))))))
 
 (deftest test-list-subcommand-validation
   (testing "list page rejects mutually exclusive journal flags"
@@ -1002,6 +1004,36 @@
                        explicit-sort-result (list-command/execute-list-page {:repo "demo" :options {:sort "title"}} {})]
                  (is (= [3 1 2] (item-ids desc-default-result)))
                  (is (= [2 1 3] (item-ids explicit-sort-result)))))
+             (p/catch (fn [e]
+                        (is false (str "unexpected error: " e))))
+             (p/finally done))))
+
+(deftest test-list-property-execute-supports-cardinality-sort-and-fields
+  (async done
+         (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                             transport/invoke (fn [_ method _ _]
+                                                (case method
+                                                  :thread-api/cli-list-properties [{:db/id 30
+                                                                                    :block/title "Gamma"
+                                                                                    :db/cardinality :db.cardinality/one}
+                                                                                   {:db/id 10
+                                                                                    :block/title "Alpha"
+                                                                                    :db/cardinality :db.cardinality/many}
+                                                                                   {:db/id 20
+                                                                                    :block/title "Beta"
+                                                                                    :db/cardinality :db.cardinality/many}]
+                                                  (throw (ex-info "unexpected invoke" {:method method}))))]
+               (p/let [result (list-command/execute-list-property
+                               {:repo "demo"
+                                :options {:sort "cardinality"
+                                          :fields "id,title,cardinality"}}
+                               {})
+                       items (get-in result [:data :items])]
+                 (is (= [10 20 30] (mapv :db/id items)))
+                 (is (= [#{:db/id :block/title :db/cardinality}
+                         #{:db/id :block/title :db/cardinality}
+                         #{:db/id :block/title :db/cardinality}]
+                        (mapv (comp set keys) items)))))
              (p/catch (fn [e]
                         (is false (str "unexpected error: " e))))
              (p/finally done))))
