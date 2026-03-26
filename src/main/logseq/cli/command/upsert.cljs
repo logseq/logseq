@@ -6,6 +6,7 @@
             [logseq.cli.command.update :as update-command]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
+            [logseq.common.graph :as common-graph]
             [logseq.common.util :as common-util]
             [promesa.core :as p]))
 
@@ -27,6 +28,7 @@
    :content {:desc "Block content (create inserts; update rewrites source block content)"}
    :blocks {:desc "EDN vector of blocks [create only]"}
    :blocks-file {:desc "EDN file of blocks [create only]"
+                 :coerce common-graph/expand-home
                  :complete :file}
    :status {:desc "Set task status"
             :validate #{"todo" "doing" "done" "now" "later" "wait" "waiting"
