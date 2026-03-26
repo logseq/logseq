@@ -7,6 +7,7 @@
             [logseq.cli.config :as cli-config]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
+            [logseq.common.graph :as common-graph]
             [promesa.core :as p]))
 
 (def ^:private graph-export-spec
@@ -21,6 +22,7 @@
           :alias :t
           :validate #{"edn" "sqlite"}}
    :input {:desc "Input path"
+           :coerce common-graph/expand-home
            :complete :file}})
 
 (def ^:private graph-validate-spec
