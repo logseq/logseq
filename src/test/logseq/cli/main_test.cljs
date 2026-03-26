@@ -1,6 +1,7 @@
 (ns logseq.cli.main-test
   (:require [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
+            [logseq.cli.commands :as commands]
             [logseq.cli.main :as cli-main]
             [logseq.cli.test-helper :as test-helper]
             [promesa.core :as p]))
@@ -113,3 +114,17 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))
                      (done)))))))
+
+(deftest test-build-action-sync-error-produces-clean-output
+  (async done
+         (-> (p/with-redefs [commands/build-action
+                             (fn [_ _]
+                               (throw (js/Error. "ENOENT: no such file or directory, open 'blah'")))]
+               (p/let [result (cli-main/run! ["upsert" "block" "-g" "test" "--blocks-file=blah"])]
+                 (is (= 1 (:exit-code result)))
+                 (is (string/includes? (:output result) "ENOENT"))
+                 (is (string/includes? (:output result) "blah"))
+                 (is (not (string/includes? (:output result) "at "))
+                     "output should not contain a stack trace")))
+             (p/catch (fn [e] (is false (str "unexpected error: " e))))
+             (p/finally (done)))))
