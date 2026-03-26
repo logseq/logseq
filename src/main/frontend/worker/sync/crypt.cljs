@@ -294,6 +294,13 @@
               {:method "GET"}
               {:response-schema :e2ee/graph-aes-key}))
 
+(defn- <fetch-graph-encrypted-aes-key
+  [base graph-id]
+  (when graph-id
+    (p/let [resp (<fetch-graph-encrypted-aes-key-raw base graph-id)]
+      (when-let [encrypted-aes-key (:encrypted-aes-key resp)]
+        (ldb/read-transit-str encrypted-aes-key)))))
+
 (defn- <upsert-graph-encrypted-aes-key!
   [base graph-id encrypted-aes-key]
   (let [body (coerce-http-request :e2ee/graph-aes-key
@@ -347,12 +354,29 @@
                 local-encrypted (when graph-id
                                   (<get-item (graph-encrypted-aes-key-idb-key graph-id)))
                 remote-encrypted (when (and (nil? local-encrypted) graph-id)
-                                   (p/let [resp (<fetch-graph-encrypted-aes-key-raw base graph-id)]
-                                     (when-let [encrypted-aes-key (:encrypted-aes-key resp)]
-                                       (ldb/read-transit-str encrypted-aes-key))))
+                                   (<fetch-graph-encrypted-aes-key base graph-id))
                 encrypted-aes-key (or local-encrypted remote-encrypted)
                 aes-key (if encrypted-aes-key
-                          (crypt/<decrypt-aes-key private-key encrypted-aes-key)
+                          (-> (crypt/<decrypt-aes-key private-key encrypted-aes-key)
+                              (p/catch (fn [error]
+                                         (if-not (and graph-id local-encrypted)
+                                           (throw error)
+                                           (let [aes-key-k (graph-encrypted-aes-key-idb-key graph-id)]
+                                             (-> (p/let [_ (<clear-item! aes-key-k)
+                                                         refetched-encrypted (<fetch-graph-encrypted-aes-key base graph-id)]
+                                                   (if-not refetched-encrypted
+                                                     (throw error)
+                                                     (p/let [aes-key (crypt/<decrypt-aes-key private-key refetched-encrypted)
+                                                             _ (<set-item! aes-key-k refetched-encrypted)]
+                                                       aes-key)))
+                                                 (p/catch (fn [retry-error]
+                                                            (log/warn :db-sync/graph-aes-key-cache-invalid
+                                                                      {:base base
+                                                                       :user-id user-id
+                                                                       :graph-id graph-id
+                                                                       :first-error error
+                                                                       :retry-error retry-error})
+                                                            (throw retry-error)))))))))
                           (p/let [aes-key (crypt/<generate-aes-key)
                                   encrypted (crypt/<encrypt-aes-key public-key aes-key)
                                   encrypted-str (ldb/write-transit-str encrypted)
