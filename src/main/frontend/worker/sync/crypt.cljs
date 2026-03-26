@@ -39,6 +39,10 @@
   []
   (worker-state/<invoke-main-thread :thread-api/native-get-e2ee-password))
 
+(defn- <native-delete-password-text!
+  []
+  (worker-state/<invoke-main-thread :thread-api/native-delete-e2ee-password))
+
 (defn- <save-e2ee-password
   [refresh-token password]
   (p/let [result (crypt/<encrypt-text-by-text-password refresh-token password)
@@ -59,6 +63,19 @@
           data (ldb/read-transit-str text)
           password (crypt/<decrypt-text-by-text-password refresh-token data)]
     password))
+
+(defn- <clear-e2ee-password!
+  []
+  (p/let [_ (when (native-worker?)
+              (-> (<native-delete-password-text!)
+                  (p/catch (fn [e]
+                             (log/error :native-delete-e2ee-password {:error e})
+                             nil))))
+          _ (-> (opfs/<delete-file! e2ee-password-file)
+                (p/catch (fn [e]
+                           (log/error :opfs-delete-e2ee-password {:error e})
+                           nil)))]
+    nil))
 
 (defn- auth-token []
   (worker-state/get-id-token))
@@ -638,3 +655,7 @@
 (def-thread-api :thread-api/save-e2ee-password
   [refresh-token password]
   (<save-e2ee-password refresh-token password))
+
+(def-thread-api :thread-api/clear-e2ee-password
+  []
+  (<clear-e2ee-password!))
