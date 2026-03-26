@@ -8,6 +8,7 @@
             [logseq.cli.command.list :as list-command]
             [logseq.cli.command.query :as query-command]
             [logseq.cli.command.remove :as remove-command]
+            [logseq.cli.command.search :as search-command]
             [logseq.cli.command.server :as server-command]
             [logseq.cli.command.show :as show-command]
             [logseq.cli.command.upsert :as upsert-command]
@@ -20,6 +21,7 @@
                upsert-command/entries
                remove-command/entries
                query-command/entries
+               search-command/entries
                show-command/entries
                doctor-command/entries
                completion-command/entries)))
@@ -147,12 +149,13 @@
     (testing "show and doctor are leaves"
       (is (contains? leaf-names "show"))
       (is (contains? leaf-names "doctor")))
-    (testing "graph, server, list, upsert, remove are groups"
+    (testing "graph, server, list, upsert, remove, search are groups"
       (is (contains? group-names "graph"))
       (is (contains? group-names "server"))
       (is (contains? group-names "list"))
       (is (contains? group-names "upsert"))
-      (is (contains? group-names "remove")))))
+      (is (contains? group-names "remove"))
+      (is (contains? group-names "search")))))
 
 (deftest test-spec->token
   (testing "boolean spec → :flag type"
@@ -205,6 +208,7 @@
     (testing "output contains group dispatchers"
       (is (string/includes? output "_logseq_graph()"))
       (is (string/includes? output "_logseq_list()"))
+      (is (string/includes? output "_logseq_search()"))
       (is (string/includes? output "_logseq_upsert()")))
     (testing "output contains top-level dispatcher"
       (is (string/includes? output "_logseq()")))

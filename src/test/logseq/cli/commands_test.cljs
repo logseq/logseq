@@ -70,6 +70,7 @@
       (is (string/includes? plain-summary "upsert"))
       (is (string/includes? plain-summary "remove"))
       (is (string/includes? plain-summary "query"))
+      (is (string/includes? plain-summary "search"))
       (is (string/includes? plain-summary "show"))
       (is (string/includes? plain-summary "doctor"))
       (is (string/includes? plain-summary "graph"))
@@ -91,6 +92,10 @@
       (is (contains-bold? summary "remove property"))
       (is (contains-bold? summary "query"))
       (is (contains-bold? summary "query list"))
+      (is (contains-bold? summary "search block"))
+      (is (contains-bold? summary "search page"))
+      (is (contains-bold? summary "search property"))
+      (is (contains-bold? summary "search tag"))
       (is (contains-bold? summary "show"))
       (is (contains-bold? summary "doctor"))
       (is (contains-bold? summary "graph list"))
@@ -184,6 +189,21 @@
       (is (contains-bold? summary "query list"))
       (is (contains-bold? summary "query"))))
 
+  (testing "search group shows subcommands"
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["search"]))
+          summary (:summary result)
+          plain-summary (strip-ansi summary)]
+      (is (true? (:help? result)))
+      (is (string/includes? plain-summary "search block"))
+      (is (string/includes? plain-summary "search page"))
+      (is (string/includes? plain-summary "search property"))
+      (is (string/includes? plain-summary "search tag"))
+      (is (contains-bold? summary "search block"))
+      (is (contains-bold? summary "search page"))
+      (is (contains-bold? summary "search property"))
+      (is (contains-bold? summary "search tag"))))
+
   (testing "group help command list omits [options]"
     (let [summary (:summary (binding [style/*color-enabled?* true]
                               (commands/parse-args ["list"])))
@@ -236,7 +256,7 @@
 
 (deftest test-parse-args-group-help-flags
   (testing "all groups show group help with -h and --help"
-    (doseq [group ["graph" "server" "list" "upsert" "remove" "query" "sync"]
+    (doseq [group ["graph" "server" "list" "upsert" "remove" "query" "search" "sync"]
             help-flag ["-h" "--help"]]
       (let [result (binding [style/*color-enabled?* true]
                      (commands/parse-args [group help-flag]))
@@ -953,6 +973,40 @@
       (is (= "cardinality" (get-in result [:options :sort])))
       (is (= "name,type,cardinality" (get-in result [:options :fields]))))))
 
+(deftest test-search-subcommand-parse
+  (testing "search block parses positional query"
+    (let [result (commands/parse-args ["search" "block" "Alpha"]) ]
+      (is (true? (:ok? result)))
+      (is (= :search-block (:command result)))
+      (is (= ["Alpha"] (:args result)))))
+
+  (testing "search page parses multi-token query"
+    (let [result (commands/parse-args ["search" "page" "project" "notes"])]
+      (is (true? (:ok? result)))
+      (is (= :search-page (:command result)))
+      (is (= ["project" "notes"] (:args result)))))
+
+  (testing "search property parses"
+    (let [result (commands/parse-args ["search" "property" "owner"])]
+      (is (true? (:ok? result)))
+      (is (= :search-property (:command result)))))
+
+  (testing "search tag parses"
+    (let [result (commands/parse-args ["search" "tag" "quote"])]
+      (is (true? (:ok? result)))
+      (is (= :search-tag (:command result))))))
+
+(deftest test-search-subcommand-validation
+  (testing "search block requires query text"
+    (let [result (commands/parse-args ["search" "block"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-query-text (get-in result [:error :code])))))
+
+  (testing "search page rejects blank query text"
+    (let [result (commands/parse-args ["search" "page" "   "])]
+      (is (false? (:ok? result)))
+      (is (= :missing-query-text (get-in result [:error :code]))))))
+
 (deftest test-list-subcommand-validation
   (testing "list page rejects mutually exclusive journal flags"
     (let [result (commands/parse-args ["list" "page"
@@ -1554,6 +1608,29 @@
           result (commands/build-action parsed {})]
       (is (false? (:ok? result)))
       (is (= :missing-repo (get-in result [:error :code])))))
+
+  (testing "search page builds action with joined query text"
+    (let [parsed {:ok? true :command :search-page :options {} :args ["project" "home"]}
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? result)))
+      (is (= {:type :search-page
+              :repo "logseq_db_demo"
+              :graph "demo"
+              :query "project home"}
+             (:action result)))))
+
+  (testing "search block requires repo"
+    (let [parsed {:ok? true :command :search-block :options {} :args ["alpha"]}
+          result (commands/build-action parsed {})]
+      (is (false? (:ok? result)))
+      (is (= :missing-repo (get-in result [:error :code])))))
+
+  (testing "search build-action supports trailing global --graph token"
+    (let [parsed {:ok? true :command :search-tag :options {} :args ["quote" "--graph" "demo"]}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))
+      (is (= "quote" (get-in result [:action :query])))))
 
   (testing "add block requires content"
     (let [parsed {:ok? true :command :upsert-block :options {}}
@@ -2437,6 +2514,26 @@
                           @ops*))))
                (p/catch (fn [e] (is false (str "unexpected error: " e " calls: " @calls*))))
                (p/finally done)))))
+
+(deftest test-execute-search-dispatch
+  (async done
+         (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                             cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                             transport/invoke (fn [_ method _ [repo [query-text query-input]]]
+                                                (is (= :thread-api/q method))
+                                                (is (= "logseq_db_demo" repo))
+                                                (is (= "quote" query-input))
+                                                (is (re-find #":logseq.class/Tag" (pr-str query-text)))
+                                                [{:db/id 1 :block/title "Quote"}])]
+               (p/let [result (commands/execute {:type :search-tag
+                                                 :repo "logseq_db_demo"
+                                                 :query "quote"}
+                                                {})]
+                 (is (= :ok (:status result)))
+                 (is (= :search-tag (:command result)))
+                 (is (= [{:db/id 1 :block/title "Quote"}] (get-in result [:data :items])))))
+             (p/catch (fn [e] (is false (str "unexpected error: " e))))
+             (p/finally done))))
 
 (deftest test-execute-requires-existing-graph
   (async done

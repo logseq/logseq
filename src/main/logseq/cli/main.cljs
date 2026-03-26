@@ -16,6 +16,11 @@
   (or (:exit-code result)
       (if (= :error (:status result)) 1 0)))
 
+;; NOTE:
+;; `--profile` is intentionally detected from raw argv before command parsing.
+;; This lets profiling include early stages (especially `cli.parse-args`) and
+;; still emit profile output for parse/help/error paths that may short-circuit
+;; before a fully parsed options map exists.
 (defn- profile-enabled-argv?
   [args]
   (boolean (some #{"--profile"} args)))

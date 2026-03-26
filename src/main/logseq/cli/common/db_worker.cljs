@@ -118,3 +118,4 @@
                       (cond-> (:db/ident e) (assoc :db/ident (:db/ident e)))
                       (update :block/uuid str))
                   (minimal-list-item e)))))))
+

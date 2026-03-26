@@ -193,7 +193,10 @@ Inspect and edit commands:
 - `upsert property --id <id> [--type <type>] [--cardinality one|many] [--hide true|false] [--public true|false]` - update a property by id
 - `move --id <id>|--uuid <uuid> --target-id <id>|--target-uuid <uuid>|--target-page <name> [--pos first-child|last-child|sibling]` - move a block and its children (defaults to first-child)
 - `remove --id <id>|--uuid <uuid>|--page <name>` - remove blocks (by db/id or UUID) or pages
-- `search <query> [--type page|block|tag|property|all] [--tag <name>] [--case-sensitive] [--sort updated-at|created-at] [--order asc|desc]` - search across pages, blocks, tags, and properties (query is positional)
+- `search block <query>` - search blocks by `:block/title` (case-insensitive substring)
+- `search page <query>` - search pages by `:block/name` (case-insensitive substring)
+- `search property <query>` - search properties by `:block/title` (Property entities only)
+- `search tag <query>` - search tags by `:block/title` (Tag entities only)
 - `query --query <edn> [--inputs <edn-vector>]` - run a Datascript query against the graph
 - `query --name <query-name> [--inputs <edn-vector>]` - run a named query (built-in or from `cli.edn`)
 - `query list` - list available named queries
@@ -213,9 +216,12 @@ Subcommands:
   upsert tag [options]     Upsert tag
   upsert property [options] Upsert property
   move [options]           Move block
-  remove [options]         Remove block or page
-  search <query> [options] Search graph
-  show [options]           Show tree
+  remove [options]          Remove block or page
+  search block [options]    Search blocks by title
+  search page [options]     Search pages by name
+  search property [options] Search properties by title
+  search tag [options]      Search tags by title
+  show [options]            Show tree
 ```
 
 Options grouping:
@@ -278,7 +284,7 @@ JSON key migration (flat -> namespaced):
   - If bundled runtime startup fails with missing-module or missing-file errors, rebuild with `yarn db-worker-node:release:bundle` and confirm `dist/db-worker-node.js` exists and every path listed in `dist/db-worker-node-assets.json` is present next to it.
 - `query` human output returns a plain string (the query result rendered via `pr-str`), which is convenient for pipelines like `logseq query ... | xargs logseq show --id`.
 - Built-in named queries currently include `block-search`, `task-search`, `recent-updated`, `list-status`, and `list-priority`. Use `query list` to see the full set for your config.
-- Show and search outputs resolve block reference UUIDs inside text, replacing `[[<uuid>]]` with the referenced block content. Nested references are resolved recursively up to 10 levels to avoid excessive expansion. For example: `[[<uuid1>]]` → `[[some text [[<uuid2>]]]]` and then `<uuid2>` is also replaced.
+- Show output resolves block reference UUIDs inside text, replacing `[[<uuid>]]` with the referenced block content. Nested references are resolved recursively up to 10 levels to avoid excessive expansion. For example: `[[<uuid1>]]` → `[[some text [[<uuid2>]]]]` and then `<uuid2>` is also replaced.
 - `show` human output prints the `:db/id` as the first column followed by a tree:
 
 ```
@@ -305,7 +311,7 @@ node ./dist/logseq.js graph export --type edn --file /tmp/demo.edn --graph demo
 node ./dist/logseq.js graph import --type edn --input /tmp/demo.edn --graph demo-import
 node ./dist/logseq.js upsert block --target-page TestPage --content "hello world"
 node ./dist/logseq.js move --uuid <uuid> --target-page TargetPage
-node ./dist/logseq.js search "hello"
+node ./dist/logseq.js search block "hello"
 node ./dist/logseq.js show --page TestPage --output json
 node ./dist/logseq.js server list
 node ./dist/logseq.js doctor
