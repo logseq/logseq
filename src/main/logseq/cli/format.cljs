@@ -14,13 +14,39 @@
                      entry))
                  value))
 
+(defn- normalize-property-cardinality
+  [value]
+  (cond
+    (nil? value) "one"
+    (keyword? value) (let [normalized (name value)]
+                       (if (#{"one" "many"} normalized)
+                         normalized
+                         "-"))
+    (string? value) (if (#{"one" "many"} value) value "-")
+    :else "-"))
+
+(defn- remap-list-property-json-item
+  [item]
+  (if (and (map? item) (contains? item :db/cardinality))
+    (-> item
+        (assoc :cardinality (normalize-property-cardinality (:db/cardinality item)))
+        (dissoc :db/cardinality))
+    item))
+
+(defn- normalize-json-data
+  [command data]
+  (if (and (= command :list-property) (map? data))
+    (update data :items (fn [items]
+                          (mapv remap-list-property-json-item (or items []))))
+    data))
+
 (defn- ->json
   [{:keys [status data error command]}]
   (let [obj (js-obj)]
     (set! (.-status obj) (name status))
     (cond
       (= status :ok)
-      (set! (.-data obj) (clj->js (normalize-json data)))
+      (set! (.-data obj) (clj->js (normalize-json (normalize-json-data command data))))
 
       (= status :error)
       (do
@@ -215,6 +241,7 @@
   [["ID"         (fn [item _] (or (:db/id item) (:id item)))           [:db/id :id]]
    ["TITLE"      (fn [item _] (or (:title item) (:block/title item) (:name item)))  [:title :block/title :name]]
    ["TYPE"       (fn [item _] (normalize-property-type (:logseq.property/type item))) [:logseq.property/type]]
+   ["CARDINALITY" (fn [item _] (normalize-property-cardinality (:db/cardinality item))) [:db/cardinality]]
    ["CLASSES"    (fn [item _] (format-classes (:logseq.property/classes item)))       [:logseq.property/classes]]
    ["UUID"       (fn [item _] (or (:block/uuid item) "-"))             [:block/uuid]]
    ["IDENT"      (fn [item _] (:db/ident item))                       [:db/ident]]

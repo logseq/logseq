@@ -14,6 +14,10 @@
     (:db/ident e) (assoc :db/ident (:db/ident e))
     (:logseq.property/type e) (assoc :logseq.property/type (:logseq.property/type e))))
 
+(defn- normalize-cardinality
+  [value]
+  (or value :db.cardinality/one))
+
 (defn list-properties
   "List properties for CLI"
   [db {:keys [expand include-built-in] :as options}]
@@ -36,9 +40,10 @@
                     (update :logseq.property/classes #(mapv :db/ident %))
                     (:logseq.property/description e)
                     (update :logseq.property/description db-property/property-value-content))
-                  ;; Keep property type in default list output (without --expand).
+                  ;; Keep property type and cardinality in default list output (without --expand).
                   (assoc (minimal-list-item e)
-                         :logseq.property/type (:logseq.property/type e))))))))
+                         :logseq.property/type (:logseq.property/type e)
+                         :db/cardinality (normalize-cardinality (:db/cardinality e)))))))))
 
 (defn list-tags
   "List tags for CLI"

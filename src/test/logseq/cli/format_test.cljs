@@ -185,21 +185,23 @@
                                         :data {:items [{:block/title "Prop"
                                                         :db/id 99
                                                         :logseq.property/type :node
+                                                        :db/cardinality :db.cardinality/many
                                                         :block/created-at 40000
                                                         :block/updated-at 90000}]}}
                                        {:output-format nil
                                         :now-ms 100000})]
-      (is (= (str "ID  TITLE  TYPE  UPDATED-AT  CREATED-AT\n"
-                  "99  Prop   node  10s ago     1m ago\n"
+      (is (= (str "ID  TITLE  TYPE  CARDINALITY  UPDATED-AT  CREATED-AT\n"
+                  "99  Prop   node  many         10s ago     1m ago\n"
                   "Count: 1")
              result))))
 
-  (testing "list property renders missing type as -"
+  (testing "list property renders missing type as - and missing cardinality as one"
     (let [result (format/format-result {:status :ok
                                         :command :list-property
                                         :data {:items [{:block/title "Prop"
                                                         :db/id 99
                                                         :logseq.property/type :node
+                                                        :db/cardinality :db.cardinality/many
                                                         :block/created-at 40000
                                                         :block/updated-at 90000}
                                                        {:block/title "Untyped"
@@ -208,11 +210,27 @@
                                                         :block/updated-at 90000}]}}
                                        {:output-format nil
                                         :now-ms 100000})]
-      (is (= (str "ID   TITLE    TYPE  UPDATED-AT  CREATED-AT\n"
-                  "99   Prop     node  10s ago     1m ago\n"
-                  "100  Untyped  -     10s ago     1m ago\n"
+      (is (= (str "ID   TITLE    TYPE  CARDINALITY  UPDATED-AT  CREATED-AT\n"
+                  "99   Prop     node  many         10s ago     1m ago\n"
+                  "100  Untyped  -     one          10s ago     1m ago\n"
                   "Count: 2")
              result)))))
+
+(deftest test-list-property-json-edn-cardinality-shape
+  (testing "list property json uses cardinality key while edn keeps :db/cardinality"
+    (let [base-result {:status :ok
+                       :command :list-property
+                       :data {:items [{:db/id 99
+                                       :block/title "Prop"
+                                       :logseq.property/type :number
+                                       :db/cardinality :db.cardinality/many}]}}
+          json-result (format/format-result base-result {:output-format :json})
+          edn-result (format/format-result base-result {:output-format :edn})
+          parsed-json (js->clj (js/JSON.parse json-result) :keywordize-keys true)
+          parsed-edn (reader/read-string edn-result)]
+      (is (= "many" (get-in parsed-json [:data :items 0 :cardinality])))
+      (is (nil? (get-in parsed-json [:data :items 0 :db/cardinality])))
+      (is (= :db.cardinality/many (get-in parsed-edn [:data :items 0 :db/cardinality]))))))
 
 (deftest test-human-output-add-upsert-remove
   (testing "upsert block renders ids in two lines"
