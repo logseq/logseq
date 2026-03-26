@@ -206,6 +206,25 @@
     true
     (true? graph-e2ee?)))
 
+(defn- <ensure-user-rsa-keys-on-server!
+  [{:keys [server-rsa-keys-exists?]}]
+  (if (not= false server-rsa-keys-exists?)
+    (p/resolved nil)
+    (if @state/*db-worker
+      (-> (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys
+                                    {:ensure-server? true
+                                     :server-rsa-keys-exists? false})
+          (p/catch (fn [error]
+                     (log/error :db-sync/ensure-user-rsa-keys-failed
+                                {:error error
+                                 :reason :server-rsa-keys-missing})
+                     nil)))
+      (do
+        (log/warn :db-sync/ensure-user-rsa-keys-skipped
+                  {:reason :db-worker-not-ready
+                   :server-rsa-keys-exists? server-rsa-keys-exists?})
+        (p/resolved nil)))))
+
 (defn- <wait-for-db-worker-ready!
   []
   (if @state/*db-worker
@@ -286,6 +305,8 @@
          base (http-base)]
      (if base
        (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+               _ (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys
+                                          {:ensure-server? true})
                body (coerce-http-request :graphs/create
                                          {:graph-name (string/replace repo config/db-version-prefix "")
                                           :schema-version schema-version
@@ -411,6 +432,8 @@
                   resp (fetch-json (str base "/graphs")
                                    {:method "GET"}
                                    {:response-schema :graphs/list})
+                  _ (<ensure-user-rsa-keys-on-server! {:server-rsa-keys-exists?
+                                                       (:user-rsa-keys-exists? resp)})
                   graphs (:graphs resp)
                   result (mapv (fn [graph]
                                  (let [graph-e2ee? (if (contains? graph :graph-e2ee?)

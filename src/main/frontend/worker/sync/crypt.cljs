@@ -260,31 +260,51 @@
             _ (<set-user-rsa-key-pair-to-idb! base user-id pair)]
       pair)))
 
-(defn- <ensure-user-rsa-key-pair-raw
+(defn- <generate-and-upload-user-rsa-key-pair!
   [base]
-  (p/let [existing (<get-user-rsa-key-pair-raw base)]
-    (if (and (string? (:public-key existing))
-             (string? (:encrypted-private-key existing)))
+  (p/let [{:keys [publicKey privateKey]} (crypt/<generate-rsa-key-pair)
+          {:keys [password]} (worker-state/<invoke-main-thread :thread-api/request-e2ee-password)
+          encrypted-private-key (crypt/<encrypt-private-key password privateKey)
+          exported-public-key (crypt/<export-public-key publicKey)
+          public-key-str (ldb/write-transit-str exported-public-key)
+          encrypted-private-key-str (ldb/write-transit-str encrypted-private-key)]
+    (p/let [_ (<upload-user-rsa-key-pair! base public-key-str encrypted-private-key-str)]
+      {:public-key public-key-str
+       :encrypted-private-key encrypted-private-key-str
+       :password password})))
+
+(defn- <ensure-user-rsa-key-pair-raw
+  [base {:keys [ensure-server? server-rsa-keys-exists?]}]
+  (p/let [existing (<get-user-rsa-key-pair-raw base)
+          existing-valid? (user-rsa-key-pair-valid? existing)
+          server-rsa-keys-exists?
+          (cond
+            (boolean? server-rsa-keys-exists?) server-rsa-keys-exists?
+            (and ensure-server? existing-valid?)
+            (p/let [server-pair (<fetch-user-rsa-key-pair-raw base)]
+              (user-rsa-key-pair-valid? server-pair))
+            :else nil)]
+    (cond
+      (and existing-valid? (not= false server-rsa-keys-exists?))
       existing
-      (p/let [{:keys [publicKey privateKey]} (crypt/<generate-rsa-key-pair)
-              {:keys [password]} (worker-state/<invoke-main-thread :thread-api/request-e2ee-password)
-              encrypted-private-key (crypt/<encrypt-private-key password privateKey)
-              exported-public-key (crypt/<export-public-key publicKey)
-              public-key-str (ldb/write-transit-str exported-public-key)
-              encrypted-private-key-str (ldb/write-transit-str encrypted-private-key)]
-        (p/let [_ (<upload-user-rsa-key-pair! base public-key-str encrypted-private-key-str)]
-          {:public-key public-key-str
-           :encrypted-private-key encrypted-private-key-str
-           :password password})))))
+
+      existing-valid?
+      (p/let [_ (<upload-user-rsa-key-pair! base (:public-key existing) (:encrypted-private-key existing))]
+        existing)
+
+      :else
+      (<generate-and-upload-user-rsa-key-pair! base))))
 
 (defn ensure-user-rsa-keys!
-  []
-  (let [base (e2ee-base)]
-    (if (string? base)
-      (<ensure-user-rsa-key-pair-raw base)
-      (do
-        (log/info :db-sync/skip-ensure-user-rsa-keys {:reason :missing-e2ee-base})
-        (p/resolved nil)))))
+  ([]
+   (ensure-user-rsa-keys! nil))
+  ([opts]
+   (let [base (e2ee-base)]
+     (if (string? base)
+       (<ensure-user-rsa-key-pair-raw base opts)
+       (do
+         (log/info :db-sync/skip-ensure-user-rsa-keys {:reason :missing-e2ee-base})
+         (p/resolved nil))))))
 
 (defn- <decrypt-private-key
   [encrypted-private-key-str]
@@ -333,7 +353,7 @@
 (defn- <load-user-rsa-key-material
   [base user-id graph-id]
   (letfn [(<load-once []
-            (p/let [{:keys [public-key encrypted-private-key]} (<ensure-user-rsa-key-pair-raw base)
+            (p/let [{:keys [public-key encrypted-private-key]} (<ensure-user-rsa-key-pair-raw base nil)
                     _ (when-not (and (string? public-key) (string? encrypted-private-key))
                         (fail-fast :db-sync/missing-field
                                    {:base base

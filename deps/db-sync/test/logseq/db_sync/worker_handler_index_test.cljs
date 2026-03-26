@@ -93,6 +93,59 @@
                           (is false (str error))
                           (done)))))))
 
+(deftest graphs-list-includes-user-rsa-keys-exists-flag-true-test
+  (async done
+         (let [request (js/Request. "http://localhost/graphs" #js {:method "GET"})
+               url (js/URL. (.-url request))]
+           (-> (p/with-redefs [index/<index-list (fn [_db _user-id]
+                                                   (p/resolved []))
+                               index/<user-rsa-key-pair (fn [_db _user-id]
+                                                          (p/resolved {:public-key "pk"
+                                                                       :encrypted-private-key "enc"}))]
+                 (p/let [resp (index-handler/handle {:db :db
+                                                     :env #js {}
+                                                     :request request
+                                                     :url url
+                                                     :claims #js {"sub" "user-1"}
+                                                     :route {:handler :graphs/list
+                                                             :path-params {}}})
+                         text (.text resp)
+                         body (js->clj (js/JSON.parse text) :keywordize-keys true)]
+                   (is (= 200 (.-status resp)))
+                   (is (= [] (:graphs body)))
+                   (is (= true (:user-rsa-keys-exists? body)))))
+               (p/then (fn []
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest graphs-list-includes-user-rsa-keys-exists-flag-false-test
+  (async done
+         (let [request (js/Request. "http://localhost/graphs" #js {:method "GET"})
+               url (js/URL. (.-url request))]
+           (-> (p/with-redefs [index/<index-list (fn [_db _user-id]
+                                                   (p/resolved []))
+                               index/<user-rsa-key-pair (fn [_db _user-id]
+                                                          (p/resolved nil))]
+                 (p/let [resp (index-handler/handle {:db :db
+                                                     :env #js {}
+                                                     :request request
+                                                     :url url
+                                                     :claims #js {"sub" "user-1"}
+                                                     :route {:handler :graphs/list
+                                                             :path-params {}}})
+                         text (.text resp)
+                         body (js->clj (js/JSON.parse text) :keywordize-keys true)]
+                   (is (= 200 (.-status resp)))
+                   (is (= [] (:graphs body)))
+                   (is (= false (:user-rsa-keys-exists? body)))))
+               (p/then (fn []
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (deftest graphs-create-e2ee-requires-user-rsa-key-pair-test
   (async done
          (let [request (js/Request. "http://localhost/graphs" #js {:method "POST"})
@@ -133,7 +186,7 @@
                           (is false (str error))
                           (done)))))))
 
-(deftest graphs-create-non-e2ee-does-not-require-user-rsa-key-pair-test
+(deftest graphs-create-non-e2ee-requires-user-rsa-key-pair-test
   (async done
          (let [request (js/Request. "http://localhost/graphs" #js {:method "POST"})
                url (js/URL. (.-url request))
@@ -161,9 +214,12 @@
                                                      :url url
                                                      :claims #js {"sub" "user-1"}
                                                      :route {:handler :graphs/create
-                                                             :path-params {}}})]
-                   (is (= 200 (.-status resp)))
-                   (is (= 1 @index-upsert-calls*))))
+                                                             :path-params {}}})
+                         text (.text resp)
+                         body (js->clj (js/JSON.parse text) :keywordize-keys true)]
+                   (is (= 400 (.-status resp)))
+                   (is (= "missing user rsa key pair" (:error body)))
+                   (is (zero? @index-upsert-calls*))))
                (p/then (fn []
                          (done)))
                (p/catch (fn [error]

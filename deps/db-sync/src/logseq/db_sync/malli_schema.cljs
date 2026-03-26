@@ -138,7 +138,8 @@
 
 (def graphs-list-response-schema
   [:map
-   [:graphs [:sequential graph-info-schema]]])
+   [:graphs [:sequential graph-info-schema]]
+   [:user-rsa-keys-exists? :boolean]])
 
 (def graph-create-request-schema
   [:map
