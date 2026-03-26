@@ -119,7 +119,7 @@
          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list page --graph {{graph-arg}} --fields title,id --sort updated-at --order desc --limit 1"]
   :expect {:exit 0
            :stdout-json-paths {[:status] "ok"
-                               [:data :items 0 :title] "Home"}}
+                               [:data :items 0 :block/title] "Home"}}
   :covers {:commands ["upsert page" "list page"]
            :options {:global ["--config" "--graph" "--data-dir" "--output"]
                      :upsert ["--page"]
@@ -134,7 +134,7 @@
          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json show --graph {{graph-arg}} --page Home --level 2 --linked-references false"]
   :expect {:exit 0
            :stdout-json-paths {[:status] "ok"
-                               [:data :root :children 0 :title] "Alpha block"}}
+                               [:data :root :block/children 0 :block/title] "Alpha block"}}
   :covers {:commands ["upsert block" "show"]
            :options {:global ["--config" "--graph" "--data-dir" "--output"]
                      :upsert ["--target-page" "--content"]
@@ -148,7 +148,7 @@
          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list tag --graph {{graph-arg}} --with-properties --sort updated-at --order desc --limit 1"]
   :expect {:exit 0
            :stdout-json-paths {[:status] "ok"
-                               [:data :items 0 :title] "TagOne"}}
+                               [:data :items 0 :block/title] "TagOne"}}
   :covers {:commands ["upsert tag" "list tag"]
            :options {:global ["--config" "--graph" "--data-dir" "--output"]
                      :upsert ["--name"]
@@ -162,9 +162,9 @@
          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list property --graph {{graph-arg}} --with-type --sort updated-at --order desc --limit 1"]
   :expect {:exit 0
            :stdout-json-paths {[:status] "ok"
-                               [:data :items 0 :title] "score"
-                               [:data :items 0 :type] "number"
-                               [:data :items 0 :cardinality] "one"}}
+                               [:data :items 0 :block/title] "score"
+                               [:data :items 0 :logseq.property/type] "number"
+                               [:data :items 0 :db/cardinality] "db.cardinality/one"}}
   :covers {:commands ["upsert property" "list property"]
            :options {:global ["--config" "--graph" "--data-dir" "--output"]
                      :upsert ["--name" "--type" "--cardinality"]
@@ -288,7 +288,7 @@
  {:id "property-upsert-update-id-json"
   :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
           "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name score --type number --cardinality one >/dev/null"]
-  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --id \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list property --graph {{graph-arg}} --fields title,id --limit 200 --sort updated-at --order desc | python3 -c 'import sys,json; print(next(item[\"id\"] for item in json.load(sys.stdin)[\"data\"][\"items\"] if item[\"title\"] == \"score\"))')\" --hide true --public false"]
+  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --id \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list property --graph {{graph-arg}} --fields title,id --limit 200 --sort updated-at --order desc | python3 -c 'import sys,json; print(next(item[\"db/id\"] for item in json.load(sys.stdin)[\"data\"][\"items\"] if item[\"block/title\"] == \"score\"))')\" --hide true --public false"]
   :expect {:exit 0
            :stdout-json-paths {[:status] "ok"}}
   :covers {:commands ["upsert property"]
@@ -412,7 +412,7 @@
  {:id "remove-tag-id-json"
   :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
           "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name TagOne >/dev/null"]
-  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json remove tag --graph {{graph-arg}} --id \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list tag --graph {{graph-arg}} --fields title,id --limit 200 --sort updated-at --order desc | python3 -c 'import sys,json; print(next(item[\"id\"] for item in json.load(sys.stdin)[\"data\"][\"items\"] if item[\"title\"] == \"TagOne\"))')\" >/dev/null"
+  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json remove tag --graph {{graph-arg}} --id \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list tag --graph {{graph-arg}} --fields title,id --limit 200 --sort updated-at --order desc | python3 -c 'import sys,json; print(next(item[\"db/id\"] for item in json.load(sys.stdin)[\"data\"][\"items\"] if item[\"block/title\"] == \"TagOne\"))')\" >/dev/null"
          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list tag --graph {{graph-arg}} --fields title,id"]
   :expect {:exit 0
            :stdout-not-contains ["TagOne"]}
@@ -425,7 +425,7 @@
  {:id "remove-property-id-json"
   :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
           "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name score --type number --cardinality one >/dev/null"]
-  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json remove property --graph {{graph-arg}} --id \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list property --graph {{graph-arg}} --fields title,id --limit 200 --sort updated-at --order desc | python3 -c 'import sys,json; print(next(item[\"id\"] for item in json.load(sys.stdin)[\"data\"][\"items\"] if item[\"title\"] == \"score\"))')\" >/dev/null"
+  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json remove property --graph {{graph-arg}} --id \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list property --graph {{graph-arg}} --fields title,id --limit 200 --sort updated-at --order desc | python3 -c 'import sys,json; print(next(item[\"db/id\"] for item in json.load(sys.stdin)[\"data\"][\"items\"] if item[\"block/title\"] == \"score\"))')\" >/dev/null"
          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list property --graph {{graph-arg}} --fields title,id"]
   :expect {:exit 0
            :stdout-not-contains ["score"]}

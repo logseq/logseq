@@ -217,7 +217,7 @@
              result)))))
 
 (deftest test-list-property-json-edn-cardinality-shape
-  (testing "list property json uses cardinality key while edn keeps :db/cardinality"
+  (testing "list property json keeps namespaced db/cardinality while edn stays unchanged"
     (let [base-result {:status :ok
                        :command :list-property
                        :data {:items [{:db/id 99
@@ -228,9 +228,24 @@
           edn-result (format/format-result base-result {:output-format :edn})
           parsed-json (js->clj (js/JSON.parse json-result) :keywordize-keys true)
           parsed-edn (reader/read-string edn-result)]
-      (is (= "many" (get-in parsed-json [:data :items 0 :cardinality])))
-      (is (nil? (get-in parsed-json [:data :items 0 :db/cardinality])))
+      (is (= "db.cardinality/many" (get-in parsed-json [:data :items 0 :db/cardinality])))
+      (is (nil? (get-in parsed-json [:data :items 0 :cardinality])))
       (is (= :db.cardinality/many (get-in parsed-edn [:data :items 0 :db/cardinality]))))))
+
+(deftest test-json-output-preserves-namespaced-keys-and-values
+  (let [payload {:status :ok
+                 :data {:item {:block/title "Block title"
+                               :logseq.property/title "Property title"
+                               :db/id 42
+                               :db/ident :logseq.class/Tag
+                               :block/uuid #uuid "2a847b91-1565-49cc-9f9f-0f6ee25ca0f3"}}}
+        json-result (format/format-result payload {:output-format :json})
+        parsed-json (js->clj (js/JSON.parse json-result) :keywordize-keys true)]
+    (is (= "Block title" (get-in parsed-json [:data :item :block/title])))
+    (is (= "Property title" (get-in parsed-json [:data :item :logseq.property/title])))
+    (is (= 42 (get-in parsed-json [:data :item :db/id])))
+    (is (= "logseq.class/Tag" (get-in parsed-json [:data :item :db/ident])))
+    (is (= "2a847b91-1565-49cc-9f9f-0f6ee25ca0f3" (get-in parsed-json [:data :item :block/uuid])))))
 
 (deftest test-human-output-add-upsert-remove
   (testing "upsert block renders ids in two lines"
