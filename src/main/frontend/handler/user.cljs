@@ -238,6 +238,14 @@
   (auto-fill-refresh-token-from-cognito!)
   (state/pub-event! [:user/fetch-info-and-graphs]))
 
+(defn- clear-e2ee-password!
+  []
+  (when @state/*db-worker
+    (-> (state/<invoke-db-worker :thread-api/clear-e2ee-password)
+        (p/catch (fn [error]
+                   (js/console.warn :clear-e2ee-password-failed error)
+                   nil)))))
+
 (defn ^:export login-with-username-password-e2e
   [username' password client-id client-secret]
   (let [text-encoder (new js/TextEncoder)
@@ -265,6 +273,7 @@
           {:id-token id-token :access-token access-token :refresh-token refresh-token})))))
 
 (defn logout []
+  (clear-e2ee-password!)
   (clear-tokens)
   (.clear js/localStorage)
   (state/clear-user-info!)
