@@ -216,6 +216,48 @@
                   "Count: 2")
              result)))))
 
+(deftest test-human-output-search
+  (testing "search block renders the list table contract"
+    (let [result (format/format-result {:status :ok
+                                        :command :search-block
+                                        :data {:items [{:db/id 3
+                                                        :block/title "Alpha block"}
+                                                       {:db/id 7
+                                                        :block/title "Second line\nIndented"}]}}
+                                       {:output-format nil})]
+      (is (= (str "ID  TITLE\n"
+                  "3   Alpha block\n"
+                  "7   Second line\n"
+                  "    Indented\n"
+                  "Count: 2")
+             result))))
+
+  (testing "search page includes IDENT column when present"
+    (let [result (format/format-result {:status :ok
+                                        :command :search-page
+                                        :data {:items [{:db/id 9
+                                                        :block/title "Home"
+                                                        :db/ident :logseq.graph/home}]}}
+                                       {:output-format nil})]
+      (is (= (str "ID  TITLE  IDENT\n"
+                  "9   Home   :logseq.graph/home\n"
+                  "Count: 1")
+             result)))))
+
+(deftest test-search-json-edn-output
+  (let [base-result {:status :ok
+                     :command :search-tag
+                     :data {:items [{:db/id 2
+                                     :block/title "Quote"
+                                     :db/ident :logseq.class/Tag}]}}
+        json-result (format/format-result base-result {:output-format :json})
+        edn-result (format/format-result base-result {:output-format :edn})
+        parsed-json (js->clj (js/JSON.parse json-result) :keywordize-keys true)
+        parsed-edn (reader/read-string edn-result)]
+    (is (= "Quote" (get-in parsed-json [:data :items 0 :block/title])))
+    (is (= "logseq.class/Tag" (get-in parsed-json [:data :items 0 :db/ident])))
+    (is (= :logseq.class/Tag (get-in parsed-edn [:data :items 0 :db/ident])))))
+
 (deftest test-list-property-json-edn-cardinality-shape
   (testing "list property json keeps namespaced db/cardinality while edn stays unchanged"
     (let [base-result {:status :ok

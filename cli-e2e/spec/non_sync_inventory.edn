@@ -80,6 +80,13 @@
              "--name"
              "--inputs"]}
 
+  :search
+  {:commands ["search block"
+              "search page"
+              "search property"
+              "search tag"]
+   :options []}
+
   :show
   {:commands ["show"]
    :options ["--id"

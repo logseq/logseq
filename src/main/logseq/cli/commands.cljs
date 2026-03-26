@@ -10,6 +10,7 @@
             [logseq.cli.command.list :as list-command]
             [logseq.cli.command.query :as query-command]
             [logseq.cli.command.remove :as remove-command]
+            [logseq.cli.command.search :as search-command]
             [logseq.cli.command.server :as server-command]
             [logseq.cli.command.show :as show-command]
             [logseq.cli.command.sync :as sync-command]
@@ -93,6 +94,13 @@
            :message "query is required"}
    :summary summary})
 
+(defn- missing-query-text-result
+  [summary]
+  {:ok? false
+   :error {:code :missing-query-text
+           :message "query text is required"}
+   :summary summary})
+
 ;; Error helpers are in logseq.cli.command.core.
 
 ;; Command-specific validation and entries are in subcommand namespaces.
@@ -104,6 +112,7 @@
                upsert-command/entries
                remove-command/entries
                query-command/entries
+               search-command/entries
                show-command/entries
                doctor-command/entries
                sync-command/entries
@@ -237,6 +246,10 @@
            (not (seq (some-> (:query opts) string/trim)))
            (not (seq (some-> (:name opts) string/trim))))
       (missing-query-result summary)
+
+      (and (#{:search-block :search-page :search-property :search-tag} command)
+           (not (seq (some-> (string/join " " args) string/trim))))
+      (missing-query-text-result summary)
 
       (and (#{:list-page :list-tag :list-property} command)
            (list-command/invalid-options? opts))
@@ -414,6 +427,9 @@
         (:list-page :list-tag :list-property)
         (list-command/build-action command options repo)
 
+        (:search-block :search-page :search-property :search-tag)
+        (search-command/build-action command args repo)
+
         :upsert-block
         (upsert-command/build-block-action options args repo)
 
@@ -483,6 +499,10 @@
                          :list-page (list-command/execute-list-page action config)
                          :list-tag (list-command/execute-list-tag action config)
                          :list-property (list-command/execute-list-property action config)
+                         :search-block (search-command/execute-search-block action config)
+                         :search-page (search-command/execute-search-page action config)
+                         :search-property (search-command/execute-search-property action config)
+                         :search-tag (search-command/execute-search-tag action config)
                          :upsert-block (upsert-command/execute-upsert-block action config)
                          :upsert-page (upsert-command/execute-upsert-page action config)
                          :upsert-tag (upsert-command/execute-upsert-tag action config)
@@ -516,7 +536,7 @@
         (assoc result
                :command (or (:command action) (:type action))
                :context (select-keys action [:repo :graph :page :name :id :ids :uuid :block :blocks
-                                             :schema
+                                             :schema :query
                                              :source :target :update-tags :update-properties
                                              :remove-tags :remove-properties
                                              :export-type :file :import-type :input

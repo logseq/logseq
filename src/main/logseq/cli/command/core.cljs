@@ -109,7 +109,7 @@
 (defn top-level-summary
   [table]
   (let [groups [{:title "Graph Inspect and Edit"
-                 :commands #{"list" "upsert" "remove" "query" "show"}}
+                 :commands #{"list" "upsert" "remove" "query" "search" "show"}}
                 {:title "Graph Management"
                  :commands #{"graph" "server" "doctor" "sync"}}
                 {:title "Authentication"
