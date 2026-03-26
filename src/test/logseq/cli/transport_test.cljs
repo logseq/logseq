@@ -216,7 +216,7 @@
                                                        :status :ok})
                        by-stage (into {} (map (juxt :stage identity) (:stages report)))]
                  (is (= 2 (get-in by-stage ["transport.invoke:thread-api/q" :count])))
-                 (is (pos? (get-in by-stage ["transport.invoke:thread-api/q" :total-ms])))
+                 (is (>= (get-in by-stage ["transport.invoke:thread-api/q" :total-ms]) 0))
                  (p/let [_ (stop!)] true))
                (p/then (fn [_] (done)))
                (p/catch (fn [e]

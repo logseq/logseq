@@ -126,6 +126,7 @@
     :missing-content "Use --content or pass content as args"
     :missing-tag-name "Use --name <tag-name>"
     :missing-query "Use --query <edn>"
+    :missing-query-text "Use: logseq search <block|page|property|tag> <query>"
     :unknown-query "Use `logseq query list` to see available queries"
     :ambiguous-tag-name "Retry with --id <tag-id>"
     :ambiguous-property-name "Retry with --id <property-id>"
@@ -709,6 +710,8 @@
         :list-page (format-list-page (:items data) now-ms)
         :list-tag (format-list-tag (:items data) now-ms)
         :list-property (format-list-property (:items data) now-ms)
+        (:search-block :search-page :search-property :search-tag)
+        (format-list-page (:items data) now-ms)
         :upsert-block (format-upsert-block context (:result data))
         :upsert-page (format-upsert-page context (:result data))
         :upsert-tag (format-upsert-tag context (:result data))
