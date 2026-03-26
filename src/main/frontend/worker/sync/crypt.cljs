@@ -411,20 +411,39 @@
         aes-key-k (graph-encrypted-aes-key-idb-key graph-id)]
     (when-not (and (string? base) (string? graph-id))
       (fail-fast :db-sync/missing-field {:base base :graph-id graph-id}))
-    (p/let [{:keys [public-key encrypted-private-key]} (<get-user-rsa-key-pair-raw base)]
-      (<clear-item! aes-key-k)
-      (when-not (and (string? public-key) (string? encrypted-private-key))
-        (fail-fast :db-sync/missing-field {:graph-id graph-id :field :user-rsa-key-pair}))
-      (p/let [private-key (<decrypt-private-key encrypted-private-key)
-              encrypted-aes-key (p/let [resp (<fetch-graph-encrypted-aes-key-raw base graph-id)]
-                                  (when-let [encrypted-aes-key (:encrypted-aes-key resp)]
-                                    (ldb/read-transit-str encrypted-aes-key)))]
-        (if-not encrypted-aes-key
-          (fail-fast :db-sync/missing-field {:graph-id graph-id :field :encrypted-aes-key})
-          (<set-item! aes-key-k encrypted-aes-key))
-        (p/let [aes-key (crypt/<decrypt-aes-key private-key encrypted-aes-key)]
-          (swap! *graph->aes-key assoc graph-id aes-key)
-          aes-key)))))
+    (letfn [(<fetch-once [{:keys [public-key encrypted-private-key]}]
+              (p/let [_ (<clear-item! aes-key-k)]
+                (when-not (and (string? public-key) (string? encrypted-private-key))
+                  (fail-fast :db-sync/missing-field {:graph-id graph-id :field :user-rsa-key-pair}))
+                (p/let [private-key (<decrypt-private-key encrypted-private-key)
+                        encrypted-aes-key (p/let [resp (<fetch-graph-encrypted-aes-key-raw base graph-id)]
+                                            (when-let [encrypted-aes-key (:encrypted-aes-key resp)]
+                                              (ldb/read-transit-str encrypted-aes-key)))]
+                  (if-not encrypted-aes-key
+                    (fail-fast :db-sync/missing-field {:graph-id graph-id :field :encrypted-aes-key})
+                    (<set-item! aes-key-k encrypted-aes-key))
+                  (p/let [aes-key (crypt/<decrypt-aes-key private-key encrypted-aes-key)]
+                    (swap! *graph->aes-key assoc graph-id aes-key)
+                    aes-key))))]
+      (p/let [pair (<get-user-rsa-key-pair-raw base)]
+        (-> (<fetch-once pair)
+            (p/catch
+             (fn [error]
+               (let [user-id (get-user-uuid)]
+                 (if (and (= "decrypt-aes-key" (ex-message error))
+                          (string? user-id))
+                   (-> (p/let [_ (<clear-user-rsa-key-pair-cache! base user-id)
+                               refreshed-pair (<get-user-rsa-key-pair-raw base)]
+                         (<fetch-once refreshed-pair))
+                       (p/catch (fn [retry-error]
+                                  (log/warn :db-sync/user-rsa-key-cache-invalid-on-download
+                                            {:base base
+                                             :user-id user-id
+                                             :graph-id graph-id
+                                             :first-error error
+                                             :retry-error retry-error})
+                                  (throw retry-error))))
+                   (throw error))))))))))
 
 (defn <grant-graph-access!
   [repo graph-id target-email]
