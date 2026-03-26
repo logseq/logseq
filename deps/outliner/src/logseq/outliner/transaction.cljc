@@ -9,7 +9,7 @@
     `(logseq.db/batch-transact!
       ~conn
       (dissoc ~opts :additional-tx :transact-opts :current-block)
-      (fn [~conn-sym _*batch-tx-data#]
+      (fn [~conn-sym]
         (let [~conn ~conn-sym]
           ~@body
           (when (seq (:additional-tx ~opts))
