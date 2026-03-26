@@ -166,6 +166,7 @@
  :content/click-to-edit "Click to edit"
  :context-menu/make-a-flashcard "Make a Flashcard"
  :context-menu/toggle-number-list "Toggle number list"
+ :context-menu/set-icon "Set icon"
  :settings-page/ai "AI"
  :settings-page/tab-ai "AI"
  :settings-page/enable-mcp-server "MCP Server"
