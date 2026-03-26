@@ -127,4 +127,4 @@
                  (is (not (string/includes? (:output result) "at "))
                      "output should not contain a stack trace")))
              (p/catch (fn [e] (is false (str "unexpected error: " e))))
-             (p/finally (done)))))
+             (p/finally (fn [] (done))))))

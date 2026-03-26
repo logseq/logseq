@@ -2399,6 +2399,23 @@
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest test-build-action-upsert-page-accepts-user-property
+  (testing "upsert page accepts user property key in update-properties"
+    (let [parsed (commands/parse-args ["upsert" "page"
+                                       "--page" "Home"
+                                       "--update-properties" "{\"p1\" \"default\"}"])
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? result)))
+      (is (some? (get-in result [:action :update-properties])))))
+
+  (testing "upsert page accepts user property key in remove-properties"
+    (let [parsed (commands/parse-args ["upsert" "page"
+                                       "--page" "Home"
+                                       "--remove-properties" "[\"p1\"]"])
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? result)))
+      (is (some? (get-in result [:action :remove-properties]))))))
+
 (deftest test-execute-upsert-page-errors-when-property-does-not-exist
   (async done
          (let [action {:type :upsert-page :repo "demo" :page "Home"
