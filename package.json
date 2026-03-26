@@ -146,7 +146,7 @@
         "fs": "0.0.1-security",
         "fs-extra": "^11.3.4",
         "fuse.js": "7.1.0",
-        "graphology": "0.26.0",
+        "graphology": "0.20.0",
         "hnswlib-wasm": "^0.8.2",
         "html2canvas": "^1.4.1",
         "inter-ui": "^4.1.1",
@@ -161,7 +161,7 @@
         "photoswipe": "^5.4.4",
         "pixi-graph-fork": "0.2.0",
         "pixi.js": "6.2.0",
-        "posthog-js": "1.10.2",
+        "posthog-js": "1.141.0",
         "prop-types": "^15.8.1",
         "react": "18.3.1",
         "react-dom": "18.3.1",
@@ -172,7 +172,6 @@
         "remove-accents": "0.5.0",
         "sanitize-filename": "1.6.4",
         "send-intent": "^7.0.0",
-
         "url": "^0.11.4",
         "util": "^0.12.5"
     },
