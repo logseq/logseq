@@ -76,12 +76,14 @@
        (reset! worker-state/*opfs-pools
                {test-repo #js {:pauseVfs (fn [] (swap! pause-calls inc))}})
        (reset! search/fuzzy-search-indices {test-repo :stale-cache})
+       (reset! client-op/*repo->pending-local-tx-count {test-repo 9})
 
        (db-worker/close-db! test-repo)
 
        (is (= #{:db :search :client-ops} (set @closed)))
        (is (= 1 @pause-calls))
        (is (nil? (get @search/fuzzy-search-indices test-repo)))
+       (is (nil? (get @client-op/*repo->pending-local-tx-count test-repo)))
        (is (nil? (get @worker-state/*sqlite-conns test-repo)))))))
 
 (deftest client-ops-cleanup-timer-starts-once-and-clears-on-close-test
