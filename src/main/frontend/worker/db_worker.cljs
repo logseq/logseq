@@ -187,6 +187,7 @@
   (swap! *sqlite-conns dissoc repo)
   (swap! *datascript-conns dissoc repo)
   (swap! *client-ops-conns dissoc repo)
+  (swap! client-op/*repo->pending-local-tx-count dissoc repo)
   (swap! *search-index-build-ids dissoc repo)
   (search/clear-fuzzy-search-indice! repo)
   (when db (.close db))
