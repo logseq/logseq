@@ -266,6 +266,7 @@
 
 (defn logout []
   (clear-tokens)
+  (.clear js/localStorage)
   (state/clear-user-info!)
   (state/pub-event! [:user/logout])
   (reset! flows/*current-login-user :logout))
