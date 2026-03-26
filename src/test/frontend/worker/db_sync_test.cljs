@@ -16,7 +16,6 @@
             [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.handle-message :as sync-handle-message]
             [frontend.worker.sync.large-title :as sync-large-title]
-            [frontend.worker.sync.legacy-rebase :as legacy-rebase]
             [frontend.worker.sync.presence :as sync-presence]
             [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
             [frontend.worker.sync.upload :as sync-upload]
@@ -755,8 +754,6 @@
                                           {:tx (sqlite-util/write-transit-str
                                                 (->> tx
                                                      (db-normalize/remove-retract-entity-ref @conn)
-                                                     (#'legacy-rebase/drop-missing-created-block-datoms @conn)
-                                                     (#'legacy-rebase/sanitize-tx-data @conn)
                                                      distinct
                                                      vec))
                                            :outliner-op outliner-op})))]
@@ -786,8 +783,6 @@
                                         {:tx (sqlite-util/write-transit-str
                                               (->> tx
                                                    (db-normalize/remove-retract-entity-ref @conn)
-                                                   (#'legacy-rebase/drop-missing-created-block-datoms @conn)
-                                                   (#'legacy-rebase/sanitize-tx-data @conn)
                                                    distinct
                                                    vec))
                                          :outliner-op outliner-op})))]
@@ -824,8 +819,6 @@
           (let [sanitize-tx (fn [tx]
                               (->> tx
                                    (db-normalize/remove-retract-entity-ref @local-conn)
-                                   (#'legacy-rebase/drop-missing-created-block-datoms @local-conn)
-                                   (#'legacy-rebase/sanitize-tx-data @local-conn)
                                    distinct
                                    vec))
                 tx-entries (mapv (fn [{:keys [tx outliner-op]}]
@@ -2855,20 +2848,6 @@
                 (is (not-any? string?
                               (keep second save-block-tx)))))))))))
 
-(deftest structural-conflict-drops-whole-entity-local-tx-test
-  (testing "remote structural conflicts drop the whole entity tx instead of leaving partial block state"
-    (let [{:keys [conn child1]} (setup-parent-child)
-          child-uuid (:block/uuid child1)
-          tx-data [[:db/add [:block/uuid child-uuid] :block/title "local title"]
-                   [:db/add [:block/uuid child-uuid] :block/parent 999]
-                   [:db/add [:block/uuid child-uuid] :block/page 998]
-                   [:db/retract [:block/uuid child-uuid] :logseq.property/created-by-ref 100]]
-          remote-updated-keys #{[child-uuid :block/page]}]
-      (is (empty? (#'legacy-rebase/drop-remote-conflicted-local-tx
-                   @conn
-                   remote-updated-keys
-                   tx-data))))))
-
 (deftest reverse-tx-data-create-property-text-block-restores-base-db-test
   (testing "reverse-tx-data for create-property-text-block should restore the base db"
     (let [conn (db-test/create-conn-with-blocks
@@ -3137,128 +3116,6 @@
                 (is (empty? anonymous-ents) (str anonymous-ents))
                 (is (empty? (non-recycle-validation-entities validation))
                     (str (:errors validation)))))))))))
-
-(deftest sanitize-tx-data-drops-partial-create-when-parent-recycled-test
-  (testing "created block should be dropped when parent is already recycled"
-    (let [{:keys [conn parent]} (setup-parent-child)
-          page-uuid (:block/uuid (:block/page parent))
-          parent-uuid (:block/uuid parent)
-          child-uuid (random-uuid)
-          tx-data [[:db/add -1 :block/uuid child-uuid]
-                   [:db/add -1 :block/title ""]
-                   [:db/add -1 :block/page [:block/uuid page-uuid]]
-                   [:db/add -1 :block/order "a0"]
-                   [:db/add [:block/uuid child-uuid] :block/parent [:block/uuid parent-uuid]]]
-          _ (outliner-core/delete-blocks! conn [parent] {})
-          sanitized (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
-                         vec)]
-      (is (empty? sanitized)))))
-
-(deftest sanitize-tx-data-removes-orphaning-parent-retract-test
-  (testing "when invalid reparent add is dropped, paired parent retract should be dropped too"
-    (let [{:keys [conn parent child1]} (setup-parent-child)
-          child-uuid (:block/uuid child1)
-          old-parent-uuid (:block/uuid parent)
-          missing-parent-uuid (random-uuid)
-          tx-data [[:db/retract [:block/uuid child-uuid] :block/parent [:block/uuid old-parent-uuid]]
-                   [:db/add [:block/uuid child-uuid] :block/parent [:block/uuid missing-parent-uuid]]]
-          sanitized (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
-                         vec)]
-      (is (empty? sanitized)))))
-
-(deftest drop-orphaning-parent-retracts-is-still-needed-test
-  (testing "without orphaning-parent cleanup, sanitize leaves a bad parent retract behind"
-    (let [{:keys [conn parent child1]} (setup-parent-child)
-          child-uuid (:block/uuid child1)
-          old-parent-uuid (:block/uuid parent)
-          missing-parent-uuid (random-uuid)
-          tx-data [[:db/retract [:block/uuid child-uuid] :block/parent [:block/uuid old-parent-uuid]]
-                   [:db/add [:block/uuid child-uuid] :block/parent [:block/uuid missing-parent-uuid]]]
-          sanitized-without-cleanup (with-redefs [legacy-rebase/drop-orphaning-parent-retracts identity]
-                                      (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
-                                           vec))]
-      (is (= [[:db/retract [:block/uuid child-uuid]
-               :block/parent
-               [:block/uuid old-parent-uuid]]]
-             sanitized-without-cleanup)))))
-
-(deftest sanitize-tx-data-drops-numeric-entity-datoms-for-recycled-block-test
-  (testing "numeric entity datoms targeting recycled blocks should be dropped"
-    (let [{:keys [conn child1]} (setup-parent-child)
-          child-id (:db/id child1)
-          tx-data [[:db/add child-id :block/title "should-drop"]]
-          _ (outliner-core/delete-blocks! conn [child1] {})
-          sanitized (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
-                         vec)]
-      (is (empty? sanitized)))))
-
-(deftest sanitize-tx-data-drops-numeric-value-refs-for-recycled-block-test
-  (testing "numeric ref values that point to recycled blocks should be dropped"
-    (let [{:keys [conn parent child1]} (setup-parent-child)
-          parent-id (:db/id parent)
-          child-id (:db/id child1)
-          tx-data [[:db/add parent-id :block/parent child-id]]
-          _ (outliner-core/delete-blocks! conn [child1] {})
-          sanitized (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
-                         vec)]
-      (is (empty? sanitized)))))
-
-(deftest sanitize-tx-data-drops-datoms-with-missing-numeric-entity-test
-  (testing "stale numeric entity ids should be dropped to avoid creating anonymous entities"
-    (let [{:keys [conn]} (setup-parent-child)
-          missing-id 999999
-          tx-data [[:db/add missing-id :block/title ""]]
-          sanitized (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
-                         vec)]
-      (is (empty? sanitized)))))
-
-(deftest sanitize-tx-data-drops-datoms-with-missing-numeric-ref-value-test
-  (testing "stale numeric ref values should be dropped when referenced entity no longer exists"
-    (let [{:keys [conn parent]} (setup-parent-child)
-          parent-id (:db/id parent)
-          missing-id 999999
-          tx-data [[:db/add parent-id :block/parent missing-id]]
-          sanitized (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
-                         vec)]
-      (is (empty? sanitized)))))
-
-(deftest sanitize-tx-data-drops-datoms-with-missing-lookup-ref-value-test
-  (testing "stale lookup ref values should be dropped when referenced entity no longer exists"
-    (let [{:keys [conn child1 child2]} (setup-parent-child)
-          child-uuid (:block/uuid child1)
-          new-parent-uuid (:block/uuid child2)
-          missing-parent-uuid (random-uuid)
-          tx-data [[:db/retract [:block/uuid child-uuid]
-                    :block/parent
-                    [:block/uuid missing-parent-uuid]]
-                   [:db/add [:block/uuid child-uuid]
-                    :block/parent
-                    [:block/uuid new-parent-uuid]]]
-          sanitized (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
-                         vec)]
-      (is (= [[:db/add [:block/uuid child-uuid]
-               :block/parent
-               [:block/uuid new-parent-uuid]]]
-             sanitized)))))
-
-(deftest sanitize-tx-data-keeps-retract-entity-lookup-for-missing-block-test
-  (testing "retractEntity lookup should survive sanitize for synced undo of inserted blocks"
-    (let [{:keys [conn]} (setup-parent-child)
-          missing-uuid (random-uuid)
-          tx-data [[:db/retractEntity [:block/uuid missing-uuid]]]
-          sanitized (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
-                         vec)]
-      (is (= tx-data sanitized)))))
-
-(deftest sanitize-tx-data-drops-stale-missing-block-lookup-updates-test
-  (testing "title-only updates for a missing lookup block should be dropped"
-    (let [{:keys [conn]} (setup-parent-child)
-          missing-uuid (random-uuid)
-          tx-data [[:db/add [:block/uuid missing-uuid] :block/title "stale title"]
-                   [:db/add [:block/uuid missing-uuid] :block/updated-at 1773747515784]]
-          sanitized (->> (#'legacy-rebase/sanitize-tx-data @conn tx-data)
-                         vec)]
-      (is (empty? sanitized)))))
 
 (deftest apply-remote-tx-local-delete-remote-recreate-does-not-leave-local-only-delete-test
   (testing "if remote batch recreates a locally deleted block, client should not end with unsynced local-only deletion"
