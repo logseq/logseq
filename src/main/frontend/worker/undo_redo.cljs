@@ -203,12 +203,11 @@
      :block-content block-content}))
 
 (defn- skip-op-and-recur
-  [repo undo? log-tag data]
-  (log/warn log-tag (assoc data :undo? undo?))
+  [repo undo?]
   (undo-redo-aux repo undo?))
 
 (defn- run-worker-path
-  [repo conn undo? op {:keys [tx-meta]} tx-meta' tx-id]
+  [repo conn undo? op tx-meta' tx-id]
   (if-let [apply-action @*apply-history-action!]
     (try
       (let [worker-result (apply-action repo tx-id undo? tx-meta')]
@@ -220,10 +219,7 @@
                               (rebind-op-db-sync-tx-id op (:history-tx-id worker-result))))
 
           (skippable-worker-result? undo? worker-result)
-          (skip-op-and-recur repo undo? ::undo-redo-skip-conflicted-op
-                             {:outliner-op (:outliner-op tx-meta)
-                              :tx-id tx-id
-                              :result worker-result})
+          (skip-op-and-recur repo undo?)
 
           :else
           (do
@@ -236,10 +232,7 @@
             (empty-stack-result undo?))))
       (catch :default e
         (if (skippable-worker-error? e)
-          (skip-op-and-recur repo undo? ::undo-redo-skip-conflicted-op
-                             {:outliner-op (:outliner-op tx-meta)
-                              :tx-id tx-id
-                              :error e})
+          (skip-op-and-recur repo undo?)
           (do
             (log/error ::undo-redo-worker-failed e)
             (clear-history! repo)
@@ -268,7 +261,7 @@
                               :inverse-outliner-ops inverse-outliner-ops
                               :db-sync/forward-outliner-ops forward-outliner-ops
                               :db-sync/inverse-outliner-ops inverse-outliner-ops))]
-      (run-worker-path repo conn undo? op data tx-meta' tx-id))))
+      (run-worker-path repo conn undo? op tx-meta' tx-id))))
 
 (defn- undo-redo-aux
   [repo undo?]
