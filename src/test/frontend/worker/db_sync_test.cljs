@@ -2976,6 +2976,38 @@
       (is (= target-uuid
              (-> (d/entity restored-db [:block/uuid target-uuid]) :block/uuid))))))
 
+(deftest reverse-tx-data-delete-and-recreate-same-uuid-remains-reversible-test
+  (testing "reverse tx-data should remain valid when a tx retracts and recreates the same block uuid"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "old"}]}]})
+          target (db-test/find-block-by-content @conn "old")
+          target-uuid (:block/uuid target)
+          page-uuid (:block/uuid (:block/page target))
+          original-order (:block/order target)
+          db-before @conn
+          tx-report (d/with db-before
+                            [[:db/retractEntity [:block/uuid target-uuid]]
+                             [:db/add -1 :block/uuid target-uuid]
+                             [:db/add -1 :block/title "new"]
+                             [:db/add -1 :block/parent [:block/uuid page-uuid]]
+                             [:db/add -1 :block/page [:block/uuid page-uuid]]
+                             [:db/add -1 :block/order original-order]]
+                            {})
+          reversed-datoms (#'sync-apply/reverse-tx-data
+                           db-before
+                           (:db-after tx-report)
+                           (:tx-data tx-report))
+          reverse-conn (d/conn-from-db (:db-after tx-report))]
+      (is (some? (d/entity (:db-after tx-report) [:block/uuid target-uuid])))
+      (ldb/transact! reverse-conn reversed-datoms {:outliner-op :reverse-test})
+      (let [restored (d/entity @reverse-conn [:block/uuid target-uuid])]
+        (is (some? restored))
+        (is (= "old" (:block/title restored)))
+        (is (= page-uuid (some-> restored :block/page :block/uuid)))
+        (is (= page-uuid (some-> restored :block/parent :block/uuid)))))))
+
 (deftest rebase-preserves-title-when-reversed-tx-ids-change-test
   (testing "rebase keeps local title when reverse tx gets a new tx id"
     (let [conn (db-test/create-conn-with-blocks

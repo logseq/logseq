@@ -98,6 +98,31 @@
       (is (= [[:delete-page [expected-page-uuid {}]]]
              inverse-outliner-ops)))))
 
+(deftest derive-history-outliner-ops-delete-blocks-inverse-avoids-self-target-test
+  (testing "delete-blocks inverse falls back to parent target when left sibling resolves to self"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page"}
+                   :blocks [{:block/title "parent"
+                             :build/children [{:block/title "child"}]}]}]})
+          child (db-test/find-block-by-content @conn "child")
+          child-id (:db/id child)
+          child-uuid (:block/uuid child)
+          parent-uuid (some-> child :block/parent :block/uuid)
+          tx-meta {:outliner-op :delete-blocks
+                   :outliner-ops [[:delete-blocks [[child-id] {}]]]}]
+      ;; Simulate stale sibling lookup returning the same entity as the deleted root.
+      (with-redefs [ldb/get-left-sibling (fn [_] child)]
+        (let [{:keys [inverse-outliner-ops]}
+              (op-construct/derive-history-outliner-ops @conn @conn [] tx-meta)
+              insert-op (first inverse-outliner-ops)]
+          (is (= :insert-blocks (first insert-op)))
+          (is (= [:block/uuid parent-uuid]
+                 (get-in insert-op [1 1])))
+          (is (= false (get-in insert-op [1 2 :sibling?])))
+          (is (not= [:block/uuid child-uuid]
+                    (get-in insert-op [1 1]))))))))
+
 (deftest derive-history-outliner-ops-builds-delete-page-inverse-for-class-property-and-today-page-test
   (testing "delete-page inverse restores hard-retracted class/property/today pages with stable db/ident"
     (let [today (date-time-util/ms->journal-day (js/Date.))
