@@ -163,7 +163,8 @@
   :expect {:exit 0
            :stdout-json-paths {[:status] "ok"
                                [:data :items 0 :title] "score"
-                               [:data :items 0 :type] "number"}}
+                               [:data :items 0 :type] "number"
+                               [:data :items 0 :cardinality] "one"}}
   :covers {:commands ["upsert property" "list property"]
            :options {:global ["--config" "--graph" "--data-dir" "--output"]
                      :upsert ["--name" "--type" "--cardinality"]

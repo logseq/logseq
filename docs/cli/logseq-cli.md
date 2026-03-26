@@ -178,7 +178,7 @@ Sync config persistence:
 Inspect and edit commands:
 - `list page [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list pages (defaults to `--sort updated-at`)
 - `list tag [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list tags (defaults to `--sort updated-at`)
-- `list property [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list properties (defaults to `--sort updated-at`; `TYPE` is included by default even without `--expand`)
+- `list property [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list properties (defaults to `--sort updated-at`; `TYPE` and `CARDINALITY` are included by default even without `--expand`; missing schema cardinality is treated as `one`)
 - `upsert block --content <text> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - create blocks; defaults to today’s journal page if no target is given
 - `upsert block --blocks <edn> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks via EDN vector
 - `upsert block --blocks-file <path> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks from an EDN file
@@ -232,9 +232,13 @@ Revision: <commit>
 Output formats:
 - Global `--output <human|json|edn>` applies to all commands
 - Output formatting is controlled via global `--output`, `:output-format` in config, or `LOGSEQ_CLI_OUTPUT`.
-- Human output is plain text. List/search commands render tables with a final `Count: N` line. For list and search subcommands, the ID column uses `:db/id` (not UUID). If `:db/ident` exists, an `IDENT` column is included. `list property` includes a dedicated `TYPE` column. Search table columns are `ID` and `TITLE`. Block titles can include multiple lines; multi-line rows align additional lines under the `TITLE` column. Times such as list `UPDATED-AT`/`CREATED-AT` and `graph info` `Created at` are shown in human-friendly relative form. Errors include error codes and may include a `Hint:` line. Use `--output json|edn` for structured output.
+- Human output is plain text. List/search commands render tables with a final `Count: N` line. For list and search subcommands, the ID column uses `:db/id` (not UUID). If `:db/ident` exists, an `IDENT` column is included. `list property` includes dedicated `TYPE` and `CARDINALITY` columns. Search table columns are `ID` and `TITLE`. Block titles can include multiple lines; multi-line rows align additional lines under the `TITLE` column. Times such as list `UPDATED-AT`/`CREATED-AT` and `graph info` `Created at` are shown in human-friendly relative form. Errors include error codes and may include a `Hint:` line. Use `--output json|edn` for structured output.
 - `sync download` progress lines are streamed to stdout only when progress is enabled. In `json`/`edn` mode, progress is disabled by default unless `--progress true` is provided.
-- For `list property`, `TYPE` is returned in default output (without `--expand`) for human and structured (`json`/`edn`) formats.
+- For `list property`, `TYPE` and cardinality are returned in default output (without `--expand`) for human and structured (`json`/`edn`) formats.
+  - Human output renders cardinality as `one` or `many` in the `CARDINALITY` column.
+  - JSON uses `cardinality` with values `"one"` or `"many"`.
+  - EDN keeps `:db/cardinality` (for example `:db.cardinality/one` or `:db.cardinality/many`).
+  - When a property omits schema cardinality, CLI treats it as default `one`.
 - `upsert page` and `upsert block` return entity ids in `data.result` for JSON/EDN output, and include ids in human output.
   - Human example:
     ```text

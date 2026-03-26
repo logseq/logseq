@@ -48,7 +48,8 @@
 (deftest test-list-non-expanded-contract
   (let [db (create-test-db)
         required-keys #{:db/id :block/title :block/created-at :block/updated-at}
-        required-property-keys #{:db/id :block/title :block/created-at :block/updated-at :logseq.property/type}
+        required-property-keys #{:db/id :block/title :block/created-at :block/updated-at
+                                 :logseq.property/type :db/cardinality}
         visible-page (some #(when (= "Visible Page" (:block/title %)) %)
                            (cli-db-worker/list-pages db {}))
         custom-tag-entity (first-user-tag-entity db)
@@ -67,9 +68,18 @@
       (is (some? custom-tag))
       (is (set/subset? required-keys (set (keys custom-tag)))))
 
-    (testing "list-properties non-expanded includes stable id and timestamps"
+    (testing "list-properties non-expanded includes stable id, timestamps, and cardinality"
       (is (some? custom-property))
       (is (set/subset? required-property-keys (set (keys custom-property)))))))
+
+(deftest test-list-properties-default-cardinality-contract
+  (let [db (create-test-db)
+        custom-property-title (:block/title (first-user-property-entity db))
+        custom-property (some #(when (= custom-property-title (:block/title %)) %)
+                              (cli-db-worker/list-properties db {}))]
+    (testing "property without explicit cardinality defaults to :db.cardinality/one"
+      (is (some? custom-property))
+      (is (= :db.cardinality/one (:db/cardinality custom-property))))))
 
 (deftest test-list-tags-and-properties-include-built-in-default
   (let [db (create-test-db)
