@@ -4,9 +4,6 @@
             [frontend.worker.state :as worker-state]
             [lambdaisland.glogi :as log]
             [logseq.common.defkeywords :refer [defkeywords]]
-            [logseq.db :as ldb]
-            [logseq.outliner.recycle :as outliner-recycle]
-            [logseq.undo-redo-validate :as undo-validate]
             [malli.core :as m]
             [malli.util :as mu]))
 
@@ -43,9 +40,6 @@
     [::db-transact
      [:cat :keyword
       [:map
-       [:tx-data [:sequential [:fn
-                               {:error/message "should be a Datom"}
-                               d/datom?]]]
        [:tx-meta [:map {:closed false}
                   [:outliner-op :keyword]]]
        [:added-ids [:set :int]]
@@ -110,66 +104,19 @@
   (assert (undo-op-validator op) {:op op})
   (swap! *redo-ops update repo conj-op op))
 
-(comment
-  ;; This version checks updated datoms by other clients, allows undo and redo back
-  ;; to the current state.
-  ;; The downside is that it'll undo the changes made by others.
-  (defn- pop-undo-op
-    [repo conn]
-    (let [undo-stack (get @*undo-ops repo)
-          [op undo-stack*] (pop-stack undo-stack)]
-      (swap! *undo-ops assoc repo undo-stack*)
-      (mapv (fn [item]
-              (if (= (first item) ::db-transact)
-                (let [m (second item)
-                      tx-data' (mapv
-                                (fn [{:keys [e a v tx add] :as datom}]
-                                  (let [one-value? (= :db.cardinality/one (:db/cardinality (d/entity @conn a)))
-                                        new-value (when (and one-value? add) (get (d/entity @conn e) a))
-                                        value-not-matched? (and (some? new-value) (not= v new-value))]
-                                    (if value-not-matched?
-                                    ;; another client might updated `new-value`, the datom below will be used
-                                    ;; to restore the the current state when redo this undo.
-                                      (d/datom e a new-value tx add)
-                                      datom)))
-                                (:tx-data m))]
-                  [::db-transact (assoc m :tx-data tx-data')])
-                item))
-            op))))
-
 (defn- pop-undo-op
   [repo]
   (let [undo-stack (get @*undo-ops repo)
         [op undo-stack*] (pop-stack undo-stack)]
     (swap! *undo-ops assoc repo undo-stack*)
-    (let [op' (mapv (fn [item]
-                      (if (= (first item) ::db-transact)
-                        (let [m (second item)
-                              tx-data' (vec (:tx-data m))]
-                          (if (seq tx-data')
-                            [::db-transact (assoc m :tx-data tx-data')]
-                            ::db-transact-no-tx-data))
-                        item))
-                    op)]
-      (when-not (some #{::db-transact-no-tx-data} op')
-        op'))))
+    op))
 
 (defn- pop-redo-op
   [repo]
   (let [redo-stack (get @*redo-ops repo)
         [op redo-stack*] (pop-stack redo-stack)]
     (swap! *redo-ops assoc repo redo-stack*)
-    (let [op' (mapv (fn [item]
-                      (if (= (first item) ::db-transact)
-                        (let [m (second item)
-                              tx-data' (vec (:tx-data m))]
-                          (if (seq tx-data')
-                            [::db-transact (assoc m :tx-data tx-data')]
-                            ::db-transact-no-tx-data))
-                        item))
-                    op)]
-      (when-not (some #{::db-transact-no-tx-data} op')
-        op'))))
+    op))
 
 (defn- empty-undo-stack?
   [repo]
@@ -191,103 +138,6 @@
        :undo? undo?
        :redo? (not undo?)
        :db-sync/source-tx-id source-tx-id)))
-
-(defn- reverse-datoms
-  [conn datoms schema added-ids retracted-ids undo? redo?]
-  (keep
-   (fn [[e a v _tx add?]]
-     (let [ref? (= :db.type/ref (get-in schema [a :db/valueType]))
-           op (if (or (and redo? add?) (and undo? (not add?)))
-                :db/add
-                :db/retract)]
-       (when (or (not ref?)
-                 (d/entity @conn v)
-                 (and (retracted-ids v) undo?)
-                 (and (added-ids v) redo?)) ; entity exists
-         [op e a v])))
-   datoms))
-
-(defn- datom-attr
-  [datom]
-  (or (nth datom 1 nil)
-      (:a datom)))
-
-(defn- datom-value
-  [datom]
-  (or (nth datom 2 nil)
-      (:v datom)))
-
-(defn- datom-added?
-  [datom]
-  (let [value (nth datom 4 nil)]
-    (if (some? value)
-      value
-      (:added datom))))
-
-(defn- reversed-move-target-ref
-  [datoms attr undo?]
-  (some (fn [datom]
-          (let [a (datom-attr datom)
-                v (datom-value datom)
-                added (datom-added? datom)]
-            (when (and (= a attr)
-                       (if undo? (not added) added))
-              v)))
-        datoms))
-
-(defn- reversed-structural-target-conflicted?
-  [conn e->datoms undo?]
-  (some (fn [[_e datoms]]
-          (let [target-parent (reversed-move-target-ref datoms :block/parent undo?)
-                target-page (reversed-move-target-ref datoms :block/page undo?)
-                parent-ent (when (int? target-parent) (d/entity @conn target-parent))
-                page-ent (when (int? target-page) (d/entity @conn target-page))]
-            (or (and target-parent
-                     (or (nil? parent-ent)
-                         (ldb/recycled? parent-ent)))
-                (and target-page
-                     (or (nil? page-ent)
-                         (ldb/recycled? page-ent))))))
-        e->datoms))
-
-(defn get-reversed-datoms
-  [conn undo? {:keys [tx-data added-ids retracted-ids]} tx-meta]
-  (let [recycle-restore-tx (when (and undo?
-                                      (= :delete-blocks (:outliner-op tx-meta)))
-                             (->> tx-data
-                                  (keep (fn [datom]
-                                          (let [e (or (nth datom 0 nil)
-                                                      (:e datom))
-                                                a (datom-attr datom)
-                                                added (datom-added? datom)]
-                                            (when (and added
-                                                       (= :logseq.property/deleted-at a))
-                                              (d/entity @conn e)))))
-                                  (mapcat #(outliner-recycle/restore-tx-data @conn %))
-                                  seq))
-        redo? (not undo?)
-        e->datoms (->> (if redo? tx-data (reverse tx-data))
-                       (group-by :e))
-        schema (:schema @conn)
-        structural-target-conflicted? (and undo?
-                                           (reversed-structural-target-conflicted? conn e->datoms undo?))
-        reversed-tx-data (if structural-target-conflicted?
-                           nil
-                           (or (some-> recycle-restore-tx reverse seq)
-                               (->> (mapcat
-                                     (fn [[e datoms]]
-                                       (cond
-                                         (and undo? (contains? added-ids e))
-                                         [[:db/retractEntity e]]
-
-                                         (and redo? (contains? retracted-ids e))
-                                         [[:db/retractEntity e]]
-
-                                         :else
-                                         (reverse-datoms conn datoms schema added-ids retracted-ids undo? redo?)))
-                                     e->datoms)
-                                    (remove nil?))))]
-    reversed-tx-data))
 
 (defn- rebind-op-db-sync-tx-id
   [op history-tx-id]
@@ -338,35 +188,12 @@
      :block-content block-content}))
 
 (defn- skip-op-and-recur
-  [repo undo? allow-worker? log-tag data]
+  [repo undo? log-tag data]
   (log/warn log-tag (assoc data :undo? undo?))
-  (undo-redo-aux repo undo? allow-worker?))
-
-(defn- run-local-path
-  [repo conn undo? allow-worker? op {:keys [tx-meta] :as data} tx-meta']
-  (let [reversed-tx-data (cond-> (get-reversed-datoms conn undo? data tx-meta)
-                           undo?
-                           reverse)]
-    (cond
-      (empty? reversed-tx-data)
-      (skip-op-and-recur repo undo? allow-worker? ::undo-redo-skip-conflicted-op
-                         {:outliner-op (:outliner-op tx-meta)})
-
-      (not (undo-validate/valid-undo-redo-tx? conn reversed-tx-data))
-      (skip-op-and-recur repo undo? allow-worker? ::undo-redo-skip-invalid-op
-                         {:outliner-op (:outliner-op tx-meta)})
-
-      :else
-      (try
-        (ldb/transact! conn reversed-tx-data tx-meta')
-        (undo-redo-result repo conn undo? op op)
-        (catch :default e
-          (log/error ::undo-redo-failed e)
-          (clear-history! repo)
-          (empty-stack-result undo?))))))
+  (undo-redo-aux repo undo?))
 
 (defn- run-worker-path
-  [repo conn undo? allow-worker? op {:keys [tx-meta] :as data} tx-meta' tx-id]
+  [repo conn undo? op {:keys [tx-meta]} tx-meta' tx-id]
   (if-let [apply-action @*apply-history-action!]
     (try
       (let [worker-result (apply-action repo tx-id undo? tx-meta')]
@@ -377,17 +204,8 @@
                               op
                               (rebind-op-db-sync-tx-id op (:history-tx-id worker-result))))
 
-          (= :missing-history-action (:reason worker-result))
-          (do
-            (log/warn ::undo-redo-fallback-local-path
-                      {:undo? undo?
-                       :outliner-op (:outliner-op tx-meta)
-                       :tx-id tx-id
-                       :result worker-result})
-            (run-local-path repo conn undo? allow-worker? op data tx-meta'))
-
           (skippable-worker-result? undo? worker-result)
-          (skip-op-and-recur repo undo? false ::undo-redo-skip-conflicted-op
+          (skip-op-and-recur repo undo? ::undo-redo-skip-conflicted-op
                              {:outliner-op (:outliner-op tx-meta)
                               :tx-id tx-id
                               :result worker-result})
@@ -403,7 +221,7 @@
             (empty-stack-result undo?))))
       (catch :default e
         (if (skippable-worker-error? e)
-          (skip-op-and-recur repo undo? false ::undo-redo-skip-conflicted-op
+          (skip-op-and-recur repo undo? ::undo-redo-skip-conflicted-op
                              {:outliner-op (:outliner-op tx-meta)
                               :tx-id tx-id
                               :error e})
@@ -412,33 +230,40 @@
             (clear-history! repo)
             (throw e)
             (empty-stack-result undo?)))))
-    (run-local-path repo conn undo? allow-worker? op data tx-meta')))
+    (do
+      (log/error ::undo-redo-worker-action-unavailable
+                 {:undo? undo?
+                  :repo repo
+                  :tx-id tx-id
+                  :tx-meta tx-meta'
+                  :reason :missing-apply-history-action})
+      (clear-history! repo)
+      (empty-stack-result undo?))))
 
 (defn- process-db-op
-  [repo conn undo? allow-worker? op]
-  (let [{:keys [tx-data] :as data} (some #(when (= ::db-transact (first %))
-                                            (second %))
-                                         op)]
-    (when (seq tx-data)
-      (let [tx-meta' (undo-redo-action-meta data undo?)
-            tx-id (:db-sync/tx-id data)]
-        (if (and tx-id allow-worker?)
-          (run-worker-path repo conn undo? allow-worker? op data tx-meta' tx-id)
-          (run-local-path repo conn undo? allow-worker? op data tx-meta'))))))
+  [repo conn undo? op]
+  (when-let [data (some #(when (= ::db-transact (first %))
+                           (second %))
+                        op)]
+    (let [tx-id (:db-sync/tx-id data)
+          forward-outliner-ops (:db-sync/forward-outliner-ops data)
+          inverse-outliner-ops (:db-sync/inverse-outliner-ops data)
+          tx-meta' (-> (undo-redo-action-meta data undo?)
+                       (assoc :forward-outliner-ops forward-outliner-ops
+                              :inverse-outliner-ops inverse-outliner-ops))]
+      (run-worker-path repo conn undo? op data tx-meta' tx-id))))
 
 (defn- undo-redo-aux
-  ([repo undo?]
-   (undo-redo-aux repo undo? true))
-  ([repo undo? allow-worker?]
-   (if-let [op (not-empty ((if undo? pop-undo-op pop-redo-op) repo))]
-     (if (= ::ui-state (ffirst op))
-       (do
-         (push-opposite-op! repo undo? op)
-         {:undo? undo?
-          :ui-state-str (second (first op))})
-       (process-db-op repo (worker-state/get-datascript-conn repo) undo? allow-worker? op))
-     (when ((if undo? empty-undo-stack? empty-redo-stack?) repo)
-       (empty-stack-result undo?)))))
+  [repo undo?]
+  (if-let [op (not-empty ((if undo? pop-undo-op pop-redo-op) repo))]
+    (if (= ::ui-state (ffirst op))
+      (do
+        (push-opposite-op! repo undo? op)
+        {:undo? undo?
+         :ui-state-str (second (first op))})
+      (process-db-op repo (worker-state/get-datascript-conn repo) undo? op))
+    (when ((if undo? empty-undo-stack? empty-redo-stack?) repo)
+      (empty-stack-result undo?))))
 
 (defn undo
   [repo]
@@ -478,12 +303,15 @@
    {:keys [apply-history-action!]}]
   (when (nil? @*apply-history-action!)
     (reset! *apply-history-action! apply-history-action!))
-  (let [{:keys [outliner-op local-tx?]} tx-meta]
+  (let [{:keys [outliner-op local-tx?]} tx-meta
+        {:db-sync/keys [forward-outliner-ops inverse-outliner-ops]} (pending-history-action-ops repo tx-id)]
     (when (and
            (true? local-tx?)
            outliner-op
            (not (false? (:gen-undo-ops? tx-meta)))
-           (not (:create-today-journal? tx-meta)))
+           (not (:create-today-journal? tx-meta))
+           (seq forward-outliner-ops)
+           (seq inverse-outliner-ops))
       (let [all-ids (distinct (map :e tx-data))
             retracted-ids (set
                            (filter
@@ -493,21 +321,15 @@
                        (filter
                         (fn [id] (and (nil? (d/entity db-before id)) (d/entity db-after id)))
                         all-ids))
-            tx-data' (vec tx-data)
             editor-info (or (:undo-redo/editor-info tx-meta)
                             (take-pending-editor-info! repo))
-            {:db-sync/keys [forward-outliner-ops inverse-outliner-ops]}
-            (pending-history-action-ops repo tx-id)
+
             data (cond-> {:db-sync/tx-id tx-id
                           :tx-meta (dissoc tx-meta :outliner-ops)
                           :added-ids added-ids
                           :retracted-ids retracted-ids
-                          :tx-data tx-data'}
-                   (seq forward-outliner-ops)
-                   (assoc :db-sync/forward-outliner-ops forward-outliner-ops)
-
-                   (seq inverse-outliner-ops)
-                   (assoc :db-sync/inverse-outliner-ops inverse-outliner-ops))
+                          :db-sync/forward-outliner-ops forward-outliner-ops
+                          :db-sync/inverse-outliner-ops inverse-outliner-ops})
             op (->> [(when editor-info [::record-editor-info editor-info])
                      [::db-transact data]]
                     (remove nil?)

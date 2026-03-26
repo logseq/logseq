@@ -126,6 +126,7 @@
   (let [worker-db-prev @worker-state/*datascript-conns
         ops-prev @worker-state/*client-ops-conns
         db-prev @db-conn-state/conns
+        apply-history-action-prev @undo-redo/*apply-history-action!
         listeners (atom [])]
     (reset! worker-state/*datascript-conns (into {} (map (fn [[repo {:keys [conn]}]]
                                                            [repo conn])
@@ -138,6 +139,7 @@
                                                          repo->conns)))
     (doseq [[repo _] repo->conns]
       (undo-redo/clear-history! repo))
+    (reset! undo-redo/*apply-history-action! sync-apply/apply-history-action!)
     (doseq [[repo {:keys [conn ops-conn]}] repo->conns]
       (when ops-conn
         (let [key (keyword "db-sync-sim" repo)]
@@ -163,7 +165,8 @@
         (doseq [[repo _] repo->conns]
           (undo-redo/clear-history! repo))
         (reset! undo-redo/*undo-ops {})
-        (reset! undo-redo/*redo-ops {})))))
+        (reset! undo-redo/*redo-ops {})
+        (reset! undo-redo/*apply-history-action! apply-history-action-prev)))))
 
 (defn- make-client [repo]
   {:repo repo
@@ -2327,13 +2330,12 @@
               (finally
                 (restore)))))))))
 
-(deftest ^:long two-clients-online-add-vs-delete-with-undo-redo-random-sim-test
+(deftest ^:long ^:large-vars/cleanup-todo two-clients-online-add-vs-delete-with-undo-redo-random-sim-test
   (testing "both online: client A adds blocks while client B deletes with random undo/redo"
     (let [seed (or (env-seed) default-seed)
           rng (make-rng seed)
           gen-uuid #(rng-uuid rng)
-          ;; scenario-runs (min op-runs 150)
-          scenario-runs 1000
+          scenario-runs op-runs
           base-uuid (gen-uuid)
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
