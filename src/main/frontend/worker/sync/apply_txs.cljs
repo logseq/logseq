@@ -1000,6 +1000,29 @@
                                                         cycle-tx-report])
                                       tx-meta)))
 
+(defn- retract-skeleton-entities!
+  "After batch processing, some entities may end up with only partial attributes
+   (e.g., only created-by-ref) that don't form a valid entity type. Retract them
+   from the temp conn so they won't pollute the main conn with unclassifiable data."
+  [temp-conn *batch-tx-data]
+  (let [db @temp-conn
+        changed-eids (->> @*batch-tx-data
+                          (keep (fn [d] (when (:added d) (:e d))))
+                          distinct)
+        skeleton-eids (filterv
+                       (fn [eid]
+                         (when-let [entity (d/entity db eid)]
+                           (and (not (:block/uuid entity))
+                                (not (:db/ident entity))
+                                (not (:logseq.property.reaction/target entity)))))
+                       changed-eids)]
+    (when (seq skeleton-eids)
+      (log/info :db-sync/retract-skeleton-entities {:eids skeleton-eids})
+      (ldb/transact! temp-conn
+                     (mapv (fn [eid] [:db/retractEntity eid]) skeleton-eids)
+                     {:op :retract-skeleton-entities
+                      :skip-validate-db? true}))))
+
 (defn- apply-remote-tx-with-local-changes!
   [{:keys [conn local-txs remote-txs temp-tx-meta *remote-tx-report *reversed-tx-report *rebased-pending-txs *temp-after-db]}]
   (let [batch-tx-meta {:rtc-tx? true
@@ -1007,7 +1030,7 @@
     (ldb/transact-with-temp-conn!
      conn
      batch-tx-meta
-     (fn [temp-conn _*batch-tx-data]
+     (fn [temp-conn *batch-tx-data]
        (let [tx-meta temp-tx-meta
              reversed-tx-reports (reverse-local-txs! temp-conn local-txs tx-meta)
              reversed-tx-report (combine-tx-reports reversed-tx-reports)
@@ -1024,9 +1047,10 @@
                                         rebase-state
                                         {:temp-conn temp-conn
                                          :tx-meta tx-meta
-                                         :*temp-after-db *temp-after-db}))))
+                                         :*temp-after-db *temp-after-db}))
+         (retract-skeleton-entities! temp-conn *batch-tx-data)))
      {:listen-db (fn [{:keys [tx-meta tx-data db-before db-after]}]
-                   (when-not (contains? #{:reverse :transact-remote-tx-data} (:op tx-meta))
+                   (when-not (contains? #{:reverse :transact-remote-tx-data :retract-skeleton-entities} (:op tx-meta))
                      (swap! *rebased-pending-txs conj {:tx-data tx-data
                                                        :tx-meta tx-meta
                                                        :db-before db-before
@@ -1038,8 +1062,9 @@
    conn
    {:rtc-tx? true
     :without-local-changes? true}
-   (fn [temp-conn]
+   (fn [temp-conn *batch-tx-data]
      (let [remote-results (transact-remote-txs! temp-conn remote-txs temp-tx-meta)]
+       (retract-skeleton-entities! temp-conn *batch-tx-data)
        (combine-tx-reports (map :report remote-results))))))
 
 (defn apply-remote-txs!
