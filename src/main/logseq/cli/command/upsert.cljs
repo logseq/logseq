@@ -195,9 +195,13 @@
     (let [id (:id options)
           page (some-> (:page options) string/trim)
           update-tags-result (add-command/parse-tags-option (:update-tags options))
-          update-properties-result (add-command/parse-properties-option (:update-properties options))
+          update-properties-result (add-command/parse-properties-option
+                                    (:update-properties options)
+                                    {:allow-non-built-in? true})
           remove-tags-result (add-command/parse-tags-vector-option (:remove-tags options))
-          remove-properties-result (add-command/parse-properties-vector-option (:remove-properties options))
+          remove-properties-result (add-command/parse-properties-vector-option
+                                    (:remove-properties options)
+                                    {:allow-non-built-in? true})
           invalid-message (invalid-options? :upsert-page options)]
       (cond
         (seq invalid-message)
@@ -541,9 +545,11 @@
               block-ids [page-id]
               update-tags (add-command/resolve-tags cfg (:repo action) (:update-tags action))
               remove-tags (add-command/resolve-tags cfg (:repo action) (:remove-tags action))
-              update-properties (add-command/resolve-properties cfg (:repo action) (:update-properties action))
+              update-properties (add-command/resolve-properties cfg (:repo action) (:update-properties action)
+                                                               {:allow-non-built-in? false})
               remove-properties (add-command/resolve-property-identifiers cfg (:repo action)
-                                                                          (:remove-properties action))
+                                                                          (:remove-properties action)
+                                                                          {:allow-non-built-in? false})
               _ (ensure-property-identifiers-exist! cfg (:repo action) (keys (or update-properties {})))
               _ (ensure-property-identifiers-exist! cfg (:repo action) remove-properties)
               update-tag-ids (->> (or update-tags [])
