@@ -19,8 +19,10 @@
            get-pending-local-tx-count
            get-unpushed-asset-ops-count
            get-local-tx
+           get-local-checksum
            get-graph-uuid
-           latest-remote-tx]}
+           latest-remote-tx
+           latest-remote-checksum]}
    repo]
   (when (get-datascript-conn repo)
     (let [pending-local (if get-pending-local-tx-count
@@ -30,6 +32,9 @@
           pending-asset (get-unpushed-asset-ops-count repo)
           local-tx (get-local-tx repo)
           remote-tx (get latest-remote-tx repo)
+          local-checksum (when get-local-checksum
+                           (get-local-checksum repo))
+          remote-checksum (get latest-remote-checksum repo)
           pending-server (when (and (number? local-tx) (number? remote-tx))
                            (max 0 (- remote-tx local-tx)))
           graph-uuid (get-graph-uuid repo)]
@@ -38,6 +43,8 @@
        :pending-server pending-server
        :local-tx local-tx
        :remote-tx remote-tx
+       :local-checksum local-checksum
+       :remote-checksum remote-checksum
        :graph-uuid graph-uuid})))
 
 (defn normalize-online-users
@@ -57,7 +64,8 @@
   (let [repo (:repo client)
         ws-state @(:ws-state client)
         online-users @(:online-users client)
-        {:keys [pending-local pending-asset pending-server local-tx remote-tx graph-uuid]}
+        {:keys [pending-local pending-asset pending-server
+                local-tx remote-tx local-checksum remote-checksum graph-uuid]}
         (sync-counts-f repo)]
     {:rtc-state {:ws-state ws-state}
      :rtc-lock (= :open ws-state)
@@ -67,6 +75,8 @@
      :pending-server-ops-count (or pending-server 0)
      :local-tx local-tx
      :remote-tx remote-tx
+     :local-checksum local-checksum
+     :remote-checksum remote-checksum
      :graph-uuid graph-uuid}))
 
 (defn set-ws-state!

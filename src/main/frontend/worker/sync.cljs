@@ -44,8 +44,10 @@
     :get-pending-local-tx-count client-op/get-pending-local-tx-count
     :get-unpushed-asset-ops-count client-op/get-unpushed-asset-ops-count
     :get-local-tx client-op/get-local-tx
+    :get-local-checksum client-op/get-local-checksum
     :get-graph-uuid client-op/get-graph-uuid
-    :latest-remote-tx @*repo->latest-remote-tx}
+    :latest-remote-tx @*repo->latest-remote-tx
+    :latest-remote-checksum @*repo->latest-remote-checksum}
    repo))
 
 (defn update-local-sync-checksum!
