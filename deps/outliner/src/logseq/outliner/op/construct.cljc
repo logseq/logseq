@@ -593,11 +593,11 @@
 
 (defn- block-restore-target
   [ent]
-  (if-let [left-sibling (ldb/get-left-sibling ent)]
-    [(:db/id left-sibling) true]
-    (or
-     (some-> ent :block/parent :db/id (#(vector % false)))
-     (some-> ent :block/page :db/id (#(vector % false))))))
+  (if-let [left-sibling-id (:db/id (ldb/get-left-sibling ent))]
+    [left-sibling-id true]
+    (when-let [parent-id (or (:db/id (:block/parent ent))
+                             (:db/id (:block/page ent)))]
+      [parent-id false])))
 
 (defn- to-insert-op
   [db-before {:keys [blocks target-id sibling?]}]
@@ -609,18 +609,18 @@
 
 (defn- delete-root->restore-plan
   [db-before root]
-  (let [root-uuid (:block/uuid root)
+  (let [root-id (:db/id root)
+        root-uuid (:block/uuid root)
         blocks (when root-uuid
                  (->> (ldb/get-block-and-children db-before root-uuid)
                       (keep #(build-insert-block-payload db-before %))
                       vec))
         [target-id sibling?] (block-restore-target root)]
     (when (and target-id
-               (= target-id (d/entity db-before [:block/uuid root-uuid])))
+               (= target-id root-id))
       (throw (ex-info "delete-root->restore-plan self target"
                       {:root root})))
-    (when (and (seq blocks)
-               (some? target-id))
+    (when (and (seq blocks) (some? target-id))
       {:blocks blocks
        :target-id target-id
        :sibling? sibling?})))

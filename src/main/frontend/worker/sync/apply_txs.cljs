@@ -88,6 +88,7 @@
 
 (defn reverse-tx-data [_db-before db-after tx-data]
   (->> tx-data
+       reverse
        (keep (fn [[e a v t added]]
                (when (and (some? a) (some? v) (some? t) (boolean? added))
                  [(if added :db/retract :db/add) e a v t])))
