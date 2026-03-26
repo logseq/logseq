@@ -195,6 +195,8 @@
       (is (string/includes? output "_logseq_queries"))
       (is (string/includes? output "_logseq_json_names"))
       (is (string/includes? output "_logseq_current_graph")))
+    (testing "page completion reads namespaced block/title key"
+      (is (string/includes? output "_logseq_json_names data items block/title")))
     (testing "output contains per-command functions"
       (is (string/includes? output "_logseq_graph_export()"))
       (is (string/includes? output "_logseq_show()")))
@@ -284,6 +286,8 @@
       (is (string/includes? output "_logseq_compadd_lines"))
       (is (string/includes? output "_logseq_json_names_bash"))
       (is (string/includes? output "_logseq_current_graph_bash")))
+    (testing "bash page completion reads namespaced block/title key"
+      (is (string/includes? output "_logseq_json_names_bash data items block/title")))
     (testing "output contains _logseq_opts_for"
       (is (string/includes? output "_logseq_opts_for()")))
     (testing "output contains _logseq_is_value_opt"
