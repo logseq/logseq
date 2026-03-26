@@ -1147,6 +1147,37 @@
           (is (= before-title
                  (:block/title (d/entity @conn [:block/uuid child-uuid])))))))))
 
+(deftest apply-history-action-redo-invalid-insert-conflict-skips-fail-fast-test
+  (testing "redo conflict on stale insert target should throw skippable error without fail-fast logger"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          tx-id (random-uuid)
+          missing-parent-uuid (random-uuid)
+          inserted-uuid (random-uuid)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (ldb/transact! client-ops-conn
+                         [{:db-sync/tx-id tx-id
+                           :db-sync/pending? true
+                           :db-sync/created-at (.now js/Date)
+                           :db-sync/outliner-op :insert-blocks
+                           :db-sync/forward-outliner-ops [[:insert-blocks [[{:block/uuid inserted-uuid
+                                                                             :block/title ""
+                                                                             :block/parent [:block/uuid missing-parent-uuid]}
+                                                                            [:block/uuid missing-parent-uuid]
+                                                                            {:sibling? false
+                                                                             :keep-uuid? true}]]]]
+                           :db-sync/normalized-tx-data []
+                           :db-sync/reversed-tx-data []}])
+          (with-redefs [sync-apply/fail-fast (fn [_tag data]
+                                               (throw (ex-info "fail-fast-called" data)))]
+            (try
+              (#'sync-apply/apply-history-action! test-repo tx-id false {})
+              (is false "expected redo conflict to throw")
+              (catch :default e
+                (is (not= "fail-fast-called" (ex-message e)))
+                (is (= :invalid-history-action-ops
+                       (:reason (ex-data e))))))))))))
+
 (deftest apply-history-action-save-block-ignores-stale-db-id-when-uuid-exists-test
   (testing "semantic save-block replay should resolve by uuid and ignore stale db/id"
     (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)

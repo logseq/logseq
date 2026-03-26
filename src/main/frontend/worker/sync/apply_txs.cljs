@@ -395,38 +395,22 @@
                :source :semantic-ops
                :history-tx-id history-tx-id}
               (catch :default error
-                (log/error ::db-transact-failed error)
                 (if semantic-forward?
                   (if undo?
-                    (do
-                      (log/warn :db-sync/skip-invalid-history-action-semantic-ops
-                                {:reason :invalid-history-action-ops
-                                 :repo repo
-                                 :tx-id tx-id
-                                 :undo? undo?
-                                 :ops ops
-                                 :error error})
-                      {:applied? false
-                       :reason :invalid-history-action-ops
-                       :error error})
-                    (fail-fast :db-sync/invalid-history-action-semantic-ops
-                               {:reason :invalid-history-action-ops
-                                :repo repo
-                                :tx-id tx-id
-                                :undo? undo?
-                                :ops ops
-                                :error error}))
-                  (do
-                    (log/debug :db-sync/drop-history-action-semantic-ops
-                               {:reason :invalid-history-action-ops
-                                :repo repo
-                                :tx-id tx-id
-                                :undo? undo?
-                                :ops ops
-                                :error error})
                     {:applied? false
                      :reason :invalid-history-action-ops
-                     :error error}))))
+                     :error error}
+                    (throw (ex-info (name :db-sync/invalid-history-action-semantic-ops)
+                                    {:reason :invalid-history-action-ops
+                                     :repo repo
+                                     :tx-id tx-id
+                                     :undo? undo?
+                                     :ops ops
+                                     :error error
+                                     :action action})))
+                  {:applied? false
+                   :reason :invalid-history-action-ops
+                   :error error})))
 
             :else
             {:applied? false :reason :unsupported-history-action
