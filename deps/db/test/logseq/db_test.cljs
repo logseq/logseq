@@ -107,7 +107,7 @@
       (ldb/batch-transact!
        conn
        {}
-       (fn [temp-conn _*batch-tx-data]
+       (fn [temp-conn]
          (ldb/transact! temp-conn [{:db/ident :logseq.class/Task
                                     :block/tags :logseq.class/Property}])
          (ldb/transact! temp-conn [[:db/retract :logseq.class/Task :block/tags :logseq.class/Property]]))))))

@@ -387,7 +387,7 @@
               (ldb/batch-transact!
                conn
                tx-meta'
-               (fn [row-conn _*batch-tx-data]
+               (fn [row-conn]
                  (precreate-missing-save-blocks! row-conn ops)
                  (doseq [op ops]
                    (replay-canonical-outliner-op! row-conn op))))
