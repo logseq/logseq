@@ -62,6 +62,9 @@
            (-> (p/with-redefs [common/read-json (fn [_]
                                                   (p/resolved #js {"graph-name" "Graph 1"
                                                                    "schema-version" "65"}))
+                               index/<user-rsa-key-pair (fn [_db _user-id]
+                                                          (p/resolved {:public-key "pk"
+                                                                       :encrypted-private-key "enc"}))
                                common/<d1-all (fn [& _]
                                                 (p/resolved #js {:results #js []}))
                                common/get-sql-rows (fn [result]
@@ -84,6 +87,83 @@
                    (is (string/includes? (:sql graph-insert) "graph_ready_for_use"))
                    (is (= 1 (nth (:args graph-insert) 5)))
                    (is (= true (:graph-ready-for-use? body)))))
+               (p/then (fn []
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest graphs-create-e2ee-requires-user-rsa-key-pair-test
+  (async done
+         (let [request (js/Request. "http://localhost/graphs" #js {:method "POST"})
+               url (js/URL. (.-url request))
+               index-upsert-calls* (atom 0)]
+           (-> (p/with-redefs [common/read-json (fn [_]
+                                                  (p/resolved #js {"graph-name" "Graph E2EE"
+                                                                   "schema-version" "65"
+                                                                   "graph-e2ee?" true}))
+                               index/<graph-name-exists? (fn [_db _graph-name _user-id]
+                                                           (p/resolved false))
+                               index/<user-rsa-key-pair (fn [_db _user-id]
+                                                          (p/resolved nil))
+                               index/<index-upsert! (fn
+                                                      ([_db _graph-id _graph-name _user-id _schema-version _graph-e2ee?]
+                                                       (swap! index-upsert-calls* inc)
+                                                       (p/resolved nil))
+                                                      ([_db _graph-id _graph-name _user-id _schema-version _graph-e2ee? _graph-ready-for-use?]
+                                                       (swap! index-upsert-calls* inc)
+                                                       (p/resolved nil)))
+                               index/<graph-member-upsert! (fn [& _]
+                                                             (p/resolved nil))]
+                 (p/let [resp (index-handler/handle {:db :db
+                                                     :env #js {}
+                                                     :request request
+                                                     :url url
+                                                     :claims #js {"sub" "user-1"}
+                                                     :route {:handler :graphs/create
+                                                             :path-params {}}})
+                         text (.text resp)
+                         body (js->clj (js/JSON.parse text) :keywordize-keys true)]
+                   (is (= 400 (.-status resp)))
+                   (is (= "missing user rsa key pair" (:error body)))
+                   (is (zero? @index-upsert-calls*))))
+               (p/then (fn []
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest graphs-create-non-e2ee-does-not-require-user-rsa-key-pair-test
+  (async done
+         (let [request (js/Request. "http://localhost/graphs" #js {:method "POST"})
+               url (js/URL. (.-url request))
+               index-upsert-calls* (atom 0)]
+           (-> (p/with-redefs [common/read-json (fn [_]
+                                                  (p/resolved #js {"graph-name" "Graph Plain"
+                                                                   "schema-version" "65"
+                                                                   "graph-e2ee?" false}))
+                               index/<graph-name-exists? (fn [_db _graph-name _user-id]
+                                                           (p/resolved false))
+                               index/<user-rsa-key-pair (fn [_db _user-id]
+                                                          (p/resolved nil))
+                               index/<index-upsert! (fn
+                                                      ([_db _graph-id _graph-name _user-id _schema-version _graph-e2ee?]
+                                                       (swap! index-upsert-calls* inc)
+                                                       (p/resolved nil))
+                                                      ([_db _graph-id _graph-name _user-id _schema-version _graph-e2ee? _graph-ready-for-use?]
+                                                       (swap! index-upsert-calls* inc)
+                                                       (p/resolved nil)))
+                               index/<graph-member-upsert! (fn [& _]
+                                                             (p/resolved nil))]
+                 (p/let [resp (index-handler/handle {:db :db
+                                                     :env #js {}
+                                                     :request request
+                                                     :url url
+                                                     :claims #js {"sub" "user-1"}
+                                                     :route {:handler :graphs/create
+                                                             :path-params {}}})]
+                   (is (= 200 (.-status resp)))
+                   (is (= 1 @index-upsert-calls*))))
                (p/then (fn []
                          (done)))
                (p/catch (fn [error]
