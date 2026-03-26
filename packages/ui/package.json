@@ -1,7 +1,7 @@
 {
   "name": "ui",
   "version": "0.0.1",
-  "packageManager": "pnpm@10.30.0",
+  "packageManager": "pnpm@10.33.0",
   "description": "UI components for Logseq.",
   "author": "Logseq",
   "scripts": {

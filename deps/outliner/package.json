@@ -1,7 +1,7 @@
 {
   "name": "@logseq/outliner",
   "version": "1.0.0",
-  "packageManager": "pnpm@10.30.0",
+  "packageManager": "pnpm@10.33.0",
   "private": true,
   "devDependencies": {
     "@logseq/nbb-logseq": "git+https://github.com/logseq/nbb-logseq.git#feat-db-v33"

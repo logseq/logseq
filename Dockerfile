@@ -19,7 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # install NodeJS & pnpm
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get update && apt-get install -y nodejs && \
-    corepack enable && corepack prepare pnpm@10.30.0 --activate
+    corepack enable && corepack prepare pnpm@10.33.0 --activate
 
 WORKDIR /data
 
