@@ -165,9 +165,9 @@
                             (let [matched-ref (first (filter (fn [r] (= (:block/name tag)
                                                               (:block/name r)))
                                                    (:block/refs m)))]
-                              (assoc tag
-                                     :block/uuid (:block/uuid matched-ref)
-                                     :db/ident (:db/ident matched-ref)))
+                              (cond-> (assoc tag :block/uuid (:block/uuid matched-ref))
+                                (:db/ident matched-ref)
+                                (assoc :db/ident (:db/ident matched-ref))))
                             tag))
                         tags)
 

@@ -483,7 +483,7 @@
                 (reset! db-sync/*repo->latest-remote-tx latest-prev)))))))))
 
 (deftest hello-checksum-mismatch-fails-fast-for-e2ee-test
-  (testing "e2ee graphs ignore checksum verification for now"
+  (testing "e2ee graphs also fail fast on checksum mismatch"
     (let [{:keys [conn client-ops-conn]} (setup-parent-child)
           latest-prev @db-sync/*repo->latest-remote-tx
           raw-message (js/JSON.stringify
@@ -501,9 +501,15 @@
           (with-redefs [sync-apply/flush-pending! (fn [& _] nil)
                         sync-assets/enqueue-asset-sync! (fn [& _] nil)
                         sync-crypt/graph-e2ee? (constantly true)]
-            (sync-handle-message/handle-message! test-repo client raw-message)
-            (is (= 0 (get @db-sync/*repo->latest-remote-tx test-repo)))
-            (reset! db-sync/*repo->latest-remote-tx latest-prev)))))))
+            (try
+              (sync-handle-message/handle-message! test-repo client raw-message)
+              (is false "expected checksum mismatch to fail-fast for e2ee graphs")
+              (catch :default error
+                (let [data (ex-data error)]
+                  (is (= :db-sync/checksum-mismatch (:type data)))
+                  (is (= "bad-checksum" (:remote-checksum data)))))
+              (finally
+                (reset! db-sync/*repo->latest-remote-tx latest-prev)))))))))
 
 (deftest hello-without-checksum-is-accepted-test
   (testing "legacy hello without checksum is accepted"
