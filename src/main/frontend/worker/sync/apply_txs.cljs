@@ -938,25 +938,22 @@
                                     (:tx-data rebase-tx-report)
                                     tx-meta))
 
-;; TODO: batch sync db to main thread
 (defn- apply-remote-tx-with-local-changes!
   [{:keys [repo conn local-txs remote-txs]}]
   (let [batch-tx-meta {:rtc-tx? true
                        :with-local-changes? true}]
-    (reverse-local-txs! conn local-txs {:rtc-tx? true})
+    (ldb/batch-transact!
+     conn
+     (assoc batch-tx-meta :reverse-and-apply-remote? true)
+     (fn [conn]
+       (reverse-local-txs! conn local-txs {:rtc-tx? true})
+       (transact-remote-txs! conn remote-txs batch-tx-meta)
 
-    (transact-remote-txs! conn remote-txs batch-tx-meta)
-    ;; (ldb/batch-transact!
-    ;;  conn
-    ;;  (assoc batch-tx-meta :apply-remote? true)
-    ;;  (fn [conn]
-    ;;    (transact-remote-txs! conn remote-txs batch-tx-meta)))
+       (remove-pending-txs! repo (map :tx-id local-txs))
 
-    (remove-pending-txs! repo (map :tx-id local-txs))
-
-    (let [rebase-tx-report (rebase-local-txs! repo conn local-txs
-                                              (assoc batch-tx-meta :rebase? true))]
-      (fix-tx! conn rebase-tx-report {:outliner-op :rebase-fix}))))
+       (let [rebase-tx-report (rebase-local-txs! repo conn local-txs
+                                                 (assoc batch-tx-meta :rebase? true))]
+         (fix-tx! conn rebase-tx-report {:outliner-op :rebase-fix}))))))
 
 (defn- apply-remote-tx-without-local-changes!
   [{:keys [conn remote-txs temp-tx-meta]}]
