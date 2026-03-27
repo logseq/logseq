@@ -6,7 +6,7 @@
 (defmacro ^:api with-batch-tx
   [conn opts & body]
   (let [conn-sym (gensym "conn__")]
-    `(logseq.db/batch-transact!
+    `(logseq.db/batch-transact-with-temp-conn!
       ~conn
       (dissoc ~opts :additional-tx :transact-opts :current-block)
       (fn [~conn-sym]

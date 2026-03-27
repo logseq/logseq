@@ -395,7 +395,7 @@
 
             (seq ops)
             (try
-              (ldb/batch-transact!
+              (ldb/batch-transact-with-temp-conn!
                conn
                tx-meta'
                (fn [row-conn]
@@ -891,7 +891,7 @@
   [repo conn local-tx]
   (let [outliner-ops (:forward-outliner-ops local-tx)]
     (try
-      (ldb/batch-transact!
+      (ldb/batch-transact-with-temp-conn!
        conn
        {:outliner-op :rebase}
        (fn [conn]
@@ -972,7 +972,7 @@
 
 (defn- apply-remote-tx-without-local-changes!
   [{:keys [conn remote-txs temp-tx-meta]}]
-  (ldb/batch-transact!
+  (ldb/batch-transact-with-temp-conn!
    conn
    {:rtc-tx? true
     :without-local-changes? true}
