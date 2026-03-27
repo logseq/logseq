@@ -29,6 +29,36 @@
                                         :json? true})]
       (is (= "ok" result)))))
 
+(deftest test-format-example-output
+  (let [base-result {:status :ok
+                     :command :example
+                     :data {:selector "upsert"
+                            :matched-commands ["upsert block" "upsert page"]
+                            :examples ["logseq upsert block --graph my-graph --content \"hello\""
+                                       "logseq upsert page --graph my-graph --page Home"]
+                            :message "Found 2 examples for selector upsert"}}
+        human-result (format/format-result base-result {:output-format nil})
+        json-result (format/format-result base-result {:output-format :json})
+        edn-result (format/format-result base-result {:output-format :edn})
+        parsed-json (js->clj (js/JSON.parse json-result) :keywordize-keys true)
+        parsed-edn (reader/read-string edn-result)]
+    (testing "human output includes selector, matched commands and examples"
+      (is (string/includes? human-result "Selector: upsert"))
+      (is (string/includes? human-result "Matched commands:"))
+      (is (string/includes? human-result "upsert block"))
+      (is (string/includes? human-result "Examples:"))
+      (is (string/includes? human-result "logseq upsert page --graph my-graph --page Home")))
+
+    (testing "json output keeps required structured fields"
+      (is (= "upsert" (get-in parsed-json [:data :selector])))
+      (is (= ["upsert block" "upsert page"] (get-in parsed-json [:data :matched-commands])))
+      (is (= "Found 2 examples for selector upsert" (get-in parsed-json [:data :message]))))
+
+    (testing "edn output keeps required structured fields"
+      (is (= "upsert" (get-in parsed-edn [:data :selector])))
+      (is (= ["upsert block" "upsert page"] (get-in parsed-edn [:data :matched-commands])))
+      (is (= "Found 2 examples for selector upsert" (get-in parsed-edn [:data :message]))))))
+
 (deftest test-format-error
   (testing "json error via output-format"
     (let [result (format/format-result {:status :error :error {:code :boom :message "nope"}}

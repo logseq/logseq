@@ -408,6 +408,25 @@
             (or doc "-")])
          (or queries []))))
 
+(defn- format-example
+  [{:keys [selector matched-commands examples message]}]
+  (let [selector (or selector "-")
+        matched-commands (vec (or matched-commands []))
+        examples (vec (or examples []))
+        matched-lines (if (seq matched-commands)
+                        (mapv #(str "  - " %) matched-commands)
+                        ["  - (none)"])
+        example-lines (if (seq examples)
+                        (mapv #(str "  - " %) examples)
+                        ["  - (none)"])]
+    (string/join "\n"
+                 (concat (when (seq message) [message ""])
+                         [(str "Selector: " selector)
+                          "Matched commands:"]
+                         matched-lines
+                         ["Examples:"]
+                         example-lines))))
+
 (declare kv-key->string
          graph-info-human-max-string-length
          graph-info-truncated-suffix)
@@ -724,6 +743,7 @@
         :graph-import (format-graph-import context data)
         :query (format-query-results (:result data))
         :query-list (format-query-list (:queries data))
+        :example (format-example data)
         :show (or (:message data) (pr-str data))
         :doctor (format-doctor (:status data) (:checks data))
         (if (and (map? data) (contains? data :message))
