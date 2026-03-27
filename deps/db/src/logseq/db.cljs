@@ -106,8 +106,7 @@
           db-based? (entity-plus/db-based-graph? db)]
       (if (and db-based?
                (not
-                (or (:batch-tx? @conn)
-                    (:rtc-download-graph? tx-meta)
+                (or (:rtc-download-graph? tx-meta)
                     (:reset-conn! tx-meta)
                     (:initial-db? tx-meta)
                     (:skip-validate-db? tx-meta false)
@@ -119,11 +118,15 @@
               [validate-result errors] (db-validate/validate-tx-report tx-report nil)]
           (cond
             validate-result
-            (when (and tx-report (seq (:tx-data tx-report)))
+            (when (and tx-report
+                       (seq (:tx-data tx-report)))
               ;; perf enhancement: avoid repeated call on `d/with`
               (reset! conn (:db-after tx-report))
-              (dc/store-after-transact! conn tx-report)
-              (dc/run-callbacks conn tx-report))
+              (if (:batch-tx? @conn)
+                (dc/run-callbacks conn tx-report)
+                (do
+                  (dc/store-after-transact! conn tx-report)
+                  (dc/run-callbacks conn tx-report))))
 
             :else
             (do
@@ -183,36 +186,32 @@
          (transact-sync repo-or-conn tx-data tx-meta))))))
 
 (defn batch-transact!
-  "Validate db and store once for a batch transaction, the conn can still load data from disk,
+  "Validate db and store once for a batch transaction, the `temp` conn can still load data from disk,
   however it can't write to the disk."
   [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
-  (let [conn-state-before @(:atom conn)
-        _ (swap! conn assoc :skip-store? true
-                 :batch-tx? true)
+  (let [temp-conn (d/conn-from-db @conn)
         *batch-tx-data (volatile! [])
-        *completed? (volatile! false)
-        listen-keyword (keyword "batch-tx" (str (random-uuid)))]
-    (d/listen! conn listen-keyword
+        *complete? (volatile! false)]
+    ;; can read from disk, write is disallowed
+    (swap! temp-conn assoc
+           :skip-store? true
+           :batch-tx? true)
+    (d/listen! temp-conn ::temp-conn-batch-tx
                (fn [{:keys [tx-data] :as tx-report}]
                  (vswap! *batch-tx-data into tx-data)
                  (when (fn? listen-db)
                    (listen-db tx-report))))
     (try
-      (batch-tx-fn conn)
-      (let [tx-data @*batch-tx-data]
-        (reset! (:atom conn) conn-state-before)
-        (let [result (when (seq tx-data)
-          ;; transact tx-data to `conn` and validate db
-                       (transact! conn tx-data tx-meta))]
-          (vreset! *completed? true)
-          result))
+      (batch-tx-fn temp-conn *batch-tx-data)
+      (vreset! *complete? true)
       (finally
-        ;; Roll back in-memory batch mutations when batch-transact exits via exception.
-        ;; This works for both top-level and nested batch transactions.
-        (when-not @*completed?
-          (reset! (:atom conn) conn-state-before))
-        (vreset! *batch-tx-data nil)
-        (d/unlisten! conn listen-keyword)))))
+        (let [tx-data @*batch-tx-data]
+          (d/unlisten! temp-conn ::temp-conn-batch-tx)
+          (reset! temp-conn nil)
+          (vreset! *batch-tx-data nil)
+          (when (and @*complete? (seq tx-data))
+            ;; transact tx-data to `conn` and validate db
+            (transact! conn tx-data tx-meta)))))))
 
 (def page? entity-util/page?)
 (def internal-page? entity-util/internal-page?)
