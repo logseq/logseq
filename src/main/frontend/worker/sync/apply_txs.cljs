@@ -27,8 +27,8 @@
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
             [logseq.outliner.recycle :as outliner-recycle]
-            [medley.core :as medley]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [datascript.conn :as dc]))
 
 (defonce *repo->latest-remote-tx (atom {}))
 (defonce *repo->latest-remote-checksum (atom {}))
@@ -222,6 +222,13 @@
                             :db-sync/reversed-tx-data reversed-datoms
                             :db-sync/pending? true
                             :db-sync/outliner-op (:outliner-op tx-meta)
+                            :db-sync/undo-redo? (cond
+                                                 (:undo? tx-meta)
+                                                 :undo
+                                                 (:redo? tx-meta)
+                                                 :redo
+                                                 :else
+                                                 :none)
                             :db-sync/forward-outliner-ops forward-outliner-ops
                             :db-sync/inverse-outliner-ops inverse-outliner-ops
                             :db-sync/inferred-outliner-ops? inferred-outliner-ops?'
@@ -255,6 +262,7 @@
                       :forward-outliner-ops (:db-sync/forward-outliner-ops ent)
                       :inverse-outliner-ops (:db-sync/inverse-outliner-ops ent)
                       :inferred-outliner-ops? (:db-sync/inferred-outliner-ops? ent)
+                      :db-sync/undo-redo (:db-sync/undo-redo? ent)
                       :tx tx'
                       :reversed-tx reversed-tx'})))
            vec))))
@@ -267,6 +275,7 @@
        :outliner-op (:db-sync/outliner-op ent)
        :forward-outliner-ops (:db-sync/forward-outliner-ops ent)
        :inverse-outliner-ops (:db-sync/inverse-outliner-ops ent)
+       :db-sync/undo-redo (:db-sync/undo-redo? ent)
        :tx (:db-sync/normalized-tx-data ent)
        :reversed-tx (:db-sync/reversed-tx-data ent)})))
 
@@ -502,9 +511,9 @@
 (defn- reverse-history-action!
   [conn local-txs index local-tx temp-tx-meta]
   (if-let [tx-data (seq (:reversed-tx local-tx))]
-    (ldb/transact! conn
-                   tx-data
-                   (local-tx-debug-meta temp-tx-meta local-txs index local-tx :reverse))
+    (d/transact! conn
+                 tx-data
+                 (local-tx-debug-meta temp-tx-meta local-txs index local-tx :reverse))
     (invalid-rebase-op! :reverse-history-action
                         {:reason :missing-reversed-tx-data
                          :tx-id (:tx-id local-tx)
@@ -546,7 +555,6 @@
            (try
              (reverse-history-action! conn local-txs index local-tx temp-tx-meta)
              (catch :default e
-               (js/console.error e)
                (log/error ::reverse-local-tx-error
                           {:index index
                            :local-tx local-tx
@@ -877,30 +885,19 @@
       (when-let [tx-data (seq tx-data)]
         (ldb/transact! conn tx-data {:outliner-op :transact})))))
 
-(defn- rebase-op-driven-local-tx!
-  [conn local-txs index local-tx tx-meta]
-  (let [replay-meta (assoc (local-tx-debug-meta tx-meta local-txs index local-tx :rebase)
-                           :db-sync/tx-id (:tx-id local-tx)
-                           :db-sync/forward-outliner-ops (:forward-outliner-ops local-tx)
-                           :db-sync/inverse-outliner-ops (:inverse-outliner-ops local-tx))
-        outliner-ops (:forward-outliner-ops local-tx)]
+(declare handle-local-tx!)
+
+(defn- rebase-local-op!
+  [repo conn local-tx]
+  (let [outliner-ops (:forward-outliner-ops local-tx)]
     (try
       (ldb/batch-transact!
        conn
-       replay-meta
+       {:outliner-op :rebase}
        (fn [conn]
          (if (= [[:transact nil]] outliner-ops)
            (when-let [tx-data (seq (:tx local-tx))]
-             ;; Preflight first to avoid noisy transact stack traces for known stale refs.
-             (try
-               (d/with @conn tx-data {:outliner-op :transact
-                                      :persist-op? false})
-               (catch :default error
-                 (invalid-rebase-op! :transact
-                                     {:reason :invalid-transact
-                                      :error-message (ex-message error)})))
-             (ldb/transact! conn tx-data {:outliner-op :transact
-                                          :persist-op? false}))
+             (ldb/transact! conn tx-data {:outliner-op :transact}))
            (do
              (precreate-missing-save-blocks! conn outliner-ops)
              (doseq [op outliner-ops]
@@ -919,18 +916,10 @@
             (log/warn :db-sync/drop-op-driven-pending-tx drop-log)))
         nil))))
 
-(declare handle-local-tx!)
 (defn- rebase-local-txs!
-  [repo conn local-txs tx-meta]
-  (ldb/batch-transact!
-   conn
-   tx-meta
-   (fn [conn]
-     (doseq [[idx local-tx] (medley/indexed local-txs)]
-       (rebase-op-driven-local-tx! conn local-txs idx local-tx {})))
-   {:listen-db (fn [tx-report]
-                 (when (seq (:tx-data tx-report))
-                   (handle-local-tx! repo tx-report)))}))
+  [repo conn local-txs]
+  (doseq [local-tx local-txs]
+    (rebase-local-op! repo conn local-tx)))
 
 (defn- fix-tx!
   [conn rebase-tx-report tx-meta]
@@ -940,20 +929,46 @@
 
 (defn- apply-remote-tx-with-local-changes!
   [{:keys [repo conn local-txs remote-txs]}]
-  (let [batch-tx-meta {:rtc-tx? true
-                       :with-local-changes? true}]
-    (ldb/batch-transact!
-     conn
-     (assoc batch-tx-meta :reverse-and-apply-remote? true)
-     (fn [conn]
-       (reverse-local-txs! conn local-txs {:rtc-tx? true})
-       (transact-remote-txs! conn remote-txs batch-tx-meta)
+  (let [db-before @conn
+        batch-tx-meta {:rtc-tx? true
+                       :with-local-changes? true}
+        *tx-data (atom [])]
 
-       (remove-pending-txs! repo (map :tx-id local-txs))
+    (d/listen! conn ::batch-tx (fn [{:keys [tx-meta tx-data] :as tx-report}]
+                                 (swap! *tx-data into tx-data)
+                                 (when (and (= :rebase (:outliner-op tx-meta))
+                                            (seq tx-data))
+                                   (handle-local-tx! repo tx-report))))
 
-       (let [rebase-tx-report (rebase-local-txs! repo conn local-txs
-                                                 (assoc batch-tx-meta :rebase? true))]
-         (fix-tx! conn rebase-tx-report {:outliner-op :rebase-fix}))))))
+    (swap! conn assoc :skip-store? true :batch-tx? true)
+
+    (prn :debug ::reverse)
+    (reverse-local-txs! conn local-txs {:rtc-tx? true})
+
+    (prn :debug ::apply-remote-txs)
+    (transact-remote-txs! conn remote-txs batch-tx-meta)
+
+    (prn :debug ::rebase)
+    (let [rebase-tx-report (rebase-local-txs! repo conn local-txs)]
+      (fix-tx! conn rebase-tx-report {:outliner-op :rebase}))
+
+    (prn :debug ::rebase-finished)
+
+    (d/unlisten! conn ::batch-tx)
+    (swap! conn dissoc :skip-store? :batch-tx?)
+
+    (d/store @conn)
+    (let [batch-tx-data @*tx-data
+          _ (reset! *tx-data nil)
+          tx-report {:db-before db-before
+                     :db-after @conn
+                     :tx-data batch-tx-data
+                     :tx-meta batch-tx-meta}]
+      (dc/run-callbacks conn tx-report))
+
+    ;; (worker-undo-redo/clear-history! repo)
+
+    (remove-pending-txs! repo (map :tx-id local-txs))))
 
 (defn- apply-remote-tx-without-local-changes!
   [{:keys [conn remote-txs temp-tx-meta]}]
@@ -962,8 +977,7 @@
    {:rtc-tx? true
     :without-local-changes? true}
    (fn [conn]
-     (let [remote-results (transact-remote-txs! conn remote-txs temp-tx-meta)]
-       (combine-tx-reports (map :report remote-results))))))
+     (transact-remote-txs! conn remote-txs temp-tx-meta))))
 
 (defn apply-remote-txs!
   [repo client remote-txs]
@@ -1024,7 +1038,7 @@
   [repo {:keys [tx-meta tx-data db-after db-before] :as tx-report}]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (when-not (or (:rtc-tx? tx-meta)
-                  (and (:batch-tx? @conn) (not= :rebase (:op tx-meta)))
+                  (and (:batch-tx? @conn) (not= (:outliner-op tx-meta) :rebase))
                   (:mark-embedding? tx-meta))
       (when (seq tx-data)
         (let [normalized (normalize-tx-data db-after db-before tx-data)
