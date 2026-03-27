@@ -353,12 +353,15 @@
         select-handler!
         (fn [^js d]
           (when d
-            (let [journal (date/js-date->journal-title d)]
+            (p/let [journal (date/js-date->journal-title d)
+                    page (db-async/<get-block (state/get-current-repo) journal {:children? false})
+                    journal-page (when (:block/journal-day page)
+                                   page)]
               (p/do!
-               (when-not (model/get-journal-page journal)
+               (when-not journal-page
                  (page-handler/<create! journal {:redirect? false}))
                (when (fn? on-change)
-                 (let [value (if datetime? (tc/to-long d) (model/get-journal-page journal))]
+                 (let [value (if datetime? (tc/to-long d) journal-page)]
                    (on-change value)))
                (when-not datetime?
                  (shui/popup-hide! id)
