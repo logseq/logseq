@@ -18,7 +18,8 @@
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.validate :as db-validate]
-            [logseq.db.sqlite.util :as sqlite-util])
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.common.log :as log])
   (:refer-clojure :exclude [object?]))
 
 (def built-in? entity-util/built-in?)
@@ -187,7 +188,8 @@
 
 (defn batch-transact-with-temp-conn!
   "Validate db and store once for a batch transaction, the `temp` conn can still load data from disk,
-  however it can't write to the disk."
+  however it can't write to the disk.
+  This fn supports nested calls, however, don't rely on the tx-report for undo/redo."
   [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
   (let [temp-conn (d/conn-from-db @conn)
         *batch-tx-data (volatile! [])
@@ -212,6 +214,39 @@
           (when (and @*complete? (seq tx-data))
             ;; transact tx-data to `conn` and validate db
             (transact! conn tx-data tx-meta)))))))
+
+(defn batch-transact!
+  "Store once for a batch transaction, notice that this fn doesn't support nest `batch-transact` calls"
+  [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
+  (let [db-before @conn
+        *tx-data (atom [])]
+    (try
+      (when (fn? listen-db) (d/listen! conn ::batch-tx
+                                       (fn [tx-report]
+                                         (swap! *tx-data into (:tx-data tx-report))
+                                         (listen-db tx-report))))
+      (swap! conn assoc :skip-store? true :batch-tx? true)
+      (batch-tx-fn conn)
+      (when (fn? listen-db) (d/unlisten! conn ::batch-tx))
+
+      (swap! conn dissoc :skip-store? :batch-tx?)
+
+      (d/store @conn)
+
+      (let [batch-tx-data @*tx-data
+            _ (reset! *tx-data nil)
+            tx-report {:db-before db-before
+                       :db-after @conn
+                       :tx-meta tx-meta
+                       :tx-data batch-tx-data}]
+        (dc/run-callbacks conn tx-report)
+        tx-report)
+      (catch :default e
+        (log/error e)
+        (reset! conn db-before)
+        (swap! conn dissoc :skip-store? :batch-tx?)
+        (reset! *tx-data nil)
+        (throw e)))))
 
 (def page? entity-util/page?)
 (def internal-page? entity-util/internal-page?)
