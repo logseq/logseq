@@ -6,6 +6,7 @@
             [logseq.cli.command.completion :as completion-command]
             [logseq.cli.command.core :as command-core]
             [logseq.cli.command.doctor :as doctor-command]
+            [logseq.cli.command.example :as example-command]
             [logseq.cli.command.graph :as graph-command]
             [logseq.cli.command.list :as list-command]
             [logseq.cli.command.query :as query-command]
@@ -105,7 +106,7 @@
 
 ;; Command-specific validation and entries are in subcommand namespaces.
 
-(def ^:private table
+(def ^:private base-table
   (vec (concat graph-command/entries
                server-command/entries
                list-command/entries
@@ -118,6 +119,10 @@
                sync-command/entries
                auth-command/entries
                completion-command/entries)))
+
+(def ^:private table
+  (vec (concat base-table
+               (example-command/build-example-entries base-table))))
 
 ;; Global option parsing lives in logseq.cli.command.core.
 
@@ -178,7 +183,8 @@
         cmd-summary (command-core/command-summary {:cmds cmds
                                                    :spec spec
                                                    :long-desc long-desc
-                                                   :examples examples})
+                                                   :examples (when (= command :example)
+                                                               examples)})
         graph (:graph opts)
         has-args? (seq args)
         has-content? (or (seq (:content opts))
@@ -293,7 +299,8 @@
            "missing shell argument; usage: logseq completion <zsh|bash>")))
 
       :else
-      (command-core/ok-result command opts args summary))))
+      (cond-> (command-core/ok-result command opts args summary)
+        (= command :example) (assoc :cmds cmds)))))
 
 ;; CLI error handling is in logseq.cli.command.core.
 
@@ -404,7 +411,7 @@
   [parsed config]
   (if-not (:ok? parsed)
     parsed
-    (let [{:keys [command options args]} parsed
+    (let [{:keys [command options args cmds]} parsed
           graph (command-core/pick-graph options args config)
           repo (command-core/resolve-repo graph)
           server-repo (command-core/resolve-repo (:graph options))]
@@ -470,6 +477,9 @@
          :action {:type :completion
                   :shell (or (:shell options) (first args))}}
 
+        :example
+        (example-command/build-action base-table cmds)
+
         {:ok? false
          :error {:code :unknown-command
                  :message (str "unknown command: " command)}}))))
@@ -519,6 +529,7 @@
                                        {:status :ok
                                         :data {:message (completion-gen/generate-completions
                                                          (:shell action) table)}})
+                         :example (example-command/execute-example action config)
                          :server-list (server-command/execute-list action config)
                          :server-status (server-command/execute-status action config)
                          :server-start (server-command/execute-start action config)

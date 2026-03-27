@@ -115,10 +115,28 @@
                 {:title "Authentication"
                  :commands #{"login" "logout"}}
                 {:title "Utilities"
-                 :commands #{"completion"}}]
-        render-group (fn [{:keys [title commands]}]
-                       (let [entries (filter #(contains? commands (first (:cmds %))) table)]
-                         (string/join "\n" [title (format-commands entries)])))]
+                 :commands #{"completion" "example"}
+                 :top-level-only? true
+                 :desc-overrides {"example" "Show command examples"}}]
+        to-top-level-entries (fn [entries commands desc-overrides]
+                               (->> commands
+                                    sort
+                                    (keep (fn [command]
+                                            (let [command-entries (filter #(= command (first (:cmds %))) entries)
+                                                  leaf-entry (first (filter #(= 1 (count (:cmds %)))
+                                                                            command-entries))
+                                                  desc (or (get desc-overrides command)
+                                                           (:desc leaf-entry)
+                                                           (:desc (first command-entries)))]
+                                              (when (seq command-entries)
+                                                {:cmds [command]
+                                                 :desc desc}))))))
+        render-group (fn [{:keys [title commands top-level-only? desc-overrides]}]
+                       (let [entries (filter #(contains? commands (first (:cmds %))) table)
+                             entries* (if top-level-only?
+                                        (to-top-level-entries entries commands (or desc-overrides {}))
+                                        entries)]
+                         (string/join "\n" [title (format-commands entries*)])))]
     (string/join "\n"
                  ["Usage: logseq <command> [options]"
                   ""

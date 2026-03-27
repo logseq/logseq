@@ -381,6 +381,117 @@
   :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
   :tags [:query]}
 
+ {:id "example-show-human"
+  :cmds ["{{cli}} --output human example show"]
+  :expect {:exit 0
+           :stdout-contains ["Selector: show"
+                             "Matched commands:"
+                             "show"
+                             "Examples:"]}
+  :covers {:commands ["example show"]
+           :options {:global ["--output"]}}
+  :tags [:example]}
+
+ {:id "example-upsert-page-json"
+  :cmds ["{{cli}} --output json example upsert page"]
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :selector] "upsert page"
+                               [:data :matched-commands 0] "upsert page"}}
+  :covers {:commands ["example upsert page"]
+           :options {:global ["--output"]}}
+  :tags [:example]}
+
+ {:id "example-upsert-prefix-json"
+  :cmds ["{{cli}} --output json example upsert"]
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :selector] "upsert"
+                               [:data :matched-commands 0] "upsert block"}}
+  :covers {:commands ["example upsert"]
+           :options {:global ["--output"]}}
+  :tags [:example]}
+
+ {:id "example-list-prefix-json"
+  :cmds ["{{cli}} --output json example list"]
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :selector] "list"
+                               [:data :matched-commands 0] "list page"}}
+  :covers {:commands ["example list"]
+           :options {:global ["--output"]}}
+  :tags [:example]}
+
+ {:id "example-list-page-json"
+  :cmds ["{{cli}} --output json example list page"]
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :selector] "list page"
+                               [:data :matched-commands] ["list page"]}}
+  :covers {:commands ["example list page"]
+           :options {:global ["--output"]}}
+  :tags [:example]}
+
+ {:id "example-query-prefix-json"
+  :cmds ["{{cli}} --output json example query"]
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :selector] "query"
+                               [:data :matched-commands 0] "query"}}
+  :covers {:commands ["example query"]
+           :options {:global ["--output"]}}
+  :tags [:example]}
+
+ {:id "example-query-list-json"
+  :cmds ["{{cli}} --output json example query list"]
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :selector] "query list"
+                               [:data :matched-commands] ["query list"]}}
+  :covers {:commands ["example query list"]
+           :options {:global ["--output"]}}
+  :tags [:example]}
+
+ {:id "example-remove-prefix-json"
+  :cmds ["{{cli}} --output json example remove"]
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :selector] "remove"
+                               [:data :matched-commands 0] "remove block"}}
+  :covers {:commands ["example remove"]
+           :options {:global ["--output"]}}
+  :tags [:example]}
+
+ {:id "example-remove-page-json"
+  :cmds ["{{cli}} --output json example remove page"]
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :selector] "remove page"
+                               [:data :matched-commands] ["remove page"]}}
+  :covers {:commands ["example remove page"]
+           :options {:global ["--output"]}}
+  :tags [:example]}
+
+ {:id "example-search-prefix-json"
+  :cmds ["{{cli}} --output json example search"]
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :selector] "search"
+                               [:data :matched-commands 0] "search block"}}
+  :covers {:commands ["example search"]
+           :options {:global ["--output"]}}
+  :tags [:example]}
+
+ {:id "example-search-block-edn"
+  :cmds ["{{cli}} --output edn example search block"]
+  :expect {:exit 0
+           :stdout-edn-paths {[:status] :ok
+                              [:data :selector] "search block"
+                              [:data :matched-commands] ["search block"]}}
+  :covers {:commands ["example search block"]
+           :options {:global ["--output"]}}
+  :tags [:example]}
+
  {:id "show-id-human"
   :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
           "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"

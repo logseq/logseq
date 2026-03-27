@@ -4,6 +4,7 @@
             [logseq.cli.command.completion :as completion-command]
             [logseq.cli.command.core :as core]
             [logseq.cli.command.doctor :as doctor-command]
+            [logseq.cli.command.example :as example-command]
             [logseq.cli.command.graph :as graph-command]
             [logseq.cli.command.list :as list-command]
             [logseq.cli.command.query :as query-command]
@@ -14,7 +15,7 @@
             [logseq.cli.command.upsert :as upsert-command]
             [logseq.cli.completion-generator :as gen]))
 
-(def ^:private full-table
+(def ^:private base-table
   (vec (concat graph-command/entries
                server-command/entries
                list-command/entries
@@ -25,6 +26,10 @@
                show-command/entries
                doctor-command/entries
                completion-command/entries)))
+
+(def ^:private full-table
+  (vec (concat base-table
+               (example-command/build-example-entries base-table))))
 
 ;; ---------------------------------------------------------------------------
 ;; Phase 1 — Spec enrichment tests
@@ -149,13 +154,14 @@
     (testing "show and doctor are leaves"
       (is (contains? leaf-names "show"))
       (is (contains? leaf-names "doctor")))
-    (testing "graph, server, list, upsert, remove, search are groups"
+    (testing "graph, server, list, upsert, remove, search, example are groups"
       (is (contains? group-names "graph"))
       (is (contains? group-names "server"))
       (is (contains? group-names "list"))
       (is (contains? group-names "upsert"))
       (is (contains? group-names "remove"))
-      (is (contains? group-names "search")))))
+      (is (contains? group-names "search"))
+      (is (contains? group-names "example")))))
 
 (deftest test-spec->token
   (testing "boolean spec → :flag type"
@@ -204,12 +210,14 @@
       (is (string/includes? output "_logseq_json_names data items block/title")))
     (testing "output contains per-command functions"
       (is (string/includes? output "_logseq_graph_export()"))
-      (is (string/includes? output "_logseq_show()")))
+      (is (string/includes? output "_logseq_show()"))
+      (is (string/includes? output "_logseq_example_upsert_page()")))
     (testing "output contains group dispatchers"
       (is (string/includes? output "_logseq_graph()"))
       (is (string/includes? output "_logseq_list()"))
       (is (string/includes? output "_logseq_search()"))
-      (is (string/includes? output "_logseq_upsert()")))
+      (is (string/includes? output "_logseq_upsert()"))
+      (is (string/includes? output "_logseq_example()")))
     (testing "output contains top-level dispatcher"
       (is (string/includes? output "_logseq()")))
     (testing "output ends with compdef _logseq logseq"
