@@ -353,9 +353,14 @@
   (p/let [existing (pull-page-by-name config repo page-name [:db/id :block/uuid])]
     (if (:db/id existing)
       existing
-      (p/let [_ (transport/invoke config :thread-api/apply-outliner-ops false
-                                  [repo [[:create-page [page-name {}]]] {}])
-              created (pull-page-by-name config repo page-name [:db/id :block/uuid])]
+      (p/let [result (transport/invoke config :thread-api/apply-outliner-ops false
+                                       [repo [[:create-page [page-name {}]]] {}])
+              ;; create-page returns [title' page-uuid]; use uuid to find
+              ;; the page since the stored name may differ from the input
+              created (if-let [page-uuid (second result)]
+                        (transport/invoke config :thread-api/pull false
+                                          [repo [:db/id :block/uuid] [:block/uuid page-uuid]])
+                        (pull-page-by-name config repo page-name [:db/id :block/uuid]))]
         (if (:db/id created)
           created
           (throw (ex-info "page not found after upsert"
@@ -546,10 +551,10 @@
               update-tags (add-command/resolve-tags cfg (:repo action) (:update-tags action))
               remove-tags (add-command/resolve-tags cfg (:repo action) (:remove-tags action))
               update-properties (add-command/resolve-properties cfg (:repo action) (:update-properties action)
-                                                               {:allow-non-built-in? false})
+                                                               {:allow-non-built-in? true})
               remove-properties (add-command/resolve-property-identifiers cfg (:repo action)
                                                                           (:remove-properties action)
-                                                                          {:allow-non-built-in? false})
+                                                                          {:allow-non-built-in? true})
               _ (ensure-property-identifiers-exist! cfg (:repo action) (keys (or update-properties {})))
               _ (ensure-property-identifiers-exist! cfg (:repo action) remove-properties)
               update-tag-ids (->> (or update-tags [])
