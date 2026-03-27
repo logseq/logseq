@@ -9,7 +9,7 @@
   "repository": "https://github.com/logseq/logseq",
   "scripts": {
     "electron:dev": "electron .",
-    "electron:debug": "electron --inspect=5858 .",
+    "electron:debug": "electron --inspect=9229 .",
     "electron:make": "electron-builder --config electron-builder.yml --publish never",
     "electron:make-linux-arm64": "electron-builder --config electron-builder.yml --linux AppImage zip --arm64 --publish never",
     "electron:make-macos-arm64": "electron-builder --config electron-builder.yml --mac dmg zip --arm64 --publish never",
@@ -35,13 +35,13 @@
     "open": "11.0.0",
     "semver": "7.7.4",
     "socks-proxy-agent": "9.0.0",
-    "electron-updater": "6.3.9",
+    "electron-updater": "6.8.3",
     "zod": "^4.3.6",
     "keytar": "^7.9.0"
   },
   "devDependencies": {
     "electron": "41.0.3",
-    "electron-builder": "26.8.1",
+    "electron-builder": "26.8.2",
     "electron-devtools-installer": "4.0.0"
   },
   "resolutions": {
