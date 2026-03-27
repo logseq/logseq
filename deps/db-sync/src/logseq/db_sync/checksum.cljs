@@ -136,15 +136,20 @@
       (let [changed-eids (->> tx-data
                               (remove (fn [d]
                                         (contains? #{:block/tx-id} (:a d))))
-                              (keep :e)
+                              (keep (fn [d]
+                                      (let [e (:e d)]
+                                        (or (:block/uuid (d/entity db-before e))
+                                            (:block/uuid (d/entity db-after e))))))
                               distinct)
             initial-state (if (valid-checksum? checksum)
                             (checksum->state checksum)
                             (checksum->state (recompute-checksum db-before)))]
         (->> changed-eids
-             (reduce (fn [[sum-fnv sum-djb] eid]
-                       (let [old-digest (entity-digest db-before eid after-e2ee?)
-                             new-digest (entity-digest db-after eid after-e2ee?)]
+             (reduce (fn [[sum-fnv sum-djb] uuid]
+                       (let [old-digest (when-let [eid (:db/id (d/entity db-before [:block/uuid uuid]))]
+                                          (entity-digest db-before eid after-e2ee?))
+                             new-digest (when-let [eid (:db/id (d/entity db-after [:block/uuid uuid]))]
+                                          (entity-digest db-after eid after-e2ee?))]
                          [(cond-> sum-fnv
                             old-digest (sub-step (first old-digest))
                             new-digest (add-step (first new-digest)))
