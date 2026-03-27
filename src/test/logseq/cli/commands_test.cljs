@@ -78,6 +78,8 @@
       (is (string/includes? plain-summary "sync"))
       (is (string/includes? plain-summary "login"))
       (is (string/includes? plain-summary "logout"))
+      (is (string/includes? plain-summary "example"))
+      (is (not (string/includes? plain-summary "example upsert")))
       (is (string/includes? plain-summary "Path to db-worker data dir (default ~/logseq/graphs)"))
       (is (contains-bold? summary "list page"))
       (is (contains-bold? summary "list tag"))
@@ -106,6 +108,8 @@
       (is (contains-bold? summary "sync start"))
       (is (contains-bold? summary "login"))
       (is (contains-bold? summary "logout"))
+      (is (contains-bold? summary "example"))
+      (is (not (contains-bold? summary "example upsert")))
       (is (contains-bold? summary "--help"))
       (is (contains-bold? summary "--graph"))
       (is (re-find #"\u001b\[[0-9;]*mCommands\u001b\[[0-9;]*m:" summary))
@@ -204,6 +208,18 @@
       (is (contains-bold? summary "search property"))
       (is (contains-bold? summary "search tag"))))
 
+  (testing "example group shows selectors"
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["example"]))
+          summary (:summary result)
+          plain-summary (strip-ansi summary)]
+      (is (true? (:help? result)))
+      (is (string/includes? plain-summary "example upsert"))
+      (is (string/includes? plain-summary "example upsert page"))
+      (is (string/includes? plain-summary "example show"))
+      (is (contains-bold? summary "example upsert"))
+      (is (contains-bold? summary "example show"))))
+
   (testing "group help command list omits [options]"
     (let [summary (:summary (binding [style/*color-enabled?* true]
                               (commands/parse-args ["list"])))
@@ -212,7 +228,7 @@
       (is (every? #(not (string/includes? % "[options]")) lines)))))
 
 (deftest test-parse-args-help-command-examples
-  (testing "remove block command shows help"
+  (testing "remove block command help no longer shows examples"
     (let [result (binding [style/*color-enabled?* true]
                    (commands/parse-args ["remove" "block" "--help"]))
           summary (:summary result)
@@ -220,22 +236,20 @@
       (is (true? (:help? result)))
       (is (string/includes? plain-summary "Usage: logseq remove block"))
       (is (string/includes? plain-summary "Command options:"))
-      (is (string/includes? plain-summary "Examples:"))
-      (is (string/includes? plain-summary "logseq remove block --graph my-graph --id 123"))
+      (is (not (string/includes? plain-summary "Examples:")))
       (is (contains-bold? summary "--id"))
       (is (contains-bold? summary "--uuid"))))
 
-  (testing "sync config set help limits examples to five lines"
+  (testing "sync config set command help no longer shows examples"
     (let [result (binding [style/*color-enabled?* true]
                    (commands/parse-args ["sync" "config" "set" "--help"]))
           plain-summary (strip-ansi (:summary result))]
       (is (true? (:help? result)))
-      (is (string/includes? plain-summary "Examples:"))
-      (is (string/includes? plain-summary "logseq sync config set ws-url wss://sync.logseq.com"))
-      (is (string/includes? plain-summary "logseq sync config set http-base http://localhost:8080"))
-      (is (not (string/includes? plain-summary "logseq sync config set ws-url wss://example.com/socket")))))
+      (is (not (string/includes? plain-summary "Examples:")))
+      (is (not (string/includes? plain-summary "logseq sync config set ws-url wss://sync.logseq.com")))
+      (is (not (string/includes? plain-summary "logseq sync config set http-base http://localhost:8080")))))
 
-  (testing "upsert block command shows help"
+  (testing "upsert block command help no longer shows examples"
     (let [result (binding [style/*color-enabled?* true]
                    (commands/parse-args ["upsert" "block" "--help"]))
           summary (:summary result)
@@ -243,7 +257,7 @@
       (is (true? (:help? result)))
       (is (string/includes? plain-summary "Usage: logseq upsert block"))
       (is (string/includes? plain-summary "Command options:"))
-      (is (string/includes? plain-summary "Examples:"))
+      (is (not (string/includes? plain-summary "Examples:")))
       (is (contains-bold? summary "--id"))
       (is (contains-bold? summary "--uuid"))
       (is (contains-bold? summary "--content"))
@@ -252,11 +266,20 @@
       (is (contains-bold? summary "--update-tags"))
       (is (contains-bold? summary "--update-properties"))
       (is (contains-bold? summary "--remove-tags"))
-      (is (contains-bold? summary "--remove-properties")))))
+      (is (contains-bold? summary "--remove-properties"))))
+
+  (testing "example command help is the place that shows examples"
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["example" "upsert" "--help"]))
+          plain-summary (strip-ansi (:summary result))]
+      (is (true? (:help? result)))
+      (is (string/includes? plain-summary "Usage: logseq example upsert"))
+      (is (string/includes? plain-summary "Examples:"))
+      (is (string/includes? plain-summary "logseq upsert block --graph my-graph --target-page Home --content \"New block\"")))))
 
 (deftest test-parse-args-group-help-flags
   (testing "all groups show group help with -h and --help"
-    (doseq [group ["graph" "server" "list" "upsert" "remove" "query" "search" "sync"]
+    (doseq [group ["graph" "server" "list" "upsert" "remove" "query" "search" "sync" "example"]
             help-flag ["-h" "--help"]]
       (let [result (binding [style/*color-enabled?* true]
                      (commands/parse-args [group help-flag]))
@@ -273,6 +296,28 @@
       (is (not (string/includes? plain-summary "Usage: logseq upsert <subcommand> [options]")))))
 
   )
+
+(deftest test-parse-args-example-selectors
+  (testing "example supports exact selectors"
+    (doseq [args [["example" "upsert" "page"]
+                  ["example" "show"]
+                  ["example" "search" "block"]]]
+      (let [result (commands/parse-args args)]
+        (is (true? (:ok? result)))
+        (is (= :example (:command result))))))
+
+  (testing "example supports prefix selectors"
+    (doseq [args [["example" "upsert"]
+                  ["example" "list"]
+                  ["example" "query"]]]
+      (let [result (commands/parse-args args)]
+        (is (true? (:ok? result)))
+        (is (= :example (:command result))))))
+
+  (testing "example rejects uncovered selectors"
+    (let [result (commands/parse-args ["example" "graph"])]
+      (is (false? (:ok? result)))
+      (is (= :unknown-command (get-in result [:error :code]))))))
 
 (deftest test-parse-args-help-auth-commands
   (testing "login command shows help"
@@ -1601,6 +1646,18 @@
       (is (= :doctor (get-in result [:action :type])))
       (is (= (cli-server/db-worker-dev-script-path)
              (get-in result [:action :script-path]))))))
+
+(deftest test-build-action-example
+  (testing "example builds local action"
+    (let [parsed {:ok? true
+                  :command :example
+                  :cmds ["example" "upsert" "page"]
+                  :options {}
+                  :args []}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :example (get-in result [:action :type])))
+      (is (= "upsert page" (get-in result [:action :selector]))))))
 
 (deftest test-build-action-inspect-edit-add-upsert
   (testing "list page requires repo"

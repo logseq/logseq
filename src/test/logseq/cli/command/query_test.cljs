@@ -3,6 +3,14 @@
             [clojure.string :as string]
             [logseq.cli.command.query :as query-command]))
 
+(deftest test-query-entries-examples
+  (let [query-entry (first (filter #(= :query (:command %)) query-command/entries))
+        query-list-entry (first (filter #(= :query-list (:command %)) query-command/entries))]
+    (testing "query command has examples metadata"
+      (is (seq (:examples query-entry))))
+    (testing "query list command has examples metadata"
+      (is (seq (:examples query-list-entry))))))
+
 (deftest test-build-action-parses-query
   (testing "query parses query and inputs"
     (let [result (query-command/build-action {:query "[:find ?e :in $ ?title :where [?e :block/title ?title]]"

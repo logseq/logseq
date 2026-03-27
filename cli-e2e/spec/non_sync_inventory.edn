@@ -96,6 +96,20 @@
              "--level"
              "stdin:--id"]}
 
+  :example
+  {:commands ["example list"
+              "example list page"
+              "example upsert"
+              "example upsert page"
+              "example remove"
+              "example remove page"
+              "example query"
+              "example query list"
+              "example search"
+              "example search block"
+              "example show"]
+   :options []}
+
   :server
   {:commands ["server list"
               "server status"
