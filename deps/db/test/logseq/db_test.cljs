@@ -104,7 +104,7 @@
                        (db-test/silence-stderr
                         (ldb/transact! conn [{:db/ident :logseq.class/Task
                                               :block/tags :logseq.class/Property}]))))))
-      (ldb/batch-transact!
+      (ldb/batch-transact-with-temp-conn!
        conn
        {}
        (fn [temp-conn]

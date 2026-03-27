@@ -631,7 +631,7 @@
                    :blocks [{:block/title "remote object"}]}]})
           block-id (:db/id (db-test/find-block-by-content @conn "remote object"))
           property-id :plugin.property._test_plugin/x7]
-      (ldb/batch-transact!
+      (ldb/batch-transact-with-temp-conn!
        conn
        {}
        (fn [temp-conn]
@@ -652,7 +652,7 @@
                  [{:page {:block/title "page 1"}
                    :blocks [{:block/title "remote object"}]}]})
           property-id :plugin.property._test_plugin/x7]
-      (ldb/batch-transact!
+      (ldb/batch-transact-with-temp-conn!
        conn
        {}
        (fn [temp-conn]
