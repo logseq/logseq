@@ -202,10 +202,11 @@
                        (start-daemon! {:data-dir data-dir
                                        :repo repo})
                        _ (reset! daemon {:stop! stop!})
-                       _ (invoke-raw host port "thread-api/q" [repo nil])
+                       {:keys [status]} (invoke-raw host port "thread-api/not-found" [repo nil])
                        _ (p/delay 50)
                        contents (when (fs/existsSync log-file)
                                   (.toString (fs/readFileSync log-file) "utf8"))]
+                 (is (= 500 status))
                  (is (fs/existsSync log-file))
                  (is (pos? (count contents))))
                (p/catch (fn [e]
@@ -1004,6 +1005,34 @@
                  (is (false? (:ok parsed)))
                  (is (string/includes? (get-in parsed [:error :message]) "Can't set tag")
                      "error message should describe the validation failure"))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
+
+(deftest db-worker-node-query-validate-error-returns-400-with-invalid-query-code
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-query-validate-error")
+               repo (str "logseq_db_query_validate_" (subs (str (random-uuid)) 0 8))]
+           (-> (p/let [{:keys [host port stop!]}
+                       (start-daemon! {:data-dir data-dir :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
+                       {:keys [status body]}
+                       (invoke-raw host port "thread-api/q"
+                                   [repo
+                                    ['[:find (pull ?e ...)
+                                       :where
+                                       [?e :block/title "Status"]]]])
+                       parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
+                 (is (= 400 status)
+                     "query validation errors should return 400, not 500")
+                 (is (false? (:ok parsed)))
+                 (is (= "invalid-query" (get-in parsed [:error :code])))
+                 (is (string/includes? (get-in parsed [:error :message]) "Query for unknown vars")))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally (fn []
