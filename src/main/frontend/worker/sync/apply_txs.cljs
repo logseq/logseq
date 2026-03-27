@@ -27,8 +27,7 @@
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
             [logseq.outliner.recycle :as outliner-recycle]
-            [promesa.core :as p]
-            [datascript.conn :as dc]))
+            [promesa.core :as p]))
 
 (defonce *repo->latest-remote-tx (atom {}))
 (defonce *repo->latest-remote-checksum (atom {}))
@@ -929,46 +928,37 @@
 
 (defn- apply-remote-tx-with-local-changes!
   [{:keys [repo conn local-txs remote-txs]}]
-  (let [db-before @conn
-        batch-tx-meta {:rtc-tx? true
-                       :with-local-changes? true}
-        *tx-data (atom [])]
+  (let [tx-meta {:rtc-tx? true
+                 :with-local-changes? true}
+        *rebase-tx-reports (atom [])]
+    (try
+      (ldb/batch-transact!
+       conn
+       tx-meta
+       (fn [conn]
+         (reverse-local-txs! conn local-txs {:rtc-tx? true})
 
-    (d/listen! conn ::batch-tx (fn [{:keys [tx-meta tx-data] :as tx-report}]
-                                 (swap! *tx-data into tx-data)
-                                 (when (and (= :rebase (:outliner-op tx-meta))
-                                            (seq tx-data))
-                                   (handle-local-tx! repo tx-report))))
+         (transact-remote-txs! conn remote-txs tx-meta)
 
-    (swap! conn assoc :skip-store? true :batch-tx? true)
+         (let [rebase-tx-report (rebase-local-txs! repo conn local-txs)]
+           (fix-tx! conn rebase-tx-report {:outliner-op :rebase})))
+       {:listen-db (fn [{:keys [tx-meta tx-data] :as tx-report}]
+                     (when (and (= :rebase (:outliner-op tx-meta))
+                                (seq tx-data))
+                       (swap! *rebase-tx-reports conj tx-report)))})
 
-    (prn :debug ::reverse)
-    (reverse-local-txs! conn local-txs {:rtc-tx? true})
+      (doseq [tx-report @*rebase-tx-reports]
+        (handle-local-tx! repo tx-report))
 
-    (prn :debug ::apply-remote-txs)
-    (transact-remote-txs! conn remote-txs batch-tx-meta)
+      (remove-pending-txs! repo (map :tx-id local-txs))
 
-    (prn :debug ::rebase)
-    (let [rebase-tx-report (rebase-local-txs! repo conn local-txs)]
-      (fix-tx! conn rebase-tx-report {:outliner-op :rebase}))
+      ;; (worker-undo-redo/clear-history! repo)
 
-    (prn :debug ::rebase-finished)
-
-    (d/unlisten! conn ::batch-tx)
-    (swap! conn dissoc :skip-store? :batch-tx?)
-
-    (d/store @conn)
-    (let [batch-tx-data @*tx-data
-          _ (reset! *tx-data nil)
-          tx-report {:db-before db-before
-                     :db-after @conn
-                     :tx-data batch-tx-data
-                     :tx-meta batch-tx-meta}]
-      (dc/run-callbacks conn tx-report))
-
-    ;; (worker-undo-redo/clear-history! repo)
-
-    (remove-pending-txs! repo (map :tx-id local-txs))))
+      (catch :default e
+        (js/console.error e)
+        (throw e))
+      (finally
+        (reset! *rebase-tx-reports nil)))))
 
 (defn- apply-remote-tx-without-local-changes!
   [{:keys [conn remote-txs temp-tx-meta]}]
