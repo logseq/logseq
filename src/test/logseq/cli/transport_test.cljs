@@ -123,10 +123,33 @@
                                     :url (str url "/invoke")
                                     :timeout-ms 1000})
                 (fn [e]
-                  (is (= :http-error (-> (ex-data e) :code)))
+                  (is (= :validation-failed (-> (ex-data e) :code)))
                   (is (= 400 (-> (ex-data e) :status)))
                   (is (= "Can't set tag with built-in #Journal" (ex-message e))
                       "error message is the clean API message, not raw JSON")))
+               (p/let [_ (stop!)] true))
+             (p/then (fn [_] (done)))
+             (p/catch (fn [e]
+                        (is false (str "unexpected error: " e))
+                        (done))))))
+
+(deftest test-request-propagates-server-error-code-for-non-400
+  (async done
+         (-> (p/let [{:keys [url stop!]} (start-server
+                                           (fn [_req ^js res]
+                                             (.writeHead res 409 #js {"Content-Type" "application/json"})
+                                             (.end res (js/JSON.stringify
+                                                        #js {:ok false
+                                                             :error #js {:code "repo-locked"
+                                                                         :message "graph is locked"}}))))]
+               (p/catch
+                (transport/request {:method "POST"
+                                    :url (str url "/invoke")
+                                    :timeout-ms 1000})
+                (fn [e]
+                  (is (= :repo-locked (-> (ex-data e) :code)))
+                  (is (= 409 (-> (ex-data e) :status)))
+                  (is (= "graph is locked" (ex-message e)))))
                (p/let [_ (stop!)] true))
              (p/then (fn [_] (done)))
              (p/catch (fn [e]

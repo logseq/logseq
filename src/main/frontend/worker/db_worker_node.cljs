@@ -212,6 +212,10 @@
             (p/rejected (ex-info "main-thread is not available in db-worker-node"
                                  {:method qkw})))))
 
+(defn- query-validation-error?
+  [data]
+  (= :parser/query (:error data)))
+
 (defn- make-server
   [proxy {:keys [bound-repo stop-fn]}]
   (http/createServer
@@ -262,6 +266,11 @@
                               (send-json! res 409 {:ok false
                                                    :error {:code :repo-locked
                                                            :message (or (.-message e) "graph is locked")}})
+
+                              (query-validation-error? data)
+                              (send-json! res 400 {:ok false
+                                                   :error {:code :invalid-query
+                                                           :message (or (.-message e) "invalid query")}})
 
                               ;; CLI should see same errors that app is seeing
                               (= :notification (:type data))

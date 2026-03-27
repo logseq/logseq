@@ -65,6 +65,22 @@
        (.on req "response" (fn [_]
                              (js/clearTimeout timeout-id)))))))
 
+(defn- parse-json-body
+  [body]
+  (when (seq body)
+    (try
+      (js->clj (js/JSON.parse body) :keywordize-keys true)
+      (catch :default _ nil))))
+
+(defn- normalize-error-code
+  [error-code]
+  (cond
+    (keyword? error-code) error-code
+    (string? error-code) (let [text (string/trim error-code)]
+                           (when (seq text)
+                             (keyword text)))
+    :else nil))
+
 (defn request
   [{:keys [method url headers body timeout-ms]}]
   (p/let [{:keys [body status] :as response}
@@ -75,16 +91,15 @@
                          :timeout-ms timeout-ms})]
     (if (<= 200 status 299)
       response
-      (let [parsed (when (and (= status 400) (seq body))
-                     (try (js->clj (js/JSON.parse body) :keywordize-keys true)
-                          (catch :default _ nil)))
+      (let [parsed (parse-json-body body)
             api-message (get-in parsed [:error :message])
+            api-code (normalize-error-code (get-in parsed [:error :code]))
             message (cond
                       (seq api-message) api-message
                       (seq body) (str "http request failed (" status ")\nhttp response: " body)
                       :else (str "http request failed (" status ")"))]
         (throw (ex-info message
-                        {:code :http-error
+                        {:code (or api-code :http-error)
                          :status status
                          :body body}))))))
 
