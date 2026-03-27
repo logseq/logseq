@@ -185,7 +185,7 @@
          (transact-fn repo-or-conn tx-data tx-meta)
          (transact-sync repo-or-conn tx-data tx-meta))))))
 
-(defn batch-transact!
+(defn batch-transact-with-temp-conn!
   "Validate db and store once for a batch transaction, the `temp` conn can still load data from disk,
   however it can't write to the disk."
   [conn tx-meta batch-tx-fn & {:keys [listen-db]}]

@@ -948,7 +948,7 @@
                                     (:db/id target-block)
                                     opts]]]
         (when-not move-parents-to-child?
-          (ldb/batch-transact!
+          (ldb/batch-transact-with-temp-conn!
            conn
            {:outliner-op :move-blocks
             :outliner-ops [op-entry]}
