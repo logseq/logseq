@@ -251,6 +251,7 @@
         class? (or class? (some (fn [t] (= :logseq.class/Tag (:db/ident t))) tags))
         class-ident-namespace? (and class? class-ident-namespace (string? class-ident-namespace))
         title (sanitize-title title*)
+        _ (outliner-validate/validate-page-title-no-hashtag title {:node {:block/title title}})
         types (cond class?
                     #{:logseq.class/Tag}
                     today-journal?

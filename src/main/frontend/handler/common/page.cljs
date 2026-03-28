@@ -51,10 +51,11 @@
                       (some-> (first
                                (common-util/split-first (str "#" page-ref/left-brackets) (:block/title parsed-result)))
                               string/trim)
-                      title)]
+                      title)
+             page-title (if (and has-tags? (nil? title'))
+                          title
+                          title')]
        (cond
-         (and has-tags? (nil? title'))
-         (notification/show! "Page name can't include \"#\"." :error)
          (and has-tags?
               (seq (set/intersection ldb/private-tags (set (map :db/ident (:block/tags parsed-result))))))
          (notification/show! (str "New page can't set built-in tags: "
@@ -63,8 +64,8 @@
                                                      (:block/tags parsed-result))))
                              :error)
          :else
-         (when-not (string/blank? title')
-           (p/let [existing-page (when-not class? (db/get-page title'))]
+         (when-not (string/blank? page-title)
+           (p/let [existing-page (when-not class? (db/get-page page-title))]
              (if existing-page
                existing-page
                (p/let [options' (cond-> (update options :tags concat (:block/tags parsed-result))
@@ -72,8 +73,8 @@
                                   (assoc :split-namespace? true))
                        [_page-name page-uuid] (ui-outliner-tx/transact!
                                                {:outliner-op :create-page}
-                                               (outliner-op/create-page! title' options'))
-                       page (db/get-page (or page-uuid title'))]
+                                               (outliner-op/create-page! page-title options'))
+                       page (db/get-page (or page-uuid page-title))]
                  (when redirect?
                    (route-handler/redirect-to-page! page-uuid)
                    (when-not today-journal?
