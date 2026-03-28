@@ -100,7 +100,13 @@
          js/Error
          #"can't include \"#\""
          (outliner-page/create! conn "foo#bar" {}))
-        "Page can't have '#' in title")))
+        "Page can't have '#' in title")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"can't include \"#\""
+         (outliner-page/create! conn "#tagstyle" {}))
+        "Page can't have leading '#' in title")))
 
 (deftest delete-page
   (let [conn (db-test/create-conn-with-blocks

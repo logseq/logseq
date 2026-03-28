@@ -138,11 +138,9 @@
 ;; TODO: Revisit title cleanup as this was copied from file implementation
 (defn ^:api sanitize-title
   [title]
-  (let [title      (-> (string/trim title)
-                       (text/page-ref-un-brackets!)
-                        ;; remove `#` from tags
-                       (string/replace #"^#+" ""))
-        title      (common-util/remove-boundary-slashes title)]
+  (let [title (-> (string/trim title)
+                  (text/page-ref-un-brackets!))
+        title (common-util/remove-boundary-slashes title)]
     title))
 
 (defn- get-page-by-parent-name
