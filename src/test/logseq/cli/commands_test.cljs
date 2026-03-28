@@ -1365,6 +1365,12 @@
       (is (= :upsert-page (:command result)))
       (is (= "Home" (get-in result [:options :page])))))
 
+  (testing "upsert page allows page names containing hashtag at parse time"
+    (let [result (commands/parse-args ["upsert" "page" "--page" "foo#bar"])]
+      (is (true? (:ok? result)))
+      (is (= :upsert-page (:command result)))
+      (is (= "foo#bar" (get-in result [:options :page])))))
+
   (testing "upsert page parses with id update mode"
     (let [result (commands/parse-args ["upsert" "page"
                                        "--id" "42"
@@ -1410,7 +1416,13 @@
       (is (true? (:ok? result)))
       (is (= :upsert-block (:command result)))
       (is (= 1 (get-in result [:options :id])))
-      (is (= "Home" (get-in result [:options :target-page]))))))
+      (is (= "Home" (get-in result [:options :target-page])))))
+
+  (testing "upsert block allows target page names containing hashtag at parse time"
+    (let [result (commands/parse-args ["upsert" "block" "--content" "hello" "--target-page" "foo#bar"])]
+      (is (true? (:ok? result)))
+      (is (= :upsert-block (:command result)))
+      (is (= "foo#bar" (get-in result [:options :target-page]))))))
 
 (deftest test-verb-subcommand-parse-show
   (testing "show requires target"

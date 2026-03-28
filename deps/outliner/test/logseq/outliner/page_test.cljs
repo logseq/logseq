@@ -94,7 +94,13 @@
          js/Error
          #"can't include \"/"
          (outliner-page/create! conn "foo/bar" {}))
-        "Page can't have '/'n title")))
+        "Page can't have '/'n title")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"can't include \"#\""
+         (outliner-page/create! conn "foo#bar" {}))
+        "Page can't have '#' in title")))
 
 (deftest delete-page
   (let [conn (db-test/create-conn-with-blocks

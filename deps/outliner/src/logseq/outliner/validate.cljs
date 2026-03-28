@@ -11,15 +11,20 @@
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]))
 
-(defn ^:api validate-page-title-characters
-  "Validates characters that must not be in a page title"
+(defn ^:api validate-page-title-no-hashtag
+  "Validates a page title doesn't include hashtag character"
   [page-title meta-m]
   (when (string/includes? page-title "#")
     (throw (ex-info "Page name can't include \"#\"."
                     (merge meta-m
                            {:type :notification
                             :payload {:message "Page name can't include \"#\"."
-                                      :type :warning}}))))
+                                      :type :warning}})))))
+
+(defn ^:api validate-page-title-characters
+  "Validates characters that must not be in a page title"
+  [page-title meta-m]
+  (validate-page-title-no-hashtag page-title meta-m)
   (when (and (string/includes? page-title ns-util/parent-char)
              (not (common-date/normalize-date page-title nil)))
     (throw (ex-info "Page name can't include \"/\"."
