@@ -2528,11 +2528,6 @@
         (state/set-state! :editor/start-pos pos))
 
       (cond
-        (and (= :page-search (state/get-editor-action))
-             (= key commands/hashtag))
-        (do
-          (util/stop e)
-          (notification/show! "Page name can't include \"#\"." :warning))
         ;; stop accepting edits if the new block is not created yet
         (some? @(:editor/async-unsaved-chars @state/state))
         (do
