@@ -266,7 +266,7 @@
 
       (and (#{:search-block :search-page :search-property :search-tag} command)
            (not (seq (some-> (:content opts) str string/trim))))
-      (missing-query-text-result summary)
+      (assoc (missing-query-text-result summary) :command command)
 
       (and (#{:list-page :list-tag :list-property} command)
            (list-command/invalid-options? opts))

@@ -118,15 +118,24 @@
        "Count: "
        (count rows)))
 
+(defn- missing-search-query-hint
+  [command]
+  (case command
+    :search-block "Use: logseq search block --content <query>"
+    :search-page "Use: logseq search page --content <query>"
+    :search-property "Use: logseq search property --content <query>"
+    :search-tag "Use: logseq search tag --content <query>"
+    "Use: logseq search <block|page|property|tag> --content <query>"))
+
 (defn- error-hint
-  [{:keys [code]}]
+  [{:keys [code]} command]
   (case code
     :missing-graph "Use --graph <name>"
     :missing-repo "Use --graph <name>"
     :missing-content "Use --content or pass content as args"
     :missing-tag-name "Use --name <tag-name>"
     :missing-query "Use --query <edn>"
-    :missing-query-text "Use: logseq search <block|page|property|tag> <query>"
+    :missing-query-text (missing-search-query-hint command)
     :unknown-query "Use `logseq query list` to see available queries"
     :ambiguous-tag-name "Retry with --id <tag-id>"
     :ambiguous-property-name "Retry with --id <property-id>"
@@ -145,9 +154,9 @@
                            candidates)))))
 
 (defn- format-error
-  [error]
+  [error command]
   (let [{:keys [code message candidates]} error
-        hint (error-hint error)
+        hint (error-hint error command)
         message* (style/bold-keywords message ["option" "command" "argument"])
         candidates* (format-candidates candidates)]
     (if (= :graph-validation-failed code)
@@ -755,7 +764,7 @@
         (format-doctor (or (get-in data [:status]) :error)
                        (or (get-in data [:checks])
                            (get-in error [:checks])))
-        (format-error error))
+        (format-error error command))
 
       (pr-str {:status status :data data :error error}))))
 
