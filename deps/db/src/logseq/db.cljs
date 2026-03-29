@@ -221,6 +221,8 @@
   (let [db-before @conn
         *tx-data (atom [])]
     (try
+      (when (:batch-tx @conn)
+        (throw (ex-info "batch-transact! can't be nested called" {:tx-meta tx-meta})))
       (when (fn? listen-db) (d/listen! conn ::batch-tx
                                        (fn [tx-report]
                                          (swap! *tx-data into (:tx-data tx-report))

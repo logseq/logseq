@@ -27,7 +27,8 @@
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
             [logseq.outliner.recycle :as outliner-recycle]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.worker-common.util :as worker-util]))
 
 (defonce *repo->latest-remote-tx (atom {}))
 (defonce *repo->latest-remote-checksum (atom {}))
@@ -1026,27 +1027,29 @@
 
 (defn enqueue-local-tx!
   [repo {:keys [tx-meta tx-data db-after db-before] :as tx-report}]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (when-not (or (:rtc-tx? tx-meta)
-                  (and (:batch-tx? @conn) (not= (:outliner-op tx-meta) :rebase))
-                  (:mark-embedding? tx-meta))
-      (when (seq tx-data)
-        (let [normalized (normalize-tx-data db-after db-before tx-data)
-              reversed-datoms (reverse-tx-data db-before db-after tx-data)]
-          (when (seq normalized)
-            (persist-local-tx! repo tx-report normalized reversed-datoms)
-            (when-let [client @worker-state/*db-sync-client]
-              (when (= repo (:repo client))
-                (let [send-queue (:send-queue client)]
-                  (swap! send-queue
-                         (fn [prev]
-                           (p/then prev
-                                   (fn [_]
-                                     (when-let [current @worker-state/*db-sync-client]
-                                       (when (= repo (:repo current))
-                                         (when-let [ws (:ws current)]
-                                           (when (ws-open? ws)
-                                             (flush-pending! repo current))))))))))))))))))
+  (worker-util/profile
+   "enqueue-local-tx!"
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (when-not (or (:rtc-tx? tx-meta)
+                   (and (:batch-tx? @conn) (not= (:outliner-op tx-meta) :rebase))
+                   (:mark-embedding? tx-meta))
+       (when (seq tx-data)
+         (let [normalized (normalize-tx-data db-after db-before tx-data)
+               reversed-datoms (reverse-tx-data db-before db-after tx-data)]
+           (when (seq normalized)
+             (persist-local-tx! repo tx-report normalized reversed-datoms)
+             (when-let [client @worker-state/*db-sync-client]
+               (when (= repo (:repo client))
+                 (let [send-queue (:send-queue client)]
+                   (swap! send-queue
+                          (fn [prev]
+                            (p/then prev
+                                    (fn [_]
+                                      (when-let [current @worker-state/*db-sync-client]
+                                        (when (= repo (:repo current))
+                                          (when-let [ws (:ws current)]
+                                            (when (ws-open? ws)
+                                              (flush-pending! repo current)))))))))))))))))))
 
 (defn handle-local-tx!
   [repo {:keys [tx-data tx-meta db-after] :as tx-report}]
