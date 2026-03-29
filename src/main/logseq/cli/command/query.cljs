@@ -19,9 +19,11 @@
 (def entries
   [(core/command-entry ["query"] :query "Run a Datascript query" query-spec
                        {:examples ["logseq query --graph my-graph --name block-search --inputs '[\"daily\"]'"
+                                   "logseq query --graph my-graph --name recent-updated --inputs '[30]'"
                                    "logseq query --graph my-graph --query '[:find [?e ...] :where [?e :block/name]]'"]})
    (core/command-entry ["query" "list"] :query-list "List available queries" query-list-spec
-                       {:examples ["logseq query list --graph my-graph"]})])
+                       {:examples ["logseq query list --graph my-graph"
+                                   "logseq query list --graph my-graph --output edn"]})])
 
 (def ^:private built-in-query-specs
   {"block-search"
