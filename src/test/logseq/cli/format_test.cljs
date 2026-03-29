@@ -933,6 +933,21 @@
                   "Hint: Use --graph <name>")
              result))))
 
+  (testing "missing query text uses per-subcommand --content hint"
+    (doseq [[command hint]
+            [[:search-block "Use: logseq search block --content <query>"]
+             [:search-page "Use: logseq search page --content <query>"]
+             [:search-property "Use: logseq search property --content <query>"]
+             [:search-tag "Use: logseq search tag --content <query>"]]]
+      (let [result (format/format-result {:status :error
+                                          :command command
+                                          :error {:code :missing-query-text
+                                                  :message "query text is required"}}
+                                         {:output-format nil})]
+        (is (= (str "Error (missing-query-text): query text is required\n"
+                    "Hint: " hint)
+               result)))))
+
   (testing "owner mismatch includes ownership hint"
     (let [result (format/format-result {:status :error
                                         :command :server-stop
