@@ -71,13 +71,19 @@
   [(core/command-entry ["upsert" "block"] :upsert-block "Upsert block" upsert-block-spec
                        {:examples ["logseq upsert block --graph my-graph --target-page Home --content \"New block\""
                                    "logseq upsert block --graph my-graph --id 123 --content \"Updated content\""
-                                   "logseq upsert block --graph my-graph --id 123 --target-page Home"]})
+                                   "logseq upsert block --graph my-graph --id 123 --target-page Home"
+                                   "logseq upsert block --graph my-graph --target-page Meeting Notes --content \"AI summary of the discussion\" --update-tags '[\"AI-GENERATED\"]'"
+                                   "logseq upsert block --graph my-graph --blocks '[{:block/title \"A\"} {:block/title \"B\"}]'"
+                                   "logseq upsert block --graph my-graph --id 123 --status done"]})
    (core/command-entry ["upsert" "page"] :upsert-page "Upsert page" upsert-page-spec
-                       {:examples ["logseq upsert page --graph my-graph --page Home --update-tags '[\"project\"]'"]})
+                       {:examples ["logseq upsert page --graph my-graph --page Home --update-tags '[\"project\"]'"
+                                   "logseq upsert page --graph my-graph --id 999 --update-properties '{:logseq.property/description \"Example\"}'"]})
    (core/command-entry ["upsert" "tag"] :upsert-tag "Upsert tag" upsert-tag-spec
-                       {:examples ["logseq upsert tag --graph my-graph --name project"]})
+                       {:examples ["logseq upsert tag --graph my-graph --name project"
+                                   "logseq upsert tag --graph my-graph --id 200 --name Project Renamed"]})
    (core/command-entry ["upsert" "property"] :upsert-property "Upsert property" upsert-property-spec
-                       {:examples ["logseq upsert property --graph my-graph --name status --type default --cardinality one"]})])
+                       {:examples ["logseq upsert property --graph my-graph --name status --type default --cardinality one"
+                                   "logseq upsert property --graph my-graph --id 321 --hide true"]})])
 
 (defn- normalize-tag-name
   [value]

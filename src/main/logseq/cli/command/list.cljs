@@ -106,11 +106,14 @@
 (def entries
   [(core/command-entry ["list" "page"] :list-page "List pages" list-page-spec
                        {:examples ["logseq list page --graph my-graph"
-                                   "logseq list page --graph my-graph --journal-only --limit 20"]})
+                                   "logseq list page --graph my-graph --journal-only --limit 20"
+                                   "logseq list page --graph my-graph --limit 50 --sort updated-at --order desc"]})
    (core/command-entry ["list" "tag"] :list-tag "List tags" list-tag-spec
-                       {:examples ["logseq list tag --graph my-graph --with-properties"]})
+                       {:examples ["logseq list tag --graph my-graph --with-properties"
+                                   "logseq list tag --graph my-graph --include-built-in --limit 20 --output json"]})
    (core/command-entry ["list" "property"] :list-property "List properties" list-property-spec
-                       {:examples ["logseq list property --graph my-graph --with-type"]})])
+                       {:examples ["logseq list property --graph my-graph --with-type"
+                                   "logseq list property --graph my-graph --include-built-in --limit 20 --output json"]})])
 
 (defn invalid-options?
   [opts]
