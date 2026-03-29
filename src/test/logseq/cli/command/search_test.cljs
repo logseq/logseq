@@ -13,11 +13,15 @@
     (is (= ["search" "block"] (:cmds (:search-block by-command))))
     (is (= ["search" "page"] (:cmds (:search-page by-command))))
     (is (= ["search" "property"] (:cmds (:search-property by-command))))
-    (is (= ["search" "tag"] (:cmds (:search-tag by-command))))))
+    (is (= ["search" "tag"] (:cmds (:search-tag by-command))))
+    (doseq [command [:search-block :search-page :search-property :search-tag]]
+      (is (contains? (get-in by-command [command :spec]) :content))
+      (is (= :c (get-in by-command [command :spec :content :alias])))
+      (is (= "Search content text" (get-in by-command [command :spec :content :desc]))))))
 
 (deftest test-build-action
-  (testing "build-action joins positional query args"
-    (let [result (search-command/build-action :search-block ["Alpha" "Beta"] "logseq_db_demo")]
+  (testing "build-action reads query text from options"
+    (let [result (search-command/build-action :search-block {:content "Alpha Beta"} "logseq_db_demo")]
       (is (true? (:ok? result)))
       (is (= {:type :search-block
               :repo "logseq_db_demo"
@@ -26,19 +30,18 @@
              (:action result)))))
 
   (testing "build-action requires repo"
-    (let [result (search-command/build-action :search-page ["Home"] nil)]
+    (let [result (search-command/build-action :search-page {:content "Home"} nil)]
       (is (false? (:ok? result)))
       (is (= :missing-repo (get-in result [:error :code])))))
 
-  (testing "build-action rejects blank query"
-    (let [result (search-command/build-action :search-tag ["   "] "logseq_db_demo")]
+  (testing "build-action rejects blank --content"
+    (let [result (search-command/build-action :search-tag {:content "   "} "logseq_db_demo")]
       (is (false? (:ok? result)))
       (is (= :missing-query-text (get-in result [:error :code])))))
 
-  (testing "build-action extracts trailing --graph from positional args"
-    (let [result (search-command/build-action :search-page ["home" "--graph" "work"] nil)]
+  (testing "build-action ignores unrelated options"
+    (let [result (search-command/build-action :search-page {:content "home" :output "json"} "logseq_db_demo")]
       (is (true? (:ok? result)))
-      (is (= "logseq_db_work" (get-in result [:action :repo])))
       (is (= "home" (get-in result [:action :query]))))))
 
 (deftest test-execute-search

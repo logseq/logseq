@@ -128,6 +128,15 @@
     (testing "remove-property :name does NOT have :complete"
       (is (nil? (get-in property-entry [:spec :name :complete]))))))
 
+(deftest test-search-spec-metadata
+  (let [entries search-command/entries]
+    (doseq [command [:search-block :search-page :search-property :search-tag]]
+      (let [entry (first (filter #(= command (:command %)) entries))]
+        (testing (str (name command) " has :content option")
+          (is (contains? (:spec entry) :content))
+          (is (= :c (get-in entry [:spec :content :alias])))
+          (is (= "Search content text" (get-in entry [:spec :content :desc]))))))))
+
 ;; ---------------------------------------------------------------------------
 ;; Phase 2 — Generator table introspection utilities
 ;; ---------------------------------------------------------------------------
@@ -236,9 +245,12 @@
     (testing ":complete :graphs emits separate long= and short+ specs"
       (is (string/includes? output "--graph=[Graph name]:value:{_logseq_graphs}'"))
       (is (string/includes? output "-g[Graph name]:value:{_logseq_graphs}'")))
-    (testing ":complete :file emits separate long= and short+ specs"
+    (testing ":complete :file emits long spec for --config without short alias"
       (is (string/includes? output "--config=[Path to cli.edn (default ~/logseq/cli.edn)]:file:_files'"))
-      (is (string/includes? output "-c[Path to cli.edn (default ~/logseq/cli.edn)]:file:_files'")))
+      (is (not (string/includes? output "-c[Path to cli.edn (default ~/logseq/cli.edn)]:file:_files'"))))
+    (testing "-c is available as content alias in command-specific completion"
+      (is (re-find #"(?s)_logseq_search_block\(\).*?-c\[Search content text\]" output))
+      (is (re-find #"(?s)_logseq_upsert_block\(\).*?-c\[Block content" output)))
     (testing ":alias emits grouping without --no- for global flags"
       (is (re-find #"\(-h --help\)" output)))))
 
@@ -246,6 +258,18 @@
   (let [output (gen/generate-completions "zsh" full-table)]
     (testing "--pos under upsert block offers correct values"
       (is (re-find #"--pos=.*\(first-child last-child sibling\)" output)))))
+
+(deftest test-search-content-option-in-completions
+  (let [zsh-output (gen/generate-completions "zsh" full-table)
+        bash-output (gen/generate-completions "bash" full-table)]
+    (testing "zsh completion includes --content under search subcommands"
+      (is (re-find #"(?s)_logseq_search_block\(\).*--content" zsh-output))
+      (is (re-find #"(?s)_logseq_search_page\(\).*--content" zsh-output))
+      (is (re-find #"(?s)_logseq_search_property\(\).*--content" zsh-output))
+      (is (re-find #"(?s)_logseq_search_tag\(\).*--content" zsh-output)))
+    (testing "bash completion includes --content under search subcommands"
+      (is (string/includes? bash-output "search)"))
+      (is (string/includes? bash-output "--content -c")))))
 
 (deftest test-zsh-no-prefix-for-command-booleans
   (let [output (gen/generate-completions "zsh" full-table)]

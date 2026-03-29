@@ -215,48 +215,52 @@
  {:id "search-block-json"
   :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
           "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page SearchBlockTarget >/dev/null"]
-  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json search block blocktarget --graph {{graph-arg}}"]
+  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} search block --content blocktarget --output json --graph {{graph-arg}}"]
   :expect {:exit 0
            :stdout-json-paths {[:status] "ok"}
            :stdout-contains ["SearchBlockTarget"]}
   :covers {:commands ["search block"]
-           :options {:global ["--config" "--graph" "--data-dir" "--output"]}}
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :search ["--content"]}}
   :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
   :tags [:search :smoke]}
 
  {:id "search-page-json"
   :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
           "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page SearchPageTarget >/dev/null"]
-  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json search page target --graph {{graph-arg}}"]
+  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json search page --content target --graph {{graph-arg}}"]
   :expect {:exit 0
            :stdout-json-paths {[:status] "ok"}
            :stdout-contains ["SearchPageTarget"]}
   :covers {:commands ["search page"]
-           :options {:global ["--config" "--graph" "--data-dir" "--output"]}}
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :search ["--content"]}}
   :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
   :tags [:search]}
 
  {:id "search-property-json"
   :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
           "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name SearchOwner --type default >/dev/null"]
-  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json search property owner --graph {{graph-arg}}"]
+  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json search property --content owner --graph {{graph-arg}}"]
   :expect {:exit 0
            :stdout-json-paths {[:status] "ok"}
            :stdout-contains ["SearchOwner"]}
   :covers {:commands ["search property"]
-           :options {:global ["--config" "--graph" "--data-dir" "--output"]}}
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :search ["--content"]}}
   :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
   :tags [:search]}
 
  {:id "search-tag-json"
   :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
           "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name SearchTagTarget >/dev/null"]
-  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json search tag target --graph {{graph-arg}}"]
+  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json search tag --content target --graph {{graph-arg}}"]
   :expect {:exit 0
            :stdout-json-paths {[:status] "ok"}
            :stdout-contains ["SearchTagTarget"]}
   :covers {:commands ["search tag"]
-           :options {:global ["--config" "--graph" "--data-dir" "--output"]}}
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :search ["--content"]}}
   :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
   :tags [:search]}
 
