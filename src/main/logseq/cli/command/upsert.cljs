@@ -25,7 +25,8 @@
                  :complete :pages}
    :pos {:desc "Position. Default: create=last-child, update=first-child"
          :validate #{"first-child" "last-child" "sibling"}}
-   :content {:desc "Block content (create inserts; update rewrites source block content)"}
+   :content {:alias :c
+             :desc "Block content (create inserts; update rewrites source block content)"}
    :blocks {:desc "EDN vector of blocks [create only]"}
    :blocks-file {:desc "EDN file of blocks [create only]"
                  :coerce common-graph/expand-home

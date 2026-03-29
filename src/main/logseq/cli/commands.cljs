@@ -176,6 +176,13 @@
       :else
       nil)))
 
+(defn- legacy-search-query-guidance
+  [cmds]
+  (let [scope (or (second cmds) "<scope>")]
+    (str "legacy positional search query is not supported; use --content, e.g. logseq search "
+         scope
+         " --content <query>")))
+
 (defn- ^:large-vars/cleanup-todo finalize-command
   [summary {:keys [command opts args cmds spec long-desc examples]}]
   (let [opts (command-core/normalize-opts opts)
@@ -254,7 +261,11 @@
       (missing-query-result summary)
 
       (and (#{:search-block :search-page :search-property :search-tag} command)
-           (not (seq (some-> (string/join " " args) string/trim))))
+           (seq args))
+      (command-core/invalid-options-result summary (legacy-search-query-guidance cmds))
+
+      (and (#{:search-block :search-page :search-property :search-tag} command)
+           (not (seq (some-> (:content opts) str string/trim))))
       (missing-query-text-result summary)
 
       (and (#{:list-page :list-tag :list-property} command)
@@ -435,7 +446,7 @@
         (list-command/build-action command options repo)
 
         (:search-block :search-page :search-property :search-tag)
-        (search-command/build-action command args repo)
+        (search-command/build-action command options repo)
 
         :upsert-block
         (upsert-command/build-block-action options args repo)

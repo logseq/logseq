@@ -196,10 +196,10 @@ Inspect and edit commands:
 - `upsert property --id <id> [--type <type>] [--cardinality one|many] [--hide true|false] [--public true|false]` - update a property by id
 - `move --id <id>|--uuid <uuid> --target-id <id>|--target-uuid <uuid>|--target-page <name> [--pos first-child|last-child|sibling]` - move a block and its children (defaults to first-child)
 - `remove --id <id>|--uuid <uuid>|--page <name>` - remove blocks (by db/id or UUID) or pages
-- `search block <query>` - search blocks by `:block/title` (case-insensitive substring)
-- `search page <query>` - search pages by `:block/name` (case-insensitive substring)
-- `search property <query>` - search properties by `:block/title` (Property entities only)
-- `search tag <query>` - search tags by `:block/title` (Tag entities only)
+- `search block --content <query>` - search blocks by `:block/title` (case-insensitive substring)
+- `search page --content <query>` - search pages by `:block/name` (case-insensitive substring)
+- `search property --content <query>` - search properties by `:block/title` (Property entities only)
+- `search tag --content <query>` - search tags by `:block/title` (Tag entities only)
 - `query --query <edn> [--inputs <edn-vector>]` - run a Datascript query against the graph
 - `query --name <query-name> [--inputs <edn-vector>]` - run a named query (built-in or from `cli.edn`)
 - `query list` - list available named queries
@@ -315,7 +315,7 @@ node ./dist/logseq.js graph export --type edn --file /tmp/demo.edn --graph demo
 node ./dist/logseq.js graph import --type edn --input /tmp/demo.edn --graph demo-import
 node ./dist/logseq.js upsert block --target-page TestPage --content "hello world"
 node ./dist/logseq.js move --uuid <uuid> --target-page TargetPage
-node ./dist/logseq.js search block "hello"
+node ./dist/logseq.js search block --content "hello"
 node ./dist/logseq.js show --page TestPage --output json
 node ./dist/logseq.js server list
 node ./dist/logseq.js doctor
