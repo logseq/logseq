@@ -85,7 +85,7 @@
               "search page"
               "search property"
               "search tag"]
-   :options []}
+   :options ["--content"]}
 
   :show
   {:commands ["show"]

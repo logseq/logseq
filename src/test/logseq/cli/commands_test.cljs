@@ -490,7 +490,12 @@
   (testing "global profile option is accepted as boolean flag"
     (let [result (commands/parse-args ["--profile" "graph" "list"])]
       (is (true? (:ok? result)))
-      (is (= true (get-in result [:options :profile]))))))
+      (is (= true (get-in result [:options :profile])))))
+
+  (testing "-c is no longer a global alias for --config"
+    (let [result (commands/parse-args ["-c" "/tmp/cli.edn" "graph" "list"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code]))))))
 
 (deftest test-parse-args-doctor
   (testing "doctor command parses"
@@ -1019,38 +1024,60 @@
       (is (= "name,type,cardinality" (get-in result [:options :fields]))))))
 
 (deftest test-search-subcommand-parse
-  (testing "search block parses positional query"
-    (let [result (commands/parse-args ["search" "block" "Alpha"]) ]
+  (testing "search block parses --content option"
+    (let [result (commands/parse-args ["search" "block" "--content" "Alpha"])]
       (is (true? (:ok? result)))
       (is (= :search-block (:command result)))
-      (is (= ["Alpha"] (:args result)))))
+      (is (= "Alpha" (get-in result [:options :content])))
+      (is (= [] (:args result)))))
 
-  (testing "search page parses multi-token query"
-    (let [result (commands/parse-args ["search" "page" "project" "notes"])]
+  (testing "search page parses multi-word --content value"
+    (let [result (commands/parse-args ["search" "page" "--content" "project notes"])]
       (is (true? (:ok? result)))
       (is (= :search-page (:command result)))
-      (is (= ["project" "notes"] (:args result)))))
+      (is (= "project notes" (get-in result [:options :content])))))
 
   (testing "search property parses"
-    (let [result (commands/parse-args ["search" "property" "owner"])]
+    (let [result (commands/parse-args ["search" "property" "--content" "owner"])]
       (is (true? (:ok? result)))
       (is (= :search-property (:command result)))))
 
   (testing "search tag parses"
-    (let [result (commands/parse-args ["search" "tag" "quote"])]
+    (let [result (commands/parse-args ["search" "tag" "--content" "quote"])]
       (is (true? (:ok? result)))
-      (is (= :search-tag (:command result))))))
+      (is (= :search-tag (:command result)))))
+
+  (testing "search block preserves --content with trailing global option"
+    (let [result (commands/parse-args ["search" "block" "--content" "alpha" "--output" "json"])]
+      (is (true? (:ok? result)))
+      (is (= "alpha" (get-in result [:options :content])))
+      (is (= "json" (get-in result [:options :output])))
+      (is (= [] (:args result)))))
+
+  (testing "search block supports short -c alias for --content"
+    (let [result (commands/parse-args ["search" "block" "-c" "Alpha"])]
+      (is (true? (:ok? result)))
+      (is (= :search-block (:command result)))
+      (is (= "Alpha" (get-in result [:options :content]))))))
 
 (deftest test-search-subcommand-validation
-  (testing "search block requires query text"
+  (testing "search block requires --content"
     (let [result (commands/parse-args ["search" "block"])]
       (is (false? (:ok? result)))
       (is (= :missing-query-text (get-in result [:error :code])))))
 
-  (testing "search page rejects blank query text"
-    (let [result (commands/parse-args ["search" "page" "   "])]
+  (testing "search page rejects blank --content"
+    (let [result (commands/parse-args ["search" "page" "--content" "   "])]
       (is (false? (:ok? result)))
-      (is (= :missing-query-text (get-in result [:error :code]))))))
+      (is (= :missing-query-text (get-in result [:error :code])))))
+
+  (testing "search block rejects legacy positional query with migration guidance"
+    (let [result (commands/parse-args ["search" "block" "alpha"])
+          message (strip-ansi (get-in result [:error :message]))]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))
+      (is (string/includes? message "use --content"))
+      (is (string/includes? message "search block --content")))))
 
 (deftest test-list-subcommand-validation
   (testing "list page rejects mutually exclusive journal flags"
@@ -1308,6 +1335,12 @@
 
   (testing "upsert block create mode parses with content"
     (let [result (commands/parse-args ["upsert" "block" "--content" "hello"])]
+      (is (true? (:ok? result)))
+      (is (= :upsert-block (:command result)))
+      (is (= "hello" (get-in result [:options :content])))))
+
+  (testing "upsert block create mode supports short -c alias for --content"
+    (let [result (commands/parse-args ["upsert" "block" "-c" "hello"])]
       (is (true? (:ok? result)))
       (is (= :upsert-block (:command result)))
       (is (= "hello" (get-in result [:options :content])))))
@@ -1678,8 +1711,8 @@
       (is (false? (:ok? result)))
       (is (= :missing-repo (get-in result [:error :code])))))
 
-  (testing "search page builds action with joined query text"
-    (let [parsed {:ok? true :command :search-page :options {} :args ["project" "home"]}
+  (testing "search page builds action from --content option"
+    (let [parsed {:ok? true :command :search-page :options {:content "project home"} :args []}
           result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= {:type :search-page
@@ -1689,14 +1722,17 @@
              (:action result)))))
 
   (testing "search block requires repo"
-    (let [parsed {:ok? true :command :search-block :options {} :args ["alpha"]}
+    (let [parsed {:ok? true :command :search-block :options {:content "alpha"} :args []}
           result (commands/build-action parsed {})]
       (is (false? (:ok? result)))
       (is (= :missing-repo (get-in result [:error :code])))))
 
-  (testing "search build-action supports trailing global --graph token"
-    (let [parsed {:ok? true :command :search-tag :options {} :args ["quote" "--graph" "demo"]}
-          result (commands/build-action parsed {})]
+  (testing "search build-action keeps --content when trailing global option exists"
+    (let [parsed {:ok? true
+                  :command :search-tag
+                  :options {:content "quote" :output "json"}
+                  :args []}
+          result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= "logseq_db_demo" (get-in result [:action :repo])))
       (is (= "quote" (get-in result [:action :query])))))

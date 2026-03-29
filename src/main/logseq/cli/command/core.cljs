@@ -12,7 +12,6 @@
    :version {:desc "Show version"
              :coerce :boolean}
    :config {:desc "Path to cli.edn (default ~/logseq/cli.edn)"
-            :alias :c
             :complete :file}
    :graph {:desc "Graph name"
            :alias :g
