@@ -320,6 +320,7 @@
      {:outliner-op :insert-blocks}
      (save-current-block! {:current-block current-block})
      (outliner-op/insert-blocks! [new-block'] current-block {:sibling? sibling?
+                                                             :right-sibling-id (:db/id (:right-sibling config))
                                                              :keep-uuid? keep-uuid?
                                                              :ordered-list? ordered-list?
                                                              :replace-empty-target? replace-empty-target?
@@ -470,9 +471,9 @@
 
 (defn insert-new-block!
   "Won't save previous block content - remember to save!"
-  ([state]
-   (insert-new-block! state nil))
-  ([_state block-value]
+  ([state right-sibling]
+   (insert-new-block! state nil right-sibling))
+  ([_state block-value right-sibling]
    (->
     (when (not config/publishing?)
       (when-let [state (get-state)]
@@ -507,7 +508,7 @@
 
                           :else
                           insert-new-block-aux!)
-              [result-promise sibling? next-block] (insert-fn config block'' value)
+              [result-promise sibling? next-block] (insert-fn (assoc config :right-sibling right-sibling) block'' value)
               edit-block-f (fn []
                              (let [next-block' (db/entity [:block/uuid (:block/uuid next-block)])
                                    pos 0
@@ -2070,7 +2071,7 @@
               input (state/get-input)
               config (assoc config :keydown-new-block true)
               content (gobj/get input "value")
-              has-right? (ldb/get-right-sibling block)]
+              right-sibling (ldb/get-right-sibling block)]
           (cond
             (and (string/blank? content)
                  (own-order-number-list? block)
@@ -2080,12 +2081,12 @@
 
             (and
              (string/blank? content)
-             (not has-right?)
+             (not right-sibling)
              (not (last-top-level-child? config block)))
             (indent-outdent false)
 
             :else
-            (insert-new-block! state)))))))
+            (insert-new-block! state right-sibling)))))))
 
 (defn- inside-of-single-block
   "When we are in a single block wrapper, we should always insert a new line instead of new block"

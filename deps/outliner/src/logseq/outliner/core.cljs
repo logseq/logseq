@@ -492,15 +492,20 @@
 ;;; ### insert-blocks, delete-blocks, move-blocks
 
 (defn- get-block-orders
-  [blocks target-block sibling? keep-block-order?]
+  [db blocks target-block sibling? keep-block-order? right-sibling-id]
   (if (and keep-block-order? (every? :block/order blocks))
     (map :block/order blocks)
     (let [target-order (:block/order target-block)
-          next-sibling-order (:block/order (ldb/get-right-sibling target-block))
-          first-child (ldb/get-down target-block)
-          first-child-order (:block/order first-child)
           start-order (when sibling? target-order)
-          end-order (if sibling? next-sibling-order first-child-order)
+          end-order (if sibling?
+                      (let [right-sibling (when right-sibling-id
+                                            (d/entity db right-sibling-id))]
+                        (if (= (:db/id (:block/parent right-sibling))
+                               (:db/id (:block/parent target-block)))
+                          (:block/order right-sibling)
+                          (:block/order (ldb/get-right-sibling target-block))))
+                      (let [first-child (ldb/get-down target-block)]
+                        (:block/order first-child)))
           orders (db-order/gen-n-keys (count blocks) start-order end-order)]
       orders)))
 
@@ -535,10 +540,10 @@
    (:db/id target-block)))
 
 (defn- build-insert-blocks-tx
-  [db target-block blocks uuids get-new-id {:keys [sibling? outliner-op replace-empty-target? insert-template? keep-block-order?]}]
+  [db target-block blocks uuids get-new-id {:keys [sibling? outliner-op replace-empty-target? insert-template? keep-block-order? right-sibling-id]}]
   (let [block-ids (set (map :block/uuid blocks))
         target-page (get-target-block-page target-block sibling?)
-        orders (get-block-orders blocks target-block sibling? keep-block-order?)]
+        orders (get-block-orders db blocks target-block sibling? keep-block-order? right-sibling-id)]
     (map-indexed (fn [idx {:block/keys [parent] :as block}]
                    (when-let [uuid' (get uuids (:block/uuid block))]
                      (let [block (remove-disallowed-inline-classes db block)
@@ -712,7 +717,7 @@
     ``"
   [db blocks target-block {:keys [_sibling? keep-uuid? keep-block-order?
                                   outliner-op outliner-real-op replace-empty-target? update-timestamps?
-                                  insert-template?]
+                                  insert-template? right-sibling-id]
                            :as opts
                            :or {update-timestamps? true}}]
   {:pre [(seq blocks)
@@ -761,7 +766,8 @@
                          :keep-uuid? keep-uuid?
                          :keep-block-order? keep-block-order?
                          :outliner-op outliner-op
-                         :insert-template? insert-template?}
+                         :insert-template? insert-template?
+                         :right-sibling-id right-sibling-id}
             {:keys [id->new-uuid blocks-tx]} (insert-blocks-aux db blocks' target-block insert-opts)]
         (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/order b)))) blocks-tx)
           (throw (ex-info "Invalid outliner data"
