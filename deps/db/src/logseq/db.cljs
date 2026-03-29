@@ -19,7 +19,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.common.log :as log])
+            [logseq.common.log :as log]
+            [goog.functions :as gfun])
   (:refer-clojure :exclude [object?]))
 
 (def built-in? entity-util/built-in?)
@@ -82,15 +83,6 @@
        f))
    tx-data))
 
-(comment
-  (defn- skip-db-validate?
-    [datoms]
-    (every?
-     (fn [d]
-       (contains? #{:logseq.property/created-by-ref :block/refs :block/tx-id}
-                  (:a d)))
-     datoms)))
-
 (defn- throw-if-page-has-block-parent!
   [db tx-data]
   (when (some (fn [d] (and (:added d)
@@ -99,6 +91,8 @@
                            (not (entity-util/page? (d/entity db (:v d)))))) tx-data)
     (throw (ex-info "Page can't have block as parent"
                     {:tx-data tx-data}))))
+
+(defonce debounced-store-db (gfun/debounce d/store 1000))
 
 (defn- transact-sync
   [conn tx-data tx-meta]
@@ -126,7 +120,7 @@
               (if (:batch-tx? @conn)
                 (dc/run-callbacks conn tx-report)
                 (do
-                  (dc/store-after-transact! conn tx-report)
+                  (debounced-store-db @conn)
                   (dc/run-callbacks conn tx-report))))
 
             :else
@@ -233,7 +227,7 @@
 
       (swap! conn dissoc :skip-store? :batch-tx?)
 
-      (d/store @conn)
+      (debounced-store-db @conn)
 
       (let [batch-tx-data @*tx-data
             _ (reset! *tx-data nil)
@@ -342,12 +336,10 @@
       :else
       (let [db (.-db block)
             datoms (d/datoms db :avet :block/parent (:db/id parent))
-            child-orders (time
-                          (doall
-                           (->> (map (fn [d]
-                                       [(:e d)
-                                        (:v (first (d/datoms db :eavt (:e d) :block/order)))]) datoms)
-                                (sort-by last))))
+            child-orders (->> (map (fn [d]
+                                     [(:e d)
+                                      (:v (first (d/datoms db :eavt (:e d) :block/order)))]) datoms)
+                              (sort-by last))
             block-order (:block/order block)]
 
         (some (fn [[e child-order]]
@@ -378,11 +370,12 @@
       :else
       (let [db (.-db block)
             datoms (d/datoms db :avet :block/parent (:db/id parent))
-            child-orders (->> (map (fn [d]
-                                     [(:e d)
-                                      (:v (first (d/datoms db :eavt (:e d) :block/order)))]) datoms)
-                              (sort-by last)
-                              reverse)
+            child-orders (time
+                          (->> (map (fn [d]
+                                      [(:e d)
+                                       (:v (first (d/datoms db :eavt (:e d) :block/order)))]) datoms)
+                               (sort-by last)
+                               reverse))
             block-order (:block/order block)]
         (some (fn [[e child-order]]
                 (when (and (< (compare child-order block-order) 0)
