@@ -4,7 +4,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
-            [frontend.undo-redo :as undo-redo]
             [frontend.util :as util]
             [goog.functions :refer [debounce]]
             [logseq.db :as ldb]
@@ -12,12 +11,21 @@
 
 (defn- restore-cursor!
   [{:keys [editor-cursors block-content undo?]}]
-  (let [{:keys [block-uuid container-id start-pos end-pos]} (if undo? (first editor-cursors) (or (last editor-cursors) (first editor-cursors)))
+  (let [cursor (if undo?
+                 (first editor-cursors)
+                 (or (last editor-cursors) (first editor-cursors)))
+        {:keys [selected-block-uuids selection-direction block-uuid container-id start-pos end-pos]} cursor
+        selected-blocks (when (seq selected-block-uuids)
+                          (->> selected-block-uuids
+                               (mapcat util/get-blocks-by-id)
+                               vec))
         pos (if undo? (or start-pos end-pos) (or end-pos start-pos))]
-    (when-let [block (db/pull [:block/uuid block-uuid])]
-      (editor/edit-block! block pos
-                          {:container-id container-id
-                           :custom-content block-content}))))
+    (if (seq selected-blocks)
+      (state/exit-editing-and-set-selected-blocks! selected-blocks selection-direction)
+      (when-let [block (db/pull [:block/uuid block-uuid])]
+        (editor/edit-block! block pos
+                            {:container-id container-id
+                             :custom-content block-content})))))
 
 (defn- restore-app-state!
   [state]
@@ -52,7 +60,7 @@
           (state/set-state! [:editor/last-replace-ref-content-tx repo] nil)
           (editor/save-current-block!)
           (state/clear-editor-action!)
-          (reset! *last-request (undo-redo/undo repo))
+          (reset! *last-request (state/<invoke-db-worker :thread-api/undo-redo-undo repo))
           (p/let [result @*last-request]
             (restore-cursor-and-state! result))))))))
 (defonce undo! (debounce undo-aux! 20))
@@ -67,7 +75,7 @@
        (when-let [repo (state/get-current-repo)]
          (util/stop e)
          (state/clear-editor-action!)
-         (reset! *last-request (undo-redo/redo repo))
+         (reset! *last-request (state/<invoke-db-worker :thread-api/undo-redo-redo repo))
          (p/let [result @*last-request]
            (restore-cursor-and-state! result)))))))
 (defonce redo! (debounce redo-aux! 20))

@@ -1,21 +1,21 @@
 (ns frontend.worker.sync
   "Sync client"
-  (:require [frontend.worker.shared-service :as shared-service]
-            [frontend.worker.state :as worker-state]
-            [frontend.worker.sync.apply-txs :as sync-apply]
-            [frontend.worker.sync.assets :as sync-assets]
-            [frontend.worker.sync.auth :as sync-auth]
-            [frontend.worker.sync.client-op :as client-op]
-            [frontend.worker.sync.crypt :as sync-crypt]
-            [frontend.worker.sync.handle-message :as sync-handle-message]
-            [frontend.worker.sync.large-title :as sync-large-title]
-            [frontend.worker.sync.presence :as sync-presence]
-            [frontend.worker.sync.transport :as sync-transport]
-            [frontend.worker.sync.upload :as sync-upload]
-            [lambdaisland.glogi :as log]
-            [logseq.common.util :as common-util]
-            [logseq.db-sync.checksum :as sync-checksum]
-            [promesa.core :as p]))
+  (:require
+   [frontend.worker.shared-service :as shared-service]
+   [frontend.worker.state :as worker-state]
+   [frontend.worker.sync.apply-txs :as sync-apply]
+   [frontend.worker.sync.assets :as sync-assets]
+   [frontend.worker.sync.auth :as sync-auth]
+   [frontend.worker.sync.client-op :as client-op]
+   [frontend.worker.sync.handle-message :as sync-handle-message]
+   [frontend.worker.sync.large-title :as sync-large-title]
+   [frontend.worker.sync.presence :as sync-presence]
+   [frontend.worker.sync.transport :as sync-transport]
+   [frontend.worker.sync.upload :as sync-upload]
+   [lambdaisland.glogi :as log]
+   [logseq.common.util :as common-util]
+   [logseq.db-sync.checksum :as sync-checksum]
+   [promesa.core :as p]))
 
 (def ^:private reconnect-base-delay-ms 1000)
 (def ^:private reconnect-max-delay-ms 30000)
@@ -24,6 +24,7 @@
 (def ^:private ws-stale-timeout-ms 600000)
 
 (defonce *repo->latest-remote-tx sync-apply/*repo->latest-remote-tx)
+(defonce *repo->latest-remote-checksum sync-apply/*repo->latest-remote-checksum)
 (defonce *start-inflight-target (atom nil))
 
 (defn fail-fast
@@ -40,16 +41,18 @@
   (sync-presence/sync-counts
    {:get-datascript-conn worker-state/get-datascript-conn
     :get-client-ops-conn worker-state/get-client-ops-conn
+    :get-pending-local-tx-count client-op/get-pending-local-tx-count
     :get-unpushed-asset-ops-count client-op/get-unpushed-asset-ops-count
     :get-local-tx client-op/get-local-tx
+    :get-local-checksum client-op/get-local-checksum
     :get-graph-uuid client-op/get-graph-uuid
-    :latest-remote-tx @*repo->latest-remote-tx}
+    :latest-remote-tx @*repo->latest-remote-tx
+    :latest-remote-checksum @*repo->latest-remote-checksum}
    repo))
 
 (defn update-local-sync-checksum!
   [repo tx-report]
-  (when (and (worker-state/get-client-ops-conn repo)
-             (not (sync-crypt/graph-e2ee? repo)))
+  (when (worker-state/get-client-ops-conn repo)
     (client-op/update-local-checksum
      repo
      (sync-checksum/update-checksum (client-op/get-local-checksum repo) tx-report))))

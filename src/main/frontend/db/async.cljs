@@ -19,9 +19,6 @@
 (def ^:private yyyyMMdd-formatter (tf/formatter "yyyyMMdd"))
 
 (def <q db-async-util/<q)
-(def <pull db-async-util/<pull)
-(comment
-  (def <pull-many db-async-util/<pull-many))
 
 (defn <get-files
   [graph]
