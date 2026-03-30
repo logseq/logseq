@@ -58,14 +58,14 @@
   (ensure-conn! self)
   (let [db @(.-conn self)
         full-checksum (checksum/recompute-checksum db)
-        current-checksum (storage/get-checksum (.-sql self))]
-    (if (or (nil? current-checksum)
-            (= full-checksum current-checksum))
-      current-checksum
+        cur-checksum (storage/get-checksum (.-sql self))]
+    (if (or (nil? cur-checksum)
+            (= full-checksum cur-checksum))
+      cur-checksum
       (do
         (log/error :db-sync/server-checksum-mismatch
                    {:full-checksum full-checksum
-                    :current-checksum current-checksum})
+                    :current-checksum cur-checksum})
         (storage/set-checksum! (.-sql self) full-checksum)
         full-checksum))))
 
