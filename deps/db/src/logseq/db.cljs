@@ -5,6 +5,7 @@
             [clojure.walk :as walk]
             [datascript.conn :as dc]
             [datascript.core :as d]
+            [datascript.storage :as storage]
             [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
             [logseq.common.plural :as common-plural]
@@ -19,8 +20,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.common.log :as log]
-            [goog.functions :as gfun])
+            [logseq.common.log :as log])
   (:refer-clojure :exclude [object?]))
 
 (def built-in? entity-util/built-in?)
@@ -34,6 +34,7 @@
 (defonce *transact-fn (atom nil))
 (defonce *transact-invalid-callback (atom nil))
 (defonce *transact-pipeline-fn (atom nil))
+(defonce *debounce-fn (atom nil))
 
 (defn register-transact-fn!
   [f]
@@ -44,6 +45,9 @@
 (defn register-transact-pipeline-fn!
   [f]
   (when f (reset! *transact-pipeline-fn f)))
+(defn register-debounce-fn!
+  [f]
+  (when f (reset! *debounce-fn f)))
 
 (defn- remove-temp-block-data
   [tx-data]
@@ -92,7 +96,11 @@
     (throw (ex-info "Page can't have block as parent"
                     {:tx-data tx-data}))))
 
-(defonce debounced-store-db (gfun/debounce d/store 1000))
+(defn debounced-store-db
+  [conn]
+  (when-some [_storage (storage/storage @conn)]
+    (let [f (or @*debounce-fn d/store)]
+      (f @conn))))
 
 (defn- transact-sync
   [conn tx-data tx-meta]
@@ -104,6 +112,7 @@
                 (or (:rtc-download-graph? tx-meta)
                     (:reset-conn! tx-meta)
                     (:initial-db? tx-meta)
+                    (:skip-validate-db? db)
                     (:skip-validate-db? tx-meta false)
                     (:logseq.graph-parser.exporter/new-graph? tx-meta))))
         (let [tx-report* (d/with db tx-data tx-meta)
@@ -120,7 +129,7 @@
               (if (:batch-tx? @conn)
                 (dc/run-callbacks conn tx-report)
                 (do
-                  (debounced-store-db @conn)
+                  (debounced-store-db conn)
                   (dc/run-callbacks conn tx-report))))
 
             :else
@@ -191,7 +200,8 @@
     ;; can read from disk, write is disallowed
     (swap! temp-conn assoc
            :skip-store? true
-           :batch-tx? true)
+           :batch-tx? true
+           :skip-validate-db? true)
     (d/listen! temp-conn ::temp-conn-batch-tx
                (fn [{:keys [tx-data] :as tx-report}]
                  (vswap! *batch-tx-data into tx-data)
@@ -227,7 +237,7 @@
 
       (swap! conn dissoc :skip-store? :batch-tx?)
 
-      (debounced-store-db @conn)
+      (debounced-store-db conn)
 
       (let [batch-tx-data @*tx-data
             _ (reset! *tx-data nil)
@@ -370,12 +380,11 @@
       :else
       (let [db (.-db block)
             datoms (d/datoms db :avet :block/parent (:db/id parent))
-            child-orders (time
-                          (->> (map (fn [d]
-                                      [(:e d)
-                                       (:v (first (d/datoms db :eavt (:e d) :block/order)))]) datoms)
-                               (sort-by last)
-                               reverse))
+            child-orders (->> (map (fn [d]
+                                     [(:e d)
+                                      (:v (first (d/datoms db :eavt (:e d) :block/order)))]) datoms)
+                              (sort-by last)
+                              reverse)
             block-order (:block/order block)]
         (some (fn [[e child-order]]
                 (when (and (< (compare child-order block-order) 0)

@@ -27,8 +27,7 @@
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
             [logseq.outliner.recycle :as outliner-recycle]
-            [promesa.core :as p]
-            [frontend.worker-common.util :as worker-util]))
+            [promesa.core :as p]))
 
 (defonce *repo->latest-remote-tx (atom {}))
 (defonce *repo->latest-remote-checksum (atom {}))
@@ -211,24 +210,18 @@
           {:keys [forward-outliner-ops inverse-outliner-ops]}
           (derive-history-outliner-ops db-before db-after tx-data tx-meta)
           inferred-outliner-ops?' (inferred-outliner-ops? tx-meta)]
-       ;; (pprint/pprint
-       ;;  {:undo? (:undo? tx-meta)
-       ;;   :forward-outliner-ops forward-outliner-ops
-       ;;   :inverse-outliner-ops inverse-outliner-ops
-       ;;   :tx-id tx-id
-       ;;   :existing-action? (some? existing-ent)})
       (ldb/transact! conn [{:db-sync/tx-id tx-id
                             :db-sync/normalized-tx-data normalized-tx-data
                             :db-sync/reversed-tx-data reversed-datoms
                             :db-sync/pending? true
                             :db-sync/outliner-op (:outliner-op tx-meta)
                             :db-sync/undo-redo? (cond
-                                                 (:undo? tx-meta)
-                                                 :undo
-                                                 (:redo? tx-meta)
-                                                 :redo
-                                                 :else
-                                                 :none)
+                                                  (:undo? tx-meta)
+                                                  :undo
+                                                  (:redo? tx-meta)
+                                                  :redo
+                                                  :else
+                                                  :none)
                             :db-sync/forward-outliner-ops forward-outliner-ops
                             :db-sync/inverse-outliner-ops inverse-outliner-ops
                             :db-sync/inferred-outliner-ops? inferred-outliner-ops?'
@@ -479,15 +472,6 @@
                                      :txs payload}))
                         (p/catch (fn [error]
                                    (js/console.error error))))))))))))))
-
-(defn- combine-tx-reports
-  [tx-reports]
-  (let [tx-reports (vec (keep identity tx-reports))]
-    (when (seq tx-reports)
-      {:db-before (:db-before (first tx-reports))
-       :db-after (:db-after (last tx-reports))
-       :tx-data (mapcat :tx-data tx-reports)
-       :tx-meta (:tx-meta (last tx-reports))})))
 
 (defn- remote-tx-debug-meta
   [temp-tx-meta remote-txs index {:keys [t outliner-op]}]
@@ -888,7 +872,7 @@
 (declare handle-local-tx!)
 
 (defn- rebase-local-op!
-  [repo conn local-tx]
+  [_repo conn local-tx]
   (let [outliner-ops (:forward-outliner-ops local-tx)]
     (try
       (ldb/batch-transact-with-temp-conn!
@@ -953,13 +937,12 @@
 
       (remove-pending-txs! repo (map :tx-id local-txs))
 
-      ;; (worker-undo-redo/clear-history! repo)
-
       (catch :default e
         (js/console.error e)
         (throw e))
       (finally
-        (reset! *rebase-tx-reports nil)))))
+        (reset! *rebase-tx-reports nil)
+        (worker-undo-redo/clear-history! repo)))))
 
 (defn- apply-remote-tx-without-local-changes!
   [{:keys [conn remote-txs temp-tx-meta]}]
@@ -1025,31 +1008,40 @@
   [repo client tx-data]
   (apply-remote-txs! repo client [{:tx-data tx-data}]))
 
+(defn- enqueue-local-tx-aux
+  [repo {:keys [tx-data db-after db-before] :as tx-report}]
+  (let [normalized (normalize-tx-data db-after db-before tx-data)
+        reversed-datoms (reverse-tx-data db-before db-after tx-data)]
+    (when (seq normalized)
+      (persist-local-tx! repo tx-report normalized reversed-datoms)
+      (when-let [client @worker-state/*db-sync-client]
+        (when (= repo (:repo client))
+          (let [send-queue (:send-queue client)]
+            (swap! send-queue
+                   (fn [prev]
+                     (p/then prev
+                             (fn [_]
+                               (when-let [current @worker-state/*db-sync-client]
+                                 (when (= repo (:repo current))
+                                   (when-let [ws (:ws current)]
+                                     (when (ws-open? ws)
+                                       (flush-pending! repo current)))))))))))))))
+
+
+;; (defonce *persist-promise (atom nil))
 (defn enqueue-local-tx!
-  [repo {:keys [tx-meta tx-data db-after db-before] :as tx-report}]
-  (worker-util/profile
-   "enqueue-local-tx!"
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (when-not (or (:rtc-tx? tx-meta)
-                   (and (:batch-tx? @conn) (not= (:outliner-op tx-meta) :rebase))
-                   (:mark-embedding? tx-meta))
-       (when (seq tx-data)
-         (let [normalized (normalize-tx-data db-after db-before tx-data)
-               reversed-datoms (reverse-tx-data db-before db-after tx-data)]
-           (when (seq normalized)
-             (persist-local-tx! repo tx-report normalized reversed-datoms)
-             (when-let [client @worker-state/*db-sync-client]
-               (when (= repo (:repo client))
-                 (let [send-queue (:send-queue client)]
-                   (swap! send-queue
-                          (fn [prev]
-                            (p/then prev
-                                    (fn [_]
-                                      (when-let [current @worker-state/*db-sync-client]
-                                        (when (= repo (:repo current))
-                                          (when-let [ws (:ws current)]
-                                            (when (ws-open? ws)
-                                              (flush-pending! repo current)))))))))))))))))))
+  [repo {:keys [tx-meta tx-data] :as tx-report}]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (when-not (or (:rtc-tx? tx-meta)
+                  (and (:batch-tx? @conn) (not= (:outliner-op tx-meta) :rebase))
+                  (:mark-embedding? tx-meta))
+      (when (seq tx-data)
+        (enqueue-local-tx-aux repo tx-report)
+        ;; (p/do!
+        ;;  (when-let [p @*persist-promise]
+        ;;    p)
+        ;;  (enqueue-local-tx-aux repo tx-report))
+        ))))
 
 (defn handle-local-tx!
   [repo {:keys [tx-data tx-meta db-after] :as tx-report}]
