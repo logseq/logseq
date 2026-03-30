@@ -123,6 +123,28 @@
         (assoc rebase-created-refs-key created-ref-uuids)))
      block)))
 
+(defn- get-missing-ref-by-lookup
+  [missing-refs tag-lookups]
+  (let [now (common-util/time-ms)]
+    (->> missing-refs
+         (keep (fn [{:block/keys [title] :as block :keys [db/ident]}]
+                 (when-let [block-id (:block/uuid block)]
+                   (let [lookup [:block/uuid block-id]
+                         tag-ref? (contains? tag-lookups lookup)
+                         entity (cond-> {:block/uuid block-id
+                                         :block/title (or title "")
+                                         :block/created-at now
+                                         :block/updated-at now
+                                         :block/tags (if tag-ref? :logseq.class/Tag :logseq.class/Page)}
+                                  (string? title)
+                                  (assoc :block/name (common-util/page-name-sanity-lc title))
+                                  tag-ref?
+                                  (assoc :logseq.property.class/extends :logseq.class/Root)
+                                  ident
+                                  (assoc :db/ident ident))]
+                     [lookup entity]))))
+         (into {}))))
+
 (defn rewrite-block-title-with-retracted-refs
   [db block]
   (let [refs (get block rebase-refs-key)
@@ -131,48 +153,17 @@
         retracted-refs (remove (fn [block]
                                  (contains? created-ref-uuids (:block/uuid block)))
                                missing-refs)
-        now (common-util/time-ms)
         tag-lookups (->> (:block/tags block)
                          (filter (fn [v]
                                    (and (vector? v)
                                         (= :block/uuid (first v)))))
                          set)
-        missing-ref-by-lookup (->> missing-refs
-                                   (keep (fn [{:block/keys [title] :as block :keys [db/ident]}]
-                                           (when-let [block-id (:block/uuid block)]
-                                             (let [lookup [:block/uuid block-id]
-                                                   tag-ref? (contains? tag-lookups lookup)
-                                                   entity (cond-> {:block/uuid block-id
-                                                                   :block/title (or title "")
-                                                                   :block/created-at now
-                                                                   :block/updated-at now
-                                                                   :block/tags (if tag-ref? :logseq.class/Tag :logseq.class/Page)}
-                                                            (string? title)
-                                                            (assoc :block/name (common-util/page-name-sanity-lc title))
-                                                            tag-ref?
-                                                            (assoc :logseq.property.class/extends :logseq.class/Root)
-                                                            ident
-                                                            (assoc :db/ident ident))]
-                                               [lookup entity]))))
-                                   (into {}))
+        missing-ref-by-lookup (get-missing-ref-by-lookup missing-refs tag-lookups)
         rewrite-retracted-refs (fn [v]
                                  (let [rewrite-ref (fn [block-ref]
                                                      (or (get missing-ref-by-lookup block-ref)
                                                          block-ref))]
-                                   (cond
-                                     (set? v)
-                                     (set (map rewrite-ref v))
-
-                                     (vector? v)
-                                     (->> v
-                                          (map rewrite-ref)
-                                          vec)
-
-                                     (sequential? v)
-                                     (map rewrite-ref v)
-
-                                     :else
-                                     (rewrite-ref v))))
+                                   (map rewrite-ref v)))
         block' (cond-> block
                  (seq retracted-refs)
                  (update :block/title
