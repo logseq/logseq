@@ -128,8 +128,8 @@
   (let [refs (get block rebase-refs-key)
         created-ref-uuids (set (get block rebase-created-refs-key))
         missing-refs (remove (fn [ref-entity] (d/entity db [:block/uuid (:block/uuid ref-entity)])) refs)
-        retracted-refs (remove (fn [{:block/keys [uuid]}]
-                                 (contains? created-ref-uuids uuid))
+        retracted-refs (remove (fn [block]
+                                 (contains? created-ref-uuids (:block/uuid block)))
                                missing-refs)
         now (common-util/time-ms)
         tag-lookups (->> (:block/tags block)
@@ -138,11 +138,11 @@
                                         (= :block/uuid (first v)))))
                          set)
         missing-ref-by-lookup (->> missing-refs
-                                   (keep (fn [{:block/keys [uuid title] :keys [db/ident]}]
-                                           (when uuid
-                                             (let [lookup [:block/uuid uuid]
+                                   (keep (fn [{:block/keys [title] :as block :keys [db/ident]}]
+                                           (when-let [block-id (:block/uuid block)]
+                                             (let [lookup [:block/uuid block-id]
                                                    tag-ref? (contains? tag-lookups lookup)
-                                                   entity (cond-> {:block/uuid uuid
+                                                   entity (cond-> {:block/uuid block-id
                                                                    :block/title (or title "")
                                                                    :block/created-at now
                                                                    :block/updated-at now
@@ -156,9 +156,9 @@
                                                [lookup entity]))))
                                    (into {}))
         rewrite-retracted-refs (fn [v]
-                                 (let [rewrite-ref (fn [ref]
-                                                     (or (get missing-ref-by-lookup ref)
-                                                         ref))]
+                                 (let [rewrite-ref (fn [block-ref]
+                                                     (or (get missing-ref-by-lookup block-ref)
+                                                         block-ref))]
                                    (cond
                                      (set? v)
                                      (set (map rewrite-ref v))
@@ -384,9 +384,9 @@
   [db tx-data [op args]]
   (case op
     :save-block
-    (let [[block opts] args]
-      (let [created-uuids (created-block-uuids-from-tx-data tx-data)]
-        [:save-block [(sanitize-block-payload db block {:created-uuids created-uuids}) opts]]))
+    (let [[block opts] args
+          created-uuids (created-block-uuids-from-tx-data tx-data)]
+      [:save-block [(sanitize-block-payload db block {:created-uuids created-uuids}) opts]])
 
     :insert-blocks
     [:insert-blocks
