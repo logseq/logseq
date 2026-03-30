@@ -358,3 +358,35 @@
                   @captured)))
          (finally
            (reset! db-sync/*repo->latest-remote-tx latest-prev)))))))
+
+(deftest thread-api-recompute-checksum-diagnostics-passes-sync-diagnostics-test
+  (restoring-worker-state
+   (fn []
+     (let [recompute (@thread-api/*thread-apis :thread-api/recompute-checksum-diagnostics)
+           conn (d/create-conn db-schema/schema)
+           captured (atom nil)
+           latest-tx-prev @db-sync/*repo->latest-remote-tx
+           latest-checksum-prev @db-sync/*repo->latest-remote-checksum
+           result {:recomputed-checksum "recomputed"
+                   :checksum-attrs [:block/uuid]
+                   :blocks []}]
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (reset! db-sync/*repo->latest-remote-tx {test-repo 22})
+       (reset! db-sync/*repo->latest-remote-checksum {test-repo "remote-checksum"})
+       (try
+         (with-redefs [client-op/get-local-tx (fn [_repo] 10)
+                       client-op/get-local-checksum (fn [_repo] "local-checksum")
+                       worker-db-validate/recompute-checksum-diagnostics (fn [& args]
+                                                                           (reset! captured args)
+                                                                           result)]
+           (is (= result (recompute test-repo)))
+           (is (= [test-repo
+                   conn
+                   {:local-tx 10
+                    :remote-tx 22
+                    :local-checksum "local-checksum"
+                    :remote-checksum "remote-checksum"}]
+                  @captured)))
+         (finally
+           (reset! db-sync/*repo->latest-remote-tx latest-tx-prev)
+           (reset! db-sync/*repo->latest-remote-checksum latest-checksum-prev)))))))

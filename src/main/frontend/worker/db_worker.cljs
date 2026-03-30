@@ -1035,6 +1035,11 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (worker-db-validate/validate-db repo conn (sync-diagnostics-for-validation repo))))
 
+(def-thread-api :thread-api/recompute-checksum-diagnostics
+  [repo]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (worker-db-validate/recompute-checksum-diagnostics repo conn (sync-diagnostics-for-validation repo))))
+
 ;; Returns an export-edn map for given repo. When there's an unexpected error, a map
 ;; with key :export-edn-error is returned
 (def-thread-api :thread-api/export-edn
