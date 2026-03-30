@@ -213,7 +213,9 @@
                           (mapcat
                            (fn [[property-id v]]
                              (build-property-value-tx-data conn property property-id v)) properties)))
-        many->one? (and (db-property/many? property) (= :one (:db/cardinality schema)))]
+        many->one? (and (db-property/many? property)
+                        ;; For UI calls, :db/cardinality can have :one and :many values
+                        (contains? #{:one :db.cardinality/one} (:db/cardinality schema)))]
     (when (and many->one? (seq (d/datoms @conn :avet db-ident)))
       (throw (ex-info "Disallowed many to one conversion"
                       {:type :notification
