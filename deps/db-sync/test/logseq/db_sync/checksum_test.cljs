@@ -110,3 +110,33 @@
                                         :kv/value true}])]
       (is (= (checksum/recompute-checksum (:db-after tx-report))
              (checksum/update-checksum (checksum/recompute-checksum db-before) tx-report))))))
+
+(deftest recompute-checksum-diagnostics-includes-relevant-attrs-test
+  (testing "diagnostics includes checksum attrs and block values used for checksum export"
+    (let [db (sample-db)
+          {:keys [checksum attrs blocks e2ee?]} (checksum/recompute-checksum-diagnostics db)
+          child-uuid (:block/uuid (d/entity db 4))
+          child-parent-uuid (:block/uuid (:block/parent (d/entity db 4)))
+          child-page-uuid (:block/uuid (:block/page (d/entity db 4)))
+          child (some #(when (= child-uuid (:block/uuid %)) %) blocks)]
+      (is (false? e2ee?))
+      (is (= (checksum/recompute-checksum db) checksum))
+      (is (= #{:block/uuid :block/title :block/name :block/parent :block/page}
+             (set attrs)))
+      (is (= 4 (count blocks)))
+      (is (= child-parent-uuid (:block/parent child)))
+      (is (= child-page-uuid (:block/page child)))
+      (is (string? (:block/title child))))))
+
+(deftest recompute-checksum-diagnostics-omits-title-and-name-in-e2ee-test
+  (testing "diagnostics for E2EE graphs omits title/name from checksum attrs and export blocks"
+    (let [db (-> (sample-db)
+                 (d/db-with [{:db/ident :logseq.kv/graph-rtc-e2ee?
+                              :kv/value true}]))
+          {:keys [checksum attrs blocks e2ee?]} (checksum/recompute-checksum-diagnostics db)]
+      (is e2ee?)
+      (is (= (checksum/recompute-checksum db) checksum))
+      (is (= #{:block/uuid :block/parent :block/page}
+             (set attrs)))
+      (is (every? #(not (contains? % :block/title)) blocks))
+      (is (every? #(not (contains? % :block/name)) blocks)))))

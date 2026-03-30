@@ -1,6 +1,8 @@
 (ns frontend.handler.common.developer
   "Common fns for developer related functionality"
-  (:require [cljs.pprint :as pprint]
+  (:require ["/frontend/utils" :as utils]
+            [cljs.pprint :as pprint]
+            [clojure.string :as string]
             [datascript.impl.entity :as de]
             [frontend.db :as db]
             [frontend.format.mldoc :as mldoc]
@@ -9,6 +11,7 @@
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [frontend.util :as util]
             [frontend.util.page :as page-util]
             [logseq.db.frontend.property :as db-property]
             [promesa.core :as p]))
@@ -82,6 +85,46 @@
 
 (defn ^:export validate-db []
   (state/<invoke-db-worker :thread-api/validate-db (state/get-current-repo)))
+
+(defn- checksum-export-file-name
+  [repo]
+  (-> (or repo "graph")
+      (string/replace #"^/+" "")
+      (string/replace #"[\\/]+" "_")
+      (str "_checksum_" (quot (util/time-ms) 1000))))
+
+(defn ^:export recompute-checksum-diagnostics
+  []
+  (if-let [repo (state/get-current-repo)]
+    (-> (state/<invoke-db-worker :thread-api/recompute-checksum-diagnostics repo)
+        (p/then (fn [{:keys [recomputed-checksum local-checksum remote-checksum blocks checksum-attrs e2ee?]
+                      :as result}]
+                  (if (map? result)
+                    (let [export-edn {:repo repo
+                                      :generated-at (.toISOString (js/Date.))
+                                      :e2ee? e2ee?
+                                      :recomputed-checksum recomputed-checksum
+                                      :local-checksum local-checksum
+                                      :remote-checksum remote-checksum
+                                      :checksum-attrs checksum-attrs
+                                      :blocks blocks}
+                          content (with-out-str (pprint/pprint export-edn))
+                          blob (js/Blob. #js [content] (clj->js {:type "text/edn;charset=utf-8"}))
+                          filename (checksum-export-file-name repo)]
+                      (utils/saveToFile blob filename "edn")
+                      (notification/show!
+                       (str "Checksum recomputed. Recomputed: " recomputed-checksum
+                            ", local: " (or local-checksum "<nil>")
+                            ", remote: " (or remote-checksum "<nil>")
+                            ". Downloaded " filename ".edn with " (count blocks)
+                            " blocks and checksum attrs " (pr-str checksum-attrs) ".")
+                       :success
+                       false))
+                    (notification/show! "Unable to compute checksum diagnostics for current graph." :warning))))
+        (p/catch (fn [error]
+                   (js/console.error "recompute-checksum-diagnostics failed:" error)
+                   (notification/show! "Failed to compute graph checksum diagnostics." :error))))
+    (notification/show! "No graph found" :warning)))
 
 (defn import-chosen-graph
   [repo]
