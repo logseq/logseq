@@ -350,6 +350,41 @@
     (reset! *result (apply toggle-reaction! conn args))
     nil))
 
+(defn- apply-single-op!
+  [conn ops *result opts' clean-tx-meta]
+  (let [db @conn
+        op (first ops)
+        result (case (ffirst ops)
+                 :save-block
+                 (apply outliner-core/save-block db (second op))
+                 :insert-blocks
+                 (let [[blocks target-block-id insert-opts] (second op)]
+                   (outliner-core/insert-blocks db blocks
+                                                (d/entity db target-block-id)
+                                                insert-opts))
+                 :delete-blocks
+                 (let [[block-ids opts] (second op)
+                       blocks (keep #(d/entity db %) block-ids)]
+                   (outliner-core/delete-blocks db blocks (merge opts opts'))))
+        additional-tx (:additional-tx opts')
+        full-tx (concat (:tx-data result) additional-tx)]
+    (ldb/transact! conn full-tx clean-tx-meta)
+    (reset! *result result)))
+
+(defn- apply-save-followed-by-insert!
+  [conn ops *result opts' clean-tx-meta]
+  (let [save-block-tx (:tx-data (apply outliner-core/save-block @conn (second (first ops))))
+        [blocks target-block-id insert-opts] (second (second ops))
+        insert-blocks-result (outliner-core/insert-blocks @conn blocks
+                                                          (d/entity @conn target-block-id)
+                                                          insert-opts)
+        additional-tx (:additional-tx opts')
+        full-tx (concat save-block-tx
+                        (:tx-data insert-blocks-result)
+                        additional-tx)]
+    (ldb/transact! conn full-tx clean-tx-meta)
+    (reset! *result insert-blocks-result)))
+
 (defn apply-ops!
   [conn ops opts]
   (assert (ops-validator ops) ops)
@@ -364,43 +399,16 @@
                      (nil? (:outliner-op opts)))
                 (assoc :outliner-op single-op-outliner-op))
         *result (atom nil)
-        clean-tx-meta (dissoc opts' :additional-tx :transact-opts :current-block)
-        db @conn]
+        clean-tx-meta (dissoc opts' :additional-tx :transact-opts :current-block)]
     (cond
       (and single-op-outliner-op
            (contains? #{:save-block :insert-blocks :delete-blocks} (ffirst ops)))
-      (let [op (first ops)
-            result (case (ffirst ops)
-                     :save-block
-                     (apply outliner-core/save-block db (second op))
-                     :insert-blocks
-                     (let [[blocks target-block-id insert-opts] (second op)]
-                       (outliner-core/insert-blocks db blocks
-                                                    (d/entity db target-block-id)
-                                                    insert-opts))
-                     :delete-blocks
-                     (let [[block-ids opts] (second op)
-                           blocks (keep #(d/entity db %) block-ids)]
-                       (outliner-core/delete-blocks db blocks (merge opts opts'))))
-            additional-tx (:additional-tx opts')
-            full-tx (concat (:tx-data result) additional-tx)]
-        (ldb/transact! conn full-tx clean-tx-meta)
-        (reset! *result result))
+      (apply-single-op! conn ops *result opts' clean-tx-meta)
 
       (and (= 2 (count ops))
            (= :save-block (ffirst ops))
            (= :insert-blocks (first (second ops))))
-      (let [save-block-tx (:tx-data (apply outliner-core/save-block @conn (second (first ops))))
-            [blocks target-block-id insert-opts] (second (second ops))
-            insert-blocks-result (outliner-core/insert-blocks @conn blocks
-                                                              (d/entity @conn target-block-id)
-                                                              insert-opts)
-            additional-tx (:additional-tx opts')
-            full-tx (concat save-block-tx
-                            (:tx-data insert-blocks-result)
-                            additional-tx)]
-        (ldb/transact! conn full-tx clean-tx-meta)
-        (reset! *result insert-blocks-result))
+      (apply-save-followed-by-insert! conn ops *result opts' clean-tx-meta)
 
       :else
       (outliner-tx/transact!
