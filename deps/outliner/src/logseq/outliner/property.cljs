@@ -221,6 +221,12 @@
                       {:type :notification
                        :payload {:message "This property can't change from multiple values to one value because it has existing data."
                                  :type :warning}})))
+    (when (and (contains? changed-property-attrs :logseq.property/type)
+               (seq (d/datoms @conn :avet db-ident)))
+      (throw (ex-info "Disallowed type change with existing data"
+                      {:type :notification
+                       :payload {:message "This property's type can't be changed because it has existing data."
+                                 :type :error}})))
     (when (seq tx-data)
       (ldb/transact! conn tx-data {:outliner-op :update-property
                                    :property-id (:db/id property)}))
