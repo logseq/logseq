@@ -52,6 +52,7 @@
     :logseq.property.embedding/hnsw-label-updated-at})
 
 (def ^:api rebase-refs-key :block.temp/sync-rebase-refs)
+(def ^:api rebase-created-refs-key :block.temp/sync-created-refs)
 (def ^:api canonical-transact-op [[:transact nil]])
 
 (defn- stable-entity-ref
@@ -82,7 +83,7 @@
   (->> refs
        (keep (fn [ref-entity]
                (when (:block/uuid ref-entity)
-                 (select-keys ref-entity [:block/uuid :block/title]))))
+                 (select-keys ref-entity [:block/uuid :block/title :db/ident]))))
        vec))
 
 (defn- ref-attr?
@@ -92,9 +93,17 @@
           (:db/valueType (d/entity db a)))))
 
 (defn- sanitize-block-payload
-  [db block]
-  (if (map? block)
-    (let [refs (sanitize-block-refs (:block/refs block))
+  ([db block]
+   (sanitize-block-payload db block nil))
+  ([db block {:keys [created-uuids]}]
+   (if (map? block)
+     (let [refs (sanitize-block-refs (:block/refs block))
+           created-ref-uuids (when (and (seq created-uuids) (seq refs))
+                               (->> refs
+                                    (keep :block/uuid)
+                                    (filter (set created-uuids))
+                                    distinct
+                                    vec))
           m (reduce-kv
              (fn [m k v]
                (cond
@@ -108,19 +117,73 @@
              block)]
       (cond-> m
         (seq refs)
-        (assoc rebase-refs-key refs)))
-    block))
+        (assoc rebase-refs-key refs)
+
+        (seq created-ref-uuids)
+        (assoc rebase-created-refs-key created-ref-uuids)))
+     block)))
 
 (defn rewrite-block-title-with-retracted-refs
   [db block]
   (let [refs (get block rebase-refs-key)
-        retracted-refs (remove (fn [ref-entity] (d/entity db [:block/uuid (:block/uuid ref-entity)])) refs)
-        block' (if (seq retracted-refs)
-                 (update block :block/title
+        created-ref-uuids (set (get block rebase-created-refs-key))
+        missing-refs (remove (fn [ref-entity] (d/entity db [:block/uuid (:block/uuid ref-entity)])) refs)
+        retracted-refs (remove (fn [{:block/keys [uuid]}]
+                                 (contains? created-ref-uuids uuid))
+                               missing-refs)
+        now (common-util/time-ms)
+        tag-lookups (->> (:block/tags block)
+                         (filter (fn [v]
+                                   (and (vector? v)
+                                        (= :block/uuid (first v)))))
+                         set)
+        missing-ref-by-lookup (->> missing-refs
+                                   (keep (fn [{:block/keys [uuid title] :keys [db/ident]}]
+                                           (when uuid
+                                             (let [lookup [:block/uuid uuid]
+                                                   tag-ref? (contains? tag-lookups lookup)
+                                                   entity (cond-> {:block/uuid uuid
+                                                                   :block/title (or title "")
+                                                                   :block/created-at now
+                                                                   :block/updated-at now
+                                                                   :block/tags (if tag-ref? :logseq.class/Tag :logseq.class/Page)}
+                                                            (string? title)
+                                                            (assoc :block/name (common-util/page-name-sanity-lc title))
+                                                            tag-ref?
+                                                            (assoc :logseq.property.class/extends :logseq.class/Root)
+                                                            ident
+                                                            (assoc :db/ident ident))]
+                                               [lookup entity]))))
+                                   (into {}))
+        rewrite-retracted-refs (fn [v]
+                                 (let [rewrite-ref (fn [ref]
+                                                     (or (get missing-ref-by-lookup ref)
+                                                         ref))]
+                                   (cond
+                                     (set? v)
+                                     (set (map rewrite-ref v))
+
+                                     (vector? v)
+                                     (->> v
+                                          (map rewrite-ref)
+                                          vec)
+
+                                     (sequential? v)
+                                     (map rewrite-ref v)
+
+                                     :else
+                                     (rewrite-ref v))))
+        block' (cond-> block
+                 (seq retracted-refs)
+                 (update :block/title
                          (fn [title]
-                           (db-content/content-id-ref->page title retracted-refs)))
-                 block)]
-    (dissoc block' rebase-refs-key)))
+                           (-> title
+                               (db-content/content-id-ref->page retracted-refs))))
+
+                 (seq missing-ref-by-lookup)
+                 (-> (update :block/refs rewrite-retracted-refs)
+                     (update :block/tags rewrite-retracted-refs)))]
+    (dissoc block' rebase-refs-key rebase-created-refs-key)))
 
 (defn- sanitize-insert-block-payload
   [db block]
@@ -322,7 +385,8 @@
   (case op
     :save-block
     (let [[block opts] args]
-      [:save-block [(sanitize-block-payload db block) opts]])
+      (let [created-uuids (created-block-uuids-from-tx-data tx-data)]
+        [:save-block [(sanitize-block-payload db block {:created-uuids created-uuids}) opts]]))
 
     :insert-blocks
     [:insert-blocks

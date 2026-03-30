@@ -189,10 +189,6 @@
      :inverse-outliner-ops nil}
     (op-construct/derive-history-outliner-ops db-before db-after tx-data tx-meta)))
 
-(defn- rewrite-block-title-with-retracted-refs
-  [db block]
-  (op-construct/rewrite-block-title-with-retracted-refs db block))
-
 (defn- inferred-outliner-ops?
   [tx-meta]
   (and (nil? (:outliner-ops tx-meta))
@@ -641,7 +637,7 @@
                       (d/entity db [:block/uuid block-uuid]))
           block-base (dissoc block :db/id :block/order)
           block' (merge block-base
-                        (rewrite-block-title-with-retracted-refs db block-base))]
+                        (op-construct/rewrite-block-title-with-retracted-refs db block-base))]
       (if (some? block-ent)
         (outliner-core/save-block! conn
                                    block'
@@ -673,7 +669,7 @@
       (when-not (and target-block (seq blocks))
         (invalid-rebase-op! op {:args args}))
       (outliner-core/insert-blocks! conn
-                                    (mapv #(rewrite-block-title-with-retracted-refs db %) blocks)
+                                    (mapv #(op-construct/rewrite-block-title-with-retracted-refs db %) blocks)
                                     target-block
                                     (assoc (or opts {}) :persist-op? false)))
 
