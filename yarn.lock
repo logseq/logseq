@@ -6565,18 +6565,12 @@ postcss@^8.4.23, postcss@^8.5.8:
     picocolors "^1.1.1"
     source-map-js "^1.2.1"
 
-posthog-js@1.141.0:
-  version "1.141.0"
-  resolved "https://registry.yarnpkg.com/posthog-js/-/posthog-js-1.141.0.tgz#bf85c935aa6b12a87f73f576adb6dd943888e675"
-  integrity sha512-EuVCq86izPX7+1eD/o87lF1HalRD6Nk5735w+FKZJ5KAPwoQjr5FCaL2V8Ed36DyQQz4gQj+PEx5i6DFKCiDzA==
+posthog-js@1.10.0:
+  version "1.10.0"
+  resolved "https://registry.yarnpkg.com/posthog-js/-/posthog-js-1.10.0.tgz#4d86360161170d37c249482f016acac2f4b6d978"
+  integrity sha512-WbcPRRX62XTq2F2lbakuDK6/HPAJ43gkuPeM4vU/hoC7WICAc+gZJaXZFy8zY25r/5GZPWUhhW8KrbL0aZ11XQ==
   dependencies:
-    fflate "^0.4.8"
-    preact "^10.19.3"
-
-preact@^10.19.3:
-  version "10.29.0"
-  resolved "https://registry.yarnpkg.com/preact/-/preact-10.29.0.tgz#a6e5858670b659c4d471c6fea232233e03b403e8"
-  integrity sha512-wSAGyk2bYR1c7t3SZ3jHcM6xy0lcBcDel6lODcs9ME6Th++Dx2KU+6D3HD8wMMKGA8Wpw7OMd3/4RGzYRpzwRg==
+    fflate "^0.4.1"
 
 prebuild-install@^7.1.1:
   version "7.1.3"
