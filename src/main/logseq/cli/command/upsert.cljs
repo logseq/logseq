@@ -417,7 +417,7 @@
 
 (defn- throw-upsert-id-type-mismatch!
   [entity-type id]
-  (throw (ex-info (str "id does not reference expected " entity-type)
+  (throw (ex-info (str "id must be a node tagged with #" entity-type)
                   {:code upsert-id-type-mismatch-code
                    :entity-type entity-type
                    :id id})))
@@ -430,7 +430,7 @@
       (throw-upsert-id-not-found! "page" id)
 
       (not (page-entity? entity))
-      (throw-upsert-id-type-mismatch! "page" id)
+      (throw-upsert-id-type-mismatch! "Page" id)
 
       :else
       entity)))
@@ -443,7 +443,7 @@
       (throw-upsert-id-not-found! "tag" id)
 
       (not (tag-entity? entity))
-      (throw-upsert-id-type-mismatch! "tag" id)
+      (throw-upsert-id-type-mismatch! "Tag" id)
 
       :else
       entity)))
@@ -485,7 +485,7 @@
       (throw-upsert-id-not-found! "property" id)
 
       (not (property-entity? entity))
-      (throw-upsert-id-type-mismatch! "property" id)
+      (throw-upsert-id-type-mismatch! "Property" id)
 
       :else
       entity)))
