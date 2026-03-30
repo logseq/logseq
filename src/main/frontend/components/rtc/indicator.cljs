@@ -27,6 +27,8 @@
          :graph-uuid nil
          :local-tx nil
          :remote-tx nil
+         :local-checksum nil
+         :remote-checksum nil
          :rtc-state :open
          :download-logs nil
          :upload-logs nil
@@ -61,6 +63,8 @@
                                          :graph-uuid (:graph-uuid state)
                                          :local-tx (:local-tx state)
                                          :remote-tx (:remote-tx state)
+                                         :local-checksum (:local-checksum state)
+                                         :remote-checksum (:remote-checksum state)
                                          :rtc-state (if (:rtc-lock state) :open :close)))
                                 rtc-flows/rtc-state-flow)))]
       (reset! *update-detail-info-canceler canceler))))
@@ -118,7 +122,7 @@
   []
   (let [online? (hooks/use-flow-state flows/network-online-event-flow)
         [expand-debug? set-expand-debug!] (hooks/use-state false)
-        {:keys [graph-uuid local-tx remote-tx rtc-state
+        {:keys [graph-uuid local-tx remote-tx local-checksum remote-checksum rtc-state
                 download-logs upload-logs misc-logs pending-local-ops pending-server-ops]}
         (hooks/use-flow-state (m/watch *detail-info))]
     [:div.rtc-info.flex.flex-col.gap-1.p-2.text-gray-11
@@ -144,6 +148,8 @@
                graph-uuid (assoc :graph-uuid graph-uuid)
                local-tx (assoc :local-tx local-tx)
                remote-tx (assoc :remote-tx remote-tx)
+               local-checksum (assoc :local-checksum local-checksum)
+               remote-checksum (assoc :remote-checksum remote-checksum)
                rtc-state (assoc :rtc-state rtc-state))
              pprint/pprint
              with-out-str)]])

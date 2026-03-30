@@ -55,6 +55,12 @@
      (or (parse-hex32 (subs checksum 8 16)) 0)]
     [0 0]))
 
+(defn- valid-checksum?
+  [checksum]
+  (boolean
+   (and (string? checksum)
+        (re-matches #"[0-9a-fA-F]{16}" checksum))))
+
 (defn- state->checksum
   [[fnv djb]]
   (str (unsigned-hex fnv)
@@ -98,9 +104,9 @@
         (not e2ee?) (hash-code field-separator)
         (not e2ee?) (digest-string name)
         (not e2ee?) (hash-code field-separator)
-        true (digest-string (some-> parent str))
+        true (digest-string (some-> parent :block/uuid str))
         true (hash-code field-separator)
-        true (digest-string (some-> page str))))))
+        true (digest-string (some-> page :block/uuid str))))))
 
 (defn recompute-checksum
   [db]
@@ -120,25 +126,60 @@
                  [0 0])
          state->checksum)))
 
+(defn recompute-checksum-diagnostics
+  [db]
+  (let [e2ee? (boolean (ldb/get-graph-rtc-e2ee? db))
+        attrs (relevant-attrs e2ee?)
+        eids (->> (d/datoms db :eavt)
+                  (keep (fn [datom]
+                          (when (contains? attrs (:a datom))
+                            (:e datom))))
+                  distinct)
+        blocks (->> eids
+                    (keep (fn [eid]
+                            (let [{:keys [block/uuid block/title block/name block/parent block/page]} (entity-values db eid e2ee?)]
+                              (when uuid
+                                (cond-> {:block/uuid uuid
+                                         :block/parent parent
+                                         :block/page page}
+                                  (not e2ee?) (assoc :block/title title
+                                                     :block/name name))))))
+                    (sort-by (comp str :block/uuid))
+                    vec)]
+    {:checksum (recompute-checksum db)
+     :e2ee? e2ee?
+     :attrs (->> attrs (sort-by str) vec)
+     :blocks blocks}))
+
 (defn update-checksum
   [checksum {:keys [db-before db-after tx-data]}]
-  (let [db (or db-after db-before)
-        e2ee? (ldb/get-graph-rtc-e2ee? db)
-        changed-eids (->> tx-data (keep :e) distinct)
-        initial-state (if (string? checksum)
-                        (checksum->state checksum)
-                        (checksum->state (when db-before (recompute-checksum db-before))))]
-    (->> changed-eids
-         (reduce (fn [[sum-fnv sum-djb] eid]
-                   (let [old-digest (when db-before (entity-digest db-before eid e2ee?))
-                         new-digest (when db-after (entity-digest db-after eid e2ee?))
-                         [sum-fnv sum-djb] (if old-digest
-                                             [(sub-step sum-fnv (first old-digest))
-                                              (sub-step sum-djb (second old-digest))]
-                                             [sum-fnv sum-djb])]
-                     (if new-digest
-                       [(add-step sum-fnv (first new-digest))
-                        (add-step sum-djb (second new-digest))]
-                       [sum-fnv sum-djb])))
-                 initial-state)
-         state->checksum)))
+  (let [before-e2ee? (ldb/get-graph-rtc-e2ee? db-before)
+        after-e2ee? (ldb/get-graph-rtc-e2ee? db-after)]
+    (if (not= before-e2ee? after-e2ee?)
+      ;; E2EE mode changes the global digest semantics, so incremental deltas are invalid.
+      (recompute-checksum db-after)
+      (let [changed-eids (->> tx-data
+                              (remove (fn [d]
+                                        (contains? #{:block/tx-id} (:a d))))
+                              (keep (fn [d]
+                                      (let [e (:e d)]
+                                        (or (:block/uuid (d/entity db-before e))
+                                            (:block/uuid (d/entity db-after e))))))
+                              distinct)
+            initial-state (if (valid-checksum? checksum)
+                            (checksum->state checksum)
+                            (checksum->state (recompute-checksum db-before)))]
+        (->> changed-eids
+             (reduce (fn [[sum-fnv sum-djb] uuid]
+                       (let [old-digest (when-let [eid (:db/id (d/entity db-before [:block/uuid uuid]))]
+                                          (entity-digest db-before eid after-e2ee?))
+                             new-digest (when-let [eid (:db/id (d/entity db-after [:block/uuid uuid]))]
+                                          (entity-digest db-after eid after-e2ee?))]
+                         [(cond-> sum-fnv
+                            old-digest (sub-step (first old-digest))
+                            new-digest (add-step (first new-digest)))
+                          (cond-> sum-djb
+                            old-digest (sub-step (second old-digest))
+                            new-digest (add-step (second new-digest)))]))
+                     initial-state)
+             state->checksum)))))

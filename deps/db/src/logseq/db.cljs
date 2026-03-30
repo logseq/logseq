@@ -5,6 +5,7 @@
             [clojure.walk :as walk]
             [datascript.conn :as dc]
             [datascript.core :as d]
+            [datascript.storage :as storage]
             [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
             [logseq.common.plural :as common-plural]
@@ -13,13 +14,13 @@
             [logseq.db.common.delete-blocks :as delete-blocks] ;; Load entity extensions
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.initial-data :as common-initial-data]
-            [logseq.db.common.normalize :as db-normalize]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.db :as db-db]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.validate :as db-validate]
-            [logseq.db.sqlite.util :as sqlite-util])
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.common.log :as log])
   (:refer-clojure :exclude [object?]))
 
 (def built-in? entity-util/built-in?)
@@ -33,6 +34,7 @@
 (defonce *transact-fn (atom nil))
 (defonce *transact-invalid-callback (atom nil))
 (defonce *transact-pipeline-fn (atom nil))
+(defonce *debounce-fn (atom nil))
 
 (defn register-transact-fn!
   [f]
@@ -43,11 +45,15 @@
 (defn register-transact-pipeline-fn!
   [f]
   (when f (reset! *transact-pipeline-fn f)))
+(defn register-debounce-fn!
+  [f]
+  (when f (reset! *debounce-fn f)))
 
 (defn- remove-temp-block-data
   [tx-data]
   (let [remove-block-temp-f (fn [m]
-                              (->> (remove (fn [[k _v]] (= "block.temp" (namespace k))) m)
+                              (->> (remove (fn [[k _v]]
+                                             (= "block.temp" (namespace k))) m)
                                    (into {})))]
     (keep (fn [data]
             (cond
@@ -81,15 +87,6 @@
        f))
    tx-data))
 
-(comment
-  (defn- skip-db-validate?
-    [datoms]
-    (every?
-     (fn [d]
-       (contains? #{:logseq.property/created-by-ref :block/refs :block/tx-id}
-                  (:a d)))
-     datoms)))
-
 (defn- throw-if-page-has-block-parent!
   [db tx-data]
   (when (some (fn [d] (and (:added d)
@@ -99,6 +96,12 @@
     (throw (ex-info "Page can't have block as parent"
                     {:tx-data tx-data}))))
 
+(defn debounced-store-db
+  [conn]
+  (when-some [_storage (storage/storage @conn)]
+    (let [f (or @*debounce-fn d/store)]
+      (f @conn))))
+
 (defn- transact-sync
   [conn tx-data tx-meta]
   (try
@@ -106,10 +109,10 @@
           db-based? (entity-plus/db-based-graph? db)]
       (if (and db-based?
                (not
-                (or (:batch-temp-conn? @conn)
-                    (:rtc-download-graph? tx-meta)
+                (or (:rtc-download-graph? tx-meta)
                     (:reset-conn! tx-meta)
                     (:initial-db? tx-meta)
+                    (:skip-validate-db? db)
                     (:skip-validate-db? tx-meta false)
                     (:logseq.graph-parser.exporter/new-graph? tx-meta))))
         (let [tx-report* (d/with db tx-data tx-meta)
@@ -119,11 +122,15 @@
               [validate-result errors] (db-validate/validate-tx-report tx-report nil)]
           (cond
             validate-result
-            (when (and tx-report (seq (:tx-data tx-report)))
+            (when (and tx-report
+                       (seq (:tx-data tx-report)))
               ;; perf enhancement: avoid repeated call on `d/with`
               (reset! conn (:db-after tx-report))
-              (dc/store-after-transact! conn tx-report)
-              (dc/run-callbacks conn tx-report))
+              (if (:batch-tx? @conn)
+                (dc/run-callbacks conn tx-report)
+                (do
+                  (debounced-store-db conn)
+                  (dc/run-callbacks conn tx-report))))
 
             :else
             (do
@@ -182,33 +189,70 @@
          (transact-fn repo-or-conn tx-data tx-meta)
          (transact-sync repo-or-conn tx-data tx-meta))))))
 
-(defn transact-with-temp-conn!
+(defn batch-transact-with-temp-conn!
   "Validate db and store once for a batch transaction, the `temp` conn can still load data from disk,
-  however it can't write to the disk."
+  however it can't write to the disk.
+  This fn supports nested calls, however, don't rely on the tx-report for undo/redo."
   [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
   (let [temp-conn (d/conn-from-db @conn)
-        *batch-tx-data (volatile! [])]
+        *batch-tx-data (volatile! [])
+        *complete? (volatile! false)]
     ;; can read from disk, write is disallowed
     (swap! temp-conn assoc
            :skip-store? true
-           :batch-temp-conn? true)
+           :batch-tx? true
+           :skip-validate-db? true)
     (d/listen! temp-conn ::temp-conn-batch-tx
                (fn [{:keys [tx-data] :as tx-report}]
                  (vswap! *batch-tx-data into tx-data)
                  (when (fn? listen-db)
                    (listen-db tx-report))))
-    (batch-tx-fn temp-conn *batch-tx-data)
-    (let [tx-data @*batch-tx-data
-          temp-after-db @temp-conn]
-      (d/unlisten! temp-conn ::temp-conn-batch-tx)
-      (reset! temp-conn nil)
-      (vreset! *batch-tx-data nil)
-      (when (seq tx-data)
-        ;; transact tx-data to `conn` and validate db
-        (let [tx-data' (->>
-                        tx-data
-                        (db-normalize/replace-attr-retract-with-retract-entity temp-after-db))]
-          (transact! conn tx-data' tx-meta))))))
+    (try
+      (batch-tx-fn temp-conn *batch-tx-data)
+      (vreset! *complete? true)
+      (finally
+        (let [tx-data @*batch-tx-data]
+          (d/unlisten! temp-conn ::temp-conn-batch-tx)
+          (reset! temp-conn nil)
+          (vreset! *batch-tx-data nil)
+          (when (and @*complete? (seq tx-data))
+            ;; transact tx-data to `conn` and validate db
+            (transact! conn tx-data tx-meta)))))))
+
+(defn batch-transact!
+  "Store once for a batch transaction, notice that this fn doesn't support nest `batch-transact` calls"
+  [conn tx-meta batch-tx-fn & {:keys [listen-db]}]
+  (let [db-before @conn
+        *tx-data (atom [])]
+    (try
+      (when (:batch-tx @conn)
+        (throw (ex-info "batch-transact! can't be nested called" {:tx-meta tx-meta})))
+      (when (fn? listen-db) (d/listen! conn ::batch-tx
+                                       (fn [tx-report]
+                                         (swap! *tx-data into (:tx-data tx-report))
+                                         (listen-db tx-report))))
+      (swap! conn assoc :skip-store? true :batch-tx? true)
+      (batch-tx-fn conn)
+      (when (fn? listen-db) (d/unlisten! conn ::batch-tx))
+
+      (swap! conn dissoc :skip-store? :batch-tx?)
+
+      (debounced-store-db conn)
+
+      (let [batch-tx-data @*tx-data
+            _ (reset! *tx-data nil)
+            tx-report {:db-before db-before
+                       :db-after @conn
+                       :tx-meta tx-meta
+                       :tx-data batch-tx-data}]
+        (dc/run-callbacks conn tx-report)
+        tx-report)
+      (catch :default e
+        (log/error e)
+        (reset! conn db-before)
+        (swap! conn dissoc :skip-store? :batch-tx?)
+        (reset! *tx-data nil)
+        (throw e)))))
 
 (def page? entity-util/page?)
 (def internal-page? entity-util/internal-page?)
@@ -280,23 +324,73 @@
                      :else
                      (:block/_parent parent)))))
 
+(defn- get-right-sibling-for-property-children
+  [block parent]
+  (assert (or (de/entity? block) (nil? block)))
+  (let [children (get-block-children-or-property-children block parent)
+        right (some (fn [child] (when (> (compare (:block/order child) (:block/order block)) 0) child)) children)]
+    (when (not= (:db/id right) (:db/id block))
+      right)))
+
 (defn get-right-sibling
   [block]
   (assert (or (de/entity? block) (nil? block)))
   (when-let [parent (:block/parent block)]
-    (let [children (get-block-children-or-property-children block parent)
-          right (some (fn [child] (when (> (compare (:block/order child) (:block/order block)) 0) child)) children)]
-      (when (not= (:db/id right) (:db/id block))
-        right))))
+    (cond
+      (:block/closed-value-property block)
+      (get-right-sibling-for-property-children block parent)
+
+      (:logseq.property/created-from-property block)
+      (get-right-sibling-for-property-children block parent)
+
+      :else
+      (let [db (.-db block)
+            datoms (d/datoms db :avet :block/parent (:db/id parent))
+            child-orders (->> (map (fn [d]
+                                     [(:e d)
+                                      (:v (first (d/datoms db :eavt (:e d) :block/order)))]) datoms)
+                              (sort-by last))
+            block-order (:block/order block)]
+
+        (some (fn [[e child-order]]
+                (when (and (> (compare child-order block-order) 0)
+                           (not (seq (d/datoms db :avet :logseq.property/created-from-property e)))
+                           (not (seq (d/datoms db :avet :block/closed-value-property e))))
+                  (d/entity db e))) child-orders)))))
+
+(defn- get-left-sibling-for-property-children
+  [block parent]
+  (assert (or (de/entity? block) (nil? block)))
+  (let [children (reverse (get-block-children-or-property-children block parent))
+        left (some (fn [child] (when (< (compare (:block/order child) (:block/order block)) 0) child)) children)]
+    (when (not= (:db/id left) (:db/id block))
+      left)))
 
 (defn get-left-sibling
   [block]
   (assert (or (de/entity? block) (nil? block)))
   (when-let [parent (:block/parent block)]
-    (let [children (reverse (get-block-children-or-property-children block parent))
-          left (some (fn [child] (when (< (compare (:block/order child) (:block/order block)) 0) child)) children)]
-      (when (not= (:db/id left) (:db/id block))
-        left))))
+    (cond
+      (:block/closed-value-property block)
+      (get-left-sibling-for-property-children block parent)
+
+      (:logseq.property/created-from-property block)
+      (get-left-sibling-for-property-children block parent)
+
+      :else
+      (let [db (.-db block)
+            datoms (d/datoms db :avet :block/parent (:db/id parent))
+            child-orders (->> (map (fn [d]
+                                     [(:e d)
+                                      (:v (first (d/datoms db :eavt (:e d) :block/order)))]) datoms)
+                              (sort-by last)
+                              reverse)
+            block-order (:block/order block)]
+        (some (fn [[e child-order]]
+                (when (and (< (compare child-order block-order) 0)
+                           (not (seq (d/datoms db :avet :logseq.property/created-from-property e)))
+                           (not (seq (d/datoms db :avet :block/closed-value-property e))))
+                  (d/entity db e))) child-orders)))))
 
 (defn get-down
   [block]

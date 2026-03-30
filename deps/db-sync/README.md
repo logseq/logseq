@@ -59,6 +59,18 @@ before it calls the worker delete endpoint for each graph. Set
 `DB_SYNC_BASE_URL` and `DB_SYNC_ADMIN_TOKEN` or pass `--base-url` and
 `--admin-token` when running it.
 
+Delete a user completely (owned graphs, memberships, keys, and user row):
+
+```bash
+cd deps/db-sync
+yarn delete-user-totally --username alice
+yarn delete-user-totally --user-id us-east-1:example-user-id
+```
+
+The script prints all linked graphs first, deletes owned graphs through the
+admin graph delete endpoint, then removes the user's remaining D1 references.
+It requires typing `DELETE` as confirmation.
+
 ### Node.js Adapter (self-hosted)
 
 Build the adapter:

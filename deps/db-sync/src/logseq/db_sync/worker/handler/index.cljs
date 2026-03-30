@@ -47,8 +47,14 @@
     (case (:handler route)
       :graphs/list
       (if (string? user-id)
-        (p/let [graphs (index/<index-list db user-id)]
-          (http/json-response :graphs/list {:graphs graphs}))
+        (p/let [graphs (index/<index-list db user-id)
+                user-rsa-key-pair (index/<user-rsa-key-pair db user-id)
+                user-rsa-keys-exists?
+                (and (string? (:public-key user-rsa-key-pair))
+                     (string? (:encrypted-private-key user-rsa-key-pair)))]
+          (http/json-response :graphs/list
+                              {:graphs graphs
+                               :user-rsa-keys-exists? user-rsa-keys-exists?}))
         (http/unauthorized))
 
       :graphs/create
@@ -70,14 +76,20 @@
                      (p/let [{:keys [graph-name schema-version graph-e2ee? graph-ready-for-use?]} body
                              graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))
                              graph-ready-for-use? (if (nil? graph-ready-for-use?) true (true? graph-ready-for-use?))
-                             name-exists? (index/<graph-name-exists? db graph-name user-id)]
+                             name-exists? (index/<graph-name-exists? db graph-name user-id)
+                             user-rsa-key-pair (index/<user-rsa-key-pair db user-id)
+                             has-user-rsa-key-pair?
+                             (and (string? (:public-key user-rsa-key-pair))
+                                  (string? (:encrypted-private-key user-rsa-key-pair)))]
                        (if name-exists?
                          (http/bad-request "duplicate graph name")
-                         (p/let [_ (index/<index-upsert! db graph-id graph-name user-id schema-version graph-e2ee? graph-ready-for-use?)
-                                 _ (index/<graph-member-upsert! db graph-id user-id "manager" user-id)]
-                           (http/json-response :graphs/create {:graph-id graph-id
-                                                               :graph-e2ee? graph-e2ee?
-                                                               :graph-ready-for-use? graph-ready-for-use?})))))))))
+                         (if-not has-user-rsa-key-pair?
+                           (http/bad-request "missing user rsa key pair")
+                           (p/let [_ (index/<index-upsert! db graph-id graph-name user-id schema-version graph-e2ee? graph-ready-for-use?)
+                                   _ (index/<graph-member-upsert! db graph-id user-id "manager" user-id)]
+                             (http/json-response :graphs/create {:graph-id graph-id
+                                                                 :graph-e2ee? graph-e2ee?
+                                                                 :graph-ready-for-use? graph-ready-for-use?}))))))))))
 
       :graphs/access
       (cond
