@@ -580,6 +580,7 @@
   :dev/show-page-data "(Dev) Show page data"
   :dev/replace-graph-with-db-file "(Dev) Replace graph with its db.sqlite file"
   :dev/validate-db "(Dev) Validate current graph"
+  :dev/recompute-checksum "(Dev) Recompute graph checksum"
   :dev/gc-graph "(Dev) Garbage collect graph (remove unused data in SQLite)"
   :dev/rtc-stop "(Dev) RTC Stop"
   :dev/rtc-start "(Dev) RTC Start"

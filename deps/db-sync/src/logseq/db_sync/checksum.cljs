@@ -126,6 +126,31 @@
                  [0 0])
          state->checksum)))
 
+(defn recompute-checksum-diagnostics
+  [db]
+  (let [e2ee? (boolean (ldb/get-graph-rtc-e2ee? db))
+        attrs (relevant-attrs e2ee?)
+        eids (->> (d/datoms db :eavt)
+                  (keep (fn [datom]
+                          (when (contains? attrs (:a datom))
+                            (:e datom))))
+                  distinct)
+        blocks (->> eids
+                    (keep (fn [eid]
+                            (let [{:keys [block/uuid block/title block/name block/parent block/page]} (entity-values db eid e2ee?)]
+                              (when uuid
+                                (cond-> {:block/uuid uuid
+                                         :block/parent parent
+                                         :block/page page}
+                                  (not e2ee?) (assoc :block/title title
+                                                     :block/name name))))))
+                    (sort-by (comp str :block/uuid))
+                    vec)]
+    {:checksum (recompute-checksum db)
+     :e2ee? e2ee?
+     :attrs (->> attrs (sort-by str) vec)
+     :blocks blocks}))
+
 (defn update-checksum
   [checksum {:keys [db-before db-after tx-data]}]
   (let [before-e2ee? (ldb/get-graph-rtc-e2ee? db-before)
