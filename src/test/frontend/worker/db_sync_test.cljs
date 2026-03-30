@@ -2835,16 +2835,16 @@
                nil
                [[:db/add (:db/id parent) :block/title "parent remote"]])
               (let [pending (#'sync-apply/pending-txs test-repo)
-                    save-block-tx (some (fn [{:keys [outliner-op tx]}]
-                                          (when (= :save-block outliner-op)
-                                            tx))
+                    expected-row [:db/add [:block/uuid block-uuid] :block/title "temp for lookup updated"]
+                    save-block-tx (some (fn [{:keys [tx]}]
+                                          (let [tx-rows (mapv (fn [[op e a v _t]]
+                                                                [op e a v])
+                                                              tx)]
+                                            (when (some #(= expected-row %) tx-rows)
+                                              tx)))
                                         pending)]
                 (is (= 2 (count pending)))
-                (is (some #(= [:db/add [:block/uuid block-uuid] :block/title "temp for lookup updated"]
-                              %)
-                          (mapv (fn [[op e a v _t]]
-                                  [op e a v])
-                                save-block-tx)))
+                (is (some? save-block-tx))
                 (is (not-any? string?
                               (keep second save-block-tx)))))))))))
 

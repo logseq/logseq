@@ -40,7 +40,9 @@
   #(test-helper/start-and-destroy-db
     %
     {:build-init-data? false
-     :schema {:logseq.property/deleted-at {:db/index true}}})
+     :schema {:logseq.property/deleted-at {:db/index true}
+              :logseq.property/created-from-property {:db/index true}
+              }})
   listen-db-fixture)
 
 (defn get-block

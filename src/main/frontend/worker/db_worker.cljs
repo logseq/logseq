@@ -54,7 +54,8 @@
             [logseq.outliner.recycle :as outliner-recycle]
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
             [missionary.core :as m]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [goog.functions :as gfun]))
 
 (def ^:private worker-bootstrap-loaded-key "__logseq_db_worker_bootstrap_loaded__")
 
@@ -311,6 +312,7 @@
       (when-not @*publishing? (common-sqlite/create-kvs-table! client-ops-db))
       (search/create-tables-and-triggers! search-db)
       (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (ldb/register-debounce-fn! (gfun/debounce d/store 1000))
       (let [conn (common-sqlite/get-storage-conn storage db-schema/schema)
             _ (db-fix/check-and-fix-schema! conn)
             _ (when datoms
