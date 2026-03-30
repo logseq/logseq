@@ -1,6 +1,7 @@
 (ns logseq.cli.command.upsert
   "Upsert-related CLI commands."
   (:require [clojure.string :as string]
+            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.cli.command.add :as add-command]
             [logseq.cli.command.core :as core]
             [logseq.cli.command.update :as update-command]
@@ -59,7 +60,8 @@
         :coerce :long}
    :name {:desc "Property name"}
    :type {:desc "Property type"
-          :validate #{"default" "number" "date" "datetime" "checkbox" "url" "node" "json" "string"}}
+          :validate (into (set (map name db-property-type/user-built-in-property-types))
+                          (set (map name db-property-type/user-allowed-internal-property-types)))}
    :cardinality {:desc "Property cardinality"
                  :validate #{"one" "many"}}
    :hide {:desc "Hide property"
