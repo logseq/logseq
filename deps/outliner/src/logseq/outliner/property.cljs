@@ -646,6 +646,7 @@
                 (prn "property-id: " property-id ", property-name: " property-name))
         (outliner-validate/validate-page-title k-name {:node {:db/ident db-ident'}})
         (outliner-validate/validate-page-title-characters k-name {:node {:db/ident db-ident'}})
+        (outliner-validate/validate-property-title k-name {:node {:db/ident db-ident'}})
         (let [db-id (:db/id properties)
               opts (cond-> {:title k-name
                             :properties properties}
