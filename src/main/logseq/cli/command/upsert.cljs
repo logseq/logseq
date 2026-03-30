@@ -53,12 +53,14 @@
 (def ^:private upsert-tag-spec
   {:id {:desc "Target tag db/id (forces update mode)"
         :coerce :long}
-   :name {:desc "Tag name"}})
+   :name {:desc "Tag name"
+          :complete :tags}})
 
 (def ^:private upsert-property-spec
   {:id {:desc "Target property db/id (forces update mode)"
         :coerce :long}
-   :name {:desc "Property name"}
+   :name {:desc "Property name"
+          :complete :properties}
    :type {:desc "Property type"
           :validate (into (set (map name db-property-type/user-built-in-property-types))
                           (set (map name db-property-type/user-allowed-internal-property-types)))}

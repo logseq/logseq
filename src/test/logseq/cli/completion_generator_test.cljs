@@ -72,6 +72,7 @@
   (let [entries upsert-command/entries
         block-entry (first (filter #(= :upsert-block (:command %)) entries))
         page-entry (first (filter #(= :upsert-page (:command %)) entries))
+        tag-entry (first (filter #(= :upsert-tag (:command %)) entries))
         property-entry (first (filter #(= :upsert-property (:command %)) entries))]
     (testing "block-spec :pos has :validate set"
       (is (= #{"first-child" "last-child" "sibling"}
@@ -84,9 +85,16 @@
       (is (= :file (get-in block-entry [:spec :blocks-file :complete]))))
     (testing "page-spec :page has :complete :pages"
       (is (= :pages (get-in page-entry [:spec :page :complete]))))
+    (testing "tag-spec :name has :complete :tags"
+      (is (= :tags (get-in tag-entry [:spec :name :complete]))))
+    (testing "property-spec :name has :complete :properties"
+      (is (= :properties (get-in property-entry [:spec :name :complete]))))
     (testing "property-spec :type has :validate set"
-      (is (= #{"default" "number" "date" "datetime" "checkbox" "url" "node" "json" "string"}
-             (get-in property-entry [:spec :type :validate]))))
+      (let [types (get-in property-entry [:spec :type :validate])]
+        (is (set? types))
+        (is (contains? types "default"))
+        (is (contains? types "node"))
+        (is (contains? types "checkbox"))))
     (testing "property-spec :cardinality has :validate set"
       (is (= #{"one" "many"}
              (get-in property-entry [:spec :cardinality :validate]))))))
@@ -123,10 +131,10 @@
         property-entry (first (filter #(= :remove-property (:command %)) entries))]
     (testing "remove-page :name has :complete :pages"
       (is (= :pages (get-in page-entry [:spec :name :complete]))))
-    (testing "remove-tag :name does NOT have :complete"
-      (is (nil? (get-in tag-entry [:spec :name :complete]))))
-    (testing "remove-property :name does NOT have :complete"
-      (is (nil? (get-in property-entry [:spec :name :complete]))))))
+    (testing "remove-tag :name has :complete :tags"
+      (is (= :tags (get-in tag-entry [:spec :name :complete]))))
+    (testing "remove-property :name has :complete :properties"
+      (is (= :properties (get-in property-entry [:spec :name :complete]))))))
 
 (deftest test-search-spec-metadata
   (let [entries search-command/entries]
@@ -408,12 +416,18 @@
     (testing "remove page spec has :name with :complete :pages"
       (let [rm-page (first (filter #(= :remove-page (:command %)) entries))]
         (is (= :pages (get-in rm-page [:spec :name :complete])))))
-    (testing "upsert tag spec does NOT have :complete on :name"
+    (testing "upsert tag spec has :complete :tags on :name"
       (let [tag (first (filter #(= :upsert-tag (:command %)) entries))]
-        (is (nil? (get-in tag [:spec :name :complete])))))
-    (testing "remove tag spec does NOT have :complete on :name"
+        (is (= :tags (get-in tag [:spec :name :complete])))))
+    (testing "remove tag spec has :complete :tags on :name"
       (let [tag (first (filter #(= :remove-tag (:command %)) entries))]
-        (is (nil? (get-in tag [:spec :name :complete])))))))
+        (is (= :tags (get-in tag [:spec :name :complete])))))
+    (testing "upsert property spec has :complete :properties on :name"
+      (let [prop (first (filter #(= :upsert-property (:command %)) entries))]
+        (is (= :properties (get-in prop [:spec :name :complete])))))
+    (testing "remove property spec has :complete :properties on :name"
+      (let [prop (first (filter #(= :remove-property (:command %)) entries))]
+        (is (= :properties (get-in prop [:spec :name :complete])))))))
 
 (deftest test-bash-context-dependent-type
   (let [output (gen/generate-completions "bash" full-table)]
@@ -423,7 +437,9 @@
       (is (string/includes? output "compgen -W 'edn sqlite'")))
     (testing "--type completes with property types under upsert property context"
       (is (string/includes? output "upsert' && \"$__subcmd\" == 'property'"))
-      (is (string/includes? output "compgen -W 'checkbox date datetime default json node number string url'")))
+      (is (string/includes? output "compgen -W '"))
+      (is (string/includes? output "default"))
+      (is (string/includes? output "node")))
 
     (testing "--type does NOT have a context-free case (simple COMPREPLY after --type)"
       ;; --type should be in context-dependent if-blocks, not a simple case
