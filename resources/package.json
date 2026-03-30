@@ -32,7 +32,7 @@
     "electron-squirrel-startup": "1.0.1",
     "electron-window-state": "5.0.3",
     "extract-zip": "2.0.1",
-    "fastify": "5.8.2",
+    "fastify": "5.8.3",
     "fs-extra": "^11.3.4",
     "https-proxy-agent": "8.0.0",
     "node-fetch": "3.3.2",
