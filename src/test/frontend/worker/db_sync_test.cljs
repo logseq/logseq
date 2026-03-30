@@ -2601,6 +2601,113 @@
         (finally
           (d/unlisten! conn-b ::capture-ref-delete-rebase))))))
 
+(deftest rebase-save-block-inline-tag-recreates-deleted-tag-with-same-ident-test
+  (testing "offline save-block with inline tag recreates deleted tag and preserves its db/ident during rebase"
+    (let [graph {:classes {:tag4 {}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "hello"}]}]}
+          conn-a (db-test/create-conn-with-blocks graph)
+          conn-b (d/conn-from-db @conn-a)
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          remote-tx (atom nil)]
+      (d/listen! conn-b ::capture-save-inline-tag-rebase
+                 (fn [tx-report]
+                   (when-not @remote-tx
+                     (reset! remote-tx
+                             (db-normalize/normalize-tx-data
+                              (:db-after tx-report)
+                              (:db-before tx-report)
+                              (:tx-data tx-report))))))
+      (try
+        (with-datascript-conns conn-a client-ops-conn
+          (fn []
+            (let [block (db-test/find-block-by-content @conn-a "hello")
+                  block-uuid (:block/uuid block)
+                  tag (d/entity @conn-a :user.class/tag4)
+                  tag-uuid (:block/uuid tag)
+                  tag-ident (:db/ident tag)
+                  tag-ref tag]
+              (outliner-core/save-block! conn-a
+                                         (assoc (into {} block)
+                                                :block/title "hello #tag4"
+                                                :block/refs #{tag-ref}
+                                                :block/tags #{tag-ref})
+                                         {})
+              (outliner-page/delete! conn-b (:block/uuid (d/entity @conn-b :user.class/tag4)))
+              (#'sync-apply/apply-remote-tx! test-repo nil @remote-tx)
+              (let [block' (d/entity @conn-a [:block/uuid block-uuid])
+                    recreated-tag (d/entity @conn-a [:block/uuid tag-uuid])
+                    ref-idents (set (keep :db/ident (:block/refs block')))
+                    tag-idents (set (keep :db/ident (:block/tags block')))
+                    validation (db-validate/validate-local-db! @conn-a)]
+                (is (some? block'))
+                (is (some? recreated-tag))
+                (is (= tag-ident (:db/ident recreated-tag)))
+                (is (= (str "hello #" (page-ref/->page-ref tag-uuid))
+                       (:block/raw-title block')))
+                (is (= #{tag-ident} ref-idents))
+                (is (= #{tag-ident} tag-idents))
+                (is (empty? (non-recycle-validation-entities validation))
+                    (str (:errors validation)))))))
+        (finally
+          (d/unlisten! conn-b ::capture-save-inline-tag-rebase))))))
+
+(deftest rebase-save-block-inline-tag-keeps-surviving-and-recreates-deleted-with-same-ident-test
+  (testing "offline save-block with mixed inline tags keeps surviving refs and recreates deleted tag with same db/ident"
+    (let [graph {:classes {:tag1 {}
+                           :tag2 {}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "hello"}]}]}
+          conn-a (db-test/create-conn-with-blocks graph)
+          conn-b (d/conn-from-db @conn-a)
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          remote-tx (atom nil)]
+      (d/listen! conn-b ::capture-save-inline-mixed-tag-rebase
+                 (fn [tx-report]
+                   (when-not @remote-tx
+                     (reset! remote-tx
+                             (db-normalize/normalize-tx-data
+                              (:db-after tx-report)
+                              (:db-before tx-report)
+                              (:tx-data tx-report))))))
+      (try
+        (with-datascript-conns conn-a client-ops-conn
+          (fn []
+            (let [block (db-test/find-block-by-content @conn-a "hello")
+                  block-uuid (:block/uuid block)
+                  tag1-ref (d/entity @conn-a :user.class/tag1)
+                  tag2-ref (d/entity @conn-a :user.class/tag2)
+                  tag1-ident (:db/ident tag1-ref)
+                  tag2-ident (:db/ident tag2-ref)
+                  tag2-uuid (:block/uuid tag2-ref)]
+              (outliner-core/save-block! conn-a
+                                         (assoc (into {} block)
+                                                :block/title "hello #tag1 #tag2"
+                                                :block/refs #{tag1-ref tag2-ref}
+                                                :block/tags #{tag1-ref tag2-ref})
+                                         {})
+              (outliner-page/delete! conn-b (:block/uuid (d/entity @conn-b :user.class/tag2)))
+              (#'sync-apply/apply-remote-tx! test-repo nil @remote-tx)
+              (let [block' (d/entity @conn-a [:block/uuid block-uuid])
+                    recreated-tag2 (d/entity @conn-a [:block/uuid tag2-uuid])
+                    ref-idents (set (keep :db/ident (:block/refs block')))
+                    tag-idents (set (keep :db/ident (:block/tags block')))
+                    validation (db-validate/validate-local-db! @conn-a)]
+                (is (some? block'))
+                (is (some? recreated-tag2))
+                (is (= tag2-ident (:db/ident recreated-tag2)))
+                (is (= (str "hello #" (page-ref/->page-ref (:block/uuid tag1-ref))
+                            " #" (page-ref/->page-ref tag2-uuid))
+                       (:block/raw-title block')))
+                (is (= #{tag1-ident tag2-ident} ref-idents))
+                (is (= #{tag1-ident tag2-ident} tag-idents))
+                (is (empty? (non-recycle-validation-entities validation))
+                    (str (:errors validation)))))))
+        (finally
+          (d/unlisten! conn-b ::capture-save-inline-mixed-tag-rebase))))))
+
 (deftest cut-paste-parent-with-child-keeps-child-parent-after-sync-test
   (testing "remote tx can retract and recreate target uuid; child should point to recreated parent"
     (let [conn (db-test/create-conn-with-blocks
