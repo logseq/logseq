@@ -14,6 +14,15 @@
 (defmulti listen-db-changes
   (fn [listen-key & _] listen-key))
 
+(defn- transit-safe-tx-meta
+  [tx-meta]
+  (when (map? tx-meta)
+    (->> tx-meta
+         (remove (fn [[k v]]
+                   (or (= :error-handler k)
+                       (fn? v))))
+         (into {}))))
+
 (defn- sync-db-to-main-thread
   "Return tx-report"
   [repo conn {:keys [tx-meta] :as tx-report}]
@@ -28,7 +37,7 @@
                     {:repo repo
                      :request-id (:request-id tx-meta)
                      :tx-data (:tx-data tx-report')
-                     :tx-meta tx-meta}
+                     :tx-meta (transit-safe-tx-meta tx-meta)}
                     (dissoc result :tx-report))]
           (shared-service/broadcast-to-clients! :sync-db-changes data))
 
@@ -84,12 +93,13 @@
     (d/listen! conn ::listen-db-changes!
                (fn listen-db-changes!-inner
                  [{:keys [tx-data tx-meta] :as tx-report}]
-                 (remove-old-embeddings-and-reset-new-updates! conn tx-data tx-meta)
-                 (when (and (seq tx-data) (not (:mark-embedding? tx-meta)))
-                   (let [tx-report' (if sync-db-to-main-thread?
-                                      (sync-db-to-main-thread repo conn tx-report)
-                                      tx-report)
-                         opt {:repo repo}]
-                     (db-sync/update-local-sync-checksum! repo tx-report')
-                     (doseq [[k handler-fn] handlers]
-                       (handler-fn k opt tx-report'))))))))
+                 (when-not (:batch-tx? @conn)
+                   (remove-old-embeddings-and-reset-new-updates! conn tx-data tx-meta)
+                   (when (and (seq tx-data) (not (:mark-embedding? tx-meta)))
+                     (let [tx-report' (if sync-db-to-main-thread?
+                                        (sync-db-to-main-thread repo conn tx-report)
+                                        tx-report)
+                           opt {:repo repo}]
+                       (db-sync/update-local-sync-checksum! repo tx-report')
+                       (doseq [[k handler-fn] handlers]
+                         (handler-fn k opt tx-report')))))))))

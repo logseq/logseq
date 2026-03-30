@@ -19,7 +19,6 @@
             [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.embedding :as embedding]
             [frontend.worker.export :as worker-export]
-            [frontend.worker.handler.page :as worker-page]
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.publish]
             [frontend.worker.search :as search]
@@ -31,6 +30,7 @@
             [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.log-and-state :as rtc-log-and-state]
             [frontend.worker.thread-atom]
+            [frontend.worker.undo-redo :as worker-undo-redo]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
@@ -50,12 +50,12 @@
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.gc :as sqlite-gc]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.recycle :as outliner-recycle]
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
             [missionary.core :as m]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [goog.functions :as gfun]))
 
 (def ^:private worker-bootstrap-loaded-key "__logseq_db_worker_bootstrap_loaded__")
 
@@ -85,6 +85,8 @@
 (defonce *opfs-pools worker-state/*opfs-pools)
 (defonce *publishing? (atom false))
 (defonce ^:private *search-index-build-ids (atom {}))
+(defonce ^:private *client-ops-cleanup-timers (atom {}))
+(def ^:private client-ops-cleanup-interval-ms (* 3 60 60 1000))
 
 (defn- check-worker-scope!
   []
@@ -180,9 +182,13 @@
 
 (defn- close-db-aux!
   [repo ^Object db ^Object search ^Object client-ops]
+  (when-let [timer (get @*client-ops-cleanup-timers repo)]
+    (js/clearInterval timer))
+  (swap! *client-ops-cleanup-timers dissoc repo)
   (swap! *sqlite-conns dissoc repo)
   (swap! *datascript-conns dissoc repo)
   (swap! *client-ops-conns dissoc repo)
+  (swap! client-op/*repo->pending-local-tx-count dissoc repo)
   (swap! *search-index-build-ids dissoc repo)
   (search/clear-fuzzy-search-indice! repo)
   (when db (.close db))
@@ -259,6 +265,23 @@
                                        :kv/value (common-util/time-ms)}]
                      {:skip-validate-db? true}))))
 
+(defn- run-client-ops-cleanup!
+  [repo]
+  (let [protected-tx-ids (worker-undo-redo/referenced-history-tx-ids repo)]
+    (client-op/cleanup-finished-history-ops! repo protected-tx-ids)
+    nil))
+
+(defn- ensure-client-ops-cleanup-timer!
+  [repo]
+  (when (and (not @*publishing?)
+             repo
+             (nil? (get @*client-ops-cleanup-timers repo)))
+    (let [timer (js/setInterval (fn []
+                                  (run-client-ops-cleanup! repo))
+                                client-ops-cleanup-interval-ms)]
+      (swap! *client-ops-cleanup-timers assoc repo timer))
+    nil))
+
 (def ^:private recycle-gc-kv :logseq.kv/recycle-last-gc-at)
 
 (defn- maybe-run-recycle-gc!
@@ -289,6 +312,7 @@
       (when-not @*publishing? (common-sqlite/create-kvs-table! client-ops-db))
       (search/create-tables-and-triggers! search-db)
       (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (ldb/register-debounce-fn! (gfun/debounce d/store 1000))
       (let [conn (common-sqlite/get-storage-conn storage db-schema/schema)
             _ (db-fix/check-and-fix-schema! conn)
             _ (when datoms
@@ -321,6 +345,7 @@
         (swap! *client-ops-conns assoc repo client-ops-conn)
         (when (and (not @*publishing?) (not= client-op/schema-in-db (d/schema @client-ops-conn)))
           (d/reset-schema! client-ops-conn client-op/schema-in-db))
+        (ensure-client-ops-cleanup-timer! repo)
         (let [initial-tx-report (when-not (or initial-data-exists?
                                               (seq datoms)
                                               sync-download-graph?)
@@ -473,8 +498,8 @@
   (sync-crypt/<grant-graph-access! repo graph-id target-email))
 
 (def-thread-api :thread-api/db-sync-ensure-user-rsa-keys
-  []
-  (sync-crypt/ensure-user-rsa-keys!))
+  [& [opts]]
+  (sync-crypt/ensure-user-rsa-keys! opts))
 
 (def-thread-api :thread-api/db-sync-upload-graph
   [repo]
@@ -635,6 +660,38 @@
         (prn :debug :worker-transact-failed :tx-meta tx-meta :tx-data tx-data)
         (log/error ::worker-transact-failed e)
         (throw e)))))
+
+(def-thread-api :thread-api/undo-redo-set-pending-editor-info
+  [repo editor-info]
+  (worker-undo-redo/set-pending-editor-info! repo editor-info)
+  nil)
+
+(def-thread-api :thread-api/undo-redo-record-editor-info
+  [repo editor-info]
+  (worker-undo-redo/record-editor-info! repo editor-info)
+  nil)
+
+(def-thread-api :thread-api/undo-redo-record-ui-state
+  [repo ui-state-str]
+  (worker-undo-redo/record-ui-state! repo ui-state-str)
+  nil)
+
+(def-thread-api :thread-api/undo-redo-undo
+  [repo]
+  (worker-undo-redo/undo repo))
+
+(def-thread-api :thread-api/undo-redo-redo
+  [repo]
+  (worker-undo-redo/redo repo))
+
+(def-thread-api :thread-api/undo-redo-clear-history
+  [repo]
+  (worker-undo-redo/clear-history! repo)
+  nil)
+
+(def-thread-api :thread-api/undo-redo-get-debug-state
+  [repo]
+  (worker-undo-redo/get-debug-state repo))
 
 (def-thread-api :thread-api/get-initial-data
   [repo opts]
@@ -966,10 +1023,22 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (worker-export/get-all-page->content @conn options)))
 
+(defn- sync-diagnostics-for-validation
+  [repo]
+  {:local-tx (client-op/get-local-tx repo)
+   :remote-tx (get @db-sync/*repo->latest-remote-tx repo)
+   :local-checksum (client-op/get-local-checksum repo)
+   :remote-checksum (get @db-sync/*repo->latest-remote-checksum repo)})
+
 (def-thread-api :thread-api/validate-db
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (worker-db-validate/validate-db conn)))
+    (worker-db-validate/validate-db repo conn (sync-diagnostics-for-validation repo))))
+
+(def-thread-api :thread-api/recompute-checksum-diagnostics
+  [repo]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (worker-db-validate/recompute-checksum-diagnostics repo conn (sync-diagnostics-for-validation repo))))
 
 ;; Returns an export-edn map for given repo. When there's an unexpected error, a map
 ;; with key :export-edn-error is returned
@@ -1110,36 +1179,6 @@
             dbs (ldb/read-transit-str r)]
       (p/all (map #(.unsafeUnlinkDB this (:name %)) dbs)))))
 
-(defn- delete-page!
-  [conn page-uuid opts]
-  (let [error-handler (fn [{:keys [msg]}]
-                        (worker-util/post-message :notification
-                                                  [[:div [:p msg]] :error]))]
-    (worker-page/delete! conn page-uuid (merge opts {:error-handler error-handler}))))
-
-(defn- create-page!
-  [conn title options]
-  (try
-    (worker-page/create! conn title options)
-    (catch :default e
-      (js/console.error e)
-      (throw e))))
-
-(defn- outliner-register-op-handlers!
-  []
-  (outliner-op/register-op-handlers!
-   {:create-page (fn [conn [title options]]
-                   (create-page! conn title options))
-    :rename-page (fn [conn [page-uuid new-title]]
-                   (if (string/blank? new-title)
-                     (throw (ex-info "Page name shouldn't be blank" {:block/uuid page-uuid
-                                                                     :block/title new-title}))
-                     (outliner-core/save-block! conn
-                                                {:block/uuid page-uuid
-                                                 :block/title new-title})))
-    :delete-page (fn [conn [page-uuid opts]]
-                   (delete-page! conn page-uuid opts))}))
-
 (defn- on-become-master
   [repo start-opts]
   (js/Promise.
@@ -1232,7 +1271,6 @@
     (log/set-levels {:glogi/root :info})
     (log/add-handler worker-state/log-append!)
     (check-worker-scope!)
-    (outliner-register-op-handlers!)
     (js/setInterval #(.postMessage js/self "keepAliveResponse") (* 1000 25))
     (Comlink/expose proxy-object)
     (let [^js wrapped-main-thread* (Comlink/wrap js/self)

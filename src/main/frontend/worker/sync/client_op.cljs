@@ -27,7 +27,7 @@
                              #(do (log/error ::bad-ops (:value %))
                                   (ma/-fail! ::ops-schema (select-keys % [:value])))))
 
-(def ^:private asset-op-types #{:update-asset :remove-asset})
+(defonce *repo->pending-local-tx-count (atom {}))
 
 (def schema-in-db
   "TODO: rename this db-name from client-op to client-metadata+op.
@@ -41,10 +41,14 @@
    :db-sync/checksum {:db/index true}
    :db-sync/tx-id {:db/unique :db.unique/identity}
    :db-sync/created-at {:db/index true}
+   :db-sync/pending? {:db/index true}
    :db-sync/outliner-op {}
-   :db-sync/tx-data {}
+   :db-sync/forward-outliner-ops {}
+   :db-sync/inverse-outliner-ops {}
+   :db-sync/inferred-outliner-ops? {}
    :db-sync/normalized-tx-data {}
-   :db-sync/reversed-tx-data {}})
+   :db-sync/reversed-tx-data {}
+   :db-sync/asset-op? {:db/index true}})
 
 (defn update-graph-uuid
   [repo graph-uuid]
@@ -101,6 +105,24 @@
       ;; (assert (some? r))
       r)))
 
+(defn get-pending-local-tx-count
+  [repo]
+  (if-let [cached (get @*repo->pending-local-tx-count repo)]
+    cached
+    (let [count' (if-let [conn (worker-state/get-client-ops-conn repo)]
+                   (count (d/datoms @conn :avet :db-sync/pending? true))
+                   0)]
+      (swap! *repo->pending-local-tx-count assoc repo count')
+      count')))
+
+(defn adjust-pending-local-tx-count!
+  [repo delta]
+  (swap! *repo->pending-local-tx-count
+         (fn [m]
+           (let [base (or (get m repo) 0)
+                 next (max 0 (+ base delta))]
+             (assoc m repo next)))))
+
 (defn get-local-checksum
   [repo]
   (let [conn (worker-state/get-client-ops-conn repo)]
@@ -135,12 +157,14 @@
                         (let [remove-asset-op (get exist-block-ops-entity :remove-asset)]
                           (when-not (already-removed? remove-asset-op t)
                             (cond-> [{:block/uuid block-uuid
+                                      :db-sync/asset-op? true
                                       :update-asset op}]
                               remove-asset-op (conj [:db.fn/retractAttribute e :remove-asset]))))
                         :remove-asset
                         (let [update-asset-op (get exist-block-ops-entity :update-asset)]
                           (when-not (update-after-remove? update-asset-op t)
                             (cond-> [{:block/uuid block-uuid
+                                      :db-sync/asset-op? true
                                       :remove-asset op}]
                               update-asset-op (conj [:db.fn/retractAttribute e :update-asset]))))))]
             (ldb/transact! conn tx-data)))))))
@@ -149,11 +173,9 @@
   [repo]
   (let [conn (worker-state/get-datascript-conn repo)
         _ (assert (some? conn))
-        asset-block-uuids (d/q '[:find [?block-uuid ...]
-                                 :where
-                                 [?b :block/uuid ?block-uuid]
-                                 [?b :logseq.property.asset/type]]
-                               @conn)
+        asset-block-uuids (->> (d/datoms @conn :avet :logseq.property.asset/type)
+                               (keep (fn [d]
+                                       (:block/uuid (d/entity @conn (:e d))))))
         ops (map
              (fn [block-uuid] [:update-asset 1 {:block-uuid block-uuid}])
              asset-block-uuids)]
@@ -161,19 +183,10 @@
 
 (defn- get-all-asset-ops*
   [db]
-  (->> (d/datoms db :eavt)
-       (group-by :e)
-       (keep (fn [[e datoms]]
-               (let [op-map (into {}
-                                  (keep (fn [datom]
-                                          (let [a (:a datom)]
-                                            (when (or (keyword-identical? :block/uuid a) (contains? asset-op-types a))
-                                              [a (:v datom)]))))
-                                  datoms)]
-                 (when (and (:block/uuid op-map)
-                            ;; count>1 = contains some `asset-op-types`
-                            (> (count op-map) 1))
-                   [e op-map]))))
+  (->> (d/datoms db :avet :db-sync/asset-op?)
+       (map (fn [d]
+              (let [op (d/entity db (:e d))]
+                [(:e d) (into {} op)])))
        (into {})))
 
 (defn get-unpushed-asset-ops-count
@@ -191,4 +204,25 @@
   (when-let [conn (worker-state/get-client-ops-conn repo)]
     (let [ent (d/entity @conn [:block/uuid asset-uuid])]
       (when-let [e (:db/id ent)]
-        (ldb/transact! conn (map (fn [a] [:db.fn/retractAttribute e a]) asset-op-types))))))
+        (ldb/transact! conn [[:db/retractEntity e]])))))
+
+(defn cleanup-finished-history-ops!
+  [repo protected-tx-ids]
+  (if-let [conn (worker-state/get-client-ops-conn repo)]
+    (let [protected-tx-ids (set protected-tx-ids)
+          tx-ent-ids (->> (d/datoms @conn :avet :db-sync/tx-id)
+                          (keep (fn [datom]
+                                  (let [tx-id (:v datom)
+                                        ent (d/entity @conn (:e datom))]
+                                    (when (and (uuid? tx-id)
+                                               (false? (:db-sync/pending? ent))
+                                               (not (contains? protected-tx-ids tx-id)))
+                                      (:db/id ent)))))
+                          vec)]
+      (when (seq tx-ent-ids)
+        (ldb/transact! conn
+                       (mapv (fn [ent-id]
+                               [:db/retractEntity ent-id])
+                             tx-ent-ids)))
+      (count tx-ent-ids))
+    0))

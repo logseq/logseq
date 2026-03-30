@@ -19,10 +19,11 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.text :as text]
             [logseq.outliner.recycle :as outliner-recycle]
+            [logseq.outliner.tx-meta :as outliner-tx-meta]
             [logseq.outliner.validate :as outliner-validate]))
 
-(defn- db-refs->page
-  "Replace [[page name]] with page name"
+(defn- page-ref-rewrite-targets
+  "Collect entities that reference `page-entity` via node refs and need title rewrite."
   [page-entity]
   (let [refs (->> (:block/_refs page-entity)
                   ;; remove child or self that refed this page
@@ -30,24 +31,49 @@
                             (or (= (:db/id ref) (:db/id page-entity))
                                 (= (:db/id (:block/page ref)) (:db/id page-entity))))))
         id-ref->page #(db-content/content-id-ref->page % [page-entity])]
-    (when (seq refs)
-      (let [tx-data (mapcat (fn [{:block/keys [raw-title] :as ref}]
-                              ;; block content
-                              (when raw-title
-                                (let [content' (id-ref->page raw-title)
-                                      content-tx (when (not= raw-title content')
-                                                   {:db/id (:db/id ref)
-                                                    :block/title content'})
-                                      tx content-tx]
-                                  (concat
-                                   [[:db/retract (:db/id ref) :block/refs (:db/id page-entity)]]
-                                   (when tx [tx]))))) refs)]
-        tx-data))))
+    (->> refs
+         (keep (fn [ref]
+                 (let [raw-title (:block/raw-title ref)
+                       block-uuid (:block/uuid ref)]
+                   (when raw-title
+                     (let [content' (id-ref->page raw-title)]
+                       (when (not= raw-title content')
+                         (let [remaining-refs (->> (:block/refs ref)
+                                                   (remove (fn [ref']
+                                                             (= (:db/id ref') (:db/id page-entity))))
+                                                   vec)]
+                           {:ref-id (:db/id ref)
+                            :ref-uuid block-uuid
+                            :title content'
+                            :refs remaining-refs})))))))
+         seq)))
+
+(defn- db-refs->page
+  "Replace [[page name]] with page name."
+  [page-entity]
+  (let [page-id (:db/id page-entity)]
+    (some->> (page-ref-rewrite-targets page-entity)
+             (mapcat (fn [{:keys [ref-id title]}]
+                       [[:db/retract ref-id :block/refs page-id]
+                        {:db/id ref-id
+                         :block/title title}])))))
+
+(defn- db-refs->page-save-ops
+  [page-entity]
+  (some->> (page-ref-rewrite-targets page-entity)
+           (keep (fn [{:keys [ref-uuid title refs]}]
+                   (when ref-uuid
+                     [:save-block [{:block/uuid ref-uuid
+                                    :block/title title
+                                    :block/refs refs}
+                                   {}]])))
+           seq
+           vec))
 
 (defn- build-page-retract-tx
   "Build cleanup tx-data for deleting a schema page.
    This is pure and can be reused by sync repair."
-  [db page & [{:keys [include-page-retract?]
+  [db page & [{:keys [include-page-retract? today-page?]
                :or {include-page-retract? true}}]]
   (let [page-id (:db/id page)
         page-blocks-tx-data (->> (:block/_page page)
@@ -65,11 +91,13 @@
         page-tx (when (and include-page-retract?
                            (d/entity db page-id))
                   [[:db/retractEntity page-id]])]
-    (concat page-blocks-tx-data
-            property-pair-tx-data
-            restore-class-parent-tx
-            (db-refs->page page)
-            page-tx)))
+    (if today-page?
+      page-blocks-tx-data
+      (concat page-blocks-tx-data
+              property-pair-tx-data
+              restore-class-parent-tx
+              (db-refs->page page)
+              page-tx))))
 
 (defn delete!
   "Deletes a page. Returns true if able to delete page. If unable to delete,
@@ -86,31 +114,37 @@
     (when-let [page (d/entity @conn [:block/uuid page-uuid])]
       (let [today-page? (when-let [day (:block/journal-day page)]
                           (= (date-time-util/ms->journal-day (js/Date.)) day))
-            tx-meta (cond-> {:outliner-op :delete-page
-                             :deleted-page (:block/title page)
-                             :persist-op? persist-op?}
+            tx-meta (cond-> (outliner-tx-meta/ensure-outliner-ops
+                             {:outliner-op :delete-page
+                              :deleted-page (:block/title page)
+                              :persist-op? persist-op?}
+                             [:delete-page [page-uuid {:deleted-by-uuid deleted-by-uuid
+                                                       :now-ms now-ms}]])
                       rename?
                       (assoc :real-outliner-op :rename-page))]
         ;; TODO: maybe we should add $$$favorites to built-in pages?
         (cond
-          today-page?
-          false
-
           (or (ldb/built-in? page) (ldb/hidden? page))
           (do
             (error-handler {:msg "Built-in page cannot be deleted"})
             false)
 
-          (or (ldb/class? page) (ldb/property? page))
-          (let [tx-data (build-page-retract-tx @conn page)]
+          (or (ldb/class? page) (ldb/property? page) today-page?)
+          (let [tx-data (build-page-retract-tx @conn page {:today-page? today-page?})]
             (ldb/transact! conn tx-data tx-meta)
             true)
 
           :else
-          (let [tx-data (outliner-recycle/recycle-page-tx-data @conn page {:deleted-by-uuid deleted-by-uuid
-                                                                           :now-ms now-ms})]
+          (let [ref-rewrite-tx-data (db-refs->page page)
+                ref-rewrite-save-ops (db-refs->page-save-ops page)
+                tx-data (concat ref-rewrite-tx-data
+                                (outliner-recycle/recycle-page-tx-data @conn page {:deleted-by-uuid deleted-by-uuid
+                                                                                   :now-ms now-ms}))
+                tx-meta' (cond-> tx-meta
+                           (seq ref-rewrite-save-ops)
+                           (update :outliner-ops (fnil into []) ref-rewrite-save-ops))]
             (when (seq tx-data)
-              (ldb/transact! conn tx-data tx-meta))
+              (ldb/transact! conn tx-data tx-meta'))
             true))))))
 
 (defn- build-page-tx [db properties page {:keys [class? tags class-ident-namespace]}]
@@ -289,22 +323,26 @@
                                   :block/uuid)
         existing-page-by-journal-uuid (when (uuid? journal-page-uuid)
                                         (d/entity db [:block/uuid journal-page-uuid]))
-        existing-page-id (some->> existing-names-page
-                                  (filter #(try (when-let [e (and class-ident-namespace? (d/entity db %))]
-                                                  (let [ns' (namespace (:db/ident e))]
-                                                    (= (str ns') class-ident-namespace)))
-                                                (catch :default _ false)))
-                                  (first))
+        existing-page-id (if class-ident-namespace?
+                           (some->> existing-names-page
+                                    (filter #(try (when-let [e (d/entity db %)]
+                                                    (let [ns' (namespace (:db/ident e))]
+                                                      (= (str ns') class-ident-namespace)))
+                                                  (catch :default _ false)))
+                                    (first))
+                           (first existing-names-page))
         existing-page (or (some->> existing-page-id (d/entity db))
                           existing-page-by-journal-uuid)]
     (if (and existing-page
              (or (:block/journal-day existing-page)
-                 (not (:block/parent existing-page))))
+                 (not (:block/parent existing-page))
+                 (ldb/recycled? existing-page)))
       (let [tx-meta {:persist-op? persist-op?
                      :outliner-op :save-block}]
-        (if (and class?
-                 (not (ldb/class? existing-page))
-                 (ldb/internal-page? existing-page))
+        (cond
+          (and class?
+               (not (ldb/class? existing-page))
+               (ldb/internal-page? existing-page))
           ;; Convert existing page to class
           (let [tx-data [(merge (db-class/build-new-class db
                                                           (select-keys existing-page [:block/title :block/uuid :block/created-at])
@@ -316,7 +354,20 @@
              :tx-data tx-data
              :page-uuid (:block/uuid existing-page)
              :title (:block/title existing-page)})
+
+          (ldb/recycled? existing-page)
+          (let [options' (assoc options :uuid (:block/uuid existing-page))
+                tx-meta' (outliner-tx-meta/ensure-outliner-ops
+                          {:persist-op? persist-op?
+                           :outliner-op :create-page}
+                          [:create-page [title options']])]
+            {:tx-meta tx-meta'
+             :tx-data (outliner-recycle/restore-tx-data db existing-page)
+             :page-uuid (:block/uuid existing-page)
+             :title (:block/title existing-page)})
+
           ;; Just return existing page info
+          :else
           {:page-uuid (:block/uuid existing-page)
            :title (:block/title existing-page)}))
       (let [page (gp-block/page-name->map title db true date-formatter
@@ -343,8 +394,10 @@
                      ;; transact doesn't support entities
                      (remove de/entity? parents')
                      page-txs)
-                tx-meta (cond-> {:persist-op? persist-op?
-                                 :outliner-op :create-page}
+                tx-meta (cond-> (outliner-tx-meta/ensure-outliner-ops
+                                 {:persist-op? persist-op?
+                                  :outliner-op :create-page}
+                                 [:create-page [title options]])
                           today-journal?
                           (assoc :create-today-journal? true
                                  :today-journal-name title))]

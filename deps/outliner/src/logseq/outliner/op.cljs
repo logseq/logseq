@@ -1,10 +1,12 @@
 (ns logseq.outliner.op
   "Transact outliner ops"
-  (:require [datascript.core :as d]
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
             [logseq.outliner.transaction :as outliner-tx]
             [malli.core :as m]))
@@ -20,6 +22,10 @@
     [:catn
      [:op :keyword]
      [:args [:tuple ::blocks ::id ::option]]]]
+   [:apply-template
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::id ::id ::option]]]]
    [:delete-blocks
     [:catn
      [:op :keyword]
@@ -152,8 +158,6 @@
 
 (def ^:private ops-validator (m/validator ops-schema))
 
-(defonce ^:private *op-handlers (atom {}))
-
 (defn- reaction-user-id
   [reaction]
   (:db/id (:logseq.property/created-by-ref reaction)))
@@ -186,10 +190,6 @@
                          {:outliner-op :toggle-reaction})
           true)))))
 
-(defn register-op-handlers!
-  [handlers]
-  (reset! *op-handlers handlers))
-
 (defn- import-edn-data
   [conn *result export-map {:keys [tx-meta] :as import-options}]
   (let [{:keys [init-tx block-props-tx misc-tx error] :as _txs}
@@ -207,6 +207,45 @@
           (js/console.error "Unexpected Import EDN error:" e)
           (reset! *result {:error (str "Unexpected Import EDN error: " (pr-str (ex-message e)))}))))))
 
+(defn- apply-insert-blocks-op!
+  [conn *result [blocks target-block-id opts]]
+  (when-let [target-block (d/entity @conn target-block-id)]
+    (let [result (outliner-core/insert-blocks! conn blocks target-block opts)]
+      (reset! *result result))))
+
+(defn- template-children-blocks
+  [db template-id]
+  (when-let [template (d/entity db template-id)]
+    (let [template-blocks (some->> (ldb/get-block-and-children db (:block/uuid template)
+                                                               {:include-property-block? true})
+                                   rest)]
+      (when (seq template-blocks)
+        (cons (assoc (first template-blocks)
+                     :logseq.property/used-template (:db/id template))
+              (rest template-blocks))))))
+
+(defn- apply-template-op!
+  [conn *result [template-id target-block-id opts]]
+  (when-let [target (d/entity @conn target-block-id)]
+    (let [blocks (template-children-blocks @conn template-id)]
+      (when (seq blocks)
+        (let [sibling? (:sibling? opts)
+              sibling?' (cond
+                          (some? sibling?)
+                          sibling?
+
+                          (seq (:block/_parent target))
+                          false
+
+                          :else
+                          true)
+              result (outliner-core/insert-blocks! conn blocks target
+                                                   (assoc opts
+                                                          :sibling? sibling?'
+                                                          :insert-template? true
+                                                          :outliner-op :insert-template-blocks))]
+          (reset! *result result))))))
+
 (defn- ^:large-vars/cleanup-todo apply-op!
   [conn opts' *result [op args]]
   (case op
@@ -215,10 +254,10 @@
     (apply outliner-core/save-block! conn args)
 
     :insert-blocks
-    (let [[blocks target-block-id opts] args]
-      (when-let [target-block (d/entity @conn target-block-id)]
-        (let [result (outliner-core/insert-blocks! conn blocks target-block opts)]
-          (reset! *result result))))
+    (apply-insert-blocks-op! conn *result args)
+
+    :apply-template
+    (apply-template-op! conn *result args)
 
     :delete-blocks
     (let [[block-ids opts] args
@@ -275,26 +314,76 @@
     :class-remove-property
     (apply outliner-property/class-remove-property! conn args)
 
-    :upsert-closed-value
+    :upsert-closed-value ; don't support undo/redo
     (apply outliner-property/upsert-closed-value! conn args)
 
-    :delete-closed-value
+    :delete-closed-value ; don't support undo/redo
     (apply outliner-property/delete-closed-value! conn args)
 
-    :add-existing-values-to-closed-values
+    :add-existing-values-to-closed-values ; don't support undo/redo
     (apply outliner-property/add-existing-values-to-closed-values! conn args)
 
-    :batch-import-edn
+    :batch-import-edn                   ; don't support undo/redo
     (apply import-edn-data conn *result args)
 
-    :transact
+    :transact                           ; don't support undo/redo
     (apply ldb/transact! conn args)
+
+    :create-page
+    (let [[title options] args]
+      (reset! *result (outliner-page/create! conn title (or options {}))))
+
+    :rename-page
+    (let [[page-uuid new-title] args]
+      (if (string/blank? new-title)
+        (throw (ex-info "Page name shouldn't be blank" {:block/uuid page-uuid
+                                                        :block/title new-title}))
+        (outliner-core/save-block! conn
+                                   {:block/uuid page-uuid
+                                    :block/title new-title})))
+
+    :delete-page
+    (let [[page-uuid opts] args]
+      (outliner-page/delete! conn page-uuid (merge opts opts')))
 
     :toggle-reaction
     (reset! *result (apply toggle-reaction! conn args))
+    nil))
 
-    (when-let [handler (get @*op-handlers op)]
-      (reset! *result (handler conn args)))))
+(defn- apply-single-op!
+  [conn ops *result opts' clean-tx-meta]
+  (let [db @conn
+        op (first ops)
+        result (case (ffirst ops)
+                 :save-block
+                 (apply outliner-core/save-block db (second op))
+                 :insert-blocks
+                 (let [[blocks target-block-id insert-opts] (second op)]
+                   (outliner-core/insert-blocks db blocks
+                                                (d/entity db target-block-id)
+                                                insert-opts))
+                 :delete-blocks
+                 (let [[block-ids opts] (second op)
+                       blocks (keep #(d/entity db %) block-ids)]
+                   (outliner-core/delete-blocks db blocks (merge opts opts'))))
+        additional-tx (:additional-tx opts')
+        full-tx (concat (:tx-data result) additional-tx)]
+    (ldb/transact! conn full-tx clean-tx-meta)
+    (reset! *result result)))
+
+(defn- apply-save-followed-by-insert!
+  [conn ops *result opts' clean-tx-meta]
+  (let [save-block-tx (:tx-data (apply outliner-core/save-block @conn (second (first ops))))
+        [blocks target-block-id insert-opts] (second (second ops))
+        insert-blocks-result (outliner-core/insert-blocks @conn blocks
+                                                          (d/entity @conn target-block-id)
+                                                          insert-opts)
+        additional-tx (:additional-tx opts')
+        full-tx (concat save-block-tx
+                        (:tx-data insert-blocks-result)
+                        additional-tx)]
+    (ldb/transact! conn full-tx clean-tx-meta)
+    (reset! *result insert-blocks-result)))
 
 (defn apply-ops!
   [conn ops opts]
@@ -303,14 +392,28 @@
                                 (first (first ops)))
         opts' (cond-> (assoc opts
                              :transact-opts {:conn conn}
-                             :local-tx? true)
+                             :local-tx? true
+                             :outliner-ops ops
+                             :db-sync/tx-id (or (:db-sync/tx-id opts) (random-uuid)))
                 (and single-op-outliner-op
                      (nil? (:outliner-op opts)))
                 (assoc :outliner-op single-op-outliner-op))
-        *result (atom nil)]
-    (outliner-tx/transact!
-     opts'
-     (doseq [op-entry ops]
-       (apply-op! conn opts' *result op-entry)))
+        *result (atom nil)
+        clean-tx-meta (dissoc opts' :additional-tx :transact-opts :current-block)]
+    (cond
+      (and single-op-outliner-op
+           (contains? #{:save-block :insert-blocks :delete-blocks} (ffirst ops)))
+      (apply-single-op! conn ops *result opts' clean-tx-meta)
+
+      (and (= 2 (count ops))
+           (= :save-block (ffirst ops))
+           (= :insert-blocks (first (second ops))))
+      (apply-save-followed-by-insert! conn ops *result opts' clean-tx-meta)
+
+      :else
+      (outliner-tx/transact!
+       opts'
+       (doseq [op-entry ops]
+         (apply-op! conn opts' *result op-entry))))
 
     @*result))

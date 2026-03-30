@@ -226,6 +226,25 @@
                           (is false (str error))
                           (done)))))))
 
+(deftest current-checksum-heals-stale-stored-checksum-test
+  (testing "server recomputes and persists checksum when stored checksum is stale"
+    (let [sql (test-sql/make-sql)
+          conn (storage/open-conn sql)
+          self #js {:sql sql
+                    :conn conn
+                    :schema-ready true}
+          stale-checksum "0000000000000000"
+          block-uuid (random-uuid)]
+      (d/transact! conn [{:block/uuid block-uuid
+                          :block/title "hello"}])
+      (is (string? (storage/get-checksum sql)))
+      (storage/set-checksum! sql stale-checksum)
+      (let [healed (sync-handler/current-checksum self)]
+        (is (string? healed))
+        (is (not= stale-checksum healed))
+        (is (= healed (storage/get-checksum sql)))
+        (is (= healed (sync-handler/current-checksum self)))))))
+
 (deftest tx-batch-rejects-with-the-exact-failed-tx-entry-test
   (testing "db transact failure replies with the specific rejected tx entry"
     (let [sql (test-sql/make-sql)
