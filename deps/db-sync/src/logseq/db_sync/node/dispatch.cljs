@@ -10,6 +10,14 @@
             [logseq.db-sync.worker.http :as http]
             [promesa.core :as p]))
 
+(defn- admin-token-valid?
+  [request env]
+  (let [expected (aget env "DB_SYNC_ADMIN_TOKEN")
+        actual (.get (.-headers request) "x-db-sync-admin-token")]
+    (and (string? expected)
+         (seq expected)
+         (= expected actual))))
+
 (defn handle-node-fetch
   [{:keys [request env registry deps]}]
   (let [url (platform/request-url request)
@@ -31,10 +39,12 @@
       (if (= method "OPTIONS")
         (assets-handler/handle request env)
         (if-let [{:keys [graph-id]} (assets-handler/parse-asset-path path)]
-          (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
-            (if (.-ok access-resp)
-              (assets-handler/handle request env)
-              access-resp))
+          (if (admin-token-valid? request env)
+            (assets-handler/handle request env)
+            (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
+              (if (.-ok access-resp)
+                (assets-handler/handle request env)
+                access-resp)))
           (http/bad-request "invalid asset path")))
 
       (= method "OPTIONS")
@@ -45,14 +55,20 @@
         (if (seq graph-id)
           (if (= method "OPTIONS")
             (common/options-response)
-            (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
-              (if (.-ok access-resp)
-                (let [ctx (graph/get-or-create-graph registry deps graph-id)
-                      new-url (js/URL. (str (.-origin url) tail (.-search url)))]
-                  (.set (.-searchParams new-url) "graph-id" graph-id)
-                  (let [rewritten (platform/request (.toString new-url) request)]
-                    (sync-handler/handle-http ctx rewritten)))
-                access-resp)))
+            (if (admin-token-valid? request env)
+              (let [ctx (graph/get-or-create-graph registry deps graph-id)
+                    new-url (js/URL. (str (.-origin url) tail (.-search url)))]
+                (.set (.-searchParams new-url) "graph-id" graph-id)
+                (let [rewritten (platform/request (.toString new-url) request)]
+                  (sync-handler/handle-http ctx rewritten)))
+              (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
+                (if (.-ok access-resp)
+                  (let [ctx (graph/get-or-create-graph registry deps graph-id)
+                        new-url (js/URL. (str (.-origin url) tail (.-search url)))]
+                    (.set (.-searchParams new-url) "graph-id" graph-id)
+                    (let [rewritten (platform/request (.toString new-url) request)]
+                      (sync-handler/handle-http ctx rewritten)))
+                  access-resp))))
           (http/bad-request "missing graph id"))
         (http/bad-request "missing graph id"))
 
