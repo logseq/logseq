@@ -168,3 +168,9 @@
 .ls-icon-color-wrap em-emoji {
   @apply !w-auto !h-auto;
 }
+
+.ui__dropdown-menu-sub-content {
+  .cp__emoji-icon-picker {
+    @apply -m-2;
+  }
+}
