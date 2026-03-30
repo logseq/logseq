@@ -615,11 +615,12 @@
                  (->> (ldb/get-block-and-children db-before root-uuid)
                       (keep #(build-insert-block-payload db-before %))
                       vec))
-        [target-id sibling?] (block-restore-target root)]
-    (when (and target-id
-               (= target-id root-id))
-      (throw (ex-info "delete-root->restore-plan self target"
-                      {:root root})))
+        [target-id sibling?] (block-restore-target root)
+        [target-id sibling?] (if (and target-id (= target-id root-id))
+                               [(or (:db/id (:block/parent root))
+                                    (:db/id (:block/page root)))
+                                false]
+                               [target-id sibling?])]
     (when (and (seq blocks) (some? target-id))
       {:blocks blocks
        :target-id target-id
