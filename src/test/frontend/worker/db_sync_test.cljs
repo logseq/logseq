@@ -19,6 +19,7 @@
             [frontend.worker.sync.presence :as sync-presence]
             [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
             [frontend.worker.sync.upload :as sync-upload]
+            [frontend.worker.undo-redo :as undo-redo]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
@@ -2390,6 +2391,71 @@
             (is (= [] @(:inflight client)))
             (is (empty? (#'sync-apply/pending-txs test-repo)))
             (is (= 1 (client-op/get-local-tx test-repo)))))))))
+
+(deftest tx-batch-ok-real-checksum-mismatch-fails-fast-test
+  (testing "tx/batch/ok fails fast on true checksum mismatch"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          stale-checksum "0000000000000000"
+          remote-checksum "ffffffffffffffff"
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}
+          raw-message (js/JSON.stringify (clj->js {:type "tx/batch/ok"
+                                                   :t 0
+                                                   :checksum remote-checksum}))]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (client-op/update-local-checksum test-repo stale-checksum)
+          (try
+            (sync-handle-message/handle-message! test-repo client raw-message)
+            (is false "expected checksum mismatch to fail fast")
+            (catch :default error
+              (let [data (ex-data error)]
+                (is (= :db-sync/checksum-mismatch (:type data)))
+                (is (= stale-checksum (:local-checksum data)))
+                (is (= remote-checksum (:remote-checksum data)))))))))))
+
+(deftest local-checksum-stays-in-sync-after-undo-redo-sequence-test
+  (testing "insert/delete/indent/outdent with undo-all/redo-all keeps cached checksum aligned"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          inserted-uuid (random-uuid)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (client-op/update-local-checksum test-repo (sync-checksum/recompute-checksum @conn))
+          (d/listen! conn ::checksum-sync
+                     (fn [tx-report]
+                       (when-not (:batch-tx? @conn)
+                         (when (seq (:tx-data tx-report))
+                           (db-sync/update-local-sync-checksum! test-repo tx-report)))))
+          (try
+            (outliner-core/insert-blocks! conn
+                                          [{:block/uuid inserted-uuid
+                                            :block/title "tmp"}]
+                                          parent
+                                          {:sibling? false
+                                           :keep-uuid? true})
+            (let [inserted (d/entity @conn [:block/uuid inserted-uuid])]
+              (outliner-core/indent-outdent-blocks! conn [inserted] true)
+              (outliner-core/indent-outdent-blocks! conn [inserted] false)
+              (outliner-core/delete-blocks @conn [inserted] {}))
+            (loop [n 0]
+              (let [result (undo-redo/undo test-repo)]
+                (when-not (= :frontend.worker.undo-redo/empty-undo-stack result)
+                  (when (> n 128)
+                    (throw (ex-info "undo loop exceeded" {:count n})))
+                  (recur (inc n)))))
+            (loop [n 0]
+              (let [result (undo-redo/redo test-repo)]
+                (when-not (= :frontend.worker.undo-redo/empty-redo-stack result)
+                  (when (> n 128)
+                    (throw (ex-info "redo loop exceeded" {:count n})))
+                  (recur (inc n)))))
+            (is (= (sync-checksum/recompute-checksum @conn)
+                   (client-op/get-local-checksum test-repo)))
+            (finally
+              (d/unlisten! conn ::checksum-sync))))))))
 
 (deftest reparent-block-when-cycle-detected-test
   (testing "cycle from remote sync reparent block to page root"
