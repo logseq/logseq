@@ -1520,7 +1520,18 @@
       (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}
                         repo-b {:conn conn-b :ops-conn ops-b}}
         (fn []
-          (let [{:keys [repro restore]} (install-invalid-tx-repro! seed history)]
+          (let [{:keys [repro restore]} (install-invalid-tx-repro! seed history)
+                listener-a ::checksum-sync-a
+                listener-b ::checksum-sync-b
+                update-local-checksum!
+                (fn [repo conn listener-key]
+                  (d/listen! conn listener-key
+                             (fn [tx-report]
+                               (when-not (:batch-tx? @conn)
+                                 (when (seq (:tx-data tx-report))
+                                   (db-sync/update-local-sync-checksum! repo tx-report))))))]
+            (update-local-checksum! repo-a conn-a listener-a)
+            (update-local-checksum! repo-b conn-b listener-b)
             (try
               (reset! db-sync/*repo->latest-remote-tx {})
               (record-meta! history {:seed seed :base-uuid base-uuid})
@@ -1528,6 +1539,8 @@
                 (ensure-base-page! conn base-uuid))
               (doseq [repo [repo-a repo-b]]
                 (client-op/update-local-tx repo 0))
+              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a))
+              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b))
 
               ;; Seed stable anchors (non-empty titles) that A won't touch.
               (let [base-a (d/entity @conn-a [:block/uuid base-uuid])
@@ -1618,6 +1631,10 @@
                   (is (empty? issues-a) (str "db A issues seed=" seed " " (pr-str issues-a)))
                   (is (empty? issues-b) (str "db B issues seed=" seed " " (pr-str issues-b)))
                   (assert-synced-attrs! seed history attrs-a attrs-b attrs-b)
+                  (is (= (sync-checksum/recompute-checksum @conn-a)
+                         (client-op/get-local-checksum repo-a)))
+                  (is (= (sync-checksum/recompute-checksum @conn-b)
+                         (client-op/get-local-checksum repo-b)))
                   (doseq [anchor-uuid anchor-uuids]
                     (let [ent-a (d/entity @conn-a [:block/uuid anchor-uuid])
                           ent-b (d/entity @conn-b [:block/uuid anchor-uuid])]
@@ -1627,6 +1644,8 @@
                       (is (not (string/blank? (or (:block/title ent-b) ""))) (str "anchor title blank in B seed=" seed " uuid=" anchor-uuid))))
                   (assert-no-invalid-tx! seed history repro)))
               (finally
+                (d/unlisten! conn-a listener-a)
+                (d/unlisten! conn-b listener-b)
                 (restore)))))))))
 
 (deftest two-clients-rebase-keeps-local-title-after-reverse-tx-test
@@ -1643,21 +1662,42 @@
       (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}
                         repo-b {:conn conn-b :ops-conn ops-b}}
         (fn []
-          (reset! db-sync/*repo->latest-remote-tx {})
-          (client-op/update-local-tx repo-a 0)
-          (client-op/update-local-tx repo-b 0)
-          (ensure-base-page! conn-a base-uuid)
-          (let [base (d/entity @conn-a [:block/uuid base-uuid])]
-            (create-block! conn-a base "before" block-uuid))
-          (sync-loop! server [{:repo repo-a :conn conn-a :client client-a :online? true}])
-          (sync-loop! server [{:repo repo-b :conn conn-b :client client-b :online? true}])
-          (is (= "before" (:block/title (d/entity @conn-b [:block/uuid block-uuid]))))
-          (update-title! conn-a block-uuid "test")
-          (is (seq (#'sync-apply/pending-txs repo-a)))
-          (d/transact! conn-b [[:db/add [:block/uuid block-uuid] :block/updated-at 1710000000000]])
-          (sync-loop! server [{:repo repo-b :conn conn-b :client client-b :online? true}])
-          (sync-loop! server [{:repo repo-a :conn conn-a :client client-a :online? true}])
-          (is (= "test" (:block/title (d/entity @conn-a [:block/uuid block-uuid])))))))))
+          (let [listener-a ::checksum-sync-a
+                listener-b ::checksum-sync-b
+                update-local-checksum!
+                (fn [repo conn]
+                  (d/listen! conn (if (= repo repo-a) listener-a listener-b)
+                             (fn [tx-report]
+                               (when-not (:batch-tx? @conn)
+                                 (when (seq (:tx-data tx-report))
+                                   (db-sync/update-local-sync-checksum! repo tx-report))))))]
+            (update-local-checksum! repo-a conn-a)
+            (update-local-checksum! repo-b conn-b)
+            (try
+              (reset! db-sync/*repo->latest-remote-tx {})
+              (client-op/update-local-tx repo-a 0)
+              (client-op/update-local-tx repo-b 0)
+              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a))
+              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b))
+              (ensure-base-page! conn-a base-uuid)
+              (let [base (d/entity @conn-a [:block/uuid base-uuid])]
+                (create-block! conn-a base "before" block-uuid))
+              (sync-loop! server [{:repo repo-a :conn conn-a :client client-a :online? true}])
+              (sync-loop! server [{:repo repo-b :conn conn-b :client client-b :online? true}])
+              (is (= "before" (:block/title (d/entity @conn-b [:block/uuid block-uuid]))))
+              (update-title! conn-a block-uuid "test")
+              (is (seq (#'sync-apply/pending-txs repo-a)))
+              (d/transact! conn-b [[:db/add [:block/uuid block-uuid] :block/updated-at 1710000000000]])
+              (sync-loop! server [{:repo repo-b :conn conn-b :client client-b :online? true}])
+              (sync-loop! server [{:repo repo-a :conn conn-a :client client-a :online? true}])
+              (is (= "test" (:block/title (d/entity @conn-a [:block/uuid block-uuid]))))
+              (is (= (sync-checksum/recompute-checksum @conn-a)
+                     (client-op/get-local-checksum repo-a)))
+              (is (= (sync-checksum/recompute-checksum @conn-b)
+                     (client-op/get-local-checksum repo-b)))
+              (finally
+                (d/unlisten! conn-a listener-a)
+                (d/unlisten! conn-b listener-b)))))))))
 
 (deftest undo-redo-indent-sequence-does-not-produce-invalid-entity-test
   (testing "undo/redo of add-1 add-2 indent-2 should remain valid after another undo"
@@ -1972,6 +2012,77 @@
       (if (= :frontend.worker.undo-redo/empty-redo-stack result)
         steps
         (recur (inc steps))))))
+
+(deftest two-clients-offline-insert-delete-indent-undo-redo-keeps-checksum-cache-aligned-test
+  (testing "both clients offline insert/delete/indent/outdent + undo-all/redo-all keep cached checksums aligned after reconnect"
+    (let [seed (or (env-seed) default-seed)
+          rng (make-rng seed)
+          gen-uuid #(rng-uuid rng)
+          base-uuid (gen-uuid)
+          conn-a (db-test/create-conn)
+          conn-b (db-test/create-conn)
+          ops-a (d/create-conn client-op/schema-in-db)
+          ops-b (d/create-conn client-op/schema-in-db)
+          client-a (make-client repo-a)
+          client-b (make-client repo-b)
+          server (make-server)]
+      (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}
+                        repo-b {:conn conn-b :ops-conn ops-b}}
+        (fn []
+          (let [listener-a ::checksum-sync-a
+                listener-b ::checksum-sync-b
+                update-local-checksum!
+                (fn [repo conn listener-key]
+                  (d/listen! conn listener-key
+                             (fn [tx-report]
+                               (when-not (:batch-tx? @conn)
+                                 (when (seq (:tx-data tx-report))
+                                   (db-sync/update-local-sync-checksum! repo tx-report)))))
+                  nil)
+                run-offline-seq!
+                (fn [repo conn label-prefix]
+                  (let [base (d/entity @conn [:block/uuid base-uuid])
+                        p1 (gen-uuid)
+                        child (gen-uuid)
+                        temp (gen-uuid)]
+                    (create-block! conn base (str label-prefix "-p1") p1)
+                    (create-block! conn (d/entity @conn [:block/uuid p1]) (str label-prefix "-child") child)
+                    (outliner-core/indent-outdent-blocks! conn [(d/entity @conn [:block/uuid child])] false {})
+                    (outliner-core/indent-outdent-blocks! conn [(d/entity @conn [:block/uuid child])] true {})
+                    (create-block! conn base (str label-prefix "-temp") temp)
+                    (delete-block! conn temp)
+                    (undo-all! repo 256)
+                    (redo-all! repo 256)))]
+            (update-local-checksum! repo-a conn-a listener-a)
+            (update-local-checksum! repo-b conn-b listener-b)
+            (try
+              (reset! db-sync/*repo->latest-remote-tx {})
+              (doseq [repo [repo-a repo-b]]
+                (client-op/update-local-tx repo 0))
+              (ensure-base-page! conn-a base-uuid)
+              (sync-loop! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                  {:repo repo-b :conn conn-b :client client-b :online? true}])
+              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a))
+              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b))
+
+              (run-offline-seq! repo-a conn-a "a")
+              (run-offline-seq! repo-b conn-b "b")
+
+              (let [rounds (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                                     {:repo repo-b :conn conn-b :client client-b :online? true}]
+                                            300)]
+                (is (< rounds 300)))
+
+              (let [checksum-a (sync-checksum/recompute-checksum @conn-a)
+                    checksum-b (sync-checksum/recompute-checksum @conn-b)
+                    cached-a (client-op/get-local-checksum repo-a)
+                    cached-b (client-op/get-local-checksum repo-b)]
+                (is (= checksum-a checksum-b))
+                (is (= checksum-a cached-a))
+                (is (= checksum-b cached-b)))
+              (finally
+                (d/unlisten! conn-a listener-a)
+                (d/unlisten! conn-b listener-b)))))))))
 
 (deftest ^:long ^:large-vars/cleanup-todo all-core-outliner-ops-local-undo-redo-random-sim-test
   (testing "local randomized stress simulation runs weighted ops and keeps undo-all/redo-all roundtrips valid"
