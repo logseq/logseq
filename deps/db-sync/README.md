@@ -46,6 +46,16 @@ yarn show-graphs-for-user --user-id us-east-1:example-user-id
 The script uses `worker/wrangler.toml`, runs against the remote D1 binding `DB`,
 defaults to `--env prod`, and prints JSON when `--json` is added.
 
+Download a graph snapshot into a local sqlite debug file matching local graph DB schema (`kvs` table only):
+
+```bash
+cd deps/db-sync
+yarn download-graph-db --graph-id 6f2d7f6f-xxxx-xxxx-xxxx-xxxxxxxxxxxx --admin-token <admin-token>
+```
+
+You can also pass `--admin-token <token>` or set `DB_SYNC_ADMIN_TOKEN`. The output defaults to
+`tmp/graph-<graph-id>.snapshot.sqlite` and can be changed with `--output`.
+
 Delete the graphs owned by a production user after an explicit confirmation:
 
 ```bash
