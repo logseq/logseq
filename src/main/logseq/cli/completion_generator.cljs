@@ -58,6 +58,8 @@
       (and (not= coerce :boolean) (nil? multiple-values) (seq values)) (assoc :type :enum :values (sort values))
       (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :graphs)) (assoc :type :dynamic :complete :graphs)
       (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :pages)) (assoc :type :dynamic :complete :pages)
+      (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :tags)) (assoc :type :dynamic :complete :tags)
+      (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :properties)) (assoc :type :dynamic :complete :properties)
       (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :queries)) (assoc :type :dynamic :complete :queries)
       (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :file)) (assoc :type :file)
       (and (not= coerce :boolean) (nil? multiple-values) (nil? values) (= complete :dir)) (assoc :type :dir)
@@ -137,6 +139,26 @@ _logseq_pages() {
     local -a pages
     pages=( ${(f)\"$(logseq list page --graph \"$graph\" --output json 2>/dev/null | _logseq_json_names data items block/title)\"} )
     compadd -a pages
+  fi
+}
+
+_logseq_tags() {
+  local graph
+  graph=$(_logseq_current_graph)
+  if [[ -n \"$graph\" ]]; then
+    local -a tags
+    tags=( ${(f)\"$(logseq list tag --graph \"$graph\" --output json 2>/dev/null | _logseq_json_names data items block/title)\"} )
+    compadd -a tags
+  fi
+}
+
+_logseq_properties() {
+  local graph
+  graph=$(_logseq_current_graph)
+  if [[ -n \"$graph\" ]]; then
+    local -a properties
+    properties=( ${(f)\"$(logseq list property --graph \"$graph\" --output json 2>/dev/null | _logseq_json_names data items block/title)\"} )
+    compadd -a properties
   fi
 }
 
@@ -232,6 +254,8 @@ _logseq_multi_values() {
       (let [action (case complete
                      :graphs "{_logseq_graphs}"
                      :pages "{_logseq_pages}"
+                     :tags "{_logseq_tags}"
+                     :properties "{_logseq_properties}"
                      :queries "{_logseq_queries}")]
         (if alias
           [(str "'" excl long-opt "=[" desc* "]:value:" action "'")
@@ -508,6 +532,14 @@ _logseq_pages_bash() {
   logseq list page --graph \"$1\" --output json 2>/dev/null | _logseq_json_names_bash data items block/title
 }
 
+_logseq_tags_bash() {
+  logseq list tag --graph \"$1\" --output json 2>/dev/null | _logseq_json_names_bash data items block/title
+}
+
+_logseq_properties_bash() {
+  logseq list property --graph \"$1\" --output json 2>/dev/null | _logseq_json_names_bash data items block/title
+}
+
 _logseq_queries_bash() {
   logseq query list --graph \"$1\" --output json 2>/dev/null | _logseq_json_names_bash data queries name
 }
@@ -722,6 +754,18 @@ _logseq_multi_values_bash() {
              "      graph=\"$(_logseq_current_graph_bash)\"\n"
              "      [[ -n \"$graph\" ]] && _logseq_compadd_lines \"$cur\" _logseq_pages_bash \"$graph\"\n"
              "      return ;;")
+        :tags
+        (str "    " pattern ")\n"
+             "      local graph\n"
+             "      graph=\"$(_logseq_current_graph_bash)\"\n"
+             "      [[ -n \"$graph\" ]] && _logseq_compadd_lines \"$cur\" _logseq_tags_bash \"$graph\"\n"
+             "      return ;;")
+        :properties
+        (str "    " pattern ")\n"
+             "      local graph\n"
+             "      graph=\"$(_logseq_current_graph_bash)\"\n"
+             "      [[ -n \"$graph\" ]] && _logseq_compadd_lines \"$cur\" _logseq_properties_bash \"$graph\"\n"
+             "      return ;;")
         :queries
         (str "    " pattern ")\n"
              "      local graph\n"
@@ -813,6 +857,18 @@ _logseq_multi_values_bash() {
              "        local graph\n"
              "        graph=\"$(_logseq_current_graph_bash)\"\n"
              "        [[ -n \"$graph\" ]] && _logseq_compadd_lines \"$cur\" _logseq_pages_bash \"$graph\"\n"
+             "      fi")
+        :tags
+        (str "      if " condition "; then\n"
+             "        local graph\n"
+             "        graph=\"$(_logseq_current_graph_bash)\"\n"
+             "        [[ -n \"$graph\" ]] && _logseq_compadd_lines \"$cur\" _logseq_tags_bash \"$graph\"\n"
+             "      fi")
+        :properties
+        (str "      if " condition "; then\n"
+             "        local graph\n"
+             "        graph=\"$(_logseq_current_graph_bash)\"\n"
+             "        [[ -n \"$graph\" ]] && _logseq_compadd_lines \"$cur\" _logseq_properties_bash \"$graph\"\n"
              "      fi")
         :queries
         (str "      if " condition "; then\n"

@@ -18,10 +18,17 @@
   {:name {:desc "Page name"
           :complete :pages}})
 
-(def ^:private remove-entity-spec
+(def ^:private remove-tag-spec
   {:id {:desc "Entity db/id"
         :coerce :long}
-   :name {:desc "Entity name"}})
+   :name {:desc "Tag name"
+          :complete :tags}})
+
+(def ^:private remove-property-spec
+  {:id {:desc "Entity db/id"
+        :coerce :long}
+   :name {:desc "Property name"
+          :complete :properties}})
 
 (def entries
   [(core/command-entry ["remove" "block"] :remove-block "Remove blocks" remove-block-spec
@@ -30,9 +37,9 @@
                                    "logseq remove block --graph my-graph --uuid 7f0f4bb3-2e48-4b46-ae0f-18f52ef0f8be"]})
    (core/command-entry ["remove" "page"] :remove-page "Remove page" remove-page-spec
                        {:examples ["logseq remove page --graph my-graph --name Home"]})
-   (core/command-entry ["remove" "tag"] :remove-tag "Remove tag" remove-entity-spec
+   (core/command-entry ["remove" "tag"] :remove-tag "Remove tag" remove-tag-spec
                        {:examples ["logseq remove tag --graph my-graph --name project"]})
-   (core/command-entry ["remove" "property"] :remove-property "Remove property" remove-entity-spec
+   (core/command-entry ["remove" "property"] :remove-property "Remove property" remove-property-spec
                        {:examples ["logseq remove property --graph my-graph --name owner"
                                    "logseq remove property --graph my-graph --id 321"]})])
 
