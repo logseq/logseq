@@ -45,6 +45,20 @@
              (:block/title (d/entity @conn :user.property/p1-2)))
           "3rd property gets unique ident"))))
 
+(deftest upsert-property-rejects-type-change-with-existing-data
+  (testing "Changing type is rejected when property has values"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"}
+                  :blocks [{:block/title "b1" :build/properties {:status "active"}}]}])]
+      (is (thrown-with-msg?
+           js/Error #"Disallowed type change with existing data"
+           (outliner-property/upsert-property! conn :user.property/status {:logseq.property/type :number} {})))))
+
+  (testing "Changing type is allowed when property has no values"
+    (let [conn (db-test/create-conn-with-blocks {:properties {:empty-prop {:logseq.property/type :default}}})]
+      (outliner-property/upsert-property! conn :user.property/empty-prop {:logseq.property/type :number} {})
+      (is (= :number (:logseq.property/type (d/entity @conn :user.property/empty-prop)))))))
+
 (deftest convert-property-input-string
   (testing "Convert property input string according to its schema type"
     (let [test-uuid (random-uuid)]
