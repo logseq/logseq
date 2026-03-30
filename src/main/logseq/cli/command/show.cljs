@@ -28,7 +28,7 @@
 (def entries
   [(core/command-entry ["show"] :show "Show tree" show-spec
                        {:examples ["logseq show --graph my-graph --page Home"
-                                   "logseq show --graph my-graph --page Meeting Notes --level 2"
+                                   "logseq show --graph my-graph --page \"Meeting Notes\" --level 2"
                                    "logseq show --graph my-graph --id 123 --level 3"
                                    "logseq show --graph my-graph --id '[123,456,789]'"
                                    "logseq show --graph my-graph --uuid 11111111-1111-1111-1111-111111111111"]})])

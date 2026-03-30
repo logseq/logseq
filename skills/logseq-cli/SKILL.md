@@ -43,74 +43,20 @@ Use `logseq` to inspect and edit graph entities, run Datascript queries, and con
 - `logseq <command> --help`
 - `logseq <command> <subcommand> --help`
 
-## Example prerequisites
+## Examples policy
 
-- Replace placeholder ids/uuids in examples (`123`, `321`, `1111...`) with real entities from the target graph.
+- Do not maintain long static command examples in this skill.
+- Use `logseq example` as the source of truth for runnable examples.
+- Before proposing runnable commands, always inspect live examples with:
+  - `logseq example`
+  - `logseq example <command-or-prefix...>`
+  - `logseq example <command-or-prefix...> --help`
+- Prefer exact selectors when possible (for example, `logseq example upsert page`).
+- Use prefix selectors when grouped examples are needed (for example, `logseq example upsert`).
+- Replace placeholder ids/uuids in retrieved examples with real entities from the target graph.
 - Use `logseq list ...`, `logseq show ...`, or `logseq query ...` first to discover valid ids/uuids.
-- `logseq graph export` requires `--file`; keep `graph import --input` consistent with the export path.
+- For graph transfer flows, keep `graph export --file` and `graph import --input` paths consistent.
 
-## Examples
-
-```bash
-# List pages (human output by default)
-logseq list page --graph "my-graph" --limit 50 --sort updated-at --order desc
-
-# Include built-in tags/properties
-logseq list tag --graph "my-graph" --include-built-in --limit 20 --output json
-logseq list property --graph "my-graph" --include-built-in --limit 20 --output json
-
-# Query by built-in query name
-logseq query --graph "my-graph" --name "recent-updated" --inputs "[30]"
-
-# Query with ad-hoc Datascript EDN
-logseq query --graph "my-graph" --query "[:find [?p ...] :where [?p :block/name]]"
-
-# List available queries (built-ins + custom-queries from cli.edn)
-logseq query list --graph "my-graph" --output edn
-
-# Show a page tree or a block
-logseq show --graph "my-graph" --page "Meeting Notes" --level 2
-logseq show --graph "my-graph" --id 123
-logseq show --graph "my-graph" --id "[123,456,789]"
-
-# Upsert a page (create or update by --id)
-logseq upsert page --graph "my-graph" --page "Project X"
-logseq upsert page --graph "my-graph" --id 999 --update-properties "{:logseq.property/description \"Example\"}"
-
-# Upsert blocks
-logseq upsert block --graph "my-graph" --target-page "Meeting Notes" --content "Discuss roadmap"
-logseq upsert block --graph "my-graph" --target-page "Meeting Notes" --content "AI summary of the discussion" --update-tags '["AI-GENERATED"]'
-logseq upsert block --graph "my-graph" --blocks "[{:block/title \"A\"} {:block/title \"B\"}]"
-logseq upsert block --graph "my-graph" --id 123 --update-tags '["AI-GENERATED"]'
-logseq upsert block --graph "my-graph" --id 123 --status done
-
-# Ensure a tag exists before associating it with a block
-logseq upsert tag --graph "my-graph" --name "AI-GENERATED"
-logseq upsert block --graph "my-graph" --target-page "Meeting Notes" --content "AI summary of the discussion" --update-tags '["AI-GENERATED"]'
-
-# Upsert tag/property
-logseq upsert tag --graph "my-graph" --name "Project"
-logseq upsert tag --graph "my-graph" --id 200 --name "Project Renamed"
-logseq upsert property --graph "my-graph" --name "Effort" --type number --cardinality one
-logseq upsert property --graph "my-graph" --id 321 --hide true
-
-# Remove entities
-logseq remove block --graph "my-graph" --id "[123,456]"
-logseq remove block --graph "my-graph" --uuid "11111111-1111-1111-1111-111111111111"
-logseq remove page --graph "my-graph" --name "Old Page"
-logseq remove tag --graph "my-graph" --name "Old Tag"
-logseq remove property --graph "my-graph" --id 321
-
-# Graph and server commands
-logseq graph create --graph "my-graph"
-logseq graph list
-logseq graph switch --graph "my-graph"
-logseq graph info --graph "my-graph"
-logseq graph export --graph "my-graph" --type edn --file /tmp/my-graph.edn
-logseq graph import --graph "my-graph-import" --type edn --input /tmp/my-graph.edn
-logseq server status --graph "my-graph"
-logseq doctor
-```
 
 ## Tag association semantics
 

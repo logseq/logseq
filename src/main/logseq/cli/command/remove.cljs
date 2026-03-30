@@ -33,7 +33,7 @@
    (core/command-entry ["remove" "tag"] :remove-tag "Remove tag" remove-entity-spec
                        {:examples ["logseq remove tag --graph my-graph --name project"]})
    (core/command-entry ["remove" "property"] :remove-property "Remove property" remove-entity-spec
-                       {:examples ["logseq remove property --graph my-graph --name status"
+                       {:examples ["logseq remove property --graph my-graph --name owner"
                                    "logseq remove property --graph my-graph --id 321"]})])
 
 (defn invalid-options?
