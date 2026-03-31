@@ -3,7 +3,7 @@ import { PluginLocal } from './LSPlugin.core'
 import * as nodePath from 'path'
 import DOMPurify from 'dompurify'
 import merge from 'deepmerge'
-import { snakeCase } from 'snake-case'
+import { snakeCase } from 'change-case'
 import * as callables from './callable.apis'
 import EventEmitter from 'eventemitter3'
 

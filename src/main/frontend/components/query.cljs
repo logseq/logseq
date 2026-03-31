@@ -146,7 +146,11 @@
         ;; Remove hidden pages from result
         result (if (and (coll? result) (not (map? result)))
                  (->> result
-                      (remove (fn [b] (when (and (map? b) (:block/title b)) (ldb/hidden? (:block/title b)))))
+                      (remove (fn [b]
+                                (when (and (map? b) (:block/title b))
+                                  (ldb/hidden? (or (when-let [id (:db/id b)]
+                                                     (db/entity id))
+                                                   (:block/title b))))))
                       (remove (fn [b]
                                 (when (and current-block (:db/id current-block)) (= (:db/id b) (:db/id current-block))))))
                  result)

@@ -6,6 +6,10 @@
     "dev": "cd ./worker && npx wrangler dev",
     "watch": "clojure -M:cljs watch db-sync",
     "release": "clojure -M:cljs release db-sync",
+    "delete-graphs-for-user": "node worker/scripts/delete_graphs_for_user.js",
+    "delete-user-totally": "node worker/scripts/delete_user_totally.js",
+    "download-graph-db": "node worker/scripts/download_graph_db.js",
+    "show-graphs-for-user": "node worker/scripts/show_graphs_for_user.js",
     "build:node-adapter": "clojure -M:cljs release db-sync-node",
     "dev:node-adapter": "clojure -M:cljs watch db-sync-node",
     "start:node-adapter": "node worker/dist/node-adapter.js",
@@ -20,13 +24,13 @@
     "deploy-staging": "export SENTRY_RELEASE=$(git rev-parse HEAD) && yarn clean && yarn release && yarn sentry:sourcemaps && cd ./worker && wrangler deploy --env staging"
   },
   "dependencies": {
-    "@sentry/cloudflare": "^10.38.0",
-    "@sentry/node": "^10.38.0",
-    "better-sqlite3": "^12.6.2",
+    "@sentry/cloudflare": "^10.45.0",
+    "@sentry/node": "^10.45.0",
+    "better-sqlite3": "^12.8.0",
     "shadow-cljs": "^3.3.4",
-    "ws": "^8.18.3"
+    "ws": "^8.19.0"
   },
   "devDependencies": {
-    "@sentry/cli": "^3.1.0"
+    "@sentry/cli": "^3.3.3"
   }
 }

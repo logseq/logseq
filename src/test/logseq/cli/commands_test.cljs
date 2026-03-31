@@ -831,7 +831,7 @@
                                    (string/lower-case nested) "Inner"}}
           output (binding [style/*color-enabled?* true]
                    (tree->text tree-data))]
-      (is (= (str "1 See [[Target [[Inner]]]]")
+      (is (= "1 See [[Target [[Inner]]]]"
              (strip-ansi output))))))
 
 (deftest test-help-upsert-update-options
@@ -2755,10 +2755,36 @@
                          property-result (commands/execute {:type :remove-property :repo "demo" :id 2} {})]
                    (is (= :ok (:status tag-result)))
                    (is (= :ok (:status property-result)))
-                   (is (= [[:delete-page [(uuid "00000000-0000-0000-0000-000000000011")]]]
+                   (is (= [[:delete-page [(uuid "00000000-0000-0000-0000-000000000011") {}]]]
                           (first @ops*)))
-                   (is (= [[:delete-page [(uuid "00000000-0000-0000-0000-000000000022")]]]
+                   (is (= [[:delete-page [(uuid "00000000-0000-0000-0000-000000000022") {}]]]
                           (second @ops*)))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-remove-page-returns-true-result-on-success
+  (async done
+         (let [ops* (atom nil)
+               page-uuid (uuid "00000000-0000-0000-0000-00000000abcd")]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               transport/invoke (fn [_ method _ args]
+                                                  (case method
+                                                    :thread-api/pull (let [[_ _ lookup] args]
+                                                                       (if (= lookup [:block/name "home"])
+                                                                         {:db/id 10
+                                                                          :block/title "Home"
+                                                                          :block/uuid page-uuid}
+                                                                         {}))
+                                                    :thread-api/apply-outliner-ops (let [[_ ops _] args]
+                                                                                     (reset! ops* ops)
+                                                                                     nil)
+                                                    (throw (ex-info "unexpected invoke" {:method method :args args}))))]
+                 (p/let [result (commands/execute {:type :remove-page :repo "demo" :name "Home"} {})]
+                   (is (= :ok (:status result)))
+                   (is (= true (get-in result [:data :result])))
+                   (is (= [[:delete-page [page-uuid {}]]]
+                          @ops*))))
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
 

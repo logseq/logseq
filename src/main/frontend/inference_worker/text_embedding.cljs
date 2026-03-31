@@ -42,14 +42,15 @@
 
 (defn- ^js get-hnsw-index
   [repo]
-  (or (@infer-worker.state/*hnsw-index repo)
-      (let [hnsw-ctor (.-HierarchicalNSW ^js @infer-worker.state/*hnswlib)
-            hnsw (new hnsw-ctor "cosine" (or (:dims (:hnsw-config (second @infer-worker.state/*model-name+config))) 384) "")
-            file-exists? (.checkFileExists (.-EmscriptenFileSystemManager ^js @infer-worker.state/*hnswlib) repo)]
-        (when file-exists?
-          (.readIndex hnsw repo init-max-elems)
-          (swap! infer-worker.state/*hnsw-index assoc repo hnsw)
-          hnsw))))
+  (when repo
+    (or (@infer-worker.state/*hnsw-index repo)
+        (let [hnsw-ctor (.-HierarchicalNSW ^js @infer-worker.state/*hnswlib)
+              hnsw (new hnsw-ctor "cosine" (or (:dims (:hnsw-config (second @infer-worker.state/*model-name+config))) 384) "")
+              file-exists? (.checkFileExists (.-EmscriptenFileSystemManager ^js @infer-worker.state/*hnswlib) repo)]
+          (when file-exists?
+            (.readIndex hnsw repo init-max-elems)
+            (swap! infer-worker.state/*hnsw-index assoc repo hnsw)
+            hnsw)))))
 
 (defn- ^js new-hnsw-index!
   [repo]

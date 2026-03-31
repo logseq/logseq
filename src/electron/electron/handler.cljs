@@ -401,8 +401,9 @@
                       (.arrayBuffer res)
 
                       :base64
-                      (-> (.buffer res)
-                          (p/then #(.toString % "base64")))
+                        (-> (.arrayBuffer res)
+                          (p/then #(-> (js/Buffer.from %)
+                                 (.toString "base64"))))
 
                       :text
                       (.text res))))

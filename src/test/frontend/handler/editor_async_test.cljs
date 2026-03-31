@@ -68,12 +68,19 @@
                     {:on-delete (fn []
                                   (let [updated-blocks (->> (d/q '[:find (pull ?b [*])
                                                                    :where
-                                                                   [?b :block/parent]
+                                                                   [?p :block/name "page1"]
+                                                                   [?b :block/page ?p]
                                                                    [?b :block/title]
-                                                                   [(missing? $ ?b :logseq.property/built-in?)]]
+                                                                   [(missing? $ ?b :logseq.property/deleted-at)]]
                                                                  @conn)
-                                                            (map (comp :block/title first)))]
-                                    (is (= ["b1" "b2"] updated-blocks) "Block is deleted")))})))
+                                                            (map (comp :block/title first)))
+                                        deleted-blocks (->> (d/q '[:find (pull ?b [*])
+                                                                   :where
+                                                                   [?b :block/title ""]]
+                                                                 @conn)
+                                                            (map first))]
+                                    (is (= ["b1" "b2"] updated-blocks) "Visible page blocks stay on the page")
+                                    (is (empty? deleted-blocks) "Deleted block is removed from page db")))})))
 
   (testing "backspace deletes empty block in embedded context"
     ;; testing embed at this layer doesn't require an embed block since
@@ -90,9 +97,16 @@
                      :on-delete (fn []
                                   (let [updated-blocks (->> (d/q '[:find (pull ?b [*])
                                                                    :where
-                                                                   [?b :block/parent]
+                                                                   [?p :block/name "page1"]
+                                                                   [?b :block/page ?p]
                                                                    [?b :block/title]
-                                                                   [(missing? $ ?b :logseq.property/built-in?)]]
+                                                                   [(missing? $ ?b :logseq.property/deleted-at)]]
                                                                  @conn)
-                                                            (map (comp :block/title first)))]
-                                    (is (= ["b1" "b2"] updated-blocks) "Block is deleted")))}))))
+                                                            (map (comp :block/title first)))
+                                        deleted-blocks (->> (d/q '[:find (pull ?b [*])
+                                                                   :where
+                                                                   [?b :block/title ""]]
+                                                                 @conn)
+                                                            (map first))]
+                                    (is (= ["b1" "b2"] updated-blocks) "Visible page blocks stay on the page")
+                                    (is (empty? deleted-blocks) "Deleted block is removed from page db")))}))))

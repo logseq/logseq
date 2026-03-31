@@ -397,19 +397,19 @@
                                db-based?
                                sanitize-hashtag-name)
           [page _page-entity] (cond
-                                (and original-page-name (string? original-page-name))
-                                (page-name-string->map original-page-name db date-formatter
-                                                       (assoc options :with-timestamp? with-timestamp?))
-                                :else
-                                (let [page (cond (and (map? original-page-name) (:block/uuid original-page-name))
-                                                 original-page-name
+                               (and original-page-name (string? original-page-name))
+                               (page-name-string->map original-page-name db date-formatter
+                                                      (assoc options :with-timestamp? with-timestamp?))
+                               :else
+                               (let [page (cond (and (map? original-page-name) (:block/uuid original-page-name))
+                                                original-page-name
 
-                                                 (map? original-page-name)
-                                                 (assoc original-page-name :block/uuid (or page-uuid (d/squuid)))
+                                                (map? original-page-name)
+                                                (assoc original-page-name :block/uuid (or page-uuid (d/squuid)))
 
-                                                 :else
-                                                 nil)]
-                                  [page nil]))]
+                                                :else
+                                                nil)]
+                                 [page nil]))]
       (when page
         (if db-based?
           (let [tags (if class? [:logseq.class/Tag]

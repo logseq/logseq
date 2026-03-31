@@ -13,7 +13,10 @@
       (ws/send! ws {:type "error" :message "invalid request"})
       (case (:type message)
         "hello"
-        (ws/send! ws {:type "hello" :t (sync-handler/t-now self)})
+        (let [checksum (sync-handler/current-checksum self)]
+          (ws/send! ws (cond-> {:type "hello"
+                                :t (sync-handler/t-now self)}
+                         (string? checksum) (assoc :checksum checksum))))
 
         "ping"
         (ws/send! ws {:type "pong"})
@@ -39,7 +42,7 @@
         "tx/batch"
         (let [txs (:txs message)
               t-before (sync-handler/parse-int (:t-before message))]
-          (if (string? txs)
+          (if (sequential? txs)
             (ws/send! ws (sync-handler/handle-tx-batch! self ws txs t-before))
             (ws/send! ws {:type "tx/reject" :reason "invalid tx"})))
 

@@ -7,6 +7,26 @@
             [logseq.db-sync.worker.http :as http]
             [promesa.core :as p]))
 
+(defn- admin-token-valid?
+  [request ^js env]
+  (let [expected (aget env "DB_SYNC_ADMIN_TOKEN")
+        actual (.get (.-headers request) "x-db-sync-admin-token")]
+    (and (string? expected)
+         (seq expected)
+         (= expected actual))))
+
+(defn- forward-sync-request
+  [request ^js env graph-id ^js new-url]
+  (let [^js namespace (.-LOGSEQ_SYNC_DO env)
+        do-id (.idFromName namespace graph-id)
+        stub (.get namespace do-id)]
+    (if (common/upgrade-request? request)
+      (.fetch stub request)
+      (do
+        (.set (.-searchParams new-url) "graph-id" graph-id)
+        (let [rewritten (platform/request (.toString new-url) request)]
+          (.fetch stub rewritten))))))
+
 (defn handle-worker-fetch [request ^js env]
   (->
    (p/do
@@ -21,6 +41,9 @@
              (string/starts-with? path "/graphs/"))
          (index-handler/handle-fetch #js {:env env :d1 (aget env "DB")} request)
 
+         (string/starts-with? path "/admin/graphs/")
+         (index-handler/handle-fetch #js {:env env :d1 (aget env "DB")} request)
+
          (string/starts-with? path "/e2ee")
          (index-handler/handle-fetch #js {:env env :d1 (aget env "DB")} request)
 
@@ -28,10 +51,12 @@
          (if (= method "OPTIONS")
            (assets-handler/handle request env)
            (if-let [{:keys [graph-id]} (assets-handler/parse-asset-path path)]
-             (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
-               (if (.-ok access-resp)
-                 (assets-handler/handle request env)
-                 access-resp))
+             (if (admin-token-valid? request env)
+               (assets-handler/handle request env)
+               (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
+                 (if (.-ok access-resp)
+                   (assets-handler/handle request env)
+                   access-resp)))
              (http/bad-request "invalid asset path")))
 
          (= method "OPTIONS")
@@ -52,18 +77,12 @@
            (if (seq graph-id)
              (if (= method "OPTIONS")
                (common/options-response)
-               (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
-                 (if (.-ok access-resp)
-                   (let [^js namespace (.-LOGSEQ_SYNC_DO env)
-                         do-id (.idFromName namespace graph-id)
-                         stub (.get namespace do-id)]
-                     (if (common/upgrade-request? request)
-                       (.fetch stub request)
-                       (do
-                         (.set (.-searchParams new-url) "graph-id" graph-id)
-                         (let [rewritten (platform/request (.toString new-url) request)]
-                           (.fetch stub rewritten)))))
-                   access-resp)))
+               (if (admin-token-valid? request env)
+                 (forward-sync-request request env graph-id new-url)
+                 (p/let [access-resp (index-handler/graph-access-response request env graph-id)]
+                   (if (.-ok access-resp)
+                     (forward-sync-request request env graph-id new-url)
+                     access-resp))))
              (http/bad-request "missing graph id")))
 
          :else

@@ -84,6 +84,7 @@
     (w/with-page-open p)              ; use with-page-open to close playwright instance
     (binding [custom-report/*pw-contexts* #{ctx}
               *pw-ctx* ctx]
+      (.addInitScript ctx "localStorage.setItem('preferred-language', '\"en\"')")
       (f)
       (.close (.browser *pw-ctx*)))))
 
@@ -144,7 +145,7 @@
         (util/login-test-account))
      [@*page1 @*page2])
     (w/with-page @*page1
-      (graph/new-graph graph-name true))
+      (graph/new-graph graph-name true false))
     (w/with-page @*page2
       (graph/wait-for-remote-graph graph-name)
       (graph/switch-graph graph-name true true))

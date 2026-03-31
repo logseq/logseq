@@ -290,9 +290,12 @@
                             (fn [content & {:as option}]
                               (shui/popup-show! e
                                                 (fn [{:keys [id]}]
-                                                  [:div {:on-click (fn [e]
-                                                                     (when-not (util/input? (.-target e))
-                                                                       (shui/popup-hide! id)))
+                                                  [:div {:on-click (fn [^js e]
+                                                                     (when-let [target (.-target e)]
+                                                                       (let [input? (util/input? target)
+                                                                             popup? (.closest target "[data-radix-popper-content-wrapper]")]
+                                                                         (when (not (or input? popup?))
+                                                                           (shui/popup-hide! id)))))
                                                          :data-keep-selection true}
                                                    content])
                                                 (merge

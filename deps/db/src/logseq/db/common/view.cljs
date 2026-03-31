@@ -219,11 +219,11 @@
                      (if entity?
                        (let [property (d/entity db property-ident)]
                          (if (match-property-value-as-entity? (first value') property)
-                           (boolean (empty? (set/intersection (set (map :block/uuid value')) match)))
-                           (boolean (empty? (set/intersection (set (map db-property/property-value-content value'))
-                                                              (set (map (comp db-property/property-value-content #(d/entity db [:block/uuid %]))
-                                                                        match)))))))
-                       (boolean (empty? (set/intersection (set value') match)))))
+                           (empty? (set/intersection (set (map :block/uuid value')) match))
+                           (empty? (set/intersection (set (map db-property/property-value-content value'))
+                                                     (set (map (comp db-property/property-value-content #(d/entity db [:block/uuid %]))
+                                                               match))))))
+                       (empty? (set/intersection (set value') match))))
 
                    :text-contains
                    (some (fn [v]
@@ -295,7 +295,8 @@
         exclude-ids (get-exclude-page-ids db)]
     (keep (fn [d]
             (let [e (entity-plus/unsafe->Entity db (:e d))]
-              (when-not (exclude-ids (:db/id e))
+              (when-not (or (exclude-ids (:db/id e))
+                            (entity-util/hidden? e))
                 (cond-> e
                   refs-count?
                   (assoc :block.temp/refs-count (common-initial-data/get-block-refs-count db (:e d)))))))

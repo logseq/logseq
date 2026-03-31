@@ -353,12 +353,15 @@
         select-handler!
         (fn [^js d]
           (when d
-            (let [journal (date/js-date->journal-title d)]
+            (p/let [journal (date/js-date->journal-title d)
+                    page (db-async/<get-block (state/get-current-repo) journal {:children? false})
+                    journal-page (when (:block/journal-day page)
+                                   page)]
               (p/do!
-               (when-not (model/get-journal-page journal)
+               (when-not journal-page
                  (page-handler/<create! journal {:redirect? false}))
                (when (fn? on-change)
-                 (let [value (if datetime? (tc/to-long d) (model/get-journal-page journal))]
+                 (let [value (if datetime? (tc/to-long d) journal-page)]
                    (on-change value)))
                (when-not datetime?
                  (shui/popup-hide! id)
@@ -885,7 +888,7 @@
         class? (= :class (:logseq.property/type property))
         non-root-classes (cond-> (remove (fn [c] (= (:db/ident c) :logseq.class/Root)) classes)
                            class?
-                           (conj (frontend.db/entity :logseq.class/Tag)))
+                           (conj (db/entity :logseq.class/Tag)))
         extends-property? (= (:db/ident property) :logseq.property.class/extends)]
 
     ;; effect runs once
@@ -1478,10 +1481,10 @@
                              :auto-focus editing?
                              :checked value
                              :on-checked-change (fn []
-                                                  (add-property! (boolean (not value))))
+                                                  (add-property! (not value)))
                              :on-key-down (fn [e]
                                             (when (= (util/ekey e) "Enter")
-                                              (add-property! (boolean (not value))))
+                                              (add-property! (not value)))
                                             (when (contains? #{"Backspace" "Delete"} (util/ekey e))
                                               (delete-block-property! block property)))})])
           ;; :others
