@@ -30,47 +30,49 @@
 (deftest snapshot-download-uses-gzip-encoding-when-compression-supported-test
   (async done
          (let [put-call (atom nil)
+               rows [[1 "row-1" nil]
+                     [2 "row-2" "{\"a\":1}"]]
                bucket #js {:put (fn [key body opts]
                                   (reset! put-call {:key key :body body :opts opts})
                                   (js/Promise.resolve #js {:ok true}))}
+               sql (empty-sql)
                conn (d/create-conn db-schema/schema)
                self #js {:env #js {:LOGSEQ_SYNC_ASSETS bucket}
                          :conn conn
                          :schema-ready true
-                         :sql (empty-sql)}
+                         :sql sql}
                {:keys [request url]} (request-url)
                original-compression-stream (.-CompressionStream js/globalThis)
                restore! #(aset js/globalThis "CompressionStream" original-compression-stream)]
-           (d/transact! conn [{:db/ident :logseq.class/Page
-                               :block/title "Page"}
-                              {:db/ident :logseq.kv/schema-version
-                               :kv/value {:major 65 :minor 23}}
-                              {:db/id 2 :block/title "hello"}])
            (aset js/globalThis
                  "CompressionStream"
                  (passthrough-compression-stream-constructor))
-           (-> (p/let [resp (sync-handler/handle {:self self
-                                                  :request request
-                                                  :url url
-                                                  :route {:handler :sync/snapshot-download}})
+           (-> (p/with-redefs [sync-handler/fetch-snapshot-kvs-rows (fn [_sql last-addr _limit]
+                                                                      (if (neg? last-addr) rows []))
+                               sync-handler/snapshot-row-count (fn [_sql] (count rows))]
+                 (p/let [resp (sync-handler/handle {:self self
+                                                    :request request
+                                                    :url url
+                                                    :route {:handler :sync/snapshot-download}})
                        text (.text resp)
                        body (js->clj (js/JSON.parse text) :keywordize-keys true)
                        http-metadata (aget (:opts @put-call) "httpMetadata")
                        payload (js/Uint8Array. (:body @put-call))
-                       {:keys [datoms]} (snapshot/parse-datoms-jsonl-chunk nil payload)]
+                       rows (snapshot/finalize-framed-buffer payload)
+                       addrs (mapv first rows)]
                  (is (= 200 (.-status resp)))
                  (is (= "gzip" (:content-encoding body)))
                  (is (= "gzip" (aget http-metadata "contentEncoding")))
-                 (is (= "application/x-ndjson" (aget http-metadata "contentType")))
-                 (is (= 5 (count datoms)))
-                 (is (= [:logseq.kv/schema-version
-                         :logseq.kv/schema-version
-                         :logseq.kv/schema-version
-                         :logseq.class/Page
-                         :logseq.class/Page]
-                        (mapv (fn [{:keys [e]}]
-                                (:db/ident (d/entity @conn e)))
-                              datoms))))
+                 (is (= "application/transit+json" (aget http-metadata "contentType")))
+                 (is (= 2 (count rows)))
+                 (is (= (sort addrs) addrs))
+                 (is (every? (fn [[addr content _addresses]]
+                               (and (int? addr)
+                                    (string? content)))
+                             rows))
+                 (is (= [[1 "row-1" nil]
+                         [2 "row-2" "{\"a\":1}"]]
+                        rows))))
                (p/then (fn []
                          (restore!)
                          (done)))
@@ -79,36 +81,44 @@
                           (is false (str error))
                           (done)))))))
 
-(deftest snapshot-download-stream-route-returns-jsonl-datoms-test
+(deftest snapshot-download-stream-route-returns-framed-kvs-rows-test
   (async done
-         (let [conn (d/create-conn db-schema/schema)
+         (let [rows [[1 "row-1" nil]
+                     [2 "row-2" nil]]
+               sql (empty-sql)
+               conn (d/create-conn db-schema/schema)
                self #js {:env #js {}
                          :conn conn
                          :schema-ready true
-                         :sql (empty-sql)}
+                         :sql sql}
                {:keys [request]} (request-url "/sync/graph-1/snapshot/stream?graph-id=graph-1")
                original-compression-stream (.-CompressionStream js/globalThis)
                restore! #(aset js/globalThis "CompressionStream" original-compression-stream)]
-           (d/transact! conn [{:db/ident :logseq.class/Page
-                               :block/title "Page"}
-                              {:db/ident :logseq.kv/schema-version
-                               :kv/value {:major 65 :minor 23}}
-                              {:db/id 2 :block/title "hello"}])
            (aset js/globalThis
                  "CompressionStream"
                  (passthrough-compression-stream-constructor))
-           (-> (p/let [resp (sync-handler/handle-http self request)
+           (-> (p/with-redefs [sync-handler/fetch-snapshot-kvs-rows (fn [_sql last-addr _limit]
+                                                                      (if (neg? last-addr) rows []))
+                               sync-handler/snapshot-row-count (fn [_sql] (count rows))]
+                 (p/let [resp (sync-handler/handle-http self request)
                        encoding (.get (.-headers resp) "content-encoding")
                        content-type (.get (.-headers resp) "content-type")
                        buf (.arrayBuffer resp)
                        payload (js/Uint8Array. buf)
-                       datoms (snapshot/finalize-datoms-jsonl-buffer payload)]
+                       rows (snapshot/finalize-framed-buffer payload)
+                       addrs (mapv first rows)]
                  (is (= 200 (.-status resp)))
                  (is (= "gzip" encoding))
-                 (is (= "application/x-ndjson" content-type))
-                 (is (= 5 (count datoms)))
-                 (is (= :logseq.kv/schema-version
-                        (:db/ident (d/entity @conn (:e (first datoms)))))))
+                 (is (= "application/transit+json" content-type))
+                 (is (= 2 (count rows)))
+                 (is (= (sort addrs) addrs))
+                 (is (every? (fn [[addr content _addresses]]
+                               (and (int? addr)
+                                    (string? content)))
+                             rows))
+                 (is (= [[1 "row-1" nil]
+                         [2 "row-2" nil]]
+                        rows))))
                (p/then (fn []
                          (restore!)
                          (done)))
@@ -225,25 +235,6 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))
-
-(deftest current-checksum-heals-stale-stored-checksum-test
-  (testing "server recomputes and persists checksum when stored checksum is stale"
-    (let [sql (test-sql/make-sql)
-          conn (storage/open-conn sql)
-          self #js {:sql sql
-                    :conn conn
-                    :schema-ready true}
-          stale-checksum "0000000000000000"
-          block-uuid (random-uuid)]
-      (d/transact! conn [{:block/uuid block-uuid
-                          :block/title "hello"}])
-      (is (string? (storage/get-checksum sql)))
-      (storage/set-checksum! sql stale-checksum)
-      (let [healed (sync-handler/current-checksum self)]
-        (is (string? healed))
-        (is (not= stale-checksum healed))
-        (is (= healed (storage/get-checksum sql)))
-        (is (= healed (sync-handler/current-checksum self)))))))
 
 (deftest tx-batch-rejects-with-the-exact-failed-tx-entry-test
   (testing "db transact failure replies with the specific rejected tx entry"

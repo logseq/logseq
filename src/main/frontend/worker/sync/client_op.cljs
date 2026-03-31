@@ -99,11 +99,8 @@
 
 (defn get-local-tx
   [repo]
-  (let [conn (worker-state/get-client-ops-conn repo)]
-    (assert (some? conn) repo)
-    (let [r (:v (first (d/datoms @conn :avet :local-tx)))]
-      ;; (assert (some? r))
-      r)))
+  (when-let [conn (worker-state/get-client-ops-conn repo)]
+    (:v (first (d/datoms @conn :avet :local-tx)))))
 
 (defn get-pending-local-tx-count
   [repo]
