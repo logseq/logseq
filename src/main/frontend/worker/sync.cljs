@@ -1,6 +1,7 @@
 (ns frontend.worker.sync
   "Sync client"
   (:require
+   [frontend.worker.platform :as platform]
    [frontend.worker.shared-service :as shared-service]
    [frontend.worker.state :as worker-state]
    [frontend.worker.sync.apply-txs :as sync-apply]
@@ -11,13 +12,11 @@
    [frontend.worker.sync.presence :as sync-presence]
    [frontend.worker.sync.transport :as sync-transport]
    [frontend.worker.sync.upload :as sync-upload]
+   [frontend.worker.sync.util :as sync-util]
    [lambdaisland.glogi :as log]
    [logseq.common.util :as common-util]
    [logseq.db-sync.checksum :as sync-checksum]
-   [promesa.core :as p]
-   [frontend.worker.platform :as platform]
-   [frontend.worker.sync.util :as sync-util]
-   [frontend.worker.sync.download :as sync-download]))
+   [promesa.core :as p]))
 
 (def ^:private reconnect-base-delay-ms 1000)
 (def ^:private reconnect-max-delay-ms 30000)
@@ -335,14 +334,6 @@
 (defn upload-graph!
   [repo]
   (sync-upload/upload-graph! repo))
-
-(defn download-graph!
-  [repo]
-  (sync-download/download-graph! repo))
-
-(defn download-graph-by-id!
-  [repo graph-id graph-e2ee?]
-  (sync-download/download-graph-by-id! repo graph-id graph-e2ee?))
 
 (defn list-remote-graphs!
   []

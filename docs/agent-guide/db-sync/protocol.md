@@ -99,7 +99,7 @@
   - Build a snapshot file in R2 and return a download URL.
   - Response: `{"ok":true,"key":"<graph-id>/<uuid>.snapshot","url":"<origin>/assets/:graph-id/<uuid>.snapshot","content-encoding":"gzip"}`.
   - Error response (409): `{"error":"graph not ready"}` when bootstrap upload/import has not finished.
-  - The snapshot file stored in R2 is a gzip-compressed NDJSON stream of full Datascript datoms. Each line is a Transit JSON datom map: `{e,a,v,tx,added}`.
+  - The snapshot file stored in R2 is a framed Transit stream of sqlite `kvs` rows (`[addr, content, addresses]`), optionally gzip-compressed.
 - `POST /sync/:graph-id/snapshot/upload?reset=true|false`
   - Upload a snapshot stream for bootstrap import. Current upload format remains framed Transit JSON kvs rows, optionally gzip-compressed.
   - Request body: binary stream; headers should include `content-type: application/transit+json` and `content-encoding: gzip` when compressed.
