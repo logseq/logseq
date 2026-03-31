@@ -28,6 +28,7 @@
             [frontend.worker.sync.asset-db-listener]
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.crypt :as sync-crypt]
+            [frontend.worker.sync.download :as sync-download]
             [frontend.worker.sync.log-and-state :as rtc-log-and-state]
             [frontend.worker.thread-atom]
             [frontend.worker.undo-redo :as worker-undo-redo]
@@ -505,6 +506,18 @@
   [repo]
   (db-sync/upload-graph! repo))
 
+(def-thread-api :thread-api/db-sync-download-graph
+  [repo graph-id graph-e2ee?]
+  (sync-download/download-graph-snapshot!
+   repo
+   graph-id
+   graph-e2ee?
+   {:prepare-f (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
+    :import-rows-f (@thread-api/*thread-apis :thread-api/db-sync-import-rows-chunk)
+    :finalize-f (@thread-api/*thread-apis :thread-api/db-sync-import-finalize)
+    :log-f (fn [payload]
+             (rtc-log-and-state/rtc-log :rtc.log/download payload))}))
+
 (def-thread-api :thread-api/set-infer-worker-proxy
   [infer-worker-proxy]
   (reset! worker-state/*infer-worker infer-worker-proxy)
@@ -740,6 +753,7 @@
 
 ;; Chunked import state - held between prepare/chunk/finalize calls
 (defonce ^:private *import-state (atom nil))
+(def ^:private snapshot-import-datoms-batch-size 10000)
 
 (defn- stale-import-ex-info
   [repo graph-id import-id]
@@ -749,16 +763,26 @@
             :graph-id graph-id
             :import-id import-id}))
 
+(defn- <remove-import-temp-db-file!
+  [repo path]
+  (-> (p/let [^js root (.getDirectory js/navigator.storage)
+              ^js dir (.getDirectoryHandle root (str "." (worker-util/get-pool-name repo)))]
+        (.removeEntry dir (subs path 1)))
+      (p/catch
+       (fn [error]
+         (if (= "NotFoundError" (.-name error))
+           nil
+           (p/rejected error))))))
+
 (defn- close-import-state!
-  [{:keys [db import-pool]}]
-  (when db
+  [{:keys [repo rows-db rows-path]}]
+  (when rows-db
     (try
-      (.close db)
+      (.close rows-db)
       (catch :default _)))
-  (when import-pool
-    (try
-      (remove-vfs! import-pool)
-      (catch :default _))))
+  (when (and repo rows-path)
+    (-> (<remove-import-temp-db-file! repo rows-path)
+        (p/catch (fn [_] nil)))))
 
 (defn- clear-import-state!
   [import-id]
@@ -781,6 +805,17 @@
   [{:keys [e a v]}]
   [:db/add e a v])
 
+(defn- <create-import-temp-db!
+  [repo]
+  (p/let [^js pool (<get-opfs-pool repo)
+          _ (when-not pool
+              (db-sync/fail-fast :db-sync/missing-field {:repo repo :field :opfs-pool}))
+          path (str "/download-import-" (random-uuid) ".sqlite")
+          ^js db (new (.-OpfsSAHPoolDb pool) path)]
+    (common-sqlite/create-kvs-table! db)
+    {:rows-db db
+     :rows-path path}))
+
 (defn- import-datoms-batch!
   [conn aes-key graph-e2ee? datoms]
   (p/let [datoms-batch (if graph-e2ee?
@@ -795,6 +830,92 @@
           tx-data (into ident-tx-data regular-tx-data)]
     (when (seq tx-data)
       (d/transact! conn tx-data {:sync-download-graph? true}))))
+
+(defn import-rows-batch!
+  [{:keys [rows-db]} rows]
+  (when-not rows-db
+    (throw (ex-info "missing import rows db"
+                    {:type :db-sync/missing-field
+                     :field :rows-db})))
+  (let [data (map (fn [[addr content addresses]]
+                    #js {:$addr addr
+                         :$content content
+                         :$addresses addresses})
+                  rows)]
+    (upsert-addr-content! rows-db data))
+  (count rows))
+
+(defn- <ensure-import-rows-db!
+  [{:keys [import-id repo rows-db] :as state}]
+  (if rows-db
+    (p/resolved state)
+    (p/let [{:keys [rows-db rows-path]} (<create-import-temp-db! repo)]
+      (swap! *import-state
+             (fn [current]
+               (if (= import-id (:import-id current))
+                 (assoc current
+                        :rows-db rows-db
+                        :rows-path rows-path)
+                 current)))
+      (assoc state
+             :rows-db rows-db
+             :rows-path rows-path))))
+
+(defn- schema-datom?
+  [ident-eids schema-version-eid datom]
+  (or (= schema-version-eid (:e datom))
+      (and (contains? ident-eids (:e datom))
+           (or (= :db/ident (:a datom))
+               (= "db" (namespace (:a datom)))))))
+
+(defn- snapshot-datoms-in-import-order
+  [conn]
+  (let [db @conn
+        schema-version-eid (some-> (d/entity db :logseq.kv/schema-version) :db/id)
+        ident-eids (into #{}
+                         (map :e)
+                         (d/datoms db :avet :db/ident))
+        schema-datom?* #(schema-datom? ident-eids schema-version-eid %)
+        ordered-datoms (fn [pred]
+                         (sequence
+                          (comp (filter pred)
+                                (map #(select-keys % [:e :a :v])))
+                          (d/datoms db :eavt)))]
+    (concat (ordered-datoms schema-datom?*)
+            (ordered-datoms #(not (schema-datom?* %))))))
+
+(defn- take-import-datoms-batch
+  [datoms batch-size]
+  (loop [batch (transient [])
+         remaining (seq datoms)
+         n 0]
+    (if (or (nil? remaining)
+            (>= n batch-size))
+      [(persistent! batch) remaining]
+      (recur (conj! batch (first remaining))
+             (next remaining)
+             (inc n)))))
+
+(defn- <yield-next-tick
+  []
+  (js/Promise. (fn [resolve] (js/setTimeout resolve 0))))
+
+(declare log-import-progress!)
+
+(defn- <replay-imported-rows!
+  [{:keys [conn rows-db aes-key graph-e2ee? graph-id import-id]}]
+  (if (nil? rows-db)
+    (p/resolved nil)
+    (let [source-storage (new-sqlite-storage rows-db)
+          source-conn (common-sqlite/get-storage-conn source-storage db-schema/schema)]
+      (p/loop [remaining (seq (snapshot-datoms-in-import-order source-conn))]
+        (if (seq remaining)
+          (let [[batch remaining'] (take-import-datoms-batch remaining snapshot-import-datoms-batch-size)]
+            (p/let [_ (import-datoms-batch! conn aes-key graph-e2ee? batch)
+                    _ (log-import-progress! graph-id import-id (count batch))
+                    _ (<yield-next-tick)]
+              (p/recur remaining')))
+          (p/resolved nil))))))
 
 (defn- log-import-progress!
   [graph-id import-id datoms-count]
@@ -837,6 +958,9 @@
                                  :graph-id graph-id
                                  :import-id import-id
                                  :imported-datoms 0
+                                 :rows-db nil
+                                 :rows-imported? false
+                                 :rows-path nil
                                  :repo repo
                                  :total-datoms total-datoms})
           {:import-id import-id})
@@ -855,9 +979,27 @@
                    (clear-import-state! import-id))
                  (throw error)))))
 
+(def-thread-api :thread-api/db-sync-import-rows-chunk
+  [rows graph-id import-id]
+  (-> (p/let [state (require-import-state! nil graph-id import-id)
+              state (<ensure-import-rows-db! state)
+              _ (import-rows-batch! state rows)
+              _ (swap! *import-state
+                       (fn [current]
+                         (if (= import-id (:import-id current))
+                           (assoc current :rows-imported? true)
+                           current)))]
+        true)
+      (p/catch (fn [error]
+                 (when-not (= :db-sync/stale-import (:type (ex-data error)))
+                   (clear-import-state! import-id))
+                 (throw error)))))
+
 (def-thread-api :thread-api/db-sync-import-finalize
   [repo graph-id remote-tx import-id]
-  (-> (p/let [_ (require-import-state! repo graph-id import-id)
+  (-> (p/let [state (require-import-state! repo graph-id import-id)
+              _ (when (:rows-imported? state)
+                  (<replay-imported-rows! state))
               result (complete-datoms-import! repo graph-id remote-tx)
               _ (reset! *import-state nil)]
         result)
