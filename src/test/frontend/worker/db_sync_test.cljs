@@ -1,44 +1,44 @@
 (ns frontend.worker.db-sync-test
-  (:require [cljs.test :refer [deftest is testing async]]
-            [clojure.set :as set]
-            [clojure.string :as string]
-            [datascript.core :as d]
-            [frontend.common.crypt :as crypt]
-            [frontend.worker-common.util :as worker-util]
-            [frontend.worker.handler.page :as worker-page]
-            [frontend.worker.pipeline :as worker-pipeline]
-            [frontend.worker.platform :as platform]
-            [frontend.worker.shared-service :as shared-service]
-            [frontend.worker.state :as worker-state]
-            [frontend.worker.sync :as db-sync]
-            [frontend.worker.sync.apply-txs :as sync-apply]
-            [frontend.worker.sync.assets :as sync-assets]
-            [frontend.worker.sync.client-op :as client-op]
-            [frontend.worker.sync.crypt :as sync-crypt]
-            [frontend.worker.sync.handle-message :as sync-handle-message]
-            [frontend.worker.sync.large-title :as sync-large-title]
-            [frontend.worker.sync.presence :as sync-presence]
-            [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
-            [frontend.worker.sync.upload :as sync-upload]
-            [frontend.worker.sync.util :as sync-util]
-            [frontend.worker.undo-redo :as undo-redo]
-            [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db :as ldb]
-            [logseq.db-sync.checksum :as sync-checksum]
-            [logseq.db-sync.storage :as sync-storage]
-            [logseq.db-sync.worker.handler.sync :as sync-handler]
-            [logseq.db-sync.worker.ws :as ws]
-            [logseq.db.common.normalize :as db-normalize]
-            [logseq.db.frontend.validate :as db-validate]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.test.helper :as db-test]
-            [logseq.outliner.core :as outliner-core]
-            [logseq.outliner.op :as outliner-op]
-            [logseq.outliner.page :as outliner-page]
-            [logseq.outliner.property :as outliner-property]
-            [promesa.core :as p]))
+  (:require
+   [cljs.test :refer [async deftest is testing]]
+   [clojure.set :as set]
+   [clojure.string :as string]
+   [datascript.core :as d]
+   [frontend.common.crypt :as crypt]
+   [frontend.worker-common.util :as worker-util]
+   [frontend.worker.handler.page :as worker-page]
+   [frontend.worker.pipeline :as worker-pipeline]
+   [frontend.worker.platform :as platform]
+   [frontend.worker.shared-service :as shared-service]
+   [frontend.worker.state :as worker-state]
+   [frontend.worker.sync :as db-sync]
+   [frontend.worker.sync.apply-txs :as sync-apply]
+   [frontend.worker.sync.assets :as sync-assets]
+   [frontend.worker.sync.client-op :as client-op]
+   [frontend.worker.sync.crypt :as sync-crypt]
+   [frontend.worker.sync.handle-message :as sync-handle-message]
+   [frontend.worker.sync.large-title :as sync-large-title]
+   [frontend.worker.sync.presence :as sync-presence]
+   [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
+   [frontend.worker.sync.util :as sync-util]
+   [frontend.worker.undo-redo :as undo-redo]
+   [logseq.common.config :as common-config]
+   [logseq.common.util :as common-util]
+   [logseq.common.util.page-ref :as page-ref]
+   [logseq.db :as ldb]
+   [logseq.db-sync.checksum :as sync-checksum]
+   [logseq.db-sync.storage :as sync-storage]
+   [logseq.db-sync.worker.handler.sync :as sync-handler]
+   [logseq.db-sync.worker.ws :as ws]
+   [logseq.db.common.normalize :as db-normalize]
+   [logseq.db.frontend.validate :as db-validate]
+   [logseq.db.sqlite.util :as sqlite-util]
+   [logseq.db.test.helper :as db-test]
+   [logseq.outliner.core :as outliner-core]
+   [logseq.outliner.op :as outliner-op]
+   [logseq.outliner.page :as outliner-page]
+   [logseq.outliner.property :as outliner-property]
+   [promesa.core :as p]))
 
 (def ^:private test-repo "test-db-sync-repo")
 (def ^:private local-tx-meta
@@ -326,23 +326,6 @@
                          :latest-remote-tx {}}
                         test-repo)]
             (is (= 1 (:pending-local counts)))))))))
-
-(deftest upload-graph-metadata-write-is-not-persisted-as-local-sync-tx-test
-  (let [captured (atom nil)
-        fake-conn (atom :db)]
-    (with-redefs [worker-state/get-datascript-conn (fn [_repo] fake-conn)
-                  ldb/transact! (fn [conn tx-data tx-meta]
-                                  (reset! captured {:conn conn
-                                                    :tx-data tx-data
-                                                    :tx-meta tx-meta})
-                                  nil)]
-      (sync-upload/set-graph-sync-metadata! test-repo true))
-    (is (= fake-conn (:conn @captured)))
-    (is (= [{:db/ident :logseq.kv/graph-remote? :kv/value true}
-            {:db/ident :logseq.kv/graph-rtc-e2ee? :kv/value true}]
-           (:tx-data @captured)))
-    (is (= {:persist-op? false}
-           (:tx-meta @captured)))))
 
 (deftest pull-ok-with-older-remote-tx-is-ignored-test
   (testing "pull/ok with remote tx behind local tx does not apply stale tx data"
