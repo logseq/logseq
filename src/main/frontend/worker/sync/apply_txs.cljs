@@ -206,6 +206,10 @@
           {:keys [forward-outliner-ops inverse-outliner-ops]}
           (derive-history-outliner-ops db-before db-after tx-data tx-meta)
           inferred-outliner-ops?' (inferred-outliner-ops? tx-meta)]
+      ;; (prn :debug :forward-outliner-ops)
+      ;; (cljs.pprint/pprint forward-outliner-ops)
+      ;; (prn :debug :inverse-outliner-ops)
+      ;; (cljs.pprint/pprint inverse-outliner-ops)
       (ldb/transact! conn [{:db-sync/tx-id tx-id
                             :db-sync/normalized-tx-data normalized-tx-data
                             :db-sync/reversed-tx-data reversed-datoms
@@ -469,38 +473,17 @@
                         (p/catch (fn [error]
                                    (js/console.error error))))))))))))))
 
-(defn- remote-tx-debug-meta
-  [temp-tx-meta remote-txs index {:keys [t outliner-op]}]
-  (cond-> (assoc temp-tx-meta
-                 :op :transact-remote-tx-data
-                 :skip-validate-db? true
-                 :remote-tx-index (inc index)
-                 :remote-tx-count (count remote-txs))
-    (number? t) (assoc :remote-t t)
-    outliner-op (assoc :outliner-op outliner-op)))
-
-(defn- local-tx-debug-meta
-  [tx-meta local-txs index local-tx op]
-  (cond-> (assoc tx-meta
-                 :op op
-                 :local-tx-index (inc index)
-                 :local-tx-count (count local-txs))
-    (:tx-id local-tx) (assoc :local-tx-id (:tx-id local-tx))
-    (:outliner-op local-tx) (assoc :outliner-op (:outliner-op local-tx))))
-
 (defn- reverse-history-action!
-  [conn local-txs index local-tx temp-tx-meta]
+  [conn local-tx]
   (if-let [tx-data (seq (:reversed-tx local-tx))]
-    (d/transact! conn
-                 tx-data
-                 (local-tx-debug-meta temp-tx-meta local-txs index local-tx :reverse))
+    (ldb/transact! conn tx-data {:reverse? true})
     (invalid-rebase-op! :reverse-history-action
                         {:reason :missing-reversed-tx-data
                          :tx-id (:tx-id local-tx)
                          :outliner-op (:outliner-op local-tx)})))
 
 (defn- transact-remote-txs!
-  [conn remote-txs temp-tx-meta]
+  [conn remote-txs]
   (loop [remaining remote-txs
          index 0
          results []]
@@ -508,9 +491,7 @@
       (let [tx-data (->> (:tx-data remote-tx)
                          seq)
             report (try
-                     (ldb/transact! conn
-                                    tx-data
-                                    (remote-tx-debug-meta temp-tx-meta remote-txs index remote-tx))
+                     (ldb/transact! conn tx-data {:transact-remote? true})
                      (catch :default e
                        (js/console.error e)
                        (log/error ::transact-remote-txs! {:remote-tx remote-tx
@@ -525,7 +506,7 @@
       results)))
 
 (defn reverse-local-txs!
-  [conn local-txs temp-tx-meta]
+  [conn local-txs]
   ;; (prn :debug :local-txs local-txs)
   (doall
    (->> local-txs
@@ -533,7 +514,7 @@
         (map-indexed
          (fn [index local-tx]
            (try
-             (reverse-history-action! conn local-txs index local-tx temp-tx-meta)
+             (reverse-history-action! conn local-tx)
              (catch :default e
                (log/error ::reverse-local-tx-error
                           {:index index
@@ -635,7 +616,7 @@
           block-uuid (:block/uuid block)
           block-ent (when block-uuid
                       (d/entity db [:block/uuid block-uuid]))
-          block-base (dissoc block :db/id :block/order)
+          block-base (dissoc block :db/id)
           block' (merge block-base
                         (op-construct/rewrite-block-title-with-retracted-refs db block-base))]
       (if (some? block-ent)
@@ -912,17 +893,19 @@
   (let [tx-meta {:rtc-tx? true
                  :with-local-changes? true}
         *rebase-tx-reports (atom [])]
+    ;; (prn :debug :apply-remote-tx (first remote-txs))
     (try
       (ldb/batch-transact!
        conn
        tx-meta
        (fn [conn]
-         (reverse-local-txs! conn local-txs {:rtc-tx? true})
+         (reverse-local-txs! conn local-txs)
 
-         (transact-remote-txs! conn remote-txs tx-meta)
+         (transact-remote-txs! conn remote-txs)
 
          (let [rebase-tx-report (rebase-local-txs! repo conn local-txs)]
            (fix-tx! conn rebase-tx-report {:outliner-op :rebase})))
+
        {:listen-db (fn [{:keys [tx-meta tx-data] :as tx-report}]
                      (when (and (= :rebase (:outliner-op tx-meta))
                                 (seq tx-data))
@@ -941,13 +924,13 @@
         (worker-undo-redo/clear-history! repo)))))
 
 (defn- apply-remote-tx-without-local-changes!
-  [{:keys [conn remote-txs temp-tx-meta]}]
+  [{:keys [conn remote-txs]}]
   (ldb/batch-transact-with-temp-conn!
    conn
    {:rtc-tx? true
     :without-local-changes? true}
    (fn [conn]
-     (transact-remote-txs! conn remote-txs temp-tx-meta))))
+     (transact-remote-txs! conn remote-txs))))
 
 (defn apply-remote-txs!
   [repo client remote-txs]

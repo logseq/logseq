@@ -82,7 +82,7 @@
                  :dispatch-key (->> (dissoc ent :db/id) (db-malli-schema/entity-dispatch-key db))
                  :errors errors'})))))
 
-(defn validate-db!
+(defn validate-db
   "Validates all the entities of the given db using :eavt datoms. Returns a map
   with info about db being validated. If there are errors, they are placed on
   :errors and grouped by entity"
