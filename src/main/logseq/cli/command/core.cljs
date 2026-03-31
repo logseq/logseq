@@ -90,11 +90,18 @@
   [spec]
   (style/bold-options (cli/format-opts {:spec (into (sorted-map) spec)})))
 
+(defn- cmds-prefix?
+  [prefix cmds]
+  (and (<= (count prefix) (count cmds))
+       (= prefix (subvec cmds 0 (count prefix)))))
+
 (defn group-summary
   [group table]
-  (let [group-table (filter #(= group (first (:cmds %))) table)]
+  (let [group-cmds (if (string? group) [group] (vec group))
+        group-label (string/join " " group-cmds)
+        group-table (filter #(cmds-prefix? group-cmds (:cmds %)) table)]
     (string/join "\n"
-                 [(str "Usage: logseq " group " <subcommand> [options]")
+                 [(str "Usage: logseq " group-label " <subcommand> [options]")
                   ""
                   (str (style/bold "Subcommands") ":")
                   (format-commands group-table)
@@ -103,7 +110,7 @@
                   (format-opts global-spec*)
                   ""
                   (str "Command " (style/bold "options") ":")
-                  (str "  See `logseq " group " <subcommand> --help`")])))
+                  (str "  See `logseq " group-label " <subcommand> --help`")])))
 
 (defn top-level-summary
   [table]
@@ -274,4 +281,5 @@
 (defn pick-graph
   [options _command-args config]
   (or (:graph options)
-      (:graph config)))
+      (:graph config)
+      (repo->graph (:repo config))))

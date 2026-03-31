@@ -95,8 +95,16 @@ Graph commands:
 - `graph info [--graph <name>]` - show graph metadata (defaults to current graph)
 - `graph export --type edn|sqlite --file <path> [--graph <name>]` - export a graph to EDN or SQLite
 - `graph import --type edn|sqlite --input <path> --graph <name>` - import a graph from EDN or SQLite (new graph only)
+- `graph backup list` - list backup snapshots under `<data-dir>/backup`
+- `graph backup create [--graph <name>] [--name <label>]` - create a backup snapshot for the selected graph
+- `graph backup restore --src <backup-name> --dst <graph-name>` - restore one backup snapshot into a new graph
+- `graph backup remove --src <backup-name>` - delete one backup snapshot
 
-For any command that requires `--graph`, if the target graph does not exist, the CLI returns `graph not exists` (except for `graph create`). `graph import` fails if the target graph already exists.
+For any command that requires `--graph`, if the target graph does not exist, the CLI returns `graph not exists` (except for `graph create`). `graph import` and `graph backup restore` fail if the target graph already exists.
+
+Backup scope note:
+- `graph backup create` copies only `db.sqlite`.
+- `search-db.sqlite` and `client-ops-db.sqlite` are intentionally excluded.
 
 Server commands:
 - `server list` - list running db-worker-node servers
@@ -313,6 +321,10 @@ node ./dist/logseq.js login
 node ./dist/logseq.js graph create --graph demo
 node ./dist/logseq.js graph export --type edn --file /tmp/demo.edn --graph demo
 node ./dist/logseq.js graph import --type edn --input /tmp/demo.edn --graph demo-import
+node ./dist/logseq.js graph backup create --graph demo --name nightly
+node ./dist/logseq.js graph backup list
+node ./dist/logseq.js graph backup restore --src demo-nightly-20260101T000000Z --dst demo-restore
+node ./dist/logseq.js graph backup remove --src demo-nightly-20260101T000000Z
 node ./dist/logseq.js upsert block --target-page TestPage --content "hello world"
 node ./dist/logseq.js move --uuid <uuid> --target-page TargetPage
 node ./dist/logseq.js search block --content "hello"

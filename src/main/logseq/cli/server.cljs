@@ -326,9 +326,12 @@
 
 (def ^:private legacy-token-pattern #"(?:\+\+|\+3A\+|%)")
 
+(def ^:private backup-root-dir-name "backup")
+
 (defn- ignored-graph-dir?
   [graph-name]
   (or (= graph-name common-config/unlinked-graphs-dir)
+      (= graph-name backup-root-dir-name)
       (string/starts-with? graph-name common-config/file-version-prefix)))
 
 (defn- legacy-derivation-signal?

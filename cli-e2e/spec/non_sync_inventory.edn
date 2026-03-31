@@ -17,11 +17,18 @@
               "graph validate"
               "graph info"
               "graph export"
-              "graph import"]
+              "graph import"
+              "graph backup list"
+              "graph backup create"
+              "graph backup restore"
+              "graph backup remove"]
    :options ["--fix"
              "--type"
              "--file"
-             "--input"]}
+             "--input"
+             "--name"
+             "--src"
+             "--dst"]}
 
   :list
   {:commands ["list page"

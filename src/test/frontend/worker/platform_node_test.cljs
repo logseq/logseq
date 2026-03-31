@@ -214,3 +214,39 @@
           (p/finally (fn []
                        (close-db! @conn*)
                        (done)))))))
+
+(deftest sqlite-backup-db-creates-importable-copy
+  (async done
+    (let [conn* (atom nil)
+          data-dir (node-helper/create-tmp-dir "platform-node-backup")
+          backup-path (node-path/join data-dir "backup" "copy.sqlite")]
+      (-> (p/let [platform (platform-node/node-platform {:data-dir data-dir})
+                  sqlite (:sqlite platform)
+                  db-path (node-path/join data-dir "source.sqlite")
+                  db ((:open-db sqlite) {:path db-path})
+                  _ (reset! conn* {:sqlite sqlite :db db})
+                  _ (exec! sqlite db "create table kvs (addr text primary key, content text);")
+                  _ (exec! sqlite db "insert into kvs (addr, content) values (?, ?)" #js ["a" "alpha"] nil)
+                  _ ((:backup-db sqlite) db backup-path)
+                  backup-db ((:open-db sqlite) {:path backup-path})
+                  rows (exec! sqlite backup-db "select addr, content from kvs order by addr" nil "array")
+                  _ ((:close-db sqlite) backup-db)]
+            (is (= [["a" "alpha"]]
+                   (mapv vec (js->clj rows)))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (close-db! @conn*)
+                       (done)))))))
+
+(deftest storage-list-graphs-ignores-backup-root
+  (async done
+    (let [data-dir (node-helper/create-tmp-dir "platform-node-list-graphs")]
+      (fs/mkdirSync (node-path/join data-dir "alpha") #js {:recursive true})
+      (fs/mkdirSync (node-path/join data-dir "backup") #js {:recursive true})
+      (-> (p/let [platform (platform-node/node-platform {:data-dir data-dir})
+                  graphs ((get-in platform [:storage :list-graphs]))]
+            (is (= ["alpha"] graphs)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
