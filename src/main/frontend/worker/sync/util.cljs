@@ -5,7 +5,9 @@
             [frontend.worker.state :as worker-state]
             [logseq.db :as ldb]
             [frontend.worker.sync.client-op :as client-op]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [logseq.db-sync.malli-schema :as db-sync-schema]
+            [promesa.core :as p]))
 
 (defn fail-fast [tag data]
   (log/error tag data)
@@ -68,3 +70,63 @@
   [client]
   (when-let [*last-error (:last-sync-error client)]
     (reset! *last-error nil)))
+
+(def ^:private invalid-coerce ::invalid-coerce)
+
+(defn coerce
+  [coercer value context]
+  (try
+    (coercer value)
+    (catch :default e
+      (log/error :db-sync/malli-coerce-failed (merge context {:error e :value value}))
+      invalid-coerce)))
+
+(defn coerce-http-request [schema-key body]
+  (if-let [coercer (get db-sync-schema/http-request-coercers schema-key)]
+    (let [coerced (coerce coercer body {:schema schema-key :dir :request})]
+      (when-not (= coerced invalid-coerce)
+        coerced))
+    body))
+
+(defn coerce-http-response [schema-key body]
+  (if-let [coercer (get db-sync-schema/http-response-coercers schema-key)]
+    (let [coerced (coerce coercer body {:schema schema-key :dir :response})]
+      (when-not (= coerced invalid-coerce)
+        coerced))
+    body))
+
+(defn- auth-headers []
+  (let [token (auth-token)]
+    (when (nil? token)
+      (throw (ex-info "Empty token" {})))
+    {"authorization" (str "Bearer " token)}))
+
+(defn- with-auth-headers [opts]
+  (if-let [auth (auth-headers)]
+    (assoc opts :headers (merge (or (:headers opts) {}) auth))
+    opts))
+
+(defn fetch-json
+  [url opts {:keys [response-schema error-schema] :or {error-schema :error}}]
+  (p/let [resp (js/fetch url (clj->js (with-auth-headers opts)))
+          text (.text resp)
+          data (when (seq text) (js/JSON.parse text))]
+    (if (.-ok resp)
+      (let [body (js->clj data :keywordize-keys true)
+            body (if response-schema
+                   (coerce-http-response response-schema body)
+                   body)]
+        (if (or (nil? response-schema) body)
+          body
+          (throw (ex-info "db-sync invalid response"
+                          {:status (.-status resp)
+                           :url url
+                           :body body}))))
+      (let [body (when data (js->clj data :keywordize-keys true))
+            body (if error-schema
+                   (coerce-http-response error-schema body)
+                   body)]
+        (throw (ex-info "db-sync request failed"
+                        {:status (.-status resp)
+                         :url url
+                         :body body}))))))
