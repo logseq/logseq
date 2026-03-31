@@ -250,6 +250,15 @@ Output formats:
 - Global `--output <human|json|edn>` applies to all commands
 - Output formatting is controlled via global `--output`, `:output-format` in config, or `LOGSEQ_CLI_OUTPUT`.
 - Global `--profile` enables stage timing output to **stderr**. This is for debugging latency and does not change command stdout payloads.
+  - Human profile output is rendered as a tree (similar to `show` output style). The elapsed time column is printed at the far left with fixed width for alignment, for example:
+    ```text
+    146ms command=list status=ok
+         stages
+    146ms └── cli.total
+      4ms     ├── cli.parse-args
+    139ms     └── cli.execute-action
+    129ms         └── transport.invoke:thread-api/cli-list-pages
+    ```
 - Human output is plain text. List/search commands render tables with a final `Count: N` line. For list and search subcommands, the ID column uses `:db/id` (not UUID). If `:db/ident` exists, an `IDENT` column is included. `list property` includes dedicated `TYPE` and `CARDINALITY` columns. Search table columns are `ID` and `TITLE`. Block titles can include multiple lines; multi-line rows align additional lines under the `TITLE` column. Times such as list `UPDATED-AT`/`CREATED-AT` and `graph info` `Created at` are shown in human-friendly relative form. Errors include error codes and may include a `Hint:` line. Use `--output json|edn` for structured output.
 - `example` human output includes `Selector`, `Matched commands`, and `Examples` sections. Structured output (`json`/`edn`) includes `selector`, `matched-commands`, `examples`, and `message` fields under `data`.
 - `sync download` progress lines are streamed to stdout only when progress is enabled. In `json`/`edn` mode, progress is disabled by default unless `--progress true` is provided.
