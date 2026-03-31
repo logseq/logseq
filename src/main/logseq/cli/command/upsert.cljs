@@ -351,9 +351,9 @@
                                    [repo
                                     [{:find [[(list 'pull '?e selector) '...]]
                                       :in '[$ ?name]
-                                      :where '[[?e :block/name ?name
-                                                [?e :block/tags ?t]
-                                                [?t :db/ident :logseq.class/Tag]]]}
+                                      :where '[[?e :block/name ?name]
+                                               [?e :block/tags ?t]
+                                               [?t :db/ident :logseq.class/Tag]]}
                                      (common-util/page-name-sanity-lc tag-name)]])]
     (first result)))
 
