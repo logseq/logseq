@@ -311,10 +311,10 @@
                        (str "Block icons can't be imported. Manually import it at the block: " (pr-str (:block location))))
                      (if (not= (get-in schema [:type :to]) (get-in schema [:type :from]))
                        (str "Property value has type " (get-in schema [:type :to]) " instead of type " (get-in schema [:type :from]))
-                       (str "Property should be imported manually")))]))
+                       "Property should be imported manually"))]))
            (map (fn [[k v]]
                   [:dl.my-2.mb-0
-                   [:dt.m-0 [:strong (str k)]]
+               [:dt.m-0 [:strong k]]
                    [:dd {:class "text-warning"} v]])))]
      :warning false))
   (let [{:keys [errors]} (db-validate/validate-local-db! db {:verbose true})]

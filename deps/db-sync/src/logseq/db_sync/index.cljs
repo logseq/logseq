@@ -224,10 +224,13 @@
                     (common/now-ms)
                     graph-id)))
 
-(defn <index-delete! [db graph-id]
+(defn <graph-delete-metadata! [db graph-id]
   (p/do!
-   (common/<d1-run db "delete from graph_members where graph_id = ?" graph-id)
-   (common/<d1-run db "delete from graphs where graph_id = ?" graph-id)))
+   (common/<d1-run db "delete from graph_aes_keys where graph_id = ?" graph-id)
+   (common/<d1-run db "delete from graph_members where graph_id = ?" graph-id)))
+
+(defn <graph-delete-index-entry! [db graph-id]
+  (common/<d1-run db "delete from graphs where graph_id = ?" graph-id))
 
 (defn <graph-name-exists?
   [db graph-name user-id]

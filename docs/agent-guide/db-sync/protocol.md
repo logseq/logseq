@@ -19,21 +19,23 @@
   - Optional keepalive; server replies `pong`.
 
 ## Server -> Client
-- `{"type":"hello","t":<t>}`
-  - Server hello with current t.
+- `{"type":"hello","t":<t>,"checksum":"<hex>"}`
+  - Server hello with current t and entity checksum.
 - `{"type":"online-users","online-users":[{"user-id":"...","email":"...","username":"...","name":"..."}...]}`
   - Presence update
   - Optional `editing-block-uuid` indicates the block the user is editing.
-- `{"type":"pull/ok","t":<t>,"txs":[{"t":<t>,"tx":"<tx-transit>"}...]}`
-  - Pull response with txs.
-- `{"type":"tx/batch/ok","t":<t>}`
-  - Batch accepted; server advanced to t.
+- `{"type":"pull/ok","t":<t>,"checksum":"<hex>","txs":[{"t":<t>,"tx":"<tx-transit>"}...]}`
+  - Pull response with txs and post-apply entity checksum.
+- `{"type":"tx/batch/ok","t":<t>,"checksum":"<hex>"}`
+  - Batch accepted; server advanced to t and returns the resulting entity checksum.
 - `{"type":"changed","t":<t>}`
   - Broadcast that server state advanced; client should pull.
 - `{"type":"tx/reject","reason":"stale","t":<t>}`
   - Client tx is based on stale t.
 - `{"type":"tx/reject","reason":"cycle","data":"<transit {:attr <kw> :server-values ...}>"}`
   - Cycle detected with server values.
+- `{"type":"tx/reject","reason":"db transact failed","t":<t>,"data":"<transit {:tx \"<tx-transit>\" :outliner-op ...}>"}`
+  - Server-side transact/validation failed for one tx entry in the batch; `data` echoes the rejected tx entry for debugging.
 - `{"type":"tx/reject","reason":"empty tx data"|"invalid tx"|"invalid t-before"}`
   - Invalid batch.
 - `{"type":"pong"}`
@@ -85,12 +87,12 @@
 - `GET /sync/:graph-id/health`
   - Health check. Response: `{"ok":true}`.
 - `GET /sync/:graph-id/pull?since=<t>`
-  - Same as WS pull. Response: `{"type":"pull/ok","t":<t>,"txs":[{"t":<t>,"tx":"<tx-transit>"}...]}`.
+  - Same as WS pull. Response: `{"type":"pull/ok","t":<t>,"checksum":"<hex>","txs":[{"t":<t>,"tx":"<tx-transit>"}...]}`.
   - Error response (400): `{"error":"invalid since"}`.
   - Error response (409): `{"error":"graph not ready"}` when bootstrap upload/import has not finished.
 - `POST /sync/:graph-id/tx/batch`
   - Same as WS tx/batch. Body: `{"t-before":<t>,"txs":["<tx-transit>", ...]}`.
-  - Response: `{"type":"tx/batch/ok","t":<t>}` or `{"type":"tx/reject","reason":...}`.
+  - Response: `{"type":"tx/batch/ok","t":<t>,"checksum":"<hex>"}` or `{"type":"tx/reject","reason":...}`.
   - Error response (400): `{"error":"missing body"|"invalid tx"}`.
   - Error response (409): `{"error":"graph not ready"}` when bootstrap upload/import has not finished.
 - `GET /sync/:graph-id/snapshot/download`

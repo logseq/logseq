@@ -106,8 +106,9 @@
 
 (defn- delete-page-by-uuid
   [config repo page-uuid]
-  (transport/invoke config :thread-api/apply-outliner-ops false
-                    [repo [[:delete-page [page-uuid]]] {}]))
+  (p/let [result (transport/invoke config :thread-api/apply-outliner-ops false
+                                   [repo [[:delete-page [page-uuid {}]]] {}])]
+    (if (nil? result) true result)))
 
 (defn- remove-block-id
   [config repo id]

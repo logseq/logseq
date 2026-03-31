@@ -1,5 +1,6 @@
 (ns logseq.db-sync.test-runner
   (:require [cljs.test :as ct]
+            [logseq.db-sync.checksum-test]
             [logseq.db-sync.common-test]
             [logseq.db-sync.index-test]
             [logseq.db-sync.node-adapter-test]
@@ -8,6 +9,7 @@
             [logseq.db-sync.normalize-test]
             [logseq.db-sync.platform-test]
             [logseq.db-sync.worker-auth-test]
+            [logseq.db-sync.worker-dispatch-test]
             [logseq.db-sync.worker-handler-assets-test]
             [logseq.db-sync.worker-handler-index-test]
             [logseq.db-sync.worker-handler-sync-test]

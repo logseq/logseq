@@ -283,13 +283,15 @@
   [[:block/uuid :uuid]
    [:block/created-at :int]
    [:block/updated-at :int]
+   [:logseq.property/deleted-at {:optional true} :int]
    ;; Injected by update-properties-in-ents
    [:block/properties {:optional true} block-properties]
    [:block/tags {:optional true} block-tags]
    [:block/refs {:optional true} [:set :int]]
    [:block/tx-id {:optional true} :int]
    [:block/collapsed? {:optional true} :boolean]
-   [:block/warning {:optional true} [:keyword]]])
+   [:block/warning {:optional true} [:keyword]]
+   [:logseq.property/created-by-ref {:optional true} :int]])
 
 (def page-attrs
   "Common attributes for pages"
@@ -440,13 +442,13 @@
     [:block/uuid :uuid]
     [:logseq.property.reaction/emoji-id :string]
     [:logseq.property.reaction/target :int]
-    [:block/properties {:optional true} block-properties]
     [:block/created-at :int]
     [:block/tx-id {:optional true} :int]
+    [:logseq.property/created-by-ref {:optional true} :int]
     [:block/refs {:optional true} [:set :int]]]))
 
 (def property-history-block*
-  [:map
+  [:map {:error/path ["property-history-block"]}
    [:block/uuid :uuid]
    [:block/created-at :int]
    [:block/updated-at {:optional true} :int]
@@ -454,6 +456,7 @@
    [:logseq.property.history/property :int]
    [:logseq.property.history/ref-value {:optional true} :int]
    [:logseq.property.history/scalar-value {:optional true} :any]
+   [:block/properties {:optional true} block-properties]
    [:block/tx-id {:optional true} :int]])
 
 (def property-history-block
@@ -561,7 +564,8 @@
                        :property
                        (entity-util/class? d)
                        :class
-                       (entity-util/hidden? d)
+                       (and (entity-util/page? d)
+                            (true? (:logseq.property/hide? d)))
                        :hidden
                        ;; TODO: Remove deprecated
                        (whiteboard? d)
