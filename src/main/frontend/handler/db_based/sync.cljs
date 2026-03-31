@@ -11,7 +11,6 @@
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db-sync.malli-schema :as db-sync-schema]
-            [logseq.db-sync.snapshot :as snapshot]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
@@ -31,96 +30,6 @@
 (defn http-base []
   (or config/db-sync-http-base
       (ws->http-base config/db-sync-ws-url)))
-
-(defn- ->uint8 [data]
-  (cond
-    (instance? js/Uint8Array data) data
-    (instance? js/ArrayBuffer data) (js/Uint8Array. data)
-    (string? data) (.encode (js/TextEncoder.) data)
-    :else (js/Uint8Array. data)))
-
-(defn- gzip-bytes?
-  [^js payload]
-  (and (some? payload)
-       (>= (.-byteLength payload) 2)
-       (= 31 (aget payload 0))
-       (= 139 (aget payload 1))))
-
-(defn- bytes->stream
-  [^js payload]
-  (js/ReadableStream.
-   #js {:start (fn [controller]
-                 (.enqueue controller payload)
-                 (.close controller))}))
-
-(defn- <decompress-gzip-bytes
-  [^js payload]
-  (if (exists? js/DecompressionStream)
-    (p/let [stream (bytes->stream payload)
-            decompressed (.pipeThrough stream (js/DecompressionStream. "gzip"))
-            resp (js/Response. decompressed)
-            buf (.arrayBuffer resp)]
-      (->uint8 buf))
-    (p/rejected (ex-info "gzip decompression not supported"
-                         {:type :db-sync/decompression-not-supported}))))
-
-(defn- <snapshot-response-bytes
-  [^js resp]
-  (p/let [buf (.arrayBuffer resp)
-          chunk (->uint8 buf)]
-    (if (gzip-bytes? chunk)
-      (<decompress-gzip-bytes chunk)
-      chunk)))
-
-(defn- response-body-stream
-  [^js resp]
-  (let [encoding (some-> resp .-headers (.get "content-encoding"))]
-    (cond
-      (nil? (.-body resp))
-      nil
-
-      (= "gzip" encoding)
-      (when (exists? js/DecompressionStream)
-        (.pipeThrough (.-body resp) (js/DecompressionStream. "gzip")))
-
-      :else
-      (.-body resp))))
-
-(defn- <flush-datom-batches!
-  [datoms batch-size on-batch]
-  (p/loop [remaining datoms]
-    (if (>= (count remaining) batch-size)
-      (let [batch (subvec remaining 0 batch-size)
-            rest-datoms (subvec remaining batch-size)]
-        (p/let [_ (on-batch batch)]
-          (p/recur rest-datoms)))
-      remaining)))
-
-(defn- <stream-snapshot-datom-batches!
-  [^js resp batch-size on-batch]
-  (if-let [stream (response-body-stream resp)]
-    (let [reader (.getReader stream)]
-      (p/loop [buffer nil
-               pending []]
-        (p/let [result (.read reader)]
-          (if (.-done result)
-            (let [pending (if (and buffer (pos? (.-byteLength buffer)))
-                            (into pending (snapshot/finalize-datoms-jsonl-buffer buffer))
-                            pending)]
-              (if (seq pending)
-                (p/let [_ (on-batch pending)]
-                  {:chunk-count 1})
-                {:chunk-count 0}))
-            (let [{datoms :datoms next-buffer :buffer} (snapshot/parse-datoms-jsonl-chunk buffer (->uint8 (.-value result)))
-                  pending (into pending datoms)]
-              (p/let [pending (<flush-datom-batches! pending batch-size on-batch)]
-                (p/recur next-buffer pending)))))))
-    (p/let [snapshot-bytes (<snapshot-response-bytes resp)
-            datoms (vec (snapshot/finalize-datoms-jsonl-buffer snapshot-bytes))]
-      (if (seq datoms)
-        (p/let [_ (on-batch datoms)]
-          {:chunk-count 1})
-        {:chunk-count 0}))))
 
 (defn- auth-headers []
   (when-let [token (state/get-auth-id-token)]
@@ -364,54 +273,11 @@
    (let [graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
          base (http-base)]
      (-> (if (and graph-uuid base)
-           (-> (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
-                       graph (str config/db-version-prefix graph-name)
-                       pull-resp (fetch-json (str base "/sync/" graph-uuid "/pull")
-                                             {:method "GET"}
-                                             {:response-schema :sync/pull})
-                       remote-tx (:t pull-resp)
-                       _ (when-not (integer? remote-tx)
-                           (throw (ex-info "non-integer remote-tx when downloading graph"
-                                           {:graph graph-name
-                                            :remote-tx remote-tx})))
-                       snapshot-resp (fetch-json (str base "/sync/" graph-uuid "/snapshot/download")
-                                                 {:method "GET"}
-                                                 {:response-schema :sync/snapshot-download})
-                       resp (js/fetch (:url snapshot-resp)
-                                      (clj->js (with-auth-headers {:method "GET"})))
-                       _ (state/pub-event!
-                          [:rtc/log {:type :rtc.log/download
-                                     :sub-type :download-progress
-                                     :graph-uuid graph-uuid
-                                     :message "Start downloading graph snapshot"}])]
-                 (when-not (.-ok resp)
-                   (throw (ex-info "snapshot download failed"
-                                   {:graph graph-name
-                                    :status (.-status resp)})))
-                 (let [import-id* (atom nil)
-                       ensure-import! (fn []
-                                        (if-let [import-id @import-id*]
-                                          (p/resolved import-id)
-                                          (p/let [{:keys [import-id]} (state/<invoke-db-worker :thread-api/db-sync-import-prepare
-                                                                                               graph true graph-uuid graph-e2ee?)]
-                                            (reset! import-id* import-id)
-                                            import-id)))]
-                   (p/let [_ (<stream-snapshot-datom-batches!
-                              resp
-                              25000
-                              (fn [datoms]
-                                (p/let [import-id (ensure-import!)]
-                                  (state/<invoke-db-worker :thread-api/db-sync-import-datoms-chunk
-                                                           datoms graph-uuid import-id))))
-                           _ (state/pub-event!
-                              [:rtc/log {:type :rtc.log/download
-                                         :sub-type :download-completed
-                                         :graph-uuid graph-uuid
-                                         :message "Graph snapshot downloaded"}])
-                           _ (when-let [import-id @import-id*]
-                               (state/<invoke-db-worker :thread-api/db-sync-import-finalize
-                                                        graph graph-uuid remote-tx import-id))]
-                     true))))
+           (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+                   graph (str config/db-version-prefix graph-name)
+                   _ (state/<invoke-db-worker :thread-api/db-sync-download-graph
+                                              graph graph-uuid graph-e2ee?)]
+             true)
            (p/rejected (ex-info "db-sync missing graph info"
                                 {:type :db-sync/invalid-graph
                                  :graph-uuid graph-uuid
