@@ -10,7 +10,6 @@
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.const :as rtc-const]
             [frontend.worker.sync.crypt :as sync-crypt]
-            [frontend.worker.sync.download :as sync-download]
             [frontend.worker.sync.large-title :as sync-large-title]
             [frontend.worker.sync.presence :as sync-presence]
             [frontend.worker.sync.transport :as sync-transport]
@@ -145,7 +144,7 @@
                   :rehydrate-large-titles!-f rehydrate-large-titles!}))
 
 (defn request-asset-download! [repo asset-uuid]
-  (sync-download/request-asset-download!
+  (sync-assets/request-asset-download!
    repo asset-uuid
    {:current-client-f current-client
     :enqueue-asset-task-f enqueue-asset-task!

@@ -12,6 +12,7 @@
             [frontend.worker.sync :as db-sync]
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.crypt :as sync-crypt]
+            [frontend.worker.sync.download :as sync-download]
             [frontend.worker.sync.log-and-state :as rtc-log-and-state]
             [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
@@ -71,7 +72,6 @@
         fuzzy-prev @search/fuzzy-search-indices
         sqlite-prev @worker-state/*sqlite
         platform-prev @@#'platform/*platform
-        import-state-prev @@#'db-worker/*import-state
         cleanup (fn []
                   (set! db-worker/close-db! close-db!-orig)
                   (set! sync-crypt/<decrypt-snapshot-datoms-batch decrypt-snapshot-datoms-batch-orig)
@@ -86,8 +86,7 @@
                   (reset! worker-state/*opfs-pools opfs-prev)
                   (reset! search/fuzzy-search-indices fuzzy-prev)
                   (reset! worker-state/*sqlite sqlite-prev)
-                  (reset! @#'platform/*platform platform-prev)
-                  (reset! @#'db-worker/*import-state import-state-prev))]
+                  (reset! @#'platform/*platform platform-prev))]
     (set! db-worker/close-db! close-db!-orig)
     (set! sync-crypt/<decrypt-snapshot-datoms-batch decrypt-snapshot-datoms-batch-orig)
     (set! sync-crypt/<fetch-graph-aes-key-for-download fetch-graph-aes-key-for-download-orig)
@@ -97,7 +96,6 @@
     (set! shared-service/broadcast-to-clients! broadcast-to-clients-orig)
     (platform/set-platform! (build-test-platform))
     (reset! worker-state/*sqlite #js {})
-    (reset! @#'db-worker/*import-state nil)
     (let [result (f)]
       (if (p/promise? result)
         (p/finally result cleanup)
@@ -179,13 +177,13 @@
               (vreset! thread-api/*thread-apis
                        (assoc thread-apis-prev
                               :thread-api/create-or-open-db (fn [_repo _opts] (p/resolved nil))
-                              :thread-api/export-db (fn [_repo] (p/resolved nil))))
-              (-> (p/with-redefs [db-sync/rehydrate-large-titles-from-db! (fn [_repo _graph-id] (p/resolved nil))
-                                  rtc-log-and-state/rtc-log (fn [& _] nil)
+                              :thread-api/export-db (fn [_repo] (p/resolved nil))
+                              :thread-api/db-sync-rehydrate-large-titles (fn [_repo _graph-id] (p/resolved nil))))
+              (-> (p/with-redefs [rtc-log-and-state/rtc-log (fn [& _] nil)
                                   client-op/update-graph-uuid (fn [& _] nil)
                                   client-op/update-local-tx (fn [& _] nil)
                                   shared-service/broadcast-to-clients! (fn [& _] nil)]
-                    (#'db-worker/complete-datoms-import! test-repo "graph-1" 42))
+                    (sync-download/complete-datoms-import! test-repo "graph-1" 42))
                   (p/then (fn [_]
                             (is true)
                             (vreset! thread-api/*thread-apis thread-apis-prev)
@@ -212,14 +210,16 @@
                     :thread-api/create-or-open-db
                     (fn [_repo _opts]
                       (swap! worker-state/*datascript-conns assoc repo conn)
-                      (p/resolved nil))))
+                      (p/resolved nil))
+                    :thread-api/db-sync-close-db
+                    (fn [_repo] nil)
+                    :thread-api/db-sync-invalidate-search-db
+                    (fn [_repo] (p/resolved nil))
+                    :thread-api/db-sync-rehydrate-large-titles
+                    (fn [_repo _graph-id] (p/resolved nil))))
     (-> (f)
         (p/finally (fn []
                      (vreset! thread-api/*thread-apis thread-apis-prev))))))
-
-(def sample-datoms
-  [{:e 1 :a :db/ident :v :logseq.class/Page :tx 1 :added true}
-   {:e 2 :a :block/title :v "hello" :tx 1 :added true}])
 
 (deftest db-sync-import-prepare-replaces-active-import-state-test
   (async done
@@ -231,8 +231,7 @@
               (with-fake-create-or-open-db
                 test-repo conn-a
                 (fn []
-                  (-> (p/with-redefs [db-worker/close-db! (fn [_] nil)
-                                      db-worker/<invalidate-search-db! (fn [_] (p/resolved nil))]
+                  (-> (p/with-redefs [db-worker/close-db! (fn [_] nil)]
                         (p/let [first-import (prepare test-repo true "graph-1" false)
                                 _ (swap! worker-state/*datascript-conns assoc test-repo conn-b)
                                 second-import (prepare test-repo true "graph-1" false)]
@@ -244,84 +243,7 @@
                                  (is false (str error))
                                  (done)))))))))))
 
-(deftest db-sync-import-datoms-chunk-rejects-stale-import-id-test
-  (async done
-         (restoring-worker-state
-          (fn []
-            (let [prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
-                  datoms-chunk (@thread-api/*thread-apis :thread-api/db-sync-import-datoms-chunk)
-                  conn (d/create-conn db-schema/schema)]
-              (with-fake-create-or-open-db
-                test-repo conn
-                (fn []
-                  (-> (p/with-redefs [db-worker/close-db! (fn [_] nil)
-                                      db-worker/<invalidate-search-db! (fn [_] (p/resolved nil))
-                                      rtc-log-and-state/rtc-log (fn [& _] nil)]
-                        (p/let [first-import (prepare test-repo true "graph-1" false)
-                                second-import (prepare test-repo true "graph-1" false)
-                                stale-outcome (capture-outcome #(datoms-chunk sample-datoms "graph-1" (:import-id first-import)))]
-                          (is (= :db-sync/stale-import (some-> stale-outcome :error ex-data :type)))
-                          (is (nil? (d/entity @conn 2)))
-                          (-> (datoms-chunk sample-datoms "graph-1" (:import-id second-import))
-                              (p/then (fn [_]
-                                        (is (= "hello" (:block/title (d/entity @conn 2))))
-                                        (done))))))
-                      (p/catch (fn [error]
-                                 (is false (str error))
-                                 (done)))))))))))
-
-(deftest db-sync-import-datoms-chunk-imports-plain-datoms-to-active-db-test
-  (async done
-         (restoring-worker-state
-          (fn []
-            (let [prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
-                  datoms-chunk (@thread-api/*thread-apis :thread-api/db-sync-import-datoms-chunk)
-                  conn (d/create-conn db-schema/schema)]
-              (with-fake-create-or-open-db
-                test-repo conn
-                (fn []
-                  (-> (p/with-redefs [db-worker/close-db! (fn [_] nil)
-                                      db-worker/<invalidate-search-db! (fn [_] (p/resolved nil))
-                                      rtc-log-and-state/rtc-log (fn [& _] nil)]
-                        (p/let [{:keys [import-id]} (prepare test-repo true "graph-1" false)
-                                _ (datoms-chunk sample-datoms "graph-1" import-id)]
-                          (is (= :logseq.class/Page (:db/ident (d/entity @conn 1))))
-                          (is (= "hello" (:block/title (d/entity @conn 2))))
-                          (done)))
-                      (p/catch (fn [error]
-                                 (is false (str error))
-                                 (done)))))))))))
-
-(deftest db-sync-import-datoms-chunk-imports-encrypted-datoms-to-active-db-test
-  (async done
-         (restoring-worker-state
-          (fn []
-            (let [prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
-                  datoms-chunk (@thread-api/*thread-apis :thread-api/db-sync-import-datoms-chunk)
-                  conn (d/create-conn db-schema/schema)
-                  decrypt-calls (atom [])]
-              (with-fake-create-or-open-db
-                test-repo conn
-                (fn []
-                  (-> (p/with-redefs [db-worker/close-db! (fn [_] nil)
-                                      db-worker/<invalidate-search-db! (fn [_] (p/resolved nil))
-                                      rtc-log-and-state/rtc-log (fn [& _] nil)
-                                      sync-crypt/<fetch-graph-aes-key-for-download (fn [_] (p/resolved :aes-key))
-                                      sync-crypt/<decrypt-snapshot-datoms-batch (fn [aes-key datoms]
-                                                                                  (swap! decrypt-calls conj {:aes-key aes-key
-                                                                                                             :datoms datoms})
-                                                                                  (p/resolved datoms))]
-                        (p/let [{:keys [import-id]} (prepare test-repo true "graph-1" true)
-                                _ (datoms-chunk sample-datoms "graph-1" import-id)]
-                          (is (= 1 (count @decrypt-calls)))
-                          (is (= sample-datoms (:datoms (first @decrypt-calls))))
-                          (is (= "hello" (:block/title (d/entity @conn 2))))
-                          (done)))
-                      (p/catch (fn [error]
-                                 (is false (str error))
-                                 (done)))))))))))
-
-(deftest db-sync-import-finalize-stale-id-and-success-test
+(deftest db-sync-import-finalize-rejects-stale-import-id-test
   (async done
          (restoring-worker-state
           (fn []
@@ -331,10 +253,7 @@
               (with-fake-create-or-open-db
                 test-repo conn
                 (fn []
-                  (-> (p/with-redefs [db-worker/close-db! (fn [_] nil)
-                                      db-worker/<invalidate-search-db! (fn [_] (p/resolved nil))
-                                      db-sync/rehydrate-large-titles-from-db! (fn [& _] (p/resolved nil))
-                                      rtc-log-and-state/rtc-log (fn [& _] nil)
+                  (-> (p/with-redefs [rtc-log-and-state/rtc-log (fn [& _] nil)
                                       client-op/update-local-tx (fn [& _] nil)
                                       shared-service/broadcast-to-clients! (fn [& _] nil)]
                         (p/let [first-import (prepare test-repo true "graph-1" false)
@@ -349,37 +268,94 @@
                                  (is false (str error))
                                  (done)))))))))))
 
-(deftest db-sync-import-finalize-completes-active-db-import-test
+(deftest db-sync-import-rows-chunk-calls-import-rows-batch-test
   (async done
          (restoring-worker-state
           (fn []
             (let [prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
-                  datoms-chunk (@thread-api/*thread-apis :thread-api/db-sync-import-datoms-chunk)
-                  finalize (@thread-api/*thread-apis :thread-api/db-sync-import-finalize)
+                  rows-chunk (@thread-api/*thread-apis :thread-api/db-sync-import-rows-chunk)
                   conn (d/create-conn db-schema/schema)
-                  search-db #js {:close (fn [] nil)
-                                 :exec (fn [_sql] nil)}
-                  main-db #js {:exec (fn [_sql] nil)}]
-              (reset! worker-state/*sqlite-conns {test-repo {:db main-db :search search-db :client-ops nil}})
+                  rows [[1 "row-1" nil]
+                        [2 "row-2" nil]]
+                  captured-rows (atom nil)]
               (with-fake-create-or-open-db
                 test-repo conn
                 (fn []
                   (-> (p/with-redefs [db-worker/close-db! (fn [_] nil)
-                                      db-worker/<invalidate-search-db! (fn [_] (p/resolved nil))
-                                      db-sync/rehydrate-large-titles-from-db! (fn [& _] (p/resolved nil))
                                       rtc-log-and-state/rtc-log (fn [& _] nil)
-                                      client-op/update-local-tx (fn [& _] nil)
-                                      shared-service/broadcast-to-clients! (fn [& _] nil)]
+                                      sync-download/<ensure-import-rows-db! (fn [state]
+                                                                              (p/resolved state))
+                                      sync-download/import-rows-batch! (fn [_state rows*]
+                                                                         (reset! captured-rows rows*)
+                                                                         (p/resolved 2))]
                         (p/let [{:keys [import-id]} (prepare test-repo true "graph-1" false)
-                                _ (datoms-chunk sample-datoms "graph-1" import-id)
-                                _ (finalize test-repo "graph-1" 42 import-id)]
-                          (is (= :logseq.class/Page (:db/ident (d/entity @conn 1))))
-                          (is (= "hello" (:block/title (d/entity @conn 2))))
+                                _ (rows-chunk rows "graph-1" import-id)]
+                          (is (= rows @captured-rows))
                           (done)))
                       (p/catch (fn [error]
                                  (is false (str error))
                                  (done)))))))))))
 
+(deftest snapshot-datoms-in-import-order-puts-schema-before-data-test
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                        :kv/value {:major 65 :minor 0}}
+                       {:db/ident :user.test/attr
+                        :db/valueType :db.type/string
+                        :db/cardinality :db.cardinality/one}
+                       {:db/id 100
+                        :user.test/attr "hello"}])
+    (let [ordered (vec (#'sync-download/snapshot-datoms-in-import-order conn))
+          data-idx (first (keep-indexed (fn [idx datom]
+                                          (when (and (= 100 (:e datom))
+                                                     (= :user.test/attr (:a datom)))
+                                            idx))
+                                        ordered))
+          attr-eid (:db/id (d/entity @conn :user.test/attr))
+          ident-idx (first (keep-indexed (fn [idx datom]
+                                           (when (and (= attr-eid (:e datom))
+                                                      (= :db/ident (:a datom)))
+                                             idx))
+                                         ordered))
+          cardinality-idx (first (keep-indexed (fn [idx datom]
+                                                 (when (and (= attr-eid (:e datom))
+                                                            (= :db/cardinality (:a datom)))
+                                                   idx))
+                                               ordered))
+          schema-version-eid (:db/id (d/entity @conn :logseq.kv/schema-version))
+          schema-version-idx (first (keep-indexed (fn [idx datom]
+                                                    (when (and (= schema-version-eid (:e datom))
+                                                               (= :db/ident (:a datom)))
+                                                      idx))
+                                                  ordered))]
+      (is (number? data-idx))
+      (is (number? ident-idx))
+      (is (number? cardinality-idx))
+      (is (number? schema-version-idx))
+      (is (< schema-version-idx data-idx))
+      (is (< ident-idx data-idx))
+      (is (< cardinality-idx data-idx)))))
+
+(deftest thread-api-validate-db-passes-sync-diagnostics-test
+  (restoring-worker-state
+   (fn []
+     (let [validate (@thread-api/*thread-apis :thread-api/validate-db)
+           conn (d/create-conn db-schema/schema)
+           captured (atom nil)
+           latest-prev @db-sync/*repo->latest-remote-tx]
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (reset! db-sync/*repo->latest-remote-tx {test-repo 11})
+       (try
+         (with-redefs [client-op/get-local-tx (fn [_repo] 7)
+                       client-op/get-local-checksum (fn [_repo] "local-checksum")
+                       worker-db-validate/validate-db (fn [& args]
+                                                        (reset! captured args)
+                                                        {:ok true})]
+           (validate test-repo)
+           (is (= [conn nil]
+                  @captured)))
+         (finally
+           (reset! db-sync/*repo->latest-remote-tx latest-prev)))))))
 (deftest thread-api-recompute-checksum-diagnostics-passes-sync-diagnostics-test
   (restoring-worker-state
    (fn []

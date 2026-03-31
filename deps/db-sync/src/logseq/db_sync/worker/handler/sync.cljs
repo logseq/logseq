@@ -13,12 +13,11 @@
             [logseq.db-sync.worker.routes.sync :as sync-routes]
             [logseq.db-sync.worker.ws :as ws]
             [logseq.db.frontend.schema :as db-schema]
-            [promesa.core :as p]
-            [logseq.db-sync.checksum :as checksum]))
+            [promesa.core :as p]))
 
 (def ^:private snapshot-download-batch-size 10000)
 (def ^:private snapshot-cache-control "private, max-age=300")
-(def ^:private snapshot-content-type "application/x-ndjson")
+(def ^:private snapshot-content-type "application/transit+json")
 (def ^:private snapshot-content-encoding "gzip")
 (def ^:private snapshot-uploading-meta-key :snapshot-uploading?)
 ;; 10m
@@ -56,18 +55,7 @@
 
 (defn current-checksum [^js self]
   (ensure-conn! self)
-  (let [db @(.-conn self)
-        full-checksum (checksum/recompute-checksum db)
-        cur-checksum (storage/get-checksum (.-sql self))]
-    (if (or (nil? cur-checksum)
-            (= full-checksum cur-checksum))
-      cur-checksum
-      (do
-        (log/error :db-sync/server-checksum-mismatch
-                   {:full-checksum full-checksum
-                    :current-checksum cur-checksum})
-        (storage/set-checksum! (.-sql self) full-checksum)
-        full-checksum))))
+  (storage/get-checksum (.-sql self)))
 
 (defn snapshot-upload-finished? [^js self]
   (ensure-schema! self)
@@ -174,47 +162,48 @@
       (.set out b (.-byteLength a))
       out)))
 
-(defn- snapshot-datom->jsonl-datom
-  [datom]
-  {:e (:e datom)
-   :a (:a datom)
-   :v (:v datom)
-   :tx (:tx datom)
-   :added (:added datom)})
+(defn- frame-bytes
+  [^js data]
+  (let [len (.-byteLength data)
+        out (js/Uint8Array. (+ 4 len))
+        view (js/DataView. (.-buffer out))]
+    (.setUint32 view 0 len false)
+    (.set out data 4)
+    out))
 
-(defn- snapshot-datom-count
-  [conn]
-  (count (d/datoms @conn :eavt)))
+(defn- fetch-snapshot-kvs-rows
+  [sql last-addr limit]
+  (let [rows (common/get-sql-rows
+              (common/sql-exec sql
+                               "select addr, content, addresses from kvs where addr > ? order by addr asc limit ?"
+                               last-addr
+                               limit))]
+    (mapv (fn [row]
+            [(aget row "addr")
+             (aget row "content")
+             (aget row "addresses")])
+          rows)))
 
-(defn- snapshot-export-datoms
-  [conn]
-  (let [db @conn
-        schema-version-eid (some-> (d/entity db :logseq.kv/schema-version) :db/id)
-        ident-eids (into #{}
-                         (map :e)
-                         (d/datoms db :avet :db/ident))
-        jsonl-datoms (fn [pred]
-                       (sequence
-                        (comp (filter pred)
-                              (map snapshot-datom->jsonl-datom))
-                        (d/datoms db :eavt)))]
-    (concat (jsonl-datoms #(= schema-version-eid (:e %)))
-            (jsonl-datoms #(and (contains? ident-eids (:e %))
-                                (not= schema-version-eid (:e %))))
-            (jsonl-datoms #(not (contains? ident-eids (:e %)))))))
+(defn- snapshot-row-count
+  [sql]
+  (if-let [row (first (common/get-sql-rows
+                       (common/sql-exec sql "select count(*) as row_count from kvs")))]
+    (or (aget row "row_count") 0)
+    0))
 
 (defn- snapshot-export-stream [^js self]
-  (ensure-conn! self)
-  (let [remaining (volatile! (seq (snapshot-export-datoms (.-conn self))))]
+  (ensure-schema! self)
+  (let [sql (.-sql self)
+        last-addr (volatile! -1)]
     (js/ReadableStream.
-     #js {:pull (fn [controller]
-                  (let [batch (vec (take snapshot-download-batch-size @remaining))]
-                    (if (empty? batch)
-                      (.close controller)
-                      (let [remaining' (drop snapshot-download-batch-size @remaining)
-                            payload (snapshot/encode-datoms-jsonl batch)]
-                        (vreset! remaining (seq remaining'))
-                        (.enqueue controller payload)))))})))
+     (clj->js
+      {:pull (fn [controller]
+               (let [batch (fetch-snapshot-kvs-rows sql @last-addr snapshot-download-batch-size)]
+                 (if (empty? batch)
+                   (.close controller)
+                   (let [payload (snapshot/encode-rows batch)]
+                     (vreset! last-addr (first (peek batch)))
+                     (.enqueue controller (frame-bytes payload))))))}))))
 
 (defn- upload-multipart!
   [^js bucket key stream opts]
@@ -419,15 +408,13 @@
       (http/bad-request "missing graph id")
       (let [stream (-> (snapshot-export-stream self)
                        (maybe-compress-stream))
-            conn (or (.-conn self)
-                     (do (ensure-conn! self) (.-conn self)))
-            datom-count (snapshot-datom-count conn)]
+            row-count (snapshot-row-count (.-sql self))]
         (js/Response. stream
                       #js {:status 200
                            :headers (js/Object.assign
                                      #js {"content-type" snapshot-content-type
                                           "content-encoding" snapshot-content-encoding}
-                                     #js {"x-snapshot-datom-count" (str datom-count)}
+                                     #js {"x-snapshot-row-count" (str row-count)}
                                      (common/cors-headers))})))))
 
 (defn- handle-sync-snapshot-download
