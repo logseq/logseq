@@ -1,7 +1,6 @@
 (ns logseq.cli.command.upsert
   "Upsert-related CLI commands."
   (:require [clojure.string :as string]
-            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.cli.command.add :as add-command]
             [logseq.cli.command.core :as core]
             [logseq.cli.command.update :as update-command]
@@ -9,6 +8,7 @@
             [logseq.cli.transport :as transport]
             [logseq.common.graph :as common-graph]
             [logseq.common.util :as common-util]
+            [logseq.db.frontend.property.type :as db-property-type]
             [promesa.core :as p]))
 
 (def ^:private upsert-block-spec
@@ -345,6 +345,30 @@
   (transport/invoke config :thread-api/pull false
                     [repo selector [:block/name (common-util/page-name-sanity-lc page-name)]]))
 
+(defn- pull-tag-by-name
+  [config repo tag-name selector]
+  (p/let [result (transport/invoke config :thread-api/q false
+                                   [repo
+                                    [{:find [[(list 'pull '?e selector) '...]]
+                                      :in '[$ ?name]
+                                      :where '[[?e :block/name ?name
+                                                [?e :block/tags ?t]
+                                                [?t :db/ident :logseq.class/Tag]]]}
+                                     (common-util/page-name-sanity-lc tag-name)]])]
+    (first result)))
+
+(defn- pull-property-by-name
+  [config repo property-name selector]
+  (p/let [result (transport/invoke config :thread-api/q false
+                                   [repo
+                                    [{:find [[(list 'pull '?e selector) '...]]
+                                      :in '[$ ?name]
+                                      :where '[[?e :block/name ?name]
+                                               [?e :block/tags ?t]
+                                               [?t :db/ident :logseq.class/Property]]}
+                                     (common-util/page-name-sanity-lc property-name)]])]
+    (first result)))
+
 (defn- ensure-property-identifiers-exist!
   [config repo property-idents]
   (if (seq property-idents)
@@ -562,7 +586,7 @@
               update-tags (add-command/resolve-tags cfg (:repo action) (:update-tags action))
               remove-tags (add-command/resolve-tags cfg (:repo action) (:remove-tags action))
               update-properties (add-command/resolve-properties cfg (:repo action) (:update-properties action)
-                                                               {:allow-non-built-in? true})
+                                                                {:allow-non-built-in? true})
               remove-properties (add-command/resolve-property-identifiers cfg (:repo action)
                                                                           (:remove-properties action)
                                                                           {:allow-non-built-in? true})
@@ -598,7 +622,7 @@
           (p/let [entity (ensure-tag-by-id! cfg (:repo action) (:id action))
                   target-name (:name action)
                   target (when (seq target-name)
-                           (pull-page-by-name cfg (:repo action) target-name tag-selector))
+                           (pull-tag-by-name cfg (:repo action) target-name tag-selector))
                   conflict (when (and (seq target-name)
                                       (not (rename-target-same-as-current? entity target-name)))
                              (rename-target-conflict entity target))
@@ -614,41 +638,34 @@
                :error conflict}
               {:status :ok
                :data {:result [(:db/id entity)]}}))
-          (p/let [existing (pull-page-by-name cfg (:repo action) (:name action)
-                                              [:db/id :block/name :block/title
-                                               {:block/tags [:db/ident]}])
+          (p/let [existing (pull-tag-by-name cfg (:repo action) (:name action)
+                                             [:db/id :block/name :block/title
+                                              {:block/tags [:db/ident]}])
                   existing-id (:db/id existing)]
-            (cond
-              (and existing-id (not (tag-entity? existing)))
-              {:status :error
-               :error {:code :tag-name-conflict
-                       :message "tag already exists as a page and is not a tag"}}
+            (p/let [_ (when-not existing-id
+                        (transport/invoke cfg :thread-api/apply-outliner-ops false
+                                          [(:repo action)
+                                           [[:create-page [(:name action) {:class? true}]]]
+                                           {}]))
+                    page (or (when existing-id existing)
+                             (pull-tag-by-name cfg (:repo action) (:name action)
+                                               [:db/id :block/name :block/title
+                                                {:block/tags [:db/ident]}]))
+                    page-id (:db/id page)]
+              (cond
+                (not page-id)
+                {:status :error
+                 :error {:code :tag-not-found
+                         :message "tag not found after upsert"}}
 
-              :else
-              (p/let [_ (when-not existing-id
-                          (transport/invoke cfg :thread-api/apply-outliner-ops false
-                                            [(:repo action)
-                                             [[:create-page [(:name action) {:class? true}]]]
-                                             {}]))
-                      page (or (when existing-id existing)
-                               (pull-page-by-name cfg (:repo action) (:name action)
-                                                  [:db/id :block/name :block/title
-                                                   {:block/tags [:db/ident]}]))
-                      page-id (:db/id page)]
-                (cond
-                  (not page-id)
-                  {:status :error
-                   :error {:code :tag-not-found
-                           :message "tag not found after upsert"}}
+                (not (tag-entity? page))
+                {:status :error
+                 :error {:code :tag-create-not-tag
+                         :message "created entity is not tagged as :logseq.class/Tag"}}
 
-                  (not (tag-entity? page))
-                  {:status :error
-                   :error {:code :tag-create-not-tag
-                           :message "created entity is not tagged as :logseq.class/Tag"}}
-
-                  :else
-                  {:status :ok
-                   :data {:result [page-id]}}))))))
+                :else
+                {:status :ok
+                 :data {:result [page-id]}})))))
       (p/catch (fn [e]
                  {:status :error
                   :error {:code (or (get-in (ex-data e) [:code]) :exception)
@@ -670,34 +687,26 @@
                                          {}]))]
             {:status :ok
              :data {:result [(:db/id existing)]}})
-          (p/let [existing (pull-page-by-name cfg (:repo action) (:name action) property-selector)
+          (p/let [existing (pull-property-by-name cfg (:repo action) (:name action) property-selector)
                   existing-id (:db/id existing)]
-            (cond
-              (and existing-id (not (property-entity? existing)))
-              {:status :error
-               :error {:code :property-name-conflict
-                       :message "property already exists as a page and is not a property"}}
-
-              :else
-              (p/let [property-ident (when (property-entity? existing)
-                                       (:db/ident existing))
-                      property-opts (cond-> {}
-                                      (nil? property-ident)
-                                      (assoc :property-name (:name action)))
-                      _ (transport/invoke cfg :thread-api/apply-outliner-ops false
-                                          [(:repo action)
-                                           [[:upsert-property [property-ident
-                                                               (:schema action)
-                                                               property-opts]]]
-                                           {}])
-                      property (pull-page-by-name cfg (:repo action) (:name action) property-selector)
-                      property-id (:db/id property)]
-                (if property-id
-                  {:status :ok
-                   :data {:result [property-id]}}
-                  {:status :error
-                   :error {:code :property-not-found
-                           :message "property not found after upsert"}}))))))
+            (p/let [property-ident (when existing-id (:db/ident existing))
+                    property-opts (cond-> {}
+                                    (nil? property-ident)
+                                    (assoc :property-name (:name action)))
+                    _ (transport/invoke cfg :thread-api/apply-outliner-ops false
+                                        [(:repo action)
+                                         [[:upsert-property [property-ident
+                                                             (:schema action)
+                                                             property-opts]]]
+                                         {}])
+                    property (pull-property-by-name cfg (:repo action) (:name action) property-selector)
+                    property-id (:db/id property)]
+              (if property-id
+                {:status :ok
+                 :data {:result [property-id]}}
+                {:status :error
+                 :error {:code :property-not-found
+                         :message "property not found after upsert"}})))))
       (p/catch (fn [e]
                  {:status :error
                   :error {:code (or (get-in (ex-data e) [:code]) :exception)
