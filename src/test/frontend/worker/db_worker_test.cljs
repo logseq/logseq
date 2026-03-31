@@ -333,6 +333,75 @@
                                  (is false (str error))
                                  (done)))))))))))
 
+(deftest db-sync-import-rows-chunk-calls-import-rows-batch-test
+  (async done
+         (restoring-worker-state
+          (fn []
+            (let [prepare (@thread-api/*thread-apis :thread-api/db-sync-import-prepare)
+                  rows-chunk (@thread-api/*thread-apis :thread-api/db-sync-import-rows-chunk)
+                  conn (d/create-conn db-schema/schema)
+                  rows [[1 "row-1" nil]
+                        [2 "row-2" nil]]
+                  captured-rows (atom nil)]
+              (with-fake-create-or-open-db
+                test-repo conn
+                (fn []
+                  (-> (p/with-redefs [db-worker/close-db! (fn [_] nil)
+                                      db-worker/<invalidate-search-db! (fn [_] (p/resolved nil))
+                                      rtc-log-and-state/rtc-log (fn [& _] nil)
+                                      db-worker/<ensure-import-rows-db! (fn [state]
+                                                                          (p/resolved state))
+                                      db-worker/import-rows-batch! (fn [_state rows*]
+                                                                     (reset! captured-rows rows*)
+                                                                     (p/resolved 2))]
+                        (p/let [{:keys [import-id]} (prepare test-repo true "graph-1" false)
+                                _ (rows-chunk rows "graph-1" import-id)]
+                          (is (= rows @captured-rows))
+                          (done)))
+                      (p/catch (fn [error]
+                                 (is false (str error))
+                                 (done)))))))))))
+
+(deftest snapshot-datoms-in-import-order-puts-schema-before-data-test
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version
+                        :kv/value {:major 65 :minor 0}}
+                       {:db/ident :user.test/attr
+                        :db/valueType :db.type/string
+                        :db/cardinality :db.cardinality/one}
+                       {:db/id 100
+                        :user.test/attr "hello"}])
+    (let [ordered (vec (#'db-worker/snapshot-datoms-in-import-order conn))
+          data-idx (first (keep-indexed (fn [idx datom]
+                                          (when (and (= 100 (:e datom))
+                                                     (= :user.test/attr (:a datom)))
+                                            idx))
+                                        ordered))
+          attr-eid (:db/id (d/entity @conn :user.test/attr))
+          ident-idx (first (keep-indexed (fn [idx datom]
+                                           (when (and (= attr-eid (:e datom))
+                                                      (= :db/ident (:a datom)))
+                                             idx))
+                                         ordered))
+          cardinality-idx (first (keep-indexed (fn [idx datom]
+                                                 (when (and (= attr-eid (:e datom))
+                                                            (= :db/cardinality (:a datom)))
+                                                   idx))
+                                               ordered))
+          schema-version-eid (:db/id (d/entity @conn :logseq.kv/schema-version))
+          schema-version-idx (first (keep-indexed (fn [idx datom]
+                                                    (when (and (= schema-version-eid (:e datom))
+                                                               (= :db/ident (:a datom)))
+                                                      idx))
+                                                  ordered))]
+      (is (number? data-idx))
+      (is (number? ident-idx))
+      (is (number? cardinality-idx))
+      (is (number? schema-version-idx))
+      (is (< schema-version-idx data-idx))
+      (is (< ident-idx data-idx))
+      (is (< cardinality-idx data-idx)))))
+
 (deftest thread-api-validate-db-passes-sync-diagnostics-test
   (restoring-worker-state
    (fn []

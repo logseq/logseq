@@ -100,7 +100,9 @@
   [conn]
   (when-some [_storage (storage/storage @conn)]
     (when-not (:batch-tx? @conn)
-      (let [f (or @*debounce-fn d/store)]
+      (let [f (if (exists? js/process)
+                d/store
+                (or @*debounce-fn d/store))]
         (f @conn)))))
 
 (defn- transact-sync
