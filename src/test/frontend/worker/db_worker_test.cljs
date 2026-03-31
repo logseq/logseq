@@ -5,6 +5,7 @@
             [frontend.worker.a-test-env]
             [frontend.worker.db-core :as db-worker]
             [frontend.worker.platform :as platform]
+            [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
@@ -120,12 +121,55 @@
        (reset! worker-state/*opfs-pools
                {test-repo #js {:pauseVfs (fn [] (swap! pause-calls inc))}})
        (reset! search/fuzzy-search-indices {test-repo :stale-cache})
+       (reset! client-op/*repo->pending-local-tx-count {test-repo 9})
 
        (db-worker/close-db! test-repo)
 
        (is (= #{:db :search :client-ops} (set @closed)))
        (is (= 1 @pause-calls))
+       (is (nil? (get @search/fuzzy-search-indices test-repo)))
+       (is (nil? (get @client-op/*repo->pending-local-tx-count test-repo)))
        (is (nil? (get @worker-state/*sqlite-conns test-repo)))))))
+
+(deftest client-ops-cleanup-timer-starts-once-and-clears-on-close-test
+  (restoring-worker-state
+   (fn []
+     (let [scheduled (atom [])
+           cleared (atom [])
+           original-set-interval js/setInterval
+           original-clear-interval js/clearInterval
+           fake-db' #js {:close (fn [] nil)}
+           timer-id #js {:id "timer-1"}]
+       (set! js/setInterval
+             (fn [f interval-ms]
+               (swap! scheduled conj {:fn f :interval-ms interval-ms})
+               timer-id))
+       (set! js/clearInterval
+             (fn [id]
+               (swap! cleared conj id)))
+       (try
+         (reset! worker-state/*sqlite-conns
+                 {test-repo {:db fake-db'
+                             :search fake-db'
+                             :client-ops fake-db'}})
+         (reset! worker-state/*datascript-conns {test-repo :datascript})
+         (reset! worker-state/*client-ops-conns {test-repo :client-ops})
+         (reset! (deref #'db-worker/*client-ops-cleanup-timers) {})
+
+         (#'db-worker/ensure-client-ops-cleanup-timer! test-repo)
+         (#'db-worker/ensure-client-ops-cleanup-timer! test-repo)
+
+         (is (= 1 (count @scheduled)))
+         (is (= (* 3 60 60 1000) (:interval-ms (first @scheduled))))
+         (is (= timer-id (get @(deref #'db-worker/*client-ops-cleanup-timers) test-repo)))
+
+         (db-worker/close-db! test-repo)
+
+         (is (= [timer-id] @cleared))
+         (is (nil? (get @(deref #'db-worker/*client-ops-cleanup-timers) test-repo)))
+         (finally
+           (set! js/setInterval original-set-interval)
+           (set! js/clearInterval original-clear-interval)))))))
 
 (deftest complete-datoms-import-invalidates-existing-search-db-test
   (async done
@@ -335,3 +379,33 @@
                       (p/catch (fn [error]
                                  (is false (str error))
                                  (done)))))))))))
+
+(deftest thread-api-recompute-checksum-diagnostics-passes-sync-diagnostics-test
+  (restoring-worker-state
+   (fn []
+     (let [recompute (@thread-api/*thread-apis :thread-api/recompute-checksum-diagnostics)
+           conn (d/create-conn db-schema/schema)
+           captured (atom nil)
+           latest-tx-prev @db-sync/*repo->latest-remote-tx
+           latest-checksum-prev @db-sync/*repo->latest-remote-checksum
+           result {:recomputed-checksum "recomputed"
+                   :checksum-attrs [:block/uuid]
+                   :blocks []}]
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (reset! db-sync/*repo->latest-remote-tx {test-repo 22})
+       (reset! db-sync/*repo->latest-remote-checksum {test-repo "remote-checksum"})
+       (try
+         (with-redefs [client-op/get-local-tx (fn [_repo] 10)
+                       client-op/get-local-checksum (fn [_repo] "local-checksum")
+                       worker-db-validate/recompute-checksum-diagnostics (fn [& args]
+                                                                           (reset! captured args)
+                                                                           result)]
+           (is (= result (recompute test-repo)))
+           (is (= [test-repo
+                   conn
+                   {:local-checksum "local-checksum"
+                    :remote-checksum "remote-checksum"}]
+                  @captured)))
+         (finally
+           (reset! db-sync/*repo->latest-remote-tx latest-tx-prev)
+           (reset! db-sync/*repo->latest-remote-checksum latest-checksum-prev)))))))

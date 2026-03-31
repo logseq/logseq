@@ -221,6 +221,7 @@
    (extend-type Entity
      cljs.core/IEncodeJS
      (-clj->js [_this] nil)                 ; avoid `clj->js` overhead when entity was passed to rum components
+     (-key->js [_this] nil)
 
      IAssociative
      (-assoc [this k v]

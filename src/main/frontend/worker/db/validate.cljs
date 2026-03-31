@@ -6,6 +6,7 @@
             [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.shared-service :as shared-service]
             [logseq.db :as ldb]
+            [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.validate :as db-validate]))
 
@@ -220,7 +221,7 @@
                  {:fix-db? true})))
 
 (defn validate-db
-  [conn {:keys [fix] :or {fix true}}]
+  [conn & {:keys [fix] :or {fix true}}]
   (when fix
     (fix-extends-cardinality! conn)
     (fix-icon-wrong-type! conn)
@@ -229,7 +230,7 @@
     (fix-num-prefix-db-idents! conn))
 
   (let [db @conn
-        {:keys [errors datom-count entities]} (db-validate/validate-db! db)
+        {:keys [errors datom-count entities]} (db-validate/validate-db db)
         invalid-entity-ids (distinct (map (fn [e] (:db/id (:entity e))) errors))]
 
     (doseq [error errors]
@@ -256,3 +257,13 @@
     {:errors errors
      :datom-count datom-count
      :invalid-entity-ids invalid-entity-ids}))
+
+(defn recompute-checksum-diagnostics
+  [_repo conn {:keys [local-checksum remote-checksum] :as _sync-diagnostics}]
+  (let [{:keys [checksum attrs blocks e2ee?]} (sync-checksum/recompute-checksum-diagnostics @conn)]
+    {:recomputed-checksum checksum
+     :local-checksum local-checksum
+     :remote-checksum remote-checksum
+     :e2ee? e2ee?
+     :checksum-attrs attrs
+     :blocks blocks}))

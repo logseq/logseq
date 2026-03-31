@@ -6,3 +6,9 @@ logseq.outliner.op/register-op-handlers!
 logseq.outliner.page/delete!
 ;; API fn
 logseq.outliner.page/create!
+;; Symbol
+logseq.outliner.recycle/gc-interval-ms
+;; API fn
+logseq.outliner.recycle/restore!
+;; API fn
+logseq.outliner.recycle/gc!

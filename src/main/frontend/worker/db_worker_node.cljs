@@ -171,7 +171,6 @@
     :thread-api/import-db
     :thread-api/import-db-base64
     :thread-api/backup-db-sqlite
-    :thread-api/db-sync-import-kvs-rows
     :thread-api/import-edn
     :thread-api/unsafe-unlink-db
     :thread-api/search-upsert-blocks
@@ -316,7 +315,8 @@
 (defn- startup-db-opts
   [{:keys [create-empty-db?]}]
   (if create-empty-db?
-    {:datoms []}
+    {:datoms []
+     :sync-download-graph? true}
     {}))
 
 (defn- pad2

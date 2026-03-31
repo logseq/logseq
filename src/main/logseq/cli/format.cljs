@@ -541,7 +541,7 @@
                                (when-let [message (:message last-error)]
                                  (str " (" message ")"))))]
     (string/join "\n"
-                 (cond-> [(str "Sync status")
+                 (cond-> ["Sync status"
                           (str "repo: " (or repo "-"))
                           (str "graph-id: " (or graph-id "-"))
                           (str "ws-state: " (or ws-state :unknown))

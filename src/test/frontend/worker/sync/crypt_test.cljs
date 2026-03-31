@@ -8,6 +8,7 @@
             [frontend.worker.platform :as platform]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync.crypt :as sync-crypt]
+            [frontend.worker.sync.util :as sync-util]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -26,7 +27,7 @@
     (try
       (with-redefs [platform/current (fn [] {:env {:runtime :node
                                                    :owner-source :cli}})]
-        (is (= "cli-config-token" (#'sync-crypt/auth-token))))
+        (is (= "cli-config-token" (sync-util/auth-token))))
       (finally
         (reset! worker-state/*db-sync-config config-prev)
         (reset! worker-state/*state state-prev)))))
@@ -62,7 +63,7 @@
                                               (= token "cli-config-token") {:sub "cli-user-id"}
                                               (= token "state-token") {:sub "state-user-id"}
                                               :else {}))]
-        (is (= "state-token" (#'sync-crypt/auth-token)))
+        (is (= "state-token" (sync-util/auth-token)))
         (is (= "state-user-id" (#'sync-crypt/get-user-uuid))))
       (finally
         (reset! worker-state/*db-sync-config config-prev)
@@ -352,3 +353,72 @@
              (p/catch (fn [e]
                         (is false (str e))
                         (done))))))
+
+(deftest fetch-graph-aes-key-for-download-retries-with-fresh-rsa-key-pair-test
+  (async done
+         (let [clear-user-rsa-cache-calls* (atom 0)
+               get-pair-calls* (atom 0)]
+           (-> (p/with-redefs [sync-crypt/e2ee-base (fn [] "https://sync.example.test")
+                               sync-crypt/get-user-uuid (fn [] "user-1")
+                               sync-crypt/<clear-item! (fn [_] (p/resolved nil))
+                               sync-crypt/<set-item! (fn [_ _] (p/resolved nil))
+                               sync-crypt/<clear-user-rsa-key-pair-cache! (fn [_base _user-id]
+                                                                            (swap! clear-user-rsa-cache-calls* inc)
+                                                                            (p/resolved nil))
+                               sync-crypt/<get-user-rsa-key-pair-raw (fn [_base]
+                                                                       (swap! get-pair-calls* inc)
+                                                                       (if (= 1 @get-pair-calls*)
+                                                                         (p/resolved {:public-key "pk-old"
+                                                                                      :encrypted-private-key "enc-old"})
+                                                                         (p/resolved {:public-key "pk-new"
+                                                                                      :encrypted-private-key "enc-new"})))
+                               sync-crypt/<decrypt-private-key (fn [encrypted-private-key]
+                                                                 (p/resolved
+                                                                  (case encrypted-private-key
+                                                                    "enc-old" :private-key-old
+                                                                    "enc-new" :private-key-new
+                                                                    :private-key-unknown)))
+                               sync-crypt/<fetch-graph-encrypted-aes-key-raw (fn [_base _graph-id]
+                                                                               (p/resolved {:encrypted-aes-key
+                                                                                            (ldb/write-transit-str "encrypted-aes")}))
+                               crypt/<decrypt-aes-key (fn [private-key encrypted-aes-key]
+                                                        (if (= :private-key-old private-key)
+                                                          (p/rejected (ex-info "decrypt-aes-key" {}))
+                                                          (p/resolved [:aes-key private-key encrypted-aes-key])))]
+                 (sync-crypt/<fetch-graph-aes-key-for-download "graph-1"))
+               (p/then (fn [result]
+                         (is (= [:aes-key :private-key-new "encrypted-aes"] result))
+                         (is (= 1 @clear-user-rsa-cache-calls*))
+                         (is (= 2 @get-pair-calls*))
+                         (done)))
+               (p/catch (fn [e]
+                          (is false (str e))
+                          (done)))))))
+
+(deftest fetch-graph-aes-key-for-download-rethrows-without-user-id-test
+  (async done
+         (let [clear-user-rsa-cache-calls* (atom 0)]
+           (-> (p/with-redefs [sync-crypt/e2ee-base (fn [] "https://sync.example.test")
+                               sync-crypt/get-user-uuid (fn [] nil)
+                               sync-crypt/<clear-item! (fn [_] (p/resolved nil))
+                               sync-crypt/<set-item! (fn [_ _] (p/resolved nil))
+                               sync-crypt/<clear-user-rsa-key-pair-cache! (fn [_base _user-id]
+                                                                            (swap! clear-user-rsa-cache-calls* inc)
+                                                                            (p/resolved nil))
+                               sync-crypt/<get-user-rsa-key-pair-raw (fn [_base]
+                                                                       (p/resolved {:public-key "pk-old"
+                                                                                    :encrypted-private-key "enc-old"}))
+                               sync-crypt/<decrypt-private-key (fn [_] (p/resolved :private-key-old))
+                               sync-crypt/<fetch-graph-encrypted-aes-key-raw (fn [_base _graph-id]
+                                                                               (p/resolved {:encrypted-aes-key
+                                                                                            (ldb/write-transit-str "encrypted-aes")}))
+                               crypt/<decrypt-aes-key (fn [_ _]
+                                                        (p/rejected (ex-info "decrypt-aes-key" {})))]
+                 (sync-crypt/<fetch-graph-aes-key-for-download "graph-1"))
+               (p/then (fn [_]
+                         (is false "expected decrypt-aes-key failure")
+                         (done)))
+               (p/catch (fn [e]
+                          (is (= "decrypt-aes-key" (ex-message e)))
+                          (is (zero? @clear-user-rsa-cache-calls*))
+                          (done)))))))

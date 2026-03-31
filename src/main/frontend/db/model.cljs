@@ -311,6 +311,7 @@ independent of format as format specific heading characters are stripped"
         classes (->> (d/datoms db :avet :block/tags :logseq.class/Tag)
                      (map (fn [d]
                             (db-utils/entity db (:e d))))
+                     (remove ldb/recycled?)
                      (remove (fn [d]
                                (and except-private-tags?
                                     (contains? ldb/private-tags (:db/ident d)))))
@@ -353,7 +354,7 @@ independent of format as format specific heading characters are stripped"
                                         (db-property/plugin-property?)))
                               ldb/built-in?
                               :block/title)
-                        (ldb/get-all-properties db))]
+                        (remove ldb/recycled? (ldb/get-all-properties db)))]
     (cond->> result
       remove-built-in-property?
       ;; remove private built-in properties

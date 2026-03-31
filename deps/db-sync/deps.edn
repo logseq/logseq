@@ -10,15 +10,15 @@
   thheller/shadow-cljs                  {:mvn/version "3.3.4"}
   com.lambdaisland/glogi                {:git/url "https://github.com/lambdaisland/glogi"
                                          :git/sha "30328a045141717aadbbb693465aed55f0904976"}
-  metosin/reitit                        {:mvn/version "0.4.2"}
+  metosin/reitit                        {:mvn/version "0.10.1"}
   logseq/common                         {:local/root "../common"}
   logseq/db                             {:local/root "../db"}}
  :aliases
- {:cljs {:extra-deps {org.clojure/tools.namespace      {:mvn/version "0.2.11"}
-                      cider/cider-nrepl                {:mvn/version "0.55.1"}
+ {:cljs {:extra-deps {org.clojure/tools.namespace      {:mvn/version "1.5.0"}
+                      cider/cider-nrepl                {:mvn/version "0.58.0"}
                       org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}
-                      tortue/spy                       {:mvn/version "2.14.0"}}
+                      tortue/spy                       {:mvn/version "2.15.0"}}
          :main-opts  ["-m" "shadow.cljs.devtools.cli"]}
   :clj-kondo
-  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2024.09.27"}}
+  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2026.01.19"}}
    :main-opts    ["-m" "clj-kondo.main"]}}}

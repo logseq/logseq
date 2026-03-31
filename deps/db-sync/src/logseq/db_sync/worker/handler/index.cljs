@@ -13,16 +13,48 @@
       (log/error :db-sync/index-db-missing {:binding "DB"}))
     db))
 
+(defn- admin-token-valid?
+  [request ^js env]
+  (let [expected (aget env "DB_SYNC_ADMIN_TOKEN")
+        actual (.get (.-headers request) "x-db-sync-admin-token")]
+    (and (string? expected)
+         (seq expected)
+         (= expected actual))))
+
+(defn- <delete-graph-do! [^js env ^js url graph-id]
+  (let [^js namespace (.-LOGSEQ_SYNC_DO env)
+        do-id (.idFromName namespace graph-id)
+        stub (.get namespace do-id)
+        reset-url (str (.-origin url) "/admin/reset")]
+    (p/let [resp (.fetch stub (js/Request. reset-url #js {:method "DELETE"}))]
+      (when-not (.-ok resp)
+        (throw (ex-info "graph DO delete failed"
+                        {:graph-id graph-id
+                         :status (.-status resp)})))
+      resp)))
+
+(defn- <delete-graph! [db ^js env ^js url graph-id]
+  (p/do!
+   (index/<graph-delete-metadata! db graph-id)
+   (<delete-graph-do! env url graph-id)
+   (index/<graph-delete-index-entry! db graph-id)))
+
 (defn ^:large-vars/cleanup-todo handle [{:keys [db ^js env request url claims route]}]
   (let [path-params (:path-params route)
         graph-id (:graph-id path-params)
         member-id (:member-id path-params)
-        user-id (aget claims "sub")]
+        user-id (some-> claims (aget "sub"))]
     (case (:handler route)
       :graphs/list
       (if (string? user-id)
-        (p/let [graphs (index/<index-list db user-id)]
-          (http/json-response :graphs/list {:graphs graphs}))
+        (p/let [graphs (index/<index-list db user-id)
+                user-rsa-key-pair (index/<user-rsa-key-pair db user-id)
+                user-rsa-keys-exists?
+                (and (string? (:public-key user-rsa-key-pair))
+                     (string? (:encrypted-private-key user-rsa-key-pair)))]
+          (http/json-response :graphs/list
+                              {:graphs graphs
+                               :user-rsa-keys-exists? user-rsa-keys-exists?}))
         (http/unauthorized))
 
       :graphs/create
@@ -44,14 +76,20 @@
                      (p/let [{:keys [graph-name schema-version graph-e2ee? graph-ready-for-use?]} body
                              graph-e2ee? (if (nil? graph-e2ee?) true (true? graph-e2ee?))
                              graph-ready-for-use? (if (nil? graph-ready-for-use?) true (true? graph-ready-for-use?))
-                             name-exists? (index/<graph-name-exists? db graph-name user-id)]
+                             name-exists? (index/<graph-name-exists? db graph-name user-id)
+                             user-rsa-key-pair (index/<user-rsa-key-pair db user-id)
+                             has-user-rsa-key-pair?
+                             (and (string? (:public-key user-rsa-key-pair))
+                                  (string? (:encrypted-private-key user-rsa-key-pair)))]
                        (if name-exists?
                          (http/bad-request "duplicate graph name")
-                         (p/let [_ (index/<index-upsert! db graph-id graph-name user-id schema-version graph-e2ee? graph-ready-for-use?)
-                                 _ (index/<graph-member-upsert! db graph-id user-id "manager" user-id)]
-                           (http/json-response :graphs/create {:graph-id graph-id
-                                                               :graph-e2ee? graph-e2ee?
-                                                               :graph-ready-for-use? graph-ready-for-use?})))))))))
+                         (if-not has-user-rsa-key-pair?
+                           (http/bad-request "missing user rsa key pair")
+                           (p/let [_ (index/<index-upsert! db graph-id graph-name user-id schema-version graph-e2ee? graph-ready-for-use?)
+                                   _ (index/<graph-member-upsert! db graph-id user-id "manager" user-id)]
+                             (http/json-response :graphs/create {:graph-id graph-id
+                                                                 :graph-e2ee? graph-e2ee?
+                                                                 :graph-ready-for-use? graph-ready-for-use?}))))))))))
 
       :graphs/access
       (cond
@@ -175,13 +213,14 @@
         (p/let [owns? (index/<user-has-access-to-graph? db graph-id user-id)]
           (if (not owns?)
             (http/forbidden)
-            (p/let [_ (index/<index-delete! db graph-id)]
-              (let [^js namespace (.-LOGSEQ_SYNC_DO env)
-                    do-id (.idFromName namespace graph-id)
-                    stub (.get namespace do-id)
-                    reset-url (str (.-origin url) "/admin/reset")]
-                (.fetch stub (js/Request. reset-url #js {:method "DELETE"})))
+            (p/let [_ (<delete-graph! db env url graph-id)]
               (http/json-response :graphs/delete {:graph-id graph-id :deleted true})))))
+
+      :admin-graphs/delete
+      (if (seq graph-id)
+        (p/let [_ (<delete-graph! db env url graph-id)]
+          (http/json-response :graphs/delete {:graph-id graph-id :deleted true}))
+        (http/bad-request "missing graph id"))
 
       :e2ee/user-keys-get
       (if (string? user-id)
@@ -299,25 +338,33 @@
         (http/error-response "server error" 500)
 
         :else
-        (p/let [claims (auth/auth-claims request env)
-                _ (when claims
-                    (index/<user-upsert! db claims))
-                route (routes/match-route method path)
-                response (cond
-                           (nil? claims)
-                           (http/unauthorized)
+        (let [route (routes/match-route method path)]
+          (cond
+            (nil? route)
+            (http/not-found)
 
-                           route
-                           (handle {:db db
-                                    :env env
-                                    :request request
-                                    :url url
-                                    :claims claims
-                                    :route route})
+            (= :admin-graphs/delete (:handler route))
+            (if (admin-token-valid? request env)
+              (handle {:db db
+                       :env env
+                       :request request
+                       :url url
+                       :claims nil
+                       :route route})
+              (http/unauthorized))
 
-                           :else
-                           (http/not-found))]
-          response))
+            :else
+            (p/let [claims (auth/auth-claims request env)
+                    _ (when claims
+                        (index/<user-upsert! db claims))]
+              (if (nil? claims)
+                (http/unauthorized)
+                (handle {:db db
+                         :env env
+                         :request request
+                         :url url
+                         :claims claims
+                         :route route}))))))
       (catch :default error
         (js/console.error "DEBUG handle-fetch error:" error)
         (log/error :db-sync/index-error error)

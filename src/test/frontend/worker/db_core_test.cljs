@@ -14,8 +14,7 @@
     (is (contains? api-map :thread-api/db-sync-request-asset-download))
     (is (contains? api-map :thread-api/db-sync-grant-graph-access))
     (is (contains? api-map :thread-api/db-sync-ensure-user-rsa-keys))
-    (is (contains? api-map :thread-api/db-sync-upload-graph))
-    (is (contains? api-map :thread-api/db-sync-import-kvs-rows))))
+    (is (contains? api-map :thread-api/db-sync-upload-graph))))
 
 (deftest init-service-does-not-close-db-when-graph-unchanged
   (async done

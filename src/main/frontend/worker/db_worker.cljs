@@ -10,7 +10,15 @@
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
-(.importScripts js/self "worker.js")
+(def ^:private worker-bootstrap-loaded-key "__logseq_db_worker_bootstrap_loaded__")
+
+(defn- ensure-worker-bootstrap!
+  []
+  (when-not (gobj/get js/self worker-bootstrap-loaded-key)
+    (gobj/set js/self worker-bootstrap-loaded-key true)
+    (.importScripts js/self "worker.js")))
+
+(ensure-worker-bootstrap!)
 
 (defn- check-worker-scope!
   []

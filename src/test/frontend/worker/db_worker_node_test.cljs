@@ -424,7 +424,8 @@
                                                                         :log-level "error"})
                          _ (is (= ["thread-api/init" true []]
                                   (first @invoke-calls)))
-                         _ (is (= ["thread-api/create-or-open-db" false [repo {:datoms []}]]
+                         _ (is (= ["thread-api/create-or-open-db" false [repo {:datoms []
+                                                                               :sync-download-graph? true}]]
                                   (second @invoke-calls)))
                          _ (stop!)]
                    true))
