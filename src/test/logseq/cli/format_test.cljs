@@ -434,6 +434,66 @@
                                        {:output-format nil})]
       (is (= "Imported sqlite from /tmp/import.sqlite" result)))))
 
+(deftest test-human-output-graph-backup
+  (testing "graph backup list renders metadata table"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-backup-list
+                                        :data {:backups [{:name "demo-nightly"
+                                                          :created-at 90000
+                                                          :size-bytes 2048}]}}
+                                       {:output-format nil
+                                        :now-ms 100000})]
+      (is (string/includes? result "NAME"))
+      (is (string/includes? result "CREATED-AT"))
+      (is (string/includes? result "SIZE-BYTES"))
+      (is (string/includes? result "demo-nightly"))
+      (is (string/includes? result "10s ago"))
+      (is (string/includes? result "2048"))
+      (is (string/includes? result "Count: 1"))))
+
+  (testing "graph backup create renders a succinct success line"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-backup-create
+                                        :context {:graph "demo"
+                                                  :backup-name "demo-nightly"}}
+                                       {:output-format nil})]
+      (is (= "Created backup: demo-nightly (graph: demo)" result))))
+
+  (testing "graph backup restore renders a succinct success line"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-backup-restore
+                                        :context {:src "demo-nightly"
+                                                  :dst "demo-restored"}}
+                                       {:output-format nil})]
+      (is (= "Restored backup demo-nightly -> demo-restored" result))))
+
+  (testing "graph backup remove renders a succinct success line"
+    (let [result (format/format-result {:status :ok
+                                        :command :graph-backup-remove
+                                        :context {:src "demo-nightly"}}
+                                       {:output-format nil})]
+      (is (= "Removed backup: demo-nightly" result)))))
+
+(deftest test-machine-output-graph-backup-list-metadata
+  (let [base-result {:status :ok
+                     :command :graph-backup-list
+                     :data {:backups [{:name "demo-nightly"
+                                       :created-at 90000
+                                       :size-bytes 2048}]}}
+        json-result (format/format-result base-result {:output-format :json})
+        edn-result (format/format-result base-result {:output-format :edn})
+        parsed-json (js->clj (js/JSON.parse json-result) :keywordize-keys true)
+        parsed-edn (reader/read-string edn-result)]
+    (testing "graph backup list json output keeps metadata fields"
+      (is (= "demo-nightly" (get-in parsed-json [:data :backups 0 :name])))
+      (is (= 90000 (get-in parsed-json [:data :backups 0 :created-at])))
+      (is (= 2048 (get-in parsed-json [:data :backups 0 :size-bytes]))))
+
+    (testing "graph backup list edn output keeps metadata fields"
+      (is (= "demo-nightly" (get-in parsed-edn [:data :backups 0 :name])))
+      (is (= 90000 (get-in parsed-edn [:data :backups 0 :created-at])))
+      (is (= 2048 (get-in parsed-edn [:data :backups 0 :size-bytes]))))))
+
 (deftest test-human-output-sync-status
   (testing "sync status renders runtime and queue fields"
     (let [result (format/format-result {:status :ok

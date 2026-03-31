@@ -102,7 +102,10 @@
 (deftest test-graph-spec-metadata
   (let [entries graph-command/entries
         export-entry (first (filter #(= :graph-export (:command %)) entries))
-        import-entry (first (filter #(= :graph-import (:command %)) entries))]
+        import-entry (first (filter #(= :graph-import (:command %)) entries))
+        backup-create-entry (first (filter #(= :graph-backup-create (:command %)) entries))
+        backup-restore-entry (first (filter #(= :graph-backup-restore (:command %)) entries))
+        backup-remove-entry (first (filter #(= :graph-backup-remove (:command %)) entries))]
     (testing "export-spec :type has :validate set"
       (is (= #{"edn" "sqlite"} (get-in export-entry [:spec :type :validate]))))
     (testing "export-spec :file has :complete :file"
@@ -110,7 +113,14 @@
     (testing "import-spec :type has :validate set"
       (is (= #{"edn" "sqlite"} (get-in import-entry [:spec :type :validate]))))
     (testing "import-spec :input has :complete :file"
-      (is (= :file (get-in import-entry [:spec :input :complete]))))))
+      (is (= :file (get-in import-entry [:spec :input :complete]))))
+    (testing "backup create has optional --name option"
+      (is (contains? (:spec backup-create-entry) :name)))
+    (testing "backup restore has --src and --dst options"
+      (is (contains? (:spec backup-restore-entry) :src))
+      (is (contains? (:spec backup-restore-entry) :dst)))
+    (testing "backup remove has --src option"
+      (is (contains? (:spec backup-remove-entry) :src)))))
 
 (deftest test-query-spec-metadata
   (let [entries query-command/entries
@@ -227,6 +237,8 @@
       (is (string/includes? output "_logseq_json_names data items block/title")))
     (testing "output contains per-command functions"
       (is (string/includes? output "_logseq_graph_export()"))
+      (is (string/includes? output "_logseq_graph_backup_restore()"))
+      (is (string/includes? output "_logseq_graph_backup_remove()"))
       (is (string/includes? output "_logseq_show()"))
       (is (string/includes? output "_logseq_example_upsert_page()")))
     (testing "output contains group dispatchers"
@@ -346,6 +358,10 @@
     (testing "graph export case includes --type and --file"
       (is (string/includes? output "--type"))
       (is (string/includes? output "--file")))
+    (testing "graph backup options include --name, --src, and --dst"
+      (is (string/includes? output "--name"))
+      (is (string/includes? output "--src"))
+      (is (string/includes? output "--dst")))
     (testing "boolean flags appear in wordlist"
       (is (string/includes? output "--verbose"))
       (is (string/includes? output "--profile")))

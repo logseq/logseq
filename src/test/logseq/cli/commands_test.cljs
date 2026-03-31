@@ -227,6 +227,39 @@
       (is (seq lines))
       (is (every? #(not (string/includes? % "[options]")) lines)))))
 
+(deftest test-parse-args-help-graph-backup-group
+  (let [result (binding [style/*color-enabled?* true]
+                 (commands/parse-args ["graph"]))
+        summary (:summary result)
+        plain-summary (strip-ansi summary)]
+    (is (true? (:help? result)))
+    (is (string/includes? plain-summary "graph backup list"))
+    (is (string/includes? plain-summary "graph backup create"))
+    (is (string/includes? plain-summary "graph backup restore"))
+    (is (string/includes? plain-summary "graph backup remove"))
+    (is (contains-bold? summary "graph backup list"))
+    (is (contains-bold? summary "graph backup create"))
+    (is (contains-bold? summary "graph backup restore"))
+    (is (contains-bold? summary "graph backup remove"))))
+
+(deftest test-parse-args-help-graph-backup-subcommands
+  (doseq [args [["graph" "backup"]
+                ["graph" "backup" "-h"]
+                ["graph" "backup" "--help"]]]
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args args))
+          summary (:summary result)
+          plain-summary (strip-ansi summary)]
+      (is (true? (:help? result)))
+      (is (string/includes? plain-summary "Usage: logseq graph backup <subcommand> [options]"))
+      (is (string/includes? plain-summary "graph backup list"))
+      (is (string/includes? plain-summary "graph backup create"))
+      (is (string/includes? plain-summary "graph backup restore"))
+      (is (string/includes? plain-summary "graph backup remove"))
+      (is (not (string/includes? plain-summary "graph create")))
+      (is (contains-bold? summary "graph backup list"))
+      (is (contains-bold? summary "graph backup create")))))
+
 (deftest test-parse-args-help-command-examples
   (testing "remove block command help no longer shows examples"
     (let [result (binding [style/*color-enabled?* true]
@@ -1593,6 +1626,56 @@
       (is (= :server-status (:command result)))
       (is (= "logseq_db_logseq_db_demo" (get-in result [:options :graph]))))))
 
+(deftest test-verb-subcommand-parse-graph-backup
+  (testing "graph backup list parses"
+    (let [result (commands/parse-args ["graph" "backup" "list"])]
+      (is (true? (:ok? result)))
+      (is (= :graph-backup-list (:command result)))))
+
+  (testing "graph backup create parses with optional name"
+    (let [result (commands/parse-args ["graph" "backup" "create" "--name" "nightly"]) ]
+      (is (true? (:ok? result)))
+      (is (= :graph-backup-create (:command result)))
+      (is (= "nightly" (get-in result [:options :name])))))
+
+  (testing "graph backup create with name carries source and naming components"
+    (let [result (commands/parse-args ["graph" "backup" "create"
+                                       "--graph" "demo"
+                                       "--name" "nightly"]) ]
+      (is (true? (:ok? result)))
+      (is (= "demo" (get-in result [:options :graph])))
+      (is (= "nightly" (get-in result [:options :name])))))
+
+  (testing "graph backup restore parses with --src and --dst"
+    (let [result (commands/parse-args ["graph" "backup" "restore"
+                                       "--src" "demo-nightly"
+                                       "--dst" "demo-restored"]) ]
+      (is (true? (:ok? result)))
+      (is (= :graph-backup-restore (:command result)))
+      (is (= "demo-nightly" (get-in result [:options :src])))
+      (is (= "demo-restored" (get-in result [:options :dst])))))
+
+  (testing "graph backup restore requires --src"
+    (let [result (commands/parse-args ["graph" "backup" "restore" "--dst" "demo-restored"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-src (get-in result [:error :code])))))
+
+  (testing "graph backup restore requires --dst"
+    (let [result (commands/parse-args ["graph" "backup" "restore" "--src" "demo-nightly"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-dst (get-in result [:error :code])))))
+
+  (testing "graph backup remove parses with --src"
+    (let [result (commands/parse-args ["graph" "backup" "remove" "--src" "demo-nightly"])]
+      (is (true? (:ok? result)))
+      (is (= :graph-backup-remove (:command result)))
+      (is (= "demo-nightly" (get-in result [:options :src])))))
+
+  (testing "graph backup remove requires --src"
+    (let [result (commands/parse-args ["graph" "backup" "remove"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-src (get-in result [:error :code]))))))
+
 (deftest test-verb-subcommand-parse-flags
   (testing "verb subcommands reject unknown flags"
     (doseq [args [["list" "page" "--wat"]
@@ -1647,6 +1730,108 @@
     (let [parsed {:ok? true
                   :command :graph-import
                   :options {:type "edn" :input "import.edn"}}
+          result (commands/build-action parsed {})]
+      (is (false? (:ok? result)))
+      (is (= :missing-repo (get-in result [:error :code])))))
+
+)
+
+(deftest test-build-action-graph-backup
+  (testing "graph backup list resolves source repo from --graph"
+    (let [parsed {:ok? true :command :graph-backup-list :options {:graph "demo"}}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :graph-backup-list (get-in result [:action :type])))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))))
+
+  (testing "graph backup list resolves source repo from config graph"
+    (let [parsed {:ok? true :command :graph-backup-list :options {}}
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :graph-backup-list (get-in result [:action :type])))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))))
+
+  (testing "graph backup list fails when no source graph is available"
+    (let [parsed {:ok? true :command :graph-backup-list :options {}}
+          result (commands/build-action parsed {})]
+      (is (false? (:ok? result)))
+      (is (= :missing-repo (get-in result [:error :code])))))
+
+  (testing "graph backup create resolves source repo from --graph"
+    (let [parsed {:ok? true :command :graph-backup-create :options {:graph "demo"}}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :graph-backup-create (get-in result [:action :type])))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))))
+
+  (testing "graph backup create resolves source repo from config graph"
+    (let [parsed {:ok? true :command :graph-backup-create :options {}}
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :graph-backup-create (get-in result [:action :type])))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))))
+
+  (testing "graph backup create falls back to legacy config repo"
+    (let [parsed {:ok? true :command :graph-backup-create :options {}}
+          result (commands/build-action parsed {:repo "logseq_db_demo"})]
+      (is (true? (:ok? result)))
+      (is (= :graph-backup-create (get-in result [:action :type])))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))))
+
+  (testing "graph backup create fails when no source graph is available"
+    (let [parsed {:ok? true :command :graph-backup-create :options {}}
+          result (commands/build-action parsed {})]
+      (is (false? (:ok? result)))
+      (is (= :missing-repo (get-in result [:error :code])))))
+
+  (testing "graph backup create with --name generates backup name shape"
+    (let [parsed {:ok? true :command :graph-backup-create :options {:graph "demo" :name "nightly"}}
+          result (commands/build-action parsed {})
+          backup-name (get-in result [:action :backup-name])]
+      (is (true? (:ok? result)))
+      (is (string? backup-name))
+      (is (and (string? backup-name)
+               (re-matches #"demo-nightly-\d{8}T\d{6}Z(?:-\d+)?" backup-name)))))
+
+  (testing "graph backup restore resolves source repo from --graph"
+    (let [parsed {:ok? true :command :graph-backup-restore :options {:graph "demo" :src "demo-nightly" :dst "demo-restored"}}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :graph-backup-restore (get-in result [:action :type])))
+      (is (= "logseq_db_demo" (get-in result [:action :source-repo])))
+      (is (= "demo-nightly" (get-in result [:action :src])))
+      (is (= "demo-restored" (get-in result [:action :dst])))))
+
+  (testing "graph backup restore resolves source repo from config graph"
+    (let [parsed {:ok? true :command :graph-backup-restore :options {:src "demo-nightly" :dst "demo-restored"}}
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :graph-backup-restore (get-in result [:action :type])))
+      (is (= "logseq_db_demo" (get-in result [:action :source-repo])))))
+
+  (testing "graph backup restore fails when no source graph is available"
+    (let [parsed {:ok? true :command :graph-backup-restore :options {:src "demo-nightly" :dst "demo-restored"}}
+          result (commands/build-action parsed {})]
+      (is (false? (:ok? result)))
+      (is (= :missing-repo (get-in result [:error :code])))))
+
+  (testing "graph backup remove resolves source repo from --graph"
+    (let [parsed {:ok? true :command :graph-backup-remove :options {:graph "demo" :src "demo-nightly"}}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :graph-backup-remove (get-in result [:action :type])))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))
+      (is (= "demo-nightly" (get-in result [:action :src])))))
+
+  (testing "graph backup remove resolves source repo from config graph"
+    (let [parsed {:ok? true :command :graph-backup-remove :options {:src "demo-nightly"}}
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :graph-backup-remove (get-in result [:action :type])))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))))
+
+  (testing "graph backup remove fails when no source graph is available"
+    (let [parsed {:ok? true :command :graph-backup-remove :options {:src "demo-nightly"}}
           result (commands/build-action parsed {})]
       (is (false? (:ok? result)))
       (is (= :missing-repo (get-in result [:error :code]))))))
