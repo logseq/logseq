@@ -39,6 +39,112 @@
               by-stage (into {} (map (juxt :stage identity) (:stages report)))]
           (is (= 1 (get-in by-stage ["cli.parse-args" :count]))))))))
 
+(deftest test-render-lines-renders-logical-containment-tree
+  (let [lines (profile/render-lines {:command "graph-list"
+                                     :status :ok
+                                     :total-ms 42
+                                     :stages []
+                                     :spans [{:stage "cli.total"
+                                              :elapsed-ms 42
+                                              :started-ms 0
+                                              :ended-ms 42
+                                              :span-id 0}
+                                             {:stage "cli.parse-args"
+                                              :elapsed-ms 2
+                                              :started-ms 1
+                                              :ended-ms 3
+                                              :span-id 1}
+                                             {:stage "cli.execute-action"
+                                              :elapsed-ms 30
+                                              :started-ms 5
+                                              :ended-ms 35
+                                              :span-id 2}
+                                             {:stage "transport.invoke:thread-api/q"
+                                              :elapsed-ms 8
+                                              :started-ms 12
+                                              :ended-ms 20
+                                              :span-id 3}]})]
+    (is (= "42ms command=graph-list status=ok" (first lines)))
+    (is (= "stages" (string/trim (second lines))))
+    (is (some #(= "42ms └── cli.total" %) lines))
+    (is (some #(string/includes? % "├── cli.parse-args") lines))
+    (is (some #(string/includes? % "└── cli.execute-action") lines))
+    (is (some #(string/includes? % "└── transport.invoke:thread-api/q") lines))
+    (is (not-any? #(string/includes? % "[profile]") lines))
+    (is (not-any? #(string/includes? % "count=") lines))
+    (is (not-any? #(string/includes? % "avg=") lines))))
+
+(deftest test-render-lines-uses-containment-not-stage-prefix
+  (let [lines (profile/render-lines {:command "query"
+                                     :status :ok
+                                     :total-ms 20
+                                     :stages []
+                                     :spans [{:stage "outer"
+                                              :elapsed-ms 20
+                                              :started-ms 0
+                                              :ended-ms 20
+                                              :span-id 0}
+                                             {:stage "transport.invoke:thread-api/q"
+                                              :elapsed-ms 10
+                                              :started-ms 5
+                                              :ended-ms 15
+                                              :span-id 1}]})]
+    (is (some #(= "20ms └── outer" %) lines))
+    (is (some #(string/includes? % "└── transport.invoke:thread-api/q") lines))))
+
+(deftest test-render-lines-does-not-merge-identical-stage-calls
+  (let [lines (profile/render-lines {:command "query"
+                                     :status :ok
+                                     :total-ms 30
+                                     :stages []
+                                     :spans [{:stage "outer"
+                                              :elapsed-ms 30
+                                              :started-ms 0
+                                              :ended-ms 30
+                                              :span-id 0}
+                                             {:stage "transport.invoke:thread-api/q"
+                                              :elapsed-ms 5
+                                              :started-ms 5
+                                              :ended-ms 10
+                                              :span-id 1}
+                                             {:stage "transport.invoke:thread-api/q"
+                                              :elapsed-ms 5
+                                              :started-ms 15
+                                              :ended-ms 20
+                                              :span-id 2}]})
+        q-lines (filter #(string/includes? % "transport.invoke:thread-api/q") lines)]
+    (is (= 2 (count q-lines)))
+    (is (= ["5ms      ├── transport.invoke:thread-api/q"
+            "5ms      └── transport.invoke:thread-api/q"]
+           (vec q-lines)))))
+
+(deftest test-render-lines-aligns-tree-column-for-different-durations
+  (let [lines (profile/render-lines {:command "query"
+                                     :status :ok
+                                     :total-ms 120
+                                     :stages []
+                                     :spans [{:stage "outer"
+                                              :elapsed-ms 120
+                                              :started-ms 0
+                                              :ended-ms 120
+                                              :span-id 0}
+                                             {:stage "child.short"
+                                              :elapsed-ms 2
+                                              :started-ms 5
+                                              :ended-ms 7
+                                              :span-id 1}
+                                             {:stage "child.long"
+                                              :elapsed-ms 45
+                                              :started-ms 10
+                                              :ended-ms 55
+                                              :span-id 2}]})
+        short-line (first (filter #(string/includes? % "child.short") lines))
+        long-line (first (filter #(string/includes? % "child.long") lines))]
+    (is (some? short-line))
+    (is (some? long-line))
+    (is (= (string/index-of short-line "├──")
+           (string/index-of long-line "└──")))))
+
 (deftest test-time-records-async-stage
   (async done
          (let [session (profile/create-session true)]
@@ -54,7 +160,8 @@
                          (let [lines (profile/render-lines (profile/report session {:command "query" :status :ok}))]
                            (is (seq lines))
                            (when (seq lines)
-                             (is (string/starts-with? (first lines) "[profile] total=")))
+                             (is (re-find #"^\d+ms command=query status=ok$" (first lines))))
+                           (is (some #(= "stages" (string/trim %)) lines))
                            (is (some #(string/includes? % "transport.invoke:thread-api/q") lines))
                            (done))))
                (p/catch (fn [e]

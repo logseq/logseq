@@ -43,7 +43,8 @@
           (is (vector? profile-lines))
           (is (seq profile-lines))
           (when (seq profile-lines)
-            (is (string/starts-with? (first profile-lines) "[profile] total=")))
+            (is (re-find #"^\d+ms command=version status=ok$" (first profile-lines))))
+          (is (some #(= "stages" (string/trim %)) profile-lines))
           (is (some #(string/includes? % "cli.parse-args") profile-lines))
           (is (some #(string/includes? % "cli.total") profile-lines))
           (done))
@@ -68,9 +69,12 @@
           (is (= 0 (:exit-code result)))
           (is (seq lines))
           (when (seq lines)
-            (is (string/starts-with? (first lines) "[profile] total=")))
-          (is (some #(string/includes? % "cli.parse-args count=1") lines))
-          (is (some #(string/includes? % "cli.total count=1") lines))
+            (is (re-find #"^\d+ms command=help status=ok$" (first lines))))
+          (is (some #(= "stages" (string/trim %)) lines))
+          (is (some #(string/includes? % "cli.parse-args") lines))
+          (is (some #(string/includes? % "cli.total") lines))
+          (is (not-any? #(string/includes? % "[profile]") lines))
+          (is (not-any? #(string/includes? % "count=") lines))
           (done))
         (p/catch (fn [e]
                    (is false (str "unexpected error: " e))
@@ -100,16 +104,19 @@
              (p/with-redefs [cli-main/run! (fn [_args]
                                              (p/resolved {:exit-code 0
                                                           :output "ok-output"
-                                                          :profile-lines ["[profile] total=1ms command=help status=ok"
-                                                                          "[profile] cli.total count=1 total=1ms avg=1ms"]}))
+                                                          :profile-lines ["1ms command=help status=ok"
+                                                                          "    stages"
+                                                                          "1ms └── cli"
+                                                                          "1ms     └── cli.total"]}))
                              println (fn [& args]
                                        (swap! stdout-lines conj (string/join " " args)))]
                (cli-main/main "--profile" "--help"))))
           (p/then (fn [_]
                     (let [stderr-text (apply str @stderr-writes)]
                       (is (= ["ok-output"] @stdout-lines))
-                      (is (string/includes? stderr-text "[profile] total=1ms command=help status=ok"))
-                      (is (string/includes? stderr-text "[profile] cli.total count=1 total=1ms avg=1ms"))
+                      (is (string/includes? stderr-text "1ms command=help status=ok"))
+                      (is (string/includes? stderr-text "    stages"))
+                      (is (string/includes? stderr-text "1ms     └── cli.total"))
                       (done))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))
