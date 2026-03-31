@@ -16,7 +16,8 @@
    [lambdaisland.glogi :as log]
    [logseq.common.util :as common-util]
    [logseq.db-sync.checksum :as sync-checksum]
-   [promesa.core :as p]))
+   [promesa.core :as p]
+   [logseq.common.config :as common-config]))
 
 (def ^:private reconnect-base-delay-ms 1000)
 (def ^:private reconnect-max-delay-ms 30000)
@@ -275,6 +276,24 @@
     (reset! worker-state/*db-sync-client nil))
   (p/resolved nil))
 
+(declare list-remote-graphs!)
+
+(defn- <resolve-start-graph-id
+  [repo]
+  (if-let [graph-id (sync-util/get-graph-id repo)]
+    (p/resolved graph-id)
+    (let [target-graph-name (some-> repo common-config/strip-leading-db-version-prefix)]
+      (if-not (seq target-graph-name)
+        (p/resolved nil)
+        (p/let [remote-graphs (list-remote-graphs!)
+                remote-graph-id (some (fn [{:keys [graph-name graph-id]}]
+                                        (when (= target-graph-name graph-name)
+                                          graph-id))
+                                      remote-graphs)]
+          (when (seq remote-graph-id)
+            (ensure-client-graph-uuid! repo remote-graph-id)
+            remote-graph-id))))))
+
 (defn start!
   [repo]
   (let [base (ws-base-url)
@@ -282,38 +301,43 @@
         start-target [repo graph-id]
         inflight-target @*start-inflight-target
         current @worker-state/*db-sync-client]
-    (cond
-      (not (and (string? base) (seq base) (seq graph-id)))
+    (if-not (and (string? base) (seq base))
       (do
         (log/info :db-sync/start-skipped {:repo repo :graph-id graph-id :base base})
         (p/resolved nil))
+      (p/let [graph-id (<resolve-start-graph-id repo)]
+        (cond
+          (not (seq graph-id))
+          (do
+            (log/info :db-sync/start-skipped {:repo repo :graph-id graph-id :base base})
+            (p/resolved nil))
 
-      (= start-target inflight-target)
-      (p/resolved nil)
+          (= start-target inflight-target)
+          (p/resolved nil)
 
-      (active-client-for? current repo graph-id)
-      (do
-        (broadcast-rtc-state! current)
-        (p/resolved nil))
+          (active-client-for? current repo graph-id)
+          (do
+            (broadcast-rtc-state! current)
+            (p/resolved nil))
 
-      :else
-      (do
-        (reset! *start-inflight-target start-target)
-        (->
-         (p/do!
-          (stop!)
-          (p/let [client (ensure-client-state! repo)
-                  url (sync-transport/format-ws-url base graph-id)
-                  _ (ensure-client-graph-uuid! repo graph-id)
-                  connected (assoc client :graph-id graph-id)
-                  token (<resolve-ws-token)
-                  connected (connect! repo connected url token)]
-            (reset! worker-state/*db-sync-client connected)
-            nil))
-         (p/finally
-           (fn []
-             (when (= start-target @*start-inflight-target)
-               (reset! *start-inflight-target nil)))))))))
+          :else
+          (do
+            (reset! *start-inflight-target start-target)
+            (->
+             (p/do!
+              (stop!)
+              (p/let [client (ensure-client-state! repo)
+                      url (sync-transport/format-ws-url base graph-id)
+                      _ (ensure-client-graph-uuid! repo graph-id)
+                      connected (assoc client :graph-id graph-id)
+                      token (<resolve-ws-token)
+                      connected (connect! repo connected url token)]
+                (reset! worker-state/*db-sync-client connected)
+                nil))
+             (p/finally
+               (fn []
+                 (when (= start-target @*start-inflight-target)
+                   (reset! *start-inflight-target nil)))))))))))
 
 (defn enqueue-local-tx!
   [repo tx-report]
@@ -335,14 +359,4 @@
   [repo]
   (sync-upload/upload-graph! repo))
 
-(defn list-remote-graphs!
-  []
-  (let [base (sync-auth/http-base-url @worker-state/*db-sync-config)]
-    (if-not (seq base)
-      (p/resolved [])
-      (do
-        (sync-util/require-auth-token! {:op :list-remote-graphs})
-        (p/let [resp (sync-transport/fetch-json (str base "/graphs")
-                                                {:method "GET"}
-                                                {:response-schema :graphs/list})]
-          (vec (or (:graphs resp) [])))))))
+(def list-remote-graphs! sync-upload/list-remote-graphs!)

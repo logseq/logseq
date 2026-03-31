@@ -13,8 +13,7 @@
    [frontend.worker.sync.crypt :as sync-crypt]
    [frontend.worker.sync.log-and-state :as rtc-log-and-state]
    [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
-   [frontend.worker.sync.transport :as sync-transport]
-   [frontend.worker.sync.util :refer [fail-fast]]
+   [frontend.worker.sync.util :refer [fail-fast] :as sync-util]
    [logseq.db-sync.snapshot :as snapshot]
    [logseq.db.common.sqlite :as common-sqlite]
    [logseq.db.frontend.schema :as db-schema]
@@ -118,10 +117,7 @@
 
 (defn- fetch-json
   [url opts schema]
-  (sync-transport/fetch-json
-   url
-   opts
-   {:response-schema schema}))
+  (sync-util/fetch-json url opts {:response-schema schema}))
 
 (defonce ^:private *import-state (atom nil))
 (def ^:private snapshot-import-datoms-batch-size 10000)
