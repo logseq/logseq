@@ -99,8 +99,9 @@
 (defn debounced-store-db
   [conn]
   (when-some [_storage (storage/storage @conn)]
-    (let [f (or @*debounce-fn d/store)]
-      (f @conn))))
+    (when-not (:batch-tx? @conn)
+      (let [f (or @*debounce-fn d/store)]
+        (f @conn)))))
 
 (defn- transact-sync
   [conn tx-data tx-meta]
@@ -112,12 +113,13 @@
                 (or (:rtc-download-graph? tx-meta)
                     (:reset-conn! tx-meta)
                     (:initial-db? tx-meta)
-                    (:skip-validate-db? db)
                     (:skip-validate-db? tx-meta false)
+                    ;; used by `batch-transact-with-temp-conn!`
+                    (:skip-validate-db? @conn)
                     (:logseq.graph-parser.exporter/new-graph? tx-meta))))
         (let [tx-report* (d/with db tx-data tx-meta)
               pipeline-f @*transact-pipeline-fn
-              tx-report (if-let [f pipeline-f] (f tx-report*) tx-report*)
+              tx-report (if pipeline-f (pipeline-f tx-report*) tx-report*)
               _ (throw-if-page-has-block-parent! (:db-after tx-report) (:tx-data tx-report))
               [validate-result errors] (db-validate/validate-tx-report tx-report nil)]
           (cond
@@ -126,11 +128,8 @@
                        (seq (:tx-data tx-report)))
               ;; perf enhancement: avoid repeated call on `d/with`
               (reset! conn (:db-after tx-report))
-              (if (:batch-tx? @conn)
-                (dc/run-callbacks conn tx-report)
-                (do
-                  (debounced-store-db conn)
-                  (dc/run-callbacks conn tx-report))))
+              (debounced-store-db conn)
+              (dc/run-callbacks conn tx-report))
 
             :else
             (do
@@ -237,7 +236,8 @@
 
       (swap! conn dissoc :skip-store? :batch-tx?)
 
-      (debounced-store-db conn)
+      (when-some [_storage (storage/storage @conn)]
+       (d/store @conn))
 
       (let [batch-tx-data @*tx-data
             _ (reset! *tx-data nil)

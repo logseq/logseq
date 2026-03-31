@@ -231,7 +231,7 @@
    (fix-num-prefix-db-idents! conn)
 
    (let [db @conn
-         {:keys [errors datom-count entities]} (db-validate/validate-db! db)
+         {:keys [errors datom-count entities]} (db-validate/validate-db db)
          invalid-entity-ids (distinct (map (fn [e] (:db/id (:entity e))) errors))]
 
      (doseq [error errors]

@@ -101,6 +101,36 @@
        ;; sort by :tx, use nth to make this fn works on both vector and datom
        (sort-by #(nth % 3))))
 
+(defn- retract-entity-op?
+  [item]
+  (and (= 2 (count item))
+       (= :db/retractEntity (first item))))
+
+(defn- retract-entity-match-keys
+  [e]
+  (if (and (vector? e) (= :block/uuid (first e)))
+    (let [uuid (second e)]
+      #{e uuid (str uuid)})
+    #{e}))
+
+(defn- reorder-retract-entity-first
+  [tx-data]
+  (let [retract-ops (filter retract-entity-op? tx-data)
+        retract-keys (->> retract-ops
+                          (map second)
+                          (mapcat retract-entity-match-keys)
+                          set)
+        datom-for-retracted-eid?
+        (fn [item]
+          (and (= 5 (count item))
+               (contains? retract-keys (second item))))
+        datoms-for-retracted-eids (filter datom-for-retracted-eid? tx-data)
+        others (remove (fn [item]
+                         (or (retract-entity-op? item)
+                             (datom-for-retracted-eid? item)))
+                       tx-data)]
+    (concat retract-ops datoms-for-retracted-eids others)))
+
 (defn normalize-tx-data
   [db-after db-before tx-data]
   (let [title-updated-entities
@@ -150,4 +180,5 @@
                                   e)]
                   [op e'])))))
          (remove-retract-entity-ref db-after)
+         reorder-retract-entity-first
          distinct)))

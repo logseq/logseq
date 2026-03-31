@@ -1212,7 +1212,7 @@
                     :reversed-tx [[:db/add child-id :block/title "raw reverse"]]}]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (let [reports (#'sync-apply/reverse-local-txs! conn [local-tx] {:rtc-tx? true})]
+          (let [reports (#'sync-apply/reverse-local-txs! conn [local-tx])]
             (is (= 1 (count reports)))
             (is (= "raw reverse"
                    (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))))
