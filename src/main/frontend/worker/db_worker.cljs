@@ -313,7 +313,7 @@
       (when-not @*publishing? (common-sqlite/create-kvs-table! client-ops-db))
       (search/create-tables-and-triggers! search-db)
       (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
-      (ldb/register-debounce-fn! (gfun/debounce d/store 1000))
+      (ldb/register-debounce-fn! (gfun/debounce d/store 100))
       (let [conn (common-sqlite/get-storage-conn storage db-schema/schema)
             _ (db-fix/check-and-fix-schema! conn)
             _ (when datoms
