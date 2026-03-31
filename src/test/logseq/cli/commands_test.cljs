@@ -2269,15 +2269,12 @@
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
                                transport/invoke (fn [_ method _ args]
                                                   (case method
-                                                    :thread-api/pull (let [[_ _ lookup] args]
-                                                                       (if (= lookup [:block/name "quote"])
-                                                                         (if @created?*
-                                                                           {:db/id 4242
-                                                                            :block/name "quote"
-                                                                            :block/title "Quote"
-                                                                            :block/tags [{:db/ident :logseq.class/Tag}]}
-                                                                           {})
-                                                                         {}))
+                                                    :thread-api/q (if @created?*
+                                                                    [{:db/id 4242
+                                                                      :block/name "quote"
+                                                                      :block/title "Quote"
+                                                                      :block/tags [{:db/ident :logseq.class/Tag}]}]
+                                                                    [])
                                                     :thread-api/apply-outliner-ops (let [[_ ops _] args]
                                                                                      (reset! created?* true)
                                                                                      (reset! ops* ops)
@@ -2292,28 +2289,30 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
-(deftest test-execute-upsert-tag-rejects-existing-non-tag-page
+(deftest test-execute-upsert-tag-creates-tag-when-non-tag-page-exists
   (async done
-         (let [action {:type :upsert-tag
+         (let [created?* (atom false)
+               action {:type :upsert-tag
                        :repo "demo"
                        :name "Home"}]
            (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
-                               transport/invoke (fn [_ method _ args]
+                               transport/invoke (fn [_ method _ _args]
                                                   (case method
-                                                    :thread-api/pull (let [[_ _ lookup] args]
-                                                                       (if (= lookup [:block/name "home"])
-                                                                         {:db/id 99
-                                                                          :block/name "home"
-                                                                          :block/title "Home"
-                                                                          :block/tags [{:db/ident :logseq.class/Page}]}
-                                                                         {}))
-                                                    :thread-api/apply-outliner-ops
-                                                    (throw (ex-info "should not create tag" {:args args}))
-                                                    (throw (ex-info "unexpected invoke" {:method method :args args}))))]
+                                                    ;; pull-tag-by-name finds no tag (only a page exists)
+                                                    :thread-api/q (if @created?*
+                                                                    [{:db/id 200
+                                                                      :block/name "home"
+                                                                      :block/title "Home"
+                                                                      :block/tags [{:db/ident :logseq.class/Tag}]}]
+                                                                    [])
+                                                    :thread-api/apply-outliner-ops (do
+                                                                                     (reset! created?* true)
+                                                                                     {:result :ok})
+                                                    (throw (ex-info "unexpected invoke" {:method method}))))]
                  (p/let [result (commands/execute action {})]
-                   (is (= :error (:status result)))
-                   (is (= :tag-name-conflict (get-in result [:error :code])))))
+                   (is (= :ok (:status result)))
+                   (is (= [200] (get-in result [:data :result])))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
@@ -2328,13 +2327,10 @@
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
                                transport/invoke (fn [_ method _ args]
                                                   (case method
-                                                    :thread-api/pull (let [[_ _ lookup] args]
-                                                                       (if (= lookup [:block/name "quote"])
-                                                                         {:db/id 4242
-                                                                          :block/name "quote"
-                                                                          :block/title "Quote"
-                                                                          :block/tags [{:db/ident :logseq.class/Tag}]}
-                                                                         {}))
+                                                    :thread-api/q [{:db/id 4242
+                                                                    :block/name "quote"
+                                                                    :block/title "Quote"
+                                                                    :block/tags [{:db/ident :logseq.class/Tag}]}]
                                                     :thread-api/apply-outliner-ops (do
                                                                                      (swap! apply-calls* inc)
                                                                                      {:result :ok})
@@ -2360,13 +2356,13 @@
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
                                transport/invoke (fn [_ method _ args]
                                                   (case method
-                                                    :thread-api/pull (if @created?*
-                                                                       {:db/id 654
-                                                                        :db/ident :user.property/owner
-                                                                        :block/name "owner"
-                                                                        :block/title "owner"
-                                                                        :logseq.property/type :node}
-                                                                       {})
+                                                    :thread-api/q (if @created?*
+                                                                    [{:db/id 654
+                                                                      :db/ident :user.property/owner
+                                                                      :block/name "owner"
+                                                                      :block/title "owner"
+                                                                      :logseq.property/type :node}]
+                                                                    [])
                                                     :thread-api/apply-outliner-ops (let [[_ ops _] args]
                                                                                      (reset! created?* true)
                                                                                      (reset! ops* ops)
@@ -2428,19 +2424,15 @@
                                transport/invoke (fn [_ method _ args]
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
-                                                                       (cond
-                                                                         (= lookup 4242)
+                                                                       (if (= lookup 4242)
                                                                          {:db/id 4242
                                                                           :block/uuid tag-uuid
                                                                           :block/name "project"
                                                                           :block/title "Project"
                                                                           :block/tags [{:db/ident :logseq.class/Tag}]}
-
-                                                                         (= lookup [:block/name "project renamed"])
-                                                                         {}
-
-                                                                         :else
                                                                          {}))
+                                                    ;; pull-tag-by-name: no existing tag named "project renamed"
+                                                    :thread-api/q []
                                                     :thread-api/apply-outliner-ops (let [[_ ops _] args]
                                                                                      (swap! apply-calls* inc)
                                                                                      (reset! ops* ops)
@@ -2476,6 +2468,11 @@
                                                                           :block/title "Quote"
                                                                           :block/tags [{:db/ident :logseq.class/Tag}]}
                                                                          {}))
+                                                    ;; pull-tag-by-name for rename target check
+                                                    :thread-api/q [{:db/id 4242
+                                                                    :block/name "quote"
+                                                                    :block/title "Quote"
+                                                                    :block/tags [{:db/ident :logseq.class/Tag}]}]
                                                     :thread-api/apply-outliner-ops (do
                                                                                      (swap! apply-calls* inc)
                                                                                      {:result :ok})
@@ -2488,7 +2485,7 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
-(deftest test-execute-upsert-tag-by-id-with-name-rejects-existing-non-tag-page
+(deftest test-execute-upsert-tag-by-id-rename-proceeds-when-only-non-tag-page-exists
   (async done
          (let [apply-calls* (atom 0)
                action {:type :upsert-tag
@@ -2501,30 +2498,23 @@
                                transport/invoke (fn [_ method _ args]
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
-                                                                       (cond
-                                                                         (= lookup 4242)
+                                                                       (if (= lookup 4242)
                                                                          {:db/id 4242
                                                                           :block/uuid (uuid "00000000-0000-0000-0000-000000004242")
                                                                           :block/name "project"
                                                                           :block/title "Project"
                                                                           :block/tags [{:db/ident :logseq.class/Tag}]}
-
-                                                                         (= lookup [:block/name "project renamed"])
-                                                                         {:db/id 5000
-                                                                          :block/name "project renamed"
-                                                                          :block/title "Project Renamed"
-                                                                          :block/tags [{:db/ident :logseq.class/Page}]}
-
-                                                                         :else
                                                                          {}))
+                                                    ;; pull-tag-by-name: no tag named "project renamed" (only a non-tag page)
+                                                    :thread-api/q []
                                                     :thread-api/apply-outliner-ops (do
                                                                                      (swap! apply-calls* inc)
                                                                                      {:result :ok})
                                                     (throw (ex-info "unexpected invoke" {:method method :args args}))))]
                  (p/let [result (commands/execute action {})]
-                   (is (= :error (:status result)))
-                   (is (= :tag-name-conflict (get-in result [:error :code])))
-                   (is (= 0 @apply-calls*))))
+                   (is (= :ok (:status result)))
+                   (is (= [4242] (get-in result [:data :result])))
+                   (is (= 1 @apply-calls*))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
@@ -2542,23 +2532,19 @@
                                transport/invoke (fn [_ method _ args]
                                                   (case method
                                                     :thread-api/pull (let [[_ _ lookup] args]
-                                                                       (cond
-                                                                         (= lookup 4242)
+                                                                       (if (= lookup 4242)
                                                                          {:db/id 4242
                                                                           :block/uuid (uuid "00000000-0000-0000-0000-000000004242")
                                                                           :block/name "project"
                                                                           :block/title "Project"
                                                                           :block/tags [{:db/ident :logseq.class/Tag}]}
-
-                                                                         (= lookup [:block/name "project renamed"])
-                                                                         {:db/id 9001
-                                                                          :block/uuid (uuid "00000000-0000-0000-0000-000000009001")
-                                                                          :block/name "project renamed"
-                                                                          :block/title "Project Renamed"
-                                                                          :block/tags [{:db/ident :logseq.class/Tag}]}
-
-                                                                         :else
                                                                          {}))
+                                                    ;; pull-tag-by-name: existing tag named "project renamed"
+                                                    :thread-api/q [{:db/id 9001
+                                                                    :block/uuid (uuid "00000000-0000-0000-0000-000000009001")
+                                                                    :block/name "project renamed"
+                                                                    :block/title "Project Renamed"
+                                                                    :block/tags [{:db/ident :logseq.class/Tag}]}]
                                                     :thread-api/apply-outliner-ops (do
                                                                                      (swap! apply-calls* inc)
                                                                                      {:result :ok})
