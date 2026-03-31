@@ -500,11 +500,20 @@
               (when (seq txs)
                 (transact-with-op! conn txs {:outliner-op :save-block})))))))))
 
+(defn- validate-batch-set-property
+  [conn block-eids property-id v]
+  (when (= property-id :block/tags)
+    (outliner-validate/validate-tags-property @conn block-eids v))
+  (when (= property-id :logseq.property.class/extends)
+    (outliner-validate/validate-extends-property
+     @conn
+     (if (number? v) (d/entity @conn v) v)
+     (map #(d/entity @conn %) block-eids))))
+
 (defn batch-set-property!
   "Sets properties for multiple blocks. Automatically handles property value refs.
-   Does no validation of property values.
-   For :many properties, passing a collection replaces existing values in one
-   call, while passing a scalar preserves add-single-value behavior."
+   Does no validation of property values. For :many properties, passing a collection
+   replaces existing values in one call, while passing a scalar preserves add-single-value behavior."
   ([conn block-ids property-id v]
    (batch-set-property! conn block-ids property-id v {}))
   ([conn block-ids property-id v options]
@@ -516,14 +525,8 @@
        (if (nil? v)
      (batch-remove-property! conn block-ids property-id)
      (let [block-eids (map ->eid block-ids)
-           _ (when (= property-id :block/tags)
-               (outliner-validate/validate-tags-property @conn block-eids v))
+           _ (validate-batch-set-property conn block-eids property-id v)
            property (d/entity @conn property-id)
-           _ (when (= (:db/ident property) :logseq.property.class/extends)
-               (outliner-validate/validate-extends-property
-                @conn
-                (if (number? v) (d/entity @conn v) v)
-                (map #(d/entity @conn %) block-eids)))
            _ (when (nil? property)
                (throw (ex-info (str "Property " property-id " doesn't exist yet") {:property-id property-id})))
            property-type (get property :logseq.property/type :default)

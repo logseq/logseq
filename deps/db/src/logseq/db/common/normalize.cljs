@@ -131,16 +131,16 @@
                        tx-data)]
     (concat retract-ops datoms-for-retracted-eids others)))
 
+(defn- added-title?
+  [d]
+  (when (= (count d) 5)
+    (let [[e a _v _t added] d]
+      (when (and added (= :block/title a))
+        e))))
+
 (defn normalize-tx-data
   [db-after db-before tx-data]
-  (let [title-updated-entities
-        (->> tx-data
-             (keep (fn [d]
-                     (when (= (count d) 5)
-                       (let [[e a _v _t added] d]
-                         (when (and added (= :block/title a))
-                           e)))))
-             set)]
+  (let [title-updated-entities (->> tx-data (keep added-title?) set)]
     (->> tx-data
          remove-conflict-datoms
          (replace-attr-retract-with-retract-entity db-after)

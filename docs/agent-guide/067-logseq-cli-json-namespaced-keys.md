@@ -202,7 +202,7 @@ A payload map may contain multiple namespaced keys sharing the same leaf name ac
 
 Nested maps inside vectors and vectors inside maps must preserve key semantics recursively.
 
-Keyword values that are real user strings in data must not be mis-typed by the serializer.
+Keyword values that are real user strings in data must not be mistyped by the serializer.
 
 String keys containing `/` must remain unchanged and must not be reinterpreted as keywords.
 
