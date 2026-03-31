@@ -332,6 +332,7 @@
 (deftest list-graph-items-ignores-non-graph-directories
   (let [data-dir (node-helper/create-tmp-dir "cli-list-graphs-ignore")
         _ (doseq [dir ["alpha"
+                       "backup"
                        "foo~2G"
                        "Unlinked graphs"
                        "logseq_local_1"]]

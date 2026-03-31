@@ -1,6 +1,8 @@
 (ns logseq.cli.command.graph
   "Graph-related CLI commands."
-  (:require [cljs.pprint :as pprint]
+  (:require ["fs" :as fs]
+            ["path" :as node-path]
+            [cljs.pprint :as pprint]
             [clojure.string :as string]
             [logseq.cli.command.core :as core]
             [logseq.cli.common :as cli-common]
@@ -8,6 +10,7 @@
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
             [logseq.common.graph :as common-graph]
+            [logseq.common.graph-dir :as graph-dir]
             [promesa.core :as p]))
 
 (def ^:private graph-export-spec
@@ -30,6 +33,19 @@
          :alias :f
          :default false}})
 
+(def ^:private graph-backup-create-spec
+  {:name {:desc "Optional backup label"}})
+
+(def ^:private graph-backup-restore-spec
+  {:src {:desc "Source backup name"}
+   :dst {:desc "Destination graph name"}})
+
+(def ^:private graph-backup-remove-spec
+  {:src {:desc "Source backup name"}})
+
+(def ^:private backup-root-dir-name "backup")
+(def ^:private backup-db-file-name "db.sqlite")
+
 (def entries
   [(core/command-entry ["graph" "list"] :graph-list "List graphs" {})
    (core/command-entry ["graph" "create"] :graph-create "Create graph" {}
@@ -46,7 +62,15 @@
    (core/command-entry ["graph" "export"] :graph-export "Export graph" graph-export-spec
                        {:examples ["logseq graph export --graph my-graph --type edn --file /tmp/my-graph.edn"]})
    (core/command-entry ["graph" "import"] :graph-import "Import graph" graph-import-spec
-                       {:examples ["logseq graph import --graph my-graph --type edn --input /tmp/my-graph.edn"]})])
+                       {:examples ["logseq graph import --graph my-graph --type edn --input /tmp/my-graph.edn"]})
+   (core/command-entry ["graph" "backup" "list"] :graph-backup-list "List graph backups" {})
+   (core/command-entry ["graph" "backup" "create"] :graph-backup-create "Create graph backup" graph-backup-create-spec
+                       {:examples ["logseq graph backup create --graph my-graph"
+                                   "logseq graph backup create --graph my-graph --name nightly"]})
+   (core/command-entry ["graph" "backup" "restore"] :graph-backup-restore "Restore graph backup" graph-backup-restore-spec
+                       {:examples ["logseq graph backup restore --src my-graph-nightly --dst my-graph-restore"]})
+   (core/command-entry ["graph" "backup" "remove"] :graph-backup-remove "Remove graph backup" graph-backup-remove-spec
+                       {:examples ["logseq graph backup remove --src my-graph-nightly"]})])
 
 (def ^:private graph-info-kv-query
   '[:find ?ident ?value
@@ -65,6 +89,100 @@
   {:ok? false
    :error {:code :missing-graph
            :message "graph name is required"}})
+
+(defn- pad2
+  [value]
+  (if (< value 10)
+    (str "0" value)
+    (str value)))
+
+(defn- utc-timestamp
+  []
+  (let [now (js/Date.)]
+    (str (.getUTCFullYear now)
+         (pad2 (inc (.getUTCMonth now)))
+         (pad2 (.getUTCDate now))
+         "T"
+         (pad2 (.getUTCHours now))
+         (pad2 (.getUTCMinutes now))
+         (pad2 (.getUTCSeconds now))
+         "Z")))
+
+(defn- trimmed-option
+  [value]
+  (some-> value str string/trim not-empty))
+
+(defn build-backup-list-action
+  [repo]
+  (if-not (seq repo)
+    {:ok? false
+     :error {:code :missing-repo
+             :message "repo is required for backup list"}}
+    {:ok? true
+     :action {:type :graph-backup-list
+              :command :graph-backup-list
+              :repo repo
+              :graph (core/repo->graph repo)}}))
+
+(defn build-backup-create-action
+  [repo name]
+  (if-not (seq repo)
+    {:ok? false
+     :error {:code :missing-repo
+             :message "repo is required for backup create"}}
+    (let [graph (core/repo->graph repo)
+          name-part (trimmed-option name)
+          backup-name (if (seq name-part)
+                        (str graph "-" name-part "-" (utc-timestamp))
+                        (str graph "-" (utc-timestamp)))]
+      {:ok? true
+       :action {:type :graph-backup-create
+                :command :graph-backup-create
+                :repo repo
+                :graph graph
+                :backup-name backup-name}})))
+
+(defn build-backup-restore-action
+  [source-repo src dst]
+  (let [src (trimmed-option src)
+        dst (trimmed-option dst)
+        destination-repo (core/resolve-repo dst)]
+    (cond
+      (not (seq source-repo))
+      {:ok? false
+       :error {:code :missing-repo
+               :message "repo is required for backup restore"}}
+
+      (not (seq destination-repo))
+      {:ok? false
+       :error {:code :missing-dst
+               :message "destination graph name is required"}}
+
+      :else
+      {:ok? true
+       :action {:type :graph-backup-restore
+                :command :graph-backup-restore
+                :repo destination-repo
+                :graph (core/repo->graph destination-repo)
+                :source-repo source-repo
+                :source-graph (core/repo->graph source-repo)
+                :src src
+                :dst dst
+                :allow-missing-graph true
+                :require-missing-graph true}})))
+
+(defn build-backup-remove-action
+  [repo src]
+  (if-not (seq repo)
+    {:ok? false
+     :error {:code :missing-repo
+             :message "repo is required for backup remove"}}
+    {:ok? true
+     :action {:type :graph-backup-remove
+              :command :graph-backup-remove
+              :repo repo
+              :graph (core/repo->graph repo)
+              :src (trimmed-option src)}}))
 
 (defn build-graph-action
   [command graph repo options]
@@ -164,6 +282,68 @@
     :legacy-undecodable (:legacy-dir item)
     nil))
 
+(defn- backup-root-path
+  [config repo]
+  (when-let [graph-dir-name (graph-dir/repo->encoded-graph-dir-name repo)]
+    (node-path/join (cli-server/resolve-data-dir config)
+                    graph-dir-name
+                    backup-root-dir-name)))
+
+(defn- backup-dir-name
+  [backup-name]
+  (graph-dir/graph-dir-key->encoded-dir-name backup-name))
+
+(defn- backup-dir-path
+  [config repo backup-name]
+  (some->> (backup-dir-name backup-name)
+           (node-path/join (backup-root-path config repo))))
+
+(defn- backup-db-path
+  [config repo backup-name]
+  (some-> (backup-dir-path config repo backup-name)
+          (node-path/join backup-db-file-name)))
+
+(defn- backup-metadata
+  [^js dirent root-path]
+  (let [dir-name (.-name dirent)
+        backup-name (graph-dir/decode-graph-dir-name dir-name)
+        db-path (node-path/join root-path dir-name backup-db-file-name)]
+    (when (and (seq backup-name)
+               (fs/existsSync db-path))
+      (let [stat (fs/statSync db-path)]
+        (when (.isFile stat)
+          {:name backup-name
+           :created-at (.-mtimeMs stat)
+           :size-bytes (.-size stat)})))))
+
+(defn- list-backups
+  [config repo]
+  (if-let [root-path (backup-root-path config repo)]
+    (let [dirents (if (fs/existsSync root-path)
+                    (fs/readdirSync root-path #js {:withFileTypes true})
+                    #js [])]
+      (->> dirents
+           (filter #(.isDirectory ^js %))
+           (keep #(backup-metadata % root-path))
+           (sort-by (juxt :name :created-at))
+           vec))
+    []))
+
+(defn- next-backup-target
+  [config repo base-name]
+  (loop [suffix 0]
+    (let [backup-name (if (zero? suffix)
+                        base-name
+                        (str base-name "-" suffix))
+          dir-path (backup-dir-path config repo backup-name)]
+      (if (and (seq dir-path)
+               (fs/existsSync dir-path))
+        (recur (inc suffix))
+        {:backup-name backup-name
+         :dir-path dir-path
+         :db-path (when (seq dir-path)
+                    (node-path/join dir-path backup-db-file-name))}))))
+
 (defn execute-graph-list
   [_action config]
   (let [graph-items (->> (cli-server/list-graph-items config)
@@ -185,6 +365,57 @@
              :data {:graphs graphs
                     :graph-items graph-items}}
       (pos? legacy-count) (assoc :human {:graph-list {:legacy-count legacy-count}}))))
+
+(defn execute-graph-backup-list
+  [action config]
+  {:status :ok
+   :data {:backups (list-backups config (:repo action))}})
+
+(defn execute-graph-backup-create
+  [action config]
+  (p/let [cfg (cli-server/ensure-server! config (:repo action))
+          {:keys [backup-name dir-path db-path]} (next-backup-target config (:repo action) (:backup-name action))
+          _ (when-not (seq dir-path)
+              (throw (ex-info "invalid backup target path"
+                              {:code :invalid-backup-path
+                               :backup-name backup-name})))
+          _ (fs/mkdirSync dir-path #js {:recursive true})
+          _ (transport/invoke cfg
+                              :thread-api/backup-db-sqlite
+                              true
+                              [(:repo action) db-path])]
+    {:status :ok
+     :data {:backup-name backup-name
+            :path db-path
+            :message (str "Created backup " backup-name)}}))
+
+(declare execute-graph-import)
+
+(defn execute-graph-backup-restore
+  [action config]
+  (let [src-path (backup-db-path config (:source-repo action) (:src action))]
+    (if-not (and (seq src-path)
+                 (fs/existsSync src-path))
+      {:status :error
+       :error {:code :backup-not-found
+               :message (str "backup not found: " (:src action))}}
+      (execute-graph-import (assoc action
+                                   :import-type "sqlite"
+                                   :input src-path)
+                            config))))
+
+(defn execute-graph-backup-remove
+  [action config]
+  (let [dir-path (backup-dir-path config (:repo action) (:src action))]
+    (if-not (and (seq dir-path)
+                 (fs/existsSync dir-path))
+      {:status :error
+       :error {:code :backup-not-found
+               :message (str "backup not found: " (:src action))}}
+      (do
+        (fs/rmSync dir-path #js {:recursive true :force true})
+        {:status :ok
+         :data {:message (str "Removed backup " (:src action))}}))))
 
 (defn- format-validation-errors
   [errors]

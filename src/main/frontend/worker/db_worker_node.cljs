@@ -170,6 +170,7 @@
   #{:thread-api/transact
     :thread-api/import-db
     :thread-api/import-db-base64
+    :thread-api/backup-db-sqlite
     :thread-api/db-sync-import-kvs-rows
     :thread-api/import-edn
     :thread-api/unsafe-unlink-db

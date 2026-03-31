@@ -777,6 +777,69 @@
                                 :else
                                 (done)))))))))
 
+(deftest db-worker-node-backup-db-sqlite
+  (async done
+         (let [daemon-a (atom nil)
+               daemon-b (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-backup-sqlite")
+               repo-a (str "logseq_db_backup_sqlite_a_" (subs (str (random-uuid)) 0 8))
+               repo-b (str "logseq_db_backup_sqlite_b_" (subs (str (random-uuid)) 0 8))
+               backup-path (node-path/join data-dir "backup" "snapshot.sqlite")
+               now (js/Date.now)
+               page-uuid (random-uuid)]
+           (-> (p/let [{:keys [host port stop!]} (start-daemon! {:data-dir data-dir
+                                                                 :repo repo-a})
+                       _ (reset! daemon-a {:stop! stop!})
+                       _ (invoke host port "thread-api/create-or-open-db" [repo-a {}])
+                       _ (invoke host port "thread-api/transact"
+                                 [repo-a
+                                  [{:block/uuid page-uuid
+                                    :block/title "Backup Source Page"
+                                    :block/name "backup-source-page"
+                                    :block/tags #{:logseq.class/Page}
+                                    :block/created-at now
+                                    :block/updated-at now}]
+                                  {}
+                                  nil])
+                       backup-result (invoke host port "thread-api/backup-db-sqlite" [repo-a backup-path])
+                       _ (is (= backup-path (:path backup-result)))
+                       _ (is (fs/existsSync backup-path))
+                       backup-base64 (.toString (fs/readFileSync backup-path) "base64")]
+                 (is (string? backup-base64))
+                 (is (pos? (count backup-base64)))
+                 (p/let [_ ((:stop! @daemon-a))
+                         {:keys [host port stop!]} (start-daemon! {:data-dir data-dir
+                                                                   :repo repo-b})
+                         _ (reset! daemon-b {:stop! stop!})
+                         _ (invoke host port "thread-api/import-db-base64" [repo-b backup-base64])
+                         _ (invoke host port "thread-api/create-or-open-db" [repo-b {}])
+                         result (invoke host port "thread-api/q"
+                                        [repo-b
+                                         ['[:find ?e
+                                            :in $ ?title
+                                            :where [?e :block/title ?title]]
+                                          "Backup Source Page"]])]
+                   (is (seq result))))
+               (p/catch (fn [e]
+                          (println "[db-worker-node-test] backup-sqlite error:" e)
+                          (is false (str e))))
+               (p/finally (fn []
+                            (let [stop-a (:stop! @daemon-a)
+                                  stop-b (:stop! @daemon-b)]
+                              (cond
+                                (and stop-a stop-b)
+                                (-> (stop-a)
+                                    (p/finally (fn [] (-> (stop-b) (p/finally (fn [] (done)))))))
+
+                                stop-a
+                                (-> (stop-a) (p/finally (fn [] (done))))
+
+                                stop-b
+                                (-> (stop-b) (p/finally (fn [] (done))))
+
+                                :else
+                                (done)))))))))
+
 (deftest db-worker-node-repo-mismatch-test
   (async done
          (let [daemon (atom nil)
@@ -840,6 +903,35 @@
                                             :lock-id "non-owner-lock")
                        _ (fs/writeFileSync lock-file (js/JSON.stringify (clj->js tampered-lock)))
                        {:keys [status body]} (invoke-raw host port "thread-api/import-db-base64" [repo export-base64])
+                       parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
+                 (is (= 409 status))
+                 (is (= false (:ok parsed)))
+                 (is (= "repo-locked" (get-in parsed [:error :code]))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally (fn []
+                            (if-let [stop! (:stop! @daemon)]
+                              (-> (stop!) (p/finally (fn [] (done))))
+                              (done))))))))
+
+(deftest db-worker-node-backup-write-mutation-fails-for-non-owner-pid
+  (async done
+         (let [daemon (atom nil)
+               data-dir (node-helper/create-tmp-dir "db-worker-backup-write-lease-pid")
+               repo (str "logseq_db_backup_write_lease_pid_" (subs (str (random-uuid)) 0 8))
+               lock-file (lock-path data-dir repo)
+               backup-path (node-path/join data-dir "backup" "non-owner.sqlite")]
+           (-> (p/let [{:keys [host port stop!]} (start-daemon! {:data-dir data-dir
+                                                                 :repo repo})
+                       _ (reset! daemon {:stop! stop!})
+                       _ (invoke host port "thread-api/create-or-open-db" [repo {}])
+                       lock-contents (js->clj (js/JSON.parse (.toString (fs/readFileSync lock-file) "utf8"))
+                                              :keywordize-keys true)
+                       tampered-lock (assoc lock-contents
+                                            :pid (inc (:pid lock-contents))
+                                            :lock-id "non-owner-lock")
+                       _ (fs/writeFileSync lock-file (js/JSON.stringify (clj->js tampered-lock)))
+                       {:keys [status body]} (invoke-raw host port "thread-api/backup-db-sqlite" [repo backup-path])
                        parsed (js->clj (js/JSON.parse body) :keywordize-keys true)]
                  (is (= 409 status))
                  (is (= false (:ok parsed)))

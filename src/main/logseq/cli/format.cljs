@@ -672,6 +672,30 @@
   [_context {:keys [message]}]
   message)
 
+(defn- format-graph-backup-list
+  [backups now-ms]
+  (format-counted-table
+   ["NAME" "CREATED-AT" "SIZE-BYTES"]
+   (mapv (fn [{:keys [name created-at size-bytes]}]
+           [(or name "-")
+            (human-ago created-at now-ms)
+            (or size-bytes 0)])
+         (or backups []))))
+
+(defn- format-graph-backup-create
+  [context data]
+  (let [backup-name (or (:backup-name data) (:backup-name context) "-")
+        graph (or (:graph context) "-")]
+    (str "Created backup: " backup-name " (graph: " graph ")")))
+
+(defn- format-graph-backup-restore
+  [{:keys [src dst]}]
+  (str "Restored backup " (or src "-") " -> " (or dst "-")))
+
+(defn- format-graph-backup-remove
+  [{:keys [src]}]
+  (str "Removed backup: " (or src "-")))
+
 (defn- format-graph-action
   [command {:keys [graph]}]
   (let [verb (case command
@@ -718,6 +742,10 @@
       (case command
         :graph-list (format-graph-list data {:current-graph graph
                                              :data-dir data-dir})
+        :graph-backup-list (format-graph-backup-list (:backups data) now-ms)
+        :graph-backup-create (format-graph-backup-create context data)
+        :graph-backup-restore (format-graph-backup-restore context)
+        :graph-backup-remove (format-graph-backup-remove context)
         :graph-info (format-graph-info data now-ms)
         (:graph-create :graph-switch :graph-remove :graph-validate)
         (format-graph-action command context)

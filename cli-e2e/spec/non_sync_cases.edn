@@ -113,6 +113,27 @@
             "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
   :tags [:graph]}
 
+ {:id "graph-backup-lifecycle-json"
+  :vars {:restore-graph "backup-restore"
+         :restore-graph-arg "backup-restore"}
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page BackupSeed >/dev/null"]
+  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph backup create --graph {{graph-arg}} --name nightly >/dev/null"
+         "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph backup list"
+         "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph backup restore --src \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph backup list | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"backups\"][0][\"name\"])')\" --dst {{restore-graph-arg}} >/dev/null"
+         "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph backup remove --src \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph backup list | python3 -c 'import sys,json; print(json.load(sys.stdin)[\"data\"][\"backups\"][0][\"name\"])')\""]
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"}}
+  :covers {:commands ["graph backup create"
+                      "graph backup list"
+                      "graph backup restore"
+                      "graph backup remove"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :graph ["--name" "--src" "--dst"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"
+            "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{restore-graph-arg}}"]
+  :tags [:graph]}
+
  {:id "page-upsert-and-list-json"
   :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"]
   :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"

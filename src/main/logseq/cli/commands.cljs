@@ -88,6 +88,20 @@
            :message "file is required"}
    :summary summary})
 
+(defn- missing-src-result
+  [summary]
+  {:ok? false
+   :error {:code :missing-src
+           :message "src is required"}
+   :summary summary})
+
+(defn- missing-dst-result
+  [summary]
+  {:ok? false
+   :error {:code :missing-dst
+           :message "dst is required"}
+   :summary summary})
+
 (defn- missing-query-result
   [summary]
   {:ok? false
@@ -291,6 +305,18 @@
       (and (= command :graph-import) (not (seq (:input opts))))
       (missing-input-result summary)
 
+      (and (= command :graph-backup-restore)
+           (not (seq (some-> (:src opts) string/trim))))
+      (missing-src-result summary)
+
+      (and (= command :graph-backup-restore)
+           (not (seq (some-> (:dst opts) string/trim))))
+      (missing-dst-result summary)
+
+      (and (= command :graph-backup-remove)
+           (not (seq (some-> (:src opts) string/trim))))
+      (missing-src-result summary)
+
       (and (#{:server-status :server-start :server-stop :server-restart} command)
            (not (seq (:graph opts))))
       (missing-graph-result summary)
@@ -315,31 +341,49 @@
 
 ;; CLI error handling is in logseq.cli.command.core.
 
-(def ^:private group-commands
+(defn- cmds-prefix?
+  [prefix cmds]
+  (and (<= (count prefix) (count cmds))
+       (= prefix (subvec cmds 0 (count prefix)))))
+
+(def ^:private group-command-paths
   (->> table
-       (map :cmds)
-       (group-by first)
-       (keep (fn [[group cmds]]
-               (when (some #(> (count %) 1) cmds)
-                 group)))
+       (mapcat (fn [{:keys [cmds]}]
+                 (let [cmds (vec cmds)]
+                   (for [n (range 1 (count cmds))]
+                     (subvec cmds 0 n)))))
+       set))
+
+(def ^:private exact-command-paths
+  (->> table
+       (mapv (comp vec :cmds))
        set))
 
 (def ^:private help-flags
   #{"-h" "--help"})
 
-(defn- group-help-invocation?
+(defn- group-help-path
   [args]
-  (let [group (first args)
-        trailing-args (rest args)]
-    (and (contains? group-commands group)
-         (or (empty? trailing-args)
-             (every? help-flags trailing-args)))))
+  (let [args (vec args)
+        candidates (->> group-command-paths
+                        (filter #(cmds-prefix? % args))
+                        (sort-by count >))]
+    (some (fn [path]
+            (let [trailing-args (subvec args (count path))
+                  exact-command? (contains? exact-command-paths (vec path))]
+              (when (and (or (empty? trailing-args)
+                             (every? help-flags trailing-args))
+                         (or (not exact-command?)
+                             (= 1 (count path))))
+                path)))
+          candidates)))
 
 (defn parse-args
   [raw-args]
   (let [summary (command-core/top-level-summary table)
         {:keys [opts args]} (command-core/parse-leading-global-opts raw-args)
-        {:keys [args id-from-stdin?]} (inject-stdin-id-arg (vec args))]
+        {:keys [args id-from-stdin?]} (inject-stdin-id-arg (vec args))
+        group-path (group-help-path args)]
     (cond
       (:version opts)
       (command-core/ok-result :version opts [] summary)
@@ -347,8 +391,8 @@
       (empty? args)
       (command-core/help-result summary)
 
-      (group-help-invocation? args)
-      (command-core/help-result (command-core/group-summary (first args) table))
+      group-path
+      (command-core/help-result (command-core/group-summary group-path table))
 
       :else
       (try
@@ -362,8 +406,8 @@
           (let [{:keys [cause] :as data} (ex-data e)]
             (cond
               (= cause :input-exhausted)
-              (if (group-help-invocation? args)
-                (command-core/help-result (command-core/group-summary (first args) table))
+              (if-let [path (group-help-path args)]
+                (command-core/help-result (command-core/group-summary path table))
                 (command-core/help-result summary))
 
               (= cause :no-match)
@@ -429,6 +473,18 @@
       (case command
         (:graph-list :graph-create :graph-switch :graph-remove :graph-validate :graph-info)
         (graph-command/build-graph-action command graph repo options)
+
+        :graph-backup-list
+        (graph-command/build-backup-list-action repo)
+
+        :graph-backup-create
+        (graph-command/build-backup-create-action repo (:name options))
+
+        :graph-backup-restore
+        (graph-command/build-backup-restore-action repo (:src options) (:dst options))
+
+        :graph-backup-remove
+        (graph-command/build-backup-remove-action repo (:src options))
 
         :graph-export
         (let [export-type (graph-command/normalize-import-export-type (:type options))]
@@ -511,6 +567,10 @@
                        :else
                        (case (:type action)
                          :graph-list (graph-command/execute-graph-list action config)
+                         :graph-backup-list (graph-command/execute-graph-backup-list action config)
+                         :graph-backup-create (graph-command/execute-graph-backup-create action config)
+                         :graph-backup-restore (graph-command/execute-graph-backup-restore action config)
+                         :graph-backup-remove (graph-command/execute-graph-backup-remove action config)
                          :invoke (graph-command/execute-invoke action config)
                          :graph-remove (graph-command/execute-graph-remove action config)
                          :graph-switch (graph-command/execute-graph-switch action config)
@@ -561,5 +621,6 @@
                                              :schema :query
                                              :source :target :update-tags :update-properties
                                              :remove-tags :remove-properties
+                                             :src :dst :backup-name
                                              :export-type :file :import-type :input
                                              :graph-id :email :config-key :config-value])))))

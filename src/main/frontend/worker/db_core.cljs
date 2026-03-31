@@ -1055,6 +1055,22 @@
                      (js/Buffer.from data))]
         (.toString buffer "base64")))))
 
+(def-thread-api :thread-api/backup-db-sqlite
+  [repo dst-path]
+  (when-not (string/blank? repo)
+    (let [db (worker-state/get-sqlite-conn repo :db)
+          backup-db-fn (get-in (platform/current) [:sqlite :backup-db])]
+      (when-not db
+        (throw (ex-info "graph not opened" {:code :graph-not-opened
+                                             :repo repo})))
+      (when-not (fn? backup-db-fn)
+        (throw (ex-info "platform sqlite backup not supported"
+                        {:code :backup-not-supported
+                         :repo repo})))
+      (.exec db "PRAGMA wal_checkpoint(2)")
+      (p/let [_ (backup-db-fn db dst-path)]
+        {:path dst-path}))))
+
 (def-thread-api :thread-api/import-db
   [repo data]
   (when-not (string/blank? repo)

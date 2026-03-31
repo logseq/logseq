@@ -28,6 +28,17 @@
 (def ^:private DatabaseSync
   (resolve-database-sync-ctor))
 
+(defn- resolve-sqlite-backup-fn
+  []
+  (or (gobj/get node-sqlite "backup")
+      (some-> (gobj/get node-sqlite "default")
+              (gobj/get "backup"))
+      (throw (ex-info "node:sqlite backup function missing"
+                      {:module-keys (js->clj (js/Object.keys node-sqlite))}))))
+
+(def ^:private sqlite-backup-fn
+  (resolve-sqlite-backup-fn))
+
 (defn- expand-home
   [path]
   (if (string/starts-with? path "~")
@@ -64,6 +75,8 @@
     (and (some? data) (some? (.-buffer data))) (js/Buffer.from (.-buffer data))
     :else (js/Buffer.from (str data))))
 
+(def ^:private backup-root-dir-name "backup")
+
 (defn- list-graphs
   [data-dir]
   (let [dir? #(and % (.isDirectory %))]
@@ -74,7 +87,8 @@
                                (db-lock/decode-canonical-graph-dir-key (.-name dirent)))
                              db-dirs)]
       (->> graph-names
-           (remove #(= % common-config/unlinked-graphs-dir))
+           (remove #(or (= % common-config/unlinked-graphs-dir)
+                        (= % backup-root-dir-name)))
            (filter some?)
            (vec)))))
 
@@ -163,8 +177,15 @@
       (finally
         (swap! tx-depth dec)))))
 
+(defn- backup-db!
+  [write-guard-fn ^js db path]
+  (p/let [_ (when write-guard-fn
+              (write-guard-fn))
+          _ (ensure-dir! (node-path/dirname path))]
+    (sqlite-backup-fn db path)))
+
 (defn- wrap-node-sqlite-db
-  [db]
+  [db write-guard-fn]
   (let [wrapper (js-obj)
         closed? (atom false)
         tx-depth (atom 0)
@@ -175,6 +196,9 @@
             (with-transaction db tx-depth savepoint-seq
               (fn []
                 (f wrapper)))))
+    (set! (.-backup wrapper)
+          (fn [path]
+            (backup-db! write-guard-fn db path)))
     (set! (.-close wrapper)
           (fn []
             (when-not @closed?
@@ -188,9 +212,9 @@
     wrapper))
 
 (defn- open-sqlite-db
-  [{:keys [path]}]
+  [write-guard-fn {:keys [path]}]
   (p/let [_ (ensure-dir! (node-path/dirname path))]
-    (wrap-node-sqlite-db (new DatabaseSync path))))
+    (wrap-node-sqlite-db (new DatabaseSync path) write-guard-fn)))
 
 (defn- install-opfs-pool
   [data-dir _sqlite pool-name]
@@ -328,9 +352,12 @@
                                      (event-fn type payload)))}
       :websocket {:connect websocket-connect}
       :sqlite {:init! (fn [] nil)
-               :open-db open-sqlite-db
+               :open-db (fn [opts] (open-sqlite-db write-guard-fn opts))
                :close-db (fn [db] (.close db))
                :exec (fn [db sql-or-opts] (.exec db sql-or-opts))
-               :transaction (fn [db f] (.transaction db f))}
+               :transaction (fn [db f] (.transaction db f))
+               :backup-db (fn [db path]
+                            (let [backup-fn (gobj/get db "backup")]
+                              (backup-fn path)))}
       :crypto {}
       :timers {:set-interval! (fn [f ms] (js/setInterval f ms))}})))
