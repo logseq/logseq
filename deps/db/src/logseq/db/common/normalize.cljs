@@ -109,8 +109,8 @@
 (defn- retract-entity-match-keys
   [e]
   (if (and (vector? e) (= :block/uuid (first e)))
-    (let [uuid (second e)]
-      #{e uuid (str uuid)})
+    (let [block-uuid (second e)]
+      #{e block-uuid (str block-uuid)})
     #{e}))
 
 (defn- reorder-retract-entity-first
