@@ -68,7 +68,9 @@
                                db/get-db (fn [] :db)
                                ldb/get-graph-schema-version (fn [_] {:major 65})
                                state/<invoke-db-worker (fn [& args]
-                                                         (swap! ensure-calls conj args)
+                                                         (when (= :thread-api/db-sync-ensure-user-rsa-keys
+                                                                  (first args))
+                                                           (swap! ensure-calls conj args))
                                                          (p/resolved {:public-key "pk"}))
                                db-sync/fetch-json (fn [url opts _]
                                                     (reset! fetch-called {:url url :opts opts})
@@ -110,7 +112,9 @@
                                db/get-db (fn [] :db)
                                ldb/get-graph-schema-version (fn [_] {:major 65})
                                state/<invoke-db-worker (fn [& args]
-                                                         (swap! ensure-calls conj args)
+                                                         (when (= :thread-api/db-sync-ensure-user-rsa-keys
+                                                                  (first args))
+                                                           (swap! ensure-calls conj args))
                                                          (p/resolved {:public-key "pk"}))
                                db-sync/fetch-json (fn [url opts _]
                                                     (reset! fetch-called {:url url :opts opts})
@@ -315,7 +319,9 @@
                                                                            :updated-at 2}]
                                                                  :user-rsa-keys-exists? true}))
                                state/<invoke-db-worker (fn [& args]
-                                                         (swap! ensure-calls conj args)
+                                                         (when (= :thread-api/db-sync-ensure-user-rsa-keys
+                                                                  (first args))
+                                                           (swap! ensure-calls conj args))
                                                          (p/resolved :ok))
                                state/set-state! (fn [k v]
                                                   (when (= k :rtc/graphs)
@@ -346,7 +352,9 @@
                                                     (p/resolved {:graphs []
                                                                  :user-rsa-keys-exists? false}))
                                state/<invoke-db-worker (fn [& args]
-                                                         (swap! ensure-calls conj args)
+                                                         (when (= :thread-api/db-sync-ensure-user-rsa-keys
+                                                                  (first args))
+                                                           (swap! ensure-calls conj args))
                                                          (p/resolved {:public-key "pk"}))
                                state/set-state! (fn [& _] nil)
                                repo-handler/refresh-repos! (fn [] nil)]
