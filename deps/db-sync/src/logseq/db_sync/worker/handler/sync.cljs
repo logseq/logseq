@@ -16,12 +16,12 @@
             [promesa.core :as p]))
 
 (def ^:private snapshot-download-batch-size 10000)
-(def ^:private snapshot-cache-control "private, max-age=300")
+;; (def ^:private snapshot-cache-control "private, max-age=300")
 (def ^:private snapshot-content-type "application/transit+json")
 (def ^:private snapshot-content-encoding "gzip")
 (def ^:private snapshot-uploading-meta-key :snapshot-uploading?)
 ;; 10m
-(def ^:private snapshot-multipart-part-size (* 10 1024 1024))
+;; (def ^:private snapshot-multipart-part-size (* 10 1024 1024))
 
 (defn parse-int [value]
   (when (some? value)
@@ -122,12 +122,12 @@
     (when (seq (or header-id param-id))
       (or header-id param-id))))
 
-(defn- snapshot-key [graph-id snapshot-id]
-  (str graph-id "/" snapshot-id ".snapshot"))
+;; (defn- snapshot-key [graph-id snapshot-id]
+;;   (str graph-id "/" snapshot-id ".snapshot"))
 
-(defn- snapshot-url [request graph-id snapshot-id]
-  (let [url (js/URL. (.-url request))]
-    (str (.-origin url) "/assets/" graph-id "/" snapshot-id ".snapshot")))
+;; (defn- snapshot-url [request graph-id snapshot-id]
+;;   (let [url (js/URL. (.-url request))]
+;;     (str (.-origin url) "/assets/" graph-id "/" snapshot-id ".snapshot")))
 
 (defn- snapshot-stream-url [request graph-id]
   (let [url (js/URL. (.-url request))]
@@ -144,27 +144,27 @@
                     {:type :db-sync/compression-not-supported})))
   (.pipeThrough stream (js/CompressionStream. snapshot-content-encoding)))
 
-(defn- <buffer-stream
-  [stream]
-  (p/let [resp (js/Response. stream)
-          buf (.arrayBuffer resp)]
-    buf))
+;; (defn- <buffer-stream
+;;   [stream]
+;;   (p/let [resp (js/Response. stream)
+;;           buf (.arrayBuffer resp)]
+;;     buf))
 
-(defn- ->uint8 [data]
-  (cond
-    (instance? js/Uint8Array data) data
-    (instance? js/ArrayBuffer data) (js/Uint8Array. data)
-    :else (js/Uint8Array. data)))
+;; (defn- ->uint8 [data]
+;;   (cond
+;;     (instance? js/Uint8Array data) data
+;;     (instance? js/ArrayBuffer data) (js/Uint8Array. data)
+;;     :else (js/Uint8Array. data)))
 
-(defn- concat-uint8 [^js a ^js b]
-  (cond
-    (nil? a) b
-    (nil? b) a
-    :else
-    (let [out (js/Uint8Array. (+ (.-byteLength a) (.-byteLength b)))]
-      (.set out a 0)
-      (.set out b (.-byteLength a))
-      out)))
+;; (defn- concat-uint8 [^js a ^js b]
+;;   (cond
+;;     (nil? a) b
+;;     (nil? b) a
+;;     :else
+;;     (let [out (js/Uint8Array. (+ (.-byteLength a) (.-byteLength b)))]
+;;       (.set out a 0)
+;;       (.set out b (.-byteLength a))
+;;       out)))
 
 (defn- frame-bytes
   [^js data]
@@ -209,41 +209,41 @@
                      (vreset! last-addr (first (peek batch)))
                      (.enqueue controller (frame-bytes payload))))))}))))
 
-(defn- upload-multipart!
-  [^js bucket key stream opts]
-  (p/let [^js upload (.createMultipartUpload bucket key opts)]
-    (let [reader (.getReader stream)]
-      (-> (p/loop [buffer nil
-                   part-number 1
-                   parts []]
-            (p/let [chunk (.read reader)]
-              (if (.-done chunk)
-                (cond
-                  (and buffer (pos? (.-byteLength buffer)))
-                  (p/let [^js resp (.uploadPart upload part-number buffer)
-                          parts (conj parts {:partNumber part-number :etag (.-etag resp)})]
-                    (p/let [_ (.complete upload (clj->js parts))]
-                      {:ok true}))
+;; (defn- upload-multipart!
+;;   [^js bucket key stream opts]
+;;   (p/let [^js upload (.createMultipartUpload bucket key opts)]
+;;     (let [reader (.getReader stream)]
+;;       (-> (p/loop [buffer nil
+;;                    part-number 1
+;;                    parts []]
+;;             (p/let [chunk (.read reader)]
+;;               (if (.-done chunk)
+;;                 (cond
+;;                   (and buffer (pos? (.-byteLength buffer)))
+;;                   (p/let [^js resp (.uploadPart upload part-number buffer)
+;;                           parts (conj parts {:partNumber part-number :etag (.-etag resp)})]
+;;                     (p/let [_ (.complete upload (clj->js parts))]
+;;                       {:ok true}))
 
-                  (seq parts)
-                  (p/let [_ (.complete upload (clj->js parts))]
-                    {:ok true})
+;;                   (seq parts)
+;;                   (p/let [_ (.complete upload (clj->js parts))]
+;;                     {:ok true})
 
-                  :else
-                  (p/let [_ (.abort upload)]
-                    (.put bucket key (js/Uint8Array. 0) opts)))
-                (let [value (.-value chunk)
-                      buffer (concat-uint8 buffer (->uint8 value))]
-                  (if (>= (.-byteLength buffer) snapshot-multipart-part-size)
-                    (let [part (.slice buffer 0 snapshot-multipart-part-size)
-                          rest-parts (.slice buffer snapshot-multipart-part-size (.-byteLength buffer))]
-                      (p/let [^js resp (.uploadPart upload part-number part)
-                              parts (conj parts {:partNumber part-number :etag (.-etag resp)})]
-                        (p/recur rest-parts (inc part-number) parts)))
-                    (p/recur buffer part-number parts))))))
-          (p/catch (fn [error]
-                     (.abort upload)
-                     (throw error)))))))
+;;                   :else
+;;                   (p/let [_ (.abort upload)]
+;;                     (.put bucket key (js/Uint8Array. 0) opts)))
+;;                 (let [value (.-value chunk)
+;;                       buffer (concat-uint8 buffer (->uint8 value))]
+;;                   (if (>= (.-byteLength buffer) snapshot-multipart-part-size)
+;;                     (let [part (.slice buffer 0 snapshot-multipart-part-size)
+;;                           rest-parts (.slice buffer snapshot-multipart-part-size (.-byteLength buffer))]
+;;                       (p/let [^js resp (.uploadPart upload part-number part)
+;;                               parts (conj parts {:partNumber part-number :etag (.-etag resp)})]
+;;                         (p/recur rest-parts (inc part-number) parts)))
+;;                     (p/recur buffer part-number parts))))))
+;;           (p/catch (fn [error]
+;;                      (.abort upload)
+;;                      (throw error)))))))
 
 (declare import-snapshot!)
 (defn- import-snapshot-stream! [^js self stream reset?]
