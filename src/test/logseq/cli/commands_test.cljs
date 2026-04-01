@@ -214,15 +214,6 @@
       (is (contains-bold? summary "search property"))
       (is (contains-bold? summary "search tag"))))
 
-  (testing "debug group shows subcommands"
-    (let [result (binding [style/*color-enabled?* true]
-                   (commands/parse-args ["debug"]))
-          summary (:summary result)
-          plain-summary (strip-ansi summary)]
-      (is (true? (:help? result)))
-      (is (string/includes? plain-summary "debug pull"))
-      (is (contains-bold? summary "debug pull"))))
-
   (testing "example group shows selectors"
     (let [result (binding [style/*color-enabled?* true]
                    (commands/parse-args ["example"]))
@@ -241,6 +232,15 @@
           lines (command-lines summary)]
       (is (seq lines))
       (is (every? #(not (string/includes? % "[options]")) lines)))))
+
+(deftest test-parse-args-help-debug-group
+  (let [result (binding [style/*color-enabled?* true]
+                 (commands/parse-args ["debug"]))
+        summary (:summary result)
+        plain-summary (strip-ansi summary)]
+    (is (true? (:help? result)))
+    (is (string/includes? plain-summary "debug pull"))
+    (is (contains-bold? summary "debug pull"))))
 
 (deftest test-parse-args-help-graph-backup-group
   (let [result (binding [style/*color-enabled?* true]
