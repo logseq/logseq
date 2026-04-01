@@ -649,8 +649,8 @@
     :else (str "Removed block (repo: " repo ")")))
 
 (defn- format-remove-page
-  [{:keys [repo name]}]
-  (str "Removed page: " name " (repo: " repo ")"))
+  [{:keys [repo page]}]
+  (str "Removed page: " page " (repo: " repo ")"))
 
 (defn- format-remove-tag
   [{:keys [repo name id]}]

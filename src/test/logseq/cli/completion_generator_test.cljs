@@ -139,8 +139,8 @@
         page-entry (first (filter #(= :remove-page (:command %)) entries))
         tag-entry (first (filter #(= :remove-tag (:command %)) entries))
         property-entry (first (filter #(= :remove-property (:command %)) entries))]
-    (testing "remove-page :name has :complete :pages"
-      (is (= :pages (get-in page-entry [:spec :name :complete]))))
+    (testing "remove-page :page has :complete :pages"
+      (is (= :pages (get-in page-entry [:spec :page :complete]))))
     (testing "remove-tag :name has :complete :tags"
       (is (= :tags (get-in tag-entry [:spec :name :complete]))))
     (testing "remove-property :name has :complete :properties"
@@ -429,9 +429,10 @@
     (testing "query spec has :name with :complete :queries"
       (let [query-entry (first (filter #(= :query (:command %)) entries))]
         (is (= :queries (get-in query-entry [:spec :name :complete])))))
-    (testing "remove page spec has :name with :complete :pages"
+    (testing "remove page spec has :page with :complete :pages"
       (let [rm-page (first (filter #(= :remove-page (:command %)) entries))]
-        (is (= :pages (get-in rm-page [:spec :name :complete])))))
+        (is (= :pages (get-in rm-page [:spec :page :complete])))
+        (is (nil? (get-in rm-page [:spec :name])))))
     (testing "upsert tag spec has :complete :tags on :name"
       (let [tag (first (filter #(= :upsert-tag (:command %)) entries))]
         (is (= :tags (get-in tag [:spec :name :complete])))))
