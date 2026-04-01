@@ -41,43 +41,42 @@
       (is (false? (:ok? result)))
       (is (= :missing-repo (get-in result [:error :code]))))))
 
-(deftest test-execute-debug-pull
-  (testing "invokes :thread-api/pull and returns entity"
-    (async done
-           (let [invoke-calls* (atom [])
-                 action {:type :debug-pull
-                         :repo "logseq_db_demo"
-                         :lookup 42
-                         :selector '[*]}]
-             (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo] config)
-                                 transport/invoke (fn [_ method _ args]
-                                                    (swap! invoke-calls* conj {:method method :args args})
-                                                    (p/resolved {:db/id 42 :block/title "Debug Home"}))]
-                   (p/let [result (debug-command/execute-debug-pull action {:base-url "http://example"})]
-                     (is (= :ok (:status result)))
-                     (is (= {:db/id 42 :block/title "Debug Home"}
-                            (get-in result [:data :entity])))
-                     (is (= 42 (get-in result [:data :lookup])))
-                     (is (= '[*] (get-in result [:data :selector])))
-                     (is (= [{:method :thread-api/pull
-                              :args ["logseq_db_demo" '[*] 42]}]
-                            @invoke-calls*))))
-                 (p/catch (fn [e]
-                            (is false (str "unexpected error: " e))))
-                 (p/finally done)))))
+(deftest test-execute-debug-pull-success
+  (async done
+         (let [invoke-calls* (atom [])
+               action {:type :debug-pull
+                       :repo "logseq_db_demo"
+                       :lookup 42
+                       :selector '[*]}]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo] config)
+                               transport/invoke (fn [_ method _ args]
+                                                  (swap! invoke-calls* conj {:method method :args args})
+                                                  (p/resolved {:db/id 42 :block/title "Debug Home"}))]
+                 (p/let [result (debug-command/execute-debug-pull action {:base-url "http://example"})]
+                   (is (= :ok (:status result)))
+                   (is (= {:db/id 42 :block/title "Debug Home"}
+                          (get-in result [:data :entity])))
+                   (is (= 42 (get-in result [:data :lookup])))
+                   (is (= '[*] (get-in result [:data :selector])))
+                   (is (= [{:method :thread-api/pull
+                            :args ["logseq_db_demo" '[*] 42]}]
+                          @invoke-calls*))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
-  (testing "returns typed error when entity is missing"
-    (async done
-           (let [action {:type :debug-pull
-                         :repo "logseq_db_demo"
-                         :lookup [:db/ident :missing/ident]
-                         :selector '[*]}]
-             (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo] config)
-                                 transport/invoke (fn [_ _method _ _args]
-                                                    (p/resolved nil))]
-                   (p/let [result (debug-command/execute-debug-pull action {:base-url "http://example"})]
-                     (is (= :error (:status result)))
-                     (is (= :entity-not-found (get-in result [:error :code])))))
-                 (p/catch (fn [e]
-                            (is false (str "unexpected error: " e))))
-                 (p/finally done))))))
+(deftest test-execute-debug-pull-entity-not-found
+  (async done
+         (let [action {:type :debug-pull
+                       :repo "logseq_db_demo"
+                       :lookup [:db/ident :missing/ident]
+                       :selector '[*]}]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo] config)
+                               transport/invoke (fn [_ _method _ _args]
+                                                  (p/resolved nil))]
+                 (p/let [result (debug-command/execute-debug-pull action {:base-url "http://example"})]
+                   (is (= :error (:status result)))
+                   (is (= :entity-not-found (get-in result [:error :code])))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
