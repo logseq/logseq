@@ -129,6 +129,10 @@
   (let [url (js/URL. (.-url request))]
     (str (.-origin url) "/assets/" graph-id "/" snapshot-id ".snapshot")))
 
+(defn- snapshot-stream-url [request graph-id]
+  (let [url (js/URL. (.-url request))]
+    (str (.-origin url) "/sync/" graph-id "/snapshot/stream")))
+
 (defn- maybe-decompress-stream [stream encoding]
   (if (and (= encoding snapshot-content-encoding) (exists? js/DecompressionStream))
     (.pipeThrough stream (js/DecompressionStream. "gzip"))
@@ -419,35 +423,17 @@
 
 (defn- handle-sync-snapshot-download
   [^js self request]
-  (let [graph-id (graph-id-from-request request)
-        ^js bucket (.-LOGSEQ_SYNC_ASSETS (.-env self))]
+  (let [graph-id (graph-id-from-request request)]
     (cond
       (not (seq graph-id))
       (http/bad-request "missing graph id")
-
-      (nil? bucket)
-      (http/error-response "missing assets bucket" 500)
 
       :else
       (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
         (if-not ready-for-sync?
           (http/error-response "graph not ready" 409)
-          (p/let [snapshot-id (str (random-uuid))
-                  key (snapshot-key graph-id snapshot-id)
-                  stream (-> (snapshot-export-stream self)
-                             (maybe-compress-stream))
-                  multipart? (and (some? (.-createMultipartUpload bucket))
-                                  (fn? (.-createMultipartUpload bucket)))
-                  opts #js {:httpMetadata #js {:contentType snapshot-content-type
-                                               :contentEncoding snapshot-content-encoding
-                                               :cacheControl snapshot-cache-control}
-                            :customMetadata #js {:purpose "snapshot"
-                                                 :created-at (str (common/now-ms))}}
-                  _ (if multipart?
-                      (upload-multipart! bucket key stream opts)
-                      (p/let [body (<buffer-stream stream)]
-                        (.put bucket key body opts)))
-                  url (snapshot-url request graph-id snapshot-id)]
+          (let [key (str "stream/" graph-id ".snapshot")
+                url (snapshot-stream-url request graph-id)]
             (http/json-response :sync/snapshot-download {:ok true
                                                          :key key
                                                          :url url
