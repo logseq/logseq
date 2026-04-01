@@ -256,7 +256,7 @@
       (and (= command :remove-block) (empty? (filter some? [(:id opts) (some-> (:uuid opts) string/trim)])))
       (missing-target-result summary)
 
-      (and (= command :remove-page) (not (seq (some-> (:name opts) string/trim))))
+      (and (= command :remove-page) (not (seq (some-> (:page opts) string/trim))))
       (missing-page-name-result summary)
 
       (and (#{:remove-tag :remove-property} command)

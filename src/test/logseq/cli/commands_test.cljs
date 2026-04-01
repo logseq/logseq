@@ -1214,11 +1214,16 @@
       (is (= :remove-block (:command result)))
       (is (= 10 (get-in result [:options :id])))))
 
-  (testing "remove page parses with name"
-    (let [result (commands/parse-args ["remove" "page" "--name" "Home"])]
+  (testing "remove page parses with page"
+    (let [result (commands/parse-args ["remove" "page" "--page" "Home"])]
       (is (true? (:ok? result)))
       (is (= :remove-page (:command result)))
-      (is (= "Home" (get-in result [:options :name])))))
+      (is (= "Home" (get-in result [:options :page])))))
+
+  (testing "remove page rejects legacy --name"
+    (let [result (commands/parse-args ["remove" "page" "--name" "Home"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
 
   (testing "remove tag parses with name"
     (let [result (commands/parse-args ["remove" "tag" "--name" "Quote"])]
@@ -1242,6 +1247,9 @@
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
 
+  )
+
+(deftest test-verb-subcommand-parse-upsert-entity
   (testing "upsert tag parses with name"
     (let [result (commands/parse-args ["upsert" "tag" "--name" "Quote"])]
       (is (true? (:ok? result)))
@@ -1624,7 +1632,13 @@
                                        "--graph" "logseq_db_logseq_db_demo"])]
       (is (true? (:ok? result)))
       (is (= :server-status (:command result)))
-      (is (= "logseq_db_logseq_db_demo" (get-in result [:options :graph]))))))
+      (is (= "logseq_db_logseq_db_demo" (get-in result [:options :graph])))))
+
+  (testing "server status accepts global -g alias"
+    (let [result (commands/parse-args ["server" "status" "-g" "demo"])]
+      (is (true? (:ok? result)))
+      (is (= :server-status (:command result)))
+      (is (= "demo" (get-in result [:options :graph]))))))
 
 (deftest test-verb-subcommand-parse-graph-backup
   (testing "graph backup list parses"
@@ -2051,11 +2065,18 @@
       (is (= :remove-block (get-in result [:action :type])))
       (is (= [1 2] (get-in result [:action :ids])))))
 
-  (testing "remove page requires name"
+  (testing "remove page requires page"
     (let [parsed {:ok? true :command :remove-page :options {}}
           result (commands/build-action parsed {:graph "demo"})]
       (is (false? (:ok? result)))
       (is (= :missing-page-name (get-in result [:error :code])))))
+
+  (testing "remove page accepts --page in action build"
+    (let [parsed {:ok? true :command :remove-page :options {:page "Home"}}
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :remove-page (get-in result [:action :type])))
+      (is (= "Home" (get-in result [:action :page])))))
 
   (testing "remove tag parses by id"
     (let [parsed {:ok? true :command :remove-tag :options {:id 42}}
@@ -2766,7 +2787,7 @@
                                                                                      (reset! ops* ops)
                                                                                      nil)
                                                     (throw (ex-info "unexpected invoke" {:method method :args args}))))]
-                 (p/let [result (commands/execute {:type :remove-page :repo "demo" :name "Home"} {})]
+                 (p/let [result (commands/execute {:type :remove-page :repo "demo" :page "Home"} {})]
                    (is (= :ok (:status result)))
                    (is (= true (get-in result [:data :result])))
                    (is (= [[:delete-page [page-uuid {}]]]

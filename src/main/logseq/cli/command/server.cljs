@@ -5,18 +5,15 @@
             [logseq.cli.version :as version]
             [promesa.core :as p]))
 
-(def ^:private server-spec
-  {:graph {:desc "Graph name"}})
-
 (def entries
   [(core/command-entry ["server" "list"] :server-list "List db-worker-node servers" {})
-   (core/command-entry ["server" "status"] :server-status "Show server status for a graph" server-spec
+   (core/command-entry ["server" "status"] :server-status "Show server status for a graph" {}
                        {:examples ["logseq server status --graph my-graph"]})
-   (core/command-entry ["server" "start"] :server-start "Start db-worker-node for a graph" server-spec
+   (core/command-entry ["server" "start"] :server-start "Start db-worker-node for a graph" {}
                        {:examples ["logseq server start --graph my-graph"]})
-   (core/command-entry ["server" "stop"] :server-stop "Stop db-worker-node for a graph" server-spec
+   (core/command-entry ["server" "stop"] :server-stop "Stop db-worker-node for a graph" {}
                        {:examples ["logseq server stop --graph my-graph"]})
-   (core/command-entry ["server" "restart"] :server-restart "Restart db-worker-node for a graph" server-spec
+   (core/command-entry ["server" "restart"] :server-restart "Restart db-worker-node for a graph" {}
                        {:examples ["logseq server restart --graph my-graph"]})])
 
 (defn build-action

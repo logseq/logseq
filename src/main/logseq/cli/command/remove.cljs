@@ -15,7 +15,7 @@
                      :ex-msg (constantly "Option uuid must be a valid UUID string")}}})
 
 (def ^:private remove-page-spec
-  {:name {:desc "Page name"
+  {:page {:desc "Page name"
           :complete :pages}})
 
 (def ^:private remove-tag-spec
@@ -36,7 +36,7 @@
                                    "logseq remove block --graph my-graph --id '[123,456]'"
                                    "logseq remove block --graph my-graph --uuid 7f0f4bb3-2e48-4b46-ae0f-18f52ef0f8be"]})
    (core/command-entry ["remove" "page"] :remove-page "Remove page" remove-page-spec
-                       {:examples ["logseq remove page --graph my-graph --name Home"]})
+                       {:examples ["logseq remove page --graph my-graph --page Home"]})
    (core/command-entry ["remove" "tag"] :remove-tag "Remove tag" remove-tag-spec
                        {:examples ["logseq remove tag --graph my-graph --name project"]})
    (core/command-entry ["remove" "property"] :remove-property "Remove property" remove-property-spec
@@ -58,6 +58,15 @@
 
         :else
         nil))
+
+    :remove-page
+    (cond
+      (and (contains? opts :page)
+           (string/blank? (or (:page opts) "")))
+      "page must be non-empty"
+
+      :else
+      nil)
 
     (:remove-tag :remove-property)
     (let [name (some-> (:name opts) string/trim)
@@ -359,13 +368,13 @@
                     :uuid uuid}}))
 
       :remove-page
-      (let [name (some-> (:name options) string/trim)]
-        (if (seq name)
+      (let [page (some-> (:page options) string/trim)]
+        (if (seq page)
           {:ok? true
            :action {:type :remove-page
                     :repo repo
                     :graph (core/repo->graph repo)
-                    :name name}}
+                    :page page}}
           {:ok? false
            :error {:code :missing-page-name
                    :message "page name is required"}}))
@@ -408,7 +417,7 @@
 (defn execute-remove-page
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              entity (resolve-page-by-name cfg (:repo action) (:name action))]
+              entity (resolve-page-by-name cfg (:repo action) (:page action))]
         (if-let [page-uuid (:block/uuid entity)]
           (p/let [result (delete-page-by-uuid cfg (:repo action) page-uuid)]
             {:status :ok
