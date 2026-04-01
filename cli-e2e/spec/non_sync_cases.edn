@@ -559,13 +559,13 @@
  {:id "remove-page-json"
   :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
           "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"]
-  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json remove page --graph {{graph-arg}} --name Home"]
+  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json remove page --graph {{graph-arg}} --page Home"]
   :expect {:exit 0
            :stdout-json-paths {[:status] "ok"
                                [:data :result] true}}
   :covers {:commands ["remove page"]
            :options {:global ["--config" "--graph" "--data-dir" "--output"]
-                     :remove ["--name"]}}
+                     :remove ["--page"]}}
   :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
   :tags [:remove]}
 
@@ -593,16 +593,16 @@
   :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
   :tags [:remove]}
 
- {:id "remove-tag-id-json"
+ {:id "remove-tag-name-json"
   :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
           "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name TagOne >/dev/null"]
-  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json remove tag --graph {{graph-arg}} --id \"$({{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list tag --graph {{graph-arg}} --fields title,id --limit 200 --sort updated-at --order desc | python3 -c 'import sys,json; print(next(item[\"db/id\"] for item in json.load(sys.stdin)[\"data\"][\"items\"] if item[\"block/title\"] == \"TagOne\"))')\" >/dev/null"
+  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json remove tag --graph {{graph-arg}} --name TagOne >/dev/null"
          "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list tag --graph {{graph-arg}} --fields title,id"]
   :expect {:exit 0
            :stdout-not-contains ["TagOne"]}
   :covers {:commands ["remove tag"]
            :options {:global ["--config" "--graph" "--data-dir" "--output"]
-                     :remove ["--id"]}}
+                     :remove ["--name"]}}
   :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
   :tags [:remove]}
 

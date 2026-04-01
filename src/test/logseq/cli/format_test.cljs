@@ -360,7 +360,7 @@
     (let [result (format/format-result {:status :ok
                                         :command :remove-page
                                         :context {:repo "demo-repo"
-                                                  :name "Home"}
+                                                  :page "Home"}
                                         :data {:result {:ok true}}}
                                        {:output-format nil})]
       (is (= "Removed page: Home (repo: demo-repo)" result))))

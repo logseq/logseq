@@ -18,6 +18,7 @@
           :alias :t
           :validate #{"edn" "sqlite"}}
    :file {:desc "Export file path"
+          :coerce common-graph/expand-home
           :complete :file}})
 
 (def ^:private graph-import-spec
@@ -31,6 +32,7 @@
 (def ^:private graph-validate-spec
   {:fix {:desc "Attempt to fix validation errors"
          :alias :f
+         :coerce :boolean
          :default false}})
 
 (def ^:private graph-backup-create-spec
