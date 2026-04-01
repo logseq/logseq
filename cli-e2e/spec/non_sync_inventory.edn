@@ -103,6 +103,12 @@
              "--level"
              "stdin:--id"]}
 
+  :debug
+  {:commands ["debug pull"]
+   :options ["--id"
+             "--uuid"
+             "--ident"]}
+
   :example
   {:commands ["example list"
               "example list page"

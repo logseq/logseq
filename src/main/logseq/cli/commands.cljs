@@ -5,6 +5,7 @@
             [logseq.cli.command.auth :as auth-command]
             [logseq.cli.command.completion :as completion-command]
             [logseq.cli.command.core :as command-core]
+            [logseq.cli.command.debug :as debug-command]
             [logseq.cli.command.doctor :as doctor-command]
             [logseq.cli.command.example :as example-command]
             [logseq.cli.command.graph :as graph-command]
@@ -130,6 +131,7 @@
                search-command/entries
                show-command/entries
                doctor-command/entries
+               debug-command/entries
                sync-command/entries
                auth-command/entries
                completion-command/entries)))
@@ -292,6 +294,9 @@
 
       (and (= command :show) (show-command/invalid-options? opts))
       (command-core/invalid-options-result summary (show-command/invalid-options? opts))
+
+      (and (= command :debug-pull) (debug-command/invalid-options? opts))
+      (command-core/invalid-options-result summary (debug-command/invalid-options? opts))
 
       (and (= command :graph-export) (not (seq (graph-command/normalize-import-export-type (:type opts)))))
       (missing-type-result summary)
@@ -538,6 +543,9 @@
         :show
         (show-command/build-action options repo)
 
+        :debug-pull
+        (debug-command/build-action options repo)
+
         :doctor
         (doctor-command/build-action options)
 
@@ -605,6 +613,7 @@
                          :query (query-command/execute-query action config)
                          :query-list (query-command/execute-query-list action config)
                          :show (show-command/execute-show action config)
+                         :debug-pull (debug-command/execute-debug-pull action config)
                          :doctor (doctor-command/execute-doctor action config)
                          :completion (p/resolved
                                        {:status :ok
@@ -628,7 +637,7 @@
         (assoc result
                :command (or (:command action) (:type action))
                :context (select-keys action [:repo :graph :page :name :id :ids :uuid :block :blocks
-                                             :schema :query
+                                             :schema :query :lookup :selector
                                              :source :target :update-tags :update-properties
                                              :remove-tags :remove-properties
                                              :src :dst :backup-name
