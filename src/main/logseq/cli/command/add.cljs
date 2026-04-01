@@ -36,6 +36,32 @@
           (transport/invoke config :thread-api/pull false
                             [repo [:db/id :block/uuid :block/name :block/title] [:block/name page-name-lc]]))))))
 
+(defn pull-tag-by-name
+  "Look up a tag by name, constrained to entities tagged with :logseq.class/Tag."
+  [config repo tag-name selector]
+  (p/let [result (transport/invoke config :thread-api/q false
+                                   [repo
+                                    [{:find [[(list 'pull '?e selector) '...]]
+                                      :in '[$ ?name]
+                                      :where '[[?e :block/name ?name]
+                                               [?e :block/tags ?t]
+                                               [?t :db/ident :logseq.class/Tag]]}
+                                     (common-util/page-name-sanity-lc tag-name)]])]
+    (first result)))
+
+(defn pull-property-by-name
+  "Look up a property by name, constrained to entities tagged with :logseq.class/Property."
+  [config repo property-name selector]
+  (p/let [result (transport/invoke config :thread-api/q false
+                                   [repo
+                                    [{:find [[(list 'pull '?e selector) '...]]
+                                      :in '[$ ?name]
+                                      :where '[[?e :block/name ?name]
+                                               [?e :block/tags ?t]
+                                               [?t :db/ident :logseq.class/Property]]}
+                                     (common-util/page-name-sanity-lc property-name)]])]
+    (first result)))
+
 (def ^:private add-positions
   #{"first-child" "last-child" "sibling"})
 
@@ -626,19 +652,18 @@
     (uuid? tag) [:block/uuid tag]
     (and (string? tag) (common-util/uuid-string? (string/trim tag))) [:block/uuid (uuid (string/trim tag))]
     (keyword? tag) [:db/ident tag]
-    (string? tag) [:block/name (common-util/page-name-sanity-lc tag)]
     :else nil))
 
 (defn- resolve-tag-entity
   [config repo tag]
-  (let [lookup (tag-lookup-ref tag)]
-    (when-not lookup
-      (throw (ex-info "invalid tag value" {:code :invalid-tag :tag tag})))
-    (p/let [entity (pull-entity config repo
-                                [:db/id :block/name :block/title :block/uuid
-                                 {:block/tags [:db/ident]}
-                                 :logseq.property/public? :logseq.property/built-in?]
-                                lookup)]
+  (let [tag-selector [:db/id :block/name :block/title :block/uuid
+                      {:block/tags [:db/ident]}
+                      :logseq.property/public? :logseq.property/built-in?]]
+    (p/let [entity (if (string? tag)
+                     (pull-tag-by-name config repo tag tag-selector)
+                     (let [lookup (or (tag-lookup-ref tag)
+                                      (throw (ex-info "invalid tag value" {:code :invalid-tag :tag tag})))]
+                       (pull-entity config repo tag-selector lookup)))]
       (cond
         (nil? (:db/id entity))
         (throw (ex-info (str "tag not found: " (pr-str tag)) {:code :tag-not-found :tag tag}))
@@ -761,8 +786,7 @@
 (defn- lookup-property-entity
   [config repo property-key]
   (let [lookup-by-title (fn [title]
-                          (pull-entity config repo property-entity-selector
-                                       [:block/name (common-util/page-name-sanity-lc title)]))]
+                          (pull-property-by-name config repo title property-entity-selector))]
     (cond
       (number? property-key)
       (pull-entity config repo property-entity-selector property-key)

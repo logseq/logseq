@@ -345,29 +345,8 @@
   (transport/invoke config :thread-api/pull false
                     [repo selector [:block/name (common-util/page-name-sanity-lc page-name)]]))
 
-(defn- pull-tag-by-name
-  [config repo tag-name selector]
-  (p/let [result (transport/invoke config :thread-api/q false
-                                   [repo
-                                    [{:find [[(list 'pull '?e selector) '...]]
-                                      :in '[$ ?name]
-                                      :where '[[?e :block/name ?name]
-                                               [?e :block/tags ?t]
-                                               [?t :db/ident :logseq.class/Tag]]}
-                                     (common-util/page-name-sanity-lc tag-name)]])]
-    (first result)))
-
-(defn- pull-property-by-name
-  [config repo property-name selector]
-  (p/let [result (transport/invoke config :thread-api/q false
-                                   [repo
-                                    [{:find [[(list 'pull '?e selector) '...]]
-                                      :in '[$ ?name]
-                                      :where '[[?e :block/name ?name]
-                                               [?e :block/tags ?t]
-                                               [?t :db/ident :logseq.class/Property]]}
-                                     (common-util/page-name-sanity-lc property-name)]])]
-    (first result)))
+(def ^:private pull-tag-by-name add-command/pull-tag-by-name)
+(def ^:private pull-property-by-name add-command/pull-property-by-name)
 
 (defn- ensure-property-identifiers-exist!
   [config repo property-idents]
