@@ -370,11 +370,21 @@
                         (sort-by count >))]
     (some (fn [path]
             (let [trailing-args (subvec args (count path))
-                  exact-command? (contains? exact-command-paths (vec path))]
-              (when (and (or (empty? trailing-args)
-                             (every? help-flags trailing-args))
-                         (or (not exact-command?)
-                             (= 1 (count path))))
+                  exact-command? (contains? exact-command-paths (vec path))
+                  help-requested? (and (seq trailing-args)
+                                       (every? help-flags trailing-args))]
+              (when (and (or (empty? trailing-args) help-requested?)
+                         (if exact-command?
+                           ;; When the path is both a group and an exact command:
+                           ;; - `query -h` → show command help (not group help)
+                           ;; - `example query` → execute command (not group help)
+                           ;; - `query` (alone, single-segment) → show group help
+                           ;;   for discoverability since cli/dispatch can't distinguish
+                           ;;   `query` from `query list` prefix
+                           (and (not help-requested?)
+                                (= 1 (count path))
+                                (empty? trailing-args))
+                           true))
                 path)))
           candidates)))
 
