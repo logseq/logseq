@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [logseq.cli.command.completion :as completion-command]
             [logseq.cli.command.core :as core]
+            [logseq.cli.command.debug :as debug-command]
             [logseq.cli.command.doctor :as doctor-command]
             [logseq.cli.command.example :as example-command]
             [logseq.cli.command.graph :as graph-command]
@@ -25,6 +26,7 @@
                search-command/entries
                show-command/entries
                doctor-command/entries
+               debug-command/entries
                completion-command/entries)))
 
 (def ^:private full-table
@@ -181,13 +183,14 @@
     (testing "show and doctor are leaves"
       (is (contains? leaf-names "show"))
       (is (contains? leaf-names "doctor")))
-    (testing "graph, server, list, upsert, remove, search, example are groups"
+    (testing "graph, server, list, upsert, remove, search, debug, example are groups"
       (is (contains? group-names "graph"))
       (is (contains? group-names "server"))
       (is (contains? group-names "list"))
       (is (contains? group-names "upsert"))
       (is (contains? group-names "remove"))
       (is (contains? group-names "search"))
+      (is (contains? group-names "debug"))
       (is (contains? group-names "example")))))
 
 (deftest test-spec->token
@@ -239,6 +242,7 @@
       (is (string/includes? output "_logseq_graph_export()"))
       (is (string/includes? output "_logseq_graph_backup_restore()"))
       (is (string/includes? output "_logseq_graph_backup_remove()"))
+      (is (string/includes? output "_logseq_debug_pull()"))
       (is (string/includes? output "_logseq_show()"))
       (is (string/includes? output "_logseq_example_upsert_page()")))
     (testing "output contains group dispatchers"
@@ -246,6 +250,7 @@
       (is (string/includes? output "_logseq_list()"))
       (is (string/includes? output "_logseq_search()"))
       (is (string/includes? output "_logseq_upsert()"))
+      (is (string/includes? output "_logseq_debug()"))
       (is (string/includes? output "_logseq_example()")))
     (testing "output contains top-level dispatcher"
       (is (string/includes? output "_logseq()")))

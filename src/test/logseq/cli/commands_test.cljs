@@ -78,6 +78,9 @@
       (is (string/includes? plain-summary "sync"))
       (is (string/includes? plain-summary "login"))
       (is (string/includes? plain-summary "logout"))
+      (is (string/includes? plain-summary "debug"))
+      (is (not (string/includes? plain-summary "debug pull")))
+      (is (string/includes? plain-summary "completion"))
       (is (string/includes? plain-summary "example"))
       (is (not (string/includes? plain-summary "example upsert")))
       (is (string/includes? plain-summary "Path to db-worker data dir (default ~/logseq/graphs)"))
@@ -108,6 +111,9 @@
       (is (contains-bold? summary "sync start"))
       (is (contains-bold? summary "login"))
       (is (contains-bold? summary "logout"))
+      (is (contains-bold? summary "debug"))
+      (is (not (contains-bold? summary "debug pull")))
+      (is (contains-bold? summary "completion"))
       (is (contains-bold? summary "example"))
       (is (not (contains-bold? summary "example upsert")))
       (is (contains-bold? summary "--help"))
@@ -207,6 +213,15 @@
       (is (contains-bold? summary "search page"))
       (is (contains-bold? summary "search property"))
       (is (contains-bold? summary "search tag"))))
+
+  (testing "debug group shows subcommands"
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["debug"]))
+          summary (:summary result)
+          plain-summary (strip-ansi summary)]
+      (is (true? (:help? result)))
+      (is (string/includes? plain-summary "debug pull"))
+      (is (contains-bold? summary "debug pull"))))
 
   (testing "example group shows selectors"
     (let [result (binding [style/*color-enabled?* true]
@@ -314,7 +329,7 @@
   (testing "all groups show group help with -h and --help"
     ;; query and example are excluded: they are both groups and exact commands,
     ;; so -h shows their command help with options instead of group subcommand listing
-    (doseq [group ["graph" "server" "list" "upsert" "remove" "search" "sync"]
+    (doseq [group ["graph" "server" "list" "upsert" "remove" "search" "sync" "debug"]
             help-flag ["-h" "--help"]]
       (let [result (binding [style/*color-enabled?* true]
                      (commands/parse-args [group help-flag]))
@@ -1558,6 +1573,50 @@
       (is (string/includes? (strip-ansi summary) "--linked-references"))
       (is (string/includes? (strip-ansi summary) "--ref-id-footer")))))
 
+(deftest test-verb-subcommand-parse-debug
+  (testing "debug pull parses with id"
+    (let [result (commands/parse-args ["debug" "pull" "--id" "1"])]
+      (is (true? (:ok? result)))
+      (is (= :debug-pull (:command result)))
+      (is (= 1 (get-in result [:options :id])))))
+
+  (testing "debug pull parses with uuid"
+    (let [result (commands/parse-args ["debug" "pull" "--uuid" "11111111-1111-1111-1111-111111111111"])]
+      (is (true? (:ok? result)))
+      (is (= :debug-pull (:command result)))
+      (is (= "11111111-1111-1111-1111-111111111111" (get-in result [:options :uuid])))))
+
+  (testing "debug pull parses with ident"
+    (let [result (commands/parse-args ["debug" "pull" "--ident" ":logseq.class/Tag"])]
+      (is (true? (:ok? result)))
+      (is (= :debug-pull (:command result)))
+      (is (= :logseq.class/Tag (get-in result [:options :ident])))))
+
+  (testing "debug pull rejects missing selector"
+    (let [result (commands/parse-args ["debug" "pull"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "debug pull rejects multiple selectors"
+    (let [result (commands/parse-args ["debug" "pull" "--id" "1" "--uuid" "11111111-1111-1111-1111-111111111111"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "debug pull rejects malformed id"
+    (let [result (commands/parse-args ["debug" "pull" "--id" "abc"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "debug pull rejects malformed uuid"
+    (let [result (commands/parse-args ["debug" "pull" "--uuid" "not-a-uuid"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "debug pull rejects malformed ident"
+    (let [result (commands/parse-args ["debug" "pull" "--ident" "logseq.class/Tag"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code]))))))
+
 (deftest test-verb-subcommand-parse-query
   (testing "query shows group help"
     (let [result (commands/parse-args ["query"])]
@@ -1713,7 +1772,8 @@
                   ["upsert" "page" "--wat"]
                   ["remove" "block" "--wat"]
                   ["upsert" "tag" "--wat"]
-                  ["show" "--wat"]]]
+                  ["show" "--wat"]
+                  ["debug" "pull" "--wat"]]]
       (let [result (commands/parse-args args)]
         (is (false? (:ok? result)))
         (is (= :invalid-options (get-in result [:error :code]))))))
@@ -2120,6 +2180,34 @@
       (is (true? (:ok? result)))
       (is (= :show (get-in result [:action :type])))
       (is (= [1 2] (get-in result [:action :ids]))))))
+
+(deftest test-build-action-debug-pull
+  (testing "debug pull uses --graph when provided"
+    (let [parsed {:ok? true :command :debug-pull :options {:graph "demo" :id 1}}
+          result (commands/build-action parsed {})]
+      (is (true? (:ok? result)))
+      (is (= :debug-pull (get-in result [:action :type])))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))
+      (is (= 1 (get-in result [:action :lookup])))
+      (is (= '[*] (get-in result [:action :selector])))))
+
+  (testing "debug pull falls back to config graph"
+    (let [parsed {:ok? true :command :debug-pull :options {:id 1}}
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? result)))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))))
+
+  (testing "debug pull falls back to config repo"
+    (let [parsed {:ok? true :command :debug-pull :options {:id 1}}
+          result (commands/build-action parsed {:repo "logseq_db_demo"})]
+      (is (true? (:ok? result)))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))))
+
+  (testing "debug pull fails when repo cannot be resolved"
+    (let [parsed {:ok? true :command :debug-pull :options {:id 1}}
+          result (commands/build-action parsed {})]
+      (is (false? (:ok? result)))
+      (is (= :missing-repo (get-in result [:error :code]))))))
 
 (deftest test-build-action-add-validates-properties
   (testing "add block accepts custom property key in update-properties"

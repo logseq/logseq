@@ -1,6 +1,7 @@
 (ns logseq.cli.format
   "Formatting helpers for CLI output."
-  (:require [clojure.string :as string]
+  (:require [cljs.pprint :as pprint]
+            [clojure.string :as string]
             [clojure.walk :as walk]
             [logseq.cli.command.core :as command-core]
             [logseq.cli.style :as style]
@@ -417,6 +418,15 @@
             (or doc "-")])
          (or queries []))))
 
+(defn- format-debug-pull
+  [{:keys [entity lookup selector]}]
+  (let [header [(str "Selector: " (pr-str selector))
+                (str "Lookup: " (pr-str lookup))
+                "Entity:"]
+        entity* (-> (with-out-str (pprint/pprint entity))
+                    string/trimr)]
+    (string/join "\n" (conj header entity*))))
+
 (defn- format-example
   [{:keys [selector matched-commands examples message]}]
   (let [selector (or selector "-")
@@ -782,6 +792,7 @@
         :query-list (format-query-list (:queries data))
         :example (format-example data)
         :show (or (:message data) (pr-str data))
+        :debug-pull (format-debug-pull data)
         :doctor (format-doctor (:status data) (:checks data))
         (if (and (map? data) (contains? data :message))
           (:message data)
