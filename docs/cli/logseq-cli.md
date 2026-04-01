@@ -118,6 +118,14 @@ Auth commands:
 - `login` - authenticate this machine and create/update `~/logseq/auth.json`
 - `logout` - remove persisted CLI auth from `~/logseq/auth.json`
 
+Debug commands:
+- `debug pull --id <db-id> [--graph <name>]` - pull a raw entity by db id with selector `[*]`
+- `debug pull --uuid <uuid> [--graph <name>]` - pull a raw entity by block UUID lookup
+- `debug pull --ident <db-ident> [--graph <name>]` - pull a raw entity by `:db/ident` lookup
+  - `--ident` must be a strict EDN keyword (for example `:logseq.class/Tag`)
+  - exactly one of `--id`, `--uuid`, or `--ident` is required
+  - if `--graph` is omitted, CLI falls back to current graph config
+
 Shell completion and examples:
 - `completion <zsh|bash>` - generate shell completion script to stdout
 - `example <command-or-prefix...>` - show runnable command examples for a command path or command prefix (phase 1 covers Graph Inspect and Edit commands)
@@ -338,6 +346,7 @@ node ./dist/logseq.js upsert block --target-page TestPage --content "hello world
 node ./dist/logseq.js move --uuid <uuid> --target-page TargetPage
 node ./dist/logseq.js search block --content "hello"
 node ./dist/logseq.js show --page TestPage --output json
+node ./dist/logseq.js debug pull --graph demo --ident :logseq.class/Tag --output json
 node ./dist/logseq.js server list
 node ./dist/logseq.js doctor
 node ./dist/logseq.js doctor --dev-script

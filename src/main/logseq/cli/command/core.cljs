@@ -121,9 +121,10 @@
                 {:title "Authentication"
                  :commands #{"login" "logout"}}
                 {:title "Utilities"
-                 :commands #{"completion" "example"}
+                 :commands #{"completion" "debug" "example"}
                  :top-level-only? true
-                 :desc-overrides {"example" "Show command examples"}}]
+                 :desc-overrides {"debug" "Pull raw entity data for debugging"
+                                  "example" "Show command examples"}}]
         to-top-level-entries (fn [entries commands desc-overrides]
                                (->> commands
                                     sort
