@@ -312,7 +312,9 @@
 
 (deftest test-parse-args-group-help-flags
   (testing "all groups show group help with -h and --help"
-    (doseq [group ["graph" "server" "list" "upsert" "remove" "query" "search" "sync" "example"]
+    ;; query and example are excluded: they are both groups and exact commands,
+    ;; so -h shows their command help with options instead of group subcommand listing
+    (doseq [group ["graph" "server" "list" "upsert" "remove" "search" "sync"]
             help-flag ["-h" "--help"]]
       (let [result (binding [style/*color-enabled?* true]
                      (commands/parse-args [group help-flag]))
@@ -327,6 +329,20 @@
       (is (true? (:help? result)))
       (is (string/includes? plain-summary "Usage: logseq upsert block"))
       (is (not (string/includes? plain-summary "Usage: logseq upsert <subcommand> [options]")))))
+
+  (testing "query -h shows command help with options (not group help)"
+    (let [result (binding [style/*color-enabled?* true]
+                   (commands/parse-args ["query" "-h"]))
+          plain-summary (strip-ansi (:summary result))]
+      (is (true? (:help? result)))
+      (is (string/includes? plain-summary "--query"))
+      (is (string/includes? plain-summary "--name"))
+      (is (string/includes? plain-summary "--inputs"))))
+
+  (testing "example query executes (not group help)"
+    (let [result (commands/parse-args ["example" "query"])]
+      (is (= :example (:command result)))
+      (is (not (:help? result)))))
 
   )
 
