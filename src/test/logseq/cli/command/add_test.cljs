@@ -48,19 +48,34 @@
       (is (= [uuid-b] (-> error ex-data :missing-uuids))))))
 
 (def ^:private mock-transport-invoke
-  (fn [_ _ _ args]
-    (let [[_ _ lookup] args]
-      (p/resolved
-       (cond
-         (= lookup [:block/name "plainpage"])
-         {:db/id 42 :block/name "plainpage" :block/title "PlainPage"
-          :block/tags [{:db/ident :logseq.class/Page}]}
+  (fn [_ method _ args]
+    (case method
+      ;; pull-tag-by-name uses :thread-api/q
+      :thread-api/q
+      (let [[_ [_ name-arg]] args]
+        (p/resolved
+         (cond
+           (= name-arg "realtag")
+           [{:db/id 99 :block/name "realtag" :block/title "RealTag"
+             :block/tags [{:db/ident :logseq.class/Tag}]}]
+           :else [])))
 
-         (= lookup [:block/name "realtag"])
-         {:db/id 99 :block/name "realtag" :block/title "RealTag"
-          :block/tags [{:db/ident :logseq.class/Tag}]}
+      ;; pull-entity uses :thread-api/pull
+      :thread-api/pull
+      (let [[_ _ lookup] args]
+        (p/resolved
+         (cond
+           (= lookup [:block/name "plainpage"])
+           {:db/id 42 :block/name "plainpage" :block/title "PlainPage"
+            :block/tags [{:db/ident :logseq.class/Page}]}
 
-         :else {})))))
+           (= lookup [:block/name "realtag"])
+           {:db/id 99 :block/name "realtag" :block/title "RealTag"
+            :block/tags [{:db/ident :logseq.class/Tag}]}
+
+           :else {})))
+
+      (p/rejected (ex-info "unexpected method" {:method method :args args})))))
 
 (deftest test-resolve-tags-accepts-valid-tag
   (async done
@@ -76,7 +91,9 @@
                (-> (add-command/resolve-tags {} "demo" ["PlainPage"])
                    (p/then (fn [_] (is false "expected error for non-tag page")))
                    (p/catch (fn [e]
-                              (is (= :not-a-tag (-> e ex-data :code)))
+                              ;; String lookup uses pull-tag-by-name which only finds tags,
+                              ;; so a non-tag page results in :tag-not-found
+                              (is (= :tag-not-found (-> e ex-data :code)))
                               (is (string/includes? (ex-message e) "PlainPage"))))))
              (p/catch (fn [e] (is false (str "unexpected error: " e))))
              (p/finally done))))
