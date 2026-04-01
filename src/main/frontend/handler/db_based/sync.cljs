@@ -275,7 +275,7 @@
      (-> (if (and graph-uuid base)
            (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
                    graph (str config/db-version-prefix graph-name)
-                   _ (state/<invoke-db-worker :thread-api/db-sync-download-graph
+                   _ (state/<invoke-db-worker :thread-api/db-sync-download-graph-by-id
                                               graph graph-uuid graph-e2ee?)]
              true)
            (p/rejected (ex-info "db-sync missing graph info"
