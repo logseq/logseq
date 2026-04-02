@@ -48,13 +48,8 @@
 (defn- ensure-conn! [^js self]
   (ensure-schema! self)
   (when-not (.-conn self)
-    (let [storage (some-> self .-state .-storage)
-          transaction-sync-f (when (fn? (some-> storage .-transactionSync))
-                               (fn [f]
-                                 (.transactionSync storage f)))]
-      (set! (.-conn self)
-            (storage/open-conn (.-sql self)
-                               {:transaction-sync-f transaction-sync-f})))))
+    (set! (.-conn self)
+          (storage/open-conn (.-sql self)))))
 
 (defn t-now [^js self]
   (ensure-schema! self)
