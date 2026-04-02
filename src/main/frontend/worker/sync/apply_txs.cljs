@@ -342,6 +342,7 @@
                                 :gen-undo-ops? false
                                 :persist-op? true
                                 :undo? undo?
+                                :redo? (:redo? tx-meta)
                                 :db-sync/tx-id history-tx-id
                                 :db-sync/source-tx-id (or (:db-sync/source-tx-id tx-meta)
                                                           tx-id)}
