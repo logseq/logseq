@@ -18,32 +18,21 @@
 
 (def entries
   [(core/command-entry ["query"] :query "Run a Datascript query" query-spec
-                       {:examples ["logseq query --graph my-graph --name block-search --inputs '[\"daily\"]'"
-                                   "logseq query --graph my-graph --name recent-updated --inputs '[30]'"
+                       {:examples ["logseq query --graph my-graph --name recent-updated --inputs '[30]'"
+                                   "logseq query --graph my-graph --name task-search --inputs '[:logseq.property/status.done \"daily\"]'"
                                    "logseq query --graph my-graph --query '[:find [?e ...] :where [?e :block/name]]'"]})
    (core/command-entry ["query" "list"] :query-list "List available queries" query-list-spec
                        {:examples ["logseq query list --graph my-graph"
                                    "logseq query list --graph my-graph --output edn"]})])
 
 (def ^:private built-in-query-specs
-  {"block-search"
-   {:doc "Find blocks by title substring (case-insensitive)."
-    :inputs ["search-title"]
-    :query '[:find [?e ...]
-             :in $ ?search-title
-             :where
-             [?e :block/title ?title]
-             [(clojure.string/lower-case ?title) ?title-lower-case]
-             [(clojure.string/lower-case ?search-title) ?search-title-lower-case]
-             [(clojure.string/includes? ?title-lower-case ?search-title-lower-case)]]}
-
-   "task-search"
+  {"task-search"
    {:doc "Find tasks by status, optional title substring, optional recent-days."
     :inputs [{:name "search-status"}
              {:name "?search-title" :default ""}
              {:name "?recent-days" :default 0}
              {:name "?now-ms" :default :now-ms}]
-    :query '[:find [?e ...]
+    :query '[:find [(pull ?e [:db/id :block/title :block/updated-at]) ...]
              :in $ ?search-status ?search-title ?recent-days ?now-ms
              :where
              [?e :block/title ?title]
@@ -68,7 +57,7 @@
    {:doc "Find entities updated within recent-days."
     :inputs [{:name "recent-days"}
              {:name "?now-ms" :default :now-ms}]
-    :query '[:find [?e ...]
+    :query '[:find [(pull ?e [:db/id :block/title :block/updated-at]) ...]
              :in $ ?recent-days ?now-ms
              :where
              [?e :block/updated-at ?updated-at]
