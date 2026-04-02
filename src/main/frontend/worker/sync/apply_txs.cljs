@@ -616,7 +616,9 @@
           block-uuid (:block/uuid block)
           block-ent (when block-uuid
                       (d/entity db [:block/uuid block-uuid]))
-          block-base (dissoc block :db/id)
+          block-base (if (:block/order block-ent)
+                       (dissoc block :db/id :block/order)
+                       (dissoc block :db/id))
           block' (merge block-base
                         (op-construct/rewrite-block-title-with-retracted-refs db block-base))]
       (if (some? block-ent)
@@ -895,21 +897,21 @@
         *rebase-tx-reports (atom [])]
     ;; (prn :debug :apply-remote-tx (first remote-txs))
     (try
-      (ldb/batch-transact!
-       conn
-       tx-meta
-       (fn [conn]
-         (reverse-local-txs! conn local-txs)
+      (let [tx-report (ldb/batch-transact!
+                       conn
+                       tx-meta
+                       (fn [conn]
+                         (reverse-local-txs! conn local-txs)
 
-         (transact-remote-txs! conn remote-txs)
+                         (transact-remote-txs! conn remote-txs)
 
-         (let [rebase-tx-report (rebase-local-txs! repo conn local-txs)]
-           (fix-tx! conn rebase-tx-report {:outliner-op :rebase})))
+                         (rebase-local-txs! repo conn local-txs))
 
-       {:listen-db (fn [{:keys [tx-meta tx-data] :as tx-report}]
-                     (when (and (= :rebase (:outliner-op tx-meta))
-                                (seq tx-data))
-                       (swap! *rebase-tx-reports conj tx-report)))})
+                       {:listen-db (fn [{:keys [tx-meta tx-data] :as tx-report}]
+                                     (when (and (= :rebase (:outliner-op tx-meta))
+                                                (seq tx-data))
+                                       (swap! *rebase-tx-reports conj tx-report)))})]
+        (fix-tx! conn tx-report {:outliner-op :fix}))
 
       (doseq [tx-report @*rebase-tx-reports]
         (handle-local-tx! repo tx-report))
@@ -960,7 +962,7 @@
                                           {:t t
                                            :outliner-op outliner-op
                                            :tx-data-count (count tx-data)
-                                           :tx-data-preview (take 12 tx-data)})
+                                           :tx-data tx-data})
                                         remote-txs)
                       :local-txs (mapv (fn [{:keys [tx-id outliner-op tx reversed-tx]}]
                                          {:tx-id tx-id
