@@ -4,6 +4,7 @@
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db-sync.batch :as batch]
+            [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.index :as index]
             [logseq.db-sync.protocol :as protocol]
@@ -405,6 +406,31 @@
           (http/error-response "graph not ready" 409)
           (http/json-response :sync/pull (pull-response self since)))))))
 
+(defn- normalize-diagnostic-block
+  [{:keys [block/uuid block/parent block/page] :as block}]
+  (cond-> block
+    uuid (assoc :block/uuid (str uuid))
+    parent (assoc :block/parent (str parent))
+    page (assoc :block/page (str page))))
+
+(defn- checksum-diagnostics-response
+  [^js self]
+  (ensure-conn! self)
+  (-> (sync-checksum/recompute-checksum-diagnostics @(.-conn self))
+      (update :blocks (fn [blocks]
+                        (mapv normalize-diagnostic-block blocks)))))
+
+(defn- handle-sync-checksum-diagnostics
+  [^js self request]
+  (let [graph-id (graph-id-from-request request)]
+    (if (not (seq graph-id))
+      (http/bad-request "missing graph id")
+      (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
+        (if-not ready-for-sync?
+          (http/error-response "graph not ready" 409)
+          (http/json-response :sync/checksum-diagnostics
+                              (checksum-diagnostics-response self)))))))
+
 (defn- handle-sync-snapshot-stream
   [^js self request]
   (let [graph-id (graph-id-from-request request)]
@@ -539,6 +565,9 @@
 
     :sync/pull
     (handle-sync-pull self url)
+
+    :sync/checksum-diagnostics
+    (handle-sync-checksum-diagnostics self request)
 
     :sync/snapshot-stream
     (handle-sync-snapshot-stream self request)
