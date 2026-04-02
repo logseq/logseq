@@ -3178,13 +3178,13 @@
 
 (deftest test-query-build-action-non-vector-inputs
   (testing "non-vector inputs gives explicit error"
-    (let [result (query-command/build-action {:name "block-search" :inputs "b1"}
+    (let [result (query-command/build-action {:name "recent-updated" :inputs "1"}
                                              "test-repo" {})]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))
       (is (= "inputs must be a vector" (get-in result [:error :message])))))
 
   (testing "valid vector inputs succeeds"
-    (let [result (query-command/build-action {:name "block-search" :inputs "[\"daily\"]"}
+    (let [result (query-command/build-action {:name "recent-updated" :inputs "[1]"}
                                              "test-repo" {})]
       (is (true? (:ok? result))))))
