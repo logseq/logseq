@@ -4,6 +4,7 @@
             [logseq.cli.command.add :as add-command]
             [logseq.cli.command.graph :as graph-command]
             [logseq.cli.command.list :as list-command]
+            [logseq.cli.command.query :as query-command]
             [logseq.cli.command.show :as show-command]
             [logseq.cli.command.sync :as sync-command]
             [logseq.cli.commands :as commands]
@@ -3174,3 +3175,16 @@
                  (is (= 2 (get-in result [:human :graph-list :legacy-count])))))
              (p/catch (fn [e] (is false (str "unexpected error: " e))))
              (p/finally done))))
+
+(deftest test-query-build-action-non-vector-inputs
+  (testing "non-vector inputs gives explicit error"
+    (let [result (query-command/build-action {:name "block-search" :inputs "b1"}
+                                             "test-repo" {})]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))
+      (is (= "inputs must be a vector" (get-in result [:error :message])))))
+
+  (testing "valid vector inputs succeeds"
+    (let [result (query-command/build-action {:name "block-search" :inputs "[\"daily\"]"}
+                                             "test-repo" {})]
+      (is (true? (:ok? result))))))

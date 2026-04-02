@@ -248,15 +248,10 @@
             query-result
             (let [inputs-text (some-> (:inputs options) string/trim)
                   inputs-result (when (seq inputs-text)
-                                  (parse-edn "inputs" inputs-text))
-                  named-inputs (when-let [entry (:entry query-result)]
-                                 (normalize-named-inputs entry (or (:value inputs-result) [])))]
+                                  (parse-edn "inputs" inputs-text))]
               (cond
                 (and inputs-result (not (:ok? inputs-result)))
                 inputs-result
-
-                (and named-inputs (not (:ok? named-inputs)))
-                named-inputs
 
                 (and inputs-result (not (vector? (:value inputs-result))))
                 {:ok? false
@@ -264,20 +259,24 @@
                          :message "inputs must be a vector"}}
 
                 :else
-                (let [inputs (normalize-task-search-inputs
-                              (:entry query-result)
-                              (or (:value named-inputs)
-                                  (:value inputs-result)
-                                  []))
-                      validated (validate-recent-updated-inputs (:entry query-result) inputs)]
-                  (if-not (:ok? validated)
-                    validated
-                    {:ok? true
-                     :action {:type :query
-                              :repo repo
-                              :graph (core/repo->graph repo)
-                              :query (:value query-result)
-                              :inputs (:value validated)}}))))))))))
+                (let [named-inputs (when-let [entry (:entry query-result)]
+                                     (normalize-named-inputs entry (or (:value inputs-result) [])))]
+                  (if (and named-inputs (not (:ok? named-inputs)))
+                    named-inputs
+                    (let [inputs (normalize-task-search-inputs
+                                  (:entry query-result)
+                                  (or (:value named-inputs)
+                                      (:value inputs-result)
+                                      []))
+                          validated (validate-recent-updated-inputs (:entry query-result) inputs)]
+                      (if-not (:ok? validated)
+                        validated
+                        {:ok? true
+                         :action {:type :query
+                                  :repo repo
+                                  :graph (core/repo->graph repo)
+                                  :query (:value query-result)
+                                  :inputs (:value validated)}}))))))))))))
 
 (defn build-list-action
   [_options _repo]
