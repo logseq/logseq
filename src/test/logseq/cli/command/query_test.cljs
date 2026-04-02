@@ -160,7 +160,6 @@
   (testing "built-in and custom queries are both listed"
     (let [queries (query-command/list-queries {:custom-queries {"custom-q" {:query '[:find ?e]}}})
           names (set (map :name queries))]
-      (is (contains? names "block-search"))
       (is (contains? names "task-search"))
       (is (contains? names "list-status"))
       (is (contains? names "list-priority"))

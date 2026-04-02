@@ -400,7 +400,7 @@
   :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json query list --graph {{graph-arg}}"]
   :expect {:exit 0
            :stdout-json-paths {[:status] "ok"
-                               [:data :queries 0 :name] "block-search"}}
+                               [:data :queries 0 :name] "list-priority"}}
   :covers {:commands ["query list"]
            :options {:global ["--config" "--graph" "--data-dir" "--output"]}}
   :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
