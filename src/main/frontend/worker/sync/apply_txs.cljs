@@ -615,9 +615,7 @@
           block-uuid (:block/uuid block)
           block-ent (when block-uuid
                       (d/entity db [:block/uuid block-uuid]))
-          block-base (if (:block/order block-ent)
-                       (dissoc block :db/id :block/order)
-                       (dissoc block :db/id))
+          block-base (dissoc block :db/id :block/order)
           block' (merge block-base
                         (op-construct/rewrite-block-title-with-retracted-refs db block-base))]
       (if (some? block-ent)
