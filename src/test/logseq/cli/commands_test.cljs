@@ -5,6 +5,7 @@
             [logseq.cli.command.graph :as graph-command]
             [logseq.cli.command.list :as list-command]
             [logseq.cli.command.query :as query-command]
+            [logseq.db.frontend.rules :as rules]
             [logseq.cli.command.show :as show-command]
             [logseq.cli.command.sync :as sync-command]
             [logseq.cli.commands :as commands]
@@ -3188,3 +3189,33 @@
     (let [result (query-command/build-action {:name "recent-updated" :inputs "[1]"}
                                              "test-repo" {})]
       (is (true? (:ok? result))))))
+
+(deftest test-query-execute-appends-dsl-rules-for-percent-in
+  (async done
+         (let [captured-args (atom nil)
+               config {:custom-queries
+                       {:task
+                        {:query '[:find (pull ?b [*])
+                                  :in $ ?status %
+                                  :where
+                                  (task ?b ?status)]
+                         :inputs [{:name "task statuses set"}]}}}
+               action-result (query-command/build-action
+                              {:name "task" :inputs "[\"Todo\"]"}
+                              "test-repo" config)]
+           (is (true? (:ok? action-result)))
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                                transport/invoke (fn [_ _method _ args]
+                                                   (reset! captured-args (second args))
+                                                   (p/resolved []))]
+                 (query-command/execute-query (:action action-result) config))
+               (p/then (fn [_]
+                         (let [args @captured-args
+                               last-arg (last args)]
+                           (is (vector? last-arg)
+                               "last arg should be the rules vector")
+                           (is (= last-arg
+                                  (rules/extract-rules rules/db-query-dsl-rules))
+                               "should append db-query-dsl-rules when :in ends with %"))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))

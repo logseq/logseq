@@ -1,6 +1,8 @@
 (ns logseq.cli.command.query
   "Query-related CLI commands."
   (:require [clojure.string :as string]
+            [frontend.util.datalog :as datalog-util]
+            [logseq.db.frontend.rules :as rules]
             [logseq.cli.command.core :as core]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
@@ -276,7 +278,10 @@
   [action config]
   (case (:type action)
     (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-                args (into [(:query action)] (:inputs action))
+                query-map (datalog-util/query-vec->map (:query action))
+                args (cond-> (into [(:query action)] (:inputs action))
+                       (= '% (last (:in query-map)))
+                       (conj (rules/extract-rules rules/db-query-dsl-rules)))
                 results (transport/invoke cfg :thread-api/q false [(:repo action) args])]
           {:status :ok
            :data {:result results}}))))
