@@ -70,7 +70,10 @@
                                (fn []
                                  (format/format-result {:status :error
                                                         :error {:code (or (:code data) :exception)
-                                                                :message message}}
+                                                                :message (str message
+                                                                              (when (get-in parsed [:options :verbose])
+                                                                                (str "\nStacktrace:\n"
+                                                                                     (.-stack error))))}}
                                                        cfg)))}))))
 
 (defn ^:large-vars/cleanup-todo run!

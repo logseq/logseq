@@ -92,9 +92,9 @@
       {:ok? true :value parsed})))
 
 (defn- normalize-query-name
-  [name]
-  (when (some? name)
-    (let [raw (if (keyword? name) (name name) (str name))
+  [name']
+  (when (some? name')
+    (let [raw (if (keyword? name') (name name') (str name'))
           text (string/trim raw)]
       (when (seq text) text))))
 
