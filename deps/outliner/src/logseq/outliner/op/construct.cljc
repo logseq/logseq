@@ -557,8 +557,23 @@
 (defn- property-ref-value
   [db property-id value]
   (let [property-type (some-> (d/entity db property-id) :logseq.property/type)]
-    (if (contains? db-property-type/all-ref-property-types property-type)
+    (cond
+      ;; Number property values are stored as ref entities but the semantic op
+      ;; uses scalar content for undo/redo payloads.
+      (= :number property-type)
+      (let [to-content (fn [v]
+                         (if (some? (:db/id v))
+                           (or (db-property/property-value-content v) v)
+                           v))]
+        (cond
+          (set? value) (set (map to-content value))
+          (sequential? value) (mapv to-content value)
+          :else (to-content value)))
+
+      (contains? db-property-type/all-ref-property-types property-type)
       (sanitize-ref-value db value)
+
+      :else
       value)))
 
 (defn- block-property-value
@@ -620,82 +635,70 @@
                ops)]
     (seq ops')))
 
+(defn- property-history-cleanup-op
+  [db-before db-after tx-data block-ids property-id]
+  (when-let [history-refs (property-history-refs-from-tx-data
+                           db-before
+                           db-after
+                           tx-data
+                           block-ids
+                           property-id)]
+    [:delete-blocks [history-refs {}]]))
+
+(defn- restore-property-op
+  [before-value block-ref property-id {:keys [remove-when-nil?]}]
+  (if (nil? before-value)
+    (when remove-when-nil?
+      [:remove-block-property [block-ref property-id]])
+    [:set-block-property [block-ref property-id before-value]]))
+
+(defn- inverse-property-ops-for-blocks
+  [db-before block-ids property-id restore-opts]
+  (->> block-ids
+       (keep (fn [block-id]
+               (let [before-value (block-property-value db-before block-id property-id)
+                     block-ref (stable-entity-ref db-before block-id)]
+                 (restore-property-op before-value block-ref property-id restore-opts))))
+       vec
+       seq))
+
+(defn- inverse-property-change-op
+  [db-before db-after tx-data block-ids property-id restore-opts]
+  (let [cleanup-op (property-history-cleanup-op
+                    db-before
+                    db-after
+                    tx-data
+                    block-ids
+                    property-id)
+        inverse-ops (inverse-property-ops-for-blocks
+                     db-before
+                     block-ids
+                     property-id
+                     restore-opts)]
+    (prepend-history-cleanup-op cleanup-op inverse-ops)))
+
 (defn- inverse-property-op
   [db-before db-after tx-data op args]
   (case op
     :set-block-property
-    (let [[block-id property-id _value] args
-          before-value (block-property-value db-before block-id property-id)
-          block-ref (stable-entity-ref db-before block-id)
-          cleanup-op (when-let [history-refs (property-history-refs-from-tx-data
-                                              db-before
-                                              db-after
-                                              tx-data
-                                              [block-id]
-                                              property-id)]
-                       [:delete-blocks [history-refs {}]])]
-      (prepend-history-cleanup-op
-       cleanup-op
-       (if (nil? before-value)
-         [:remove-block-property [block-ref property-id]]
-         [:set-block-property [block-ref property-id before-value]])))
+    (let [[block-id property-id _value] args]
+      (inverse-property-change-op
+       db-before db-after tx-data [block-id] property-id {:remove-when-nil? true}))
 
     :remove-block-property
-    (let [[block-id property-id] args
-          before-value (block-property-value db-before block-id property-id)
-          block-ref (stable-entity-ref db-before block-id)
-          cleanup-op (when-let [history-refs (property-history-refs-from-tx-data
-                                              db-before
-                                              db-after
-                                              tx-data
-                                              [block-id]
-                                              property-id)]
-                       [:delete-blocks [history-refs {}]])]
-      (prepend-history-cleanup-op
-       cleanup-op
-       (when (some? before-value)
-         [:set-block-property [block-ref property-id before-value]])))
+    (let [[block-id property-id] args]
+      (inverse-property-change-op
+       db-before db-after tx-data [block-id] property-id {:remove-when-nil? false}))
 
     :batch-set-property
-    (let [[block-ids property-id _value _opts] args
-          cleanup-op (when-let [history-refs (property-history-refs-from-tx-data
-                                              db-before
-                                              db-after
-                                              tx-data
-                                              block-ids
-                                              property-id)]
-                       [:delete-blocks [history-refs {}]])]
-      (prepend-history-cleanup-op
-       cleanup-op
-       (->> block-ids
-            (keep (fn [block-id]
-                    (let [before-value (block-property-value db-before block-id property-id)
-                          block-ref (stable-entity-ref db-before block-id)]
-                      (if (nil? before-value)
-                        [:remove-block-property [block-ref property-id]]
-                        [:set-block-property [block-ref property-id before-value]]))))
-            vec
-            seq)))
+    (let [[block-ids property-id _value _opts] args]
+      (inverse-property-change-op
+       db-before db-after tx-data block-ids property-id {:remove-when-nil? true}))
 
     :batch-remove-property
-    (let [[block-ids property-id _opts] args
-          cleanup-op (when-let [history-refs (property-history-refs-from-tx-data
-                                              db-before
-                                              db-after
-                                              tx-data
-                                              block-ids
-                                              property-id)]
-                       [:delete-blocks [history-refs {}]])]
-      (prepend-history-cleanup-op
-       cleanup-op
-       (->> block-ids
-            (keep (fn [block-id]
-                    (let [before-value (block-property-value db-before block-id property-id)
-                          block-ref (stable-entity-ref db-before block-id)]
-                      (when (some? before-value)
-                        [:set-block-property [block-ref property-id before-value]]))))
-            vec
-            seq)))
+    (let [[block-ids property-id _opts] args]
+      (inverse-property-change-op
+       db-before db-after tx-data block-ids property-id {:remove-when-nil? false}))
 
     nil))
 
