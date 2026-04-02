@@ -23,7 +23,7 @@
             [logseq.outliner.pipeline :as outliner-pipeline]))
 
 (def ^:private rtc-tx-or-download-graph?
-  (let [p (some-fn :rtc-op? :rtc-tx? :rtc-download-graph?)]
+  (let [p (some-fn :rtc-op? :rtc-tx? :rtc-download-graph? :transact-remote?)]
     (fn [tx-meta]
       (p tx-meta))))
 
@@ -437,7 +437,7 @@
                                         (toggle-page-and-block db tx-report))
         display-blocks-tx-data (add-missing-properties-to-typed-display-blocks db-after tx-data tx-meta)
         ensure-query-tx-data (ensure-query-property-on-tag-additions tx-report)
-        commands-tx (when-not (rtc-tx-or-download-graph? tx-meta)
+        commands-tx (when-not (or (:undo? tx-meta) (rtc-tx-or-download-graph? tx-meta))
                       (commands/run-commands tx-report))
         insert-templates-tx (when-not (rtc-tx-or-download-graph? tx-meta)
                               (insert-tag-templates tx-report))
