@@ -153,7 +153,8 @@
           server-blocks (map (fn [b]
                                {:block/uuid (uuid (:uuid b))
                                 :block/parent (when-let [id (:parent b)] (uuid id))
-                                :block/page (when-let [id (:page b)] (uuid id))})
+                                :block/page (when-let [id (:page b)] (uuid id))
+                                :block/order (:order b)})
                              (:blocks server-diagnostics))
           diff-blocks (different-blocks (:blocks export-edn) server-blocks)
           diff-data {:repo repo
@@ -161,8 +162,6 @@
                      :remote-checksum (:remote-checksum export-edn)
                      :recomputed-checksum (:recomputed-checksum export-edn)
                      :server-checksum (:checksum server-diagnostics)
-                     :local-diagnostics export-edn
-                     :server-diagnostics server-diagnostics
                      :different-blocks diff-blocks}]
     (pprint/pprint diff-data)
     (js/console.warn "Checksum mismatch between client and server. Diff data:" diff-data)))

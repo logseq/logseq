@@ -408,11 +408,12 @@
           (http/json-response :sync/pull (pull-response self since)))))))
 
 (defn- normalize-diagnostic-block
-  [{:keys [block/uuid block/parent block/page] :as block}]
+  [{:keys [block/uuid block/parent block/page block/order] :as block}]
   (cond-> block
     uuid (assoc :block/uuid (str uuid))
     parent (assoc :block/parent (str parent))
-    page (assoc :block/page (str page))))
+    page (assoc :block/page (str page))
+    order (assoc :block/order order)))
 
 (defn- checksum-diagnostics-response
   [^js self]
