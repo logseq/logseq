@@ -333,7 +333,6 @@
                         :logseq.kv/graph-remote?
                         :logseq.kv/latest-code-lang
                         :logseq.kv/graph-backup-folder
-                        :logseq.kv/graph-text-embedding-model-name
                         :logseq.property/empty-placeholder])
         favorites (get-favorites db)
         recent-updated-pages (let [pages (get-recent-updated-pages db)]

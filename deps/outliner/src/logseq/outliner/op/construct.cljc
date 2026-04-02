@@ -48,8 +48,7 @@
     :block.temp/ast-body
     :block.temp/load-status
     :block.temp/has-children?
-    :logseq.property/created-by-ref
-    :logseq.property.embedding/hnsw-label-updated-at})
+    :logseq.property/created-by-ref})
 
 (def ^:api rebase-refs-key :block.temp/sync-rebase-refs)
 (def ^:api rebase-created-refs-key :block.temp/sync-created-refs)

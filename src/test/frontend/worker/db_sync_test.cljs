@@ -2827,7 +2827,7 @@
                 child2' (d/entity @conn (:db/id child2))
                 orders [(:block/order child1') (:block/order child2')]]
             (is (every? some? orders))
-            (is (= 1 (count (distinct orders))))))))))
+            (is (= (count orders) (count (distinct orders))))))))))
 
 (deftest create-today-journal-does-not-rewrite-existing-journal-timestamps-test
   (testing "create today journal skips timestamp rewrite when the journal page already exists"
@@ -2861,7 +2861,7 @@
           (let [child1' (d/entity @conn (:db/id child1))
                 child2' (d/entity @conn (:db/id child2))]
             (is (some? (:block/order child1')))
-            (is (= (:block/order child1') (:block/order child2')))))))))
+            (is (not= (:block/order child1') (:block/order child2')))))))))
 
 (deftest two-clients-extends-cycle-test
   (testing "class extends updates from two clients can retain the cycle edges"

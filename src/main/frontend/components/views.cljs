@@ -2184,7 +2184,6 @@
                              :logseq.property.node/display-type
                              (= :code))]
     (->> properties
-         (remove #{:logseq.property.embedding/hnsw-label-updated-at})
          (map db/entity)
          (ldb/sort-by-order)
          ((fn [cs] (build-columns config cs {:add-tags-column? false

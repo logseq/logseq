@@ -87,32 +87,6 @@
                                     shadow.remote.runtime.cljs.browser]
                          :loader-mode :eval}}
 
-  :inference-worker {:target        :browser
-                     :module-loader true
-                     :js-options    {:js-provider    :external
-                                     :external-index "target/inference-worker.js"
-                                     :external-index-format :esm
-                                     :entry-keys ["module" "browser" "main"]
-                                     :export-conditions ["module" "import", "browser" "require" "default"]}
-                     :modules       {:inference-worker
-                                     {:init-fn frontend.inference-worker.inference-worker/init
-                                      :web-worker true
-                                      :prepend-js "importScripts('inference-worker-bundle.js');\n"}}
-
-                     :output-dir       "./static/js"
-                     :asset-path       "/static/js"
-                     :release          {:asset-path "https://asset.logseq.com/static/js"}
-                     :compiler-options {:infer-externs      :auto
-                                        :output-feature-set :es-next-in
-                                        :source-map true
-                                        :externs ["datascript/externs.js"
-                                                  "externs.js"]
-                                        :warnings {:fn-deprecated false
-                                                   :redef false}}
-                     :closure-defines {goog.debug.LOGGING_ENABLED true}
-                     :devtools {:watch-path "/static"
-                                :preloads [devtools.preload
-                                           shadow.remote.runtime.cljs.browser]}}
   :mobile {:target        :browser
            :module-loader true
            :js-options    {:ignore-asset-requires true
