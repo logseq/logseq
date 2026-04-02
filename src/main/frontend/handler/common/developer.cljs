@@ -164,7 +164,7 @@
                      :local-diagnostics export-edn
                      :server-diagnostics server-diagnostics
                      :different-blocks diff-blocks}]
-    (cljs.pprint/pprint diff-data)
+    (pprint/pprint diff-data)
     (js/console.warn "Checksum mismatch between client and server. Diff data:" diff-data)))
 
 (defn ^:export recompute-checksum-diagnostics
