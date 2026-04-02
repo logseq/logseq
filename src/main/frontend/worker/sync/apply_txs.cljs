@@ -64,8 +64,7 @@
      (sync-presence/rtc-state-payload sync-counts client))))
 
 (def reverse-data-ignored-attrs
-  #{:logseq.property.embedding/hnsw-label-updated-at
-    :block/tx-id})
+  #{:block/tx-id})
 
 (def rtc-ignored-attrs
   (set/union
@@ -1014,8 +1013,7 @@
   [repo {:keys [tx-meta tx-data] :as tx-report}]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (when-not (or (:rtc-tx? tx-meta)
-                  (and (:batch-tx? @conn) (not= (:outliner-op tx-meta) :rebase))
-                  (:mark-embedding? tx-meta))
+                  (and (:batch-tx? @conn) (not= (:outliner-op tx-meta) :rebase)))
       (when (seq tx-data)
         (enqueue-local-tx-aux repo tx-report)
         ;; (p/do!

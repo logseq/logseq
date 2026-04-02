@@ -340,7 +340,8 @@
                        worker-db-validate/recompute-checksum-diagnostics (fn [& args]
                                                                            (reset! captured args)
                                                                            result)]
-           (is (= result (recompute test-repo)))
+           (is (= (assoc result :local-checksum "recomputed")
+                  (recompute test-repo)))
            (is (= [test-repo
                    conn
                    {:local-tx 10
