@@ -35,6 +35,7 @@
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.op :as outliner-op]
+            [logseq.outliner.op.construct :as op-construct]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
             [promesa.core :as p]))
@@ -3096,6 +3097,39 @@
                      (set (map :db/ident (:block/tags block-restored)))))
               (is (= base-history-count restored-history-count)))))))))
 
+(deftest derive-history-set-block-property-inverse-includes-property-history-cleanup-test
+  (testing "derive-history-outliner-ops should delete created property-history block for set-block-property"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:pnum {:logseq.property/type :number
+                                     :db/cardinality :db.cardinality/one}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "task"
+                             :build/properties {:pnum 1}}]}]})
+          block-before (db-test/find-block-by-content @conn "task")
+          block-id (:db/id block-before)
+          property-id (:db/id (d/entity @conn :user.property/pnum))
+          history-uuid (random-uuid)
+          {:keys [db-after tx-data]}
+          (d/with @conn
+                  [[:db/add block-id :user.property/pnum 2]
+                   {:db/id -1
+                    :block/uuid history-uuid
+                    :logseq.property.history/block block-id
+                    :logseq.property.history/property property-id
+                    :logseq.property.history/scalar-value 2}]
+                  {})
+          {:keys [inverse-outliner-ops]}
+          (op-construct/derive-history-outliner-ops
+           @conn
+           db-after
+           tx-data
+           {:outliner-op :set-block-property
+            :outliner-ops [[:set-block-property [block-id :user.property/pnum 2]]]})]
+      (is (= :delete-blocks (ffirst inverse-outliner-ops)))
+      (is (= #{[:block/uuid history-uuid]}
+             (set (get-in inverse-outliner-ops [0 1 0])))))))
+
 (deftest pending-reversed-txs-for-batch-status-changes-restore-base-db-test
   (testing "fresh persisted reversed tx rows from repeated batch status changes should restore the base db"
     (let [conn (db-test/create-conn-with-blocks
@@ -3138,6 +3172,52 @@
               (is (= base-tags
                      (set (map :db/ident (:block/tags block-restored)))))
               (is (= base-history-count restored-history-count)))))))))
+
+(deftest derive-history-batch-set-property-inverse-includes-property-history-cleanup-test
+  (testing "derive-history-outliner-ops should delete created property-history blocks for batch-set-property"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:pnum {:logseq.property/type :number
+                                     :db/cardinality :db.cardinality/one}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "task-1"
+                             :build/properties {:pnum 1}}
+                            {:block/title "task-2"}]}]})
+          block-1 (db-test/find-block-by-content @conn "task-1")
+          block-2 (db-test/find-block-by-content @conn "task-2")
+          property-id (:db/id (d/entity @conn :user.property/pnum))
+          history-uuid-1 (random-uuid)
+          history-uuid-2 (random-uuid)
+          {:keys [db-after tx-data]}
+          (d/with @conn
+                  [[:db/add (:db/id block-1) :user.property/pnum 2]
+                   [:db/add (:db/id block-2) :user.property/pnum 2]
+                   {:db/id -1
+                    :block/uuid history-uuid-1
+                    :logseq.property.history/block (:db/id block-1)
+                    :logseq.property.history/property property-id
+                    :logseq.property.history/scalar-value 2}
+                   {:db/id -2
+                    :block/uuid history-uuid-2
+                    :logseq.property.history/block (:db/id block-2)
+                    :logseq.property.history/property property-id
+                    :logseq.property.history/scalar-value 2}]
+                  {})
+          {:keys [inverse-outliner-ops]}
+          (op-construct/derive-history-outliner-ops
+           @conn
+           db-after
+           tx-data
+           {:outliner-op :batch-set-property
+            :outliner-ops [[:batch-set-property [[(:db/id block-1)
+                                                  (:db/id block-2)]
+                                                 :user.property/pnum
+                                                 2
+                                                 {}]]]})]
+      (is (= :delete-blocks (ffirst inverse-outliner-ops)))
+      (is (= #{[:block/uuid history-uuid-1]
+               [:block/uuid history-uuid-2]}
+             (set (get-in inverse-outliner-ops [0 1 0])))))))
 
 (deftest normalize-rebased-pending-tx-keeps-reconstructive-reverse-for-retract-entity-test
   (testing "rebased pending tx should keep non-empty reverse datoms even when forward tx collapses to retractEntity"
