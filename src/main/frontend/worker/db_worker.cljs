@@ -917,7 +917,14 @@
 (def-thread-api :thread-api/recompute-checksum-diagnostics
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (worker-db-validate/recompute-checksum-diagnostics repo conn (sync-diagnostics-for-validation repo))))
+    (let [result (worker-db-validate/recompute-checksum-diagnostics repo conn (sync-diagnostics-for-validation repo))
+          recomputed-checksum (:recomputed-checksum result)]
+      (when (and (some? recomputed-checksum)
+                 (worker-state/get-client-ops-conn repo))
+        (client-op/update-local-checksum repo recomputed-checksum))
+      (cond-> result
+        (some? recomputed-checksum)
+        (assoc :local-checksum recomputed-checksum)))))
 
 ;; Returns an export-edn map for given repo. When there's an unexpected error, a map
 ;; with key :export-edn-error is returned
