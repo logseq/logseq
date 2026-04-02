@@ -208,7 +208,7 @@
                                    (d/datoms db :eavt eid)))
                             eids)
                     (remove (fn [[_e a _v _tx _added]]
-                              (contains? #{:block/tx-id :logseq.property.user/email :logseq.property.embedding/hnsw-label-updated-at} a))))
+                              (contains? #{:block/tx-id :logseq.property.user/email} a))))
         datoms (if (entity-util/page? entity)
                  raw-datoms
                  (normalize-block-publish-datoms raw-datoms (set (map :db/id blocks)) (:db/id entity)))]

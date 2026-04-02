@@ -8,7 +8,6 @@
             [frontend.components.page :as page]
             [frontend.components.profiler :as profiler]
             [frontend.components.shortcut-help :as shortcut-help]
-            [frontend.components.vector-search.sidebar :as vector-search]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -157,10 +156,6 @@
         [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) Profiler"]
          (profiler/profiler)]
 
-        :vector-search
-        [[:.flex.items-center (ui/icon "file-search" {:class "text-md mr-2"}) "(Dev) VectorSearch"]
-         (vector-search/vector-search-sidebar)]
-
         ["" [:span]])))
    (p/catch (fn [error]
               (js/console.error error)))))
@@ -179,9 +174,6 @@
 
     developer-mode?
     (conj {:db-id "undo-redo" :block-type :undo-redo :label "(Dev) Undo/Redo"})
-
-    developer-mode?
-    (conj {:db-id "vector-search" :block-type :vector-search :label "(Dev) vector-search"})
 
     developer-mode?
     (conj {:db-id "profiler" :block-type :profiler :label "(Dev) Profiler"})))
