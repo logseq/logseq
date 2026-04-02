@@ -186,13 +186,17 @@
   [db ids]
   (mapv #(stable-entity-ref db %) ids))
 
+(defn- resolve-target-and-sibling
+  [block]
+  (if-let [left-sibling (ldb/get-left-sibling block)]
+    [(:db/id left-sibling) true]
+    (when-let [parent (:block/parent block)]
+      [(:db/id parent) false])))
+
 (defn- resolve-move-target
   [db ids]
   (when-let [first-block (some->> ids first (d/entity db))]
-    (if-let [left-sibling (ldb/get-left-sibling first-block)]
-      [(:db/id left-sibling) true]
-      (when-let [parent (:block/parent first-block)]
-        [(:db/id parent) false]))))
+    (resolve-target-and-sibling first-block)))
 
 (defn- stable-property-value
   [db property-id v]
@@ -769,7 +773,7 @@
                                [target-id sibling?])]
     (when (and (seq blocks) (some? target-id))
       {:blocks blocks
-       :target-id target-id
+       :target-id (stable-entity-ref db-before target-id)
        :sibling? sibling?})))
 
 (defn- build-inverse-delete-blocks
@@ -873,8 +877,12 @@
     (when-let [target-ref (stable-entity-ref db-before target-id)]
       (when (d/entity db-after target-ref)
         (when-let [target (d/entity db-before target-ref)]
-          [[:delete-blocks [[target-ref] {}]]
-           (build-inverse-save-block db-before target opts)])))))
+          (let [insert-block (build-insert-block-payload db-before target)
+                [target-id sibling?] (resolve-target-and-sibling target)]
+            [[:delete-blocks [[target-ref] {}]]
+             (to-insert-op db-before {:blocks [insert-block]
+                                      :target-id (stable-entity-ref db-before target-id)
+                                      :sibling? sibling?})]))))))
 
 (defn- build-inverse-insert-like
   [db-before db-after tx-data args]
