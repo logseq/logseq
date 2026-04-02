@@ -15,8 +15,8 @@
            (map (comp :block/title :page) batch)))
     (is (= ["id-0" "id-4"]
            (map (comp :block/uuid :page) batch)))
-    (is (= [["Block" "Block" "Block"]
-            ["Block" "Block" "Block"]]
+    (is (= [[(#'sut/build-block-title 10 0) (#'sut/build-block-title 10 1) (#'sut/build-block-title 10 2)]
+            [(#'sut/build-block-title 11 0) (#'sut/build-block-title 11 1) (#'sut/build-block-title 11 2)]]
            (map (fn [{:keys [blocks]}]
                   (mapv :block/title blocks))
                 batch)))
