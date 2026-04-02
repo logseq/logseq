@@ -107,10 +107,19 @@
             {}
             datoms)))
 
+(defn- checksum-eligible-entity?
+  [db eid]
+  (when-let [ent (d/entity db eid)]
+    (and (:block/uuid ent)
+         (not (ldb/built-in? ent))
+         (nil? (:logseq.property/deleted-at ent))
+         (or (ldb/page? ent)
+             (:block/page ent)))))
+
 (defn- entity-digest
   [db eid e2ee?]
-  (let [{:keys [block/uuid block/title block/name block/parent block/page block/order]} (entity-values db eid e2ee?)]
-    (when uuid
+  (when (checksum-eligible-entity? db eid)
+    (let [{:keys [block/uuid block/title block/name block/parent block/page block/order]} (entity-values db eid e2ee?)]
       (cond-> [fnv-offset djb-offset]
         true (digest-string (str uuid))
         true (hash-code field-separator)
@@ -152,8 +161,8 @@
                   distinct)
         blocks (->> eids
                     (keep (fn [eid]
-                            (let [{:keys [block/uuid block/title block/name block/parent block/page :block/order]} (entity-values db eid e2ee?)]
-                              (when uuid
+                            (when (checksum-eligible-entity? db eid)
+                              (let [{:keys [block/uuid block/title block/name block/parent block/page :block/order]} (entity-values db eid e2ee?)]
                                 (cond-> {:block/uuid uuid
                                          :block/parent parent
                                          :block/page page

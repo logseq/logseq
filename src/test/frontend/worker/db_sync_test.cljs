@@ -456,8 +456,8 @@
               (is (= "db transact failed" (:reason data)))
               (is (= rejected-tx (:data data))))))))))
 
-(deftest hello-checksum-mismatch-fails-fast-test
-  (testing "hello with matching t but mismatched checksum fails fast"
+(deftest hello-checksum-mismatch-logs-warning-test
+  (testing "hello with matching t but mismatched checksum logs warning without throwing"
     (let [{:keys [conn client-ops-conn]} (setup-parent-child)
           latest-prev @db-sync/*repo->latest-remote-tx
           raw-message (js/JSON.stringify
@@ -475,16 +475,17 @@
           (with-redefs [sync-apply/flush-pending! (fn [& _] nil)
                         sync-assets/enqueue-asset-sync! (fn [& _] nil)]
             (try
-              (sync-handle-message/handle-message! test-repo client raw-message)
-              (catch :default error
-                (let [data (ex-data error)]
-                  (is (= :db-sync/checksum-mismatch (:type data)))
-                  (is (= "bad-checksum" (:remote-checksum data)))))
+              (is (= :ok
+                     (try
+                       (sync-handle-message/handle-message! test-repo client raw-message)
+                       :ok
+                       (catch :default _error
+                         :thrown))))
               (finally
                 (reset! db-sync/*repo->latest-remote-tx latest-prev)))))))))
 
-(deftest hello-checksum-mismatch-fails-fast-for-e2ee-test
-  (testing "e2ee graphs also fail fast on checksum mismatch"
+(deftest hello-checksum-mismatch-logs-warning-for-e2ee-test
+  (testing "e2ee graphs also log warning on checksum mismatch without throwing"
     (let [{:keys [conn client-ops-conn]} (setup-parent-child)
           latest-prev @db-sync/*repo->latest-remote-tx
           raw-message (js/JSON.stringify
@@ -503,12 +504,12 @@
                         sync-assets/enqueue-asset-sync! (fn [& _] nil)
                         sync-crypt/graph-e2ee? (constantly true)]
             (try
-              (sync-handle-message/handle-message! test-repo client raw-message)
-              (is false "expected checksum mismatch to fail-fast for e2ee graphs")
-              (catch :default error
-                (let [data (ex-data error)]
-                  (is (= :db-sync/checksum-mismatch (:type data)))
-                  (is (= "bad-checksum" (:remote-checksum data)))))
+              (is (= :ok
+                     (try
+                       (sync-handle-message/handle-message! test-repo client raw-message)
+                       :ok
+                       (catch :default _error
+                         :thrown))))
               (finally
                 (reset! db-sync/*repo->latest-remote-tx latest-prev)))))))))
 
@@ -1973,9 +1974,16 @@
                 pasted (d/entity @conn pasted-id)
                 pasted-uuid (:block/uuid pasted)
                 pasted-child-uuid (:block/uuid (d/entity @conn pasted-child-id))]
-            (is (some #(and (= :save-block (first %))
-                            (= empty-target-uuid (get-in % [1 0 :block/uuid])))
+            (is (some #(and (= :delete-blocks (first %))
+                            (= [[:block/uuid empty-target-uuid]]
+                               (vec (get-in % [1 0]))))
                       (:inverse-outliner-ops pending)))
+            (is (some #(and (= :insert-blocks (first %))
+                            (= empty-target-uuid
+                               (get-in % [1 0 0 :block/uuid])))
+                      (:inverse-outliner-ops pending)))
+            (is (not-any? #(= :save-block (first %))
+                          (:inverse-outliner-ops pending)))
             (is (= true
                    (:applied? (#'sync-apply/apply-history-action! test-repo tx-id true {}))))
             (let [restored-target (d/entity @conn [:block/uuid empty-target-uuid])]
@@ -2393,8 +2401,8 @@
             (is (empty? (#'sync-apply/pending-txs test-repo)))
             (is (= 1 (client-op/get-local-tx test-repo)))))))))
 
-(deftest tx-batch-ok-real-checksum-mismatch-fails-fast-test
-  (testing "tx/batch/ok fails fast on true checksum mismatch"
+(deftest tx-batch-ok-real-checksum-mismatch-logs-warning-test
+  (testing "tx/batch/ok logs warning on true checksum mismatch without throwing"
     (let [{:keys [conn client-ops-conn]} (setup-parent-child)
           stale-checksum "0000000000000000"
           remote-checksum "ffffffffffffffff"
@@ -2409,14 +2417,12 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (client-op/update-local-checksum test-repo stale-checksum)
-          (try
-            (sync-handle-message/handle-message! test-repo client raw-message)
-            (is false "expected checksum mismatch to fail fast")
-            (catch :default error
-              (let [data (ex-data error)]
-                (is (= :db-sync/checksum-mismatch (:type data)))
-                (is (= stale-checksum (:local-checksum data)))
-                (is (= remote-checksum (:remote-checksum data)))))))))))
+          (is (= :ok
+                 (try
+                   (sync-handle-message/handle-message! test-repo client raw-message)
+                   :ok
+                   (catch :default _error
+                     :thrown)))))))))
 
 (deftest local-checksum-stays-in-sync-after-undo-redo-sequence-test
   (testing "insert/delete/indent/outdent with undo-all/redo-all keeps cached checksum aligned"
