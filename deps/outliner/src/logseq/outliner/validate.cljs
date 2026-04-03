@@ -146,6 +146,22 @@
                              :payload {:message "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['."
                                        :type :error}}))))))
 
+(defn validate-editing-built-in-property
+  "Validates if built-in property entity is editable for the given attributes to be updated"
+  [entity attribute-map-to-update]
+   ;; Update allowed as needed. Keep this as an allowed list to default to safe editing for built-in entities
+  (let [allowed-attributes #{:logseq.property/hide-empty-value :logseq.property/description}]
+    (when-let [disallowed (and (:logseq.property/built-in? entity)
+                               (not-empty (set/difference (set (keys attribute-map-to-update))
+                                                          allowed-attributes)))]
+      (throw (ex-info "Given built-in property's attributes are not editable"
+                      (merge
+                       {:type :notification
+                        :payload {:message "Can't change the given attributes for a built-in property"
+                                  :type :error}}
+                       {:property (:db/ident entity)
+                        :disallowed-attributes disallowed}))))))
+
 (defn- validate-extends-property-have-correct-type
   "Validates whether given parent and children are classes"
   [parent-ent child-ents]
