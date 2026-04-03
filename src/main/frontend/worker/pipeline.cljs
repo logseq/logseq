@@ -354,7 +354,7 @@
                    ;; add created-by for new-block
                    (and (keyword-identical? :block/uuid attr)
                         (:added datom))
-                   (let [ent (d/entity db-after e)]
+                   (when-let [ent (d/entity db-after e)]
                      (when-not (:logseq.property/created-by-ref ent)
                        [:db/add e :logseq.property/created-by-ref created-by-id]))
 
@@ -364,7 +364,8 @@
                         (let [origin-title (:block/title (d/entity db-before e))]
                           (and (some? origin-title)
                                (string/blank? origin-title))))
-                   [:db/add e :logseq.property/created-by-ref created-by-id])))
+                   (when (d/entity db-after e)
+                     [:db/add e :logseq.property/created-by-ref created-by-id]))))
              tx-data)]
         (cond->> add-created-by-tx-data
           (nil? created-by-ent) (cons created-by-block))))))
