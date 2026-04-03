@@ -7,6 +7,7 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [frontend.dicts :as dicts]
+            [logseq.tasks.lang-lint :as lang-lint]
             [logseq.tasks.util :as task-util]))
 
 (defn- get-dicts
@@ -39,7 +40,7 @@
   (if (< (count s) length)
     s
     (string/replace (str (subs s 0 length) "...")
-                    ;; Escape newlines for multi-line translations like tutorials
+                    ;; Keep shortened table rows single-line for multi-line translations.
                     "\n" "\\n")))
 
 (defn list-missing
@@ -49,7 +50,7 @@
                  (task-util/print-usage "LOCALE [--copy]"))
         options (cli/parse-opts (rest args) {:coerce {:copy :boolean}})
         _ (when-not (contains? (get-languages) lang)
-            (println "Language" lang "does not have an entry in dicts/core.cljs")
+            (println "Language" lang "does not have an entry in frontend.dicts/languages")
             (System/exit 1))
         dicts (get-dicts)
         all-missing (select-keys (dicts :en)
@@ -94,10 +95,10 @@
         valid-keys (set (keys (dicts :en)))
         invalid-dicts
         (->> (dissoc dicts :en)
-             (mapcat (fn [[lang get-dicts]]
+             (mapcat (fn [[lang lang-dicts]]
                        (map
                         #(hash-map :language lang :invalid-key %)
-                        (set/difference (set (keys get-dicts))
+                        (set/difference (set (keys lang-dicts))
                                         valid-keys)))))]
     (if (empty? invalid-dicts)
       (println "All non-default translations have valid keys!")
@@ -107,32 +108,93 @@
         (when fix?
           (delete-invalid-non-default-languages
            (update-vals (group-by :language invalid-dicts) #(map :invalid-key %)))
-          (println "These invalid non-language keys have been removed."))
+          (println "These invalid translation keys have been removed from non-default dictionaries."))
         (System/exit 1)))))
 
-;; Command to check for manual entries:
-;; grep -E -oh  '\(t [^ ):]+' -r src/main
-(def manual-ui-dicts
-  "Manual list of ui translations because they are dynamic i.e. keyword isn't
-  first arg. Only map values are used in linter as keys are for easily scanning
-  grep result."
+(def ^:private direct-translation-call-source-paths
+  ["src/main" "src/electron"])
 
-  {"(t (shortcut-helper/decorate-namespace" [] ;; shortcuts related so can ignore
-   "(t (keyword" [:color/yellow :color/red :color/pink :color/green :color/blue
-                  :color/purple :color/gray]
-   "(tt (keyword" [:left-side-bar/assets :left-side-bar/tasks]
+(def ^:private translated-code-source-paths
+  ["deps" "src/main" "src/electron"])
 
-   ;; from 3 files
-   "(t (if" [:asset/show-in-folder :asset/open-in-browser
-             :search-item/page
-             :page/make-private :page/make-public]
-   "(t (name" [] ;; shortcuts related
-   "(t (dh/decorate-namespace" [] ;; shortcuts related
-   "(t prompt-key" [:select/default-prompt :select/default-select-multiple :select.graph/prompt]
-   ;; All args to ui/make-confirm-modal are not keywords
-   "(t title" []
-   "(t (or title-key" [:views.table/live-query-title :views.table/default-title :all-pages/table-title]
-   "(t subtitle" [:asset/physical-delete]})
+(def ^:private shortcut-config-path
+  "src/main/frontend/modules/shortcut/config.cljs")
+
+;; Matches literal `(t :ns/key)` and `(tt :ns/key)` calls, including alias-qualified
+;; forms like `(i18n/t :ns/key)`.
+(def ^:private direct-translation-call-rg-pattern
+  "[(](?:[[:alnum:]._-]+/)?tt?[[:space:]]+:[^ )]+")
+
+;; Matches literal `:i18n-key :ns/key` entries, including values wrapped onto the
+;; next line when `rg` runs in multiline mode.
+(def ^:private i18n-key-rg-pattern
+  ":i18n-key[[:space:]]+:[^ }\n]+")
+
+;; Matches files containing dynamic translation-call `if`/`or` forms, `i18n-key`
+;; `if` forms, literal `:prompt-key`/`:title-key` options, `built-in-colors`,
+;; `navs` vectors, or `:shortcut.category/*` keys for later exact extraction.
+(def ^:private derived-ui-key-candidate-rg-pattern
+  "(?:[(](?:[[:alnum:]._-]+/)?tt?[[:space:]]+[(](?:if|or)\\b|:?i18n-key[[:space:]]+[(]if\\b|:prompt-key[[:space:]]+:|:title-key[[:space:]]+:|[(]def[[:space:]]+built-in-colors\\b|\\bnavs[[:space:]]+\\[|:shortcut\\.category/)")
+
+(defn- extract-keyword-match
+  [value]
+  (some-> (last (re-seq #":[^ )}\s]+" value))
+          (subs 1)
+          keyword))
+
+(defn- rg-output-lines
+  [paths pattern & {:keys [multiline?]}]
+  (let [args (concat ["rg"]
+                     (when multiline? ["-U"])
+                     ["--no-filename" "-o" "-N" pattern]
+                     paths)]
+    (->> (apply shell {:out :string :continue true} args)
+         :out
+         string/split-lines
+         (remove string/blank?))))
+
+(defn- rg-matching-files
+  [paths pattern]
+  (let [args (concat ["rg" "-l"
+                      "--glob" "*.clj"
+                      "--glob" "*.cljs"
+                      "--glob" "*.cljc"
+                      pattern]
+                     paths)]
+    (->> (apply shell {:out :string :continue true} args)
+         :out
+         string/split-lines
+         (remove string/blank?))))
+
+(defn- grep-direct-translation-keys
+  "Grep source paths for literal `(t :ns/key)` and `(tt :ns/key)` calls."
+  []
+  (->> (rg-output-lines direct-translation-call-source-paths direct-translation-call-rg-pattern)
+       (keep extract-keyword-match)
+       set))
+
+(defn- grep-i18n-payload-keys
+  "Grep translated code paths for `:i18n-key` payload entries, including cases
+  where the translation key is wrapped onto the next line."
+  []
+  (->> (rg-output-lines translated-code-source-paths i18n-key-rg-pattern :multiline? true)
+       (keep extract-keyword-match)
+       set))
+
+(defn- grep-derived-translation-keys
+  "Scan candidate source files for translation keys derived from supported
+  dynamic patterns such as `if`/`or` translation calls, option keys, built-in
+  colors, left-sidebar tag navs, and shortcut category labels."
+  []
+  (->> (rg-matching-files translated-code-source-paths derived-ui-key-candidate-rg-pattern)
+       (mapcat #(lang-lint/derived-translation-keys (slurp %)))
+       set))
+
+(defn- grep-shortcut-command-keys
+  "Derive `:command.*` translation keys from shortcut ids declared in the
+  built-in shortcut config."
+  []
+  (lang-lint/shortcut-command-keys (slurp shortcut-config-path)))
 
 (defn- delete-not-used-key-from-dict-file
   [invalid-keys]
@@ -146,87 +208,58 @@
         (spit (fs/file path) new-content)))))
 
 (defn- validate-ui-translations-are-used
-  "This validation checks to see that translations done by (t ...) are equal to
-  the ones defined for the default :en lang. This catches translations that have
-  been added in UI but don't have an entry or translations no longer used in the UI"
+  "This validation checks that translation keys referenced from frontend, Electron,
+  shortcut config, and translated validation payloads all exist in the default
+  :en dictionary, and that unused keys in :en can be detected."
   [{:keys [fix?]}]
-  (let [actual-dicts (->> (shell {:out :string}
-                                 ;; This currently assumes all ui translations
-                                 ;; use (t and src/main. This can easily be
-                                 ;; tweaked as needed
-                                 "grep -E -oh '\\(tt? :[^ )]+' -r src/main")
-                          :out
-                          string/split-lines
-                          (map #(keyword (subs % 4)))
-                          (concat (mapcat val manual-ui-dicts))
-                          ;; Temporarily unused as they will be brought back soon
-                          (concat [:download])
-                          set)
-        expected-dicts (set (remove #(re-find #"^(command|shortcut)\." (str (namespace %)))
-                                    (keys (:en (get-dicts)))))
-        actual-only (set/difference actual-dicts expected-dicts)
-        expected-only (set/difference expected-dicts actual-dicts)]
-    (if (and (empty? actual-only) (empty? expected-only))
+  (let [defined-translation-keys (set (keys (:en (get-dicts))))
+        referenced-translation-keys (->> [(grep-direct-translation-keys)
+                                          (grep-i18n-payload-keys)
+                                          (grep-derived-translation-keys)
+                                          (grep-shortcut-command-keys)]
+                                         (apply concat)
+                                         set)
+        undefined-references (set/difference referenced-translation-keys defined-translation-keys)
+        unreferenced-definitions (set/difference defined-translation-keys referenced-translation-keys)]
+    (if (and (empty? undefined-references) (empty? unreferenced-definitions))
       (println "All defined :en translation keys match the ones that are used!")
       (do
-        (when (seq actual-only)
-          (println "\nThese translation keys are invalid because they are used in the UI but not defined:")
-          (task-util/print-table (map #(hash-map :invalid-key %) actual-only)))
-        (when (seq expected-only)
-          (println "\nThese translation keys are invalid because they are not used in the UI:")
-          (task-util/print-table (map #(hash-map :invalid-key %) expected-only))
+        (when (seq undefined-references)
+          (println "\nThese translation keys are invalid because they are referenced in translated code paths but not defined:")
+          (task-util/print-table (map #(hash-map :invalid-key %) undefined-references)))
+        (when (seq unreferenced-definitions)
+          (println "\nThese translation keys are invalid because they are defined but not referenced in translated code paths:")
+          (task-util/print-table (map #(hash-map :invalid-key %) unreferenced-definitions))
           (when fix?
-            (delete-not-used-key-from-dict-file expected-only)
-            (println "These invalid ui keys have been removed.")))
+            (delete-not-used-key-from-dict-file unreferenced-definitions)
+            (println "These unreferenced translation keys have been removed.")))
         (System/exit 1)))))
 
-(def allowed-duplicates
-  "Allows certain keys in a language to have the same translation
-   as English. Happens more in romance languages but pretty rare otherwise"
-  {:fr #{:port :type :help/docs :search-item/page :shortcut.category/navigating :text/image
-         :settings-of-plugins :code :shortcut.category/plugins}
-   :de #{:graph :host :plugins :port
-         :settings-of-plugins :shortcut.category/navigating
-         :settings-page/enable-tooltip :settings-page/plugin-system}
-   :ca #{:port :settings-page/tab-editor :settings-page/tab-general}
-   :es #{:settings-page/tab-general :settings-page/tab-editor}
-   :it #{:home :handbook/home :host :help/awesome-logseq
-         :settings-page/tab-account :settings-page/tab-editor}
-   :nl #{:plugins :type :left-side-bar/nav-recent-pages :plugin/update}
-   :pl #{:port :home :host :plugin/marketplace}
-   :pt-BR #{:plugins :right-side-bar/flashcards :settings-page/enable-flashcards :page/backlinks
-            :host :settings-page/tab-editor :shortcut.category/plugins :settings-of-plugins
-            :on-boarding/quick-tour-journal-page-desc-2 :plugin/downloads :plugin/popular
-            :settings-page/plugin-system}
-   :pt-PT #{:plugins :settings-of-plugins :plugin/downloads :right-side-bar/flashcards
-            :settings-page/enable-flashcards :settings-page/plugin-system}
-   :nb-NO #{:port :type :right-side-bar/flashcards :settings-page/enable-flashcards
-            :settings-page/tab-editor :linked-references/filter-heading}
-   :tr #{:help/awesome-logseq}
-   :id #{:host :port}
-   :cs #{:host :port :help/blog :settings-page/tab-editor}})
-
-(defn- validate-languages-dont-have-duplicates
-  "Looks up duplicates for all languages"
+(defn- validate-rich-translations
+  "Checks that localized rich translations remain rich zero-arg functions.
+   Missing translations are allowed, but once a locale defines a rich key it
+   must preserve the same renderable contract as English."
   []
-  (let [dicts (get-dicts)
-        en-dicts (dicts :en)
-        invalid-dicts
-        (->> (dissoc dicts :en)
-             (mapcat
-              (fn [[lang lang-dicts]]
-                (keep
-                 #(when (= (en-dicts %) (lang-dicts %))
-                    {:translation-key %
-                     :lang lang
-                     :duplicate-value (shorten (lang-dicts %) 70)})
-                 (keys (apply dissoc lang-dicts (allowed-duplicates lang))))))
-             (sort-by (juxt :lang :translation-key)))]
+  (let [invalid-dicts (lang-lint/rich-translation-mismatch-findings (get-dicts))]
     (if (empty? invalid-dicts)
-      (println "All languages have no duplicate English values!")
+      (println "All rich translations preserve English render contracts!")
       (do
-        (println "These translations keys are invalid because they are just copying the English value:")
+        (println "These translation keys are invalid because they no longer preserve English rich render contracts:")
         (task-util/print-table invalid-dicts)
+        (System/exit 1)))))
+
+(defn- validate-translation-placeholders
+  "Checks that every localized string uses the same placeholder set as English.
+   Missing translations are allowed because Tongue falls back to :en, but once
+   a locale defines a string it must preserve the placeholder contract."
+  []
+  (let [invalid-dicts (lang-lint/placeholder-mismatch-findings (get-dicts))]
+    (if (empty? invalid-dicts)
+      (println "All translations preserve English placeholder contracts!")
+      (do
+        (println "These translation keys are invalid because their placeholders do not match English:")
+        (task-util/print-table
+         (map #(dissoc % :default-value :localized-value) invalid-dicts))
         (System/exit 1)))))
 
 (defn validate-translations
@@ -234,4 +267,128 @@
   [& args]
   (validate-non-default-languages {:fix? (contains? (set args) "--fix")})
   (validate-ui-translations-are-used {:fix? (contains? (set args) "--fix")})
-  (validate-languages-dont-have-duplicates))
+  (validate-rich-translations)
+  (validate-translation-placeholders))
+
+(def ^:private hardcoded-default-paths
+  ["src/main/frontend"
+   "src/main/mobile"
+   "src/electron"
+   "deps"
+   "packages/ui"])
+
+(def ^:private hardcoded-allowed-extensions
+  #{"clj" "cljs" "cljc" "ts" "tsx"})
+
+(def ^:private hardcoded-ignored-segments
+  ["/test/" "/tests/" "/dev/" "/node_modules/" "/target/" "/static/" "/cljs-test-runner-out/"])
+
+;; These files are outside the product UI translation surface even though they
+;; contain readable strings:
+;; - component demos/playgrounds under `deps/shui`
+;; - MCP tool metadata under the CLI implementation
+;; - internal command definitions used only for worker-side matching
+;; - language autonyms curated outside the translation dictionaries
+(def ^:private hardcoded-ignored-path-patterns
+  [#"^deps/shui/src/logseq/shui/demo\d*\.cljs$"
+   #"^deps/cli/src/logseq/cli/common/mcp/"
+   #"^src/main/frontend/worker/commands\.cljs$"
+   #"^src/main/frontend/dicts\.cljc$"])
+
+(def ^:private hardcoded-ignored-dirs
+  #{"test" "tests" "dev" "node_modules" "target" "static"})
+
+(defn- normalize-path
+  [path]
+  (-> (str path)
+      (string/replace "\\" "/")
+      (string/replace-first #"^\./" "")))
+
+(defn- hardcoded-lint-file?
+  [path]
+  (let [normalized (normalize-path path)]
+    (and (hardcoded-allowed-extensions (fs/extension normalized))
+         (not-any? #(string/includes? normalized %) hardcoded-ignored-segments)
+         (not-any? #(re-find % normalized) hardcoded-ignored-path-patterns))))
+
+(defn- ignored-dir?
+  "Return true if the directory should be skipped during lint traversal."
+  [^java.io.File f]
+  (let [n (.getName f)]
+    (or (string/starts-with? n ".")
+        (hardcoded-ignored-dirs n))))
+
+(defn- directory-files
+  [path]
+  (let [root (fs/file path)
+        acc  (volatile! [])]
+    (letfn [(walk [^java.io.File f]
+                  (if (.isDirectory f)
+                    (when-not (ignored-dir? f)
+                      (run! walk (.listFiles f)))
+                    (vswap! acc conj (str f))))]
+      (walk root))
+    @acc))
+
+(defn- collect-files
+  [paths]
+  (->> paths
+       (map normalize-path)
+       (filter fs/exists?)
+       (mapcat (fn [path]
+                 (if (fs/directory? path)
+                   (directory-files path)
+                   [path])))
+       (map normalize-path)
+       (filter hardcoded-lint-file?)
+       distinct
+       sort))
+
+(defn- changed-files-from-git-status
+  []
+  (->> (shell {:out :string :continue true}
+              "git" "status" "--porcelain" "--untracked-files=all")
+       :out
+       string/split-lines
+       (map #(subs % 3))
+       (map #(if (string/includes? % " -> ")
+               (last (string/split % #" -> "))
+               %))
+       (map normalize-path)
+       (filter seq)))
+
+(defn- lint-findings
+  [paths]
+  (->> paths
+       (mapcat #(lang-lint/hardcoded-string-findings % (slurp %)))
+       (sort-by (juxt :file :line :kind))
+       vec))
+
+(defn lint-hardcoded
+  "Lint likely hardcoded user-facing strings in UI-oriented source files.
+  Use --warn-only to report findings without failing and --changed-only to scan
+  only files changed in git status. Optional positional args limit the scan to
+  specific files or directories."
+  [& args]
+  (let [arg-set (set args)
+        warn-only? (contains? arg-set "--warn-only")
+        changed-only? (contains? arg-set "--changed-only")
+        explicit-paths (remove #(#{"--warn-only" "--changed-only"} %) args)
+        paths (cond
+                (seq explicit-paths) (collect-files explicit-paths)
+                changed-only? (collect-files (changed-files-from-git-status))
+                :else (collect-files hardcoded-default-paths))
+        findings (lint-findings paths)]
+    (cond
+      (empty? paths)
+      (println "No files matched the hardcoded-string lint scope.")
+
+      (empty? findings)
+      (println "No hardcoded user-facing string literals found in the selected files.")
+
+      :else
+      (do
+        (println "Potential hardcoded user-facing strings:")
+        (task-util/print-table findings)
+        (when-not warn-only?
+          (System/exit 1))))))
