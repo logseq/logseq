@@ -36,6 +36,25 @@ This creates runtime divergence:
 
 Target state: db worker should own all non-UI logic and only use explicit message protocol for UI interactions.
 
+## Progress snapshot (current)
+
+### Completed migrations
+
+- Auth refresh dependency on `:thread-api/ensure-id&access-token` was removed from worker sync auth path.
+- Asset upload/download/metadata dependencies on main-thread thread APIs were removed and replaced by worker-local implementations through platform adapters.
+- Search idle dependency on `:thread-api/input-idle?` was removed from `db_core`; it now uses a **main-thread push + worker TTL cache** model:
+  - main thread periodically pushes `:thread-atom/search-input-idle-status` with `{repo {:idle? ... :ts ...}}`
+  - worker consumes that state with a TTL window and falls back to non-blocking behavior when state is missing/stale.
+
+### Remaining direct `invoke-main-thread` production usages
+
+Only E2EE UI-interaction paths remain in `frontend.worker.sync.crypt`:
+
+- `:thread-api/request-e2ee-password`
+- `:thread-api/decrypt-user-e2ee-private-key`
+
+These are the intended scope for Phase 2 UI request/response protocol completion.
+
 ## Full inventory of current `invoke-main-thread` dependencies
 
 | Call site | Current main-thread API | Category | Runtime risk in `db-worker-node` |
