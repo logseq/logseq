@@ -40,7 +40,8 @@
 
                        :user/info nil
                        ;; thread atoms, these atoms' value are syncing from ui-thread
-                       :thread-atom/online-event (atom nil)}))
+                       :thread-atom/online-event (atom nil)
+                       :thread-atom/search-input-idle-status (atom {})}))
 
 (defonce *db-sync-config (atom {:ws-url nil}))
 (defonce *db-sync-client (atom nil))
