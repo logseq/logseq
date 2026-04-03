@@ -131,6 +131,64 @@
                           (is false (str e))))
                (p/finally done)))))
 
+(deftest save-e2ee-password-native-uses-platform-secret-storage-test
+  (async done
+         (let [platform-map {:runtime :test}
+               secret-calls (atom [])
+               invoke-calls (atom 0)]
+           (-> (p/with-redefs [sync-crypt/native-worker? (fn [] true)
+                               crypt/<encrypt-text-by-text-password (fn [_refresh-token _password]
+                                                                      {:cipher "payload"})
+                               platform/current (fn [] platform-map)
+                               platform/save-secret-text! (fn [platform' key text]
+                                                            (swap! secret-calls conj {:platform platform'
+                                                                                      :key key
+                                                                                      :text text})
+                                                            (p/resolved nil))
+                               platform/write-text! (fn [_platform' _path _text]
+                                                      (p/rejected (ex-info "should not fallback for successful native save" {})))
+                               worker-state/<invoke-main-thread (fn [& _]
+                                                                  (swap! invoke-calls inc)
+                                                                  (p/rejected (ex-info "should not call invoke-main-thread" {})))]
+                 (#'sync-crypt/<save-e2ee-password "refresh-token" "password"))
+               (p/then (fn [_]
+                         (is (= 1 (count @secret-calls)))
+                         (is (= platform-map (:platform (first @secret-calls))))
+                         (is (= "logseq-encrypted-password" (:key (first @secret-calls))))
+                         (is (string? (:text (first @secret-calls))))
+                         (is (zero? @invoke-calls))))
+               (p/catch (fn [e]
+                          (is false (str e))))
+               (p/finally done)))))
+
+(deftest read-e2ee-password-native-falls-back-to-file-when-secret-read-fails-test
+  (async done
+         (let [platform-map {:runtime :test}
+               fallback-read-calls (atom 0)
+               invoke-calls (atom 0)]
+           (-> (p/with-redefs [sync-crypt/native-worker? (fn [] true)
+                               platform/current (fn [] platform-map)
+                               platform/read-secret-text (fn [_platform' _key]
+                                                           (p/rejected (ex-info "secret store unavailable" {})))
+                               platform/read-text! (fn [platform' path]
+                                                     (swap! fallback-read-calls inc)
+                                                     (is (= platform-map platform'))
+                                                     (is (= "e2ee-password" path))
+                                                     (ldb/write-transit-str {:cipher "payload"}))
+                               crypt/<decrypt-text-by-text-password (fn [_refresh-token _data]
+                                                                      "decrypted-password")
+                               worker-state/<invoke-main-thread (fn [& _]
+                                                                  (swap! invoke-calls inc)
+                                                                  (p/rejected (ex-info "should not call invoke-main-thread" {})))]
+                 (#'sync-crypt/<read-e2ee-password "refresh-token"))
+               (p/then (fn [password]
+                         (is (= "decrypted-password" password))
+                         (is (= 1 @fallback-read-calls))
+                         (is (zero? @invoke-calls))))
+               (p/catch (fn [e]
+                          (is false (str e))))
+               (p/finally done)))))
+
 (deftest save-e2ee-password-native-fallback-uses-platform-write-text-test
   (async done
          (let [platform-map {:runtime :test}

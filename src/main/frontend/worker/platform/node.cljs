@@ -298,6 +298,12 @@
   [state]
   (transit/write kv-transit-writer state))
 
+(def ^:private secret-prefix "worker-secret###")
+
+(defn- secret-key
+  [key]
+  (str secret-prefix key))
+
 (defn- kv-store
   [data-dir]
   (let [kv-path (node-path/join data-dir "kv-store.json")
@@ -359,5 +365,10 @@
                :backup-db (fn [db path]
                             (let [backup-fn (gobj/get db "backup")]
                               (backup-fn path)))}
-      :crypto {}
+      :crypto {:save-secret-text! (fn [key text]
+                                    ((:set! kv) (secret-key key) text))
+               :read-secret-text (fn [key]
+                                   ((:get kv) (secret-key key)))
+               :delete-secret-text! (fn [key]
+                                      ((:set! kv) (secret-key key) nil))}
       :timers {:set-interval! (fn [f ms] (js/setInterval f ms))}})))

@@ -16,6 +16,7 @@
 (defonce ^:private *graph->aes-key (atom {}))
 (defonce ^:private *user-rsa-key-pair-inflight (atom {}))
 (defonce ^:private e2ee-password-file "e2ee-password")
+(defonce ^:private e2ee-password-secret-key "logseq-encrypted-password")
 (defonce ^:private native-env?
   (let [href (try (.. js/self -location -href)
                   (catch :default _ nil))]
@@ -31,15 +32,15 @@
 
 (defn <native-save-password-text!
   [encrypted-text]
-  (worker-state/<invoke-main-thread :thread-api/native-save-e2ee-password encrypted-text))
+  (platform/save-secret-text! (platform/current) e2ee-password-secret-key encrypted-text))
 
 (defn- <native-read-password-text
   []
-  (worker-state/<invoke-main-thread :thread-api/native-get-e2ee-password))
+  (platform/read-secret-text (platform/current) e2ee-password-secret-key))
 
 (defn- <native-delete-password-text!
   []
-  (worker-state/<invoke-main-thread :thread-api/native-delete-e2ee-password))
+  (platform/delete-secret-text! (platform/current) e2ee-password-secret-key))
 
 (defn- <save-e2ee-password
   [refresh-token password]
@@ -55,9 +56,16 @@
 
 (defn- <read-e2ee-password
   [refresh-token]
-  (p/let [text (if (native-worker?)
-                 (<native-read-password-text)
-                 (platform/read-text! (platform/current) e2ee-password-file))
+  (p/let [platform' (platform/current)
+          text (if (native-worker?)
+                 (-> (p/let [native-text (<native-read-password-text)]
+                       (if (seq native-text)
+                         native-text
+                         (platform/read-text! platform' e2ee-password-file)))
+                     (p/catch (fn [e]
+                                (log/error :native-get-e2ee-password {:error e})
+                                (platform/read-text! platform' e2ee-password-file))))
+                 (platform/read-text! platform' e2ee-password-file))
           data (ldb/read-transit-str text)
           password (crypt/<decrypt-text-by-text-password refresh-token data)]
     password))

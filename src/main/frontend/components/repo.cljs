@@ -452,7 +452,9 @@
          (state/<invoke-db-worker :thread-api/set-db-sync-config
                                   {:enabled? true
                                    :ws-url config/db-sync-ws-url
-                                   :http-base config/db-sync-http-base})
+                                   :http-base config/db-sync-http-base
+                                   :oauth-domain config/OAUTH-DOMAIN
+                                   :oauth-client-id config/COGNITO-CLIENT-ID})
          (p/let [rsa-key-pair (state/<invoke-db-worker :thread-api/db-sync-ensure-user-rsa-keys)]
            (set-e2ee-rsa-key-ensured? (some? rsa-key-pair))))
         (p/catch (fn [e]
