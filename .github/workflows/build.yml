@@ -103,6 +103,9 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
 
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
       - name: Run clj-kondo lint
         run: clojure -M:clj-kondo --parallel --lint src
 
@@ -117,6 +120,9 @@ jobs:
 
       - name: Lint invalid translation entries
         run: bb lang:validate-translations
+
+      - name: Lint hardcoded user-facing strings
+        run: bb lang:lint-hardcoded --warn-only
 
       - name: Lint to keep worker independent of frontend
         run: bb lint:worker-and-frontend-separate

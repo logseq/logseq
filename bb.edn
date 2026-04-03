@@ -215,6 +215,9 @@
   lang:validate-translations
   logseq.tasks.lang/validate-translations
 
+  lang:lint-hardcoded
+  logseq.tasks.lang/lint-hardcoded
+
   ai:check-common-errors
   logseq.tasks.common-errors/check-common-errors}
 
