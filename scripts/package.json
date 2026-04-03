@@ -2,6 +2,9 @@
   "name": "nbb-dev-scripts",
   "version": "1.0.0",
   "private": true,
+  "scripts": {
+    "test": "yarn nbb-logseq -cp test -m logseq.tasks.test-runner"
+  },
   "devDependencies": {
     "@logseq/nbb-logseq": "github:logseq/nbb-logseq#feat-db-v33"
   },
