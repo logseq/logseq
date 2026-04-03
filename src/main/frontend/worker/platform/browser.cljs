@@ -7,6 +7,8 @@
             [frontend.common.file.opfs :as opfs]
             [frontend.worker-common.util :as worker-util]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
+            [logseq.common.path :as path]
             [promesa.core :as p]))
 
 (defn- iter->vec
@@ -104,6 +106,66 @@
   [path text]
   (opfs/<write-text! path text))
 
+(defn- browser-pfs
+  []
+  (or (some-> js/globalThis .-window .-pfs)
+      (some-> js/globalThis .-pfs)
+      (throw (ex-info "browser pfs is not available" {}))))
+
+(defn- graph-assets-dir
+  [repo]
+  (when-let [graph-name (some-> repo common-config/strip-leading-db-version-prefix)]
+    (str "/" graph-name "/assets")))
+
+(defn- ensure-pfs-dir!
+  [^js pfs dir]
+  (cond
+    (or (nil? dir) (= "" dir) (= "/" dir) (= "." dir))
+    (p/resolved nil)
+
+    :else
+    (-> (.stat pfs dir)
+        (p/then (constantly nil))
+        (p/catch
+         (fn [_]
+           (p/do!
+            (ensure-pfs-dir! pfs (path/parent dir))
+            (.mkdir pfs dir)))))))
+
+(defn- asset-path
+  [repo file-name]
+  (if-let [assets-dir (graph-assets-dir repo)]
+    (path/path-join assets-dir file-name)
+    (throw (ex-info "missing repo for browser asset path"
+                    {:repo repo
+                     :file-name file-name}))))
+
+(defn- asset-read-bytes!
+  [repo file-name]
+  (.readFile (browser-pfs) (asset-path repo file-name)))
+
+(defn- asset-write-bytes!
+  [repo file-name payload]
+  (let [^js pfs (browser-pfs)
+        file-path (asset-path repo file-name)]
+    (p/do!
+     (ensure-pfs-dir! pfs (path/parent file-path))
+     (.writeFile pfs file-path payload))))
+
+(defn- asset-stat
+  [repo file-name]
+  (let [^js pfs (browser-pfs)]
+    (-> (.stat pfs (asset-path repo file-name))
+        (p/then (fn [^js stat]
+                  {:size (.-size stat)
+                   :type (.-type stat)}))
+        (p/catch (constantly nil)))))
+
+(defn- asset-delete!
+  [repo file-name]
+  (-> (.unlink (browser-pfs) (asset-path repo file-name))
+      (p/catch (constantly nil))))
+
 (defn- websocket-connect
   [url]
   (js/WebSocket. url))
@@ -133,6 +195,10 @@
              :remove-vfs! remove-vfs!
              :read-text! read-text!
              :write-text! write-text!
+             :asset-read-bytes! asset-read-bytes!
+             :asset-write-bytes! asset-write-bytes!
+             :asset-stat asset-stat
+             :asset-delete! asset-delete!
              :transfer (fn [data transferables]
                          (Comlink/transfer data transferables))}
    :kv {:get kv-get
