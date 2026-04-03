@@ -2,10 +2,10 @@
   "Auth and endpoint helpers for db sync."
   (:require [clojure.string :as string]
             [frontend.worker-common.util :as worker-util]
-            [logseq.common.util :as common-util]
-            [promesa.core :as p]
+            [frontend.worker.state :as worker-state]
             [frontend.worker.sync.util :as sync-util]
-            [frontend.worker.state :as worker-state]))
+            [logseq.common.util :as common-util]
+            [promesa.core :as p]))
 
 (defn ws-base-url
   [db-sync-config]
@@ -36,16 +36,59 @@
       (catch :default _
         true))))
 
+(defn oauth-token-url
+  [db-sync-config]
+  (or (:oauth-token-url db-sync-config)
+      (when-let [domain (not-empty (:oauth-domain db-sync-config))]
+        (str "https://" domain "/oauth2/token"))))
+
+(defn <refresh-id&access-token
+  []
+  (let [refresh-token (:auth/refresh-token @worker-state/*state)
+        db-sync-config @worker-state/*db-sync-config
+        token-url (oauth-token-url db-sync-config)
+        oauth-client-id (:oauth-client-id db-sync-config)]
+    (when-not (seq refresh-token)
+      (throw (ex-info "worker auth refresh requires refresh token"
+                      {:code :missing-refresh-token})))
+    (when-not (seq token-url)
+      (throw (ex-info "worker auth refresh requires oauth token url"
+                      {:code :missing-oauth-token-url})))
+    (when-not (seq oauth-client-id)
+      (throw (ex-info "worker auth refresh requires oauth client id"
+                      {:code :missing-oauth-client-id})))
+    (let [form-data (js/URLSearchParams.)]
+      (.set form-data "grant_type" "refresh_token")
+      (.set form-data "client_id" oauth-client-id)
+      (.set form-data "refresh_token" refresh-token)
+      (p/let [resp (js/fetch token-url #js {:method "POST"
+                                            :headers #js {"content-type" "application/x-www-form-urlencoded"}
+                                            :body (.toString form-data)})
+              text (.text resp)
+              data (when (seq text)
+                     (js->clj (js/JSON.parse text) :keywordize-keys true))]
+        (if (.-ok resp)
+          {:id-token (:id_token data)
+           :access-token (:access_token data)}
+          (throw (ex-info "worker auth refresh failed"
+                          {:code :auth-refresh-failed
+                           :status (.-status resp)
+                           :token-url token-url
+                           :body data})))))))
+
 (defn <resolve-ws-token
   []
-  (let [token (sync-util/auth-token)]
-    (if (and (not (sync-util/cli-node-owner?))
-             (id-token-expired? token))
-      (p/let [resp (worker-state/<invoke-main-thread :thread-api/ensure-id&access-token)
-              refreshed-token (:id-token resp)]
-        (when (string? refreshed-token)
-          (worker-state/set-new-state! {:auth/id-token refreshed-token})
-          refreshed-token))
+  (let [token (sync-util/auth-token)
+        token-expired? (id-token-expired? token)]
+    (if (and (not (sync-util/cli-node-owner?)) token-expired?)
+      (p/let [{:keys [id-token access-token]} (<refresh-id&access-token)]
+        (when-not (seq id-token)
+          (throw (ex-info "worker auth refresh returned empty id-token"
+                          {:code :auth-refresh-empty-id-token})))
+        (worker-state/set-new-state!
+         (cond-> {:auth/id-token id-token}
+           (seq access-token) (assoc :auth/access-token access-token)))
+        id-token)
       (p/resolved token))))
 
 (defn get-user-uuid

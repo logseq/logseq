@@ -75,6 +75,24 @@
     (f path text)
     (throw (ex-info "platform storage/write-text! missing" {:path path}))))
 
+(defn save-secret-text!
+  [platform key text]
+  (if-let [f (get-in platform [:crypto :save-secret-text!])]
+    (f key text)
+    (throw (ex-info "platform crypto/save-secret-text! missing" {:key key}))))
+
+(defn read-secret-text
+  [platform key]
+  (if-let [f (get-in platform [:crypto :read-secret-text])]
+    (f key)
+    (throw (ex-info "platform crypto/read-secret-text missing" {:key key}))))
+
+(defn delete-secret-text!
+  [platform key]
+  (if-let [f (get-in platform [:crypto :delete-secret-text!])]
+    (f key)
+    (throw (ex-info "platform crypto/delete-secret-text! missing" {:key key}))))
+
 (defn websocket-connect
   [platform url]
   (if-let [f (get-in platform [:websocket :connect])]
