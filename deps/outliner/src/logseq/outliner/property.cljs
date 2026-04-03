@@ -187,6 +187,8 @@
     (outliner-validate/validate-block-title @conn property-name property)
     (outliner-validate/validate-property-title property-name))
 
+  ;; TODO: Add this check to more editing fns like batch-set-property! and set-block-property!
+  (outliner-validate/validate-editing-built-in-property property schema)
   (let [changed-property-attrs
         ;; Only update property if something has changed as we are updating a timestamp
         (cond-> (->> (dissoc schema :db/cardinality)
