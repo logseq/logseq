@@ -99,14 +99,6 @@
                     {:repo repo
                      :file-name file-name}))))
 
-(defn asset-delete!
-  [platform repo file-name]
-  (if-let [f (get-in platform [:storage :asset-delete!])]
-    (f repo file-name)
-    (throw (ex-info "platform storage/asset-delete! missing"
-                    {:repo repo
-                     :file-name file-name}))))
-
 (defn save-secret-text!
   [platform key text]
   (if-let [f (get-in platform [:crypto :save-secret-text!])]

@@ -157,7 +157,7 @@
   (-> (if (string? file) file (.arrayBuffer file))
       (p/then db-asset/<get-file-array-buffer-checksum)))
 
-(defn- ->uint8
+(defn ->uint8
   [payload]
   (cond
     (instance? js/Uint8Array payload)

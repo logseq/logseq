@@ -71,7 +71,7 @@
 
 (def ^:private search-index-build-batch-size 200)
 (def ^:private search-index-build-time-budget-ms 8)
-(def ^:private search-index-build-idle-diff-ms 1000)
+(def ^:private search-index-build-idle-status-ttl-ms 2000)
 (def ^:private search-index-build-pause-ms 300)
 (defonce ^:private *search-index-build-ids (atom {}))
 (defonce ^:private *client-ops-cleanup-timers (atom {}))
@@ -863,15 +863,27 @@
                (next remaining)
                (inc n))))))
 
+(defn- search-index-input-idle?
+  [repo]
+  (if (node-runtime?)
+    true
+    (let [status-map @(:thread-atom/search-input-idle-status @worker-state/*state)
+          {:keys [idle? ts]} (get status-map repo)
+          fresh? (and (number? ts)
+                      (<= (- (common-util/time-ms) ts)
+                          search-index-build-idle-status-ttl-ms))]
+      (if (and fresh? (boolean? idle?))
+        idle?
+        true))))
+
 (defn- <wait-for-search-index-idle!
   [repo build-id]
   (p/loop []
     (ensure-active-search-index-build! repo build-id)
-    (p/let [idle? (worker-state/<invoke-main-thread :thread-api/input-idle? repo search-index-build-idle-diff-ms)]
-      (if idle?
-        nil
-        (p/let [_ (js/Promise. (fn [resolve] (js/setTimeout resolve search-index-build-pause-ms)))]
-          (p/recur))))))
+    (if (search-index-input-idle? repo)
+      nil
+      (p/let [_ (js/Promise. (fn [resolve] (js/setTimeout resolve search-index-build-pause-ms)))]
+        (p/recur)))))
 
 (defn- <build-blocks-fts!
   "Build FTS index in batches with yielding. Sets user_version to search-db-version on completion."

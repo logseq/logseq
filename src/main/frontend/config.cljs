@@ -289,15 +289,14 @@
    (when-let [repo-dir (get-repo-dir repo)]
      (path/path-join repo-dir app-name  export-css-file))))
 
-(defn get-current-repo-assets-root
-  []
-  (when-let [repo-dir (get-repo-dir (state/get-current-repo))]
-    (path/path-join repo-dir "assets")))
-
 (defn get-repo-assets-root
   [repo]
   (when-let [repo-dir (get-repo-dir repo)]
     (path/path-join repo-dir "assets")))
+
+(defn get-current-repo-assets-root
+  []
+  (get-repo-assets-root (state/get-current-repo)))
 
 (defn get-custom-js-path
   ([]

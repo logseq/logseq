@@ -183,12 +183,7 @@
                                         #js {:name "RSA-OAEP"}
                                         private-key
                                         encrypted-aes-key)]
-     (.importKey subtle
-                 "raw"
-                 decrypted-key-data
-                 "AES-GCM"
-                 true
-                 #js ["encrypt" "decrypt"]))
+     (<import-aes-key (js/Uint8Array. decrypted-key-data)))
    (p/catch (fn [e]
               (log/error "decrypt-aes-key failed" e)
               (ex-info "decrypt-aes-key" {} e)))))
