@@ -18,7 +18,9 @@
 (defn config-with-document-mode
   [config]
   (assoc config
-         :document/mode? (state/sub [:document/mode?])))
+         :document/mode? (state/sub [:document/mode?])
+         :rtc/state (state/sub [:rtc/state])
+         :editor/raw-mode-block (state/sub [:editor/raw-mode-block])))
 
 (defn safe-read-string
   [content error-message-or-handler]

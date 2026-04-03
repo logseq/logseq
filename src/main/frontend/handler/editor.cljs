@@ -2766,7 +2766,7 @@
   (fn [e]
     (let [editor-action (state/get-editor-action)]
       (if (= :block-search editor-action)
-        (let [timeout 50]
+        (let [timeout 150]
           (when @search-timeout
             (js/clearTimeout @search-timeout))
           (reset! search-timeout

@@ -49,7 +49,13 @@
 
 (def ReactTweetEmbed (r/adapt-class react-tweet-embed))
 (def useInView (gobj/get react-intersection-observer "useInView"))
-(defonce _emoji-init-data ((gobj/get emoji-mart "init") #js {:data emoji-data}))
+;; Defer emoji-mart init to first use instead of module-load time.
+;; The original eager init was parsing ~200KB of JSON on startup.
+(defonce *emoji-initialized? (atom false))
+(defn ensure-emoji-init! []
+  (when-not @*emoji-initialized?
+    (reset! *emoji-initialized? true)
+    ((gobj/get emoji-mart "init") #js {:data emoji-data})))
 ;; (def EmojiPicker (r/adapt-class (gobj/get Picker "default")))
 
 (defonce icon-size (if (mobile-util/native-platform?) 24 20))
