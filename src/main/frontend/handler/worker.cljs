@@ -23,6 +23,18 @@
   (let [state data]
     (state/pub-event! [:rtc/sync-state state])))
 
+(defmethod handle :rtc-asset-upload-download-progress [_ _worker {:keys [repo asset-id progress]}]
+  (when (and (seq repo) (seq asset-id) (map? progress))
+    (state/update-state!
+     :rtc/asset-upload-download-progress
+     (fn [m] (assoc-in m [repo asset-id] progress)))))
+
+(defmethod handle :asset-file-write-finish [_ _worker {:keys [repo asset-id ts]}]
+  (when (and (seq repo) (seq asset-id))
+    (state/update-state!
+     :assets/asset-file-write-finish
+     (fn [m] (assoc-in m [repo asset-id] (or ts (.now js/Date)))))))
+
 (defmethod handle :vector-search-sync-state [_ _worker data]
   (state/pub-event! [:vector-search/sync-state data]))
 

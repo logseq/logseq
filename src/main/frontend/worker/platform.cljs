@@ -75,6 +75,38 @@
     (f path text)
     (throw (ex-info "platform storage/write-text! missing" {:path path}))))
 
+(defn asset-read-bytes!
+  [platform repo file-name]
+  (if-let [f (get-in platform [:storage :asset-read-bytes!])]
+    (f repo file-name)
+    (throw (ex-info "platform storage/asset-read-bytes! missing"
+                    {:repo repo
+                     :file-name file-name}))))
+
+(defn asset-write-bytes!
+  [platform repo file-name payload]
+  (if-let [f (get-in platform [:storage :asset-write-bytes!])]
+    (f repo file-name payload)
+    (throw (ex-info "platform storage/asset-write-bytes! missing"
+                    {:repo repo
+                     :file-name file-name}))))
+
+(defn asset-stat
+  [platform repo file-name]
+  (if-let [f (get-in platform [:storage :asset-stat])]
+    (f repo file-name)
+    (throw (ex-info "platform storage/asset-stat missing"
+                    {:repo repo
+                     :file-name file-name}))))
+
+(defn asset-delete!
+  [platform repo file-name]
+  (if-let [f (get-in platform [:storage :asset-delete!])]
+    (f repo file-name)
+    (throw (ex-info "platform storage/asset-delete! missing"
+                    {:repo repo
+                     :file-name file-name}))))
+
 (defn save-secret-text!
   [platform key text]
   (if-let [f (get-in platform [:crypto :save-secret-text!])]
