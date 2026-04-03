@@ -260,6 +260,41 @@
             _ (ensure-dir! dir)]
       (fs/writeFile full-path text "utf8"))))
 
+(defn- asset-file-path
+  [data-dir repo file-name]
+  (node-path/join (repo-dir data-dir repo)
+                  common-config/local-assets-dir
+                  file-name))
+
+(defn- asset-read-bytes!
+  [data-dir repo file-name]
+  (fs/readFile (asset-file-path data-dir repo file-name)))
+
+(defn- asset-write-bytes!
+  [write-guard-fn data-dir repo file-name payload]
+  (let [full-path (asset-file-path data-dir repo file-name)
+        dir (node-path/dirname full-path)]
+    (p/let [_ (when write-guard-fn
+                (write-guard-fn))
+            _ (ensure-dir! dir)]
+      (fs/writeFile full-path (->buffer payload)))))
+
+(defn- asset-stat
+  [data-dir repo file-name]
+  (-> (fs/stat (asset-file-path data-dir repo file-name))
+      (p/then (fn [^js stat]
+                {:size (.-size stat)
+                 :is-file? (.isFile stat)}))
+      (p/catch (constantly nil))))
+
+(defn- asset-delete!
+  [write-guard-fn data-dir repo file-name]
+  (let [full-path (asset-file-path data-dir repo file-name)]
+    (p/let [_ (when write-guard-fn
+                (write-guard-fn))]
+      (-> (fs/rm full-path #js {:force true})
+          (p/catch (constantly nil))))))
+
 (defn- websocket-connect
   [url]
   (ws. url))
@@ -350,7 +385,15 @@
                 :import-db (fn [pool path data] (import-db write-guard-fn pool path data))
                 :remove-vfs! (fn [pool] (remove-vfs! write-guard-fn pool))
                 :read-text! (fn [path] (read-text! data-dir path))
-                :write-text! (fn [path text] (write-text! write-guard-fn data-dir path text))}
+                :write-text! (fn [path text] (write-text! write-guard-fn data-dir path text))
+                :asset-read-bytes! (fn [repo file-name]
+                                     (asset-read-bytes! data-dir repo file-name))
+                :asset-write-bytes! (fn [repo file-name payload]
+                                      (asset-write-bytes! write-guard-fn data-dir repo file-name payload))
+                :asset-stat (fn [repo file-name]
+                              (asset-stat data-dir repo file-name))
+                :asset-delete! (fn [repo file-name]
+                                 (asset-delete! write-guard-fn data-dir repo file-name))}
       :kv {:get (:get kv)
            :set! (:set! kv)}
       :broadcast {:post-message! (fn [type payload]
