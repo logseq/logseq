@@ -386,7 +386,7 @@
                (p/then (fn [_]
                          (is (= 1 (count @worker-calls)))
                          (let [[op graph graph-uuid graph-e2ee?] (first @worker-calls)]
-                           (is (= :thread-api/db-sync-download-graph op))
+                           (is (= :thread-api/db-sync-download-graph-by-id op))
                            (is (string/ends-with? graph "demo-graph"))
                            (is (= "graph-1" graph-uuid))
                            (is (= false graph-e2ee?)))
