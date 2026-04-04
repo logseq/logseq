@@ -9,6 +9,7 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.util :as sync-util]
+            [frontend.worker.ui-request :as ui-request]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -250,8 +251,10 @@
                                sync-crypt/e2ee-base (fn [] "https://example.com")
                                worker-state/get-id-token (fn [] "token")
                                worker-util/parse-jwt (fn [_] {:sub "user-1"})
-                               worker-state/<invoke-main-thread (fn [_type _payload]
-                                                                  (p/resolved :exported-private-key))
+                               ui-request/<request (fn [action payload _opts]
+                                                     (is (= :decrypt-user-e2ee-private-key action))
+                                                     (is (= {:encrypted-private-key "encrypted-private-key"} payload))
+                                                     (p/resolved :exported-private-key))
                                crypt/<import-private-key (fn [_]
                                                            (p/resolved :private-key))
                                crypt/<import-public-key (fn [_]
@@ -323,8 +326,10 @@
            (-> (p/with-redefs [sync-crypt/e2ee-base (fn [] "https://example.com")
                                worker-state/get-id-token (fn [] "token")
                                worker-util/parse-jwt (fn [_] {:sub "user-1"})
-                               worker-state/<invoke-main-thread (fn [_type _payload]
-                                                                  (p/resolved :exported-private-key))
+                               ui-request/<request (fn [action payload _opts]
+                                                     (is (= :decrypt-user-e2ee-private-key action))
+                                                     (is (= {:encrypted-private-key "encrypted-private-key"} payload))
+                                                     (p/resolved :exported-private-key))
                                crypt/<import-private-key (fn [_]
                                                            (p/resolved :private-key))
                                crypt/<decrypt-aes-key (fn [_private-key encrypted]

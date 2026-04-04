@@ -7,6 +7,7 @@
             [frontend.worker.platform :as platform]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync.const :as sync-const]
+            [frontend.worker.ui-request :as ui-request]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [promesa.core :as p]
@@ -203,10 +204,20 @@
             _ (<set-user-rsa-key-pair-to-idb! base user-id pair)]
       pair)))
 
+(defn- <request-e2ee-password-from-ui
+  [payload]
+  (p/let [{:keys [password]} (ui-request/<request :request-e2ee-password
+                                                   payload
+                                                   {:hint "set :e2ee-password in --config for headless mode"})]
+    (when-not (seq password)
+      (fail-fast :db-sync/missing-e2ee-password {:field :e2ee-password
+                                                 :reason :empty-ui-password}))
+    password))
+
 (defn- <generate-and-upload-user-rsa-key-pair!
   [base]
   (p/let [{:keys [publicKey privateKey]} (crypt/<generate-rsa-key-pair)
-          {:keys [password]} (worker-state/<invoke-main-thread :thread-api/request-e2ee-password)
+          password (<request-e2ee-password-from-ui {:reason :generate-user-rsa-key-pair})
           encrypted-private-key (crypt/<encrypt-private-key password privateKey)
           exported-public-key (crypt/<export-public-key publicKey)
           public-key-str (ldb/write-transit-str exported-public-key)
@@ -251,22 +262,7 @@
 
 (defn- <decrypt-private-key
   [encrypted-private-key-str]
-  (let [decrypt-on-main-thread
-        (fn [encrypted-private-key]
-          (p/let [exported-private-key (worker-state/<invoke-main-thread
-                                        :thread-api/decrypt-user-e2ee-private-key
-                                        encrypted-private-key)]
-            (crypt/<import-private-key exported-private-key)))
-
-        main-thread-unavailable?
-        (fn [error]
-          (let [message (some-> error ex-message)
-                data (ex-data error)]
-            (or (= :thread-api/decrypt-user-e2ee-private-key (:method data))
-                (and (string? message)
-                     (string/includes? message "main-thread is not available")))))
-
-        <decrypt-in-headless
+  (let [<decrypt-in-headless
         (fn [encrypted-private-key]
           (let [sync-config @worker-state/*db-sync-config
                 configured-password (:e2ee-password sync-config)
@@ -292,7 +288,7 @@
 
                     (<decrypt-with-candidates
                       [remaining]
-                            (if-let [candidate (first remaining)]
+                      (if-let [candidate (first remaining)]
                         (-> (p/let [password (<candidate-password candidate)]
                               (when-not (seq password)
                                 (fail-fast :db-sync/missing-e2ee-password {:field :e2ee-password
@@ -303,13 +299,21 @@
                         (fail-fast :db-sync/missing-e2ee-password {:field :e2ee-password
                                                                    :reason :headless-decrypt-private-key
                                                                    :hint "set :e2ee-password in --config for CLI sync"})))]
-              (<decrypt-with-candidates candidates))))]
+              (<decrypt-with-candidates candidates))))
+
+        <decrypt-with-ui-request
+        (fn [encrypted-private-key]
+          (p/let [exported-private-key (ui-request/<request :decrypt-user-e2ee-private-key
+                                                            {:encrypted-private-key encrypted-private-key}
+                                                            {:hint "set :e2ee-password in --config for headless mode"})]
+            (crypt/<import-private-key exported-private-key)))]
     (p/let [encrypted-private-key (ldb/read-transit-str encrypted-private-key-str)]
-      (-> (decrypt-on-main-thread encrypted-private-key)
-          (p/catch (fn [error]
-                     (if (main-thread-unavailable? error)
-                       (<decrypt-in-headless encrypted-private-key)
-                       (p/rejected error))))))))
+      (-> (try
+            (<decrypt-in-headless encrypted-private-key)
+            (catch :default error
+              (p/rejected error)))
+          (p/catch (fn [_headless-error]
+                     (<decrypt-with-ui-request encrypted-private-key)))))))
 
 (defn- <import-public-key
   [public-key-str]
@@ -634,6 +638,10 @@
               _ (<save-e2ee-password refresh-token new-password)]
         nil))))
 
+(defn cancel-ui-requests!
+  [context]
+  (ui-request/cancel-all! context))
+
 (def-thread-api :thread-api/get-user-rsa-key-pair
   [_token _user-uuid]
   (let [base (e2ee-base)]
@@ -653,7 +661,7 @@
       (when-not (and (string? (:public-key existing))
                      (string? (:encrypted-private-key existing)))
         (p/let [{:keys [publicKey privateKey]} (crypt/<generate-rsa-key-pair)
-                {:keys [password]} (worker-state/<invoke-main-thread :thread-api/request-e2ee-password)
+                password (<request-e2ee-password-from-ui {:reason :init-user-rsa-key-pair})
                 encrypted-private-key (crypt/<encrypt-private-key password privateKey)
                 exported-public-key (crypt/<export-public-key publicKey)
                 public-key-str (ldb/write-transit-str exported-public-key)
