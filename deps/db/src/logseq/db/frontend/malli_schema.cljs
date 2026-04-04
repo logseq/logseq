@@ -444,7 +444,7 @@
     [:logseq.property.reaction/target :int]
     [:block/created-at :int]
     [:block/tx-id {:optional true} :int]
-    [:logseq.property/created-by-ref {:optional true} :int]
+    [:block/properties {:optional true} block-properties]
     [:block/refs {:optional true} [:set :int]]]))
 
 (def property-history-block*

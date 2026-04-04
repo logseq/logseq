@@ -60,9 +60,6 @@
   [qkw & args]
   (<invoke-db-worker* qkw true args))
 
-(defonce *infer-worker (atom nil))
-(defonce *infer-worker-port (atom nil))
-
 ;; Stores main application state
 (defonce ^:large-vars/data-var state
   (let [document-mode? (or (storage/get :document/mode?) false)
@@ -317,10 +314,7 @@
                                                        3))
       :favorites/updated?                    (atom 0)
       :db/async-queries                      (atom {})
-      :db/latest-transacted-entity-uuids     (atom {})
-
-      :vector-search/state                   (atom {})
-      :vector-search/load-model-progress     (atom nil)})))
+      :db/latest-transacted-entity-uuids     (atom {})})))
 
 ;; User configuration getters under :config (and sometimes :me)
 ;; ========================================

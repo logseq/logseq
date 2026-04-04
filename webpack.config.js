@@ -29,8 +29,7 @@ var config = {
 var AppConfig = Object.assign({}, config, {
   name: "app",
   entry: {
-    "db-worker" : "./target/db-worker.js",
-    "inference-worker" : "./target/inference-worker.js"
+    "db-worker" : "./target/db-worker.js"
   },
 
   output: {

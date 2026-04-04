@@ -149,7 +149,6 @@
     :thread-api/db-sync-ensure-user-rsa-keys
     :thread-api/list-db
     :thread-api/get-version
-    :thread-api/set-infer-worker-proxy
     :thread-api/set-context
     :thread-api/sync-app-state
     :thread-api/update-thread-atom

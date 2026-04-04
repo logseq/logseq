@@ -4,7 +4,6 @@
             [logseq.common.util :as common-util]))
 
 (defonce *main-thread (atom nil))
-(defonce *infer-worker (atom nil))
 (defonce *deleted-block-uuid->db-id (atom {}))
 
 (defonce *state (atom {:db/latest-transact-time {}

@@ -4,6 +4,7 @@
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db-sync.batch :as batch]
+            [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.index :as index]
             [logseq.db-sync.protocol :as protocol]
@@ -16,12 +17,12 @@
             [promesa.core :as p]))
 
 (def ^:private snapshot-download-batch-size 10000)
-(def ^:private snapshot-cache-control "private, max-age=300")
+;; (def ^:private snapshot-cache-control "private, max-age=300")
 (def ^:private snapshot-content-type "application/transit+json")
 (def ^:private snapshot-content-encoding "gzip")
 (def ^:private snapshot-uploading-meta-key :snapshot-uploading?)
 ;; 10m
-(def ^:private snapshot-multipart-part-size (* 10 1024 1024))
+;; (def ^:private snapshot-multipart-part-size (* 10 1024 1024))
 
 (defn parse-int [value]
   (when (some? value)
@@ -47,7 +48,8 @@
 (defn- ensure-conn! [^js self]
   (ensure-schema! self)
   (when-not (.-conn self)
-    (set! (.-conn self) (storage/open-conn (.-sql self)))))
+    (set! (.-conn self)
+          (storage/open-conn (.-sql self)))))
 
 (defn t-now [^js self]
   (ensure-schema! self)
@@ -122,12 +124,16 @@
     (when (seq (or header-id param-id))
       (or header-id param-id))))
 
-(defn- snapshot-key [graph-id snapshot-id]
-  (str graph-id "/" snapshot-id ".snapshot"))
+;; (defn- snapshot-key [graph-id snapshot-id]
+;;   (str graph-id "/" snapshot-id ".snapshot"))
 
-(defn- snapshot-url [request graph-id snapshot-id]
+;; (defn- snapshot-url [request graph-id snapshot-id]
+;;   (let [url (js/URL. (.-url request))]
+;;     (str (.-origin url) "/assets/" graph-id "/" snapshot-id ".snapshot")))
+
+(defn- snapshot-stream-url [request graph-id]
   (let [url (js/URL. (.-url request))]
-    (str (.-origin url) "/assets/" graph-id "/" snapshot-id ".snapshot")))
+    (str (.-origin url) "/sync/" graph-id "/snapshot/stream")))
 
 (defn- maybe-decompress-stream [stream encoding]
   (if (and (= encoding snapshot-content-encoding) (exists? js/DecompressionStream))
@@ -140,27 +146,27 @@
                     {:type :db-sync/compression-not-supported})))
   (.pipeThrough stream (js/CompressionStream. snapshot-content-encoding)))
 
-(defn- <buffer-stream
-  [stream]
-  (p/let [resp (js/Response. stream)
-          buf (.arrayBuffer resp)]
-    buf))
+;; (defn- <buffer-stream
+;;   [stream]
+;;   (p/let [resp (js/Response. stream)
+;;           buf (.arrayBuffer resp)]
+;;     buf))
 
-(defn- ->uint8 [data]
-  (cond
-    (instance? js/Uint8Array data) data
-    (instance? js/ArrayBuffer data) (js/Uint8Array. data)
-    :else (js/Uint8Array. data)))
+;; (defn- ->uint8 [data]
+;;   (cond
+;;     (instance? js/Uint8Array data) data
+;;     (instance? js/ArrayBuffer data) (js/Uint8Array. data)
+;;     :else (js/Uint8Array. data)))
 
-(defn- concat-uint8 [^js a ^js b]
-  (cond
-    (nil? a) b
-    (nil? b) a
-    :else
-    (let [out (js/Uint8Array. (+ (.-byteLength a) (.-byteLength b)))]
-      (.set out a 0)
-      (.set out b (.-byteLength a))
-      out)))
+;; (defn- concat-uint8 [^js a ^js b]
+;;   (cond
+;;     (nil? a) b
+;;     (nil? b) a
+;;     :else
+;;     (let [out (js/Uint8Array. (+ (.-byteLength a) (.-byteLength b)))]
+;;       (.set out a 0)
+;;       (.set out b (.-byteLength a))
+;;       out)))
 
 (defn- frame-bytes
   [^js data]
@@ -205,41 +211,41 @@
                      (vreset! last-addr (first (peek batch)))
                      (.enqueue controller (frame-bytes payload))))))}))))
 
-(defn- upload-multipart!
-  [^js bucket key stream opts]
-  (p/let [^js upload (.createMultipartUpload bucket key opts)]
-    (let [reader (.getReader stream)]
-      (-> (p/loop [buffer nil
-                   part-number 1
-                   parts []]
-            (p/let [chunk (.read reader)]
-              (if (.-done chunk)
-                (cond
-                  (and buffer (pos? (.-byteLength buffer)))
-                  (p/let [^js resp (.uploadPart upload part-number buffer)
-                          parts (conj parts {:partNumber part-number :etag (.-etag resp)})]
-                    (p/let [_ (.complete upload (clj->js parts))]
-                      {:ok true}))
+;; (defn- upload-multipart!
+;;   [^js bucket key stream opts]
+;;   (p/let [^js upload (.createMultipartUpload bucket key opts)]
+;;     (let [reader (.getReader stream)]
+;;       (-> (p/loop [buffer nil
+;;                    part-number 1
+;;                    parts []]
+;;             (p/let [chunk (.read reader)]
+;;               (if (.-done chunk)
+;;                 (cond
+;;                   (and buffer (pos? (.-byteLength buffer)))
+;;                   (p/let [^js resp (.uploadPart upload part-number buffer)
+;;                           parts (conj parts {:partNumber part-number :etag (.-etag resp)})]
+;;                     (p/let [_ (.complete upload (clj->js parts))]
+;;                       {:ok true}))
 
-                  (seq parts)
-                  (p/let [_ (.complete upload (clj->js parts))]
-                    {:ok true})
+;;                   (seq parts)
+;;                   (p/let [_ (.complete upload (clj->js parts))]
+;;                     {:ok true})
 
-                  :else
-                  (p/let [_ (.abort upload)]
-                    (.put bucket key (js/Uint8Array. 0) opts)))
-                (let [value (.-value chunk)
-                      buffer (concat-uint8 buffer (->uint8 value))]
-                  (if (>= (.-byteLength buffer) snapshot-multipart-part-size)
-                    (let [part (.slice buffer 0 snapshot-multipart-part-size)
-                          rest-parts (.slice buffer snapshot-multipart-part-size (.-byteLength buffer))]
-                      (p/let [^js resp (.uploadPart upload part-number part)
-                              parts (conj parts {:partNumber part-number :etag (.-etag resp)})]
-                        (p/recur rest-parts (inc part-number) parts)))
-                    (p/recur buffer part-number parts))))))
-          (p/catch (fn [error]
-                     (.abort upload)
-                     (throw error)))))))
+;;                   :else
+;;                   (p/let [_ (.abort upload)]
+;;                     (.put bucket key (js/Uint8Array. 0) opts)))
+;;                 (let [value (.-value chunk)
+;;                       buffer (concat-uint8 buffer (->uint8 value))]
+;;                   (if (>= (.-byteLength buffer) snapshot-multipart-part-size)
+;;                     (let [part (.slice buffer 0 snapshot-multipart-part-size)
+;;                           rest-parts (.slice buffer snapshot-multipart-part-size (.-byteLength buffer))]
+;;                       (p/let [^js resp (.uploadPart upload part-number part)
+;;                               parts (conj parts {:partNumber part-number :etag (.-etag resp)})]
+;;                         (p/recur rest-parts (inc part-number) parts)))
+;;                     (p/recur buffer part-number parts))))))
+;;           (p/catch (fn [error]
+;;                      (.abort upload)
+;;                      (throw error)))))))
 
 (declare import-snapshot!)
 (defn- import-snapshot-stream! [^js self stream reset?]
@@ -401,6 +407,32 @@
           (http/error-response "graph not ready" 409)
           (http/json-response :sync/pull (pull-response self since)))))))
 
+(defn- normalize-diagnostic-block
+  [{:keys [block/uuid block/parent block/page block/order] :as block}]
+  (cond-> block
+    uuid (assoc :block/uuid (str uuid))
+    parent (assoc :block/parent (str parent))
+    page (assoc :block/page (str page))
+    order (assoc :block/order order)))
+
+(defn- checksum-diagnostics-response
+  [^js self]
+  (ensure-conn! self)
+  (-> (sync-checksum/recompute-checksum-diagnostics @(.-conn self))
+      (update :blocks (fn [blocks]
+                        (mapv normalize-diagnostic-block blocks)))))
+
+(defn- handle-sync-checksum-diagnostics
+  [^js self request]
+  (let [graph-id (graph-id-from-request request)]
+    (if (not (seq graph-id))
+      (http/bad-request "missing graph id")
+      (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
+        (if-not ready-for-sync?
+          (http/error-response "graph not ready" 409)
+          (http/json-response :sync/checksum-diagnostics
+                              (checksum-diagnostics-response self)))))))
+
 (defn- handle-sync-snapshot-stream
   [^js self request]
   (let [graph-id (graph-id-from-request request)]
@@ -419,35 +451,17 @@
 
 (defn- handle-sync-snapshot-download
   [^js self request]
-  (let [graph-id (graph-id-from-request request)
-        ^js bucket (.-LOGSEQ_SYNC_ASSETS (.-env self))]
+  (let [graph-id (graph-id-from-request request)]
     (cond
       (not (seq graph-id))
       (http/bad-request "missing graph id")
-
-      (nil? bucket)
-      (http/error-response "missing assets bucket" 500)
 
       :else
       (p/let [ready-for-sync? (<ready-for-sync? self graph-id)]
         (if-not ready-for-sync?
           (http/error-response "graph not ready" 409)
-          (p/let [snapshot-id (str (random-uuid))
-                  key (snapshot-key graph-id snapshot-id)
-                  stream (-> (snapshot-export-stream self)
-                             (maybe-compress-stream))
-                  multipart? (and (some? (.-createMultipartUpload bucket))
-                                  (fn? (.-createMultipartUpload bucket)))
-                  opts #js {:httpMetadata #js {:contentType snapshot-content-type
-                                               :contentEncoding snapshot-content-encoding
-                                               :cacheControl snapshot-cache-control}
-                            :customMetadata #js {:purpose "snapshot"
-                                                 :created-at (str (common/now-ms))}}
-                  _ (if multipart?
-                      (upload-multipart! bucket key stream opts)
-                      (p/let [body (<buffer-stream stream)]
-                        (.put bucket key body opts)))
-                  url (snapshot-url request graph-id snapshot-id)]
+          (let [key (str "stream/" graph-id ".snapshot")
+                url (snapshot-stream-url request graph-id)]
             (http/json-response :sync/snapshot-download {:ok true
                                                          :key key
                                                          :url url
@@ -553,6 +567,9 @@
 
     :sync/pull
     (handle-sync-pull self url)
+
+    :sync/checksum-diagnostics
+    (handle-sync-checksum-diagnostics self request)
 
     :sync/snapshot-stream
     (handle-sync-snapshot-stream self request)

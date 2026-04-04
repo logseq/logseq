@@ -68,7 +68,7 @@
 
 (defn- relevant-attrs
   [e2ee?]
-  (cond-> #{:block/uuid :block/parent :block/page}
+  (cond-> #{:block/uuid :block/parent :block/page :block/order}
     (not e2ee?) (into #{:block/title :block/name})))
 
 (defn- get-block-uuid
@@ -97,6 +97,7 @@
                 (if (contains? attrs attr)
                   (case attr
                     :block/uuid (assoc acc :block/uuid (:v datom))
+                    :block/order (assoc acc :block/order (:v datom))
                     :block/title (assoc acc :block/title (:v datom))
                     :block/name (assoc acc :block/name (:v datom))
                     :block/parent (assoc acc :block/parent (get-block-uuid db (:v datom)))
@@ -106,10 +107,19 @@
             {}
             datoms)))
 
+(defn- checksum-eligible-entity?
+  [db eid]
+  (when-let [ent (d/entity db eid)]
+    (and (:block/uuid ent)
+         (not (ldb/built-in? ent))
+         (nil? (:logseq.property/deleted-at ent))
+         (or (ldb/page? ent)
+             (:block/page ent)))))
+
 (defn- entity-digest
   [db eid e2ee?]
-  (let [{:keys [block/uuid block/title block/name block/parent block/page]} (entity-values db eid e2ee?)]
-    (when uuid
+  (when (checksum-eligible-entity? db eid)
+    (let [{:keys [block/uuid block/title block/name block/parent block/page block/order]} (entity-values db eid e2ee?)]
       (cond-> [fnv-offset djb-offset]
         true (digest-string (str uuid))
         true (hash-code field-separator)
@@ -119,7 +129,8 @@
         (not e2ee?) (hash-code field-separator)
         true (digest-string (some-> parent :block/uuid str))
         true (hash-code field-separator)
-        true (digest-string (some-> page :block/uuid str))))))
+        true (digest-string (some-> page :block/uuid str))
+        true (digest-string (some-> order str))))))
 
 (defn recompute-checksum
   [db]
@@ -150,11 +161,12 @@
                   distinct)
         blocks (->> eids
                     (keep (fn [eid]
-                            (let [{:keys [block/uuid block/title block/name block/parent block/page]} (entity-values db eid e2ee?)]
-                              (when uuid
+                            (when (checksum-eligible-entity? db eid)
+                              (let [{:keys [block/uuid block/title block/name block/parent block/page :block/order]} (entity-values db eid e2ee?)]
                                 (cond-> {:block/uuid uuid
                                          :block/parent parent
-                                         :block/page page}
+                                         :block/page page
+                                         :block/order order}
                                   (not e2ee?) (assoc :block/title title
                                                      :block/name name))))))
                     (sort-by (comp str :block/uuid))

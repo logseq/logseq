@@ -1,33 +1,33 @@
 (ns frontend.worker.sync.apply-txs
   "Pending tx and remote tx application helpers for db sync."
-  (:require [clojure.set :as set]
-            [clojure.string :as string]
-            [datascript.core :as d]
-            [frontend.worker.shared-service :as shared-service]
-            [frontend.worker.state :as worker-state]
-            [frontend.worker.sync.assets :as sync-assets]
-            [frontend.worker.sync.auth :as sync-auth]
-            [frontend.worker.sync.client-op :as client-op]
-            [frontend.worker.sync.const :as rtc-const]
-            [frontend.worker.sync.crypt :as sync-crypt]
-            [frontend.worker.sync.large-title :as sync-large-title]
-            [frontend.worker.sync.presence :as sync-presence]
-            [frontend.worker.sync.transport :as sync-transport]
-            [frontend.worker.undo-redo :as worker-undo-redo]
-            [lambdaisland.glogi :as log]
-            [logseq.db :as ldb]
-            [logseq.db-sync.order :as sync-order]
-            [logseq.db.common.normalize :as db-normalize]
-            [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.outliner.core :as outliner-core]
-            [logseq.outliner.op :as outliner-op]
-            [logseq.outliner.op.construct :as op-construct]
-            [logseq.outliner.page :as outliner-page]
-            [logseq.outliner.property :as outliner-property]
-            [logseq.outliner.recycle :as outliner-recycle]
-            [promesa.core :as p]
-            [frontend.worker.sync.util :refer [fail-fast]]))
+  (:require
+   [clojure.set :as set]
+   [datascript.core :as d]
+   [frontend.worker.shared-service :as shared-service]
+   [frontend.worker.state :as worker-state]
+   [frontend.worker.sync.assets :as sync-assets]
+   [frontend.worker.sync.auth :as sync-auth]
+   [frontend.worker.sync.client-op :as client-op]
+   [frontend.worker.sync.const :as rtc-const]
+   [frontend.worker.sync.crypt :as sync-crypt]
+   [frontend.worker.sync.large-title :as sync-large-title]
+   [frontend.worker.sync.presence :as sync-presence]
+   [frontend.worker.sync.transport :as sync-transport]
+   [frontend.worker.sync.util :refer [fail-fast]]
+   [frontend.worker.undo-redo :as worker-undo-redo]
+   [lambdaisland.glogi :as log]
+   [logseq.db :as ldb]
+   [logseq.db-sync.order :as sync-order]
+   [logseq.db.common.normalize :as db-normalize]
+   [logseq.db.frontend.property.type :as db-property-type]
+   [logseq.db.sqlite.util :as sqlite-util]
+   [logseq.outliner.core :as outliner-core]
+   [logseq.outliner.op :as outliner-op]
+   [logseq.outliner.op.construct :as op-construct]
+   [logseq.outliner.page :as outliner-page]
+   [logseq.outliner.property :as outliner-property]
+   [logseq.outliner.recycle :as outliner-recycle]
+   [promesa.core :as p]))
 
 (defonce *repo->latest-remote-tx (atom {}))
 (defonce *repo->latest-remote-checksum (atom {}))
@@ -60,8 +60,7 @@
      (sync-presence/rtc-state-payload sync-counts client))))
 
 (def reverse-data-ignored-attrs
-  #{:logseq.property.embedding/hnsw-label-updated-at
-    :block/tx-id})
+  #{:block/tx-id})
 
 (def rtc-ignored-attrs
   (set/union
@@ -334,6 +333,7 @@
                                 :gen-undo-ops? false
                                 :persist-op? true
                                 :undo? undo?
+                                :redo? (:redo? tx-meta)
                                 :db-sync/tx-id history-tx-id
                                 :db-sync/source-tx-id (or (:db-sync/source-tx-id tx-meta)
                                                           tx-id)}
@@ -593,6 +593,10 @@
                                  (dissoc :db/id)
                                  (assoc :block/created-at now)
                                  (assoc :block/updated-at now))]
+            (when-not (or (:block/parent block)
+                          (:block/page block))
+              (throw (ex-info "block doesn't have both parent and page"
+                              block)))
             (ldb/transact! conn
                            [create-block]
                            {:outliner-op :save-block
@@ -607,7 +611,7 @@
           block-uuid (:block/uuid block)
           block-ent (when block-uuid
                       (d/entity db [:block/uuid block-uuid]))
-          block-base (dissoc block :db/id)
+          block-base (dissoc block :db/id :block/order)
           block' (merge block-base
                         (op-construct/rewrite-block-title-with-retracted-refs db block-base))]
       (if (some? block-ent)
@@ -849,6 +853,7 @@
        (fn [conn]
          (if (= [[:transact nil]] outliner-ops)
            (when-let [tx-data (seq (:tx local-tx))]
+             (prn :debug :transact :tx-data tx-data)
              (ldb/transact! conn tx-data {:outliner-op :transact}))
            (do
              (precreate-missing-save-blocks! conn outliner-ops)
@@ -857,15 +862,8 @@
       (catch :default error
         (let [drop-log {:tx-id (:tx-id local-tx)
                         :outliner-ops outliner-ops
-                        :error error}
-              expected-drop? (or (= "invalid rebase op" (ex-message error))
-                                 (string/includes? (or (ex-message error) "")
-                                                   "doesn't exist yet")
-                                 (string/includes? (or (ex-message error) "")
-                                                   "Nothing found for entity id"))]
-          (if expected-drop?
-            (log/debug :db-sync/drop-op-driven-pending-tx drop-log)
-            (log/warn :db-sync/drop-op-driven-pending-tx drop-log)))
+                        :error error}]
+          (log/warn :db-sync/drop-op-driven-pending-tx drop-log))
         nil))))
 
 (defn- rebase-local-txs!
@@ -886,21 +884,21 @@
         *rebase-tx-reports (atom [])]
     ;; (prn :debug :apply-remote-tx (first remote-txs))
     (try
-      (ldb/batch-transact!
-       conn
-       tx-meta
-       (fn [conn]
-         (reverse-local-txs! conn local-txs)
+      (let [tx-report (ldb/batch-transact!
+                       conn
+                       tx-meta
+                       (fn [conn]
+                         (reverse-local-txs! conn local-txs)
 
-         (transact-remote-txs! conn remote-txs)
+                         (transact-remote-txs! conn remote-txs)
 
-         (let [rebase-tx-report (rebase-local-txs! repo conn local-txs)]
-           (fix-tx! conn rebase-tx-report {:outliner-op :rebase})))
+                         (rebase-local-txs! repo conn local-txs))
 
-       {:listen-db (fn [{:keys [tx-meta tx-data] :as tx-report}]
-                     (when (and (= :rebase (:outliner-op tx-meta))
-                                (seq tx-data))
-                       (swap! *rebase-tx-reports conj tx-report)))})
+                       {:listen-db (fn [{:keys [tx-meta tx-data] :as tx-report}]
+                                     (when (and (= :rebase (:outliner-op tx-meta))
+                                                (seq tx-data))
+                                       (swap! *rebase-tx-reports conj tx-report)))})]
+        (fix-tx! conn tx-report {:outliner-op :fix}))
 
       (doseq [tx-report @*rebase-tx-reports]
         (handle-local-tx! repo tx-report))
@@ -951,7 +949,7 @@
                                           {:t t
                                            :outliner-op outliner-op
                                            :tx-data-count (count tx-data)
-                                           :tx-data-preview (take 12 tx-data)})
+                                           :tx-data tx-data})
                                         remote-txs)
                       :local-txs (mapv (fn [{:keys [tx-id outliner-op tx reversed-tx]}]
                                          {:tx-id tx-id
@@ -982,6 +980,10 @@
   [repo {:keys [tx-data db-after db-before] :as tx-report}]
   (let [normalized (normalize-tx-data db-after db-before tx-data)
         reversed-datoms (reverse-tx-data db-before db-after tx-data)]
+    ;; (prn :debug :enqueue-local-tx :tx-data)
+    ;; (cljs.pprint/pprint tx-data)
+    ;; (prn :debug :enqueue-local-tx :normalized)
+    ;; (cljs.pprint/pprint normalized)
     (when (seq normalized)
       (persist-local-tx! repo tx-report normalized reversed-datoms)
       (when-let [client @worker-state/*db-sync-client]
@@ -997,14 +999,12 @@
                                      (when (ws-open? ws)
                                        (flush-pending! repo current)))))))))))))))
 
-
 ;; (defonce *persist-promise (atom nil))
 (defn enqueue-local-tx!
   [repo {:keys [tx-meta tx-data] :as tx-report}]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (when-not (or (:rtc-tx? tx-meta)
-                  (and (:batch-tx? @conn) (not= (:outliner-op tx-meta) :rebase))
-                  (:mark-embedding? tx-meta))
+                  (and (:batch-tx? @conn) (not= (:outliner-op tx-meta) :rebase)))
       (when (seq tx-data)
         (enqueue-local-tx-aux repo tx-report)
         ;; (p/do!
