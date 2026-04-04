@@ -228,12 +228,12 @@
                worker-state-prev @worker-state/*state
                sync-config-prev @worker-state/*db-sync-config
                fetch-prev js/fetch]
-           (reset! worker-state/*db-sync-config {:feature-flags {:worker-auth-refresh? true}
-                                                 :oauth-token-url "https://auth.example.com/oauth2/token"
-                                                 :oauth-client-id "worker-client-id"})
+           (reset! worker-state/*db-sync-config {:feature-flags {:worker-auth-refresh? true}})
            (reset! worker-state/*state (assoc worker-state-prev
                                               :auth/id-token "expired-token"
-                                              :auth/refresh-token "refresh-token"))
+                                              :auth/refresh-token "refresh-token"
+                                              :auth/oauth-token-url "https://auth.example.com/oauth2/token"
+                                              :auth/oauth-client-id "worker-client-id"))
            (reset! worker-state/*main-thread
                    (fn [qkw _direct-pass? _args-list]
                      (when (= qkw :thread-api/ensure-id&access-token)
@@ -276,12 +276,12 @@
                worker-state-prev @worker-state/*state
                sync-config-prev @worker-state/*db-sync-config
                fetch-prev js/fetch]
-           (reset! worker-state/*db-sync-config {:feature-flags {:worker-auth-refresh? false}
-                                                 :oauth-token-url "https://auth.example.com/oauth2/token"
-                                                 :oauth-client-id "worker-client-id"})
+           (reset! worker-state/*db-sync-config {:feature-flags {:worker-auth-refresh? false}})
            (reset! worker-state/*state (assoc worker-state-prev
                                               :auth/id-token "expired-token"
-                                              :auth/refresh-token "refresh-token"))
+                                              :auth/refresh-token "refresh-token"
+                                              :auth/oauth-token-url "https://auth.example.com/oauth2/token"
+                                              :auth/oauth-client-id "worker-client-id"))
            (reset! worker-state/*main-thread
                    (fn [qkw _direct-pass? _args-list]
                      (when (= qkw :thread-api/ensure-id&access-token)

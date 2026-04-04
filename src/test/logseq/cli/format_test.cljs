@@ -577,17 +577,16 @@
       (is (string/includes? result "Sync download"))
       (is (string/includes? result "demo-graph")))))
 
-(deftest test-human-output-sync-config-get-e2ee-password-redaction
-  (testing "sync config get e2ee-password redacts value in human output"
-    (let [password "super-secret-password"
+(deftest test-human-output-sync-config-get-ws-url
+  (testing "sync config get ws-url renders value in human output"
+    (let [value "wss://api-staging.logseq.io/sync/%s"
           result (format/format-result {:status :ok
                                         :command :sync-config-get
-                                        :data {:key :e2ee-password
-                                               :value password}}
+                                        :data {:key :ws-url
+                                               :value value}}
                                        {:output-format nil})]
-      (is (string/includes? result "e2ee-password"))
-      (is (string/includes? result "[REDACTED]"))
-      (is (not (string/includes? result password))))))
+      (is (string/includes? result "ws-url"))
+      (is (string/includes? result value)))))
 
 (deftest test-human-output-auth-commands
   (testing "login human output reports auth path and user metadata without tokens"

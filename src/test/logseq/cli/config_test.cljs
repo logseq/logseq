@@ -30,7 +30,8 @@
                                  ":login-timeout-ms 444 "
                                  ":logout-timeout-ms 555 "
                                  ":output-format :edn "
-                                 ":auth-token \"file-secret\"}"))
+                                 ":auth-token \"file-secret\" "
+                                 ":e2ee-password \"legacy-password\"}"))
         env {"LOGSEQ_CLI_GRAPH" "env-repo"
              "LOGSEQ_CLI_DATA_DIR" "env-data"
              "LOGSEQ_CLI_TIMEOUT_MS" "222"
@@ -53,6 +54,7 @@
     (is (= 999 (:logout-timeout-ms result)))
     (is (nil? (:auth-token result)))
     (is (nil? (:retries result)))
+    (is (nil? (:e2ee-password result)))
     (is (= :human (:output-format result)))))
 
 (deftest test-env-overrides-file
@@ -92,8 +94,8 @@
         expected-config-path (node-path/join (.homedir os) "logseq" "cli.edn")]
     (is (= expected-config-path (:config-path result)))
     (is (= "~/logseq/graphs" (:data-dir result)))
-    (is (= "wss://api.logseq.io/sync/%s" (:ws-url result)))
-    (is (= "https://api.logseq.io" (:http-base result)))
+    (is (= "wss://api-staging.logseq.io/sync/%s" (:ws-url result)))
+    (is (= "https://api-staging.logseq.io" (:http-base result)))
     (is (= 10000 (:timeout-ms result)))
     (is (= 300000 (:login-timeout-ms result)))
     (is (= 120000 (:logout-timeout-ms result)))))
@@ -110,16 +112,18 @@
 (deftest test-update-config-strips-removed-options
   (let [dir (node-helper/create-tmp-dir "cli")
         cfg-path (node-path/join dir "cli.edn")
-        _ (fs/writeFileSync cfg-path "{:graph \"old\" :auth-token \"legacy-secret\"}")
+        _ (fs/writeFileSync cfg-path "{:graph \"old\" :auth-token \"legacy-secret\" :e2ee-password \"legacy-password\"}")
         _ (config/update-config! {:config-path cfg-path}
                                  {:graph "new"
                                   :auth-token "secret"
-                                  :retries 2})
+                                  :retries 2
+                                  :e2ee-password "new-password"})
         contents (.toString (fs/readFileSync cfg-path) "utf8")
         parsed (reader/read-string contents)]
     (is (= "new" (:graph parsed)))
     (is (not (contains? parsed :auth-token)))
-    (is (not (contains? parsed :retries)))))
+    (is (not (contains? parsed :retries)))
+    (is (not (contains? parsed :e2ee-password)))))
 
 (deftest test-update-config-removes-nil-values
   (let [dir (node-helper/create-tmp-dir "cli")

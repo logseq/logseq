@@ -12,16 +12,18 @@
 (deftest ensure-rsa-key-does-not-create-graph-test
   (async done
          (let [ensure-fn (ensure-rsa-key-fn)
-               db-worker-ops (atom [])
+               db-worker-calls (atom [])
                create-calls (atom 0)
                ensured-values (atom [])]
            (if-not ensure-fn
              (do
                (is false "missing ensure-e2ee-rsa-key-for-cloud!")
                (done))
-             (-> (p/with-redefs [state/<invoke-db-worker
-                                 (fn [op & _]
-                                   (swap! db-worker-ops conj op)
+             (-> (p/with-redefs [state/pub-event! (fn [_event]
+                                                    (p/resolved nil))
+                                 state/<invoke-db-worker
+                                 (fn [op & args]
+                                   (swap! db-worker-calls conj (into [op] args))
                                    (if (= op :thread-api/db-sync-ensure-user-rsa-keys)
                                      (p/resolved {:public-key "pk"})
                                      (p/resolved nil)))
@@ -38,9 +40,15 @@
                               (fn [value]
                                 (swap! ensured-values conj value))))
                  (p/then (fn [_]
-                           (is (= [:thread-api/set-db-sync-config
-                                   :thread-api/db-sync-ensure-user-rsa-keys]
-                                  @db-worker-ops))
+                           (let [[set-config-call ensure-call] @db-worker-calls
+                                 set-config (second set-config-call)]
+                             (is (= :thread-api/set-db-sync-config (first set-config-call)))
+                             (is (= :thread-api/db-sync-ensure-user-rsa-keys (first ensure-call)))
+                             (is (= true (:enabled? set-config)))
+                             (is (contains? set-config :ws-url))
+                             (is (contains? set-config :http-base))
+                             (is (not (contains? set-config :oauth-domain)))
+                             (is (not (contains? set-config :oauth-client-id))))
                            (is (= [true] @ensured-values))
                            (is (zero? @create-calls))
                            (done)))
@@ -51,16 +59,18 @@
 (deftest ensure-rsa-key-nil-result-does-not-create-graph-test
   (async done
          (let [ensure-fn (ensure-rsa-key-fn)
-               db-worker-ops (atom [])
+               db-worker-calls (atom [])
                create-calls (atom 0)
                ensured-values (atom [])]
            (if-not ensure-fn
              (do
                (is false "missing ensure-e2ee-rsa-key-for-cloud!")
                (done))
-             (-> (p/with-redefs [state/<invoke-db-worker
-                                 (fn [op & _]
-                                   (swap! db-worker-ops conj op)
+             (-> (p/with-redefs [state/pub-event! (fn [_event]
+                                                    (p/resolved nil))
+                                 state/<invoke-db-worker
+                                 (fn [op & args]
+                                   (swap! db-worker-calls conj (into [op] args))
                                    (p/resolved nil))
                                  repo-handler/new-db!
                                  (fn [& _]
@@ -75,9 +85,15 @@
                               (fn [value]
                                 (swap! ensured-values conj value))))
                  (p/then (fn [_]
-                           (is (= [:thread-api/set-db-sync-config
-                                   :thread-api/db-sync-ensure-user-rsa-keys]
-                                  @db-worker-ops))
+                           (let [[set-config-call ensure-call] @db-worker-calls
+                                 set-config (second set-config-call)]
+                             (is (= :thread-api/set-db-sync-config (first set-config-call)))
+                             (is (= :thread-api/db-sync-ensure-user-rsa-keys (first ensure-call)))
+                             (is (= true (:enabled? set-config)))
+                             (is (contains? set-config :ws-url))
+                             (is (contains? set-config :http-base))
+                             (is (not (contains? set-config :oauth-domain)))
+                             (is (not (contains? set-config :oauth-client-id))))
                            (is (= [false] @ensured-values))
                            (is (zero? @create-calls))
                            (done)))

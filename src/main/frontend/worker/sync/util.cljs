@@ -23,12 +23,9 @@
 
 (defn auth-token
   []
-  (let [cli-owner? (cli-node-owner?)
-        configured-token (:auth-token @worker-state/*db-sync-config)]
-    (if cli-owner?
-      configured-token
-      (or (worker-state/get-id-token)
-          configured-token))))
+  (let [state @worker-state/*state]
+    (or (:auth/id-token state)
+        (:auth/access-token state))))
 
 (defn get-graph-id
   [repo]

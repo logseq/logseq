@@ -6,82 +6,130 @@
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.platform :as platform]
             [frontend.worker.state :as worker-state]
+            [frontend.worker.sync.auth :as sync-auth]
             [frontend.worker.sync.const :as sync-const]
             [frontend.worker.ui-request :as ui-request]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [promesa.core :as p]
-            [frontend.worker.sync.util :refer [fail-fast fetch-json coerce-http-request] :as sync-util]
-            [frontend.common.file.opfs :as opfs]))
+            [frontend.worker.sync.util :refer [fail-fast fetch-json coerce-http-request] :as sync-util]))
 
 (defonce ^:private *graph->aes-key (atom {}))
 (defonce ^:private *user-rsa-key-pair-inflight (atom {}))
-(defonce ^:private e2ee-password-file "e2ee-password")
+(defonce ^:private node-default-e2ee-password-file "~/logseq/e2ee-password")
+(defonce ^:private node-default-auth-file "~/logseq/auth.json")
 (defonce ^:private e2ee-password-secret-key "logseq-encrypted-password")
-(defonce ^:private native-env?
-  (let [href (try (.. js/self -location -href)
-                  (catch :default _ nil))]
-    (boolean (and (string? href)
-                  (or (string/includes? href "electron=true")
-                      (string/includes? href "capacitor=true"))))))
-
 (def ^:private invalid-transit ::invalid-transit)
 
-(defn native-worker?
-  []
-  native-env?)
+(defn- runtime
+  [platform']
+  (get-in platform' [:env :runtime]))
 
-(defn <native-save-password-text!
-  [encrypted-text]
-  (platform/save-secret-text! (platform/current) e2ee-password-secret-key encrypted-text))
+(defn- browser-runtime?
+  [platform']
+  (= :browser (runtime platform')))
 
-(defn- <native-read-password-text
+(defn- e2ee-password-file-path
   []
-  (platform/read-secret-text (platform/current) e2ee-password-secret-key))
+  node-default-e2ee-password-file)
 
-(defn- <native-delete-password-text!
+(defn- auth-file-path
   []
-  (platform/delete-secret-text! (platform/current) e2ee-password-secret-key))
+  node-default-auth-file)
+
+(defn- interactive-runtime?
+  []
+  (let [env (:env (platform/current))
+        runtime' (:runtime env)
+        owner-source (:owner-source env)]
+    (or (= :browser runtime')
+        (and (= :node runtime')
+             (= :electron owner-source)))))
+
+(defn- fail-missing-e2ee-password!
+  [data]
+  (fail-fast :db-sync/missing-e2ee-password
+             (merge {:field :e2ee-password}
+                    data)))
+
+(defn- ensure-refresh-token!
+  [refresh-token]
+  (when-not (seq refresh-token)
+    (fail-missing-e2ee-password! {:reason :missing-refresh-token
+                                  :hint "Run logseq login first."})))
+
+(defn- parse-auth-file
+  [text]
+  (when (seq text)
+    (try
+      (js->clj (js/JSON.parse text) :keywordize-keys true)
+      (catch :default _
+        invalid-transit))))
+
+(defn- <read-refresh-token-from-auth-file
+  [platform']
+  (p/let [text (-> (platform/read-text! platform' (auth-file-path))
+                   (p/catch (fn [_]
+                              nil)))
+          auth-data (parse-auth-file text)]
+    (when (= invalid-transit auth-data)
+      (fail-missing-e2ee-password! {:reason :invalid-auth-file
+                                    :hint "Run logseq login first."}))
+    (let [refresh-token (:refresh-token auth-data)]
+      (ensure-refresh-token! refresh-token)
+      refresh-token)))
 
 (defn- <save-e2ee-password
-  [refresh-token password]
-  (p/let [result (crypt/<encrypt-text-by-text-password refresh-token password)
+  [password]
+  (p/let [platform' (platform/current)
+          refresh-token (<read-refresh-token-from-auth-file platform')
+          result (crypt/<encrypt-text-by-text-password refresh-token password)
           text (ldb/write-transit-str result)]
-    (if (native-worker?)
-      (-> (p/let [_ (<native-save-password-text! text)]
-            nil)
-          (p/catch (fn [e]
-                     (log/error :native-save-e2ee-password {:error e})
-                     (platform/write-text! (platform/current) e2ee-password-file text))))
-      (platform/write-text! (platform/current) e2ee-password-file text))))
+    (if (browser-runtime? platform')
+      (platform/save-secret-text! platform' e2ee-password-secret-key text)
+      (platform/write-text! platform' (e2ee-password-file-path) text))))
+
+(defn- <read-browser-e2ee-password-text
+  [platform']
+  (-> (platform/read-secret-text platform' e2ee-password-secret-key)
+      (p/catch (fn [e]
+                 (log/warn :db-sync/read-e2ee-password-secret-failed {:error e})
+                 nil))))
 
 (defn- <read-e2ee-password
   [refresh-token]
+  (ensure-refresh-token! refresh-token)
   (p/let [platform' (platform/current)
-          text (if (native-worker?)
-                 (-> (p/let [native-text (<native-read-password-text)]
-                       (if (seq native-text)
-                         native-text
-                         (platform/read-text! platform' e2ee-password-file)))
-                     (p/catch (fn [e]
-                                (log/error :native-get-e2ee-password {:error e})
-                                (platform/read-text! platform' e2ee-password-file))))
-                 (platform/read-text! platform' e2ee-password-file))
-          data (ldb/read-transit-str text)
-          password (crypt/<decrypt-text-by-text-password refresh-token data)]
-    password))
+          text (if (browser-runtime? platform')
+                 (<read-browser-e2ee-password-text platform')
+                 (-> (platform/read-text! platform' (e2ee-password-file-path))
+                     (p/catch (fn [_]
+                                nil))))]
+    (when-not (seq text)
+      (fail-missing-e2ee-password! {:reason :missing-persisted-password
+                                    :hint "Provide --e2ee-password to persist it."}))
+    (let [data (try
+                 (ldb/read-transit-str text)
+                 (catch :default _
+                   invalid-transit))]
+      (when (= invalid-transit data)
+        (fail-fast :db-sync/invalid-e2ee-password-payload
+                   {:field :e2ee-password
+                    :reason :invalid-transit-payload}))
+      (crypt/<decrypt-text-by-text-password refresh-token data))))
 
 (defn- <clear-e2ee-password!
   []
-  (p/let [_ (when (native-worker?)
-              (-> (<native-delete-password-text!)
+  (p/let [platform' (platform/current)
+          _ (if (browser-runtime? platform')
+              (-> (platform/delete-secret-text! platform' e2ee-password-secret-key)
                   (p/catch (fn [e]
-                             (log/error :native-delete-e2ee-password {:error e})
-                             nil))))
-          _ (-> (opfs/<delete-file! e2ee-password-file)
-                (p/catch (fn [e]
-                           (log/error :opfs-delete-e2ee-password {:error e})
-                           nil)))]
+                             (log/warn :db-sync/delete-e2ee-password-secret-failed {:error e})
+                             nil)))
+              (-> (platform/write-text! platform' (e2ee-password-file-path) "")
+                  (p/catch (fn [e]
+                             (log/warn :db-sync/clear-e2ee-password-file-failed {:error e})
+                             nil))))]
     nil))
 
 (defn e2ee-base
@@ -105,6 +153,20 @@
 
 (defn- get-user-uuid []
   (some-> (sync-util/auth-token) worker-util/parse-jwt :sub))
+
+(defn- token->user-uuid
+  [token]
+  (some-> token worker-util/parse-jwt :sub))
+
+(defn- <resolve-user-uuid
+  []
+  (let [user-id (get-user-uuid)]
+    (if (seq user-id)
+      (p/resolved user-id)
+      (-> (sync-auth/<resolve-ws-token)
+          (p/then token->user-uuid)
+          (p/catch (fn [_error]
+                     nil))))))
 
 (defn- <get-item
   [k]
@@ -139,9 +201,10 @@
               {:response-schema :e2ee/user-keys}))
 
 (defn- user-rsa-key-pair-valid?
-  [{:keys [public-key encrypted-private-key]}]
-  (and (string? public-key)
-       (string? encrypted-private-key)))
+  [pair]
+  (and (map? pair)
+       (string? (:public-key pair))
+       (string? (:encrypted-private-key pair))))
 
 (defn- <set-user-rsa-key-pair-to-idb!
   [base user-id pair]
@@ -169,7 +232,7 @@
 
 (defn- <get-user-rsa-key-pair-raw
   [base]
-  (let [user-id (get-user-uuid)]
+  (p/let [user-id (<resolve-user-uuid)]
     (when-not (and (string? base) (string? user-id))
       (fail-fast :db-sync/missing-field {:base base :user-id user-id :field :user-rsa-key-pair}))
     (let [k [base user-id]]
@@ -182,7 +245,7 @@
                              (if (user-rsa-key-pair-valid? pair)
                                (p/let [_ (<set-user-rsa-key-pair-to-idb! base user-id pair)]
                                  pair)
-                               pair))))
+                               nil))))
                        (p/finally (fn []
                                     (swap! *user-rsa-key-pair-inflight dissoc k))))]
           (swap! *user-rsa-key-pair-inflight assoc k task)
@@ -200,7 +263,7 @@
                               :headers {"content-type" "application/json"}
                               :body (js/JSON.stringify (clj->js body))}
                              {:response-schema :e2ee/user-keys})
-            user-id (get-user-uuid)
+            user-id (<resolve-user-uuid)
             _ (<set-user-rsa-key-pair-to-idb! base user-id pair)]
       pair)))
 
@@ -208,11 +271,34 @@
   [payload]
   (p/let [{:keys [password]} (ui-request/<request :request-e2ee-password
                                                    payload
-                                                   {:hint "set :e2ee-password in --config for headless mode"})]
+                                                   {:hint "Provide e2ee-password to continue."})]
     (when-not (seq password)
       (fail-fast :db-sync/missing-e2ee-password {:field :e2ee-password
                                                  :reason :empty-ui-password}))
     password))
+
+(defn- <verify-and-save-e2ee-password!
+  [password encrypted-private-key-or-str]
+  (when-not (seq password)
+    (fail-missing-e2ee-password! {:reason :empty-password}))
+  (p/let [encrypted-private-key (if (string? encrypted-private-key-or-str)
+                                  (ldb/read-transit-str encrypted-private-key-or-str)
+                                  encrypted-private-key-or-str)
+          private-key (crypt/<decrypt-private-key password encrypted-private-key)
+          _ (<save-e2ee-password password)]
+    private-key))
+
+(defn- <verify-and-save-e2ee-password-from-server!
+  [password]
+  (let [base (e2ee-base)]
+    (when-not (string? base)
+      (fail-fast :db-sync/missing-field {:base base
+                                         :field :e2ee-base}))
+    (p/let [{:keys [encrypted-private-key]} (<get-user-rsa-key-pair-raw base)]
+      (when-not (string? encrypted-private-key)
+        (fail-fast :db-sync/missing-field {:base base
+                                           :field :encrypted-private-key}))
+      (<verify-and-save-e2ee-password! password encrypted-private-key))))
 
 (defn- <generate-and-upload-user-rsa-key-pair!
   [base]
@@ -264,56 +350,25 @@
   [encrypted-private-key-str]
   (let [<decrypt-in-headless
         (fn [encrypted-private-key]
-          (let [sync-config @worker-state/*db-sync-config
-                configured-password (:e2ee-password sync-config)
-                refresh-token (:auth/refresh-token @worker-state/*state)
-                configured-auth-token (:auth-token sync-config)
-                candidates (cond-> []
-                             (seq configured-password) (conj {:source :config
-                                                              :value configured-password})
-                             (seq refresh-token) (conj {:source :saved-password
-                                                        :value refresh-token})
-                             (and (seq configured-auth-token)
-                                  (not= configured-auth-token refresh-token))
-                             (conj {:source :saved-password
-                                    :value configured-auth-token}))]
-            (letfn [(<candidate-password
-                      [{:keys [source value]}]
-                      (case source
-                        :config
-                        (p/resolved value)
-
-                        :saved-password
-                        (<read-e2ee-password value)))
-
-                    (<decrypt-with-candidates
-                      [remaining]
-                      (if-let [candidate (first remaining)]
-                        (-> (p/let [password (<candidate-password candidate)]
-                              (when-not (seq password)
-                                (fail-fast :db-sync/missing-e2ee-password {:field :e2ee-password
-                                                                           :source (:source candidate)}))
-                              (crypt/<decrypt-private-key password encrypted-private-key))
-                            (p/catch (fn [_error]
-                                       (<decrypt-with-candidates (rest remaining)))))
-                        (fail-fast :db-sync/missing-e2ee-password {:field :e2ee-password
-                                                                   :reason :headless-decrypt-private-key
-                                                                   :hint "set :e2ee-password in --config for CLI sync"})))]
-              (<decrypt-with-candidates candidates))))
+          (let [refresh-token (:auth/refresh-token @worker-state/*state)]
+            (p/let [password (<read-e2ee-password refresh-token)]
+              (when-not (seq password)
+                (fail-missing-e2ee-password! {:reason :headless-empty-password
+                                              :hint "Provide --e2ee-password to persist it."}))
+              (crypt/<decrypt-private-key password encrypted-private-key))))
 
         <decrypt-with-ui-request
         (fn [encrypted-private-key]
-          (p/let [exported-private-key (ui-request/<request :decrypt-user-e2ee-private-key
-                                                            {:encrypted-private-key encrypted-private-key}
-                                                            {:hint "set :e2ee-password in --config for headless mode"})]
-            (crypt/<import-private-key exported-private-key)))]
+          (p/let [password (<request-e2ee-password-from-ui {:reason :decrypt-user-rsa-private-key})]
+            (<verify-and-save-e2ee-password! password encrypted-private-key)))]
     (p/let [encrypted-private-key (ldb/read-transit-str encrypted-private-key-str)]
-      (-> (try
-            (<decrypt-in-headless encrypted-private-key)
-            (catch :default error
-              (p/rejected error)))
-          (p/catch (fn [_headless-error]
-                     (<decrypt-with-ui-request encrypted-private-key)))))))
+      (-> (<decrypt-in-headless encrypted-private-key)
+          (p/catch (fn [headless-error]
+                     (if (interactive-runtime?)
+                       (-> (<decrypt-with-ui-request encrypted-private-key)
+                           (p/catch (fn [_ui-error]
+                                      (p/rejected headless-error))))
+                       (p/rejected headless-error))))))))
 
 (defn- <import-public-key
   [public-key-str]
@@ -384,47 +439,47 @@
     (p/resolved nil)
     (if-let [cached (get @*graph->aes-key graph-id)]
       (p/resolved cached)
-      (let [base (e2ee-base)
-            user-id (get-user-uuid)]
-        (when-not (and (string? base) (string? user-id))
-          (fail-fast :db-sync/missing-field {:base base :user-id user-id :graph-id graph-id}))
-        (p/let [{:keys [public-key private-key]} (<load-user-rsa-key-material base user-id graph-id)
-                local-encrypted (when graph-id
-                                  (<get-item (graph-encrypted-aes-key-idb-key graph-id)))
-                remote-encrypted (when (and (nil? local-encrypted) graph-id)
-                                   (<fetch-graph-encrypted-aes-key base graph-id))
-                encrypted-aes-key (or local-encrypted remote-encrypted)
-                aes-key (if encrypted-aes-key
-                          (-> (crypt/<decrypt-aes-key private-key encrypted-aes-key)
-                              (p/catch (fn [error]
-                                         (if-not (and graph-id local-encrypted)
-                                           (throw error)
-                                           (let [aes-key-k (graph-encrypted-aes-key-idb-key graph-id)]
-                                             (-> (p/let [_ (<clear-item! aes-key-k)
-                                                         refetched-encrypted (<fetch-graph-encrypted-aes-key base graph-id)]
-                                                   (if-not refetched-encrypted
-                                                     (throw error)
-                                                     (p/let [aes-key (crypt/<decrypt-aes-key private-key refetched-encrypted)
-                                                             _ (<set-item! aes-key-k refetched-encrypted)]
-                                                       aes-key)))
-                                                 (p/catch (fn [retry-error]
-                                                            (log/warn :db-sync/graph-aes-key-cache-invalid
-                                                                      {:base base
-                                                                       :user-id user-id
-                                                                       :graph-id graph-id
-                                                                       :first-error error
-                                                                       :retry-error retry-error})
-                                                            (throw retry-error)))))))))
-                          (p/let [aes-key (crypt/<generate-aes-key)
-                                  encrypted (crypt/<encrypt-aes-key public-key aes-key)
-                                  encrypted-str (ldb/write-transit-str encrypted)
-                                  _ (<upsert-graph-encrypted-aes-key! base graph-id encrypted-str)
-                                  _ (<set-item! (graph-encrypted-aes-key-idb-key graph-id) encrypted)]
-                            aes-key))
-                _ (when (and graph-id encrypted-aes-key (nil? local-encrypted))
-                    (<set-item! (graph-encrypted-aes-key-idb-key graph-id) encrypted-aes-key))]
-          (swap! *graph->aes-key assoc graph-id aes-key)
-          aes-key)))))
+      (let [base (e2ee-base)]
+        (p/let [user-id (<resolve-user-uuid)]
+          (when-not (and (string? base) (string? user-id))
+            (fail-fast :db-sync/missing-field {:base base :user-id user-id :graph-id graph-id}))
+          (p/let [{:keys [public-key private-key]} (<load-user-rsa-key-material base user-id graph-id)
+                  local-encrypted (when graph-id
+                                    (<get-item (graph-encrypted-aes-key-idb-key graph-id)))
+                  remote-encrypted (when (and (nil? local-encrypted) graph-id)
+                                     (<fetch-graph-encrypted-aes-key base graph-id))
+                  encrypted-aes-key (or local-encrypted remote-encrypted)
+                  aes-key (if encrypted-aes-key
+                            (-> (crypt/<decrypt-aes-key private-key encrypted-aes-key)
+                                (p/catch (fn [error]
+                                           (if-not (and graph-id local-encrypted)
+                                             (throw error)
+                                             (let [aes-key-k (graph-encrypted-aes-key-idb-key graph-id)]
+                                               (-> (p/let [_ (<clear-item! aes-key-k)
+                                                           refetched-encrypted (<fetch-graph-encrypted-aes-key base graph-id)]
+                                                     (if-not refetched-encrypted
+                                                       (throw error)
+                                                       (p/let [aes-key (crypt/<decrypt-aes-key private-key refetched-encrypted)
+                                                               _ (<set-item! aes-key-k refetched-encrypted)]
+                                                         aes-key)))
+                                                   (p/catch (fn [retry-error]
+                                                              (log/warn :db-sync/graph-aes-key-cache-invalid
+                                                                        {:base base
+                                                                         :user-id user-id
+                                                                         :graph-id graph-id
+                                                                         :first-error error
+                                                                         :retry-error retry-error})
+                                                              (throw retry-error)))))))))
+                            (p/let [aes-key (crypt/<generate-aes-key)
+                                    encrypted (crypt/<encrypt-aes-key public-key aes-key)
+                                    encrypted-str (ldb/write-transit-str encrypted)
+                                    _ (<upsert-graph-encrypted-aes-key! base graph-id encrypted-str)
+                                    _ (<set-item! (graph-encrypted-aes-key-idb-key graph-id) encrypted)]
+                              aes-key))
+                  _ (when (and graph-id encrypted-aes-key (nil? local-encrypted))
+                      (<set-item! (graph-encrypted-aes-key-idb-key graph-id) encrypted-aes-key))]
+            (swap! *graph->aes-key assoc graph-id aes-key)
+            aes-key))))))
 
 (defn <fetch-graph-aes-key-for-download
   [graph-id]
@@ -626,7 +681,7 @@
     (ldb/write-transit-str new-encrypted-private-key)))
 
 (defn <change-e2ee-password!
-  [refresh-token user-uuid old-password new-password]
+  [_refresh-token user-uuid old-password new-password]
   (let [base (e2ee-base)]
     (when-not (string? base)
       (fail-fast :db-sync/missing-field {:base base :user-uuid user-uuid}))
@@ -635,7 +690,7 @@
         (fail-fast :db-sync/missing-field {:base base :user-uuid user-uuid :field :user-rsa-key-pair}))
       (p/let [encrypted-private-key' (<re-encrypt-private-key encrypted-private-key old-password new-password)
               _ (<upload-user-rsa-key-pair! base public-key encrypted-private-key')
-              _ (<save-e2ee-password refresh-token new-password)]
+              _ (<save-e2ee-password new-password)]
         nil))))
 
 (defn cancel-ui-requests!
@@ -653,7 +708,7 @@
          :encrypted-private-key encrypted-private-key}))))
 
 (def-thread-api :thread-api/init-user-rsa-key-pair
-  [_token refresh-token _user-uuid]
+  [_token _refresh-token _user-uuid]
   (let [base (e2ee-base)]
     (when-not (string? base)
       (fail-fast :db-sync/missing-field {:base base}))
@@ -667,11 +722,11 @@
                 public-key-str (ldb/write-transit-str exported-public-key)
                 encrypted-private-key-str (ldb/write-transit-str encrypted-private-key)
                 _ (<upload-user-rsa-key-pair! base public-key-str encrypted-private-key-str)
-                _ (<save-e2ee-password refresh-token password)]
+                _ (<save-e2ee-password password)]
           nil)))))
 
 (def-thread-api :thread-api/reset-user-rsa-key-pair
-  [_token refresh-token _user-uuid new-password]
+  [_token _refresh-token _user-uuid new-password]
   (p/let [{:keys [publicKey privateKey]} (crypt/<generate-rsa-key-pair)
           encrypted-private-key (crypt/<encrypt-private-key new-password privateKey)
           exported-public-key (crypt/<export-public-key publicKey)
@@ -681,24 +736,26 @@
     (when-not (string? base)
       (fail-fast :db-sync/missing-field {:base base}))
     (p/let [_ (<upload-user-rsa-key-pair! base public-key-str encrypted-private-key-str)
-            _ (<save-e2ee-password refresh-token new-password)]
+            _ (<save-e2ee-password new-password)]
       nil)))
 
 (def-thread-api :thread-api/change-e2ee-password
   [_token refresh-token user-uuid old-password new-password]
   (<change-e2ee-password! refresh-token user-uuid old-password new-password))
 
+(def-thread-api :thread-api/verify-and-save-e2ee-password
+  [_refresh-token password]
+  (p/let [_ (<verify-and-save-e2ee-password-from-server! password)]
+    nil))
+
 (def-thread-api :thread-api/get-e2ee-password
   [refresh-token]
-  (-> (p/let [password (<read-e2ee-password refresh-token)]
-        {:password password})
-      (p/catch (fn [e]
-                 (log/error :read-e2ee-password e)
-                 (ex-info ":thread-api/get-e2ee-password" {})))))
+  (p/let [password (<read-e2ee-password refresh-token)]
+    {:password password}))
 
 (def-thread-api :thread-api/save-e2ee-password
-  [refresh-token password]
-  (<save-e2ee-password refresh-token password))
+  [password]
+  (<save-e2ee-password password))
 
 (def-thread-api :thread-api/clear-e2ee-password
   []

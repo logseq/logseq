@@ -63,9 +63,10 @@
 
 (defn- path-under-data-dir
   [data-dir path]
-  (if (node-path/isAbsolute path)
-    path
-    (node-path/join data-dir path)))
+  (let [expanded-path (expand-home path)]
+    (if (node-path/isAbsolute expanded-path)
+      expanded-path
+      (node-path/join data-dir expanded-path))))
 
 (defn- ->buffer
   [data]
