@@ -211,14 +211,14 @@
     (try
       (batch-tx-fn temp-conn *batch-tx-data)
       (vreset! *complete? true)
-      (finally
-        (let [tx-data @*batch-tx-data]
-          (d/unlisten! temp-conn ::temp-conn-batch-tx)
-          (reset! temp-conn nil)
-          (vreset! *batch-tx-data nil)
-          (when (and @*complete? (seq tx-data))
+      (let [tx-data @*batch-tx-data]
+        (when (and @*complete? (seq tx-data))
             ;; transact tx-data to `conn` and validate db
-            (transact! conn tx-data tx-meta)))))))
+          (transact! conn tx-data tx-meta)))
+      (finally
+        (d/unlisten! temp-conn ::temp-conn-batch-tx)
+        (reset! temp-conn nil)
+        (vreset! *batch-tx-data nil)))))
 
 (defn batch-transact!
   "Store once for a batch transaction, notice that this fn doesn't support nest `batch-transact` calls"

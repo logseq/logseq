@@ -29,55 +29,29 @@
 
 (deftest snapshot-download-uses-gzip-encoding-when-compression-supported-test
   (async done
-         (let [put-call (atom nil)
-               rows [[1 "row-1" nil]
-                     [2 "row-2" "{\"a\":1}"]]
-               bucket #js {:put (fn [key body opts]
-                                  (reset! put-call {:key key :body body :opts opts})
-                                  (js/Promise.resolve #js {:ok true}))}
-               sql (empty-sql)
+         (let [sql (empty-sql)
                conn (d/create-conn db-schema/schema)
-               self #js {:env #js {:LOGSEQ_SYNC_ASSETS bucket}
+               self #js {:env #js {}
                          :conn conn
                          :schema-ready true
                          :sql sql}
                {:keys [request url]} (request-url)
-               original-compression-stream (.-CompressionStream js/globalThis)
-               restore! #(aset js/globalThis "CompressionStream" original-compression-stream)]
-           (aset js/globalThis
-                 "CompressionStream"
-                 (passthrough-compression-stream-constructor))
-           (-> (p/with-redefs [sync-handler/fetch-snapshot-kvs-rows (fn [_sql last-addr _limit]
-                                                                      (if (neg? last-addr) rows []))
-                               sync-handler/snapshot-row-count (fn [_sql] (count rows))]
-                 (p/let [resp (sync-handler/handle {:self self
-                                                    :request request
-                                                    :url url
-                                                    :route {:handler :sync/snapshot-download}})
+               expected-url "http://localhost/sync/graph-1/snapshot/stream"]
+           (-> (p/let [resp (sync-handler/handle {:self self
+                                                  :request request
+                                                  :url url
+                                                  :route {:handler :sync/snapshot-download}})
                        text (.text resp)
-                       body (js->clj (js/JSON.parse text) :keywordize-keys true)
-                       http-metadata (aget (:opts @put-call) "httpMetadata")
-                       payload (js/Uint8Array. (:body @put-call))
-                       rows (snapshot/finalize-framed-buffer payload)
-                       addrs (mapv first rows)]
+                       body (js->clj (js/JSON.parse text) :keywordize-keys true)]
                  (is (= 200 (.-status resp)))
+                 (is (= true (:ok body)))
+                 (is (= "stream/graph-1.snapshot" (:key body)))
+                 (is (= expected-url (:url body)))
                  (is (= "gzip" (:content-encoding body)))
-                 (is (= "gzip" (aget http-metadata "contentEncoding")))
-                 (is (= "application/transit+json" (aget http-metadata "contentType")))
-                 (is (= 2 (count rows)))
-                 (is (= (sort addrs) addrs))
-                 (is (every? (fn [[addr content _addresses]]
-                               (and (int? addr)
-                                    (string? content)))
-                             rows))
-                 (is (= [[1 "row-1" nil]
-                         [2 "row-2" "{\"a\":1}"]]
-                        rows))))
+                 (done))
                (p/then (fn []
-                         (restore!)
-                         (done)))
+                         nil))
                (p/catch (fn [error]
-                          (restore!)
                           (is false (str error))
                           (done)))))))
 

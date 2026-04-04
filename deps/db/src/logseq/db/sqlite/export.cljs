@@ -85,7 +85,7 @@
         (merge (select-keys pvalue [:block/created-at :block/updated-at])))
       property-value-content')))
 
-(defonce ignored-properties [:logseq.property/created-by-ref :logseq.property.embedding/hnsw-label-updated-at])
+(defonce ignored-properties [:logseq.property/created-by-ref])
 ;; buildable-properties and build-blocks-export depend on each other
 (declare build-blocks-export)
 

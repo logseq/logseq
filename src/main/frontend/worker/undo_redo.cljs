@@ -236,8 +236,7 @@
           (do
             (log/error ::undo-redo-worker-failed e)
             (clear-history! repo)
-            (throw e)
-            (empty-stack-result undo?)))))
+            (throw e)))))
     (do
       (log/error ::undo-redo-worker-action-unavailable
                  {:undo? undo?
