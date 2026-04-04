@@ -179,8 +179,8 @@
                            stored (cli-auth/read-auth-file {:auth-path auth-path})]
                      (is (= 0 (:exit-code result)))
                      (is (= "ok" (:status payload)))
-                     (is (= :thread-api/set-db-sync-config (ffirst @invoke-calls)))
-                     (is (= "fresh-token" (get-in (nth @invoke-calls 0) [2 0 :auth-token])))
+                     (is (= :thread-api/sync-app-state (ffirst @invoke-calls)))
+                     (is (= "fresh-token" (get-in (nth @invoke-calls 0) [2 0 :auth/id-token])))
                      (is (= "fresh-token" (:id-token stored)))
                      (is (= "fresh-access-token" (:access-token stored)))))]
              (-> promise
@@ -197,7 +197,7 @@
                invoke-calls (atom [])
                status-calls (atom 0)]
            (-> (p/let [cfg-path (node-path/join (node-helper/create-tmp-dir "cli") "cli.edn")
-                       _ (fs/writeFileSync cfg-path "{:output-format :json :e2ee-password \"pw\"}")
+                       _ (fs/writeFileSync cfg-path "{:output-format :json}")
                        create-result (run-cli ["graph" "create" "--graph" start-repo] data-dir cfg-path)
                        create-payload (parse-json-output-safe create-result "graph create")
                        _ (is (= 0 (:exit-code create-result)))
@@ -205,6 +205,9 @@
                        [download-result start-result]
                        (p/with-redefs [cli-auth/resolve-auth-token! (fn [_config]
                                                                       (p/resolved "runtime-token"))
+                                       cli-auth/resolve-auth! (fn [_config]
+                                                                (p/resolved {:id-token "runtime-token"
+                                                                             :refresh-token "refresh-token"}))
                                        cli-server/ensure-server! (fn [config _repo]
                                                                    (p/resolved (assoc config :base-url "http://example")))
                                        transport/invoke (fn [_ method _direct-pass? args]
@@ -217,6 +220,9 @@
                                                             (p/resolved [{:graph-id "remote-graph-id"
                                                                           :graph-name download-repo
                                                                           :graph-e2ee? true}])
+
+                                                            :thread-api/verify-and-save-e2ee-password
+                                                            (p/resolved nil)
 
                                                             :thread-api/db-sync-download-graph-by-id
                                                             (p/resolved {:repo "logseq_db_sync_integration_graph"
@@ -240,8 +246,8 @@
                                                             (p/resolved 0)
 
                                                             (p/resolved nil)))]
-                         (p/let [download-result (run-cli ["--graph" download-repo "sync" "download"] data-dir cfg-path)
-                                 start-result (run-cli ["--graph" start-repo "sync" "start"] data-dir cfg-path)]
+                         (p/let [download-result (run-cli ["--graph" download-repo "sync" "download" "--e2ee-password" "pw"] data-dir cfg-path)
+                                 start-result (run-cli ["--graph" start-repo "sync" "start" "--e2ee-password" "pw"] data-dir cfg-path)]
                            [download-result start-result]))
                        download-payload (parse-json-output-safe download-result "sync download")
                        start-payload (parse-json-output-safe start-result "sync start")]
@@ -275,8 +281,8 @@
                        _ (is (= 0 (:exit-code create-result)))
                        _ (is (= "ok" (:status create-payload)))
                        upload-result (p/with-redefs
-                                      [cli-auth/resolve-auth-token! (fn [_config]
-                                                                      (p/resolved "runtime-token"))
+                                      [cli-auth/resolve-auth! (fn [_config]
+                                                                (p/resolved {:id-token "runtime-token"}))
                                        cli-server/ensure-server! (fn [config _repo]
                                                                    (p/resolved (assoc config :base-url "http://example")))
                                        transport/invoke (fn [_ method _direct-pass? args]
@@ -294,12 +300,13 @@
                  (is (= 0 (:exit-code upload-result)))
                  (is (= "ok" (:status upload-payload)))
                  (is (= "created-graph-id" (get-in upload-payload [:data :graph-id])))
-                 (is (= [[:thread-api/set-db-sync-config [{:ws-url "wss://api.logseq.io/sync/%s"
-                                                           :http-base "https://api.logseq.io"
-                                                           :auth-token "runtime-token"
-                                                           :e2ee-password nil}]]
-                         [:thread-api/db-sync-upload-graph ["logseq_db_sync-upload-graph"]]]
-                        @invoke-calls))
+                 (is (= :thread-api/sync-app-state (ffirst @invoke-calls)))
+                 (is (= "runtime-token" (get-in (first @invoke-calls) [1 0 :auth/id-token])))
+                 (is (= [:thread-api/set-db-sync-config [{:ws-url "wss://api-staging.logseq.io/sync/%s"
+                                                          :http-base "https://api-staging.logseq.io"}]]
+                        (second @invoke-calls)))
+                 (is (= [:thread-api/db-sync-upload-graph ["logseq_db_sync-upload-graph"]]
+                        (nth @invoke-calls 2)))
                  (stop-repo! data-dir cfg-path upload-repo))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
@@ -318,8 +325,8 @@
                        _ (is (= 0 (:exit-code create-result)))
                        _ (is (= "ok" (:status create-payload)))
                        [upload-result info-result]
-                       (p/with-redefs [cli-auth/resolve-auth-token! (fn [_config]
-                                                                      (p/resolved "runtime-token"))
+                       (p/with-redefs [cli-auth/resolve-auth! (fn [_config]
+                                                                (p/resolved {:id-token "runtime-token"}))
                                        cli-server/ensure-server! (fn [config _repo]
                                                                    (p/resolved (assoc config :base-url "http://example")))
                                        transport/invoke (fn [_ method _direct-pass? args]

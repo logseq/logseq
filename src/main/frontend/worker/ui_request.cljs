@@ -11,7 +11,12 @@
 
 (defn- interactive-runtime?
   []
-  (= :browser (get-in (platform/current) [:env :runtime])))
+  (let [env (:env (platform/current))
+        runtime (:runtime env)
+        owner-source (:owner-source env)]
+    (or (= :browser runtime)
+        (and (= :node runtime)
+             (= :electron owner-source)))))
 
 (defn- ui-interaction-required-error
   [action hint]

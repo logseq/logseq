@@ -9,7 +9,7 @@
 
 (defn- execute-with-runtime-auth
   [action config]
-  (sync-command/execute action (assoc config :auth-token "runtime-token")))
+  (sync-command/execute action (assoc config :id-token "runtime-token")))
 
 (deftest test-build-action-validation
   (testing "sync status requires repo"
@@ -56,10 +56,24 @@
       (is (false? (:ok? unset-result)))
       (is (= :invalid-options (get-in unset-result [:error :code])))))
 
-  (testing "sync config accepts e2ee-password key"
-    (let [result (sync-command/build-action :sync-config-set {} ["e2ee-password" "pw"] nil)]
-      (is (true? (:ok? result)))
-      (is (= :e2ee-password (get-in result [:action :config-key])))))
+  (testing "sync config rejects e2ee-password key"
+    (let [set-result (sync-command/build-action :sync-config-set {} ["e2ee-password" "pw"] nil)
+          get-result (sync-command/build-action :sync-config-get {} ["e2ee-password"] nil)
+          unset-result (sync-command/build-action :sync-config-unset {} ["e2ee-password"] nil)]
+      (is (false? (:ok? set-result)))
+      (is (= :invalid-options (get-in set-result [:error :code])))
+      (is (false? (:ok? get-result)))
+      (is (= :invalid-options (get-in get-result [:error :code])))
+      (is (false? (:ok? unset-result)))
+      (is (= :invalid-options (get-in unset-result [:error :code])))))
+
+  (testing "sync start and download actions carry e2ee-password option"
+    (let [start-result (sync-command/build-action :sync-start {:e2ee-password "pw"} [] "logseq_db_demo")
+          download-result (sync-command/build-action :sync-download {:e2ee-password "pw"} [] "logseq_db_demo")]
+      (is (true? (:ok? start-result)))
+      (is (= "pw" (get-in start-result [:action :e2ee-password])))
+      (is (true? (:ok? download-result)))
+      (is (= "pw" (get-in download-result [:action :e2ee-password])))))
 
   (testing "sync grant-access requires graph-id and email"
     (let [missing-graph-id (sync-command/build-action :sync-grant-access {:email "user@example.com"} [] "logseq_db_demo")
@@ -98,6 +112,39 @@
                    (is (every? (fn [[_ repo]] (= "logseq_db_demo" repo)) @ensure-calls))
                    (is (= 1 (count (filter #(= :thread-api/db-sync-start %) invoked-methods))))
                    (is (<= 2 (count (filter #(= :thread-api/db-sync-status %) invoked-methods))))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-sync-start-verifies-and-persists-e2ee-password-when-provided
+  (async done
+         (let [invoke-calls (atom [])]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               transport/invoke (fn [_ method direct-pass? args]
+                                                  (swap! invoke-calls conj [method direct-pass? args])
+                                                  (case method
+                                                    :thread-api/get-db-sync-config (p/resolved {:auth-token "worker-token"})
+                                                    :thread-api/q (p/resolved true)
+                                                    :thread-api/verify-and-save-e2ee-password (p/resolved nil)
+                                                    :thread-api/db-sync-status (p/resolved {:repo "logseq_db_demo"
+                                                                                            :ws-state :open
+                                                                                            :pending-local 0
+                                                                                            :pending-asset 0
+                                                                                            :pending-server 0})
+                                                    (p/resolved {:ok true})))]
+                 (p/let [result (sync-command/execute {:type :sync-start
+                                                       :repo "logseq_db_demo"
+                                                       :e2ee-password "pw"
+                                                       :wait-timeout-ms 50
+                                                       :wait-poll-interval-ms 0}
+                                                      {:data-dir "/tmp"
+                                                       :refresh-token "refresh-token"
+                                                       :id-token "runtime-token"})]
+                   (is (= :ok (:status result)))
+                   (is (some #(= [:thread-api/verify-and-save-e2ee-password false ["refresh-token" "pw"]]
+                                 %)
+                             @invoke-calls))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
@@ -144,7 +191,7 @@
                                                        :repo "logseq_db_demo"}
                                                       {:data-dir "/tmp"
                                                        :ws-url ""
-                                                       :auth-token "runtime-token"})]
+                                                       :id-token "runtime-token"})]
                    (is (= :error (:status result)))
                    (is (= :missing-sync-config (get-in result [:error :code])))
                    (is (= :sync-start (get-in result [:error :action])))
@@ -169,7 +216,7 @@
                                                        :repo "logseq_db_demo"}
                                                       {:data-dir "/tmp"
                                                        :http-base ""
-                                                       :auth-token "runtime-token"})]
+                                                       :id-token "runtime-token"})]
                    (is (= :error (:status result)))
                    (is (= :missing-sync-config (get-in result [:error :code])))
                    (is (= :sync-upload (get-in result [:error :action])))
@@ -196,7 +243,7 @@
                                                       {:base-url "http://example"
                                                        :data-dir "/tmp"
                                                        :http-base ""
-                                                       :auth-token "runtime-token"})]
+                                                       :id-token "runtime-token"})]
                    (is (= :error (:status result)))
                    (is (= :missing-sync-config (get-in result [:error :code])))
                    (is (= :sync-download (get-in result [:error :action])))
@@ -225,6 +272,11 @@
                                                                   :graph-name "demo"
                                                                   :graph-e2ee? true}])
 
+                                                    :thread-api/get-e2ee-password
+                                                    (p/rejected (ex-info "missing-e2ee-password"
+                                                                         {:code :db-sync/missing-e2ee-password
+                                                                          :field :e2ee-password}))
+
                                                     :thread-api/db-sync-download-graph-by-id
                                                     (p/resolved {:ok true})
 
@@ -234,13 +286,12 @@
                                                        :graph "demo"}
                                                       {:base-url "http://example"
                                                        :data-dir "/tmp"
-                                                       :http-base "https://api.logseq.io"
-                                                       :auth-token "runtime-token"})]
+                                                       :http-base "https://api-staging.logseq.io"
+                                                       :id-token "runtime-token"
+                                                       :refresh-token "refresh-token"})]
                    (is (= :error (:status result)))
-                   (is (= :missing-sync-config (get-in result [:error :code])))
-                   (is (= :sync-download (get-in result [:error :action])))
-                   (is (= [:e2ee-password] (get-in result [:error :missing-keys])))
-                   (is (= [] @ensure-calls))
+                   (is (= :e2ee-password-not-found (get-in result [:error :code])))
+                   (is (= "logseq_db_demo" (get-in result [:error :repo])))
                    (is (not-any? (fn [[method _ _]]
                                    (= :thread-api/db-sync-download-graph-by-id method))
                                  @invoke-calls))))
@@ -283,7 +334,7 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
-(deftest test-execute-sync-stop-preserves-existing-worker-auth-token
+(deftest test-execute-sync-stop-syncs-non-auth-config-only
   (async done
          (let [ensure-calls (atom [])
                invoke-calls (atom [])]
@@ -293,7 +344,6 @@
                                transport/invoke (fn [_ method direct-pass? args]
                                                   (swap! invoke-calls conj [method direct-pass? args])
                                                   (case method
-                                                    :thread-api/get-db-sync-config (p/resolved {:auth-token "worker-token"})
                                                     :thread-api/db-sync-stop (p/resolved {:ok true})
                                                     (p/resolved nil)))]
                  (p/let [_ (sync-command/execute {:type :sync-stop
@@ -302,18 +352,15 @@
                    (is (= [[{:data-dir "/tmp"}
                             "logseq_db_demo"]]
                           @ensure-calls))
-                   (is (= [[:thread-api/get-db-sync-config false []]
-                           [:thread-api/set-db-sync-config false [{:ws-url nil
-                                                                   :http-base nil
-                                                                   :auth-token "worker-token"
-                                                                   :e2ee-password nil}]]
+                   (is (= [[:thread-api/set-db-sync-config false [{:ws-url nil
+                                                                   :http-base nil}]]
                            [:thread-api/db-sync-stop false []]]
                           @invoke-calls))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
-(deftest test-execute-sync-status-preserves-existing-worker-auth-token
+(deftest test-execute-sync-status-syncs-non-auth-config-only
   (async done
          (let [ensure-calls (atom [])
                invoke-calls (atom [])]
@@ -323,7 +370,6 @@
                                transport/invoke (fn [_ method direct-pass? args]
                                                   (swap! invoke-calls conj [method direct-pass? args])
                                                   (case method
-                                                    :thread-api/get-db-sync-config (p/resolved {:auth-token "worker-token"})
                                                     :thread-api/db-sync-status (p/resolved {:repo "logseq_db_demo"
                                                                                             :ws-state :open
                                                                                             :pending-local 0
@@ -338,13 +384,86 @@
                    (is (= [[{:data-dir "/tmp"}
                             "logseq_db_demo"]]
                           @ensure-calls))
-                   (is (= [[:thread-api/get-db-sync-config false []]
-                           [:thread-api/set-db-sync-config false [{:ws-url nil
-                                                                   :http-base nil
-                                                                   :auth-token "worker-token"
-                                                                   :e2ee-password nil}]]
-                           [:thread-api/db-sync-status false ["logseq_db_demo"]]]
-                          @invoke-calls))))
+                   (is (= [:thread-api/set-db-sync-config
+                           :thread-api/q
+                           :thread-api/db-sync-status]
+                          (mapv first @invoke-calls)))
+                   (let [[_ _ q-args] (nth @invoke-calls 1)]
+                     (is (= "logseq_db_demo" (first q-args))))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-sync-status-returns-error-when-e2ee-password-missing
+  (async done
+         (let [invoke-calls (atom [])]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               transport/invoke (fn [_ method direct-pass? args]
+                                                  (swap! invoke-calls conj [method direct-pass? args])
+                                                  (case method
+                                                    :thread-api/get-db-sync-config
+                                                    (p/resolved {:auth-token "worker-token"})
+
+                                                    :thread-api/q
+                                                    (p/resolved true)
+
+                                                    :thread-api/get-e2ee-password
+                                                    (p/rejected (ex-info "missing-e2ee-password"
+                                                                         {:code :db-sync/missing-e2ee-password
+                                                                          :field :e2ee-password}))
+
+                                                    :thread-api/db-sync-status
+                                                    (p/resolved {:repo "logseq_db_demo"
+                                                                 :ws-state :open})
+
+                                                    (p/resolved nil)))]
+                 (p/let [result (sync-command/execute {:type :sync-status
+                                                       :repo "logseq_db_demo"}
+                                                      {:data-dir "/tmp"
+                                                       :refresh-token "refresh-token"})]
+                   (is (= :error (:status result)))
+                   (is (= :e2ee-password-not-found (get-in result [:error :code])))
+                   (is (= "logseq_db_demo" (get-in result [:error :repo])))
+                   (is (not-any? (fn [[method _ _]]
+                                   (= :thread-api/db-sync-status method))
+                                 @invoke-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-sync-status-returns-error-when-e2ee-password-decrypt-fails
+  (async done
+         (let [invoke-calls (atom [])]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                           (p/resolved (assoc config :base-url "http://example")))
+                               transport/invoke (fn [_ method direct-pass? args]
+                                                  (swap! invoke-calls conj [method direct-pass? args])
+                                                  (case method
+                                                    :thread-api/get-db-sync-config
+                                                    (p/resolved {:auth-token "worker-token"})
+
+                                                    :thread-api/q
+                                                    (p/resolved true)
+
+                                                    :thread-api/get-e2ee-password
+                                                    (p/rejected (ex-info "decrypt-text-by-text-password" {}))
+
+                                                    :thread-api/db-sync-status
+                                                    (p/resolved {:repo "logseq_db_demo"
+                                                                 :ws-state :open})
+
+                                                    (p/resolved nil)))]
+                 (p/let [result (sync-command/execute {:type :sync-status
+                                                       :repo "logseq_db_demo"}
+                                                      {:data-dir "/tmp"
+                                                       :refresh-token "refresh-token"})]
+                   (is (= :error (:status result)))
+                   (is (= :e2ee-password-not-found (get-in result [:error :code])))
+                   (is (= "logseq_db_demo" (get-in result [:error :repo])))
+                   (is (not-any? (fn [[method _ _]]
+                                   (= :thread-api/db-sync-status method))
+                                 @invoke-calls))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
@@ -363,15 +482,17 @@
                                                   :repo "logseq_db_demo"}
                                                  {:data-dir "/tmp"})]
                    (is (= [[{:data-dir "/tmp"
-                             :auth-token "runtime-token"}
+                             :id-token "runtime-token"}
                             "logseq_db_demo"]]
                           @ensure-calls))
-                   (is (= [[:thread-api/set-db-sync-config false [{:ws-url nil
-                                                                   :http-base nil
-                                                                   :auth-token "runtime-token"
-                                                                   :e2ee-password nil}]]
-                           [:thread-api/db-sync-upload-graph false ["logseq_db_demo"]]]
-                          @invoke-calls))))
+                   (is (= :thread-api/sync-app-state (ffirst @invoke-calls)))
+                   (is (= "runtime-token"
+                          (get-in (first @invoke-calls) [2 0 :auth/id-token])))
+                   (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
+                                                                   :http-base nil}]]
+                          (second @invoke-calls)))
+                   (is (= [:thread-api/db-sync-upload-graph false ["logseq_db_demo"]]
+                          (nth @invoke-calls 2)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
@@ -424,35 +545,38 @@
                                                     (p/resolved nil)))]
                  (p/let [_ (execute-with-runtime-auth {:type :sync-download
                                                   :repo "logseq_db_demo"
-                                                  :graph "demo"}
+                                                  :graph "demo"
+                                                  :e2ee-password "pw"}
                                                  {:base-url "http://example"
                                                   :data-dir "/tmp"
-                                                  :e2ee-password "pw"})]
+                                                  :refresh-token "refresh-token"})]
                    (is (= [[{:base-url "http://example"
                              :create-empty-db? true
                              :data-dir "/tmp"
-                             :e2ee-password "pw"
-                             :auth-token "runtime-token"}
+                             :refresh-token "refresh-token"
+                             :id-token "runtime-token"}
                             "logseq_db_demo"]]
                           @ensure-calls))
+                   (is (= :thread-api/sync-app-state (get-in @invoke-calls [0 0])))
+                   (is (= "runtime-token" (get-in @invoke-calls [0 2 0 :auth/id-token])))
                    (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
-                                                                  :http-base nil
-                                                                  :auth-token "runtime-token"
-                                                                  :e2ee-password "pw"}]]
-                          (nth @invoke-calls 0)))
-                   (is (= [:thread-api/db-sync-list-remote-graphs false []]
+                                                                  :http-base nil}]]
                           (nth @invoke-calls 1)))
-                   (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
-                                                                  :http-base nil
-                                                                  :auth-token "runtime-token"
-                                                                  :e2ee-password "pw"}]]
+                   (is (= [:thread-api/db-sync-list-remote-graphs false []]
                           (nth @invoke-calls 2)))
-                   (let [[method direct-pass? args] (nth @invoke-calls 3)]
+                   (is (= :thread-api/sync-app-state (get-in @invoke-calls [3 0])))
+                   (is (= "runtime-token" (get-in @invoke-calls [3 2 0 :auth/id-token])))
+                   (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
+                                                                  :http-base nil}]]
+                          (nth @invoke-calls 4)))
+                   (is (= [:thread-api/verify-and-save-e2ee-password false ["refresh-token" "pw"]]
+                          (nth @invoke-calls 5)))
+                   (let [[method direct-pass? args] (nth @invoke-calls 6)]
                      (is (= :thread-api/q method))
                      (is (= false direct-pass?))
                      (is (= "logseq_db_demo" (first args))))
                    (is (= [:thread-api/db-sync-download-graph-by-id false ["logseq_db_demo" "remote-graph-id" true]]
-                          (nth @invoke-calls 4)))))
+                          (nth @invoke-calls 7)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
@@ -483,16 +607,20 @@
                                                            {:base-url "http://example"
                                                             :data-dir "/tmp"
                                                             :timeout-ms 10000})
-                         [set-config-before list-remote-graphs set-config-after check-empty-db download]
+                         [sync-app-state-before set-config-before list-remote-graphs sync-app-state-after set-config-after check-empty-db download]
                          @invoke-calls]
                    (is (= :ok (:status result)))
+                   (is (= :thread-api/sync-app-state (:method sync-app-state-before)))
                    (is (= :thread-api/set-db-sync-config (:method set-config-before)))
                    (is (= :thread-api/db-sync-list-remote-graphs (:method list-remote-graphs)))
+                   (is (= :thread-api/sync-app-state (:method sync-app-state-after)))
                    (is (= :thread-api/set-db-sync-config (:method set-config-after)))
                    (is (= :thread-api/q (:method check-empty-db)))
                    (is (= :thread-api/db-sync-download-graph-by-id (:method download)))
+                   (is (= 10000 (:timeout-ms sync-app-state-before)))
                    (is (= 10000 (:timeout-ms set-config-before)))
                    (is (= 10000 (:timeout-ms list-remote-graphs)))
+                   (is (= 10000 (:timeout-ms sync-app-state-after)))
                    (is (= 10000 (:timeout-ms set-config-after)))
                    (is (= 10000 (:timeout-ms check-empty-db)))
                    (is (= 1800000 (:timeout-ms download)))))
@@ -611,32 +739,32 @@
                    (is (= [[{:graph "demo"
                              :create-empty-db? true
                              :data-dir "/tmp"
-                             :auth-token "runtime-token"}
+                             :id-token "runtime-token"}
                             "logseq_db_demo"]
                            [{:graph "demo"
                              :create-empty-db? true
                              :data-dir "/tmp"
-                             :auth-token "runtime-token"}
+                             :id-token "runtime-token"}
                             "logseq_db_demo"]]
                           @ensure-calls))
+                   (is (= :thread-api/sync-app-state (get-in @invoke-calls [0 0])))
+                   (is (= "runtime-token" (get-in @invoke-calls [0 2 0 :auth/id-token])))
                    (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
-                                                                  :http-base nil
-                                                                  :auth-token "runtime-token"
-                                                                  :e2ee-password nil}]]
-                          (nth @invoke-calls 0)))
-                   (is (= [:thread-api/db-sync-list-remote-graphs false []]
+                                                                  :http-base nil}]]
                           (nth @invoke-calls 1)))
-                   (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
-                                                                  :http-base nil
-                                                                  :auth-token "runtime-token"
-                                                                  :e2ee-password nil}]]
+                   (is (= [:thread-api/db-sync-list-remote-graphs false []]
                           (nth @invoke-calls 2)))
-                   (let [[method direct-pass? args] (nth @invoke-calls 3)]
+                   (is (= :thread-api/sync-app-state (get-in @invoke-calls [3 0])))
+                   (is (= "runtime-token" (get-in @invoke-calls [3 2 0 :auth/id-token])))
+                   (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
+                                                                  :http-base nil}]]
+                          (nth @invoke-calls 4)))
+                   (let [[method direct-pass? args] (nth @invoke-calls 5)]
                      (is (= :thread-api/q method))
                      (is (= false direct-pass?))
                      (is (= "logseq_db_demo" (first args))))
                    (is (= [:thread-api/db-sync-download-graph-by-id false ["logseq_db_demo" "remote-graph-id" false]]
-                          (nth @invoke-calls 4)))))
+                          (nth @invoke-calls 6)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
@@ -662,12 +790,13 @@
                                                        :data-dir "/tmp"})]
                    (is (= :error (:status result)))
                    (is (= :remote-graph-not-found (get-in result [:error :code])))
-                   (is (= [[:thread-api/set-db-sync-config false [{:ws-url nil
-                                                                   :http-base nil
-                                                                   :auth-token "runtime-token"
-                                                                   :e2ee-password nil}]]
-                           [:thread-api/db-sync-list-remote-graphs false []]]
-                          @invoke-calls))))
+                   (is (= :thread-api/sync-app-state (get-in @invoke-calls [0 0])))
+                   (is (= "runtime-token" (get-in @invoke-calls [0 2 0 :auth/id-token])))
+                   (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
+                                                                   :http-base nil}]]
+                          (nth @invoke-calls 1)))
+                   (is (= [:thread-api/db-sync-list-remote-graphs false []]
+                          (nth @invoke-calls 2)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
@@ -692,10 +821,11 @@
                                                   (p/resolved nil)))]
                (p/let [result (execute-with-runtime-auth {:type :sync-download
                                                      :repo "logseq_db_demo"
-                                                     :graph "demo"}
+                                                     :graph "demo"
+                                                     :e2ee-password "pw"}
                                                     {:base-url "http://example"
                                                      :data-dir "/tmp"
-                                                     :e2ee-password "pw"})]
+                                                     :refresh-token "refresh-token"})]
                  (is (= :error (:status result)))
                  (is (= :db-sync/snapshot-download-failed (get-in result [:error :code])))))
              (p/catch (fn [e]
@@ -723,9 +853,10 @@
                                                     (p/resolved nil)))]
                  (p/let [result (execute-with-runtime-auth {:type :sync-download
                                                        :repo "logseq_db_demo"
-                                                       :graph "demo"}
+                                                       :graph "demo"
+                                                       :e2ee-password "pw"}
                                                       {:data-dir "/tmp"
-                                                       :e2ee-password "pw"})]
+                                                       :refresh-token "refresh-token"})]
                    (is (= :error (:status result)))
                    (is (= :graph-db-not-empty (get-in result [:error :code])))
                    (is (= "logseq_db_demo" (get-in result [:error :repo])))
@@ -742,9 +873,10 @@
          (let [ensure-calls (atom [])
                invoke-calls (atom [])
                auth-calls (atom [])]
-           (-> (p/with-redefs [cli-auth/resolve-auth-token! (fn [config]
-                                                              (swap! auth-calls conj config)
-                                                              (p/resolved "resolved-token"))
+           (-> (p/with-redefs [cli-auth/resolve-auth! (fn [config]
+                                                        (swap! auth-calls conj config)
+                                                        (p/resolved {:id-token "resolved-token"
+                                                                     :refresh-token "refresh-token"}))
                                cli-server/ensure-server! (fn [config repo]
                                                            (swap! ensure-calls conj [config repo])
                                                            (p/resolved (assoc config :base-url "http://example")))
@@ -764,12 +896,13 @@
                             :e2ee-password "pw"
                             :data-dir "/tmp"}]
                           @auth-calls))
-                   (is (= [[:thread-api/set-db-sync-config false [{:ws-url "wss://sync.example.com/sync/%s"
-                                                                   :http-base "https://sync.example.com"
-                                                                   :auth-token "resolved-token"
-                                                                   :e2ee-password "pw"}]]
-                           [:thread-api/db-sync-list-remote-graphs false []]]
-                          @invoke-calls))))
+                   (is (= :thread-api/sync-app-state (get-in @invoke-calls [0 0])))
+                   (is (= "resolved-token" (get-in @invoke-calls [0 2 0 :auth/id-token])))
+                   (is (= [:thread-api/set-db-sync-config false [{:ws-url "wss://sync.example.com/sync/%s"
+                                                                   :http-base "https://sync.example.com"}]]
+                          (nth @invoke-calls 1)))
+                   (is (= [:thread-api/db-sync-list-remote-graphs false []]
+                          (nth @invoke-calls 2)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
@@ -777,10 +910,10 @@
 (deftest test-execute-sync-remote-graphs-missing-auth
   (async done
          (let [invoke-calls (atom [])]
-           (-> (p/with-redefs [cli-auth/resolve-auth-token! (fn [_config]
-                                                              (p/rejected (ex-info "missing auth"
-                                                                                   {:code :missing-auth
-                                                                                    :hint "Run logseq login first."})))
+           (-> (p/with-redefs [cli-auth/resolve-auth! (fn [_config]
+                                                         (p/rejected (ex-info "missing auth"
+                                                                              {:code :missing-auth
+                                                                               :hint "Run logseq login first."})))
                                transport/invoke (fn [_ method direct-pass? args]
                                                   (swap! invoke-calls conj [method direct-pass? args])
                                                   (p/resolved []))]
@@ -809,17 +942,18 @@
                                                  {:base-url "http://example"
                                                   :data-dir "/tmp"})]
                    (is (= [] @ensure-calls))
-                   (is (= [[:thread-api/set-db-sync-config false [{:ws-url nil
-                                                                   :http-base nil
-                                                                   :auth-token "runtime-token"
-                                                                   :e2ee-password nil}]]
-                           [:thread-api/db-sync-ensure-user-rsa-keys false []]]
-                          @invoke-calls))))
+                   (is (= :thread-api/sync-app-state (get-in @invoke-calls [0 0])))
+                   (is (= "runtime-token" (get-in @invoke-calls [0 2 0 :auth/id-token])))
+                   (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
+                                                                   :http-base nil}]]
+                          (nth @invoke-calls 1)))
+                   (is (= [:thread-api/db-sync-ensure-user-rsa-keys false []]
+                          (nth @invoke-calls 2)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
-(deftest test-execute-sync-grant-access-missing-e2ee-password-is-error
+(deftest test-execute-sync-grant-access-missing-http-base-is-error
   (async done
          (let [ensure-calls (atom [])
                invoke-calls (atom [])]
@@ -834,11 +968,12 @@
                                                        :graph-id "graph-uuid"
                                                        :email "user@example.com"}
                                                       {:data-dir "/tmp"
-                                                       :auth-token "runtime-token"})]
+                                                       :http-base ""
+                                                       :id-token "runtime-token"})]
                    (is (= :error (:status result)))
                    (is (= :missing-sync-config (get-in result [:error :code])))
                    (is (= :sync-grant-access (get-in result [:error :action])))
-                   (is (= [:e2ee-password] (get-in result [:error :missing-keys])))
+                   (is (= [:http-base] (get-in result [:error :missing-keys])))
                    (is (= [] @ensure-calls))
                    (is (= [] @invoke-calls))))
                (p/catch (fn [e]
@@ -859,19 +994,18 @@
                                                   :repo "logseq_db_demo"
                                                   :graph-id "graph-uuid"
                                                   :email "user@example.com"}
-                                                 {:data-dir "/tmp"
-                                                  :e2ee-password "pw"})]
+                                                 {:data-dir "/tmp"})]
                    (is (= [[{:data-dir "/tmp"
-                             :e2ee-password "pw"
-                             :auth-token "runtime-token"}
+                             :id-token "runtime-token"}
                             "logseq_db_demo"]]
                           @ensure-calls))
-                   (is (= [[:thread-api/set-db-sync-config false [{:ws-url nil
-                                                                   :http-base nil
-                                                                   :auth-token "runtime-token"
-                                                                   :e2ee-password "pw"}]]
-                           [:thread-api/db-sync-grant-graph-access false ["logseq_db_demo" "graph-uuid" "user@example.com"]]]
-                          @invoke-calls))))
+                   (is (= :thread-api/sync-app-state (get-in @invoke-calls [0 0])))
+                   (is (= "runtime-token" (get-in @invoke-calls [0 2 0 :auth/id-token])))
+                   (is (= [:thread-api/set-db-sync-config false [{:ws-url nil
+                                                                   :http-base nil}]]
+                          (nth @invoke-calls 1)))
+                   (is (= [:thread-api/db-sync-grant-graph-access false ["logseq_db_demo" "graph-uuid" "user@example.com"]]
+                          (nth @invoke-calls 2)))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))

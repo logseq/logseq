@@ -472,12 +472,12 @@
 
 (def-thread-api :thread-api/set-db-sync-config
   [config]
-  (reset! worker-state/*db-sync-config config)
+  (reset! worker-state/*db-sync-config (worker-state/non-auth-db-sync-config config))
   nil)
 
 (def-thread-api :thread-api/get-db-sync-config
   []
-  @worker-state/*db-sync-config)
+  (worker-state/non-auth-db-sync-config @worker-state/*db-sync-config))
 
 (def-thread-api :thread-api/db-sync-status
   [repo]

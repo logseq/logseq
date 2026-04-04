@@ -38,13 +38,29 @@
 (c.m/run-background-task
  ::sync-to-worker-search-input-idle-status
  (m/reduce
-  (fn [_ [_tick db-worker-ready? repo]]
-    (when (and db-worker-ready? (seq repo))
-      (state/<invoke-db-worker
-       :thread-api/update-thread-atom
-       :thread-atom/search-input-idle-status
-       {repo {:idle? (state/input-idle? repo :diff search-input-idle-diff-ms)
-              :ts (js/Date.now)}})))
+  (fn [{:keys [last-synced-repo last-synced-idle? prev-db-worker-ready?] :as sync-state}
+       [_tick db-worker-ready? repo]]
+    (if (and db-worker-ready? (seq repo))
+      (let [idle? (state/input-idle? repo :diff search-input-idle-diff-ms)
+            should-sync?
+            (or (nil? last-synced-repo)
+                (not= last-synced-repo repo)
+                (and db-worker-ready? (not prev-db-worker-ready?))
+                (not= last-synced-idle? idle?))]
+        (when should-sync?
+          (state/<invoke-db-worker
+           :thread-api/update-thread-atom
+           :thread-atom/search-input-idle-status
+           {repo {:idle? idle?
+                  :ts (js/Date.now)}}))
+        (assoc sync-state
+               :last-synced-repo repo
+               :last-synced-idle? idle?
+               :prev-db-worker-ready? db-worker-ready?))
+      (assoc sync-state
+             :last-synced-repo nil
+             :last-synced-idle? nil
+             :prev-db-worker-ready? db-worker-ready?)))
   (m/latest vector
             (search-input-idle-tick-flow)
             state/db-worker-ready-flow

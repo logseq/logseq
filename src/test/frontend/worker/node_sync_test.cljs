@@ -8,13 +8,13 @@
 
 (def ^:private test-repo "test-db-sync-repo")
 
-(deftest resolve-ws-token-cli-owner-source-prefers-config-token-test
+(deftest resolve-ws-token-cli-owner-source-reads-state-token-test
   (async done
          (let [refresh-calls (atom 0)
                config-prev @worker-state/*db-sync-config
                state-prev @worker-state/*state
                main-thread-prev @worker-state/*main-thread]
-           (reset! worker-state/*db-sync-config {:auth-token "cli-config-token"})
+           (reset! worker-state/*db-sync-config {:ws-url "wss://example.com/sync/%s"})
            (reset! worker-state/*state (assoc state-prev :auth/id-token "state-token"))
            (reset! worker-state/*main-thread
                    (fn [qkw _direct-pass? _args-list]
@@ -27,7 +27,7 @@
              (-> (#'db-sync/<resolve-ws-token)
                  (p/then (fn [token]
                            (is (= 0 @refresh-calls))
-                           (is (= "cli-config-token" token))
+                           (is (= "state-token" token))
                            (is (= "state-token" (worker-state/get-id-token)))
                            (reset! worker-state/*main-thread main-thread-prev)
                            (reset! worker-state/*db-sync-config config-prev)
@@ -42,13 +42,14 @@
 
 (deftest connect-uses-platform-websocket-adapter-test
   (let [ws-ctor-prev js/WebSocket
+        state-prev @worker-state/*state
         platform-map {:runtime :test}
         ws-calls (atom [])
         attach-calls (atom [])]
     (set! js/WebSocket (js* "(function(_url){ this.readyState = 1; })"))
+    (reset! worker-state/*state (assoc state-prev :auth/id-token "token-123"))
     (try
-      (with-redefs [worker-state/get-id-token (fn [] "token-123")
-                    platform/current (fn [] platform-map)
+      (with-redefs [platform/current (fn [] platform-map)
                     platform/websocket-connect (fn [platform' url]
                                                  (swap! ws-calls conj {:platform platform' :url url})
                                                  (js-obj))
@@ -64,4 +65,5 @@
                    :url "wss://example.com/sync/graph-1"}]
                  @attach-calls))))
       (finally
+        (reset! worker-state/*state state-prev)
         (set! js/WebSocket ws-ctor-prev)))))

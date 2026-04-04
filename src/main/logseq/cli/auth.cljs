@@ -446,16 +446,21 @@
           (p/finally (fn []
                        ((:stop! callback-server))))))))
 
-(defn resolve-auth-token!
+(defn resolve-auth!
   [opts]
   (if-let [current-auth (read-auth-file opts)]
     (if (expired-auth? current-auth)
       (p/let [refreshed-auth (refresh-auth! opts current-auth)
               next-auth (merge current-auth refreshed-auth)]
         (write-auth-file! opts next-auth)
-        (:id-token next-auth))
-      (p/resolved (:id-token current-auth)))
+        next-auth)
+      (p/resolved current-auth))
     (p/rejected (ex-info "missing auth"
                          {:code :missing-auth
                           :hint "Run logseq login first."
                           :auth-path (auth-path opts)}))))
+
+(defn resolve-auth-token!
+  [opts]
+  (p/let [auth (resolve-auth! opts)]
+    (:id-token auth)))

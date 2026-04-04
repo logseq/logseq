@@ -63,6 +63,14 @@
   [owner-source]
   (db-lock/normalize-owner-source owner-source))
 
+(defn- encode-event-type
+  [type]
+  (cond
+    (keyword? type) (subs (str type) 1)
+    (string? type) type
+    (nil? type) nil
+    :else (str type)))
+
 (defn- encode-event-payload
   [payload]
   (if (string? payload)
@@ -87,7 +95,7 @@
 
 (defn- handle-event!
   [type payload]
-  (let [event (js/JSON.stringify (clj->js {:type type
+  (let [event (js/JSON.stringify (clj->js {:type (encode-event-type type)
                                            :payload (encode-event-payload payload)}))
         message (str "data: " event "\n\n")]
     (doseq [^js res @*sse-clients]
@@ -164,7 +172,11 @@
     :thread-api/reset-user-rsa-key-pair
     :thread-api/change-e2ee-password
     :thread-api/get-e2ee-password
-    :thread-api/save-e2ee-password})
+    :thread-api/save-e2ee-password
+    :thread-api/verify-and-save-e2ee-password
+    :thread-api/resolve-ui-request
+    :thread-api/reject-ui-request
+    :thread-api/cancel-ui-requests})
 
 (def ^:private write-methods
   #{:thread-api/transact
@@ -190,7 +202,8 @@
     (when-not (contains? non-repo-methods method-kw)
       (let [repo (repo-arg args)]
         (cond
-          (not (seq repo))
+          (or (not (string? repo))
+              (string/blank? repo))
           {:status 400
            :error {:code :missing-repo
                    :message "repo is required"}}
