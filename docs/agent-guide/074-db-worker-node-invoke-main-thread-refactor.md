@@ -12,6 +12,7 @@ Architecture: Keep runtime-specific logic behind worker platform adapters (`fron
 
 Related:
 - `/Users/rcmerci/gh-repos/logseq/src/main/frontend/worker/state.cljs`
+- `/Users/rcmerci/gh-repos/logseq/src/main/frontend/worker/ui_request.cljs`
 - `/Users/rcmerci/gh-repos/logseq/src/main/frontend/worker/db_worker_node.cljs`
 - `/Users/rcmerci/gh-repos/logseq/src/main/frontend/worker/db_worker.cljs`
 - `/Users/rcmerci/gh-repos/logseq/src/main/frontend/worker/db_core.cljs`
@@ -28,13 +29,13 @@ Related:
 
 `db-worker-node` currently sets a main-thread stub that always rejects (`main-thread is not available in db-worker-node`).
 
-However, shared worker modules still call `worker-state/<invoke-main-thread` for auth refresh, asset upload/download metadata, E2EE key/password operations, and search-idle checks.
+Historically, shared worker modules called `worker-state/<invoke-main-thread` for auth refresh, asset upload/download metadata, E2EE key/password operations, and search-idle checks.
 
-This creates runtime divergence:
-- Browser worker can call main-thread APIs through Comlink.
-- Node daemon cannot, so behavior depends on fallback code quality or fails outright.
+That created runtime divergence:
+- Browser worker could call main-thread APIs through Comlink.
+- Node daemon could not, so behavior depended on fallback code quality or failed outright.
 
-Target state: db worker should own all non-UI logic and only use explicit message protocol for UI interactions.
+Target state: db worker owns all non-UI logic and uses only explicit message protocol for UI interactions.
 
 ## Progress snapshot (current)
 
@@ -45,17 +46,18 @@ Target state: db worker should own all non-UI logic and only use explicit messag
 - Search idle dependency on `:thread-api/input-idle?` was removed from `db_core`; it now uses a **main-thread push + worker TTL cache** model:
   - main thread periodically pushes `:thread-atom/search-input-idle-status` with `{repo {:idle? ... :ts ...}}`
   - worker consumes that state with a TTL window and falls back to non-blocking behavior when state is missing/stale.
+- E2EE UI-interaction path in `frontend.worker.sync.crypt` was migrated to a worker-owned request manager:
+  - worker now emits `:db-worker/ui-request` with `request-id`
+  - main thread responds via `:thread-api/resolve-ui-request` / `:thread-api/reject-ui-request`
+  - worker crypt flow no longer directly calls `worker-state/<invoke-main-thread`
+  - pending UI requests are cancelled on close/shutdown paths (`close-db`, `db-sync-close-db`, `unsafe-unlink-db`, browser `stop-db-worker!`)
 
 ### Remaining direct `invoke-main-thread` production usages
 
-Only E2EE UI-interaction paths remain in `frontend.worker.sync.crypt`:
+- None in production worker modules.
+- `frontend.worker.state/<invoke-main-thread` remains as legacy infrastructure, but has no active production call sites.
 
-- `:thread-api/request-e2ee-password`
-- `:thread-api/decrypt-user-e2ee-private-key`
-
-These are the intended scope for Phase 2 UI request/response protocol completion.
-
-## Full inventory of current `invoke-main-thread` dependencies
+## Historical inventory of `invoke-main-thread` dependencies (baseline before migration)
 
 | Call site | Current main-thread API | Category | Runtime risk in `db-worker-node` |
 | --- | --- | --- | --- |

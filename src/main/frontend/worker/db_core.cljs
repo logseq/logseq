@@ -727,17 +727,23 @@
 (def-thread-api :thread-api/unsafe-unlink-db
   [repo]
   (p/let [pool (<get-opfs-pool repo)
+          _ (sync-crypt/cancel-ui-requests! {:reason :unsafe-unlink-db
+                                             :repo repo})
           _ (close-db! repo)
           _result (remove-vfs! pool)]
     nil))
 
 (def-thread-api :thread-api/close-db
   [repo]
+  (sync-crypt/cancel-ui-requests! {:reason :close-db
+                                   :repo repo})
   (close-db! repo)
   nil)
 
 (def-thread-api :thread-api/db-sync-close-db
   [repo]
+  (sync-crypt/cancel-ui-requests! {:reason :db-sync-close-db
+                                   :repo repo})
   (close-db! repo))
 
 (def-thread-api :thread-api/db-sync-invalidate-search-db

@@ -89,6 +89,9 @@
 
 (defn stop-db-worker!
   []
+  (when @state/*db-worker
+    (-> (state/<invoke-db-worker :thread-api/cancel-ui-requests {:reason :stop-db-worker})
+        (p/catch (constantly nil))))
   (when-let [^js worker @state/*db-worker-thread]
     (set! (.-onmessage worker) nil)
     (.terminate worker))
