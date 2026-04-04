@@ -37,17 +37,17 @@
         true))))
 
 (defn oauth-token-url
-  [db-sync-config]
-  (or (:oauth-token-url db-sync-config)
-      (when-let [domain (not-empty (:oauth-domain db-sync-config))]
+  [state]
+  (or (:auth/oauth-token-url state)
+      (when-let [domain (not-empty (:auth/oauth-domain state))]
         (str "https://" domain "/oauth2/token"))))
 
 (defn <refresh-id&access-token
   []
-  (let [refresh-token (:auth/refresh-token @worker-state/*state)
-        db-sync-config @worker-state/*db-sync-config
-        token-url (oauth-token-url db-sync-config)
-        oauth-client-id (:oauth-client-id db-sync-config)]
+  (let [state @worker-state/*state
+        refresh-token (:auth/refresh-token state)
+        token-url (oauth-token-url state)
+        oauth-client-id (:auth/oauth-client-id state)]
     (when-not (seq refresh-token)
       (throw (ex-info "worker auth refresh requires refresh token"
                       {:code :missing-refresh-token})))

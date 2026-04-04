@@ -157,13 +157,32 @@
   (log/info :db-sync/stop true)
   (state/<invoke-db-worker :thread-api/db-sync-stop))
 
+(defn- sync-app-state-payload
+  []
+  (cond-> (select-keys @state/state [:git/current-repo :config
+                                     :auth/id-token :auth/access-token :auth/refresh-token
+                                     :auth/oauth-token-url :auth/oauth-domain :auth/oauth-client-id
+                                     :user/info])
+    (seq config/OAUTH-DOMAIN)
+    (assoc :auth/oauth-domain config/OAUTH-DOMAIN)
+
+    (seq config/COGNITO-CLIENT-ID)
+    (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID)))
+
+(defn- <sync-auth-state-to-db-worker!
+  []
+  (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
+          payload (sync-app-state-payload)]
+    (state/<invoke-db-worker :thread-api/sync-app-state payload)))
+
 (defn <rtc-start!
   [repo & {:keys [_stop-before-start?] :as _opts}]
   (p/let [_ (<wait-for-db-worker-ready!)]
     (if (should-start-rtc? repo)
       (do
         (log/info :db-sync/start {:repo repo})
-        (state/<invoke-db-worker :thread-api/db-sync-start repo))
+        (p/let [_ (<sync-auth-state-to-db-worker!)]
+          (state/<invoke-db-worker :thread-api/db-sync-start repo)))
       (do
         (log/info :db-sync/skip-start {:repo repo :reason :graph-not-in-remote-list
                                        :remote-graphs-loading? (:rtc/loading-graphs? @state/state)

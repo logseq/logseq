@@ -6,28 +6,37 @@
             [logseq.cli.config :as cli-config]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
+            [logseq.common.cognito-config :as cognito-config]
             [promesa.core :as p]))
 
 (def ^:private sync-grant-access-spec
   {:graph-id {:desc "Remote graph UUID"}
    :email {:desc "Target user email"}})
 
+(def ^:private sync-start-spec
+  {:e2ee-password {:desc "Verify and persist E2EE password before sync"
+                   :coerce :string}})
+
 (def ^:private sync-download-spec
   {:progress {:desc "Stream realtime download progress to stdout"
-              :coerce :boolean}})
+              :coerce :boolean}
+   :e2ee-password {:desc "Verify and persist E2EE password before download"
+                   :coerce :string}})
 
 (def entries
   [(core/command-entry ["sync" "status"] :sync-status "Show db-sync runtime status" {}
                        {:examples ["logseq sync status --graph my-graph"]})
-   (core/command-entry ["sync" "start"] :sync-start "Start db-sync client" {}
-                       {:examples ["logseq sync start --graph my-graph"]})
+   (core/command-entry ["sync" "start"] :sync-start "Start db-sync client" sync-start-spec
+                       {:examples ["logseq sync start --graph my-graph"
+                                   "logseq sync start --graph my-graph --e2ee-password \"my-secret\""]})
    (core/command-entry ["sync" "stop"] :sync-stop "Stop db-sync client" {}
                        {:examples ["logseq sync stop --graph my-graph"]})
    (core/command-entry ["sync" "upload"] :sync-upload "Upload current graph snapshot" {}
                        {:examples ["logseq sync upload --graph my-graph"]})
    (core/command-entry ["sync" "download"] :sync-download "Download remote graph snapshot" sync-download-spec
                        {:examples ["logseq sync download --graph my-graph"
-                                   "logseq sync download --graph my-graph --progress"]})
+                                   "logseq sync download --graph my-graph --progress"
+                                   "logseq sync download --graph my-graph --e2ee-password \"my-secret\""]})
    (core/command-entry ["sync" "remote-graphs"] :sync-remote-graphs "List remote graphs" {})
    (core/command-entry ["sync" "ensure-keys"] :sync-ensure-keys "Ensure user RSA keys for sync/e2ee" {})
    (core/command-entry ["sync" "grant-access"] :sync-grant-access "Grant graph access to an email" sync-grant-access-spec
@@ -35,7 +44,6 @@
    (core/command-entry ["sync" "config" "set"] :sync-config-set "Set sync config key" {}
                        {:examples ["logseq sync config set ws-url wss://sync.logseq.com"
                                    "logseq sync config set http-base https://api.logseq.com"
-                                   "logseq sync config set e2ee-password my-secret"
                                    "logseq sync config set ws-url ws://localhost:12315"
                                    "logseq sync config set http-base http://localhost:8080"
                                    "logseq sync config set ws-url wss://example.com/socket"]})
@@ -46,8 +54,7 @@
 
 (def ^:private config-key-map
   {"ws-url" :ws-url
-   "http-base" :http-base
-   "e2ee-password" :e2ee-password})
+   "http-base" :http-base})
 
 (def ^:private authenticated-sync-actions
   #{:sync-start
@@ -66,14 +73,14 @@
   #{:inactive :stopped})
 
 (def ^:private sync-config-defaults
-  {:ws-url "wss://api.logseq.io/sync/%s"
-   :http-base "https://api.logseq.io"})
+  {:ws-url "wss://api-staging.logseq.io/sync/%s"
+   :http-base "https://api-staging.logseq.io"})
 
 (def ^:private required-sync-config-keys-by-action
   {:sync-start [:ws-url]
    :sync-upload [:http-base]
    :sync-download [:http-base]
-   :sync-grant-access [:http-base :e2ee-password]})
+   :sync-grant-access [:http-base]})
 
 (defn- config-value-present?
   [value]
@@ -125,6 +132,12 @@
     (not [?e :db/ident])
     (not [?e :file/path])])
 
+(def ^:private graph-e2ee-query
+  '[:find ?v .
+    :where
+    [?e :db/ident :logseq.kv/graph-rtc-e2ee?]
+    [?e :kv/value ?v]])
+
 (defn- missing-repo
   [label]
   {:ok? false
@@ -155,6 +168,59 @@
                    (when (seq data) {:context data})
                    extra)}))
 
+(defn- missing-e2ee-password-diagnostic?
+  [error]
+  (let [data (or (ex-data error) {})
+        code (:code data)
+        code' (or code (ex-message->code (ex-message error)))]
+    (contains? #{:db-sync/missing-e2ee-password
+                 :missing-e2ee-password
+                 :db-sync/invalid-e2ee-password-payload
+                 :invalid-e2ee-password-payload
+                 :decrypt-text-by-text-password}
+               code')))
+
+(defn- e2ee-password-not-found-error
+  [action-type repo]
+  {:status :error
+   :error {:code :e2ee-password-not-found
+           :message "e2ee-password not found"
+           :action action-type
+           :repo repo
+           :hint "Provide --e2ee-password to verify and persist it."}})
+
+(defn- ensure-refresh-token!
+  [config]
+  (if (seq (:refresh-token config))
+    (p/resolved (:refresh-token config))
+    (p/let [auth (cli-auth/resolve-auth! config)
+            refresh-token (:refresh-token auth)]
+      (if (seq refresh-token)
+        refresh-token
+        (p/rejected (ex-info "missing refresh token"
+                             {:code :missing-auth
+                              :hint "Run logseq login first."
+                              :auth-path (cli-auth/auth-path config)}))))))
+
+(defn- <ensure-e2ee-password-available!
+  [cfg config {:keys [type repo e2ee-password]} graph-e2ee?]
+  (if-not (true? graph-e2ee?)
+    (p/resolved nil)
+    (-> (p/let [refresh-token (ensure-refresh-token! config)
+                _ (if (seq e2ee-password)
+                    (transport/invoke cfg :thread-api/verify-and-save-e2ee-password false [refresh-token e2ee-password])
+                    (transport/invoke cfg :thread-api/get-e2ee-password false [refresh-token]))]
+          nil)
+        (p/catch (fn [error]
+                   (if (missing-e2ee-password-diagnostic? error)
+                     (p/rejected (ex-info "e2ee-password-not-found"
+                                          {:code :e2ee-password-not-found
+                                           :action type
+                                           :repo repo
+                                           :hint "Provide --e2ee-password to verify and persist it."}
+                                          error))
+                     (p/rejected error)))))))
+
 (defn- parse-config-key
   [raw-key]
   (let [raw-key (some-> raw-key string/trim string/lower-case)
@@ -164,28 +230,119 @@
        :key config-key}
       (invalid-options (str "unknown config key: " raw-key)))))
 
+(defn- build-basic-repo-action
+  [command repo]
+  (if-not (seq repo)
+    (missing-repo (name command))
+    {:ok? true
+     :action {:type command
+              :repo repo
+              :graph (core/repo->graph repo)}}))
+
+(defn- build-sync-start-action
+  [options repo]
+  (if-not (seq repo)
+    (missing-repo "sync-start")
+    {:ok? true
+     :action {:type :sync-start
+              :repo repo
+              :graph (core/repo->graph repo)
+              :e2ee-password (:e2ee-password options)}}))
+
+(defn- build-sync-download-action
+  [options repo]
+  (if-not (seq repo)
+    (missing-repo "sync-download")
+    {:ok? true
+     :action {:type :sync-download
+              :repo repo
+              :graph (core/repo->graph repo)
+              :allow-missing-graph true
+              :require-missing-graph true
+              :progress (:progress options)
+              :progress-explicit? (contains? options :progress)
+              :e2ee-password (:e2ee-password options)}}))
+
+(defn- build-sync-grant-access-action
+  [options repo]
+  (if-not (seq repo)
+    (missing-repo "sync grant-access")
+    (let [graph-id (some-> (:graph-id options) string/trim)
+          email (some-> (:email options) string/trim)]
+      (cond
+        (not (seq graph-id))
+        (invalid-options "--graph-id is required")
+
+        (not (seq email))
+        (invalid-options "--email is required")
+
+        :else
+        {:ok? true
+         :action {:type :sync-grant-access
+                  :repo repo
+                  :graph (core/repo->graph repo)
+                  :graph-id graph-id
+                  :email email}}))))
+
+(defn- build-sync-config-get-action
+  [args]
+  (let [[name] args
+        key-result (parse-config-key name)]
+    (if-not (seq (some-> name string/trim))
+      (invalid-options "config key is required")
+      (if-not (:ok? key-result)
+        key-result
+        {:ok? true
+         :action {:type :sync-config-get
+                  :config-key (:key key-result)}}))))
+
+(defn- build-sync-config-set-action
+  [args]
+  (let [[name value] args
+        key-result (parse-config-key name)]
+    (cond
+      (not (seq (some-> name string/trim)))
+      (invalid-options "config key is required")
+
+      (not (seq (some-> value str string/trim)))
+      (invalid-options "config value is required")
+
+      (not (:ok? key-result))
+      key-result
+
+      :else
+      {:ok? true
+       :action {:type :sync-config-set
+                :config-key (:key key-result)
+                :config-value value}})))
+
+(defn- build-sync-config-unset-action
+  [args]
+  (let [[name] args
+        key-result (parse-config-key name)]
+    (cond
+      (not (seq (some-> name string/trim)))
+      (invalid-options "config key is required")
+
+      (not (:ok? key-result))
+      key-result
+
+      :else
+      {:ok? true
+       :action {:type :sync-config-unset
+                :config-key (:key key-result)}})))
+
 (defn build-action
   [command options args repo]
   (case command
-    (:sync-status :sync-start :sync-stop :sync-upload)
-    (if-not (seq repo)
-      (missing-repo (name command))
-      {:ok? true
-       :action {:type command
-                :repo repo
-                :graph (core/repo->graph repo)}})
+    (:sync-status :sync-stop :sync-upload)
+    (build-basic-repo-action command repo)
+
+    :sync-start
+    (build-sync-start-action options repo)
 
     :sync-download
-    (if-not (seq repo)
-      (missing-repo (name command))
-      {:ok? true
-       :action {:type :sync-download
-                :repo repo
-                :graph (core/repo->graph repo)
-                :allow-missing-graph true
-                :require-missing-graph true
-                :progress (:progress options)
-                :progress-explicit? (contains? options :progress)}})
+    (build-sync-download-action options repo)
 
     :sync-remote-graphs
     {:ok? true
@@ -196,108 +353,83 @@
      :action {:type :sync-ensure-keys}}
 
     :sync-grant-access
-    (if-not (seq repo)
-      (missing-repo "sync grant-access")
-      (let [graph-id (some-> (:graph-id options) string/trim)
-            email (some-> (:email options) string/trim)]
-        (cond
-          (not (seq graph-id))
-          (invalid-options "--graph-id is required")
-
-          (not (seq email))
-          (invalid-options "--email is required")
-
-          :else
-          {:ok? true
-           :action {:type :sync-grant-access
-                    :repo repo
-                    :graph (core/repo->graph repo)
-                    :graph-id graph-id
-                    :email email}})))
+    (build-sync-grant-access-action options repo)
 
     :sync-config-get
-    (let [[name] args
-          key-result (parse-config-key name)]
-      (if-not (seq (some-> name string/trim))
-        (invalid-options "config key is required")
-        (if-not (:ok? key-result)
-        key-result
-        {:ok? true
-         :action {:type :sync-config-get
-                  :config-key (:key key-result)}})))
+    (build-sync-config-get-action args)
 
     :sync-config-set
-    (let [[name value] args
-          key-result (parse-config-key name)]
-      (cond
-        (not (seq (some-> name string/trim)))
-        (invalid-options "config key is required")
-
-        (not (seq (some-> value str string/trim)))
-        (invalid-options "config value is required")
-
-        (not (:ok? key-result))
-        key-result
-
-        :else
-        {:ok? true
-         :action {:type :sync-config-set
-                  :config-key (:key key-result)
-                  :config-value value}}))
+    (build-sync-config-set-action args)
 
     :sync-config-unset
-    (let [[name] args
-          key-result (parse-config-key name)]
-      (cond
-        (not (seq (some-> name string/trim)))
-        (invalid-options "config key is required")
+    (build-sync-config-unset-action args)
 
-        (not (:ok? key-result))
-        key-result
-
-        :else
-        {:ok? true
-         :action {:type :sync-config-unset
-                  :config-key (:key key-result)}}))
-
-      {:ok? false
+    {:ok? false
      :error {:code :unknown-command
              :message (str "unknown sync command: " command)}}))
 
 (defn- sync-config
   [config]
   {:ws-url (:ws-url config)
-   :http-base (:http-base config)
-   :auth-token (:auth-token config)
-   :e2ee-password (:e2ee-password config)})
+   :http-base (:http-base config)})
+
+(defn- runtime-auth-present?
+  [config]
+  (or (seq (:id-token config))
+      (seq (:access-token config))
+      (seq (:refresh-token config))))
+
+(defn- merge-runtime-auth
+  [config auth]
+  (cond-> config
+    (seq (:id-token auth)) (assoc :id-token (:id-token auth))
+    (seq (:access-token auth)) (assoc :access-token (:access-token auth))
+    (seq (:refresh-token auth)) (assoc :refresh-token (:refresh-token auth))))
 
 (defn- resolve-runtime-config!
   [action config]
   (if (contains? authenticated-sync-actions (:type action))
-    (if (seq (:auth-token config))
+    (if (runtime-auth-present? config)
       (p/resolved config)
-      (p/let [auth-token (cli-auth/resolve-auth-token! config)]
-        (assoc config :auth-token auth-token)))
+      (p/let [auth (cli-auth/resolve-auth! config)]
+        (merge-runtime-auth config auth)))
     (p/resolved config)))
 
-(defn- resolve-sync-config-for-worker!
+(defn- worker-auth-state
+  [config]
+  (let [oauth-domain (or (:oauth-domain config)
+                         cognito-config/OAUTH-DOMAIN)
+        oauth-client-id (or (:oauth-client-id config)
+                            cognito-config/CLI-COGNITO-CLIENT-ID)
+        oauth-token-url (or (:oauth-token-url config)
+                            (when (seq oauth-domain)
+                              (str "https://" oauth-domain "/oauth2/token")))
+        id-token (:id-token config)
+        access-token (:access-token config)
+        refresh-token (:refresh-token config)
+        has-auth? (or (seq id-token)
+                      (seq access-token)
+                      (seq refresh-token))]
+    (cond-> {}
+      (seq id-token) (assoc :auth/id-token id-token)
+      (seq access-token) (assoc :auth/access-token access-token)
+      (seq refresh-token) (assoc :auth/refresh-token refresh-token)
+      (and has-auth? (seq oauth-token-url)) (assoc :auth/oauth-token-url oauth-token-url)
+      (and has-auth? (seq oauth-domain)) (assoc :auth/oauth-domain oauth-domain)
+      (and has-auth? (seq oauth-client-id)) (assoc :auth/oauth-client-id oauth-client-id))))
+
+(defn- <sync-worker-runtime!
   [cfg config]
-  (let [sync-cfg (sync-config config)]
-    (if (seq (:auth-token sync-cfg))
-      (p/resolved sync-cfg)
-      (-> (p/let [current-sync-cfg (transport/invoke cfg :thread-api/get-db-sync-config false [])
-                  auth-token (:auth-token current-sync-cfg)]
-            (if (seq auth-token)
-              (assoc sync-cfg :auth-token auth-token)
-              sync-cfg))
-          (p/catch (fn [_error]
-                     sync-cfg))))))
+  (let [auth-state (worker-auth-state config)]
+    (p/let [_ (when (seq auth-state)
+                (transport/invoke cfg :thread-api/sync-app-state false [auth-state]))
+            _ (transport/invoke cfg :thread-api/set-db-sync-config false [(sync-config config)])]
+      nil)))
 
 (defn- invoke-with-repo
   [config repo method args]
   (p/let [cfg (cli-server/ensure-server! config repo)
-          sync-cfg (resolve-sync-config-for-worker! cfg config)
-          _ (transport/invoke cfg :thread-api/set-db-sync-config false [sync-cfg])
+          _ (<sync-worker-runtime! cfg config)
           result (transport/invoke cfg method false args)]
     result))
 
@@ -305,8 +437,7 @@
   [config method args]
   (let [base-url (:base-url config)]
     (if (seq base-url)
-      (p/let [sync-cfg (resolve-sync-config-for-worker! config config)
-              _ (transport/invoke config :thread-api/set-db-sync-config false [sync-cfg])]
+      (p/let [_ (<sync-worker-runtime! config config)]
         (transport/invoke config method false args))
       (p/let [repo (or (core/resolve-repo (:graph config))
                        (p/let [graphs (cli-server/list-graphs config)]
@@ -315,8 +446,7 @@
                     (cli-server/ensure-server! config repo)
                     (p/rejected (ex-info "graph name is required"
                                          {:code :missing-graph})))
-              sync-cfg (resolve-sync-config-for-worker! cfg config)
-              _ (transport/invoke cfg :thread-api/set-db-sync-config false [sync-cfg])]
+              _ (<sync-worker-runtime! cfg config)]
         (transport/invoke cfg method false args)))))
 
 (defn- download-config
@@ -431,134 +561,163 @@
              :error {:code :remote-graph-not-found
                      :message (str "remote graph not found: " (:graph action))
                      :graph (:graph action)}}
-            (let [missing-keys (when (true? (:graph-e2ee? remote-graph))
-                                 (->> [:e2ee-password]
-                                      (remove (fn [key]
-                                                (config-value-present? (effective-sync-config-value config' key))))
-                                      vec))]
-              (if (seq missing-keys)
-                (missing-sync-config-error :sync-download missing-keys)
-                (p/let [cfg (cli-server/ensure-server! config' (:repo action))
-                        _ (transport/invoke cfg :thread-api/set-db-sync-config false [(sync-config config')])
-                        _ (ensure-empty-download-db! cfg (:repo action))
-                        download-cfg (sync-download-invoke-config cfg)
-                        graph-id (:graph-id remote-graph)
-                        events-sub (when progress-enabled?
-                                     (transport/connect-events!
-                                      download-cfg
-                                      (fn [event-type payload]
-                                        (when-let [message (download-progress-message graph-id event-type payload)]
-                                          (print-progress-line! message)))))
-                        result (-> (transport/invoke download-cfg :thread-api/db-sync-download-graph-by-id false
-                                                     [(:repo action) graph-id (:graph-e2ee? remote-graph)])
-                                   (p/finally (fn []
-                                                (when-let [close! (:close! events-sub)]
-                                                  (close!)))))]
-                  {:status :ok
-                   :data (if (map? result)
-                           result
-                           {:result result})})))))
+            (p/let [cfg (cli-server/ensure-server! config' (:repo action))
+                    _ (<sync-worker-runtime! cfg config')
+                    _ (<ensure-e2ee-password-available! cfg config' action (true? (:graph-e2ee? remote-graph)))
+                    _ (ensure-empty-download-db! cfg (:repo action))
+                    download-cfg (sync-download-invoke-config cfg)
+                    graph-id (:graph-id remote-graph)
+                    events-sub (when progress-enabled?
+                                 (transport/connect-events!
+                                  download-cfg
+                                  (fn [event-type payload]
+                                    (when-let [message (download-progress-message graph-id event-type payload)]
+                                      (print-progress-line! message)))))
+                    result (-> (transport/invoke download-cfg :thread-api/db-sync-download-graph-by-id false
+                                                 [(:repo action) graph-id (:graph-e2ee? remote-graph)])
+                               (p/finally (fn []
+                                            (when-let [close! (:close! events-sub)]
+                                              (close!)))))]
+              {:status :ok
+               :data (if (map? result)
+                       result
+                       {:result result})})))
         (p/catch (fn [error]
-                   (exception->error error {:repo (:repo action)
-                                            :graph (:graph action)}))))))
+                   (if (= :e2ee-password-not-found (:code (ex-data error)))
+                     (e2ee-password-not-found-error :sync-download (:repo action))
+                     (exception->error error {:repo (:repo action)
+                                              :graph (:graph action)})))))))
+
+(defn- run-sync-status
+  [action config]
+  (-> (p/let [config' (resolve-runtime-config! action config)
+              cfg (cli-server/ensure-server! config' (:repo action))
+              _ (<sync-worker-runtime! cfg config')
+              graph-e2ee? (transport/invoke cfg :thread-api/q false [(:repo action) [graph-e2ee-query]])
+              _ (<ensure-e2ee-password-available! cfg config' action (true? graph-e2ee?))
+              result (transport/invoke cfg :thread-api/db-sync-status false [(:repo action)])]
+        {:status :ok
+         :data result})
+      (p/catch (fn [error]
+                 (if (= :e2ee-password-not-found (:code (ex-data error)))
+                   (e2ee-password-not-found-error :sync-status (:repo action))
+                   (exception->error error {:repo (:repo action)}))))))
+
+(defn- run-sync-start
+  [action config]
+  (-> (p/let [config' (resolve-runtime-config! action config)
+              missing-keys (missing-required-sync-config-keys (:type action) config')]
+        (if (seq missing-keys)
+          (missing-sync-config-error (:type action) missing-keys)
+          (p/let [cfg (cli-server/ensure-server! config' (:repo action))
+                  _ (<sync-worker-runtime! cfg config')
+                  graph-e2ee? (transport/invoke cfg :thread-api/q false [(:repo action) [graph-e2ee-query]])
+                  _ (<ensure-e2ee-password-available! cfg config' action (true? graph-e2ee?))
+                  _ (transport/invoke cfg :thread-api/db-sync-start false [(:repo action)])
+                  result (wait-sync-start-ready config' (:repo action) action)]
+            result)))
+      (p/catch (fn [error]
+                 (if (= :e2ee-password-not-found (:code (ex-data error)))
+                   (e2ee-password-not-found-error :sync-start (:repo action))
+                   (exception->error error {:repo (:repo action)}))))))
+
+(defn- run-sync-stop
+  [action config]
+  (p/let [result (invoke-with-repo config (:repo action)
+                                   :thread-api/db-sync-stop
+                                   [])]
+    {:status :ok
+     :data {:result result}}))
+
+(defn- run-sync-upload
+  [action config]
+  (-> (p/let [config' (resolve-runtime-config! action config)
+              missing-keys (missing-required-sync-config-keys (:type action) config')]
+        (if (seq missing-keys)
+          (missing-sync-config-error (:type action) missing-keys)
+          (execute-sync-upload action config')))
+      (p/catch (fn [error]
+                 (exception->error error {:repo (:repo action)})))))
+
+(defn- run-sync-download
+  [action config]
+  (-> (p/let [config' (resolve-runtime-config! action config)
+              missing-keys (missing-required-sync-config-keys (:type action) config')]
+        (if (seq missing-keys)
+          (missing-sync-config-error (:type action) missing-keys)
+          (execute-sync-download action config')))
+      (p/catch (fn [error]
+                 (exception->error error {:repo (:repo action)
+                                          :graph (:graph action)})))))
+
+(defn- run-sync-remote-graphs
+  [action config]
+  (-> (p/let [config' (resolve-runtime-config! action config)
+              graphs (invoke-global config' :thread-api/db-sync-list-remote-graphs [])]
+        {:status :ok
+         :data {:graphs (or graphs [])}})
+      (p/catch (fn [error]
+                 (exception->error error nil)))))
+
+(defn- run-sync-ensure-keys
+  [action config]
+  (-> (p/let [config' (resolve-runtime-config! action config)
+              result (invoke-global config' :thread-api/db-sync-ensure-user-rsa-keys [])]
+        {:status :ok
+         :data {:result result}})
+      (p/catch (fn [error]
+                 (exception->error error nil)))))
+
+(defn- run-sync-grant-access
+  [action config]
+  (-> (p/let [config' (resolve-runtime-config! action config)
+              missing-keys (missing-required-sync-config-keys (:type action) config')]
+        (if (seq missing-keys)
+          (missing-sync-config-error (:type action) missing-keys)
+          (p/let [result (invoke-with-repo config' (:repo action)
+                                           :thread-api/db-sync-grant-graph-access
+                                           [(:repo action) (:graph-id action) (:email action)])]
+            {:status :ok
+             :data {:result result}})))
+      (p/catch (fn [error]
+                 (exception->error error {:repo (:repo action)
+                                          :graph-id (:graph-id action)
+                                          :email (:email action)})))))
+
+(defn- run-sync-config-get
+  [action config]
+  (p/let [current config]
+    {:status :ok
+     :data {:key (:config-key action)
+            :value (get (or current {}) (:config-key action))}}))
+
+(defn- run-sync-config-set
+  [action config]
+  (p/let [_ (cli-config/update-config! config {(:config-key action) (:config-value action)})]
+    {:status :ok
+     :data {:key (:config-key action)
+            :value (:config-value action)}}))
+
+(defn- run-sync-config-unset
+  [action config]
+  (p/let [_ (cli-config/update-config! config {(:config-key action) nil})]
+    {:status :ok
+     :data {:key (:config-key action)}}))
 
 (defn execute
   [action config]
   (case (:type action)
-    :sync-status
-    (p/let [result (invoke-with-repo config (:repo action)
-                                     :thread-api/db-sync-status
-                                     [(:repo action)])]
-      {:status :ok
-       :data result})
-
-    :sync-start
-    (-> (p/let [config' (resolve-runtime-config! action config)
-                missing-keys (missing-required-sync-config-keys (:type action) config')]
-          (if (seq missing-keys)
-            (missing-sync-config-error (:type action) missing-keys)
-            (p/let [_ (invoke-with-repo config' (:repo action)
-                                        :thread-api/db-sync-start
-                                        [(:repo action)])
-                    result (wait-sync-start-ready config' (:repo action) action)]
-              result)))
-        (p/catch (fn [error]
-                   (exception->error error {:repo (:repo action)}))))
-
-    :sync-stop
-    (p/let [result (invoke-with-repo config (:repo action)
-                                     :thread-api/db-sync-stop
-                                     [])]
-      {:status :ok
-       :data {:result result}})
-
-    :sync-upload
-    (-> (p/let [config' (resolve-runtime-config! action config)
-                missing-keys (missing-required-sync-config-keys (:type action) config')]
-          (if (seq missing-keys)
-            (missing-sync-config-error (:type action) missing-keys)
-            (execute-sync-upload action config')))
-        (p/catch (fn [error]
-                   (exception->error error {:repo (:repo action)}))))
-
-    :sync-download
-    (-> (p/let [config' (resolve-runtime-config! action config)
-                missing-keys (missing-required-sync-config-keys (:type action) config')]
-          (if (seq missing-keys)
-            (missing-sync-config-error (:type action) missing-keys)
-            (execute-sync-download action config')))
-        (p/catch (fn [error]
-                   (exception->error error {:repo (:repo action)
-                                            :graph (:graph action)}))))
-
-    :sync-remote-graphs
-    (-> (p/let [config' (resolve-runtime-config! action config)
-                graphs (invoke-global config' :thread-api/db-sync-list-remote-graphs [])]
-          {:status :ok
-           :data {:graphs (or graphs [])}})
-        (p/catch (fn [error]
-                   (exception->error error nil))))
-
-    :sync-ensure-keys
-    (-> (p/let [config' (resolve-runtime-config! action config)
-                result (invoke-global config' :thread-api/db-sync-ensure-user-rsa-keys [])]
-          {:status :ok
-           :data {:result result}})
-        (p/catch (fn [error]
-                   (exception->error error nil))))
-
-    :sync-grant-access
-    (-> (p/let [config' (resolve-runtime-config! action config)
-                missing-keys (missing-required-sync-config-keys (:type action) config')]
-          (if (seq missing-keys)
-            (missing-sync-config-error (:type action) missing-keys)
-            (p/let [result (invoke-with-repo config' (:repo action)
-                                             :thread-api/db-sync-grant-graph-access
-                                             [(:repo action) (:graph-id action) (:email action)])]
-              {:status :ok
-               :data {:result result}})))
-        (p/catch (fn [error]
-                   (exception->error error {:repo (:repo action)
-                                            :graph-id (:graph-id action)
-                                            :email (:email action)}))))
-
-    :sync-config-get
-    (p/let [current config]
-      {:status :ok
-       :data {:key (:config-key action)
-              :value (get (or current {}) (:config-key action))}})
-
-    :sync-config-set
-    (p/let [_ (cli-config/update-config! config {(:config-key action) (:config-value action)})]
-      {:status :ok
-       :data {:key (:config-key action)
-              :value (:config-value action)}})
-
-    :sync-config-unset
-    (p/let [_ (cli-config/update-config! config {(:config-key action) nil})]
-      {:status :ok
-       :data {:key (:config-key action)}})
-
+    :sync-status (run-sync-status action config)
+    :sync-start (run-sync-start action config)
+    :sync-stop (run-sync-stop action config)
+    :sync-upload (run-sync-upload action config)
+    :sync-download (run-sync-download action config)
+    :sync-remote-graphs (run-sync-remote-graphs action config)
+    :sync-ensure-keys (run-sync-ensure-keys action config)
+    :sync-grant-access (run-sync-grant-access action config)
+    :sync-config-get (run-sync-config-get action config)
+    :sync-config-set (run-sync-config-set action config)
+    :sync-config-unset (run-sync-config-unset action config)
     (p/resolved {:status :error
                  :error {:code :unknown-action
                          :message "unknown sync action"}})))

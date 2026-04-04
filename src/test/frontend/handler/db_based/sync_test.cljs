@@ -1,6 +1,7 @@
 (ns frontend.handler.db-based.sync-test
   (:require [cljs.test :refer [deftest is async]]
             [clojure.string :as string]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.db-based.sync :as db-sync]
             [frontend.handler.repo :as repo-handler]
@@ -265,6 +266,53 @@
                (p/then (fn [_]
                          (is (not-any? #(= :thread-api/db-sync-start (first %)) @calls))
                          (is (some #(= :thread-api/db-sync-stop (first %)) @calls))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))
+               (p/finally (fn []
+                            (reset! state/*db-worker worker-prev)
+                            (reset! state/state state-prev)))))))
+
+(deftest rtc-start-syncs-auth-state-before-db-sync-start-test
+  (async done
+         (let [worker-prev @state/*db-worker
+               state-prev @state/state
+               calls (atom [])]
+           (reset! state/*db-worker :worker)
+           (reset! state/state (assoc state-prev
+                                      :git/current-repo "demo-graph"
+                                      :auth/id-token "id-token"
+                                      :auth/access-token "access-token"
+                                      :auth/refresh-token "refresh-token"
+                                      :user/info {:sub "user-1"}
+                                      :config {:a 1}
+                                      :rtc/uploading? false
+                                      :rtc/loading-graphs? false))
+           (-> (p/with-redefs [user-handler/task--ensure-id&access-token (fn [resolve _reject]
+                                                                           (resolve true))
+                               state/get-rtc-graphs (fn [] [{:url "demo-graph"
+                                                             :graph-ready-for-use? true}])
+                               state/<invoke-db-worker (fn [& args]
+                                                         (swap! calls conj args)
+                                                         (p/resolved :ok))]
+                 (db-sync/<rtc-start! "demo-graph"))
+               (p/then (fn [_]
+                         (is (= :thread-api/sync-app-state (ffirst @calls)))
+                         (is (= (cond-> {:git/current-repo "demo-graph"
+                                          :config {:a 1}
+                                          :auth/id-token "id-token"
+                                          :auth/access-token "access-token"
+                                          :auth/refresh-token "refresh-token"
+                                          :user/info {:sub "user-1"}}
+                                   (seq config/OAUTH-DOMAIN)
+                                   (assoc :auth/oauth-domain config/OAUTH-DOMAIN)
+
+                                   (seq config/COGNITO-CLIENT-ID)
+                                   (assoc :auth/oauth-client-id config/COGNITO-CLIENT-ID))
+                                (second (first @calls))))
+                         (is (= [:thread-api/db-sync-start "demo-graph"]
+                                (second @calls)))
                          (done)))
                (p/catch (fn [error]
                           (is false (str error))

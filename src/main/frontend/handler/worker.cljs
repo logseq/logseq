@@ -84,12 +84,14 @@
   [action payload]
   (case action
     :request-e2ee-password
-    (p/let [password (state/pub-event! [:rtc/request-e2ee-password])]
+    (p/let [password-promise (state/pub-event! [:rtc/request-e2ee-password payload])
+            password password-promise]
       {:password password})
 
     :decrypt-user-e2ee-private-key
     (let [encrypted-private-key (:encrypted-private-key payload)]
-      (p/let [private-key (state/pub-event! [:rtc/decrypt-user-e2ee-private-key encrypted-private-key])]
+      (p/let [private-key-promise (state/pub-event! [:rtc/decrypt-user-e2ee-private-key encrypted-private-key])
+              private-key private-key-promise]
         (crypt/<export-private-key private-key)))
 
     (p/rejected (ex-info "unsupported db-worker ui action"
@@ -97,7 +99,8 @@
                           :action action
                           :payload payload}))))
 
-(defmethod handle :db-worker/ui-request [_ wrapped-worker {:keys [request-id action payload]}]
+(defn- <handle-db-worker-ui-request
+  [wrapped-worker {:keys [request-id action payload]}]
   (if (and (string? request-id) (keyword? action))
     (-> (<db-worker-ui-action action payload)
         (p/then (fn [result]
@@ -118,6 +121,9 @@
                {:request-id request-id
                 :action action
                 :payload payload})))
+
+(defmethod handle :db-worker/ui-request [_ wrapped-worker data]
+  (<handle-db-worker-ui-request wrapped-worker data))
 
 (defmethod handle :default [_ _worker data]
   (prn :debug "Worker data not handled: " data))

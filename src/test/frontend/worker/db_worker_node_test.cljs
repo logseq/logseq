@@ -377,6 +377,24 @@
       (is (= {:repo "graph-a"}
              (ldb/read-transit-str (:payload parsed)))))))
 
+(deftest db-worker-node-handle-event-preserves-namespaced-type
+  (let [handle-event! #'db-worker-node/handle-event!
+        *sse-clients @#'db-worker-node/*sse-clients
+        writes (atom [])
+        fake-res #js {:write (fn [message]
+                               (swap! writes conj message))}]
+    (reset! *sse-clients #{fake-res})
+    (handle-event! :db-worker/ui-request {:request-id "r1"})
+    (is (= 1 (count @writes)))
+    (let [raw-message (first @writes)
+          event-json (-> raw-message
+                         (string/replace-first #"^data: " "")
+                         (string/replace #"\n\n$" ""))
+          parsed (js->clj (js/JSON.parse event-json) :keywordize-keys true)]
+      (is (= "db-worker/ui-request" (:type parsed)))
+      (is (= {:request-id "r1"}
+             (ldb/read-transit-str (:payload parsed)))))))
+
 (deftest db-worker-node-help-omits-auth-token
   (let [show-help! #'db-worker-node/show-help!
         output (binding [style/*color-enabled?* true]
@@ -475,14 +493,22 @@
         bound-repo "logseq_db_bound"]
     (is (nil? (repo-error :thread-api/list-db [] bound-repo)))
     (is (nil? (repo-error :thread-api/get-db-sync-config [] bound-repo)))
+    (is (nil? (repo-error :thread-api/sync-app-state [{:auth/id-token "token"}] bound-repo)))
     (is (nil? (repo-error :thread-api/db-sync-list-remote-graphs [] bound-repo)))
     (is (nil? (repo-error "thread-api/list-db" [] bound-repo)))
     (is (nil? (repo-error :thread-api/rtc-get-graphs ["token"] bound-repo)))
     (is (nil? (repo-error :thread-api/set-context [{:repo "not-a-repo-arg"}] bound-repo)))
+    (is (nil? (repo-error :thread-api/resolve-ui-request ["req-id" {:password "pw"}] bound-repo)))
+    (is (nil? (repo-error :thread-api/reject-ui-request ["req-id" {:code :cancelled}] bound-repo)))
+    (is (nil? (repo-error :thread-api/cancel-ui-requests [{:context :logout}] bound-repo)))
     (is (= {:status 400
             :error {:code :missing-repo
                     :message "repo is required"}}
            (repo-error :thread-api/create-or-open-db [] bound-repo)))
+    (is (= {:status 400
+            :error {:code :missing-repo
+                    :message "repo is required"}}
+           (repo-error :thread-api/create-or-open-db [:public-key] bound-repo)))
     (is (= {:status 409
             :error {:code :repo-mismatch
                     :message "repo does not match bound repo"
@@ -500,11 +526,12 @@
                                        :repo repo})
                        _ (reset! daemon {:host host :port port :stop! stop!})
                        _ (invoke host port "thread-api/set-db-sync-config"
-                                 [{:ws-url "wss://example.com/sync/%s"
-                                   :auth-token "token-value"}])
+                                 [{:ws-url "wss://example.com/sync/%s"}])
+                       _ (invoke host port "thread-api/sync-app-state"
+                                 [{:auth/id-token "token-value"}])
                        config (invoke host port "thread-api/get-db-sync-config" [])
                        _ (is (= "wss://example.com/sync/%s" (:ws-url config)))
-                       _ (is (= "token-value" (:auth-token config)))
+                       _ (is (not (contains? config :auth-token)))
                        result (invoke host port "thread-api/set-context" [{:app "desktop"}])]
                  (is (nil? result)))
                (p/catch (fn [e]
@@ -581,8 +608,7 @@
                        _ (invoke host port "thread-api/create-or-open-db" [repo {}])
                        _ (invoke host port "thread-api/set-db-sync-config"
                                  [{:ws-url nil
-                                   :http-base "https://example.com"
-                                   :auth-token "token-value"}])
+                                   :http-base "https://example.com"}])
                        start-result (invoke host port "thread-api/db-sync-start" [repo])
                        status-result (invoke host port "thread-api/db-sync-status" [repo])]
                  (is (nil? start-result))
