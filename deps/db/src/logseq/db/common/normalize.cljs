@@ -113,9 +113,19 @@
       #{e block-uuid (str block-uuid)})
     #{e}))
 
-(defn- reorder-retract-entity-first
+(defn- reorder-retract-entity
   [tx-data]
   (let [retract-ops (filter retract-entity-op? tx-data)
+        {recreated-block-retract-ops true
+         end-retract-ops false} (->> retract-ops
+                                     (group-by (fn [[_ [_ id]]]
+                                                 (boolean
+                                                  (some (fn [x]
+                                                          (and
+                                                           (= 5 (count x))
+                                                           (= (first x) :db/add)
+                                                           (= (nth x 2) :block/uuid)
+                                                           (= (nth x 3) id))) tx-data)))))
         retract-keys (->> retract-ops
                           (map second)
                           (mapcat retract-entity-match-keys)
@@ -129,7 +139,7 @@
                          (or (retract-entity-op? item)
                              (datom-for-retracted-eid? item)))
                        tx-data)]
-    (concat retract-ops datoms-for-retracted-eids others)))
+    (concat recreated-block-retract-ops datoms-for-retracted-eids others end-retract-ops)))
 
 (defn- collect-title-updated-entities
   [tx-data]
@@ -178,8 +188,7 @@
   (when-let [[op e] (and (= 2 (count d))
                          (= :db/retractEntity (first d))
                          d)]
-    (when-let [e' (or (eid->lookup db-before e)
-                      e)]
+    (when-let [e' (eid->lookup db-before e)]
       [op e'])))
 
 (defn- normalize-tx-item
@@ -198,5 +207,5 @@
          sort-datoms
          (keep #(normalize-tx-item db-after db-before title-updated-entities %))
          (remove-retract-entity-ref db-after)
-         reorder-retract-entity-first
+         reorder-retract-entity
          distinct)))

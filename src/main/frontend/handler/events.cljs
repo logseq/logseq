@@ -31,7 +31,6 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.search :as search-handler]
             [frontend.handler.shell :as shell-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.mobile.util :as mobile-util]
@@ -112,7 +111,6 @@
       (p/delay 5000)
       (p/let [repo (state/get-current-repo)
               _ (state/<invoke-db-worker :thread-api/search-build-blocks-indice-in-worker repo)]
-        (search-handler/rebuild-embeddings! repo)
         (when state/lsp-enabled?
           (doseq [service (state/get-all-plugin-services-with-type :search)]
             (search-plugin/call-service! service "search:rebuildPagesIndice" {})
@@ -351,9 +349,6 @@
                       (db/entity [:block/uuid (:block/uuid block)])))]
        (js/setTimeout #(editor-handler/edit-block! block :max) 100)))))
 
-(defmethod handle :vector-search/sync-state [[_ state]]
-  (state/set-state! :vector-search/state state))
-
 (defmethod handle :rtc/sync-state [[_ state]]
   (state/update-state! :rtc/state (fn [old] (merge old state))))
 
@@ -417,9 +412,6 @@
     (p/all (map (fn [id]
                   (db-async/<get-block (state/get-current-repo) id
                                        {:skip-refresh? false})) ids))))
-
-(defmethod handle :vector-search/load-model-progress [[_ data]]
-  (state/set-state! :vector-search/load-model-progress data))
 
 (defn run!
   []

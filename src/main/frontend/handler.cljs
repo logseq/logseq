@@ -16,7 +16,6 @@
             [frontend.db.restore :as db-restore]
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
-            [frontend.handler.db-based.vector-search-flows :as vector-search-flows]
             [frontend.handler.e2ee]
             [frontend.handler.events :as events]
             [frontend.handler.events.export]
@@ -35,7 +34,6 @@
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.persist-db :as persist-db]
-            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
@@ -168,15 +166,7 @@
          (p/finally (fn []
                       (state/set-db-restoring! false)
                       (p/resolve! state/app-ready-promise true)
-                      (log/info ::app-init-spent-time (- (util/time-ms) t1))
-                      (when-not (util/mobile?)
-                        (p/let [webgpu-available? (db-browser/<check-webgpu-available?)]
-                          (log/info :webgpu-available? webgpu-available?)
-                          (when webgpu-available?
-                            (p/do! (db-browser/start-inference-worker!)
-                                   (db-browser/<connect-db-worker-and-infer-worker!)
-                                   (reset! vector-search-flows/*infer-worker-ready true))))
-                        nil)))))))
+                      (log/info ::app-init-spent-time (- (util/time-ms) t1))))))))
 
 (defn quit-and-install-new-version!
   []

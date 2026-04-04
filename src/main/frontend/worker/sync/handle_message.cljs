@@ -13,7 +13,8 @@
             [frontend.worker.sync.util :as sync-util]
             [lambdaisland.glogi :as log]
             [logseq.db-sync.checksum :as sync-checksum]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.worker-common.util :as worker-util]))
 
 (defn- fail-fast
   [tag data]
@@ -127,15 +128,16 @@
              (checksum-compare-ready? repo client local-tx remote-tx))
     (let [local-checksum (local-sync-checksum repo)]
       (when-not (= local-checksum remote-checksum)
-        (fail-fast :db-sync/checksum-mismatch
-                   (merge context
-                          {:type :db-sync/checksum-mismatch
-                           :repo repo
-                           :message-type (:type context)
-                           :local-tx local-tx
-                           :remote-tx remote-tx
-                           :local-checksum local-checksum
-                           :remote-checksum remote-checksum}))))))
+        (when worker-util/dev?
+          (log/warn :db-sync/checksum-mismatch
+                    (merge context
+                           {:type :db-sync/checksum-mismatch
+                            :repo repo
+                            :message-type (:type context)
+                            :local-tx local-tx
+                            :remote-tx remote-tx
+                            :local-checksum local-checksum
+                            :remote-checksum remote-checksum})))))))
 
 (defn- handle-tx-reject!
   [repo client message local-tx]

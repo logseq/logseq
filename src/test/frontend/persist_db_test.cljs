@@ -218,27 +218,21 @@
                        (set! remote/stop! original-stop!)
                        (done)))))))
 
-(deftest connect-db-worker-and-infer-worker-skips-in-electron-runtime
+(deftest start-db-worker-skips-in-node-test-runtime
   (async done
     (let [invoke-calls (atom [])
-          original-electron? util/electron?
-          original-invoke state/<invoke-db-worker-direct-pass
-          original-db-worker @state/*db-worker
-          original-infer-worker @state/*infer-worker]
-      (set! util/electron? (constantly true))
-      (set! state/<invoke-db-worker-direct-pass (fn [& args]
-                                                  (swap! invoke-calls conj args)
-                                                  (p/resolved :ok)))
-      (reset! state/*db-worker (fn [& _] nil))
-      (reset! state/*infer-worker (fn [& _] nil))
-      (-> (p/let [_ (browser/<connect-db-worker-and-infer-worker!)]
+          original-node-test? util/node-test?
+          original-invoke state/<invoke-db-worker]
+      (set! util/node-test? true)
+      (set! state/<invoke-db-worker (fn [& args]
+                                      (swap! invoke-calls conj args)
+                                      (p/resolved :ok)))
+      (-> (p/let [_ (browser/start-db-worker!)]
             (is (= [] @invoke-calls)))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally
            (fn []
-             (set! util/electron? original-electron?)
-             (set! state/<invoke-db-worker-direct-pass original-invoke)
-             (reset! state/*db-worker original-db-worker)
-             (reset! state/*infer-worker original-infer-worker)
+             (set! util/node-test? original-node-test?)
+             (set! state/<invoke-db-worker original-invoke)
              (done)))))))

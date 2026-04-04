@@ -1,45 +1,45 @@
 (ns frontend.worker.db-sync-test
-  (:require
-   [cljs.test :refer [async deftest is testing]]
-   [clojure.set :as set]
-   [clojure.string :as string]
-   [datascript.core :as d]
-   [frontend.common.crypt :as crypt]
-   [frontend.worker-common.util :as worker-util]
-   [frontend.worker.handler.page :as worker-page]
-   [frontend.worker.pipeline :as worker-pipeline]
-   [frontend.worker.platform :as platform]
-   [frontend.worker.shared-service :as shared-service]
-   [frontend.worker.state :as worker-state]
-   [frontend.worker.sync :as db-sync]
-   [frontend.worker.sync.apply-txs :as sync-apply]
-   [frontend.worker.sync.assets :as sync-assets]
-   [frontend.worker.sync.auth :as sync-auth]
-   [frontend.worker.sync.client-op :as client-op]
-   [frontend.worker.sync.crypt :as sync-crypt]
-   [frontend.worker.sync.handle-message :as sync-handle-message]
-   [frontend.worker.sync.large-title :as sync-large-title]
-   [frontend.worker.sync.presence :as sync-presence]
-   [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
-   [frontend.worker.sync.util :as sync-util]
-   [frontend.worker.undo-redo :as undo-redo]
-   [logseq.common.config :as common-config]
-   [logseq.common.util :as common-util]
-   [logseq.common.util.page-ref :as page-ref]
-   [logseq.db :as ldb]
-   [logseq.db-sync.checksum :as sync-checksum]
-   [logseq.db-sync.storage :as sync-storage]
-   [logseq.db-sync.worker.handler.sync :as sync-handler]
-   [logseq.db-sync.worker.ws :as ws]
-   [logseq.db.common.normalize :as db-normalize]
-   [logseq.db.frontend.validate :as db-validate]
-   [logseq.db.sqlite.util :as sqlite-util]
-   [logseq.db.test.helper :as db-test]
-   [logseq.outliner.core :as outliner-core]
-   [logseq.outliner.op :as outliner-op]
-   [logseq.outliner.page :as outliner-page]
-   [logseq.outliner.property :as outliner-property]
-   [promesa.core :as p]))
+  (:require [cljs.test :refer [deftest is testing async]]
+            [clojure.set :as set]
+            [clojure.string :as string]
+            [datascript.core :as d]
+            [frontend.common.crypt :as crypt]
+            [frontend.worker-common.util :as worker-util]
+            [frontend.worker.handler.page :as worker-page]
+            [frontend.worker.pipeline :as worker-pipeline]
+            [frontend.worker.shared-service :as shared-service]
+            [frontend.worker.state :as worker-state]
+            [frontend.worker.sync :as db-sync]
+            [frontend.worker.sync.apply-txs :as sync-apply]
+            [frontend.worker.sync.assets :as sync-assets]
+            [frontend.worker.sync.auth :as sync-auth]
+            [frontend.worker.sync.client-op :as client-op]
+            [frontend.worker.sync.crypt :as sync-crypt]
+            [frontend.worker.sync.handle-message :as sync-handle-message]
+            [frontend.worker.sync.large-title :as sync-large-title]
+            [frontend.worker.sync.presence :as sync-presence]
+            [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
+            [frontend.worker.sync.util :as sync-util]
+            [frontend.worker.platform :as platform]
+            [frontend.worker.undo-redo :as undo-redo]
+            [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.db :as ldb]
+            [logseq.db-sync.checksum :as sync-checksum]
+            [logseq.db-sync.storage :as sync-storage]
+            [logseq.db-sync.worker.handler.sync :as sync-handler]
+            [logseq.db-sync.worker.ws :as ws]
+            [logseq.db.common.normalize :as db-normalize]
+            [logseq.db.frontend.validate :as db-validate]
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.test.helper :as db-test]
+            [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.op :as outliner-op]
+            [logseq.outliner.op.construct :as op-construct]
+            [logseq.outliner.page :as outliner-page]
+            [logseq.outliner.property :as outliner-property]
+            [promesa.core :as p]))
 
 (def ^:private test-repo "test-db-sync-repo")
 (def ^:private local-tx-meta
@@ -483,8 +483,8 @@
               (is (= "db transact failed" (:reason data)))
               (is (= rejected-tx (:data data))))))))))
 
-(deftest hello-checksum-mismatch-fails-fast-test
-  (testing "hello with matching t but mismatched checksum fails fast"
+(deftest hello-checksum-mismatch-logs-warning-test
+  (testing "hello with matching t but mismatched checksum logs warning without throwing"
     (let [{:keys [conn client-ops-conn]} (setup-parent-child)
           latest-prev @db-sync/*repo->latest-remote-tx
           raw-message (js/JSON.stringify
@@ -502,16 +502,17 @@
           (with-redefs [sync-apply/flush-pending! (fn [& _] nil)
                         sync-assets/enqueue-asset-sync! (fn [& _] nil)]
             (try
-              (sync-handle-message/handle-message! test-repo client raw-message)
-              (catch :default error
-                (let [data (ex-data error)]
-                  (is (= :db-sync/checksum-mismatch (:type data)))
-                  (is (= "bad-checksum" (:remote-checksum data)))))
+              (is (= :ok
+                     (try
+                       (sync-handle-message/handle-message! test-repo client raw-message)
+                       :ok
+                       (catch :default _error
+                         :thrown))))
               (finally
                 (reset! db-sync/*repo->latest-remote-tx latest-prev)))))))))
 
-(deftest hello-checksum-mismatch-fails-fast-for-e2ee-test
-  (testing "e2ee graphs also fail fast on checksum mismatch"
+(deftest hello-checksum-mismatch-logs-warning-for-e2ee-test
+  (testing "e2ee graphs also log warning on checksum mismatch without throwing"
     (let [{:keys [conn client-ops-conn]} (setup-parent-child)
           latest-prev @db-sync/*repo->latest-remote-tx
           raw-message (js/JSON.stringify
@@ -530,12 +531,12 @@
                         sync-assets/enqueue-asset-sync! (fn [& _] nil)
                         sync-crypt/graph-e2ee? (constantly true)]
             (try
-              (sync-handle-message/handle-message! test-repo client raw-message)
-              (is false "expected checksum mismatch to fail-fast for e2ee graphs")
-              (catch :default error
-                (let [data (ex-data error)]
-                  (is (= :db-sync/checksum-mismatch (:type data)))
-                  (is (= "bad-checksum" (:remote-checksum data)))))
+              (is (= :ok
+                     (try
+                       (sync-handle-message/handle-message! test-repo client raw-message)
+                       :ok
+                       (catch :default _error
+                         :thrown))))
               (finally
                 (reset! db-sync/*repo->latest-remote-tx latest-prev)))))))))
 
@@ -1191,7 +1192,7 @@
                            :db-sync/normalized-tx-data []
                            :db-sync/reversed-tx-data []}])
           (with-redefs [sync-util/fail-fast (fn [_tag data]
-                                               (throw (ex-info "fail-fast-called" data)))]
+                                              (throw (ex-info "fail-fast-called" data)))]
             (try
               (#'sync-apply/apply-history-action! test-repo tx-id false {})
               (is false "expected redo conflict to throw")
@@ -2000,9 +2001,16 @@
                 pasted (d/entity @conn pasted-id)
                 pasted-uuid (:block/uuid pasted)
                 pasted-child-uuid (:block/uuid (d/entity @conn pasted-child-id))]
-            (is (some #(and (= :save-block (first %))
-                            (= empty-target-uuid (get-in % [1 0 :block/uuid])))
+            (is (some #(and (= :delete-blocks (first %))
+                            (= [[:block/uuid empty-target-uuid]]
+                               (vec (get-in % [1 0]))))
                       (:inverse-outliner-ops pending)))
+            (is (some #(and (= :insert-blocks (first %))
+                            (= empty-target-uuid
+                               (get-in % [1 0 0 :block/uuid])))
+                      (:inverse-outliner-ops pending)))
+            (is (not-any? #(= :save-block (first %))
+                          (:inverse-outliner-ops pending)))
             (is (= true
                    (:applied? (#'sync-apply/apply-history-action! test-repo tx-id true {}))))
             (let [restored-target (d/entity @conn [:block/uuid empty-target-uuid])]
@@ -2420,8 +2428,8 @@
             (is (empty? (#'sync-apply/pending-txs test-repo)))
             (is (= 1 (client-op/get-local-tx test-repo)))))))))
 
-(deftest tx-batch-ok-real-checksum-mismatch-fails-fast-test
-  (testing "tx/batch/ok fails fast on true checksum mismatch"
+(deftest tx-batch-ok-real-checksum-mismatch-logs-warning-test
+  (testing "tx/batch/ok logs warning on true checksum mismatch without throwing"
     (let [{:keys [conn client-ops-conn]} (setup-parent-child)
           stale-checksum "0000000000000000"
           remote-checksum "ffffffffffffffff"
@@ -2436,14 +2444,12 @@
       (with-datascript-conns conn client-ops-conn
         (fn []
           (client-op/update-local-checksum test-repo stale-checksum)
-          (try
-            (sync-handle-message/handle-message! test-repo client raw-message)
-            (is false "expected checksum mismatch to fail fast")
-            (catch :default error
-              (let [data (ex-data error)]
-                (is (= :db-sync/checksum-mismatch (:type data)))
-                (is (= stale-checksum (:local-checksum data)))
-                (is (= remote-checksum (:remote-checksum data)))))))))))
+          (is (= :ok
+                 (try
+                   (sync-handle-message/handle-message! test-repo client raw-message)
+                   :ok
+                   (catch :default _error
+                     :thrown)))))))))
 
 (deftest local-checksum-stays-in-sync-after-undo-redo-sequence-test
   (testing "insert/delete/indent/outdent with undo-all/redo-all keeps cached checksum aligned"
@@ -2854,7 +2860,7 @@
                 child2' (d/entity @conn (:db/id child2))
                 orders [(:block/order child1') (:block/order child2')]]
             (is (every? some? orders))
-            (is (= 1 (count (distinct orders))))))))))
+            (is (= (count orders) (count (distinct orders))))))))))
 
 (deftest create-today-journal-does-not-rewrite-existing-journal-timestamps-test
   (testing "create today journal skips timestamp rewrite when the journal page already exists"
@@ -2888,7 +2894,7 @@
           (let [child1' (d/entity @conn (:db/id child1))
                 child2' (d/entity @conn (:db/id child2))]
             (is (some? (:block/order child1')))
-            (is (= (:block/order child1') (:block/order child2')))))))))
+            (is (not= (:block/order child1') (:block/order child2')))))))))
 
 (deftest two-clients-extends-cycle-test
   (testing "class extends updates from two clients can retain the cycle edges"
@@ -3124,6 +3130,39 @@
                      (set (map :db/ident (:block/tags block-restored)))))
               (is (= base-history-count restored-history-count)))))))))
 
+(deftest derive-history-set-block-property-inverse-includes-property-history-cleanup-test
+  (testing "derive-history-outliner-ops should delete created property-history block for set-block-property"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:pnum {:logseq.property/type :number
+                                     :db/cardinality :db.cardinality/one}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "task"
+                             :build/properties {:pnum 1}}]}]})
+          block-before (db-test/find-block-by-content @conn "task")
+          block-id (:db/id block-before)
+          property-id (:db/id (d/entity @conn :user.property/pnum))
+          history-uuid (random-uuid)
+          {:keys [db-after tx-data]}
+          (d/with @conn
+                  [[:db/add block-id :user.property/pnum 2]
+                   {:db/id -1
+                    :block/uuid history-uuid
+                    :logseq.property.history/block block-id
+                    :logseq.property.history/property property-id
+                    :logseq.property.history/scalar-value 2}]
+                  {})
+          {:keys [inverse-outliner-ops]}
+          (op-construct/derive-history-outliner-ops
+           @conn
+           db-after
+           tx-data
+           {:outliner-op :set-block-property
+            :outliner-ops [[:set-block-property [block-id :user.property/pnum 2]]]})]
+      (is (= :delete-blocks (ffirst inverse-outliner-ops)))
+      (is (= #{[:block/uuid history-uuid]}
+             (set (get-in inverse-outliner-ops [0 1 0])))))))
+
 (deftest pending-reversed-txs-for-batch-status-changes-restore-base-db-test
   (testing "fresh persisted reversed tx rows from repeated batch status changes should restore the base db"
     (let [conn (db-test/create-conn-with-blocks
@@ -3166,6 +3205,52 @@
               (is (= base-tags
                      (set (map :db/ident (:block/tags block-restored)))))
               (is (= base-history-count restored-history-count)))))))))
+
+(deftest derive-history-batch-set-property-inverse-includes-property-history-cleanup-test
+  (testing "derive-history-outliner-ops should delete created property-history blocks for batch-set-property"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:pnum {:logseq.property/type :number
+                                     :db/cardinality :db.cardinality/one}}
+                 :pages-and-blocks
+                 [{:page {:block/title "page1"}
+                   :blocks [{:block/title "task-1"
+                             :build/properties {:pnum 1}}
+                            {:block/title "task-2"}]}]})
+          block-1 (db-test/find-block-by-content @conn "task-1")
+          block-2 (db-test/find-block-by-content @conn "task-2")
+          property-id (:db/id (d/entity @conn :user.property/pnum))
+          history-uuid-1 (random-uuid)
+          history-uuid-2 (random-uuid)
+          {:keys [db-after tx-data]}
+          (d/with @conn
+                  [[:db/add (:db/id block-1) :user.property/pnum 2]
+                   [:db/add (:db/id block-2) :user.property/pnum 2]
+                   {:db/id -1
+                    :block/uuid history-uuid-1
+                    :logseq.property.history/block (:db/id block-1)
+                    :logseq.property.history/property property-id
+                    :logseq.property.history/scalar-value 2}
+                   {:db/id -2
+                    :block/uuid history-uuid-2
+                    :logseq.property.history/block (:db/id block-2)
+                    :logseq.property.history/property property-id
+                    :logseq.property.history/scalar-value 2}]
+                  {})
+          {:keys [inverse-outliner-ops]}
+          (op-construct/derive-history-outliner-ops
+           @conn
+           db-after
+           tx-data
+           {:outliner-op :batch-set-property
+            :outliner-ops [[:batch-set-property [[(:db/id block-1)
+                                                  (:db/id block-2)]
+                                                 :user.property/pnum
+                                                 2
+                                                 {}]]]})]
+      (is (= :delete-blocks (ffirst inverse-outliner-ops)))
+      (is (= #{[:block/uuid history-uuid-1]
+               [:block/uuid history-uuid-2]}
+             (set (get-in inverse-outliner-ops [0 1 0])))))))
 
 (deftest normalize-rebased-pending-tx-keeps-reconstructive-reverse-for-retract-entity-test
   (testing "rebased pending tx should keep non-empty reverse datoms even when forward tx collapses to retractEntity"
@@ -3429,55 +3514,55 @@
 (deftest create-temp-sqlite-db-uses-opfs-pool-test
   (testing "temp upload db should use an OPFS-backed sqlite db instead of :memory:"
     (async done
-      (let [sqlite-prev @worker-state/*sqlite
-            platform-prev (try
-                            (platform/current)
-                            (catch :default _ nil))
-            sqlite #js {:sqlite? true}
-            pool #js {:pool? true}
-            opened-opts (atom [])
-            installed-pools (atom [])
-            test-platform {:env {:runtime :node
-                                 :owner-source :test}
-                           :storage {:install-opfs-pool (fn [sqlite* pool-name]
-                                                          (swap! installed-pools conj {:sqlite sqlite*
-                                                                                       :pool-name pool-name})
-                                                          pool)
-                                     :resolve-db-path (fn [repo _pool suffix]
-                                                        (str "/tmp/" repo suffix))
-                                     :remove-vfs! (fn [_pool] nil)}
-                           :kv {:get (fn [_] nil)
-                                :set! (fn [_ _] nil)}
-                           :broadcast {:post-message! (fn [_ _] nil)}
-                           :websocket {:connect (fn [_] nil)}
-                           :crypto {}
-                           :timers {}
-                           :sqlite {:init! (fn [] nil)
-                                    :open-db (fn [opts]
-                                               (swap! opened-opts conj opts)
-                                               #js {:close (fn [] nil)
-                                                    :exec (fn [& _] nil)})}}]
-        (platform/set-platform! test-platform)
-        (reset! worker-state/*sqlite sqlite)
-        (-> (p/let [{:keys [db path]} (sync-temp-sqlite/<create-temp-sqlite-db!)]
-              (is (some? db))
-              (is (= [{:sqlite sqlite
-                       :pool-name sync-temp-sqlite/upload-temp-pool-name}]
-                     @installed-pools))
-              (is (= [{:sqlite sqlite
-                       :pool pool
-                       :path path
-                       :mode "c"}]
-                     @opened-opts))
-              (is (string/includes? path "upload-"))
-              (is (string/ends-with? path ".sqlite")))
-            (p/catch (fn [e]
-                       (is false (str e))))
-            (p/finally (fn []
-                         (reset! worker-state/*sqlite sqlite-prev)
-                         (when platform-prev
-                           (platform/set-platform! platform-prev))
-                         (done))))))))
+           (let [sqlite-prev @worker-state/*sqlite
+                 platform-prev (try
+                                 (platform/current)
+                                 (catch :default _ nil))
+                 sqlite #js {:sqlite? true}
+                 pool #js {:pool? true}
+                 opened-opts (atom [])
+                 installed-pools (atom [])
+                 test-platform {:env {:runtime :node
+                                      :owner-source :test}
+                                :storage {:install-opfs-pool (fn [sqlite* pool-name]
+                                                               (swap! installed-pools conj {:sqlite sqlite*
+                                                                                            :pool-name pool-name})
+                                                               pool)
+                                          :resolve-db-path (fn [repo _pool suffix]
+                                                             (str "/tmp/" repo suffix))
+                                          :remove-vfs! (fn [_pool] nil)}
+                                :kv {:get (fn [_] nil)
+                                     :set! (fn [_ _] nil)}
+                                :broadcast {:post-message! (fn [_ _] nil)}
+                                :websocket {:connect (fn [_] nil)}
+                                :crypto {}
+                                :timers {}
+                                :sqlite {:init! (fn [] nil)
+                                         :open-db (fn [opts]
+                                                    (swap! opened-opts conj opts)
+                                                    #js {:close (fn [] nil)
+                                                         :exec (fn [& _] nil)})}}]
+             (platform/set-platform! test-platform)
+             (reset! worker-state/*sqlite sqlite)
+             (-> (p/let [{:keys [db path]} (sync-temp-sqlite/<create-temp-sqlite-db!)]
+                   (is (some? db))
+                   (is (= [{:sqlite sqlite
+                            :pool-name sync-temp-sqlite/upload-temp-pool-name}]
+                          @installed-pools))
+                   (is (= [{:sqlite sqlite
+                            :pool pool
+                            :path path
+                            :mode "c"}]
+                          @opened-opts))
+                   (is (string/includes? path "upload-"))
+                   (is (string/ends-with? path ".sqlite")))
+                 (p/catch (fn [e]
+                            (is false (str e))))
+                 (p/finally (fn []
+                              (reset! worker-state/*sqlite sqlite-prev)
+                              (when platform-prev
+                                (platform/set-platform! platform-prev))
+                              (done))))))))
 
 (deftest upload-large-title-encrypts-transit-payload-test
   (testing "encrypted large title uploads transit-encoded payload"
