@@ -1027,11 +1027,11 @@
   (when (and (seq tx-data)
              (not (:rtc-tx? tx-meta))
              (not (:sync-download-graph? tx-meta))
-             (:persist-op? tx-meta true)
-             (:kv/value (d/entity db-after :logseq.kv/graph-remote?)))
+             (:persist-op? tx-meta true))
     (enqueue-local-tx! repo tx-report)
     (when-let [client @worker-state/*db-sync-client]
-      (when (= repo (:repo client))
+      (when (and (= repo (:repo client))
+                 (:kv/value (d/entity db-after :logseq.kv/graph-remote?)))
         (sync-assets/enqueue-asset-sync!
          repo client
          {:enqueue-asset-task-f enqueue-asset-task!
