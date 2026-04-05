@@ -5,6 +5,7 @@
   (:require [cljs.cache :as cache]
             [clojure.string :as string]
             [frontend.common.cache :as common.cache]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.format :as format]
             [frontend.format.mldoc :as mldoc]
@@ -40,7 +41,7 @@ and handles unexpected failure."
         (log/error :exception e)
         (state/pub-event! [:capture-error {:error e
                                            :payload {:type "Extract-blocks"}}])
-        (notification/show! "An unexpected error occurred during block extraction." :error)
+        (notification/show! (t :notification/block-extraction-error) :error)
         []))))
 
 (defn parse-block

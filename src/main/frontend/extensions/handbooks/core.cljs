@@ -5,7 +5,7 @@
             [clojure.edn :as edn]
             [clojure.string :as string]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :as i18n :refer [t]]
             [frontend.extensions.lightbox :as lightbox]
             [frontend.extensions.video.youtube :as youtube]
             [frontend.handler.notification :as notification]
@@ -445,7 +445,7 @@
              (p/then #(.json %))
              (p/then #(when-let [count (.-approximate_presence_count ^js %)]
                         (swap! *config assoc
-                               :discord-online (.toLocaleString count)
+                               :discord-online (i18n/locale-format-number count)
                                :discord-online-created (js/Date.now)))))))
      [discord-count])
 

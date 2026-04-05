@@ -6,6 +6,7 @@
             [dommy.core :as dom]
             [frontend.commands :as commands]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
@@ -542,7 +543,7 @@
                   (db/entity [:block/uuid block-uuid]))]
       (when block
         (if (ldb/recycled? block)
-          (notification/show! "Recycle is read-only." :warning)
+          (notification/show! (t :storage/recycle-readonly) :warning)
           (let [last-block (when (not sibling?)
                              (let [children (:block/_parent block)
                                    blocks (db/sort-by-order children)
@@ -800,7 +801,7 @@
   (when (seq blocks)
     (if (or (some ldb/recycled? blocks)
             (ldb/recycled? target))
-      (notification/show! "Recycle is read-only." :warning)
+      (notification/show! (t :storage/recycle-readonly) :warning)
       (ui-outliner-tx/transact!
        {:outliner-op :move-blocks}
        (outliner-op/move-blocks! blocks target opts)))))
@@ -821,7 +822,7 @@
                                                  (state/pub-event! [:editor/hide-action-bar])
                                                  (state/clear-selection!)
                                                  (move-blocks! blocks (:source-block chosen) {:bottom? true}))}))
-      (notification/show! "There's no block selected, please select blocks first." :warning))))
+      (notification/show! (t :notification/no-block-selected) :warning))))
 
 (defn delete-block!
   [repo]
@@ -1331,8 +1332,7 @@
           existing-asset (some->> checksum (db-async/<get-asset-with-checksum repo))]
     (if existing-asset
       (do
-        (notification/show! (str "Asset exists already, title: " (:block/title existing-asset)
-                                 ", node reference: [[" (:block/uuid existing-asset) "]]")
+        (notification/show! (t :asset/already-exists (:block/title existing-asset) (:block/uuid existing-asset))
                             :warning
                             false)
         nil)
@@ -1343,7 +1343,7 @@
                 (throw (ex-info "File doesn't have a valid ext."
                                 {:file-name file-name})))
             _ (when (some-> file (assets-handler/exceed-limit-size?))
-                (notification/show! [:div "Asset size shouldn't be larger than 100M"]
+                (notification/show! [:div (t :asset/size-too-large)]
                                     :warning
                                     false)
                 (throw (ex-info "Asset size shouldn't be larger than 100M" {:file-name file-name})))
@@ -2564,7 +2564,7 @@
              (= key commands/hashtag))
         (do
           (util/stop e)
-          (notification/show! "Page name can't include \"#\"." :warning))
+          (notification/show! (t :page/page-name-cannot-include-hash) :warning))
         ;; stop accepting edits if the new block is not created yet
         (some? @(:editor/async-unsaved-chars @state/state))
         (do
@@ -3574,7 +3574,7 @@
           (state/close-modal!)
           (shui/popup-hide!)
           (when (seq children)
-            (notification/show! "Blocks added to today!" :success))))))))
+            (notification/show! (t :notification/blocks-added-today) :success))))))))
 
 (defn quick-add
   []

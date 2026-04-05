@@ -188,7 +188,7 @@
                                  (reaction-handler/toggle-reaction! block-id emoji-id)
                                  (state/hide-custom-context-menu!)
                                  (shui/popup-hide!))
-                               (notification/show! "Please pick an emoji reaction." :warning))))
+                               (notification/show! (t :notification/emoji-required) :warning))))
               :tabs [[:emoji "Emojis"]]
               :default-tab :emoji
               :show-used? true
@@ -315,14 +315,14 @@
                {:key "(Dev) Show block data"
                 :on-click (fn []
                             (dev-common-handler/show-entity-data [:block/uuid block-id]))}
-               (t :dev/show-block-data))
+               (t :command.dev/show-block-data))
               (shui/dropdown-menu-item
                {:key "(Dev) Show block AST"
                 :on-click (fn []
                             (let [block (db/entity [:block/uuid block-id])]
                               (dev-common-handler/show-content-ast (:block/title block)
                                                                    (get block :block/format :markdown))))}
-               (t :dev/show-block-ast))
+               (t :command.dev/show-block-ast))
               (shui/dropdown-menu-item
                {:key "(Dev) Show block content history"
                 :on-click

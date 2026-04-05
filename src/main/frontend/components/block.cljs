@@ -260,7 +260,7 @@
           (let [handle-copy!
                 (fn [_e]
                   (-> (util/copy-image-to-clipboard image-src)
-                      (p/then #(notification/show! "Copied!" :success))
+                      (p/then #(notification/show! (t :notification/copied) :success))
                       (p/catch (fn [error]
                                  (js/console.error error)))))
                 handle-delete!
@@ -275,7 +275,7 @@
                                 {:default-checked @*local-selected?
                                  :on-checked-change #(reset! *local-selected? %)})
                                (t :asset/physical-delete)])]
-                           {:title (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
+                           {:title (t :asset/confirm-delete-image)
                             :outside-cancel? true})
                           (p/then (fn []
                                     (shui/dialog-close!)
@@ -742,7 +742,7 @@
 
           (ldb/page? page-entity)
           (if untitled?
-            (t :untitled)
+            (t :ui/untitled)
             (let [s (util/trim-safe (if show-unique-title?
                                       (block-handler/block-unique-title page-entity {:with-tags? with-tags?})
                                       (:block/title page-entity)))]
@@ -3244,7 +3244,7 @@
                             (let [element (dom/create-element "div")]
                               (-> element
                                   (dom/set-attr! "id" "dragging-ghost-element")
-                                  (dom/set-text! (str "Moving " (count blocks) " blocks"))
+                                  (dom/set-text! (t :editor/invalid-date (count blocks)))
                                   (dom/set-class! "p-2 rounded text-sm"))
                               element))]
               (doseq [block blocks]
@@ -3721,7 +3721,7 @@
                              (util/stop-propagation e)
                              (when-let [^js cm (util/get-cm-instance (util/rec-get-node (.-target e) "ls-block"))]
                                (util/copy-to-clipboard! (.getValue cm))
-                               (notification/show! "Copied!" :success)))}
+                               (notification/show! (t :notification/copied) :success)))}
                 (ui/icon "copy")
                 "Copy")]
               (lazy-editor/editor config (str (d/squuid)) attr code options)

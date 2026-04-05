@@ -1,7 +1,7 @@
 (ns frontend.components.shortcut
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :as i18n :refer [t]]
             [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as dh]
@@ -508,6 +508,11 @@
          ^{:key (str "stroke-" i)}
          (shui/shortcut stroke {:style :compact}))])))
 
+(defn- feedback-inline-label
+  [template replacements]
+  (into [:span]
+        (i18n/interpolate-rich-text template replacements)))
+
 (defn- prefix-conflict-label
   "Render content for a prefix-conflict amber banner with inline keycaps.
    n=1: keycap + quoted name inline. n=2-3: vertical list with keycap + name.
@@ -517,7 +522,7 @@
     (cond
       (= n 1)
       (let [{:keys [binding name]} (first details)]
-        [:<>
+        [:span.shortcut-feedback-inline
          [:span (t :keymap/deactivates-chord)]
          (chord-keycap binding)
          [:span.shortcut-feedback-name (str \u201c name \u201d)]])
@@ -980,8 +985,9 @@
         (case rec-state
           :conflict-cross
           [:div.shortcut-feedback.shortcut-feedback--error
-           [:span (t :keymap/used-by)
-            [:span.shortcut-feedback-name (conflict-action-names (:exact key-conflicts))]]
+           (feedback-inline-label (t :keymap/used-by-action)
+                                  [[:span.shortcut-feedback-name
+                                    (conflict-action-names (:exact key-conflicts))]])
            (ui/tooltip
             (shui/button {:variant :destructive
                           :size :xs
@@ -997,11 +1003,14 @@
           (cond
             (:cross-context? accepted-info)
             [:div.shortcut-feedback.shortcut-feedback--warning
-             [:span (t :keymap/also-used-for)
-              [:span.shortcut-feedback-name
-               (:cross-action-name accepted-info)]
-              (when-let [ctx (:cross-context-label accepted-info)]
-                (str (t :keymap/in-context) ctx))]]
+             (if-let [ctx (:cross-context-label accepted-info)]
+               (feedback-inline-label (t :keymap/also-used-for-action-in-context)
+                                      [[:span.shortcut-feedback-name
+                                        (:cross-action-name accepted-info)]
+                                       [:span ctx]])
+               (feedback-inline-label (t :keymap/also-used-for-action)
+                                      [[:span.shortcut-feedback-name
+                                        (:cross-action-name accepted-info)]]))]
 
             (:prefix-conflicts? accepted-info)
             [:div.shortcut-feedback.shortcut-feedback--warning
@@ -1009,20 +1018,23 @@
              undo-link]
 
             (:from accepted-info)
-            (if-let [prefix-details' (:prefix-details accepted-info)]
+            (let [reassigned-label
+                  (into [:span]
+                        (i18n/interpolate-rich-text
+                         (t :keymap/reassigned-from)
+                         [[:span.shortcut-feedback-name (:from accepted-info)]]))]
+              (if-let [prefix-details' (:prefix-details accepted-info)]
               ;; Post-reassign with prefix info (mixed case)
               [:<>
                [:div.shortcut-feedback.shortcut-feedback--success
-                [:span (t :keymap/reassigned-from)
-                 [:span.shortcut-feedback-name (:from accepted-info)]]
+                reassigned-label
                 undo-link]
                [:div.shortcut-feedback.shortcut-feedback--warning
                 (prefix-conflict-label prefix-details')]]
               ;; Pure reassign, no prefix
               [:div.shortcut-feedback.shortcut-feedback--success
-               [:span (t :keymap/reassigned-from)
-                [:span.shortcut-feedback-name (:from accepted-info)]]
-               undo-link])
+               reassigned-label
+               undo-link]))
 
             :else
             [:div.shortcut-feedback.shortcut-feedback--success

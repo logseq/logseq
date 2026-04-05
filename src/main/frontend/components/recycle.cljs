@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [frontend.components.block :as component-block]
+            [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
@@ -65,16 +66,14 @@
       (deleted-by-avatar user)
       [:div.min-w-0
        [:div.truncate
-        (str (if (ldb/page? root) "Page" "Block")
-             " deleted "
-             (.toLocaleString (js/Date. deleted-at)))]]]
+        (t (if (ldb/page? root) :nav/page-deleted :nav/block-deleted)
+           (i18n/locale-format-date (js/Date. deleted-at)))]]]
      (shui/button
       {:variant :ghost
        :size :xs
        :class "!py-0 !px-1 h-4"
        :on-click #(page-handler/restore-recycled! (:block/uuid root))}
-      "Restore")]))
-
+      (t :nav/restore))]))
 (defn- deleted-root-outliner
   [root]
   (component-block/block-container

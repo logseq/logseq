@@ -1,5 +1,6 @@
 (ns electron.context-menu
-  (:require [electron.utils :as utils]
+  (:require [electron.i18n :refer [t]]
+            [electron.utils :as utils]
             ["electron" :refer [Menu MenuItem shell nativeImage clipboard] :as electron]
             ["electron-dl" :refer [download]]))
 
@@ -27,19 +28,18 @@
                                       #(. web-contents replaceMisspelling suggestion)}))))
             (when-let [misspelled-word (not-empty (.-misspelledWord params))]
               (. menu append
-                 (MenuItem. (clj->js {:label
-                                      "Add to dictionary"
+                 (MenuItem. (clj->js {:label (t :electron/add-to-dictionary)
                                       :click
                                       #(.. web-contents -session (addWordToSpellCheckerDictionary misspelled-word))})))
               (. menu append (MenuItem. #js {:type "separator"})))
 
             (when (and utils/mac? has-text? (not link-url))
               (. menu append
-                 (MenuItem. #js {:label (str "Look Up “" selection-text "”")
+                 (MenuItem. #js {:label (t :electron/look-up)
                                  :click #(. web-contents showDefinitionForSelection)})))
-            (when has-text?
-              (. menu append
-                 (MenuItem. #js {:label "Search with Google"
+             (when has-text?
+               (. menu append
+                 (MenuItem. #js {:label (t :electron/search-with-google)
                                  :click #(let [url (js/URL. "https://www.google.com/search")]
                                            (.. url -searchParams (set "q" selection-text))
                                            (.. shell (openExternal (.toString url))))}))
@@ -48,26 +48,26 @@
             (when editable?
               (when has-text?
                 (. menu append
-                   (MenuItem. #js {:label "Cut"
+                   (MenuItem. #js {:label (t :editor/cut)
                                    :enabled (.-canCut edit-flags)
                                    :role "cut"}))
                 (. menu append
-                   (MenuItem. #js {:label "Copy"
+                   (MenuItem. #js {:label (t :editor/copy)
                                    :enabled (.-canCopy edit-flags)
                                    :role "copy"})))
 
               (. menu append
-                 (MenuItem. #js {:label "Paste"
+                 (MenuItem. #js {:label (t :editor/paste)
                                  :enabled (.-canPaste edit-flags)
                                  :role "paste"}))
               (. menu append
-                 (MenuItem. #js {:label "Select All"
+                 (MenuItem. #js {:label (t :views/select-all)
                                  :enabled (.-canSelectAll edit-flags)
                                  :role "selectAll"})))
 
             (when (= media-type "image")
               (. menu append
-                 (MenuItem. #js {:label "Save Image"
+                 (MenuItem. #js {:label (t :electron/save-image)
                                  :click (fn [menu-item]
                                           (let [url (.-srcURL params)
                                                 url (if (.-transform menu-item)
@@ -76,7 +76,7 @@
                                             (download win url)))}))
 
               (. menu append
-                 (MenuItem. #js {:label "Save Image As..."
+                 (MenuItem. #js {:label (t :electron/save-image-as)
                                  :click (fn [menu-item]
                                           (let [url (.-srcURL params)
                                                 url (if (.-transform menu-item)
@@ -85,7 +85,7 @@
                                             (download win url #js {:saveAs true})))}))
 
               (. menu append
-                 (MenuItem. #js {:label "Copy Image"
+                 (MenuItem. #js {:label (t :electron/copy-image)
                                  :click (fn []
                                           (. clipboard writeImage (. nativeImage createFromPath (subs (.-srcURL params) 7))))})))
 

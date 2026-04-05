@@ -68,7 +68,7 @@
             [:div.flex.flex-row.justify-between.align-items.mb-4.items-center.separator-top.py-4
              [:div.flex.flex-col.items-start.mr-2
               [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "3")]
-              [:div [:span.highlighted.font-bold "Export "] [:span.toned-down " current graph as SQLite db"]]
+              [:div [:span.highlighted.font-bold "Export"] [:span.toned-down " current graph as SQLite db"]]
               [:div.text-xs.toned-down "You can send it to help@logseq.com for debugging."]
               [:a#download-as-sqlite-db.hidden]]
              [:div
@@ -86,7 +86,7 @@
                          :small? true
                          :on-click (fn []
                                      (.clear js/localStorage)
-                                     (notification/show! "Cleared!" :success)))]]]
+                                     (notification/show! (t :page/cleared) :success)))]]]
            [:div
             [:p "You can also go to "
              [:a {:title "All graphs"

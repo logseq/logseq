@@ -1,6 +1,7 @@
 (ns frontend.handler.reaction
   "Reactions handler"
-  (:require [frontend.handler.notification :as notification]
+  (:require [frontend.context.i18n :refer [t]]
+            [frontend.handler.notification :as notification]
             [frontend.handler.user :as user-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
@@ -14,5 +15,5 @@
       (ui-outliner-tx/transact! {:outliner-op :toggle-reaction}
                                 (outliner-op/toggle-reaction! target-uuid emoji-id user-uuid)))
     (do
-      (notification/show! "Unsupported reaction emoji." :warning)
+      (notification/show! (t :notification/unsupported-reaction-emoji) :warning)
       false)))

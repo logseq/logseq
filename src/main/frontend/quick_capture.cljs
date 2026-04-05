@@ -3,6 +3,7 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
@@ -96,4 +97,4 @@
                                                                         :edit-block? true
                                                                         :replace-empty-target? true})
                         100))))
-    (notification/show! "Failed to parse date to journal name." :error)))
+    (notification/show! (t :notification/parse-to-journal-name-failed) :error)))

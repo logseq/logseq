@@ -8,6 +8,7 @@
             [dommy.core :as dom]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
+            [frontend.context.i18n :as i18n :refer [t]]
             [frontend.handler.config :as config-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.notification :as notification]
@@ -54,14 +55,18 @@
                       title)]
        (cond
          (and has-tags? (nil? title'))
-         (notification/show! "Page name can't include \"#\"." :error)
+         (notification/show! (t :page/page-name-cannot-include-hash) :error)
+
          (and has-tags?
               (seq (set/intersection ldb/private-tags (set (map :db/ident (:block/tags parsed-result))))))
-         (notification/show! (str "New page can't set built-in tags: "
-                                  (string/join ", "
-                                               (keep #(when (ldb/private-tags (:db/ident %)) (pr-str (:block/title %)))
-                                                     (:block/tags parsed-result))))
+         (notification/show! (i18n/interpolate-rich-text-node
+                              (t :page/new-page-cant-set-built-in-tags)
+                              [(i18n/locale-join-rich-text-node
+                                (keep #(when (ldb/private-tags (:db/ident %))
+                                         (pr-str (:block/title %)))
+                                      (:block/tags parsed-result)))])
                              :error)
+
          :else
          (when-not (string/blank? title')
            (p/let [existing-page (when-not class? (db/get-page title'))]
@@ -143,7 +148,7 @@
              (p/do!
               (config-handler/set-config! :default-home (dissoc default-home :page))
               (config-handler/set-config! :feature/enable-journals? true)
-              (notification/show! "Journals enabled" :success)))
+              (notification/show! (t :settings/journals-enabled) :success)))
            (-> (p/let [res (ui-outliner-tx/transact!
                             {:outliner-op :delete-page}
                             (outliner-op/delete-page! page-uuid))]

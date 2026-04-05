@@ -8,6 +8,7 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.handler.assets :as assets-handler]
@@ -126,7 +127,7 @@
     (-> (embed-asset-file url format)
         (p/catch (fn [error]
                    (log/error :share-import-media-failed {:error error :url url})
-                   (notification/show! "Failed to import the shared media. Please try again." :error false))))))
+                   (notification/show! (t :mobile/shared-media-import-failed) :error false))))))
 
 (defn- handle-received-application [result]
   (p/let [{:keys [url type]} result
@@ -181,7 +182,7 @@
         result)
       (p/catch (fn [error]
                  (log/error :handle-asset-file {:error error :url url})
-                 (notification/show! "Failed to import the shared file. Please try again." :error false)))))
+                 (notification/show! (t :mobile/shared-file-import-failed) :error false)))))
 
 (defn- handle-payload-resource
   [{:keys [type name ext url] :as resource} format]

@@ -814,7 +814,8 @@
     (when (seq (filter :logseq.property/built-in? top-level-blocks*))
       (throw (ex-info "Built-in nodes can't be deleted"
                       {:type :notification
-                       :payload {:message "Built-in nodes can't be deleted"
+                       :payload {:message "Built-in nodes can't be deleted."
+                                 :i18n-key :outliner/built-in-cant-delete
                                  :type :error}})))
     (when (seq top-level-blocks)
       (let [from-property (:logseq.property/created-from-property start-block)

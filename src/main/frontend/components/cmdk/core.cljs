@@ -7,7 +7,7 @@
             [frontend.components.cmdk.state :as cmdk-state]
             [frontend.components.icon :as icon-component]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
@@ -60,13 +60,27 @@
   (let [current-page (state/get-current-page)]
     (->>
      [(when current-page
-        {:filter {:group :current-page} :text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "file"})
-      {:filter {:group :nodes} :text "Search only nodes" :info "Add filter to search" :icon-theme :gray :icon "point-filled"}
-      {:filter {:group :code} :text "Search only code" :info "Add filter to search" :icon-theme :gray :icon "code"}
-      {:filter {:group :commands} :text "Search only commands" :info "Add filter to search" :icon-theme :gray :icon "command"}
-      {:filter {:group :files} :text "Search only files" :info "Add filter to search" :icon-theme :gray :icon "file"}
-      {:filter {:group :themes} :text "Search only themes" :info "Add filter to search" :icon-theme :gray :icon "palette"}]
+        {:filter {:group :current-page} :text (t :cmdk/filter-current-page) :info (t :cmdk/filter-add) :icon-theme :gray :icon "file"})
+      {:filter {:group :nodes} :text (t :cmdk/filter-nodes) :info (t :cmdk/filter-add) :icon-theme :gray :icon "point-filled"}
+      {:filter {:group :codes} :text (t :cmdk/filter-codes) :info (t :cmdk/filter-add) :icon-theme :gray :icon "code"}
+      {:filter {:group :commands} :text (t :cmdk/filter-commands) :info (t :cmdk/filter-add) :icon-theme :gray :icon "command"}
+      {:filter {:group :files} :text (t :cmdk/filter-files) :info (t :cmdk/filter-add) :icon-theme :gray :icon "file"}
+      {:filter {:group :themes} :text (t :cmdk/filter-themes) :info (t :cmdk/filter-add) :icon-theme :gray :icon "palette"}]
      (remove nil?))))
+
+(defn- group-label
+  [group]
+  (case group
+    :filters (t :cmdk/group-filters)
+    :current-page (t :cmdk/group-current-page)
+    :nodes (t :cmdk/group-nodes)
+    :codes (t :cmdk/group-codes)
+    :files (t :cmdk/group-files)
+    :create (t :cmdk/group-create)
+    :recently-updated-pages (t :cmdk/group-recently-updated)
+    :commands (t :cmdk/group-commands)
+    :themes (t :cmdk/group-themes)
+    (name group)))
 
 ;; The results are separated into groups, and loaded/fetched/queried separately
 (def default-results
@@ -75,7 +89,7 @@
    :favorites      {:status :success :show :less :items nil}
    :current-page   {:status :success :show :less :items nil}
    :nodes          {:status :success :show :less :items nil}
-   :code           {:status :success :show :less :items nil}
+   :codes          {:status :success :show :less :items nil}
    :files          {:status :success :show :less :items nil}
    :themes         {:status :success :show :less :items nil}
    :filters        {:status :success :show :less :items nil}})
@@ -94,18 +108,18 @@
                   (when (ldb/class? class)
                     class))]
       (->> [{:text (cond
-                     class "Configure tag"
-                     class? "Create tag"
-                     :else "Create page")
+                     class (t :cmdk/create-configure-tag)
+                     class? (t :cmdk/create-tag)
+                     :else (t :cmdk/create-page))
              :icon (if class "settings" "new-page")
              :icon-theme :gray
              :info (cond
                      class
-                     (str "Configure #" class-name)
+                     (t :cmdk/info-configure-tag class-name)
                      class?
-                     (str "Create tag called '" class-name "'")
+                     (t :cmdk/info-create-tag class-name)
                      :else
-                     (str "Create page called '" q "'"))
+                     (t :cmdk/info-create-page q))
              :source-create :page
              :class class}]
            (remove nil?)))))
@@ -143,41 +157,38 @@
                  []
 
                  start-with-slash?
-                 [["Filters" :filters (visible-items :filters)]
-                  ["Current page"   :current-page   (visible-items :current-page)]
-                  ["Nodes"          :nodes         (visible-items :nodes)]]
+                 [[(group-label :filters)        :filters       (visible-items :filters)]
+                  [(group-label :current-page)   :current-page  (visible-items :current-page)]
+                  [(group-label :nodes)          :nodes         (visible-items :nodes)]]
 
                  include-slash?
                  [(when-not node-exists?
-                    ["Create"         :create         (create-items input)])
+                    [(group-label :create)       :create        (create-items input)])
 
-                  ["Current page"   :current-page   (visible-items :current-page)]
-                  ["Nodes"         :nodes         (visible-items :nodes)]
-                  ["Files"          :files          (visible-items :files)]
-                  ["Filters" :filters (visible-items :filters)]]
+                  [(group-label :current-page)   :current-page  (visible-items :current-page)]
+                  [(group-label :nodes)          :nodes         (visible-items :nodes)]
+                  [(group-label :files)          :files         (visible-items :files)]
+                  [(group-label :filters)        :filters       (visible-items :filters)]]
 
                  filter-group
                  [(when (= filter-group :nodes)
-                    ["Current page"   :current-page   (visible-items :current-page)])
-                  [(cond
-                     (= filter-group :current-page) "Current page"
-                     (= filter-group :code) "Code"
-                     :else (name filter-group))
+                    [(group-label :current-page) :current-page  (visible-items :current-page)])
+                  [(group-label filter-group)
                    filter-group
                    (visible-items filter-group)]
                   (when-not node-exists?
-                    ["Create"         :create         (create-items input)])]
+                    [(group-label :create)         :create         (create-items input)])]
 
                  :else
                  (->>
                   [(when-not node-exists?
-                     ["Create"         :create       (create-items input)])
-                   ["Current page"     :current-page   (visible-items :current-page)]
-                   ["Nodes"            :nodes         (visible-items :nodes)]
-                   ["Recently updated" :recently-updated-pages (visible-items :recently-updated-pages)]
-                   ["Commands"         :commands       (visible-items :commands)]
-                   ["Files"            :files          (visible-items :files)]
-                   ["Filters"          :filters        (visible-items :filters)]]
+                     [(group-label :create)         :create         (create-items input)])
+                   [(group-label :current-page)     :current-page   (visible-items :current-page)]
+                   [(group-label :nodes)            :nodes          (visible-items :nodes)]
+                   [(group-label :recently-updated-pages) :recently-updated-pages (visible-items :recently-updated-pages)]
+                   [(group-label :commands)         :commands       (visible-items :commands)]
+                   [(group-label :files)            :files          (visible-items :files)]
+                   [(group-label :filters)          :filters        (visible-items :filters)]]
                   (remove nil?)))
         order (remove nil? order*)]
     (for [[group-name group-key group-items] order]
@@ -347,14 +358,14 @@
           (swap! !results update group merge {:status :success :items items-on-current-page}))
         (swap! !results update group merge {:status :success :items items})))))
 
-(defmethod load-results :code [group state]
+(defmethod load-results :codes [group state]
   (let [!input (::input state)
         !results (::results state)
         repo (state/get-current-repo)
         current-page (when-let [id (page-util/get-current-page-id)]
                        (db/entity id))
         opts (cmdk-state/cmdk-block-search-options
-              {:filter-group :code
+              {:filter-group :codes
                :dev? config/dev?})]
     (swap! !results assoc-in [group :status] :loading)
     (p/let [blocks (search/block-search repo @!input opts)
@@ -926,7 +937,7 @@
                          (:block/properties page'))]
         (if link
           (js/window.open link)
-          (notification/show! "No link found in this page's properties." :warning)))
+          (notification/show! (t :cmdk/no-page-link) :warning)))
 
       (:source-block item)
       (p/let [block-id (:block/uuid (:source-block item))
@@ -935,9 +946,9 @@
               link (re-find editor-handler/url-regex (:block/title block))]
         (if link
           (js/window.open link)
-          (notification/show! "No link found in this block's content." :warning)))
+          (notification/show! (t :cmdk/no-block-link) :warning)))
       :else
-      (notification/show! "No link for this search item." :warning))))
+      (notification/show! (t :cmdk/no-search-item-link) :warning))))
 
 (defn- keydown-handler
   [state e]
@@ -1023,16 +1034,16 @@
         action (get-action)]
     (cond
       (= action :move-blocks)
-      "Move blocks to"
+      (t :cmdk/input-move-blocks)
 
       (= search-mode :graph)
-      "Add graph filter"
+      (t :cmdk/input-add-graph-filter)
 
       (= action :new-page)
-      "Type a page name to create"
+      (t :cmdk/input-type-page-name)
 
       :else
-      "What are you looking for?")))
+      (t :cmdk/input-default))))
 
 (rum/defc input-row
   [state all-items opts]
@@ -1090,16 +1101,18 @@
        :on-composition-end debounced-composition-end
        :default-value input}]]))
 
+(defn- tip-with-shortcut
+  [template shortcut & [shortcut-opts]]
+  (into [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100]
+        (i18n/interpolate-rich-text
+         template
+         [(shui/shortcut shortcut shortcut-opts)])))
+
 (defn rand-tip
   []
   (rand-nth
-   [[:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
-     [:div "Type"]
-     (shui/shortcut "/")
-     [:div "to filter search results"]]
-    [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
-     (shui/shortcut ["mod" "enter"] {:style :combo})
-     [:div "to open search in the sidebar"]]]))
+   [(tip-with-shortcut (t :cmdk/tip-filter-results) "/")
+    (tip-with-shortcut (t :cmdk/tip-open-sidebar) ["mod" "enter"] {:style :combo})]))
 
 (rum/defcs tip <
   {:init (fn [state]
@@ -1108,10 +1121,7 @@
   (let [filter' @(::filter state)]
     (cond
       filter'
-      [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
-       [:div "Type"]
-       (shui/shortcut "esc")
-       [:div "to clear search filter"]]
+      (tip-with-shortcut (t :cmdk/tip-clear-filter) "esc")
 
       :else
       (::rand-tip inner-state))))
@@ -1146,40 +1156,40 @@
     (when action
       [:div.hints
        [:div.text-sm.leading-6
-        [:div.flex.flex-row.gap-1.items-center
-         [:div.font-medium.text-gray-12 "Tip:"]
+        [:div.flex.flex-row.gap-1.items-center]
+        [:div.font-medium.text-gray-12 (t :cmdk/tip-label)
          (tip state)]]
 
        [:div.gap-2.hidden.md:flex {:style {:margin-right -6}}
         (case action
           :open
           [:<>
-           (button-fn "Open" ["return"])
-           (button-fn "Open in sidebar" ["shift" "return"] {:open-sidebar? true})
-           (when (:source-block @(::highlighted-item state)) (button-fn "Copy ref" ["cmd" "c"]))]
+           (button-fn (t :cmdk/action-open) ["return"])
+           (button-fn (t :cmdk/action-open-in-sidebar) ["shift" "return"] {:open-sidebar? true})
+           (when (:source-block @(::highlighted-item state)) (button-fn (t :cmdk/action-copy-ref) ["cmd" "c"]))]
 
           :search
           [:<>
-           (button-fn "Search" ["return"])]
+           (button-fn (t :cmdk/action-search) ["return"])]
 
           :trigger
           [:<>
-           (button-fn "Trigger" ["return"])]
+           (button-fn (t :cmdk/action-trigger) ["return"])]
 
           :create
           [:<>
-           (button-fn "Create" ["return"])]
+           (button-fn (t :cmdk/action-create) ["return"])]
 
           :filter
           [:<>
-           (button-fn "Filter" ["return"])]
+           (button-fn (t :cmdk/action-filter) ["return"])]
 
           nil)]])))
 
 (rum/defc search-only
   [state group-name]
   [:div.flex.flex-row.gap-1.items-center
-   [:div "Search only:"]
+   [:div (t :cmdk/search-only)]
    [:div group-name]
    (shui/button
     {:variant  :ghost
@@ -1270,7 +1280,7 @@
 
       (when group-filter
         [:div.flex.flex-col.px-3.py-1.opacity-70.text-sm
-         (search-only state (string/capitalize (name group-filter)))])
+         (search-only state (group-label group-filter))])
 
       (let [items (filter
                    (fn [[_group-name group-key group-count _group-items]]
@@ -1299,4 +1309,3 @@
 (rum/defc cmdk-block [props]
   [:div {:class "cp__cmdk__block rounded-md"}
    (cmdk props)])
-

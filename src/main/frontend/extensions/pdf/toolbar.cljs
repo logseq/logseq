@@ -128,7 +128,7 @@
                  (let [text (.-innerText (js/document.querySelector "#pdf-docinfo > .inner-text"))
                        text (string/replace text #"[\n\t]+" "\n")]
                    (util/copy-to-clipboard! text)
-                   (notification/show! "Copied!" :success)
+                   (notification/show! (t :notification/copied) :success)
                    (close-fn!))))]])
 
 (defn make-docinfo-in-modal
@@ -630,7 +630,7 @@
          {:on-click #(if in-system-window?
                        (pdf-windows/exit-pdf-in-system-window! false)
                        (state/set-current-pdf! nil))}
-         (t :close)]]]
+         (t :ui/close)]]]
 
       ;; contents outline
       (pdf-outline-&-highlights viewer outline-visible? set-outline-visible!)

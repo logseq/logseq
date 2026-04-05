@@ -7,6 +7,7 @@
             [frontend.components.icon :as icon-component]
             [frontend.components.select :as select]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
@@ -204,7 +205,7 @@
                                                            (:db/id (db/entity :block/page))
                                                            {:entity-id? entity-id?})))))
         (when (seq (:view/selected-blocks @state/state))
-          (notification/show! "Property updated!" :success))
+          (notification/show! (t :property/updated) :success))
         (when-not many?
           (cond
             exit-edit?

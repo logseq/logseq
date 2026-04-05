@@ -2,6 +2,7 @@
   "Share/open link"
   (:require [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.db.async :as db-async]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
@@ -50,7 +51,7 @@
               (if graph-url
                 (do (state/pub-event! [:graph/switch graph-url])
                     (reset! *link-to-another-graph true))
-                (notification/show! (str "Open graph failed. Graph `" graph-name "` doesn't exist.") :error false))))
+                (notification/show! (t :deeplink/open-graph-failed graph-name) :error false))))
 
           (when (or (= graph-name current-graph-name)
                     @*link-to-another-graph)
@@ -61,15 +62,13 @@
                  (p/let [block (db-async/<get-block (state/get-current-repo) page-name {:children? false})]
                    (if block
                      (route-handler/redirect-to-page! block-uuid)
-                     (notification/show! (str "Open link failed. Page `" page-name "` doesn't exist in the graph."
-                                              :result block) :error false)))
+                     (notification/show! (t :deeplink/open-page-failed page-name) :error false)))
 
                  block-uuid
                  (p/let [block (db-async/<get-block (state/get-current-repo) block-uuid {:children? false})]
                    (if block
                      (route-handler/redirect-to-page! block-uuid)
-                     (notification/show! (str "Open link failed. Block-id `" block-uuid "` doesn't exist in the graph."
-                                              :result block) :error false)))
+                     (notification/show! (t :deeplink/open-block-failed block-uuid) :error false)))
 
                  :else
                  nil)

@@ -103,7 +103,7 @@
         :on-click #(add-bgcolor-fn color)}
        [:div.heading-bg {:style {:background-color (str "var(--color-" color "-500)")}}]])
     [:a
-     {:title (t :remove-background)
+     {:title (t :ui/remove-background)
       :on-click rm-bgcolor-fn}
      [:div.heading-bg.remove "-"]]]])
 
@@ -556,7 +556,7 @@
        (shui/shortcut binding {:glow? true})])))
 
 (defn loading
-  ([] (loading (t :loading)))
+  ([] (loading (t :ui/loading)))
   ([content] (loading content nil))
   ([content opts]
    [:div.flex.flex-row.items-center.inline.icon-loading
@@ -943,7 +943,7 @@
                       ""
                       :disabled? (and (some? heading) (= heading i))
                       :icon (str "h-" i)
-                      :title (t :heading i)
+                      :title (t :editor/heading i)
                       :class "to-heading-button"
                       :on-click #(add-heading-fn i)
                       :intent "link"
@@ -954,7 +954,7 @@
       :icon "h-auto"
       :disabled? (and (some? heading) (true? heading))
       :class "to-heading-button"
-      :title (t :auto-heading)
+      :title (t :editor/auto-heading)
       :on-click auto-heading-fn
       :intent "link"
       :small? true)
@@ -963,7 +963,7 @@
       :icon "heading-off"
       :disabled? (and (some? heading) (not heading))
       :class "to-heading-button"
-      :title (t :remove-heading)
+      :title (t :editor/remove-heading)
       :on-click rm-heading-fn
       :intent "link"
       :small? true)]]))
@@ -1104,7 +1104,7 @@
                               (if-let [date (and result (doto (goog.date.DateTime.) (.setTime (.getTime result))))]
                                 (let [on-select' (or (:on-select opts) (:on-day-click opts))]
                                   (on-select' date))
-                                (notification/show! (str (pr-str value) " is not a valid date. Please try again") :warning)))))))})]))
+                                (notification/show! (t :notification/invalid-date (pr-str value)) :warning)))))))})]))
 
 (comment
   (rum/defc skeleton

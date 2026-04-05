@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.persist :as db-persist]
@@ -40,13 +41,12 @@
          (do
            (state/set-current-repo! nil)
            (when-let [graph (:url (first (state/get-repos)))]
-             (notification/show! (str "Removed graph "
-                                      (pr-str (text-util/get-graph-name-from-path url))
-                                      ". Redirecting to graph "
-                                      (pr-str (text-util/get-graph-name-from-path graph)))
+             (notification/show! (t :graph/removed-and-redirecting
+                                    (text-util/get-graph-name-from-path url)
+                                    (text-util/get-graph-name-from-path graph))
                                  :success)
              (state/pub-event! [:graph/switch graph {:persist? false}])))
-         (notification/show! (str "Removed graph " (pr-str (text-util/get-graph-name-from-path url))) :success))))))
+           (notification/show! (t :graph/removed (text-util/get-graph-name-from-path url)) :success))))))
 
 (defn start-repo-db-if-not-exists!
   [repo & {:as opts}]
@@ -158,7 +158,7 @@
      (prn "New db created: " full-graph-name)
      full-graph-name)
    (p/catch (fn [error]
-              (notification/show! "Create graph failed." :error)
+              (notification/show! (t :graph/create-failed) :error)
               (js/console.error error)))))
 
 (defn new-db!
