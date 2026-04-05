@@ -2,7 +2,7 @@
   (:require [clojure.string :as string]
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :as i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.db-based.sync :as rtc-handler]
@@ -50,7 +50,7 @@
   [dst]
   (when (number? dst)
     (try
-      (.toLocaleString (js/Date. dst))
+      (i18n/locale-format-date (js/Date. dst))
       (catch js/Error _e nil))))
 
 (rum/defc ^:large-vars/cleanup-todo repos-inner
@@ -176,10 +176,10 @@
                                       (state/<invoke-db-worker :thread-api/rtc-stop))
                                     (-> (rtc-handler/<rtc-leave-graph! GraphUUID)
                                         (p/then (fn []
-                                                  (notification/show! "Left graph." :success)
+                                                  (notification/show! (t :graph/left) :success)
                                                   (rtc-handler/<get-remote-graphs)))
                                         (p/catch (fn [e]
-                                                   (notification/show! "Failed to leave graph." :error)
+                                                   (notification/show! (t :graph/leave-failed) :error)
                                                    (log/error :db-sync/leave-graph-failed
                                                               {:error e
                                                                :graph-uuid GraphUUID})))
@@ -312,7 +312,7 @@
       {:size :sm :variant :ghost
        :on-click (fn [] (route-handler/redirect! {:to :import}))}
       (shui/tabler-icon "database-import")
-      [:span (t :import-notes)]))
+      [:span (t :import/notes)]))
 
    (when-not config/publishing?
      (shui/button {:size :sm :variant :ghost
@@ -320,7 +320,7 @@
                                (if (util/capacitor?)
                                  (state/pub-event! [:mobile/set-tab "graphs"])
                                  (route-handler/redirect-to-all-graphs)))}
-                  (shui/tabler-icon "layout-2") [:span (t :all-graphs)]))])
+                  (shui/tabler-icon "layout-2") [:span (t :graph/all-graphs)]))])
 
 (rum/defcs repos-dropdown-content < rum/reactive
   [_state & {:keys [contentid footer?] :as opts

@@ -59,7 +59,7 @@
   [page]
   (page-handler/<delete! (:block/uuid page)
                          (fn []
-                           (notification/show! (str "Page " (:block/title page) " was deleted successfully!")
+                           (notification/show! (t :page/deleted-successfully (:block/title page))
                                                :success))
                          {:error-handler (fn [{:keys [msg]}]
                                            (notification/show! msg :warning))}))
@@ -112,7 +112,7 @@
              :options {:on-click #(delete-page-confirm! page)}})
 
           (when page
-            {:title   (t :export-page)
+            {:title   (t :export/page)
              :options {:on-click #(shui/dialog-open!
                                    (fn []
                                      (export/export-blocks [(:block/uuid page)] {:export-type :page}))
@@ -148,7 +148,7 @@
                                    (db-page-handler/convert-tag-to-page! page))}})
 
           (when developer-mode?
-            {:title   (t :dev/show-page-data)
+            {:title   (t :command.dev/show-page-data)
              :options {:on-click (fn []
                                    (dev-common-handler/show-entity-data (:db/id page)))}})]
          (flatten)

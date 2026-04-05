@@ -245,7 +245,7 @@
                     (state/pub-event! [:editor/new-property {:property-key "Icon"
                                                              :block page
                                                              :target (.-target e)}]))}
-       "Add icon"))
+       (t :command.editor/add-property-icon)))
 
     (shui/button
      {:variant :ghost
@@ -398,7 +398,7 @@
         :size :sm
         :class "px-1 text-muted-foreground"
         :on-click #(set-collapsed! (not collapsed?))}
-       [:span.text-xs (str (if collapsed? "Open" "Hide")) " properties"])]
+       [:span.text-xs (t (if collapsed? :page/open-properties :page/hide-properties))])]
 
      (when-not collapsed?
        [:<>
@@ -681,7 +681,7 @@
                 ;;      (set-setting! :layout value))
                 ;;    {:class "graph-layout"})]
               [:div.flex.items-center.justify-between.mb-2
-               [:span (t :settings-page/enable-journals)]
+               [:span (t :settings/enable-journals)]
                  ;; FIXME: why it's not aligned well?
                [:div.mt-1
                 (ui/toggle journal?
@@ -1002,16 +1002,16 @@
          [:a {:href (rfe/href :page {:name (:block/uuid page-item)})}
           (component-block/page-cp {} page-item)]])]
 
-     [:p.px-2.opacity-50 [:small (str "Total: " (count pages))]]
+     [:p.px-2.opacity-50 [:small (t :page/delete-total (count pages))]]
 
      [:div.pt-6.flex.justify-end.gap-4
       (ui/button
-       (t :cancel)
+       (t :ui/cancel)
        :variant :outline
        :on-click close)
 
       (ui/button
-       (t :yes)
+       (t :ui/yes)
        :on-click (fn []
                    (close)
                    (let [failed-pages (atom [])]
@@ -1022,7 +1022,7 @@
                                                                        (swap! failed-pages conj (:block/name page)))}))
                                            pages))]
                        (if (seq @failed-pages)
-                         (notification/show! (t :all-pages/failed-to-delete-pages (string/join ", " (map pr-str @failed-pages)))
+                         (notification/show! (t :page/failed-to-delete-pages (string/join ", " (map pr-str @failed-pages)))
                                              :warning false)
-                         (notification/show! (t :tips/all-done) :success))))
+                         (notification/show! (t :ui/all-done) :success))))
                    (js/setTimeout #(refresh-fn) 200)))]]))

@@ -7,6 +7,7 @@
             [frontend.db :as db]
             [frontend.flows :as flows]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
+            [frontend.context.i18n :as i18n]
             [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -131,7 +132,7 @@
      (when-let [latest-log (some (fn [l] (when (contains? #{:rtc.log/push-local-update} (:type l)) l)) misc-logs)]
        (when-let [time (:created-at latest-log)]
          [:div.text-sm "Last synced time: "
-          (.toLocaleString time)]))
+          (i18n/locale-format-date time)]))
      [:a.fade-link.text-sm {:on-click #(set-expand-debug! (not expand-debug?))}
       "More debug info"]
      (when expand-debug?

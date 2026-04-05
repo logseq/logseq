@@ -222,7 +222,7 @@
 
      (and id [:li.item {:data-action "link"} (t :pdf/linked-ref)])
 
-     (and id [:li.item {:data-action "del"} (t :delete)])
+     (and id [:li.item {:data-action "del"} (t :ui/delete)])
 
      (when (and config/lsp-enabled? (not area?))
        (for [[_ {:keys [key label extras] :as _cmd} action pid]

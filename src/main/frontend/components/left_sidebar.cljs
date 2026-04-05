@@ -92,7 +92,7 @@
         (cond
           (not (db/page? page))
           (block/inline-text :markdown (string/replace (apply str (take 64 (:block/title page))) "\n" " "))
-          untitled? (t :untitled)
+          untitled? (t :ui/untitled)
           :else (block-handler/block-unique-title page))]
 
      ;; dots trigger

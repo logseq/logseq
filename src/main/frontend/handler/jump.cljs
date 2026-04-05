@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [dommy.core :as d]
             [frontend.db :as db]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
@@ -84,7 +85,7 @@
                 block (when block-id (db/entity [:block/uuid block-id]))]
             (when block (editor-handler/edit-block! block :max {:container-id container-id})))
           (.click trigger))
-        (notification/show! "Invalid jump" :error true)))))
+        (notification/show! (t :notification/invalid-jump) :error true)))))
 
 (defn jump-to
   []

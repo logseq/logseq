@@ -3,6 +3,7 @@
   (:require [cljs.pprint :as pprint]
             [datascript.impl.entity :as de]
             [frontend.db :as db]
+            [frontend.context.i18n :refer [t]]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.db-based.sync :as rtc-handler]
             [frontend.handler.notification :as notification]
@@ -42,7 +43,7 @@
       [:pre.code (str "ID: " (:db/id result) "\n"
                       pull-data)]
       [:br]
-      (ui/button "Copy to clipboard"
+      (ui/button (t :notification/copy-to-clipboard)
                  :on-click #(.writeText js/navigator.clipboard pull-data))]
      :success
      false)))
@@ -56,7 +57,7 @@
     (notification/show!
      [:div.ls-wrap-widen
       ;; Show clipboard at top since content is really long for pages
-      (ui/button "Copy to clipboard"
+      (ui/button (t :notification/copy-to-clipboard)
                  :on-click #(.writeText js/navigator.clipboard ast-data))
       [:br]
       [:pre.code ast-data]]
@@ -68,17 +69,17 @@
   ;; Use editor state to locate most recent block
   (if-let [block-uuid (:block-id (first (state/get-editor-args)))]
     (show-entity-data [:block/uuid block-uuid])
-    (notification/show! "No block found" :warning)))
+    (notification/show! (t :notification/no-block-found) :warning)))
 
 (defn ^:export show-block-ast []
   (if-let [{:block/keys [title format]} (:block (first (state/get-editor-args)))]
     (show-content-ast title (or format :markdown))
-    (notification/show! "No block found" :warning)))
+    (notification/show! (t :notification/no-block-found) :warning)))
 
 (defn ^:export show-page-data []
   (if-let [page-id (page-util/get-current-page-id)]
     (show-entity-data page-id)
-    (notification/show! "No page found" :warning)))
+    (notification/show! (t :notification/no-page-found) :warning)))
 
 (defn ^:export validate-db []
   (state/<invoke-db-worker :thread-api/validate-db (state/get-current-repo)))
@@ -86,7 +87,7 @@
 (defn import-chosen-graph
   [repo]
   (p/let [_ (persist-db/<unsafe-delete repo)]
-    (notification/show! "Graph updated! Switching to graph ..." :success)
+    (notification/show! (t :graph/updated-switching) :success)
     (state/pub-event! [:graph/switch repo])))
 
 (defn ^:export replace-graph-with-db-file []

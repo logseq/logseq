@@ -61,7 +61,8 @@
     (throw (ex-info "Property is protected and can't be deleted"
                     {:type :notification
                      :payload {:type :error
-                               :message "Property is protected and can't be deleted"
+                               :message "Property is protected and can't be deleted."
+                               :i18n-key :outliner/property-protected
                                :entity-idents entity-idents
                                :property property-ident}}))))
 
@@ -72,7 +73,9 @@
                                     ldb/private-tags))]
     (throw (ex-info "Can't remove private tags"
                     {:type :notification
-                     :payload {:message (str "Can't remove private tags: " (string/join ", " private-tags))
+                     :payload {:message (str "Can't remove private tags: " (string/join ", " private-tags) ".")
+                               :i18n-key :outliner/cant-remove-private-tags
+                               :i18n-args [(string/join ", " private-tags)]
                                :type :error}
                      :property-id :block/tags}))))
 
@@ -81,7 +84,8 @@
   (when (contains? db-malli-schema/required-properties property-ident)
     (throw (ex-info "Can't remove required property"
                     {:type :notification
-                     :payload {:message "Can't remove required property"
+                     :payload {:message "Can't remove required property."
+                               :i18n-key :outliner/cant-remove-required-property
                                :type :error}
                      :property-id property-ident}))))
 
@@ -144,7 +148,9 @@
     (or result
         (throw (ex-info (str "Can't convert \"" v-str "\" to a number")
                         {:type :notification
-                         :payload {:message (str "Can't convert \"" v-str "\" to a number")
+                         :payload {:message (str "Can't convert \"" v-str "\" to a number.")
+                                   :i18n-key :outliner/cant-convert-to-number
+                                   :i18n-args [v-str]
                                    :type :error}})))))
 
 (defn ^:api convert-property-input-string
@@ -218,6 +224,7 @@
       (throw (ex-info "Disallowed many to one conversion"
                       {:type :notification
                        :payload {:message "This property can't change from multiple values to one value because it has existing data."
+                                 :i18n-key :outliner/property-many-to-one
                                  :type :warning}})))
     (when (seq tx-data)
       (ldb/transact! conn tx-data {:outliner-op :update-property
@@ -249,11 +256,13 @@
     (when-not (m/validate schema value)
       (let [errors (-> (m/explain schema value)
                        (me/humanize))
-            error-msg (str "\"" (:block/title property) "\"" " " (if (coll? errors) (first errors) errors))]
+            error-msg (str "Property validation failed: \"" (:block/title property) "\" " (if (coll? errors) (first errors) errors))]
         (throw
          (ex-info "Schema validation failed"
                   {:type :notification
                    :payload {:message error-msg
+                             :i18n-key :outliner/property-validation-failed
+                             :i18n-args [(:block/title property) (if (coll? errors) (first errors) errors)]
                              :type :warning}
                    :property (:db/ident property)
                    :value value
@@ -399,7 +408,8 @@
   (when (and ref? (= value (:db/id block)))
     (throw (ex-info "Can't set this block itself as own property value"
                     {:type :notification
-                     :payload {:message "Can't set this block itself as own property value"
+                     :payload {:message "Can't set this block itself as own property value."
+                               :i18n-key :outliner/cant-set-self-value
                                :type :error}}))))
 
 (defn batch-remove-property!
@@ -599,6 +609,7 @@
                             (throw (ex-info (str e)
                                             {:type :notification
                                              :payload {:message "Property failed to create. Please try a different property name."
+                                                       :i18n-key :outliner/property-create-failed
                                                        :type :error}})))))]
     (assert (qualified-keyword? db-ident))
     (when (and (contains? #{:checkbox} (:logseq.property/type  schema))
@@ -787,7 +798,8 @@
           (throw (ex-info "Closed value choice already exists"
                           {:error :value-exists
                            :type :notification
-                           :payload {:message "Choice already exists"
+                           :payload {:message "Choice already exists."
+                                     :i18n-key :outliner/choice-already-exists
                                      :type :warning}}))
 
           validate-message
@@ -795,7 +807,9 @@
           (throw (ex-info "Invalid property value"
                           {:error :value-invalid
                            :type :notification
-                           :payload {:message validate-message
+                           :payload {:message (str "Invalid choice \"" value' "\" for this property: " validate-message ".")
+                                     :i18n-key :outliner/property-closed-value-invalid
+                                     :i18n-args [value' validate-message]
                                      :type :warning}}))
 
           (nil? resolved-value)
@@ -846,6 +860,7 @@
       (throw (ex-info "The choice can't be deleted"
                       {:type :notification
                        :payload {:message "The choice can't be deleted because it's built-in."
+                                 :i18n-key :outliner/choice-cant-delete-built-in
                                  :type :warning}}))
       (let [tx-data (conj (:tx-data (outliner-core/delete-blocks @conn [value-block] {:hard-retract? true}))
                           (outliner-core/block-with-updated-at {:db/id property-id}))]

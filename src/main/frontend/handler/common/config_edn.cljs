@@ -2,8 +2,8 @@
   "Common fns related to config.edn - global and repo"
   (:require [clojure.edn :as edn]
             [clojure.string :as string]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.notification :as notification]
-            [goog.string :as gstring]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [malli.core :as m]
@@ -68,8 +68,7 @@ nested keys or positional errors e.g. tuples"
       true
       (and failed? (string/includes? (second parsed-body) "duplicate key"))
       (do
-        (notification/show! (gstring/format "The file '%s' has duplicate keys. The key '%s' is assigned multiple times."
-                                            path, (subs (second parsed-body) 36))
+        (notification/show! (t :file/config-duplicate-keys path (subs (second parsed-body) 36))
                             :error)
         false)
 

@@ -251,13 +251,13 @@
                         {:value (text-util/get-graph-name-from-path url)
                          :id (config/get-repo-dir url)
                          :graph url}))))
-    :prompt-key :select.graph/prompt
+    :prompt-key :select/graph-prompt
     :on-chosen #(state/pub-event! [:graph/switch (:graph %)])
     :empty-placeholder (fn [t]
                          [:div.px-4.py-2
-                          [:div.mb-2 (t :select.graph/empty-placeholder-description)]
+                          [:div.mb-2 (t :select/empty-placeholder-description)]
                           (ui/button
-                           (t :select.graph/add-graph)
+                           (t :select/add-graph)
                            :href (rfe/href :graphs)
                            :on-click state/close-modal!)])}
    :graph-remove

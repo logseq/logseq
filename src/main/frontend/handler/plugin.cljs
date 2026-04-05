@@ -567,12 +567,12 @@
             (and (string/blank? (string/trim content)) (throw (js/Error. "blank readme content")))
             (state/set-state! :plugin/active-readme [content item])
             (shui/dialog-open! (fn [_] (display))
-                               {:label "plugin-readme"
+                               {:label :plugin-readme
                                 :content-props {:class "max-h-[86vh] overflow-auto"}}))
           (p/catch #(do (js/console.warn %)
-                        (notification/show! "No README content." :warning))))
+                        (notification/show! (t :plugin/no-readme-content) :warning))))
       ;; market
-      (shui/dialog-open! (fn [_] (display item nil)) {:label "plugin-readme"}))))
+      (shui/dialog-open! (fn [_] (display item nil)) {:label :plugin-readme}))))
 
 (defn load-unpacked-plugin
   []

@@ -260,7 +260,7 @@
     [:<>
      [:div.cp__sidebar-help-btn
       [:div.inner
-       {:title (t :help-shortcut-title)
+       {:title (t :help/shortcut-title)
         :on-click #(state/toggle! :ui/help-open?)}
        [:svg.scale-125 {:stroke "currentColor", :fill "none", :stroke-linejoin "round", :width "24", :view-box "0 0 24 24", :xmlns "http://www.w3.org/2000/svg", :stroke-linecap "round", :stroke-width "2", :class "icon icon-tabler icon-tabler-help-small", :height "24"}
         [:path {:stroke "none", :d "M0 0h24v24H0z", :fill "none"}]
@@ -435,7 +435,7 @@
         :on-key-up (fn [e]
                      (when (= "Enter" (.-key e))
                        (ui/focus-element (ui/main-node))))}
-       (t :accessibility/skip-to-main-content)]
+       (t :nav/skip-to-main-content)]
       [:div.#app-container
        {:on-mouse-up on-mouse-up}
        [:div#left-container

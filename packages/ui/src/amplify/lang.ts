@@ -9,7 +9,7 @@ export default {
       '3. must have uppercase characters.\n' +
       '4. must have symbol characters.',
   },
-  'zh-cn': {
+  'zh-CN': {
     'login': '登录',
     'signup': '注册',
     'reset-password': '重置密码',
@@ -43,7 +43,7 @@ export default {
     'Back to login': '返回登录',
     'Enter your email': '请输入您的电子邮箱'
   },
-  'zh-hant': {
+  'zh-Hant': {
     'login': '登入',
     'signup': '註冊',
     'reset-password': '重置密碼',

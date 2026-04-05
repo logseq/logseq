@@ -2,6 +2,7 @@
   (:require ["/frontend/utils" :as utils]
             [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.zip :as zip]
             [frontend.handler.assets :as assets-handler]
@@ -77,7 +78,7 @@
           (.click anchor)))
       (p/catch (fn [error]
                  (js/console.error error)
-                 (notification/show! "Export zip failed." :error)))
+                 (notification/show! (t :export/zip-failed) :error)))
       (p/finally (fn []
                    (state/pub-event! [:dialog/close-export-zip])))))
 
@@ -209,7 +210,7 @@
                       (js/console.error error))))
           (p/do!
             ;; handle cleared
-           (notification/show! "DB backup failed, please go to Export and specify a backup folder." :error)
+           (notification/show! (t :export/db-backup-failed) :error)
            false))))))
 
 (defn backup-db-graph

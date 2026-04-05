@@ -945,7 +945,9 @@
             :notification
             (do
               (log/error ::apply-outliner-ops-failed e)
-              (shared-service/broadcast-to-clients! :notification [(:message payload) (:type payload) (:clear? payload) (:uid payload) (:timeout payload)]))
+              (shared-service/broadcast-to-clients! :notification
+                                                    [(:message payload) (:type payload) (:clear? payload) (:uid payload) (:timeout payload)
+                                                     {:i18n-key (:i18n-key payload) :i18n-args (:i18n-args payload)}]))
             (throw e)))))))
 
 (def-thread-api :thread-api/sync-app-state
@@ -1183,7 +1185,8 @@
   (when-not (and (or (:undo? tx-meta) (:redo? tx-meta))
                  (not worker-util/dev?))
     (shared-service/broadcast-to-clients! :notification
-                                          [["Invalid data writing to db!"] :error])
+                                          [["Invalid data writing to db!"] :error nil nil nil
+                                           {:i18n-key :outliner/invalid-data-writing}])
     (worker-util/post-message :capture-error
                               {:error (ex-info "Invalid data writing to db" tx-meta)
                                :payload {}

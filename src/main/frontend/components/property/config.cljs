@@ -6,6 +6,7 @@
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
@@ -96,12 +97,12 @@
                                    :value (:block/uuid class)})
                                 classes)
                    options (if no-class?
-                             (cons {:label "Skip choosing tag"
+                             (cons {:label (t :property/skip-choosing-tag)
                                     :value :no-tag}
                                    options)
                              options)
                    opts {:items options
-                         :input-default-placeholder (if multiple-choices? "Choose tags" "Choose tag")
+                         :input-default-placeholder (if multiple-choices? (t :property/choose-tags) (t :property/choose-tag))
                          :dropdown? false
                          :close-modal? false
                          :multiple-choices? multiple-choices?
@@ -175,13 +176,13 @@
       (shui/input {:ref *input-ref
                    :size "sm"
                    :default-value title
-                   :placeholder "name"
+                   :placeholder (t :property/name-placeholder)
                    :disabled disabled?
                    :on-key-down (fn [e]
                                   (when (contains? #{"ArrowLeft" "ArrowRight"} (util/ekey e))
                                     (util/stop-propagation e)))
                    :on-change (fn [^js e] (set-form-data! (assoc form-data :title (util/trim-safe (util/evalue e)))))})]
-     [:div.pt-2 (shui/textarea {:placeholder "description" :default-value description
+     [:div.pt-2 (shui/textarea {:placeholder (t :property/description-placeholder) :default-value description
                                 :disabled disabled? :on-change (fn [^js e] (set-form-data! (assoc form-data :description (util/trim-safe (util/evalue e)))))})]
 
      (let [dirty? (not= (rum/deref *form-data) form-data)]
@@ -201,7 +202,7 @@
                                       (p/then #(set-sub-open! false))
                                       (p/catch #(shui/toast! (str %) :error))
                                       (p/finally #(set-saving! false))))}
-                     "Save")])]))
+                     (t :ui/save))])]))
 
 (rum/defc choice-base-edit-form
   [own-property block owner-block]
@@ -232,9 +233,9 @@
       (shui/input {:ref *input-ref :size "sm"
                    :default-value (:value form-data)
                    :on-change (fn [^js e] (set-form-data! (assoc form-data :value (util/trim-safe (util/evalue e)))))
-                   :placeholder "title"})]
+                   :placeholder (t :property/title-placeholder)})]
      [:div.pt-2 (shui/textarea
-                 {:placeholder "description" :default-value (:description form-data)
+                 {:placeholder (t :property/description-placeholder) :default-value (:description form-data)
                   :on-change (fn [^js e] (set-form-data! (assoc form-data :description (util/trim-safe (util/evalue e)))))})]
      [:div.pt-2.flex.justify-end
       (let [dirty? (not= (rum/deref *form-data) form-data)]
@@ -250,7 +251,7 @@
                                       (p/then #(shui/popup-hide!))
                                       (p/catch #(shui/toast! (str %) :error))))
                       :variant (if dirty? :default :secondary)}
-                     "Save"))]]))
+                     (t :ui/save)))]]))
 
 (defn restore-root-highlight-item!
   [id]
@@ -328,18 +329,18 @@
         excluded-ids (set (keep :db/id (:logseq.property/choice-exclusions owner-block')))
         global-choice? (empty? (:logseq.property/choice-classes block))]
     [:li
-     (shui/button {:size :sm :variant :ghost :title "Drag && Drop to reorder"}
+     (shui/button {:size :sm :variant :ghost :title (t :property/drag-to-reorder)}
                   (shui/tabler-icon "grip-vertical" {:size 14}))
      (icon-component/icon-picker icon {:on-chosen (fn [_e icon] (update-icon! icon))
                                        :popup-opts {:align "start"}
                                        :del-btn? (boolean icon)
                                        :empty-label "?"
-                                       :button-opts {:title "Set Icon"}})
+                                       :button-opts {:title (t :property/set-icon)}})
      [:strong {:on-click (fn [^js e]
                            (shui/popup-show! (.-target e)
-                             (fn [] (choice-base-edit-form property block owner-block))
-                             {:id :ls-base-edit-form
-                              :align "start"}))
+                                             (fn [] (choice-base-edit-form property block owner-block))
+                                             {:id :ls-base-edit-form
+                                              :align "start"}))
                :title value}
       value]
      (shui/dropdown-menu
@@ -348,7 +349,7 @@
         :disabled disabled?}
        (shui/button
         {:size :sm :variant :ghost
-         :title "More settings"}
+         :title (t :property/more-settings)}
         (shui/tabler-icon "dots" {:size 16})))
       (shui/dropdown-menu-content
        ;; default choice
@@ -365,10 +366,10 @@
                                                                    value))}
             (shui/checkbox {:id "default value"
                             :size :sm
-                            :title "Set as default choice"
+                            :title (t :property/set-default-choice)
                             :class "mr-1 opacity-50 hover:opacity-100"
                             :checked default-value?})
-            "Set as default choice")))
+            (t :property/set-default-choice))))
 
        (when (and owner-class? owner-block' global-choice?)
          (let [excluded? (contains? excluded-ids (:db/id block))
@@ -382,24 +383,24 @@
              :on-click toggle-exclusion!}
             (shui/checkbox {:id "exclude for tag"
                             :size :sm
-                            :title "Hide choice for this tag"
+                            :title (t :property/hide-choice-for-tag)
                             :class "mr-1 opacity-50 hover:opacity-100"
                             :checked excluded?})
-            (str "Hide for #" tag-title))))
+            (t :property/hide-for-tag tag-title))))
 
        (when-not (and owner-class? global-choice?)
          (shui/dropdown-menu-item
           {:key "delete"
            :class "del"
            :on-click delete-choice!}
-           [:span.w-full.text-red-rx-09.opacity-90.flex.items-center.hover:opacity-100
-            (ui/icon "x" {:class "scale-90 pr-1"}) "Delete"]))))]))
+          [:span.w-full.text-red-rx-09.opacity-90.flex.items-center.hover:opacity-100
+           (ui/icon "x" {:class "scale-90 pr-1"}) (t :ui/delete)]))))]))
 
 (rum/defc add-existing-values
   [property values {:keys [toggle-fn]}]
   [:div.flex.flex-col.gap-1.w-64.p-4.overflow-y-auto
    {:class "max-h-[50dvh]"}
-   [:div "Existing values:"]
+   [:div (t :property/existing-values)]
    [:ol
     (for [value values]
       [:li (:label value)])]
@@ -409,7 +410,7 @@
                                                                                       (map (fn [{:keys [value]}]
                                                                                              (:block/uuid value)) values))]
                    (toggle-fn)))}
-    "Add choices")])
+    (t :property/add-choices))])
 
 (rum/defcs choices-sub-pane < rum/reactive db-mixins/query
   (rum/local false ::show-hidden?)
@@ -452,7 +453,7 @@
             :class "text-muted-foreground"
             :on-click (fn []
                         (swap! *show-hidden? not))}
-           (if @*show-hidden? "Hide hidden choices" "Show hidden choices")))
+           (if @*show-hidden? (t :property/hide-hidden-choices) (t :property/show-hidden-choices))))
         [:ul.choices-list
          (dnd/items choice-items
                     {:sort-by-inner-element? false
@@ -478,7 +479,7 @@
      ;; add choice
      (when-not disabled?
        (dropdown-editor-menuitem
-        {:icon :plus :title "Add choice"
+        {:icon :plus :title (t :property/add-choice)
          :item-props {:on-click
                       (fn [^js e]
                         (p/let [values (db-async/<get-property-values (:db/ident property) {})
@@ -514,7 +515,7 @@
                      opts
                      (shui/select-trigger
                       {:class "h-8"}
-                      (shui/select-value {:placeholder "Select a choice"}))
+                      (shui/select-value {:placeholder (t :property/select-choice)}))
                      (shui/select-content
                       (map (fn [choice]
                              (shui/select-item {:key (str (:db/id choice))
@@ -523,7 +524,7 @@
         unchecked-choice (some (fn [choice] (when (false? (:logseq.property/choice-checkbox-state choice)) choice)) choices)]
     [:div.flex.flex-col.gap-4.text-sm.p-2
      [:div.flex.flex-col.gap-2
-      [:div "Map unchecked to"]
+      [:div (t :property/map-unchecked-to)]
       (select-cp
        (cond->
         {:on-value-change
@@ -535,7 +536,7 @@
          unchecked-choice
          (assoc :default-value (:db/id unchecked-choice))))
 
-      [:div.mt-2 "Map checked to"]
+      [:div.mt-2 (t :property/map-checked-to)]
       (select-cp
        (cond->
         {:on-value-change
@@ -547,11 +548,12 @@
          checked-choice
          (assoc :default-value (:db/id checked-choice))))]]))
 
-(def position-labels
-  {:properties {:icon :layout-distribute-horizontal :title "Block properties"}
-   :block-left {:icon :layout-align-right :title "Beginning of the block"}
-   :block-right {:icon :layout-align-left :title "End of the block"}
-   :block-below {:icon :layout-align-top :title "Below the block"}})
+(defn position-labels
+  []
+  {:properties {:icon :layout-distribute-horizontal :title (t :property/ui-position-properties)}
+   :block-left {:icon :layout-align-right :title (t :property/ui-position-block-left)}
+   :block-right {:icon :layout-align-left :title (t :property/ui-position-block-right)}
+   :block-below {:icon :layout-align-top :title (t :property/ui-position-block-below)}})
 
 (rum/defc ui-position-sub-pane
   [property {:keys [id set-sub-open! _ui-position]}]
@@ -565,7 +567,7 @@
                            (restore-root-highlight-item! id)))
         item-props {:on-select handle-select!}]
     [:div.ls-property-dropdown.ls-property-ui-position-sub-pane
-     (for [[k v] position-labels]
+     (for [[k v] (position-labels)]
        (let [item-props (assoc item-props :data-value k)]
          (dropdown-editor-menuitem
           (assoc v :item-props item-props))))]))
@@ -573,10 +575,13 @@
 (defn property-type-label
   [property-type]
   (case property-type
-    :default
-    "Text"
-    :datetime
-    "DateTime"
+    :default (t :property/type-text)
+    :number (t :property/type-number)
+    :date (t :property/type-date)
+    :datetime (t :property/type-datetime)
+    :checkbox (t :property/type-checkbox)
+    :url (t :property/type-url)
+    :node (t :property/type-node)
     ((comp string/capitalize name) property-type)))
 
 (defn- handle-delete-property!
@@ -587,12 +592,12 @@
                    (property-handler/remove-block-property! (:block/uuid block) (:db/ident property)))]
     (if (and class? class-schema?)
       (-> (shui/dialog-confirm!
-           [:p "Are you sure you want to delete the property from this tag?"]
+           [:p (t :property/delete-from-tag-confirm)]
            {:id :delete-property-from-class
             :data-reminder :ok})
           (p/then remove!))
       (-> (shui/dialog-confirm!
-           "Are you sure you want to delete the property from this node?"
+           (t :property/delete-from-node-confirm)
            {:id :delete-property-from-node
             :data-reminder :ok})
           (p/then remove!)))))
@@ -627,14 +632,14 @@
         option (if (= :checkbox property-type)
                  (let [default-value (:logseq.property/scalar-default-value property)]
                    {:icon :settings-2
-                    :title "Default value"
+                    :title (t :property/default-value)
                     :toggle-checked? (boolean default-value)
                     :checkbox? true
                     :on-toggle-checked-change (fn []
                                                 (db-property-handler/set-block-property! (:block/uuid property) :logseq.property/scalar-default-value (not default-value)))})
                  (let [default-value (:logseq.property/default-value property)]
-                   {:icon :settings-2 :title "Default value"
-                    :desc (if default-value (db-property/property-value-content default-value) "Set value")
+                   {:icon :settings-2 :title (t :property/default-value)
+                    :desc (if default-value (db-property/property-value-content default-value) (t :property/set-value))
                     :submenu-content (fn [] (pdv/default-value-config property))}))]
     (dropdown-editor-menuitem (assoc option :disabled? config/publishing?))))
 
@@ -657,18 +662,18 @@
     (->>
      [(when with-title?
         [:h3.font-medium.px-2.py-2.opacity-80.flex.items-center.gap-1
-         "Configure property"])
+         (t :property/configure)])
       (when-not special-built-in-prop?
-        (dropdown-editor-menuitem {:icon :pencil :title "Property name" :desc [:span.flex.items-center.gap-1 icon title]
+        (dropdown-editor-menuitem {:icon :pencil :title (t :property/name) :desc [:span.flex.items-center.gap-1 icon title]
                                    :submenu-content (fn [ops] (name-edit-pane property (assoc ops :disabled? disabled?)))}))
       (let [disabled?' (or disabled? (and property-type (seq values)))]
         (dropdown-editor-menuitem {:icon :letter-t
-                                   :title "Property type"
+                                   :title (t :property/type)
                                    :desc (if disabled?'
                                            (ui/tooltip
                                             [:span (str property-type-label')]
                                             [:div.w-96
-                                             "The type of this property is locked once you start using it. This is to make sure all your existing information stays correct if the property type is changed later. To unlock, all uses of a property must be deleted."])
+                                             (t :property/type-locked-help)])
                                            (str property-type-label'))
                                    :disabled? disabled?'
                                    :submenu-content (fn [ops]
@@ -678,7 +683,7 @@
                  (not (contains? #{:logseq.property.class/extends} (:db/ident property))))
         (dropdown-editor-menuitem {:icon :hash
                                    :disabled? disabled?
-                                   :title "Specify node tags"
+                                   :title (t :property/specify-node-tags)
                                    :desc ""
                                    :submenu-content (fn [_ops]
                                                       [:div.px-4
@@ -693,8 +698,8 @@
 
       (when enable-closed-values?
         (let [values (:property/closed-values property)]
-          (dropdown-editor-menuitem {:icon :list :title "Available choices"
-                                     :desc (when (seq values) (str (count values) " choices"))
+          (dropdown-editor-menuitem {:icon :list :title (t :property/available-choices)
+                                     :desc (when (seq values) (t :property/choices-count (count values)))
                                      :submenu-content (fn []
                                                         (choices-sub-pane property
                                                                           {:disabled? config/publishing?
@@ -706,14 +711,14 @@
           (when (>= (count values) 2)
             (dropdown-editor-menuitem
              {:icon :checkbox
-              :title "Checkbox state mapping"
+              :title (t :property/checkbox-state-mapping)
               :disabled? config/publishing?
               :submenu-content (fn []
                                  (checkbox-state-mapping values))}))))
 
       (when (and (contains? db-property-type/cardinality-property-types property-type) (not disabled?))
         (let [many? (db-property/many? property)]
-          (dropdown-editor-menuitem {:icon :checks :title "Multiple values"
+          (dropdown-editor-menuitem {:icon :checks :title (t :property/multiple-values)
                                      :toggle-checked? many?
                                      :on-toggle-checked-change
                                      (fn []
@@ -723,7 +728,7 @@
                                       ;; Only show dialog for existing values as it can be reversed for unused properties
                                          (if (and (seq values) (not many?))
                                            (-> (shui/dialog-confirm!
-                                                "This action cannot be undone. Do you want to change this property to have multiple values?")
+                                                (t :property/multiple-values-confirm))
                                                (p/then update-cardinality-fn))
                                            (update-cardinality-fn))))})))
 
@@ -737,20 +742,20 @@
                                             (empty? (:property/closed-values property))
                                             (contains? #{nil :properties} (:logseq.property/ui-position property)))))
                              (let [position (:logseq.property/ui-position property)]
-                               (dropdown-editor-menuitem {:icon :float-left :title "UI position" :desc (some->> position (get position-labels) (:title))
+                               (dropdown-editor-menuitem {:icon :float-left :title (t :property/ui-position) :desc (some-> (position-labels) (get position) :title)
                                                           :item-props {:class "ui__position-trigger-item"}
                                                           :disabled? config/publishing?
                                                           :submenu-content (fn [ops] (ui-position-sub-pane property (assoc ops :ui-position position)))})))
 
                            (when (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))
-                             (dropdown-editor-menuitem {:icon :eye-off :title "Hide by default" :toggle-checked? (boolean (:logseq.property/hide? property))
+                             (dropdown-editor-menuitem {:icon :eye-off :title (t :property/hide-by-default) :toggle-checked? (boolean (:logseq.property/hide? property))
                                                         :disabled? config/publishing?
                                                         :on-toggle-checked-change #(db-property-handler/set-block-property! (:db/id property)
                                                                                                                             :logseq.property/hide?
                                                                                                                             %)}))
                            (when (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))
                              (dropdown-editor-menuitem
-                              {:icon :eye-off :title "Hide empty value"
+                              {:icon :eye-off :title (t :property/hide-empty-value)
                                :toggle-checked? (boolean (:logseq.property/hide-empty-value property))
                                :disabled? config/publishing?
                                :on-toggle-checked-change (fn []
@@ -765,7 +770,7 @@
         [:<>
          (shui/dropdown-menu-separator)
          (dropdown-editor-menuitem
-          {:icon :share-3 :title "Go to this property" :desc ""
+          {:icon :share-3 :title (t :property/go-to-this-property) :desc ""
            :item-props {:class "opacity-90 focus:opacity-100"
                         :on-select (fn []
                                      (shui/popup-hide-all!)
@@ -777,19 +782,19 @@
                             (set (map :db/id (:logseq.property/checkbox-display-properties owner-block)))
                             (:db/id property))]
               (dropdown-editor-menuitem
-               {:icon :checkbox
-                :title (if class-schema? "Show as checkbox on tagged nodes" "Show as checkbox on node")
-                :disabled? config/publishing?
-                :desc (when owner-block
-                        (shui/switch
-                         {:id "show as checkbox" :size "sm"
-                          :checked checked?
-                          :on-click util/stop-propagation
-                          :on-checked-change
-                          (fn [value]
-                            (if value
-                              (db-property-handler/set-block-property! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))
-                              (db-property-handler/delete-property-value! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))))}))})))))
+               {:icon :checkbox})
+              :title (if class-schema? (t :property/show-as-checkbox-on-tagged-nodes) (t :property/show-as-checkbox-on-node))
+              :disabled? config/publishing?
+              :desc (when owner-block
+                      (shui/switch
+                       {:id "show as checkbox" :size "sm"
+                        :checked checked?
+                        :on-click util/stop-propagation
+                        :on-checked-change
+                        (fn [value]
+                          (if value
+                            (db-property-handler/set-block-property! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))
+                            (db-property-handler/delete-property-value! (:db/id owner-block) :logseq.property/checkbox-display-properties (:db/id property))))}))))))
 
       (when (and owner-block
                 ;; Any property should be removable from Tag Properties
@@ -799,7 +804,7 @@
 
         (dropdown-editor-menuitem
          {:id :delete-property :icon :x
-          :title (if class-schema? "Delete property from tag" "Delete property from node")
+          :title (if class-schema? (t :property/delete-from-tag) (t :property/delete-from-node))
           :desc "" :disabled? false
           :item-props {:class "opacity-60 focus:!text-red-rx-09 focus:opacity-100"
                        :on-select (fn [^js e]

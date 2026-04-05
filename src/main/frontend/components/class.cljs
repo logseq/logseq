@@ -1,5 +1,6 @@
 (ns frontend.components.class
   (:require [frontend.components.block :as block]
+            [frontend.context.i18n :refer [t]]
             [frontend.db.model :as model]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -30,7 +31,7 @@
           default-collapsed? (> (count children-pages) 30)]
       (ui/foldable
        [:div.font-medium.opacity-50
-        (str "Children (" (count children-pages) ")")]
+        (t :property/children-count (count children-pages))]
        [:div.ml-1.mt-2 (class-children-aux class {:default-collapsed? default-collapsed?})]
        {:default-collapsed? false
         :title-trigger? true}))))

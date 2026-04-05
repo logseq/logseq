@@ -9,6 +9,7 @@
             [frontend.components.select :as select]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
@@ -50,7 +51,7 @@
       (do
         (when (and (not (ldb/public-built-in-property? property))
                    (ldb/built-in? property))
-          (notification/show! "This is a private built-in property that can't be used." :error))
+          (notification/show! (t :property/private-built-in-not-usable) :error))
         property)
       ;; new property entered or converting page to property
       (if (db-property/valid-property-name? property-title)
@@ -62,7 +63,7 @@
                 _ (when add-class-property?
                     (pv/<add-property! entity (:db/ident property) "" {:class-schema? class-schema? :exit-edit? false}))]
           property)
-        (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)))))
+        (notification/show! (t :property/invalid-name) :error)))))
 
 ;; TODO: This component should be cleaned up as it's only used for new properties and used to be used for existing properties
 (rum/defcs property-type-select <
