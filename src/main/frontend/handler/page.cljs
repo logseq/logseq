@@ -169,13 +169,13 @@
             target (first (:block/_alias chosen-result))
             chosen-result (if (and target (not (ldb/class? chosen-result)) (ldb/class? target)) target chosen-result)
             chosen (:block/title chosen-result)
-            class? (or (string/includes? chosen (str (t :new-tag) " "))
+            class? (or (string/includes? chosen (str (t :editor/new-tag) " "))
                        (ldb/class? chosen-result))
             inline-tag? (and class? (= (.-identifier e) "auto-complete/meta-complete")
                              (not= chosen "Page"))
             chosen (-> chosen
-                       (string/replace-first (str (t :new-tag) " ") "")
-                       (string/replace-first (str (t :new-page) " ") ""))
+                       (string/replace-first (str (t :editor/new-tag) " ") "")
+                       (string/replace-first (str (t :editor/new-page) " ") ""))
             wrapped? (= page-ref/left-brackets (common-util/safe-subs edit-content (- pos 2) pos))
             chosen-last-part (if (text/namespace-page? chosen)
                                (text/get-namespace-last-part chosen)
@@ -217,7 +217,7 @@
                 (throw (ex-info "No chosen item"
                                 {:chosen chosen-result})))
             chosen (:block/title chosen-result)
-            chosen' (string/replace-first chosen (str (t :new-page) " ") "")
+            chosen' (string/replace-first chosen (str (t :editor/new-page) " ") "")
             [chosen' chosen-result] (or (when (and (:nlp-date? chosen-result) (not (de/entity? chosen-result)))
                                           (when-let [result (date/nld-parse chosen')]
                                             (let [d (doto (goog.date.DateTime.) (.setTime (.getTime result)))
@@ -303,4 +303,4 @@
    (if page-uuid
      (util/copy-to-clipboard!
       (url-util/get-logseq-graph-page-url nil (state/get-current-repo) (str page-uuid)))
-     (notification/show! "No page found to copy" :warning))))
+     (notification/show! (t :page/no-page-found-to-copy) :warning))))

@@ -2,6 +2,7 @@
   "DB graph only page util fns"
   (:require [clojure.string :as string]
             [datascript.impl.entity :as de]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.handler.common.page :as page-common-handler]
@@ -46,11 +47,11 @@
   "Converts a Page to a Tag"
   [page-entity]
   (cond (db/page-exists? (:block/title page-entity) #{:logseq.class/Tag})
-        (notification/show! (str "A tag with the name \"" (:block/title page-entity) "\" already exists.") :warning false)
+        (notification/show! (t :page/tag-name-already-exists (:block/title page-entity)) :warning false)
         (:block/parent page-entity)
-        (notification/show! "Namespaced pages can't be tags" :error false)
+        (notification/show! (t :page/namespaced-pages-cant-be-tags) :error false)
         (ldb/built-in? page-entity)
-        (notification/show! "Built-in pages can't be used as tags" :error)
+        (notification/show! (t :page/built-in-pages-cant-be-tags) :error)
         :else
         (let [txs [(db-class/build-new-class (db/get-db)
                                              {:db/id (:db/id page-entity)
@@ -63,12 +64,12 @@
 (defn convert-tag-to-page!
   [entity]
   (cond (db/page-exists? (:block/title entity) #{:logseq.class/Page})
-        (notification/show! (str "A page with the name \"" (:block/title entity) "\" already exists.") :warning false)
+        (notification/show! (t :page/page-name-already-exists (:block/title entity)) :warning false)
         (ldb/built-in? entity)
-        (notification/show! "Built-in tags can't be converted to pages" :error)
+        (notification/show! (t :page/built-in-tags-cant-be-pages) :error)
         :else
         (if (seq (:logseq.property.class/_extends entity))
-          (notification/show! "This tag cannot be converted because it has tag children. All tag children must be removed or converted before converting this tag." :error false)
+          (notification/show! (t :page/tag-has-children-cant-convert) :error false)
           (p/let [objects (db-async/<get-tag-objects (state/get-current-repo) (:db/id entity))]
             (let [convert-fn
                   (fn convert-fn []
@@ -86,7 +87,7 @@
                           txs (concat page-txs obj-txs)]
                       (db/transact! (state/get-current-repo) txs {:outliner-op :save-block})))]
               (-> (shui/dialog-confirm!
-                   "Converting a tag to page also removes its tag properties and its tag from all nodes tagged with it. Are you ok with that?"
+                   (t :page/convert-tag-to-page-confirm)
                    {:id :convert-tag-to-page
                     :data-reminder :ok})
                   (p/then convert-fn)))))))
@@ -124,5 +125,5 @@
                       node-ent' (or node-ent (db/get-case-page nearest-node))
                       _ (add-tag (state/get-current-repo) (:block/uuid node-ent') tag-entity)]
                 ;; Notify as action has been applied to a node off screen
-                (notification/show! (str "Added tag " (pr-str (:block/title tag-entity)) " to " (pr-str (:block/title node-ent')))))
+                (notification/show! (t :page/added-tag-to-node (:block/title tag-entity) (:block/title node-ent'))))
               (add-tag (state/get-current-repo) (:block/uuid edit-block) tag-entity))))))))

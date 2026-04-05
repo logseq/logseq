@@ -102,7 +102,7 @@
          nil
 
          :else
-         [:div.text-sm.mt-2.opacity-90 (t :search-item/no-result)])])))
+         [:div.text-sm.mt-2.opacity-90 (t :search/no-result)])])))
 
 (rum/defc query-title
   [config title {:keys [result-count]}]
@@ -116,7 +116,7 @@
                          :else title)]
      (when result-count
        [:span.opacity-60.text-sm.ml-2.results-count
-        (str result-count (if (> result-count 1) " results" " result"))])]))
+        (t :search/result-count result-count)])]))
 
 (defn- calculate-collapsed?
   [current-block current-block-uuid {:keys [collapsed? container-id]}]

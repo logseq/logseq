@@ -70,8 +70,8 @@
              (:nlp-date? block')
              (ui/icon "calendar" {:size 14})
 
-             (or (string/starts-with? (str (:block/title block')) (t :new-tag))
-                 (string/starts-with? (str (:block/title block')) (t :new-page)))
+             (or (string/starts-with? (str (:block/title block')) (t :editor/new-tag))
+                 (string/starts-with? (str (:block/title block')) (t :editor/new-page)))
              (ui/icon "plus" {:size 14})
 
              :else
@@ -79,8 +79,8 @@
 
         (let [title (let [alias (get-in block' [:alias :block/title])]
                       (block-handler/block-unique-title block' {:alias alias}))]
-          (if (or (string/starts-with? title (t :new-tag))
-                  (string/starts-with? title (t :new-page)))
+          (if (or (string/starts-with? title (t :editor/new-tag))
+                  (string/starts-with? title (t :editor/new-page)))
             title
             (block-handler/block-title-with-icon block'
                                                  (search-handler/highlight-exact-query title q)
@@ -184,9 +184,9 @@
        ;; Don't show 'New tag' for an internal page because it already shows 'Convert ...'
          (when-not (let [entity (db/get-page q)]
                      (and (ldb/internal-page? entity) (= (:block/title entity) q)))
-           [{:block/title (str (t :new-tag) " " q)}])
+           [{:block/title (str (t :editor/new-tag) " " q)}])
          partial-matched-pages)
-        (cons {:block/title (str (t :new-page) " " q)}
+        (cons {:block/title (str (t :editor/new-page) " " q)}
               partial-matched-pages)))))
 
 (defn- search-pages

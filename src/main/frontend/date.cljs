@@ -1,11 +1,11 @@
 (ns frontend.date
   "Journal date related utility fns"
   (:require ["chrono-node" :as chrono]
-            [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
             [cljs-time.local :as tl]
+            [frontend.context.i18n :as i18n]
             [frontend.state :as state]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -83,13 +83,7 @@
 
 (defn get-current-time
   []
-  (let [d (js/Date.)]
-    (.toLocaleTimeString
-     d
-     (gobj/get js/window.navigator "language")
-     (bean/->js {:hour "2-digit"
-                 :minute "2-digit"
-                 :hourCycle "h23"}))))
+  (i18n/locale-format-time (js/Date.)))
 
 (defn valid-journal-title?
   [title]

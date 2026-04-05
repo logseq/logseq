@@ -17,6 +17,7 @@
             [frontend.components.shell :as shell]
             [frontend.components.user.login :as login]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
@@ -94,7 +95,7 @@
   (shui/dialog-open!
    (fn [] (fsrs/cards-view cards-id))
    {:id :srs
-    :label "flashcards__cp"}))
+    :label :flashcards__cp}))
 
 (defmethod events/handle :modal/show-themes-modal [[_ classic?]]
   (if classic?
@@ -246,7 +247,7 @@
                       (do
                         (reaction-handler/toggle-reaction! target-block-id emoji-id)
                         (shui/popup-hide! popup-id))
-                      (notification/show! "Please pick an emoji reaction." :warning))))]
+                      (notification/show! (t :notification/emoji-required) :warning))))]
     (when (and target-block-id target')
       (shui/popup-show!
        target'

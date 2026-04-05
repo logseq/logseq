@@ -9,6 +9,10 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
+(defn paste-shortcut-label
+  [mac?]
+  (if mac? "⌘+V" "Ctrl+V"))
+
 (defn parse-clipboard-data-transfer
   "parse dataTransfer
 
@@ -58,8 +62,9 @@
 
     [:div.flex.flex-col
      (when (= step 0)
-       (list [:div.mx-auto (t :bug-report/inspector-page-desc-1)]
-             [:div.mx-auto (t :bug-report/inspector-page-desc-2)]
+       (list (for [line (string/split-lines (t :bug-report/inspector-page-desc
+                                               (paste-shortcut-label util/mac?)))]
+               [:div.mx-auto line])
              ;; for mobile
              [:input.form-input.is-large.transition.duration-150.ease-in-out {:type "text" :placeholder (t :bug-report/inspector-page-placeholder)}]
              [:div.flex.justify-between.items-center.mt-2

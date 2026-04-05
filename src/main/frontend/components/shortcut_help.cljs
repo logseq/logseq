@@ -40,23 +40,23 @@
   (let [list [:bold :italics :del :mark :latex :code :link :pre :img]
         title (t :help/markdown-syntax)
         learn-more "https://www.markdownguide.org/basic-syntax"
-        raw {:bold (str "**" (t :bold) "**")
-             :italics (str "_" (t :italics) "_")
+        raw {:bold (str "**" (t :format/bold) "**")
+             :italics (str "_" (t :format/italics) "_")
              :link "[Link](https://www.example.com)"
-             :del (str "~~" (t :strikethrough) "~~")
-             :mark (str "^^" (t :highlight) "^^")
+             :del (str "~~" (t :format/strikethrough) "~~")
+             :mark (str "^^" (t :format/highlight) "^^")
              :latex "$$E = mc^2$$"
-             :code (str "`" (t :code) "`")
+             :code (str "`" (t :format/code) "`")
              :pre "```clojure\n  (println \"Hello world!\")\n```"
              :img "![image](https://asset.logseq.com/static/img/logo.png)"}
 
-        rendered {:italics [:i (t :italics)]
-                  :bold [:b (t :bold)]
+        rendered {:italics [:i (t :format/italics)]
+                  :bold [:b (t :format/bold)]
                   :link [:a {:href "https://www.example.com"} "Link"]
-                  :del [:del (t :strikethrough)]
-                  :mark [:mark (t :highlight)]
+                  :del [:del (t :format/strikethrough)]
+                  :mark [:mark (t :format/highlight)]
                   :latex (latex/latex "E = mc^2" true false)
-                  :code [:code (t :code)]
+                  :code [:code (t :format/code)]
                   :pre (highlight/highlight "help-highlight" {:data-lang "clojure"} "(println \"Hello world!\")")
                   :img [:img {:style {:float "right" :width 32 :height 32}
                               :src "https://asset.logseq.com/static/img/logo.png"

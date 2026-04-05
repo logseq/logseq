@@ -108,7 +108,7 @@
         *themes (::themes state)]
     [:div.cp__themes-installed
      {:tab-index -1}
-     [:h1.mb-4.text-2xl.p-1 (t :themes)]
+     [:h1.mb-4.text-2xl.p-1 (t :nav/themes)]
      (map-indexed
       (fn [idx opt]
         (let [current-selected? (:selected opt)
@@ -141,9 +141,9 @@
            (fn [^js e]
              (case (keyword (aget e "name"))
                :IllegalPluginPackageError
-               (notification/show! "Illegal Logseq plugin package." :error)
+               (notification/show! (t :plugin/invalid-package) :error)
                :ExistedImportedPluginPackageError
-               (notification/show! (str "Existed plugin package (" (.-message e) ").") :error)
+               (notification/show! (t :plugin/existed-package (.-message e)) :error)
                :default)
              (plugin-handler/reset-unpacked-state))
            reg-handle #(plugin-handler/reset-unpacked-state)]
@@ -167,14 +167,14 @@
    (ui/button
     [:span.flex.items-center
      (ui/icon "puzzle")
-     (t :plugins) (when (vector? total-nums) (str " (" (first total-nums) ")"))]
+     (t :nav/plugins) (when (vector? total-nums) (str " (" (first total-nums) ")"))]
     :intent "link"
     :on-click #(on-action :plugins)
     :class (if (= category :plugins) "active" ""))
    (ui/button
     [:span.flex.items-center
      (ui/icon "palette")
-     (t :themes) (when (vector? total-nums) (str " (" (last total-nums) ")"))]
+     (t :nav/themes) (when (vector? total-nums) (str " (" (last total-nums) ")"))]
     :intent "link"
     :on-click #(on-action :themes)
     :class (if (= category :themes) "active" ""))])
@@ -356,7 +356,7 @@
                               (reset! *search-key (str "@" author))
                               (.select el))} author]
         [:small {:on-click #(do
-                              (notification/show! "Copied!" :success)
+                              (notification/show! (t :notification/copied) :success)
                               (util/copy-to-clipboard! id))}
          (str "ID: " id)]]]
 
@@ -425,9 +425,9 @@
         *test-input (rum/create-ref)
         disabled?   (or (= (:type opts) "system") (= (:type opts) "direct"))]
     [:div.cp__settings-network-proxy-cnt
-     [:h1.mb-2.text-2xl.font-bold (t :settings-page/network-proxy)]
+     [:h1.mb-2.text-2xl.font-bold (t :settings/network-proxy)]
      [:div.p-2
-      [:p [:label [:strong (t :type)]
+      [:p [:label [:strong (t :ui/type)]
            (ui/select [{:label "System" :value "system" :selected (= type "system")}
                        {:label "Direct" :value "direct" :selected (= type "direct")}
                        {:label "HTTP" :value "http" :selected (= type "http")}
@@ -437,7 +437,7 @@
       [:p.flex
        [:label.pr-4
         {:class (if disabled? "opacity-50" nil)}
-        [:strong (t :host)]
+        [:strong (t :ui/host)]
         [:input.form-input.is-small
          {:value     (:host opts)
           :disabled  disabled?
@@ -446,7 +446,7 @@
 
        [:label
         {:class (if disabled? "opacity-50" nil)}
-        [:strong (t :port)]
+        [:strong (t :ui/port)]
         [:input.form-input.is-small
          {:value     (:port opts) :type "number" :min 1 :max 65535
           :disabled  disabled?
@@ -480,13 +480,13 @@
                                        (js->clj result :keywordize-keys true))
                                      (p/then (fn [{:keys [code response-ms]}]
                                                (notification/clear! :proxy-net-check)
-                                               (notification/show! (str "Success! Status " code " in " response-ms "ms.") :success)))
+                                               (notification/show! (t :plugin/proxy-check-success code response-ms) :success)))
                                      (p/catch (fn [e]
                                                 (notification/show! (str e) :error false :proxy-net-check)))
                                      (p/finally (fn [] (set-testing?! false)))))))]
 
       [:p.pt-2
-       (ui/button (t :save)
+       (ui/button (t :ui/save)
                   :on-click (fn []
                               (p/let [_ (ipc/ipc :setProxy opts)]
                                 (state/set-state! [:electron/user-cfgs :settings/agent] opts))))]]]))
@@ -498,7 +498,7 @@
         handle-submit! (fn []
                          (set-pending? true)
                          (-> (plugin-handler/load-plugin-from-web-url! url)
-                             (p/then #(do (notification/show! "New plugin registered!" :success)
+                             (p/then #(do (notification/show! (t :plugin/new-registered) :success)
                                           (shui/dialog-close!)))
                              (p/catch #(notification/show! (str %) :error))
                              (p/finally
@@ -559,7 +559,7 @@
                                 (p/then #(shui/dialog-close!))
                                 (p/catch #(notification/show! (str %) :error))
                                 (p/finally #(set-pending! false))))
-                          (notification/show! "Invalid GitHub repo url" :error)))))
+                          (notification/show! (t :plugin/invalid-github-repo-url) :error)))))
         :disabled pending}
        (if pending (ui/loading "Installing") "Install"))]]))
 
@@ -703,7 +703,7 @@
                               :options {:on-click #(plugin-handler/user-check-enabled-for-updates! (not= :plugins category))}}])
 
                           (when (util/electron?)
-                            [{:title   [:span.flex.items-center.gap-1 (ui/icon "world") (t :settings-page/network-proxy)]
+                            [{:title   [:span.flex.items-center.gap-1 (ui/icon "world") (t :settings/network-proxy)]
                               :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}
 
                              {:title   [:span.flex.items-center.gap-1 (ui/icon "arrow-down-circle") (t :plugin.install-from-file/menu-title)]
@@ -927,7 +927,7 @@
        [:p.flex.justify-center.py-20 svg/loading]
 
        @*error
-       [:p.flex.justify-center.pt-20.opacity-50 (t :plugin/remote-error) (.-message @*error)]
+       [:p.flex.justify-center.pt-20.opacity-50 (t :plugin/remote-error (.-message @*error))]
 
        :else
        [:div.cp__plugins-marketplace-cnt
@@ -1223,17 +1223,17 @@
                                                    (plugin-handler/op-pinned-toolbar-item! pkey (if pinned? :remove :add)))
                                                  true))}})
                       [{:hr true}
-                       {:title (t :plugins)
+                       {:title (t :nav/plugins)
                         :options {:on-click #(plugin-handler/goto-plugins-dashboard!)
                                   :class "extra-item mt-2"}
                         :icon (ui/icon "apps")}
 
-                       {:title (t :themes)
+                       {:title (t :nav/themes)
                         :options {:on-click #(plugin-handler/show-themes-modal!)
                                   :class "extra-item"}
                         :icon (ui/icon "palette")}
 
-                       {:title (t :settings)
+                       {:title (t :nav/settings)
                         :options {:on-click #(plugin-handler/goto-plugins-settings!)
                                   :class "extra-item"}
                         :icon (ui/icon "adjustments")}
@@ -1381,7 +1381,7 @@
       :class (when-not (util/electron?) "web-platform")
       :tab-index "-1"}
 
-     [:h1 (t :plugins)]
+     [:h1 (t :nav/plugins)]
 
      (when (util/electron?)
        [:<>
@@ -1488,7 +1488,7 @@
       (when nav?
         [:aside.md:w-64 {:style {:min-width "10rem"}}
          [:header.cp__settings-header
-          [:h1.cp__settings-modal-title (or title (t :settings-of-plugins))]]
+          [:h1.cp__settings-modal-title (or title (t :nav/settings-of-plugins))]]
          (let [plugins (plugin-handler/get-enabled-plugins-if-setting-schema)]
            [:ul.settings-plugin-list
             (for [{:keys [id name title icon]} plugins]
@@ -1576,7 +1576,7 @@
    (fn []
      [:div.settings-modal.of-plugins
       (focused-settings-content title)])
-   {:label   "plugin-settings-modal"
+   {:label   :plugin-settings-modal
     :align   :start
     :id      "ls-focused-settings-modal"}))
 

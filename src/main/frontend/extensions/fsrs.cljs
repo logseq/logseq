@@ -344,7 +344,7 @@
             [:h2.font-medium (t :flashcards/modal-welcome-title)]
 
             [:div
-             [:p (t :flashcards/modal-welcome-desc-1 "#Card")]]]
+             [:p (t :flashcards/modal-welcome-desc "#Card")]]]
 
            :else
            [:p (t :flashcards/modal-finished)]))])))

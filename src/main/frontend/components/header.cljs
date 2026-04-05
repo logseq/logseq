@@ -43,7 +43,7 @@
   < {:key-fn #(identity "home-button")}
   []
   (shui/button-ghost-icon :home
-                          {:title (t :home)
+                          {:title (t :nav/home)
                            :on-click #(do
                                         (when (mobile-util/native-iphone?)
                                           (state/set-left-sidebar-open! false))
@@ -144,16 +144,16 @@
         items (fn []
                 (->>
                  [(when (state/enable-editing?)
-                    {:title (t :settings)
+                    {:title (t :nav/settings)
                      :options {:on-click state/open-settings!}
                      :icon (ui/icon "settings")})
 
                   (when config/lsp-enabled?
-                    {:title (t :plugins)
+                    {:title (t :nav/plugins)
                      :options {:on-click #(plugin-handler/goto-plugins-dashboard!)}
                      :icon (ui/icon "apps")})
 
-                  {:title (t :appearance)
+                  {:title (t :nav/appearance)
                    :options {:on-click #(state/pub-event! [:ui/toggle-appearance])}
                    :icon (ui/icon "color-swatch")}
 
@@ -163,22 +163,22 @@
                      :icon (ui/icon "trash")})
 
                   (when current-repo
-                    {:title (t :export-graph)
+                    {:title (t :export/graph)
                      :options {:on-click #(shui/dialog-open! export/export)}
                      :icon (ui/icon "database-export")})
 
                   (when (and current-repo (state/enable-editing?))
-                    {:title (t :import)
+                    {:title (t :import/title)
                      :options {:href (rfe/href :import)}
                      :icon (ui/icon "file-upload")})
 
                   (when config/publishing?
-                    {:title (t :toggle-theme)
+                    {:title (t :ui/toggle-theme)
                      :options {:on-click #(state/toggle-theme!)}
                      :icon (ui/icon "bulb")})
 
                   (when-not (or config/publishing? login?)
-                    {:title (t :login)
+                    {:title (t :ui/login)
                      :options {:on-click #(state/pub-event! [:user/login])}
                      :icon (ui/icon "user")})
 
@@ -188,7 +188,7 @@
                             [:b.leading-none (user-handler/username)]
                             [:small.opacity-70 (user-handler/email)]
                             [:i.absolute.opacity-0.group-hover:opacity-100.text-red-rx-09
-                             {:class "right-1 top-3" :title (t :logout)}
+                             {:class "right-1 top-3" :title (t :ui/logout)}
                              (ui/icon "logout")]]
                      :options {:on-click #(user-handler/logout)
                                :class "w-full"}})]
@@ -462,7 +462,7 @@
 
        (when config/publishing?
          [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
-          (t :graph)])
+          (t :nav/graph)])
 
        (toolbar-dots-menu {:t            t
                            :current-repo current-repo

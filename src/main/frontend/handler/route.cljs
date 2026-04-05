@@ -84,7 +84,7 @@
                 (not= common-config/recycle-page-name (:block/title page))
                 (or (and (ldb/hidden? page) (not (ldb/property? page)))
                     (and (ldb/built-in? page) (ldb/private-built-in-page? page))))
-         (notification/show! "Cannot go to an internal page." :warning)
+         (notification/show! (t :nav/cannot-go-to-internal-page) :warning)
          (if-let [source (and (not ignore-alias?) (db/get-alias-source-page (state/get-current-repo) (:db/id page)))]
            (redirect-to-page! (:block/uuid source) (assoc opts :ignore-alias? true))
            (do
@@ -111,13 +111,13 @@
     :graphs
     "Graphs"
     :graph
-    (t :graph)
+    (t :nav/graph)
     :all-files
-    (t :all-files)
+    (t :nav/all-files)
     :all-pages
-    (t :all-pages)
+    (t :nav/all-pages)
     :all-journals
-    (t :all-journals)
+    (t :nav/all-journals)
     :file
     (str "File " (:path path-params))
     :new-page

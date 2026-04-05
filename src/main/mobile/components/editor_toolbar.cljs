@@ -1,6 +1,7 @@
 (ns mobile.components.editor-toolbar
   "Mobile editor toolbar"
   (:require [frontend.commands :as commands]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.history :as history]
             [frontend.mobile.camera :as mobile-camera]
@@ -59,7 +60,9 @@
 (defn- indent-outdent-action
   [indent?]
   {:id (if indent? "indent" "outdent")
-   :title (if indent? "Indent" "Outdent")
+   :title (if indent?
+            (t :mobile/toolbar-indent)
+            (t :mobile/toolbar-outdent))
    :system-icon (if indent? "arrow.right" "arrow.left")
    :handler (fn []
               (blur-if-compositing)
@@ -68,7 +71,7 @@
 (defn- undo-action
   []
   {:id "undo"
-   :title "Undo"
+  :title (t :mobile/toolbar-undo)
    :system-icon "arrow.uturn.backward"
    :event? true
    :handler (fn []
@@ -78,7 +81,7 @@
 (defn- redo-action
   []
   {:id "redo"
-   :title "Redo"
+  :title (t :mobile/toolbar-redo)
    :system-icon "arrow.uturn.forward"
    :event? true
    :handler (fn []
@@ -88,7 +91,7 @@
 (defn- todo-action
   []
   {:id "todo"
-   :title "Todo"
+  :title (t :mobile/toolbar-todo)
    :system-icon "checkmark.square"
    :event? true
    :handler (fn []
@@ -98,7 +101,7 @@
 (defn- tag-action
   []
   {:id "tag"
-   :title "Tag"
+  :title (t :mobile/toolbar-tag)
    :system-icon "number"
    :event? true
    :handler #(insert-text "#" {})})
@@ -106,7 +109,7 @@
 (defn- page-ref-action
   []
   {:id "page-ref"
-   :title "Reference"
+  :title (t :mobile/toolbar-reference)
    ;; TODO: create sf symbol for brackets
    :system-icon "parentheses"
    :event? true
@@ -115,7 +118,7 @@
 (defn- slash-action
   []
   {:id "slash"
-   :title "Slash"
+  :title (t :mobile/toolbar-slash)
    :system-icon "command"
    :event? true
    :handler #(insert-text "/" {})})
@@ -123,7 +126,7 @@
 (defn- camera-action
   []
   {:id "camera"
-   :title "Photo"
+  :title (t :mobile/toolbar-photo)
    :system-icon "camera"
    :event? true
    :handler #(when-let [parent-id (state/get-edit-input-id)]
@@ -132,14 +135,14 @@
 (defn- audio-action
   []
   {:id "audio"
-   :title "Audio"
+  :title (t :mobile/toolbar-audio)
    :system-icon "waveform"
    :handler #(recorder/record!)})
 
 (defn- keyboard-action
   []
   {:id "keyboard"
-   :title "Hide"
+  :title (t :mobile/toolbar-hide)
    :system-icon "keyboard.chevron.compact.down"
    :handler #(p/do!
               (editor-handler/save-current-block!)
@@ -210,7 +213,8 @@
 
 (rum/defc mobile-bar < rum/reactive
   []
-  (let [editing? (state/sub :editor/editing?)
+  (let [_preferred-language (state/sub :preferred-language)
+        editing? (state/sub :editor/editing?)
         code-block? (state/sub :editor/code-block-context)
         show? (and (not code-block?)
                    editing?)

@@ -66,9 +66,9 @@
                          (p/let [result (export/backup-db-graph repo)]
                            (case result
                              true
-                             (notification/show! "Backup successful!" :success)
+                             (notification/show! (t :export/backup-successful) :success)
                              :graph-not-changed
-                             (notification/show! "Graph has not been updated since last export." :success)
+                             (notification/show! (t :export/no-updates-since-last-export) :success)
                              nil)
                            (export/auto-db-backup! repo))
                          (p/catch (fn [error]
@@ -87,32 +87,32 @@
   []
   (when-let [current-repo (state/get-current-repo)]
     [:div.export
-     [:h1.title.mb-8 (t :export)]
+     [:h1.title.mb-8 (t :export/title)]
 
      [:div.flex.flex-col.gap-4.ml-1
       [:div
        [:a.font-medium {:on-click #(export/export-repo-as-sqlite-db! current-repo)}
-        (t :export-sqlite-db)]
+        (t :export/sqlite-db)]
        [:p.text-sm.opacity-70.mb-0 "Primary way to backup graph's content to a single .sqlite file."]]
       [:div
        [:a.font-medium {:on-click #(export/export-repo-as-zip! current-repo)}
-        (t :export-zip)]
+        (t :export/zip)]
        [:p.text-sm.opacity-70.mb-0 "Primary way to backup graph's content and assets to a .zip file."]]
 
       (when-not (util/mobile?)
         [:div
          [:a.font-medium {:on-click #(db-export-handler/export-repo-as-db-edn! current-repo)}
-          (t :export-db-edn)]
+          (t :export/db-edn)]
          [:p.text-sm.opacity-70.mb-0 "Exports to a readable and editable .edn file. Don't rely on this as a primary backup."]])
       (when-not (mobile-util/native-platform?)
         [:div
          [:a.font-medium {:on-click #(export-text/export-repo-as-markdown! current-repo)}
-          (t :export-markdown)]])
+          (t :export/markdown)]])
 
       (when (util/electron?)
         [:div
          [:a.font-medium {:on-click #(export/download-repo-as-html! current-repo)}
-          (t :export-public-pages)]])
+          (t :export/public-pages)]])
 
       [:div
        [:a.font-medium {:on-click #(export/export-repo-as-debug-transit! current-repo)}
@@ -286,7 +286,7 @@
 
       (if (= :png tp)
         [:div.flex.items-center
-         [:div (t :export-transparent-background)]
+         [:div (t :export/transparent-background)]
          (ui/checkbox {:class "mr-2 ml-4"
                        :on-change (fn [e]
                                     (reset! *content nil)
@@ -398,14 +398,14 @@
 
       (when @*content
         [:div.mt-4.flex.flex-row.gap-2
-         (ui/button (if @*copied? (t :export-copied-to-clipboard) (t :export-copy-to-clipboard))
+         (ui/button (if @*copied? (t :export/copied-to-clipboard) (t :export/copy-to-clipboard))
                     :class "mr-4"
                     :on-click (fn []
                                 (if (= tp :png)
                                   (js/navigator.clipboard.write [(js/ClipboardItem. #js {"image/png" @*content})])
                                   (util/copy-to-clipboard! @*content :html (when (= tp :html) @*content)))
                                 (reset! *copied? true)))
-         (ui/button (t :export-save-to-file)
+         (ui/button (t :export/save-to-file)
                     :on-click #(let [file-name (if (uuid? top-level-uuids)
                                                  (-> (db/get-page top-level-uuids)
                                                      (util/get-page-title))

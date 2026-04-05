@@ -69,7 +69,7 @@
   [& {:keys [reload?]
       :or {reload? true}}]
   (state/pub-event! [:graph/sync-context])
-  (notification/show! "Import finished!" :success)
+  (notification/show! (t :import/file-finished) :success)
   (shui/dialog-close! :import-indicator)
   (route-handler/redirect-to-home!)
   (if util/web-platform?
@@ -86,10 +86,10 @@
       (let [graph-name (string/trim graph-name)]
         (cond
           (string/blank? graph-name)
-          (notification/show! "Empty graph name." :error)
+          (notification/show! (t :import/empty-graph-name) :error)
 
           (repo-handler/graph-already-exists? graph-name)
-          (notification/show! "Please specify another name as another graph with this name already exists!" :error)
+          (notification/show! (t :import/graph-name-conflict) :error)
 
           :else
           (let [reader (js/FileReader.)]
@@ -108,10 +108,10 @@
       (let [graph-name (string/trim graph-name)]
         (cond
           (string/blank? graph-name)
-          (notification/show! "Empty graph name." :error)
+          (notification/show! (t :import/empty-graph-name) :error)
 
           (repo-handler/graph-already-exists? graph-name)
-          (notification/show! "Please specify another name as another graph with this name already exists!" :error)
+          (notification/show! (t :import/graph-name-conflict) :error)
 
           :else
           (db-import-handler/import-from-sqlite-zip! file graph-name
@@ -122,10 +122,10 @@
       (let [graph-name (string/trim graph-name)]
         (cond
           (string/blank? graph-name)
-          (notification/show! "Empty graph name." :error)
+          (notification/show! (t :import/empty-graph-name) :error)
 
           (repo-handler/graph-already-exists? graph-name)
-          (notification/show! "Please specify another name as another graph with this name already exists!" :error)
+          (notification/show! (t :import/graph-name-conflict) :error)
 
           :else
           (do
@@ -148,7 +148,7 @@
               (.readAsText reader file)))))
 
       :else
-      (notification/show! "Please choose an EDN or a JSON file."
+      (notification/show! (t :import/select-edn-or-json)
                           :error))))
 
 (rum/defcs set-graph-name-dialog
@@ -163,7 +163,7 @@
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.leading-6.font-medium.pb-2
-        "New graph name:"]]]
+        (t :import/new-graph-name)]]]
 
      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
       {:auto-focus true
@@ -174,7 +174,7 @@
                         (on-submit)))}]
 
      [:div.mt-5.sm:mt-4.flex
-      (ui/button "Submit"
+      (ui/button (t :ui/submit)
                  {:on-click on-submit})]]))
 
 (rum/defc import-file-graph-dialog
@@ -206,9 +206,9 @@
                           (shui/form-field {:name "graph-name"}
                                            (fn [field error]
                                              (shui/form-item
-                                              (shui/form-label "New graph name")
+                                              (shui/form-label (t :import/new-graph-name))
                                               (shui/form-control
-                                               (shui/input (merge {:placeholder "Graph name"} field)))
+                                               (shui/input (merge {:placeholder (t :import/graph-name-placeholder)} field)))
                                               (when error
                                                 (shui/form-description
                                                  [:b.text-red-800 (:message error)])))))
@@ -217,7 +217,7 @@
                                            (fn [field]
                                              (shui/form-item
                                               {:class "pt-3 flex justify-start items-center space-x-3 space-y-0 my-3 pr-3"}
-                                              (shui/form-label "Extract inline code snippets as child blocks")
+                                              (shui/form-label (t :import/extract-inline-code-snippets))
                                               (shui/form-control
                                                (shui/checkbox {:checked (:value field)
                                                                :on-checked-change (:onChange field)})))))
@@ -226,7 +226,7 @@
                                            (fn [field]
                                              (shui/form-item
                                               {:class "pt-3 flex justify-start items-center space-x-3 space-y-0 my-3 pr-3"}
-                                              (shui/form-label "Import all tags")
+                                              (shui/form-label (t :import/all-tags))
                                               (shui/form-control
                                                (shui/checkbox {:checked (:value field)
                                                                :on-checked-change (fn [e]
@@ -237,18 +237,18 @@
                                            (fn [field _error]
                                              (shui/form-item
                                               {:class "pt-3"}
-                                              (shui/form-label "Import specific tags")
+                                              (shui/form-label (t :import/specific-tags))
                                               (shui/form-control
                                                (shui/input (merge field
-                                                                  {:placeholder "tag 1, tag 2" :disabled convert-all-tags-input})))
-                                              (shui/form-description "Tags are case insensitive"))))
+                                                                  {:placeholder (t :import/tag-classes-placeholder) :disabled convert-all-tags-input})))
+                                              (shui/form-description (t :import/tags-case-insensitive)))))
 
                           (shui/form-field {:name "remove-inline-tags?"}
                                            (fn [field]
                                              (shui/form-item
                                               {:class "pt-3 flex justify-start items-center space-x-3 space-y-0 my-3 pr-3"}
-                                              (shui/form-label "Remove inline tags")
-                                              (shui/form-description "Default behavior for DB graphs")
+                                              (shui/form-label (t :import/remove-inline-tags))
+                                              (shui/form-description (t :import/default-db-graph-behavior))
                                               (shui/form-control
                                                (shui/checkbox {:checked (:value field)
                                                                :on-checked-change (:onChange field)})))))
@@ -257,64 +257,59 @@
                                            (fn [field _error]
                                              (shui/form-item
                                               {:class "pt-3"}
-                                              (shui/form-label "Import additional tags from property values")
+                                              (shui/form-label (t :import/property-value-tags))
                                               (shui/form-control
-                                               (shui/input (merge {:placeholder "e.g. type"} field)))
+                                               (shui/input (merge {:placeholder (t :import/property-classes-placeholder)} field)))
                                               (shui/form-description
-                                               "Properties are case insensitive and separated by commas"))))
+                                               (t :import/properties-case-insensitive-commas)))))
 
                           (shui/form-field {:name "property-parent-classes"}
                                            (fn [field _error]
                                              (shui/form-item
                                               {:class "pt-3"}
-                                              (shui/form-label "Import tag parents from property values")
+                                              (shui/form-label (t :import/property-value-tag-parents))
                                               (shui/form-control
-                                               (shui/input (merge {:placeholder "e.g. parent"} field)))
+                                               (shui/input (merge {:placeholder (t :import/property-parent-classes-placeholder)} field)))
                                               (shui/form-description
-                                               "Properties are case insensitive and separated by commas"))))
+                                               (t :import/properties-case-insensitive-commas)))))
 
-                          (shui/button {:type "submit" :class "right-0 mt-3"} "Submit")]))])
+                          (shui/button {:type "submit" :class "right-0 mt-3"} (t :ui/submit))]))])
 
 (defn- validate-imported-data
   [db import-state files]
   (when-let [org-files (seq (filter #(= "org" (path/file-ext (:path %))) files))]
     (log/info :org-files (mapv :path org-files))
-    (notification/show! (str "Imported " (count org-files) " org file(s) as markdown. Support for org files will be added later.")
+    (notification/show! (t :import/org-files-imported (count org-files))
                         :info false))
   (when-let [ignored-files (seq @(:ignored-files import-state))]
-    (notification/show! (str "Import ignored " (count ignored-files) " "
-                             (if (= 1 (count ignored-files)) "file" "files")
-                             ". See the javascript console for more details.")
+    (notification/show! (t :import/ignored-files (count ignored-files))
                         :info false)
     (log/error :import-ignored-files {:msg (str "Import ignored " (count ignored-files) " file(s)")})
     (pprint/pprint ignored-files))
   (when-let [ignored-assets (seq @(:ignored-assets import-state))]
-    (notification/show! (str "Import ignored " (count ignored-assets) " "
-                             (if (= 1 (count ignored-assets)) "asset" "assets")
-                             ". See the javascript console for more details.")
+    (notification/show! (t :import/ignored-assets (count ignored-assets))
                         :info false)
     (log/error :import-ignored-assets {:msg (str "Import ignored " (count ignored-assets) " asset(s)")})
     (pprint/pprint ignored-assets))
   (when-let [ignored-props (seq @(:ignored-properties import-state))]
     (notification/show!
      [:.mb-2
-      [:.text-lg.mb-2 (str "Import ignored " (count ignored-props) " "
-                           (if (= 1 (count ignored-props)) "property" "properties"))]
+      [:.text-lg.mb-2 (t :import/ignored-properties (count ignored-props))]
       [:span.text-xs
-       "To fix a property type, change the property value to the correct type and reimport the graph"]
+       (t :import/ignored-properties-fix)]
       (->> ignored-props
            (map (fn [{:keys [property value schema location]}]
                   [(str "Property " (pr-str property) " with value " (pr-str value))
                    (if (= property :icon)
                      (if (:page location)
-                       (str "Page icons can't be imported. Go to the page " (pr-str (:page location)) " to manually import it.")
-                       (str "Block icons can't be imported. Manually import it at the block: " (pr-str (:block location))))
+                       (t :import/page-icons-cannot-be-imported (pr-str (:page location)))
+                       (t :import/block-icons-cannot-be-imported (pr-str (:block location))))
                      (if (not= (get-in schema [:type :to]) (get-in schema [:type :from]))
-                       (str "Property value has type " (get-in schema [:type :to]) " instead of type " (get-in schema [:type :from]))
-                       "Property should be imported manually"))]))
+                       (t :import/property-type-mismatch (get-in schema [:type :to]) (get-in schema [:type :from]))
+                       (t :import/property-import-manually)))]))
            (map (fn [[k v]]
                   [:dl.my-2.mb-0
-               [:dt.m-0 [:strong k]]
+                   [:dt.m-0 [:strong k]]
                    [:dd {:class "text-warning"} v]])))]
      :warning false))
   (let [{:keys [errors]} (db-validate/validate-local-db! db {:verbose true})]
@@ -322,7 +317,7 @@
       (do
         (log/error :import-errors {:msg (str "Import detected " (count errors) " invalid block(s):")})
         (pprint/pprint errors)
-        (notification/show! (str "Import detected " (count errors) " invalid block(s). These blocks may be buggy when you interact with them. See the javascript console for more.")
+        (notification/show! (t :import/invalid-blocks-detected (count errors))
                             :warning false))
       (log/info :import-valid {:msg "Valid import!"}))))
 
@@ -429,7 +424,7 @@
                                                              (ignored-path? original-graph-name (.-webkitRelativePath (:file-object %))))))]
                                 (if-let [config-file (first (filter #(= (:path %) "logseq/config.edn") files))]
                                   (import-file-graph files user-inputs config-file)
-                                  (notification/show! "Import failed as the file 'logseq/config.edn' was not found for a Logseq graph."
+                                  (notification/show! (t :import/logseq-config-missing)
                                                       :error)))))]
     (shui/dialog-open!
      #(import-file-graph-dialog original-graph-name
@@ -439,7 +434,7 @@
                                     (repo/invalid-graph-name-warning)
 
                                     (repo-handler/graph-already-exists? graph-name)
-                                    (notification/show! "Please specify another name as another graph with this name already exists!" :error)
+                                    (notification/show! (t :import/graph-name-conflict) :error)
 
                                     :else
                                     (import-graph-fn user-inputs)))))))
@@ -447,7 +442,7 @@
 (rum/defc indicator-progress < rum/reactive
   []
   (let [{:keys [total current-idx current-page label]} (state/sub :graph/importing-state)
-        label (or label (t :importing))
+        label (or label (t :import/loading))
         left-label (if (and current-idx total (= current-idx total))
                      [:div.flex.flex-row.font-bold "Loading ..."]
                      [:div.flex.flex-row.font-bold
