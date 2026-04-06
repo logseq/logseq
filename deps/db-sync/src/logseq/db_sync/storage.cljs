@@ -153,6 +153,7 @@
     (let [full-checksum (sync-checksum/recompute-checksum db-after)]
       (when (and prev-checksum (not= checksum full-checksum))
        (prn :debug :before-checksum-error {:prev-checksum prev-checksum
+                                           :new-checksum checksum
                                            :recomputed-after-checksum full-checksum
                                            :tx-meta tx-meta
                                            :tx-data tx-data
