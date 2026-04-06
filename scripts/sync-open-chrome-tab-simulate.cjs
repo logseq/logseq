@@ -15,6 +15,7 @@ const DEFAULT_SESSION_NAME = 'logseq-op-sim';
 const DEFAULT_CHROME_PROFILE = 'auto';
 const DEFAULT_INSTANCES = 1;
 const DEFAULT_OPS = 50;
+const DEFAULT_ROUNDS = 1;
 const DEFAULT_UNDO_REDO_DELAY_MS = 350;
 const DEFAULT_HEADED = true;
 const DEFAULT_AUTO_CONNECT = false;
@@ -30,6 +31,9 @@ const DEFAULT_CHROME_LAUNCH_ARGS = [
 const RENDERER_READY_TIMEOUT_MS = 30000;
 const RENDERER_READY_POLL_DELAY_MS = 250;
 const FALLBACK_PAGE_NAME = 'op-sim-scratch';
+const DEFAULT_VERIFY_CHECKSUM = true;
+const DEFAULT_CLEANUP_TODAY_PAGE = true;
+const DEFAULT_SYNC_SETTLE_TIMEOUT_MS = 120000;
 const AGENT_BROWSER_ACTION_TIMEOUT_MS = 180000;
 const PROCESS_TIMEOUT_MS = 240000;
 const AGENT_BROWSER_RETRY_COUNT = 5;
@@ -54,7 +58,13 @@ function usage() {
     '  --no-reset-session          Do not close the target agent-browser session before starting',
     `  --switch-timeout-ms <n>     Timeout for graph switch/download bootstrap (default: ${DEFAULT_SWITCH_GRAPH_TIMEOUT_MS})`,
     `  --ops <n>                   Total operations to execute (must be >= 1, default: ${DEFAULT_OPS})`,
+    `  --rounds <n>                Number of operation rounds per instance (default: ${DEFAULT_ROUNDS})`,
     `  --undo-redo-delay-ms <n>    Wait time after undo/redo command (default: ${DEFAULT_UNDO_REDO_DELAY_MS})`,
+    `  --sync-settle-timeout-ms <n> Timeout waiting for local/remote tx to settle before checksum verify (default: ${DEFAULT_SYNC_SETTLE_TIMEOUT_MS})`,
+    '  --verify-checksum           Run dev checksum diagnostics after each round (default: enabled)',
+    '  --no-verify-checksum        Skip post-round checksum diagnostics',
+    '  --cleanup-today-page        Delete today page after simulation (default: enabled)',
+    '  --no-cleanup-today-page     Keep today page unchanged after simulation',
     '  --headless                  Run agent-browser in headless mode',
     '  --print-only                Print parsed args only, do not run simulation',
     '  -h, --help                  Show this message',
@@ -90,7 +100,11 @@ function parseArgs(argv) {
     resetSession: DEFAULT_RESET_SESSION,
     switchTimeoutMs: DEFAULT_SWITCH_GRAPH_TIMEOUT_MS,
     ops: DEFAULT_OPS,
+    rounds: DEFAULT_ROUNDS,
     undoRedoDelayMs: DEFAULT_UNDO_REDO_DELAY_MS,
+    syncSettleTimeoutMs: DEFAULT_SYNC_SETTLE_TIMEOUT_MS,
+    verifyChecksum: DEFAULT_VERIFY_CHECKSUM,
+    cleanupTodayPage: DEFAULT_CLEANUP_TODAY_PAGE,
     headed: DEFAULT_HEADED,
     printOnly: false,
   };
@@ -109,6 +123,26 @@ function parseArgs(argv) {
 
     if (arg === '--headless') {
       result.headed = false;
+      continue;
+    }
+
+    if (arg === '--verify-checksum') {
+      result.verifyChecksum = true;
+      continue;
+    }
+
+    if (arg === '--no-verify-checksum') {
+      result.verifyChecksum = false;
+      continue;
+    }
+
+    if (arg === '--cleanup-today-page') {
+      result.cleanupTodayPage = true;
+      continue;
+    }
+
+    if (arg === '--no-cleanup-today-page') {
+      result.cleanupTodayPage = false;
       continue;
     }
 
@@ -195,8 +229,20 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (arg === '--rounds') {
+      result.rounds = parsePositiveInteger(next, '--rounds');
+      i += 1;
+      continue;
+    }
+
     if (arg === '--undo-redo-delay-ms') {
       result.undoRedoDelayMs = parseNonNegativeInteger(next, '--undo-redo-delay-ms');
+      i += 1;
+      continue;
+    }
+
+    if (arg === '--sync-settle-timeout-ms') {
+      result.syncSettleTimeoutMs = parsePositiveInteger(next, '--sync-settle-timeout-ms');
       i += 1;
       continue;
     }
@@ -212,6 +258,9 @@ function parseArgs(argv) {
 
   if (result.ops < 1) {
     throw new Error('--ops must be at least 1');
+  }
+  if (result.rounds < 1) {
+    throw new Error('--rounds must be at least 1');
   }
 
   return result;
@@ -856,6 +905,150 @@ function buildRendererProgram(config) {
       throw new Error('Unable to resolve anchor block: open a graph and page, then retry');
     };
 
+    const parseRtcTxText = (text) => {
+      if (typeof text !== 'string' || text.length === 0) return null;
+      const localMatch = text.match(/:local-tx\\s+(-?\\d+)/);
+      const remoteMatch = text.match(/:remote-tx\\s+(-?\\d+)/);
+      if (!localMatch || !remoteMatch) return null;
+      return {
+        localTx: Number.parseInt(localMatch[1], 10),
+        remoteTx: Number.parseInt(remoteMatch[1], 10),
+      };
+    };
+
+    const readRtcTx = () => {
+      const node = document.querySelector('[data-testid="rtc-tx"]');
+      if (!node) return null;
+      return parseRtcTxText((node.textContent || '').trim());
+    };
+
+    const waitForRtcSettle = async () => {
+      const deadline = Date.now() + config.syncSettleTimeoutMs;
+      let stableHits = 0;
+      let last = null;
+      while (Date.now() < deadline) {
+        const current = readRtcTx();
+        if (current && Number.isFinite(current.localTx) && Number.isFinite(current.remoteTx)) {
+          last = current;
+          if (current.localTx === current.remoteTx) {
+            stableHits += 1;
+            if (stableHits >= 3) return { ok: true, ...current };
+          } else {
+            stableHits = 0;
+          }
+        }
+        await sleep(250);
+      }
+      return { ok: false, ...(last || {}), reason: 'rtc-tx did not settle before timeout' };
+    };
+
+    const extractNotificationTexts = () =>
+      Array.from(
+        document.querySelectorAll('.ui__notifications-content .text-sm.leading-5.font-medium.whitespace-pre-line')
+      )
+        .map((el) => (el.textContent || '').trim())
+        .filter(Boolean);
+
+    const parseChecksumNotification = (text) => {
+      if (typeof text !== 'string' || !text.includes('Checksum recomputed.')) return null;
+      const match = text.match(
+        /Recomputed:\\s*([0-9a-fA-F]{16})\\s*,\\s*local:\\s*([^,]+)\\s*,\\s*remote:\\s*([^,\\.]+)/
+      );
+      if (!match) {
+        return {
+          raw: text,
+          parsed: false,
+          reason: 'notification did not match expected checksum format',
+        };
+      }
+      const normalize = (value) => {
+        const trimmed = String(value || '').trim();
+        if (trimmed === '<nil>') return null;
+        return trimmed;
+      };
+      const recomputed = normalize(match[1]);
+      const local = normalize(match[2]);
+      const remote = normalize(match[3]);
+      const localMatches = recomputed === local;
+      const remoteMatches = recomputed === remote;
+      const localRemoteMatch = local === remote;
+      return {
+        raw: text,
+        parsed: true,
+        recomputed,
+        local,
+        remote,
+        localMatches,
+        remoteMatches,
+        localRemoteMatch,
+        matched: localMatches && remoteMatches && localRemoteMatch,
+      };
+    };
+
+    const runChecksumDiagnostics = async () => {
+      const settle = await waitForRtcSettle();
+      if (!settle.ok) {
+        return {
+          ok: false,
+          settle,
+          reason: settle.reason || 'sync did not settle',
+        };
+      }
+
+      const before = new Set(extractNotificationTexts());
+      const commandCandidates = ['dev/recompute-checksum', ':dev/recompute-checksum'];
+      let invoked = null;
+      let invokeError = null;
+
+      for (const command of commandCandidates) {
+        try {
+          await logseq.api.invoke_external_command(command);
+          invoked = command;
+          invokeError = null;
+          break;
+        } catch (error) {
+          invokeError = error;
+        }
+      }
+
+      if (!invoked) {
+        return {
+          ok: false,
+          settle,
+          reason: 'failed to invoke checksum command',
+          error: describeError(invokeError),
+        };
+      }
+
+      const deadline = Date.now() + Math.max(10000, config.readyTimeoutMs);
+      let seen = null;
+      while (Date.now() < deadline) {
+        const current = extractNotificationTexts();
+        for (const text of current) {
+          if (before.has(text)) continue;
+          const parsed = parseChecksumNotification(text);
+          if (parsed) {
+            return {
+              ok: Boolean(parsed.matched),
+              settle,
+              invoked,
+              ...parsed,
+            };
+          }
+          seen = text;
+        }
+        await sleep(250);
+      }
+
+      return {
+        ok: false,
+        settle,
+        invoked,
+        reason: 'checksum notification not found before timeout',
+        seen,
+      };
+    };
+
     const counts = {
       add: 0,
       delete: 0,
@@ -1051,9 +1244,24 @@ function buildRendererProgram(config) {
       }
     }
 
+    let checksum = null;
+    if (config.verifyChecksum) {
+      checksum = await runChecksumDiagnostics();
+      if (!checksum.ok) {
+        counts.errors += 1;
+        errors.push({
+          index: config.plan.length,
+          requested: 'verifyChecksum',
+          attempted: 'verifyChecksum',
+          message: checksum.reason || 'checksum mismatch',
+          checksum,
+        });
+      }
+    }
+
     const finalManaged = await listManagedBlocks();
     return {
-      ok: true,
+      ok: errors.length === 0,
       requestedOps: config.plan.length,
       executedOps: executed,
       counts,
@@ -1067,7 +1275,38 @@ function buildRendererProgram(config) {
       errorCount: errors.length,
       errors: errors.slice(0, 20),
       opLogSample: operationLog.slice(0, 20),
+      checksum,
     };
+  })())()`;
+}
+
+function buildCleanupTodayPageProgram() {
+  return `(() => (async () => {
+    const asPageName = (pageLike) => {
+      if (typeof pageLike === 'string' && pageLike.length > 0) return pageLike;
+      if (!pageLike || typeof pageLike !== 'object') return null;
+      if (typeof pageLike.name === 'string' && pageLike.name.length > 0) return pageLike.name;
+      if (typeof pageLike.originalName === 'string' && pageLike.originalName.length > 0) return pageLike.originalName;
+      if (typeof pageLike.title === 'string' && pageLike.title.length > 0) return pageLike.title;
+      return null;
+    };
+
+    try {
+      if (!globalThis.logseq?.api?.get_today_page || !globalThis.logseq?.api?.delete_page) {
+        return { ok: false, reason: 'today page APIs unavailable' };
+      }
+
+      const today = await logseq.api.get_today_page();
+      const todayName = asPageName(today);
+      if (!todayName) {
+        return { ok: false, reason: 'today page missing' };
+      }
+
+      await logseq.api.delete_page(todayName);
+      return { ok: true, deleted: todayName };
+    } catch (error) {
+      return { ok: false, reason: String(error?.message || error) };
+    }
   })())()`;
 }
 
@@ -1672,33 +1911,82 @@ async function runSimulationForSession(sessionName, index, args, sharedConfig) {
   await runAgentBrowser(sessionName, ['open', args.url], runOptions);
   await ensureActiveTabOnTargetUrl(sessionName, args.url, runOptions);
 
-  const bootstrap = await runGraphBootstrap(sessionName, args, runOptions);
+  const rounds = [];
+  let bootstrap = null;
+  for (let round = 0; round < args.rounds; round += 1) {
+    bootstrap = await runGraphBootstrap(sessionName, args, runOptions);
+    const clientPlan = shuffleOperationPlan(sharedConfig.plan);
+    const markerPrefix = `${sharedConfig.runPrefix}r${round + 1}-client-${index + 1}-`;
+    const rendererProgram = buildRendererProgram({
+      runPrefix: sharedConfig.runPrefix,
+      markerPrefix,
+      plan: clientPlan,
+      undoRedoDelayMs: args.undoRedoDelayMs,
+      readyTimeoutMs: RENDERER_READY_TIMEOUT_MS,
+      readyPollDelayMs: RENDERER_READY_POLL_DELAY_MS,
+      syncSettleTimeoutMs: args.syncSettleTimeoutMs,
+      fallbackPageName: FALLBACK_PAGE_NAME,
+      verifyChecksum: args.verifyChecksum,
+    });
 
-  const clientPlan = shuffleOperationPlan(sharedConfig.plan);
-  const markerPrefix = `${sharedConfig.runPrefix}client-${index + 1}-`;
-  const rendererProgram = buildRendererProgram({
-    runPrefix: sharedConfig.runPrefix,
-    markerPrefix,
-    plan: clientPlan,
-    undoRedoDelayMs: args.undoRedoDelayMs,
-    readyTimeoutMs: RENDERER_READY_TIMEOUT_MS,
-    readyPollDelayMs: RENDERER_READY_POLL_DELAY_MS,
-    fallbackPageName: FALLBACK_PAGE_NAME,
-  });
-
-  const evaluation = await runAgentBrowser(
-    sessionName,
-    ['eval', '--stdin'],
-    {
-      input: rendererProgram,
-      ...runOptions,
+    const evaluation = await runAgentBrowser(
+      sessionName,
+      ['eval', '--stdin'],
+      {
+        input: rendererProgram,
+        ...runOptions,
+      }
+    );
+    const value = evaluation?.data?.result;
+    if (!value) {
+      throw new Error(`Unexpected empty result from agent-browser eval (round ${round + 1})`);
     }
+    rounds.push({
+      round: round + 1,
+      ...value,
+    });
+  }
+
+  let cleanupTodayPage = null;
+  if (args.cleanupTodayPage && index === 0) {
+    const cleanupEval = await runAgentBrowser(
+      sessionName,
+      ['eval', '--stdin'],
+      {
+        input: buildCleanupTodayPageProgram(),
+        ...runOptions,
+      }
+    );
+    cleanupTodayPage = cleanupEval?.data?.result || null;
+  }
+
+  const summary = rounds.reduce(
+    (acc, round) => {
+      const roundCounts = round?.counts && typeof round.counts === 'object' ? round.counts : {};
+      for (const [k, v] of Object.entries(roundCounts)) {
+        acc.counts[k] = (acc.counts[k] || 0) + (Number(v) || 0);
+      }
+      acc.requestedOps += Number(round.requestedOps || 0);
+      acc.executedOps += Number(round.executedOps || 0);
+      acc.errorCount += Number(round.errorCount || 0);
+      if (round.ok !== true) {
+        acc.failedRounds.push(round.round);
+      }
+      return acc;
+    },
+    { counts: {}, requestedOps: 0, executedOps: 0, errorCount: 0, failedRounds: [] }
   );
 
-  const value = evaluation?.data?.result;
-  if (!value) {
-    throw new Error('Unexpected empty result from agent-browser eval');
-  }
+  const value = {
+    ok: summary.failedRounds.length === 0,
+    rounds,
+    requestedOps: summary.requestedOps,
+    executedOps: summary.executedOps,
+    counts: summary.counts,
+    errorCount: summary.errorCount,
+    failedRounds: summary.failedRounds,
+    cleanupTodayPage,
+  };
 
   value.runtime = {
     session: sessionName,
@@ -1707,6 +1995,9 @@ async function runSimulationForSession(sessionName, index, args, sharedConfig) {
     effectiveLaunchArgs: sharedConfig.effectiveLaunchArgs,
     effectiveExecutablePath: sharedConfig.effectiveExecutablePath,
     bootstrap,
+    rounds: args.rounds,
+    verifyChecksum: args.verifyChecksum,
+    cleanupTodayPage: args.cleanupTodayPage,
     autoConnect: args.autoConnect,
     headed: args.headed,
   };
@@ -1742,7 +2033,11 @@ async function main() {
     autoConnect: args.autoConnect,
     resetSession: args.resetSession,
     ops: args.ops,
+    rounds: args.rounds,
     undoRedoDelayMs: args.undoRedoDelayMs,
+    syncSettleTimeoutMs: args.syncSettleTimeoutMs,
+    verifyChecksum: args.verifyChecksum,
+    cleanupTodayPage: args.cleanupTodayPage,
     headed: args.headed,
   };
 
@@ -1797,6 +2092,7 @@ async function main() {
     runSimulationForSession(sessionName, index, args, sharedConfig)
   );
   const settled = await Promise.allSettled(tasks);
+  const expectedOps = args.ops * args.rounds;
 
   if (sessionNames.length === 1) {
     const single = settled[0];
@@ -1805,7 +2101,7 @@ async function main() {
     }
     const value = single.value;
     console.log(JSON.stringify(value, null, 2));
-    if (!value.ok || value.executedOps < args.ops) {
+    if (!value.ok || value.executedOps < expectedOps) {
       process.exitCode = 2;
     }
     return;
@@ -1815,7 +2111,7 @@ async function main() {
     const sessionName = sessionNames[idx];
     if (entry.status === 'fulfilled') {
       const value = entry.value;
-      const passed = Boolean(value?.ok) && Number(value?.executedOps || 0) >= args.ops;
+      const passed = Boolean(value?.ok) && Number(value?.executedOps || 0) >= expectedOps;
       return {
         session: sessionName,
         instanceIndex: idx + 1,
