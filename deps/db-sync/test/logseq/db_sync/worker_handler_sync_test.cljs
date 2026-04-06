@@ -133,8 +133,8 @@
                           (is false (str error))
                           (done)))))))
 
-(deftest tx-batch-drops-stale-lookup-entity-updates-test
-  (testing "stale lookup-ref entity updates should not reject the whole tx batch"
+(deftest tx-batch-rejects-stale-lookup-entity-updates-test
+  (testing "stale lookup-ref entity updates reject the tx batch"
     (let [sql (test-sql/make-sql)
           conn (storage/open-conn sql)
           self #js {:sql sql
@@ -150,15 +150,14 @@
                     :outliner-op :save-block}
           response (with-redefs [ws/broadcast! (fn [& _] nil)]
                      (sync-handler/handle-tx-batch! self nil [tx-entry] 0))]
-      (is (= "tx/batch/ok" (:type response)))
-      (is (string? (:checksum response)))
-      (is (= "ok" (:block/title (d/entity @conn [:block/uuid created-uuid]))))
+      (is (= "tx/reject" (:type response)))
+      (is (= "db transact failed" (:reason response)))
+      (is (= 0 (:t response)))
+      (is (nil? (d/entity @conn [:block/uuid created-uuid])))
       (is (nil? (d/entity @conn [:block/uuid missing-uuid])))
-      (let [pull-response (sync-handler/pull-response self 0)
-            tx-log-entry (first (:txs pull-response))]
+      (let [pull-response (sync-handler/pull-response self 0)]
         (is (= "pull/ok" (:type pull-response)))
-        (is (string? (:checksum pull-response)))
-        (is (= :save-block (:outliner-op tx-log-entry)))))))
+        (is (empty? (:txs pull-response)))))))
 
 (deftest tx-batch-rejects-while-snapshot-upload-is-in-progress-test
   (let [sql (test-sql/make-sql)
@@ -210,8 +209,8 @@
                           (is false (str error))
                           (done)))))))
 
-(deftest tx-batch-rejects-with-the-exact-failed-tx-entry-test
-  (testing "db transact failure replies with the specific rejected tx entry"
+(deftest tx-batch-rejects-when-a-tx-entry-fails-test
+  (testing "db transact failure rejects the batch"
     (let [sql (test-sql/make-sql)
           conn (d/create-conn db-schema/schema)
           self #js {:sql sql
@@ -232,7 +231,8 @@
       (is (= "tx/reject" (:type response)))
       (is (= "db transact failed" (:reason response)))
       (is (= 0 (:t response)))
-      (is (= tx-entry-2 (common/read-transit (:data response)))))))
+      (is (nil? (:data response)))
+      (is (= 2 @apply-calls)))))
 
 (deftest sync-pull-is-blocked-when-graph-is-not-ready-for-use-test
   (async done

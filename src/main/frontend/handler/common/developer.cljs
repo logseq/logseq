@@ -95,12 +95,6 @@
       (string/replace #"[\\/]+" "_")
       (str "_checksum_" (quot (util/time-ms) 1000))))
 
-(defn- client-server-checksum-mismatch?
-  [local-checksum remote-checksum]
-  (and (string? local-checksum)
-       (string? remote-checksum)
-       (not= local-checksum remote-checksum)))
-
 (defn- <fetch-server-checksum-diagnostics
   [repo]
   (let [base (rtc-handler/http-base)
