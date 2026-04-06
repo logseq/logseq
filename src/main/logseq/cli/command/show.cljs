@@ -90,7 +90,6 @@
    :db/ident
    :block/uuid
    :block/title
-   :block/content
    :logseq.property/created-from-property
    {:logseq.property/status [:db/ident :block/title]}
    :block/order
@@ -102,7 +101,6 @@
    :db/ident
    :block/uuid
    :block/title
-   :block/content
    :logseq.property/created-from-property
    {:logseq.property/status [:db/ident :block/title]}
    {:block/tags [:db/id :block/name :block/title :block/uuid]}
@@ -292,11 +290,9 @@
 
 (defn- block-label
   [node]
-  (let [title (:block/title node)
-        content (:block/content node)
+  (let [text (:block/title node)
         status (style-status (:logseq.property/status node))
         uuid->label (:uuid->label node)
-        text (or title content)
         base (cond
                (and text (seq status)) (str status " " text)
                text text
@@ -313,7 +309,6 @@
   [node uuid->label]
   (cond-> node
     (:block/title node) (update :block/title replace-uuid-refs uuid->label)
-    (:block/content node) (update :block/content replace-uuid-refs uuid->label)
     (:block/name node) (update :block/name replace-uuid-refs uuid->label)
     (:block/children node) (update :block/children (fn [children]
                                                      (mapv #(resolve-uuid-refs-in-node % uuid->label) children)))
@@ -447,7 +442,7 @@
         ref-blocks (:blocks linked-refs)
         pages (keep :block/page ref-blocks)
         texts (->> (concat nodes ref-blocks pages)
-                   (mapcat (fn [node] (keep node [:block/title :block/name :block/content])))
+                   (mapcat (fn [node] (keep node [:block/title :block/name])))
                    (remove string/blank?))]
     (->> texts
          (mapcat extract-uuid-refs)
