@@ -101,12 +101,14 @@
                       (let [call-idx (swap! call-count inc)]
                         (p/resolved
                          (case call-idx
-                           ;; First call: idents-query returns property idents with types
+                           ;; First call: user idents-query returns property idents with types
                            1 [[:user.property/title :default]
                               [:user.property/due :datetime]
                               [:user.property/count :number]]
-                           ;; Second call: props-query returns raw values
-                           2 [[10 :user.property/title "hello"]
+                           ;; Second call: built-in idents-query returns built-in property types
+                           2 []
+                           ;; Third call: props-query returns raw values
+                           3 [[10 :user.property/title "hello"]
                               [10 :user.property/due 1774267200000]
                               [10 :user.property/count 42]]
                            []))))]
@@ -120,6 +122,37 @@
                      (is (= 42 (get-in result [10 :user.property/count]))))
                    (testing "string value is left as-is"
                      (is (= "hello" (get-in result [10 :user.property/title]))))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-fetch-user-properties-includes-built-in-datetime
+  (let [fetch #'show-command/fetch-user-properties
+        call-count (atom 0)
+        mock-invoke (fn [_ _method _ _args]
+                      (let [call-idx (swap! call-count inc)]
+                        (p/resolved
+                         (case call-idx
+                           ;; First call: user idents-query
+                           1 [[:user.property/status :default]]
+                           ;; Second call: built-in idents-query returns deadline and scheduled
+                           2 [[:logseq.property/deadline :datetime]
+                              [:logseq.property/scheduled :datetime]]
+                           ;; Third call: props-query returns raw values
+                           3 [[10 :user.property/status "todo"]
+                              [10 :logseq.property/deadline 1774267200000]
+                              [10 :logseq.property/scheduled 1774180800000]]
+                           []))))]
+    (async done
+           (-> (p/with-redefs [transport/invoke mock-invoke]
+                 (p/let [result (fetch {} "demo" [10])]
+                   (testing "built-in deadline is converted to ISO string"
+                     (is (string? (get-in result [10 :logseq.property/deadline])))
+                     (is (string/includes? (get-in result [10 :logseq.property/deadline]) "2026")))
+                   (testing "built-in scheduled is converted to ISO string"
+                     (is (string? (get-in result [10 :logseq.property/scheduled])))
+                     (is (string/includes? (get-in result [10 :logseq.property/scheduled]) "2026")))
+                   (testing "user property is unaffected"
+                     (is (= "todo" (get-in result [10 :user.property/status]))))))
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
 

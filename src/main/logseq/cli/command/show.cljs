@@ -9,7 +9,9 @@
             [logseq.cli.style :as style]
             [logseq.cli.transport :as transport]
             [logseq.common.util :as common-util]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [clojure.set :as set]
+            [logseq.db.frontend.property :as db-property]))
 
 (def ^:private show-spec
   {:id {:desc "Block db/id or EDN vector of ids"}
@@ -154,12 +156,21 @@
     (when (seq labels)
       (string/join " " (map #(style/bold (str "#" %)) labels)))))
 
-(def ^:private user-property-namespace "user.property")
+(def ^:private displayable-built-in-properties
+  "Built-in properties that are displayed alongside user properties."
+  (set/difference db-property/public-built-in-properties
+                  ;; Exclude built-in properties handled elsewhere in this command
+                  #{:block/tags :logseq.property/status}))
 
 (defn- user-property-key?
   [k]
   (and (qualified-keyword? k)
-       (= user-property-namespace (namespace k))))
+       (= db-property/default-user-namespace (namespace k))))
+
+(defn- displayable-property-key?
+  [k]
+  (or (user-property-key? k)
+      (contains? displayable-built-in-properties k)))
 
 (defn- nonblank-string
   [value]
@@ -223,7 +234,7 @@
   ([node] (node-user-property-entries node nil))
   ([node labels]
    (->> node
-        (filter (fn [[k _]] (user-property-key? k)))
+        (filter (fn [[k _]] (displayable-property-key? k)))
         (map (fn [[k v]] [k (normalize-property-values v labels)]))
         (remove (fn [[_ values]] (empty? values)))
         vec)))
@@ -488,7 +499,7 @@
   [{:keys [root linked-references]}]
   (letfn [(collect-node [node]
             (let [node-keys (->> (keys node)
-                                 (filter user-property-key?))]
+                                 (filter displayable-property-key?))]
               (reduce (fn [acc child]
                         (into acc (collect-node child)))
                       (set node-keys)
@@ -542,7 +553,7 @@
               :else acc))
           (collect-node [acc node]
             (let [acc (reduce (fn [acc [k v]]
-                                (if (user-property-key? k)
+                                (if (displayable-property-key? k)
                                   (collect-value acc v)
                                   acc))
                               acc
@@ -633,12 +644,21 @@
                          [(namespace ?a) ?ns]
                          [(= "user.property" ?ns)]
                          [(get-else $ ?e :logseq.property/type :default) ?type]]
+          built-in-query '[:find ?a ?type
+                           :in $ [?a ...]
+                           :where
+                           [?e :db/ident ?a]
+                           [(get-else $ ?e :logseq.property/type :default) ?type]]
           props-query '[:find ?b ?a ?v
                         :in $ [?b ...] [?a ...]
                         :where
                         [?b ?a ?v]]
-          ids (vec block-ids)]
-      (p/let [ident-type-pairs (transport/invoke config :thread-api/q false [repo [idents-query]])
+          ids (vec block-ids)
+          built-in-idents (vec displayable-built-in-properties)]
+      (p/let [user-pairs (transport/invoke config :thread-api/q false [repo [idents-query]])
+              built-in-pairs (transport/invoke config :thread-api/q false
+                                               [repo [built-in-query built-in-idents]])
+              ident-type-pairs (into (vec user-pairs) built-in-pairs)
               datetime-idents (set (keep (fn [[a type]] (when (= :datetime type) a)) ident-type-pairs))
               property-idents (vec (map first ident-type-pairs))]
         (if (seq property-idents)
