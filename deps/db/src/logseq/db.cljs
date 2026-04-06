@@ -96,14 +96,15 @@
     (throw (ex-info "Page can't have block as parent"
                     {:tx-data tx-data}))))
 
-(defn debounced-store-db
-  [conn]
-  (when-some [_storage (storage/storage @conn)]
-    (when-not (:batch-tx? @conn)
-      (let [f (if (exists? js/process)
-                d/store
-                (or @*debounce-fn d/store))]
-        (f @conn)))))
+(comment
+  (defn debounced-store-db
+   [conn]
+   (when-some [_storage (storage/storage @conn)]
+     (when-not (:batch-tx? @conn)
+       (let [f (if (exists? js/process)
+                 d/store
+                 (or @*debounce-fn d/store))]
+         (f @conn))))))
 
 (defn- transact-sync
   [conn tx-data tx-meta]
@@ -130,7 +131,7 @@
                        (seq (:tx-data tx-report)))
               ;; perf enhancement: avoid repeated call on `d/with`
               (reset! conn (:db-after tx-report))
-              (debounced-store-db conn)
+              (dc/store-after-transact! conn tx-report)
               (dc/run-callbacks conn tx-report))
 
             :else
@@ -138,6 +139,14 @@
               ;; notify ui
               (when-let [f @*transact-invalid-callback]
                 (f tx-report errors))
+              (prn :debug :invalid-data
+                   {:tx-meta tx-meta
+                    :tx-data tx-data
+                    :errors errors
+                    :pipeline-tx-data (map
+                                       (fn [[e a v t]]
+                                         [e a v t])
+                                       (:tx-data tx-report))})
               (throw (ex-info "DB write failed with invalid data" {:tx-meta tx-meta
                                                                    :tx-data tx-data
                                                                    :errors errors
@@ -213,7 +222,7 @@
       (vreset! *complete? true)
       (let [tx-data @*batch-tx-data]
         (when (and @*complete? (seq tx-data))
-            ;; transact tx-data to `conn` and validate db
+          ;; transact tx-data to `conn` and validate db
           (transact! conn tx-data tx-meta)))
       (finally
         (d/unlisten! temp-conn ::temp-conn-batch-tx)
@@ -228,21 +237,24 @@
     (try
       (when (:batch-tx @conn)
         (throw (ex-info "batch-transact! can't be nested called" {:tx-meta tx-meta})))
-      (when (fn? listen-db) (d/listen! conn ::batch-tx
-                                       (fn [tx-report]
-                                         (swap! *tx-data into (:tx-data tx-report))
-                                         (listen-db tx-report))))
+      (d/listen! conn ::batch-tx
+                 (fn [tx-report]
+                   (swap! *tx-data into (:tx-data tx-report))
+                   (when (fn? listen-db)
+                     (listen-db tx-report))))
       (swap! conn assoc :skip-store? true :batch-tx? true)
       (batch-tx-fn conn)
-      (when (fn? listen-db) (d/unlisten! conn ::batch-tx))
+
+      (d/unlisten! conn ::batch-tx)
 
       (swap! conn dissoc :skip-store? :batch-tx?)
 
       (when-some [_storage (storage/storage @conn)]
-       (d/store @conn))
+        (d/store @conn))
 
       (let [batch-tx-data @*tx-data
             _ (reset! *tx-data nil)
+            _ (prn :debug :batch-tx-data batch-tx-data)
             tx-report {:db-before db-before
                        :db-after @conn
                        :tx-meta tx-meta

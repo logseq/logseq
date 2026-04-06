@@ -15,7 +15,8 @@
    [lambdaisland.glogi :as log]
    [logseq.common.util :as common-util]
    [logseq.db-sync.checksum :as sync-checksum]
-   [promesa.core :as p]))
+   [promesa.core :as p]
+   [logseq.db :as ldb]))
 
 (def ^:private reconnect-base-delay-ms 1000)
 (def ^:private reconnect-max-delay-ms 30000)
@@ -53,9 +54,10 @@
 (defn update-local-sync-checksum!
   [repo tx-report]
   (when (worker-state/get-client-ops-conn repo)
-    (client-op/update-local-checksum
-     repo
-     (sync-checksum/update-checksum (client-op/get-local-checksum repo) tx-report))))
+    (let [current-checksum (client-op/get-local-checksum repo)
+          ;; new-checksum (sync-checksum/update-checksum current-checksum tx-report)
+          new-checksum (sync-checksum/recompute-checksum (:db-after tx-report))]
+      (client-op/update-local-checksum repo new-checksum))))
 
 (defn- broadcast-rtc-state!
   [client]
