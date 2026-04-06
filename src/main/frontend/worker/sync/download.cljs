@@ -14,6 +14,7 @@
    [frontend.worker.sync.log-and-state :as rtc-log-and-state]
    [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
    [frontend.worker.sync.util :refer [fail-fast] :as sync-util]
+   [lambdaisland.glogi :as log]
    [logseq.db-sync.snapshot :as snapshot]
    [logseq.db.common.sqlite :as common-sqlite]
    [logseq.db.frontend.schema :as db-schema]
@@ -66,9 +67,12 @@
       (nil? (.-body resp))
       nil
 
+      ;; NOTE: Some runtimes (e.g. Node fetch) may auto-decompress while still
+      ;; keeping `content-encoding: gzip` in headers. Avoid stream-level manual
+      ;; decompression here to prevent double-decompression failures. For gzip,
+      ;; fall back to arrayBuffer path where we detect gzip by magic bytes.
       (= "gzip" encoding)
-      (when (exists? js/DecompressionStream)
-        (.pipeThrough (.-body resp) (js/DecompressionStream. "gzip")))
+      nil
 
       :else
       (.-body resp))))
@@ -410,53 +414,79 @@
   [repo graph-id graph-e2ee?]
   (let [base (sync-auth/http-base-url @worker-state/*db-sync-config)]
     (if (and (seq repo) (seq graph-id) (seq base))
-      (p/let [log-f (fn [payload]
-                      (rtc-log-and-state/rtc-log :rtc.log/download payload))
-              _ (log-f {:sub-type :download-progress
-                        :graph-uuid graph-id
-                        :message "Preparing graph snapshot download"})
-              pull-resp (fetch-json (str base "/sync/" graph-id "/pull")
-                                    {:method "GET"}
-                                    :sync/pull)
-              remote-tx (:t pull-resp)
-              _ (when-not (integer? remote-tx)
-                  (throw (ex-info "non-integer remote-tx when downloading graph"
+      (let [stage* (atom :init)]
+        (-> (p/let [log-f (fn [payload]
+                            (rtc-log-and-state/rtc-log :rtc.log/download payload))
+                    _ (log-f {:sub-type :download-progress
+                              :graph-uuid graph-id
+                              :message "Preparing graph snapshot download"})
+                    _ (reset! stage* :fetch-pull)
+                    pull-resp (fetch-json (str base "/sync/" graph-id "/pull")
+                                          {:method "GET"}
+                                          :sync/pull)
+                    remote-tx (:t pull-resp)
+                    _ (when-not (integer? remote-tx)
+                        (throw (ex-info "non-integer remote-tx when downloading graph"
+                                        {:repo repo
+                                         :remote-tx remote-tx})))
+                    _ (reset! stage* :fetch-snapshot-download)
+                    snapshot-resp (fetch-json (str base "/sync/" graph-id "/snapshot/download")
+                                              {:method "GET"}
+                                              :sync/snapshot-download)
+                    _ (reset! stage* :fetch-snapshot-stream)
+                    resp (js/fetch (:url snapshot-resp)
+                                   (clj->js (with-auth-headers {:method "GET"})))
+                    _ (log-f {:sub-type :download-progress
+                              :graph-uuid graph-id
+                              :message "Start downloading graph snapshot"})]
+              (when-not (.-ok resp)
+                (throw (ex-info "snapshot download failed"
+                                {:repo repo
+                                 :status (.-status resp)})))
+              (let [import-id* (atom nil)
+                    ensure-import! (fn []
+                                     (if-let [import-id @import-id*]
+                                       (p/resolved import-id)
+                                       (p/let [_ (reset! stage* :prepare-import)
+                                               {:keys [import-id]} (prepare-import! repo true graph-id graph-e2ee?)]
+                                         (reset! import-id* import-id)
+                                         import-id)))]
+                (p/let [_ (do
+                            (reset! stage* :stream-snapshot)
+                            (<stream-snapshot-row-batches!
+                             resp
+                             25000
+                             (fn [rows]
+                               (p/let [import-id (ensure-import!)]
+                                 (import-rows-chunk! rows graph-id import-id)))))
+                        _ (log-f {:sub-type :download-completed
+                                  :graph-uuid graph-id
+                                  :message "Graph snapshot downloaded"})
+                        _ (when-let [import-id @import-id*]
+                            (reset! stage* :finalize-import)
+                            (finalize-import! repo graph-id remote-tx import-id))]
+                  {:repo repo
+                   :graph-id graph-id
+                   :remote-tx remote-tx
+                   :graph-e2ee? graph-e2ee?})))
+            (p/catch (fn [error]
+                       (log/error :db-sync/download-graph-by-id-failed
                                   {:repo repo
-                                   :remote-tx remote-tx})))
-              snapshot-resp (fetch-json (str base "/sync/" graph-id "/snapshot/download")
-                                        {:method "GET"}
-                                        :sync/snapshot-download)
-              resp (js/fetch (:url snapshot-resp)
-                             (clj->js (with-auth-headers {:method "GET"})))
-              _ (log-f {:sub-type :download-progress
-                        :graph-uuid graph-id
-                        :message "Start downloading graph snapshot"})]
-        (when-not (.-ok resp)
-          (throw (ex-info "snapshot download failed"
-                          {:repo repo
-                           :status (.-status resp)})))
-        (let [import-id* (atom nil)
-              ensure-import! (fn []
-                               (if-let [import-id @import-id*]
-                                 (p/resolved import-id)
-                                 (p/let [{:keys [import-id]} (prepare-import! repo true graph-id graph-e2ee?)]
-                                   (reset! import-id* import-id)
-                                   import-id)))]
-          (p/let [_ (<stream-snapshot-row-batches!
-                     resp
-                     25000
-                     (fn [rows]
-                       (p/let [import-id (ensure-import!)]
-                         (import-rows-chunk! rows graph-id import-id))))
-                  _ (log-f {:sub-type :download-completed
-                            :graph-uuid graph-id
-                            :message "Graph snapshot downloaded"})
-                  _ (when-let [import-id @import-id*]
-                      (finalize-import! repo graph-id remote-tx import-id))]
-            {:repo repo
-             :graph-id graph-id
-             :remote-tx remote-tx
-             :graph-e2ee? graph-e2ee?})))
+                                   :graph-id graph-id
+                                   :graph-e2ee? graph-e2ee?
+                                   :stage @stage*
+                                   :error error
+                                   :error-stack (when (instance? js/Error error)
+                                                  (.-stack error))})
+                       (throw (ex-info "db-sync download failed"
+                                       {:repo repo
+                                        :graph-id graph-id
+                                        :graph-e2ee? graph-e2ee?
+                                        :stage @stage*
+                                        :error-message (or (ex-message error)
+                                                           (when (instance? js/Error error)
+                                                             (.-message error)))}
+                                       error))))))
       (p/rejected (ex-info "db-sync missing graph download info"
                            {:repo repo
                             :graph-id graph-id

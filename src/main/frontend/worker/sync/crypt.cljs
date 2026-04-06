@@ -301,9 +301,18 @@
       (<verify-and-save-e2ee-password! password encrypted-private-key))))
 
 (defn- <generate-and-upload-user-rsa-key-pair!
-  [base]
+  [base {:keys [password]}]
   (p/let [{:keys [publicKey privateKey]} (crypt/<generate-rsa-key-pair)
-          password (<request-e2ee-password-from-ui {:reason :generate-user-rsa-key-pair})
+          password (cond
+                     (and (string? password) (seq password))
+                     password
+
+                     (interactive-runtime?)
+                     (<request-e2ee-password-from-ui {:reason :generate-user-rsa-key-pair})
+
+                     :else
+                     (fail-missing-e2ee-password! {:reason :missing-password-for-generate-user-rsa-key-pair
+                                                   :hint "Provide --e2ee-password when running sync ensure-keys --upload-keys."}))
           encrypted-private-key (crypt/<encrypt-private-key password privateKey)
           exported-public-key (crypt/<export-public-key publicKey)
           public-key-str (ldb/write-transit-str exported-public-key)
@@ -314,7 +323,7 @@
        :password password})))
 
 (defn- <ensure-user-rsa-key-pair-raw
-  [base {:keys [ensure-server? server-rsa-keys-exists?]}]
+  [base {:keys [ensure-server? server-rsa-keys-exists?] :as opts}]
   (p/let [existing (<get-user-rsa-key-pair-raw base)
           existing-valid? (user-rsa-key-pair-valid? existing)
           server-rsa-keys-exists?
@@ -333,7 +342,7 @@
         existing)
 
       :else
-      (<generate-and-upload-user-rsa-key-pair! base))))
+      (<generate-and-upload-user-rsa-key-pair! base opts))))
 
 (defn ensure-user-rsa-keys!
   ([]
