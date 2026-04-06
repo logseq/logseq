@@ -193,7 +193,7 @@
           child (some #(when (= child-uuid (:block/uuid %)) %) blocks)]
       (is (false? e2ee?))
       (is (= (checksum/recompute-checksum db) checksum))
-      (is (= #{:block/uuid :block/title :block/name :block/parent :block/page}
+      (is (= #{:block/uuid :block/title :block/name :block/parent :block/page :block/order}
              (set attrs)))
       (is (= 4 (count blocks)))
       (is (= child-parent-uuid (:block/parent child)))
@@ -208,7 +208,30 @@
           {:keys [checksum attrs blocks e2ee?]} (checksum/recompute-checksum-diagnostics db)]
       (is e2ee?)
       (is (= (checksum/recompute-checksum db) checksum))
-      (is (= #{:block/uuid :block/parent :block/page}
+      (is (= #{:block/uuid :block/parent :block/page :block/order}
              (set attrs)))
       (is (every? #(not (contains? % :block/title)) blocks))
       (is (every? #(not (contains? % :block/name)) blocks)))))
+
+(deftest incremental-checksum-is-invariant-across-tx-partitioning-test
+  (testing "incremental checksum converges to the same value regardless of tx partitioning"
+    (let [db0 (sample-db)
+          tx-a [[:db/add 4 :block/order "aBL"]
+                [:db/add 4 :block/title "Child v2"]]
+          tx-b [[:db/add 3 :block/order "aBK"]
+                [:db/add 4 :block/parent 2]
+                [:db/add 4 :block/page 2]]
+          one-shot-report (d/with db0 (into tx-a tx-b))
+          one-shot-checksum (checksum/update-checksum (checksum/recompute-checksum db0)
+                                                      one-shot-report)
+          checksum0 (checksum/recompute-checksum db0)
+          report-a (d/with db0 tx-a)
+          checksum-a (checksum/update-checksum checksum0 report-a)
+          db-a (:db-after report-a)
+          report-b (d/with db-a tx-b)
+          checksum-b (checksum/update-checksum checksum-a report-b)
+          db-final (:db-after report-b)
+          full-final (checksum/recompute-checksum db-final)]
+      (is (= full-final one-shot-checksum))
+      (is (= full-final checksum-b))
+      (is (= one-shot-checksum checksum-b)))))
