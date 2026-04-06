@@ -642,10 +642,7 @@ function buildRendererProgram(config) {
         : config.markerPrefix;
 
     const chooseRunnableOperation = (requestedOperation, operableCount) => {
-      if (requestedOperation === 'copyPaste' || requestedOperation === 'copyPasteTreeToEmptyTarget') {
-        return operableCount >= 1 ? requestedOperation : 'add';
-      }
-      if (requestedOperation === 'move' || requestedOperation === 'indent' || requestedOperation === 'delete') {
+      if (requestedOperation === 'move' || requestedOperation === 'delete') {
         return operableCount >= 2 ? requestedOperation : 'add';
       }
       return requestedOperation;
@@ -669,15 +666,36 @@ function buildRendererProgram(config) {
     const isOperableBlock = (block) =>
       typeof block?.content === 'string' && block.content.startsWith(runPrefix);
 
-    const listOperableBlocks = async () => {
+    const isClientRootBlock = (block) =>
+      typeof block?.content === 'string' && block.content === (config.markerPrefix + ' client-root');
+
+    const listPageBlocks = async () => {
       const tree = await logseq.api.get_current_page_blocks_tree();
-      const flattened = flattenBlocks(tree, []);
+      return flattenBlocks(tree, []);
+    };
+
+    const listOperableBlocks = async () => {
+      const flattened = await listPageBlocks();
       return flattened.filter(isOperableBlock);
     };
 
     const listManagedBlocks = async () => {
       const operableBlocks = await listOperableBlocks();
       return operableBlocks.filter(isClientBlock);
+    };
+
+    const ensureClientRootBlock = async (anchorBlock) => {
+      const existing = (await listOperableBlocks()).find(isClientRootBlock);
+      if (existing?.uuid) return existing;
+      const inserted = await logseq.api.insert_block(anchorBlock.uuid, config.markerPrefix + ' client-root', {
+        sibling: true,
+        before: false,
+        focus: false,
+      });
+      if (!inserted?.uuid) {
+        throw new Error('Failed to create client root block');
+      }
+      return inserted;
     };
 
     const pickIndentCandidate = async (blocks) => {
@@ -698,6 +716,81 @@ function buildRendererProgram(config) {
         }
       }
       return null;
+    };
+
+    const getPreviousSiblingUuid = async (uuid) => {
+      const prev = await logseq.api.get_previous_sibling_block(uuid);
+      return prev?.uuid || null;
+    };
+
+    const ensureIndentCandidate = async (blocks, anchorBlock, opIndex) => {
+      const existing = await pickIndentCandidate(blocks);
+      if (existing?.uuid) return existing;
+
+      const baseTarget = blocks.length > 0 ? randomItem(blocks) : anchorBlock;
+      const base = await logseq.api.insert_block(baseTarget.uuid, config.markerPrefix + ' indent-base-' + opIndex, {
+        sibling: true,
+        before: false,
+        focus: false,
+      });
+      if (!base?.uuid) {
+        throw new Error('Failed to create indent base block');
+      }
+
+      const candidate = await logseq.api.insert_block(base.uuid, config.markerPrefix + ' indent-candidate-' + opIndex, {
+        sibling: true,
+        before: false,
+        focus: false,
+      });
+      if (!candidate?.uuid) {
+        throw new Error('Failed to create indent candidate block');
+      }
+      return candidate;
+    };
+
+    const runIndent = async (candidate) => {
+      const prevUuid = await getPreviousSiblingUuid(candidate.uuid);
+      if (!prevUuid) {
+        throw new Error('No previous sibling for indent candidate');
+      }
+      await logseq.api.move_block(candidate.uuid, prevUuid, {
+        before: false,
+        children: true,
+      });
+    };
+
+    const ensureOutdentCandidate = async (blocks, anchorBlock, opIndex) => {
+      const existing = await pickOutdentCandidate(blocks);
+      if (existing?.uuid) return existing;
+
+      const candidate = await ensureIndentCandidate(blocks, anchorBlock, opIndex);
+      await runIndent(candidate);
+      return candidate;
+    };
+
+    const runOutdent = async (candidate) => {
+      const full = await logseq.api.get_block(candidate.uuid, { includeChildren: false });
+      const parentId = full?.parent?.id;
+      const pageId = full?.page?.id;
+      if (!parentId || !pageId || parentId === pageId) {
+        throw new Error('Outdent candidate is not nested');
+      }
+      const parent = await logseq.api.get_block(parentId, { includeChildren: false });
+      if (!parent?.uuid) {
+        throw new Error('Cannot resolve parent block for outdent');
+      }
+      await logseq.api.move_block(candidate.uuid, parent.uuid, {
+        before: false,
+        children: false,
+      });
+    };
+
+    const pickRandomGroup = (blocks, minSize = 1, maxSize = 3) => {
+      const pool = shuffle(blocks);
+      const lower = Math.max(1, Math.min(minSize, pool.length));
+      const upper = Math.max(lower, Math.min(maxSize, pool.length));
+      const size = lower + Math.floor(Math.random() * (upper - lower + 1));
+      return pool.slice(0, size);
     };
 
     const toBatchTree = (block) => ({
@@ -782,6 +875,7 @@ function buildRendererProgram(config) {
 
     await waitForEditorReady();
     const anchor = await getAnchor();
+    await ensureClientRootBlock(anchor);
 
     if (!(await listManagedBlocks()).length) {
       await logseq.api.insert_block(anchor.uuid, config.markerPrefix + ' seed', {
@@ -806,21 +900,30 @@ function buildRendererProgram(config) {
 
         if (operation === 'add') {
           const target = operable.length > 0 ? randomItem(operable) : anchor;
-          const content = config.markerPrefix + ' add-' + i;
+          const content = Math.random() < 0.2 ? '' : config.markerPrefix + ' add-' + i;
+          const asChild = operable.length > 0 && Math.random() < 0.35;
           await logseq.api.insert_block(target.uuid, content, {
-            sibling: true,
+            sibling: !asChild,
             before: false,
             focus: false,
           });
         }
 
         if (operation === 'copyPaste') {
-          const source = randomItem(operable);
-          const target = randomItem(operable);
+          const pageBlocks = await listPageBlocks();
+          const copyPool = (operable.length > 0 ? operable : pageBlocks).filter((b) => b?.uuid);
+          if (copyPool.length === 0) {
+            throw new Error('No blocks available for copyPaste');
+          }
+          const source = randomItem(copyPool);
+          const target = randomItem(copyPool);
           await logseq.api.select_block(source.uuid);
           await logseq.api.invoke_external_command('logseq.editor/copy');
           const latestSource = await logseq.api.get_block(source.uuid);
-          await logseq.api.insert_block(target.uuid, latestSource?.content || source.content || '', {
+          const sourceContent = latestSource?.content || source.content || '';
+          const copiedContent =
+            config.markerPrefix + ' copy-' + i + (sourceContent ? ' :: ' + sourceContent : '');
+          await logseq.api.insert_block(target.uuid, copiedContent, {
             sibling: true,
             before: false,
             focus: false,
@@ -828,14 +931,25 @@ function buildRendererProgram(config) {
         }
 
         if (operation === 'copyPasteTreeToEmptyTarget') {
-          const source = randomItem(operable);
-          const sourceTree = await logseq.api.get_block(source.uuid, { includeChildren: true });
-          if (!sourceTree?.uuid) {
-            throw new Error('Failed to load source tree block');
+          const pageBlocks = await listPageBlocks();
+          const treePool = (operable.length >= 2 ? operable : pageBlocks).filter((b) => b?.uuid);
+          if (treePool.length < 2) {
+            throw new Error('Not enough blocks available for multi-block copy');
+          }
+          const sources = pickRandomGroup(treePool, 2, 4);
+          const sourceTrees = [];
+          for (const source of sources) {
+            const sourceTree = await logseq.api.get_block(source.uuid, { includeChildren: true });
+            if (sourceTree?.uuid) {
+              sourceTrees.push(sourceTree);
+            }
+          }
+          if (sourceTrees.length === 0) {
+            throw new Error('Failed to load source tree blocks');
           }
 
           const treeTarget = operable.length > 0 ? randomItem(operable) : anchor;
-          const emptyTarget = await logseq.api.insert_block(treeTarget.uuid, config.markerPrefix + ' tree-target-' + i, {
+          const emptyTarget = await logseq.api.insert_block(treeTarget.uuid, '', {
             sibling: true,
             before: false,
             focus: false,
@@ -845,7 +959,21 @@ function buildRendererProgram(config) {
           }
 
           await logseq.api.update_block(emptyTarget.uuid, '');
-          await logseq.api.insert_batch_block(emptyTarget.uuid, toBatchTree(sourceTree), { sibling: false });
+          const payload = sourceTrees.map((tree, idx) => {
+            const node = toBatchTree(tree);
+            const origin = typeof node.content === 'string' && node.content.length > 0
+              ? ' :: ' + node.content
+              : '';
+            node.content = config.markerPrefix + ' tree-copy-' + i + '-' + idx + origin;
+            return node;
+          });
+          try {
+            await logseq.api.insert_batch_block(emptyTarget.uuid, payload, { sibling: false });
+          } catch (_error) {
+            for (const tree of sourceTrees) {
+              await logseq.api.insert_batch_block(emptyTarget.uuid, toBatchTree(tree), { sibling: false });
+            }
+          }
         }
 
         if (operation === 'move') {
@@ -859,27 +987,22 @@ function buildRendererProgram(config) {
         }
 
         if (operation === 'indent') {
-          const candidate = await pickIndentCandidate(operable);
-          if (!candidate?.uuid) {
-            throw new Error('No block can be indented in current operable set');
-          }
-          await logseq.api.select_block(candidate.uuid);
-          await logseq.api.invoke_external_command('logseq.editor/indent');
+          const candidate = await ensureIndentCandidate(operable, anchor, i);
+          await runIndent(candidate);
         }
 
         if (operation === 'outdent') {
-          const candidate = await pickOutdentCandidate(operable);
-          if (!candidate?.uuid) {
-            throw new Error('No block can be outdented in current operable set');
-          }
-          await logseq.api.select_block(candidate.uuid);
-          await logseq.api.invoke_external_command('logseq.editor/outdent');
+          const candidate = await ensureOutdentCandidate(operable, anchor, i);
+          await runOutdent(candidate);
         }
 
         if (operation === 'delete') {
-          const candidates = operable.filter((block) => block.uuid !== anchor.uuid);
+          const candidates = operable.filter((block) => block.uuid !== anchor.uuid && !isClientRootBlock(block));
           const victimPool = candidates.length > 0 ? candidates : operable;
           const victim = randomItem(victimPool);
+          if (isClientRootBlock(victim)) {
+            throw new Error('Skip deleting protected client root block');
+          }
           await logseq.api.remove_block(victim.uuid);
         }
 
