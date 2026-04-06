@@ -147,11 +147,11 @@
 (defn- append-tx-for-tx-report
   [sql {:keys [db-after db-before tx-data tx-meta] :as tx-report}]
   (let [prev-checksum (get-checksum sql)
-        checksum (sync-checksum/update-checksum prev-checksum tx-report)
-        ;; checksum (sync-checksum/recompute-checksum db-after)
-        ]
+        checksum (sync-checksum/update-checksum prev-checksum tx-report)]
     (let [full-checksum (sync-checksum/recompute-checksum db-after)]
-      (when (and prev-checksum (not= checksum full-checksum))
+      (when (and prev-checksum
+                 (seq tx-data)
+                 (not= checksum full-checksum))
        (prn :debug :before-checksum-error {:prev-checksum prev-checksum
                                            :new-checksum checksum
                                            :recomputed-after-checksum full-checksum
