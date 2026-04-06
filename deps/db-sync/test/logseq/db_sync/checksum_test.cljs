@@ -141,6 +141,48 @@
           incremental (checksum/update-checksum (checksum/recompute-checksum db-before) tx-report)]
       (is (= full incremental)))))
 
+(deftest incremental-checksum-matches-recompute-when-block-is-readded-test
+  (testing "incremental checksum remains equal to recompute when a block is deleted and re-added with the same UUID"
+    (let [db0 (sample-db)
+          checksum0 (checksum/recompute-checksum db0)
+          child-uuid (:block/uuid (d/entity db0 4))
+          parent-uuid (:block/uuid (d/entity db0 3))
+          page-uuid (:block/uuid (d/entity db0 1))
+          {:keys [db checksum]} (assert-incremental=full! db0 checksum0 [[:db/retractEntity [:block/uuid child-uuid]]])]
+      (assert-incremental=full! db checksum [{:db/id -1
+                                              :block/uuid child-uuid
+                                              :block/title "Child"
+                                              :block/parent [:block/uuid parent-uuid]
+                                              :block/page [:block/uuid page-uuid]}]))))
+
+(deftest incremental-checksum-matches-recompute-when-delete-tree-undo-and-delete-again-test
+  (testing "incremental checksum matches recompute across delete-tree, undo-all, then delete-tree-again"
+    (let [db0 (sample-db)
+          parent-uuid (:block/uuid (d/entity db0 3))
+          child-uuid (:block/uuid (d/entity db0 4))
+          page-uuid (:block/uuid (d/entity db0 1))
+          tx-seq [{:tx-data [[:db/retractEntity [:block/uuid child-uuid]]
+                             [:db/retractEntity [:block/uuid parent-uuid]]]}
+                  {:tx-data [{:db/id -1
+                              :block/uuid parent-uuid
+                              :block/title "Parent"
+                              :block/parent [:block/uuid page-uuid]
+                              :block/page [:block/uuid page-uuid]}
+                             {:db/id -2
+                              :block/uuid child-uuid
+                              :block/title "Child"
+                              :block/parent [:block/uuid parent-uuid]
+                              :block/page [:block/uuid page-uuid]}]}
+                  {:tx-data [[:db/retractEntity [:block/uuid child-uuid]]
+                             [:db/retractEntity [:block/uuid parent-uuid]]]}]
+          {:keys [db checksum]} (reduce
+                                 (fn [{:keys [db checksum]} {:keys [tx-data]}]
+                                   (assert-incremental=full! db checksum tx-data))
+                                 {:db db0
+                                  :checksum (checksum/recompute-checksum db0)}
+                                 tx-seq)]
+      (is (= checksum (checksum/recompute-checksum db))))))
+
 (deftest recompute-checksum-diagnostics-includes-relevant-attrs-test
   (testing "diagnostics includes checksum attrs and block values used for checksum export"
     (let [db (sample-db)
