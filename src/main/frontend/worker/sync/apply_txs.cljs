@@ -527,10 +527,8 @@
 
 (defn reverse-local-txs!
   [conn local-txs]
-  (prn :debug :local-txs local-txs)
   (doall
    (->> local-txs
-        (remove (fn [tx] (= :fix (:outliner-op tx))))
         reverse
         (map-indexed
          (fn [index local-tx]
@@ -655,7 +653,6 @@
           db @conn]
       (when-not (and target-block (seq blocks))
         (invalid-rebase-op! op {:args args}))
-      (prn :debug :insert-blocks :target-block target-block)
       (outliner-core/insert-blocks! conn
                                     (mapv #(op-construct/rewrite-block-title-with-retracted-refs db %) blocks)
                                     target-block
@@ -866,7 +863,6 @@
        (fn [conn]
          (if (= [[:transact nil]] outliner-ops)
            (when-let [tx-data (seq (:tx local-tx))]
-             (prn :debug :transact :tx-data tx-data)
              (ldb/transact! conn tx-data {:outliner-op :transact}))
            (do
              ;; (precreate-missing-save-blocks! conn outliner-ops)
@@ -911,10 +907,10 @@
                                      (when (and (= :rebase (:outliner-op tx-meta))
                                                 (seq tx-data))
                                        (swap! *rebase-tx-reports conj tx-report)))})]
-        (fix-tx! conn tx-report {:outliner-op :fix}))
+        (doseq [tx-report @*rebase-tx-reports]
+          (handle-local-tx! repo tx-report))
 
-      (doseq [tx-report @*rebase-tx-reports]
-        (handle-local-tx! repo tx-report))
+        (fix-tx! conn tx-report {:outliner-op :fix}))
 
       (remove-pending-txs! repo (map :tx-id local-txs))
 
@@ -993,10 +989,10 @@
   [repo {:keys [tx-data db-after db-before tx-meta] :as tx-report}]
   (let [normalized (normalize-tx-data db-after db-before tx-data)
         reversed-datoms (reverse-tx-data db-before db-after tx-data)]
-    (prn :debug :enqueue-local-tx :tx-data)
-    (cljs.pprint/pprint tx-data)
-    (prn :debug :enqueue-local-tx :normalized)
-    (cljs.pprint/pprint normalized)
+    ;; (prn :debug :enqueue-local-tx :tx-data)
+    ;; (cljs.pprint/pprint tx-data)
+    ;; (prn :debug :enqueue-local-tx :normalized)
+    ;; (cljs.pprint/pprint normalized)
     (when (and (= (:outliner-op tx-meta) :insert-blocks)
                (not (:undo? tx-meta))
                (not (some (fn [x]

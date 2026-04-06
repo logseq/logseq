@@ -254,7 +254,6 @@
 
       (let [batch-tx-data @*tx-data
             _ (reset! *tx-data nil)
-            _ (prn :debug :batch-tx-data batch-tx-data)
             tx-report {:db-before db-before
                        :db-after @conn
                        :tx-meta tx-meta
