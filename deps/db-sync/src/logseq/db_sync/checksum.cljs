@@ -160,10 +160,15 @@
 (defn- tx-ref-target-eids
   [tx-data]
   (->> tx-data
-       (keep (fn [{:keys [a v]}]
-               (when (and (#{:block/parent :block/page :block/uuid} a)
-                          (number? v))
-                 v)))
+       (keep (fn [{:keys [e a v]}]
+               (case a
+                 (:block/parent :block/page)
+                 (when (number? v) v)
+
+                 :block/uuid
+                 (when (number? e) e)
+
+                 nil)))
        set))
 
 (defn- touched-checksum-eids

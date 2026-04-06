@@ -123,6 +123,18 @@
       (is (not= before-checksum full))
       (is (= full incremental)))))
 
+(deftest incremental-checksum-matches-recompute-when-parent-uuid-is-retracted-test
+  (testing "incremental checksum updates referrers when parent uuid is removed"
+    (let [db-before (sample-db)
+          before-checksum (checksum/recompute-checksum db-before)
+          parent-uuid (:block/uuid (d/entity db-before 3))
+          tx-report (d/with db-before [[:db/retract 3 :block/uuid parent-uuid]])
+          db-after (:db-after tx-report)
+          full (checksum/recompute-checksum db-after)
+          incremental (checksum/update-checksum before-checksum tx-report)]
+      (is (not= before-checksum full))
+      (is (= full incremental)))))
+
 (deftest incremental-checksum-matches-recompute-when-block-is-readded-test
   (testing "incremental checksum remains equal to recompute when a block is deleted and re-added with the same UUID"
     (let [db0 (sample-db)
