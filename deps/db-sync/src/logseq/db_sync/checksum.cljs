@@ -110,11 +110,7 @@
 (defn- checksum-eligible-entity?
   [db eid]
   (when-let [ent (d/entity db eid)]
-    (and (:block/uuid ent)
-         (not (ldb/built-in? ent))
-         (nil? (:logseq.property/deleted-at ent))
-         (or (ldb/page? ent)
-             (:block/page ent)))))
+    (uuid? (:block/uuid ent))))
 
 (defn- entity-digest
   [db eid e2ee?]
@@ -135,12 +131,8 @@
 (defn recompute-checksum
   [db]
   (let [e2ee? (ldb/get-graph-rtc-e2ee? db)
-        attrs (relevant-attrs e2ee?)
-        eids (->> (d/datoms db :eavt)
-                  (keep (fn [datom]
-                          (when (contains? attrs (:a datom))
-                            (:e datom))))
-                  distinct)]
+        eids (->> (d/datoms db :avet :block/uuid)
+                  (map :e))]
     (->> eids
          (reduce (fn [[sum-fnv sum-djb] eid]
                    (if-let [[fnv djb] (entity-digest db eid e2ee?)]

@@ -56,6 +56,13 @@ yarn download-graph-db --graph-id 6f2d7f6f-xxxx-xxxx-xxxx-xxxxxxxxxxxx --admin-t
 You can also pass `--admin-token <token>` or set `DB_SYNC_ADMIN_TOKEN`. The output defaults to
 `tmp/graph-<graph-id>.snapshot.sqlite` and can be changed with `--output`.
 
+Show stored and recomputed checksum for a local sqlite graph db:
+
+```bash
+cd deps/db-sync
+yarn show-sqlite-checksum --db ~/Downloads/test.sqlite
+```
+
 Delete the graphs owned by a production user after an explicit confirmation:
 
 ```bash

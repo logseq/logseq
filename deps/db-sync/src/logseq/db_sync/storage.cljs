@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
+            [logseq.db :as ldb]
             [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db-sync.common :as common]
             [logseq.db.common.normalize :as db-normalize]
@@ -145,17 +146,34 @@
 
 (defn- append-tx-for-tx-report
   [sql {:keys [db-after db-before tx-data tx-meta] :as tx-report}]
-  (let [created-at (common/now-ms)
-        normalized-data (->> tx-data
-                             (db-normalize/normalize-tx-data db-after db-before))
-        ;; _ (prn :debug :tx-data tx-data)
-        ;; _ (prn :debug :normalized-data normalized-data)
-        tx-str (common/write-transit normalized-data)
-        new-t (next-t! sql)
-        prev-checksum (get-checksum sql)
-        checksum (sync-checksum/update-checksum prev-checksum tx-report)]
+  (let [prev-checksum (get-checksum sql)
+        ;; checksum (sync-checksum/update-checksum prev-checksum tx-report)
+        checksum (sync-checksum/recompute-checksum db-after)]
+    ;; (when (and prev-checksum (not= checksum (sync-checksum/recompute-checksum db-after)))
+    ;;     (prn :debug :before-checksum-error {:prev-checksum prev-checksum
+    ;;                                         :recomputed-after-checksum (sync-checksum/recompute-checksum db-after)
+    ;;                                         :tx-meta tx-meta
+    ;;                                         :tx-data tx-data
+    ;;                                         :db-before (ldb/write-transit-str db-before)
+    ;;                                         :db-after (ldb/write-transit-str db-after)})
+    ;;     (throw (ex-info "server checksum doesn't match"
+    ;;                     {:prev-checksum prev-checksum
+    ;;                                         :recomputed-after-checksum (sync-checksum/recompute-checksum db-after)
+    ;;                                         :tx-meta tx-meta
+    ;;                                         :tx-data tx-data
+    ;;                                         :db-before (ldb/write-transit-str db-before)
+    ;;                                         :db-after (ldb/write-transit-str db-after)})))
+
     (set-checksum! sql checksum)
-    (append-tx! sql new-t tx-str created-at (:outliner-op tx-meta))))
+    (when-not (empty? tx-data)
+      (let [created-at (common/now-ms)
+            normalized-data (->> tx-data
+                                 (db-normalize/normalize-tx-data db-after db-before))
+            ;; _ (prn :debug :tx-data tx-data)
+            ;; _ (prn :debug :normalized-data normalized-data)
+            tx-str (common/write-transit normalized-data)
+            new-t (next-t! sql)]
+        (append-tx! sql new-t tx-str created-at (:outliner-op tx-meta))))))
 
 (defn- listen-db-updates!
   [sql conn]

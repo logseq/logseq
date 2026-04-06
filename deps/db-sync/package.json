@@ -13,6 +13,7 @@
     "build:node-adapter": "clojure -M:cljs release db-sync-node",
     "dev:node-adapter": "clojure -M:cljs watch db-sync-node",
     "start:node-adapter": "node worker/dist/node-adapter.js",
+    "show-sqlite-checksum": "clojure -M:cljs compile db-sync-show-checksum && node worker/dist/show-sqlite-checksum.js",
     "migrate:local": "cd ./worker && wrangler d1 migrations apply DB --local",
     "migrate:staging": "cd ./worker && wrangler d1 migrations apply logseq-sync-graph-meta-staging --env staging --remote",
     "migrate:prod": "cd ./worker && wrangler d1 migrations apply logseq-sync-graphs-prod --env prod --remote",
@@ -28,6 +29,7 @@
     "@sentry/node": "^10.45.0",
     "better-sqlite3": "^12.8.0",
     "shadow-cljs": "^3.3.4",
+    "transit-js": "^0.8.874",
     "ws": "^8.19.0"
   },
   "devDependencies": {

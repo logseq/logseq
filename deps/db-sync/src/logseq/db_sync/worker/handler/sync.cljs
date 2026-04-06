@@ -294,49 +294,26 @@
       (reset-import! sql))
     (import-snapshot-rows! sql "kvs" rows)))
 
-(defn- sanitize-client-tx-data
-  [conn txs]
-  (let [lookup-id (fn [x]
-                    (when (and (vector? x)
-                               (= 2 (count x))
-                               (= :block/uuid (first x)))
-                      (second x)))
-        tx-data* (protocol/transit->tx txs)
-        created-block-uuids (->> tx-data*
-                                 (keep (fn [item]
-                                         (when (and (vector? item)
-                                                    (= :db/add (first item))
-                                                    (>= (count item) 4)
-                                                    (= :block/uuid (nth item 2)))
-                                           (nth item 3))))
-                                 set)
-        missing-lookup-ref? (fn [x]
-                              (when-let [block-uuid (lookup-id x)]
-                                (and (not (contains? created-block-uuids block-uuid))
-                                     (nil? (d/entity @conn x)))))]
-    (remove (fn [item]
-              (when (vector? item)
-                (let [op (first item)
-                      attr (nth item 2 nil)
-                      value (when (>= (count item) 4) (nth item 3))]
-                  (or (and (contains? #{:db/add :db/retract :db/retractEntity} op)
-                           (missing-lookup-ref? (second item)))
-                      (and (contains? #{:db/add :db/retract} op)
-                           (contains? db-schema/ref-type-attributes attr)
-                           (missing-lookup-ref? value))))))
-            tx-data*)))
+(defn- sanitize-tx
+  [db outliner-op tx-data]
+  (if (= outliner-op :fix)
+    (remove (fn [[_ id]]
+              (nil? (d/entity db id))) tx-data)
+    tx-data))
 
 (defn- apply-tx-entry!
   [conn {:keys [tx outliner-op]}]
-  (let [tx-data (sanitize-client-tx-data conn tx)]
+  (let [tx-data (->> (protocol/transit->tx tx)
+                     (sanitize-tx @conn outliner-op))]
+    (prn :debug :entity (:block/parent (d/entity @conn [:block/uuid #uuid "69d38949-1f23-4e1c-b7d9-861c16cfdb2c"])))
     (when (seq tx-data)
       (ldb/transact! conn tx-data (cond-> {:op :apply-client-tx}
                                     outliner-op (assoc :outliner-op outliner-op))))))
 
 (defn- db-transact-failed-response
-  [sql tx-entry]
+  [sql tx-entry message]
   {:type "tx/reject"
-   :reason "db transact failed"
+   :reason (str "db transact failed: " message)
    :t (storage/get-t sql)
    :data (common/write-transit tx-entry)})
 
@@ -350,8 +327,9 @@
                          (apply-tx-entry! conn tx-entry)
                          ::ok
                          (catch :default e
+                           (throw e)
                            (log/error :db-sync/transact-failed e)
-                           (db-transact-failed-response sql tx-entry)))]
+                           (db-transact-failed-response sql tx-entry (.-message e))))]
             (if (= ::ok result)
               (recur (next remaining))
               result))
