@@ -305,7 +305,6 @@
   [conn {:keys [tx outliner-op]}]
   (let [tx-data (->> (protocol/transit->tx tx)
                      (sanitize-tx @conn outliner-op))]
-    (prn :debug :entity (:block/parent (d/entity @conn [:block/uuid #uuid "69d38949-1f23-4e1c-b7d9-861c16cfdb2c"])))
     (when (seq tx-data)
       (ldb/transact! conn tx-data (cond-> {:op :apply-client-tx}
                                     outliner-op (assoc :outliner-op outliner-op))))))
