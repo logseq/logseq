@@ -24,12 +24,20 @@
    :task (main/build! cli-opts)}
 
   list-cases
-  {:doc "List declared cli-e2e case ids"
+  {:doc "List declared non-sync cli-e2e case ids"
    :task (main/list-cases! cli-opts)}
 
+  list-sync-cases
+  {:doc "List declared sync cli-e2e case ids"
+   :task (main/list-sync-cases! cli-opts)}
+
   test
-  {:doc "Run cli-e2e cases with build preflight unless --skip-build is provided"
+  {:doc "Run non-sync cli-e2e cases with build preflight unless --skip-build is provided"
    :task (main/test! cli-opts)}
+
+  test-sync
+  {:doc "Run sync cli-e2e cases with build preflight unless --skip-build is provided"
+   :task (main/test-sync! cli-opts)}
 
   cleanup
   {:doc "Terminate cli-e2e db-worker-node processes and remove temp graph dirs"

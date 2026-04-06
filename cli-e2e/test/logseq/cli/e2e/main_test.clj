@@ -2,7 +2,8 @@
   (:require [clojure.string :as string]
             [clojure.test :refer [deftest is testing]]
             [logseq.cli.e2e.cleanup :as cleanup]
-            [logseq.cli.e2e.main :as main]))
+            [logseq.cli.e2e.main :as main]
+            [logseq.cli.e2e.manifests :as manifests]))
 
 (def sample-cases
   [{:id "global-help"
@@ -118,6 +119,75 @@
             [:ok 2 2 "graph-list"]]
            @events))))
 
+(deftest run-loads-non-sync-suite-by-default
+  (let [suite-calls (atom [])]
+    (with-redefs [manifests/load-inventory (fn [suite]
+                                             (swap! suite-calls conj [:inventory suite])
+                                             complete-inventory)
+                  manifests/load-cases (fn [suite]
+                                         (swap! suite-calls conj [:cases suite])
+                                         sample-cases)]
+      (let [result (main/run! {:skip-build true
+                               :run-command (fn [_]
+                                              {:exit 0
+                                               :out ""
+                                               :err ""})
+                               :run-case (fn [case _opts]
+                                           {:id (:id case)
+                                            :status :ok})})]
+        (is (= :ok (:status result))))
+      (is (= [[:inventory :non-sync]
+              [:cases :non-sync]]
+             @suite-calls)))))
+
+(deftest run-loads-sync-suite-when-explicit
+  (let [suite-calls (atom [])
+        sync-inventory {:excluded-command-prefixes ["login" "logout"]
+                        :scopes {:sync {:commands ["sync upload"]
+                                        :options []}}}
+        sync-cases [{:id "sync-upload"
+                     :cmds ["node static/logseq-cli.js sync upload"]
+                     :covers {:commands ["sync upload"]}}]]
+    (with-redefs [manifests/load-inventory (fn [suite]
+                                             (swap! suite-calls conj [:inventory suite])
+                                             sync-inventory)
+                  manifests/load-cases (fn [suite]
+                                         (swap! suite-calls conj [:cases suite])
+                                         sync-cases)]
+      (let [result (main/run! {:suite :sync
+                               :skip-build true
+                               :run-command (fn [_]
+                                              {:exit 0
+                                               :out ""
+                                               :err ""})
+                               :run-case (fn [case _opts]
+                                           {:id (:id case)
+                                            :status :ok})})]
+        (is (= :ok (:status result))))
+      (is (= [[:inventory :sync]
+              [:cases :sync]]
+             @suite-calls)))))
+
+(deftest list-cases-defaults-to-non-sync
+  (let [selected-suite (atom nil)
+        output (with-out-str
+                 (with-redefs [manifests/load-cases (fn [suite]
+                                                      (reset! selected-suite suite)
+                                                      [{:id "non-sync-case"}])]
+                   (main/list-cases! {})))]
+    (is (= :non-sync @selected-suite))
+    (is (string/includes? output "non-sync-case"))))
+
+(deftest list-sync-cases-uses-sync-suite
+  (let [selected-suite (atom nil)
+        output (with-out-str
+                 (with-redefs [manifests/load-cases (fn [suite]
+                                                      (reset! selected-suite suite)
+                                                      [{:id "sync-case"}])]
+                   (main/list-sync-cases! {})))]
+    (is (= :sync @selected-suite))
+    (is (string/includes? output "sync-case"))))
+
 (deftest test-prints-progress-and-summary
   (let [output (with-out-str
                  (main/test! {:inventory complete-inventory
@@ -160,6 +230,28 @@
     (is (= :help (:status @result)))
     (is (false? @ran?))
     (is (string/includes? output "Usage: bb -f cli-e2e/bb.edn test [options]"))
+    (is (string/includes? output "--skip-build"))
+    (is (string/includes? output "--include TAG"))
+    (is (string/includes? output "--case ID"))))
+
+(deftest test-sync-help-prints-usage-and-skips-execution
+  (let [ran? (atom false)
+        result (atom nil)
+        output (with-out-str
+                 (reset! result
+                         (main/test-sync! {:help true
+                                           :run-command (fn [_]
+                                                          (reset! ran? true)
+                                                          {:exit 0
+                                                           :out ""
+                                                           :err ""})
+                                           :run-case (fn [_ _]
+                                                       (reset! ran? true)
+                                                       {:id "unexpected"
+                                                        :status :ok})})))]
+    (is (= :help (:status @result)))
+    (is (false? @ran?))
+    (is (string/includes? output "Usage: bb -f cli-e2e/bb.edn test-sync [options]"))
     (is (string/includes? output "--skip-build"))
     (is (string/includes? output "--include TAG"))
     (is (string/includes? output "--case ID"))))
