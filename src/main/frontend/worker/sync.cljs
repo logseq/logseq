@@ -55,8 +55,9 @@
   [repo tx-report]
   (when (worker-state/get-client-ops-conn repo)
     (let [current-checksum (client-op/get-local-checksum repo)
-          ;; new-checksum (sync-checksum/update-checksum current-checksum tx-report)
-          new-checksum (sync-checksum/recompute-checksum (:db-after tx-report))]
+          new-checksum (sync-checksum/update-checksum current-checksum tx-report)
+          ;; new-checksum (sync-checksum/recompute-checksum (:db-after tx-report))
+          ]
       (client-op/update-local-checksum repo new-checksum))))
 
 (defn- broadcast-rtc-state!
