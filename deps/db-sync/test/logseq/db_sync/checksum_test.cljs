@@ -217,3 +217,91 @@
       (is (= full-final one-shot-checksum))
       (is (= full-final checksum-b))
       (is (= one-shot-checksum checksum-b)))))
+
+(deftest incremental-checksum-handles-rebase-like-toggle-churn-test
+  (testing "incremental checksum uses net tuple delta when batch contains add/retract/add churn"
+    (let [db0 (sample-db)
+          checksum0 (checksum/recompute-checksum db0)
+          ;; Simulate rebase churn on a tuple absent in db0: add -> retract -> add
+          report-1 (d/with db0 [[:db/add 4 :block/order "aBL"]])
+          db1 (:db-after report-1)
+          report-2 (d/with db1 [[:db/retract 4 :block/order "aBL"]])
+          db2 (:db-after report-2)
+          report-3 (d/with db2 [[:db/add 4 :block/order "aBL"]])
+          db3 (:db-after report-3)
+          batch-report {:db-before db0
+                        :db-after db3
+                        :tx-data (vec (concat (:tx-data report-1)
+                                              (:tx-data report-2)
+                                              (:tx-data report-3)))}
+          full-final (checksum/recompute-checksum db3)
+          incremental (checksum/update-checksum checksum0 batch-report)]
+      (is (not= checksum0 full-final))
+      (is (= full-final incremental)))))
+
+(deftest incremental-checksum-handles-transient-entity-churn-in-one-batch-test
+  (testing "incremental checksum remains stable when a newly created block is retracted in the same batch"
+    (let [db0 (sample-db)
+          checksum0 (checksum/recompute-checksum db0)
+          page-id 1
+          parent-id 3
+          transient-uuid (random-uuid)
+          report-1 (d/with db0 [{:db/id -1
+                                 :block/uuid transient-uuid
+                                 :block/title "Transient"
+                                 :block/parent parent-id
+                                 :block/page page-id}])
+          db1 (:db-after report-1)
+          report-2 (d/with db1 [[:db/retractEntity [:block/uuid transient-uuid]]])
+          db2 (:db-after report-2)
+          batch-report {:db-before db0
+                        :db-after db2
+                        :tx-data (vec (concat (:tx-data report-1)
+                                              (:tx-data report-2)))}
+          full-final (checksum/recompute-checksum db2)
+          incremental (checksum/update-checksum checksum0 batch-report)]
+      (is (= checksum0 full-final))
+      (is (= full-final incremental)))))
+
+(deftest incremental-checksum-handles-new-entity-attr-replacement-in-one-batch-test
+  (testing "incremental checksum cancels replaced attrs on entities created inside the same batch"
+    (let [db0 (sample-db)
+          checksum0 (checksum/recompute-checksum db0)
+          page-id 1
+          parent-id 3
+          transient-uuid (random-uuid)
+          report-1 (d/with db0 [{:db/id -1
+                                 :block/uuid transient-uuid
+                                 :block/title "Transient"
+                                 :block/order "a1"
+                                 :block/parent parent-id
+                                 :block/page page-id}])
+          db1 (:db-after report-1)
+          report-2 (d/with db1 [[:db/add [:block/uuid transient-uuid] :block/order "a2"]])
+          db2 (:db-after report-2)
+          batch-report {:db-before db0
+                        :db-after db2
+                        :tx-data (vec (concat (:tx-data report-1)
+                                              (:tx-data report-2)))}
+          full-final (checksum/recompute-checksum db2)
+          incremental (checksum/update-checksum checksum0 batch-report)]
+      (is (= full-final incremental)))))
+
+(deftest checksum-ignores-non-page-non-block-entities-test
+  (testing "entities with uuid but without page semantics do not affect checksum"
+    (let [db0 (sample-db)
+          checksum0 (checksum/recompute-checksum db0)
+          internal-uuid (random-uuid)
+          tx-report (d/with db0 [{:db/id -1
+                                  :block/uuid internal-uuid
+                                  :block/order "zz"}])
+          db1 (:db-after tx-report)
+          full1 (checksum/recompute-checksum db1)
+          incremental1 (checksum/update-checksum checksum0 tx-report)
+          tx-report-2 (d/with db1 [[:db/add [:block/uuid internal-uuid] :block/order "aa"]])
+          full2 (checksum/recompute-checksum (:db-after tx-report-2))
+          incremental2 (checksum/update-checksum full1 tx-report-2)]
+      (is (= checksum0 full1))
+      (is (= checksum0 incremental1))
+      (is (= checksum0 full2))
+      (is (= full2 incremental2)))))
