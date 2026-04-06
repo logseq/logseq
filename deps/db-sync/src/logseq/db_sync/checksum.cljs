@@ -154,11 +154,6 @@
          attr
          (normalize-checksum-value db attr (:v datom))]))))
 
-(defn- existing-entity-in-db?
-  [db eid]
-  (and (number? eid)
-       (some? (d/entity db eid))))
-
 (defn recompute-checksum
   [db]
   (let [e2ee? (ldb/get-graph-rtc-e2ee? db)
@@ -206,21 +201,15 @@
             initial-state (if (valid-checksum? checksum)
                             (checksum->state checksum)
                             (checksum->state (recompute-checksum db-before)))
-            ;; UUID mutation on an existing entity can implicitly affect
-            ;; normalized parent/page tuples of referencing entities.
-            ;; Keep incremental logic simple and robust by full recompute.
-            existing-uuid-mutation?
-            (some (fn [{:keys [a e]}]
-                    (and (= :block/uuid a)
-                         (existing-entity-in-db? db-before e)))
-                  tx-data)
             attrs (relevant-attrs after-e2ee?)
-            removed-tuples (keep #(when (false? (:added %))
-                                    (datom->checksum-tuple db-before attrs %))
-                                tx-data)
-            added-tuples (keep #(when (:added %)
-                                  (datom->checksum-tuple db-after attrs %))
-                              tx-data)
+            removed-tuples (->> tx-data
+                                (keep #(when (false? (:added %))
+                                         (datom->checksum-tuple db-before attrs %)))
+                                set)
+            added-tuples (->> tx-data
+                              (keep #(when (:added %)
+                                       (datom->checksum-tuple db-after attrs %)))
+                              set)
             state-after-removals (reduce (fn [checksum-state tuple]
                                            (subtract-digest checksum-state (tuple-digest tuple)))
                                          initial-state
@@ -229,6 +218,4 @@
                                             (add-digest checksum-state (tuple-digest tuple)))
                                           state-after-removals
                                           added-tuples)]
-        (if existing-uuid-mutation?
-          (recompute-checksum db-after)
-          (state->checksum state-after-additions))))))
+        (state->checksum state-after-additions)))))
