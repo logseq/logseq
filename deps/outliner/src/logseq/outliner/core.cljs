@@ -460,7 +460,6 @@
             block' (if (de/entity? block)
                      block
                      (merge entity block))]
-        (prn :debug :block block')
         (otree/-save block' *txs-state db opts)
         {:tx-data @*txs-state}))))
 
@@ -1093,8 +1092,8 @@
           (ldb/transact! (first args) (:tx-data result) tx-meta)))
       result)
     (catch :default e
-      (js/console.error e)
       (when-not (= "not-allowed-move-block-page" (ex-message e))
+        (js/console.error e)
         (throw e)))))
 
 (let [f (fn [conn block opts]
