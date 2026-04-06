@@ -92,7 +92,7 @@
    :block/title
    :block/content
    :logseq.property/created-from-property
-   {:logseq.property/status [:db/ident :block/name :block/title]}
+   {:logseq.property/status [:db/ident :block/title]}
    :block/order
    {:block/parent [:db/id]}
    {:block/tags [:db/id :block/name :block/title :block/uuid]}])
@@ -104,7 +104,7 @@
    :block/title
    :block/content
    :logseq.property/created-from-property
-   {:logseq.property/status [:db/ident :block/name :block/title]}
+   {:logseq.property/status [:db/ident :block/title]}
    {:block/tags [:db/id :block/name :block/title :block/uuid]}
    {:block/page [:db/id :block/name :block/title :block/uuid]}
    {:block/parent [:db/id
@@ -277,45 +277,28 @@
     (string/upper-case status)))
 
 (def ^:private status-color-map
-  {"TODO" style/yellow
-   "DOING" style/blue
-   "NOW" style/cyan
-   "LATER" style/magenta
-   "WAITING" style/magenta
-   "DONE" style/green
-   "CANCELED" style/red
-   "CANCELLED" style/red})
+  {:logseq.property/status.backlog style/magenta
+   :logseq.property/status.todo style/yellow
+   :logseq.property/status.doing style/blue
+   :logseq.property/status.in-review style/cyan
+   :logseq.property/status.done style/green
+   :logseq.property/status.canceled style/red})
 
 (defn- style-status
   [status]
   (when (seq status)
-    (let [label (str status)
-          lookup (string/upper-case label)
-          color-fn (get status-color-map lookup identity)]
-      (style/bold (color-fn label)))))
-
-(defn- status-label
-  [node]
-  (let [status (:logseq.property/status node)]
-    (cond
-      (string? status) (when (seq status) status)
-      (keyword? status) (status-from-ident status)
-      (map? status) (or (:block/title status)
-                        (:block/name status)
-                        (when-let [ident (:db/ident status)]
-                          (status-from-ident ident)))
-      :else nil)))
+    (let [color-fn (get status-color-map (:db/ident status) identity)]
+      (style/bold (color-fn (:block/title status))))))
 
 (defn- block-label
   [node]
   (let [title (:block/title node)
         content (:block/content node)
-        status (status-label node)
-        status* (style-status status)
+        status (style-status (:logseq.property/status node))
         uuid->label (:uuid->label node)
         text (or title content)
         base (cond
-               (and text (seq status)) (str status* " " text)
+               (and text (seq status)) (str status " " text)
                text text
                (:block/name node) (:block/name node)
                (:block/uuid node) (some-> (:block/uuid node) str))
@@ -751,7 +734,7 @@
       (some? id)
       (p/let [entity (transport/invoke config :thread-api/pull false
                                        [repo [:db/id :db/ident :block/name :block/uuid :block/title
-                                              {:logseq.property/status [:db/ident :block/name :block/title]}
+                                              {:logseq.property/status [:db/ident :block/title]}
                                               {:block/page [:db/id :block/title]}
                                               {:block/tags [:db/id :block/name :block/title :block/uuid]}] id])]
         (p/let [entity (attach-user-properties-to-entity config repo entity)]
@@ -770,7 +753,7 @@
       (seq uuid-str)
       (p/let [entity (transport/invoke config :thread-api/pull false
                                        [repo [:db/id :db/ident :block/name :block/uuid :block/title
-                                              {:logseq.property/status [:db/ident :block/name :block/title]}
+                                              {:logseq.property/status [:db/ident :block/title]}
                                               {:block/page [:db/id :block/title]}
                                               {:block/tags [:db/id :block/name :block/title :block/uuid]}]
                                         [:block/uuid (uuid uuid-str)]])
@@ -778,7 +761,7 @@
                        entity
                        (transport/invoke config :thread-api/pull false
                                          [repo [:db/id :db/ident :block/name :block/uuid :block/title
-                                                {:logseq.property/status [:db/ident :block/name :block/title]}
+                                                {:logseq.property/status [:db/ident :block/title]}
                                                 {:block/page [:db/id :block/title]}
                                                 {:block/tags [:db/id :block/name :block/title :block/uuid]}]
                                           [:block/uuid uuid-str]]))]
@@ -798,7 +781,7 @@
       (seq page)
       (p/let [page-entity (transport/invoke config :thread-api/pull false
                                             [repo [:db/id :db/ident :block/uuid :block/title
-                                                   {:logseq.property/status [:db/ident :block/name :block/title]}
+                                                   {:logseq.property/status [:db/ident :block/title]}
                                                    {:block/tags [:db/id :block/name :block/title :block/uuid]}]
                                              [:block/name page]])]
         (p/let [page-entity (attach-user-properties-to-entity config repo page-entity)]
