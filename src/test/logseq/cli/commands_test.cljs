@@ -701,6 +701,26 @@
                   "3 └── Child B")
              (strip-ansi output))))))
 
+(deftest test-tree->text-renders-properties-map-value
+  (testing "show tree text renders literal map property values"
+    (let [tree->text #'show-command/tree->text
+          tree-data {:root {:db/id 1
+                            :block/title "Root"
+                            :block/children [{:db/id 2
+                                              :block/title "Child A"
+                                              :user.property/config {:a 1 :b 2}}
+                                             {:db/id 3
+                                              :block/title "Child B"}]}
+                     :property-titles {:user.property/config "Config"}}
+          output (binding [style/*color-enabled?* true]
+                   (tree->text tree-data))]
+      (is (contains-bold? output "Config"))
+      (is (= (str "1 Root\n"
+                  "2 ├── Child A\n"
+                  "  │   Config: {:a 1, :b 2}\n"
+                  "3 └── Child B")
+             (strip-ansi output))))))
+
 (deftest test-tree->text-properties-order
   (testing "show tree text renders user properties in stable key order"
     (let [tree->text #'show-command/tree->text

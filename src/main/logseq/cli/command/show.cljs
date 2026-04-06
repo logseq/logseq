@@ -210,7 +210,8 @@
                       (when-let [val (:logseq.property/value value)]
                         (if (string? val)
                           (nonblank-string val)
-                          (str val))))
+                          (str val)))
+                      (pr-str value))
      (some? value) (str value)
      :else nil)))
 
