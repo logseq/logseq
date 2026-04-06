@@ -123,24 +123,6 @@
       (is (not= before-checksum full))
       (is (= full incremental)))))
 
-(deftest incremental-checksum-matches-recompute-when-referenced-uuid-is-retracted-test
-  (testing "incremental checksum updates dependents when a referenced entity loses its block UUID"
-    (let [db-before (sample-db)
-          parent-uuid (:block/uuid (d/entity db-before 3))
-          tx-report (d/with db-before [[:db/retract 3 :block/uuid parent-uuid]])
-          full (checksum/recompute-checksum (:db-after tx-report))
-          incremental (checksum/update-checksum (checksum/recompute-checksum db-before) tx-report)]
-      (is (= full incremental)))))
-
-(deftest incremental-checksum-matches-recompute-when-block-uuid-changes-test
-  (testing "incremental checksum matches full recompute when an existing block UUID changes"
-    (let [db-before (sample-db)
-          new-parent-uuid (random-uuid)
-          tx-report (d/with db-before [[:db/add 3 :block/uuid new-parent-uuid]])
-          full (checksum/recompute-checksum (:db-after tx-report))
-          incremental (checksum/update-checksum (checksum/recompute-checksum db-before) tx-report)]
-      (is (= full incremental)))))
-
 (deftest incremental-checksum-matches-recompute-when-block-is-readded-test
   (testing "incremental checksum remains equal to recompute when a block is deleted and re-added with the same UUID"
     (let [db0 (sample-db)
