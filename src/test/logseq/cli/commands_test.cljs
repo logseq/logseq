@@ -1696,6 +1696,18 @@
       (is (true? (:ok? enabled)))
       (is (= true (get-in enabled [:options :progress])))))
 
+  (testing "sync ensure-keys accepts e2ee-password option"
+    (let [result (commands/parse-args ["sync" "ensure-keys" "--e2ee-password" "pw"])]
+      (is (true? (:ok? result)))
+      (is (= :sync-ensure-keys (:command result)))
+      (is (= "pw" (get-in result [:options :e2ee-password])))))
+
+  (testing "sync ensure-keys accepts upload-keys option"
+    (let [result (commands/parse-args ["sync" "ensure-keys" "--upload-keys"])]
+      (is (true? (:ok? result)))
+      (is (= :sync-ensure-keys (:command result)))
+      (is (= true (get-in result [:options :upload-keys])))))
+
   (testing "graph import rejects unknown type"
     (let [result (commands/parse-args ["graph" "import"
                                        "--type" "zip"

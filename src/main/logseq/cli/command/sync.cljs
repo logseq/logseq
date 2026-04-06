@@ -23,6 +23,12 @@
    :e2ee-password {:desc "Verify and persist E2EE password before download"
                    :coerce :string}})
 
+(def ^:private sync-ensure-keys-spec
+  {:e2ee-password {:desc "Verify and persist E2EE password before ensuring user RSA keys"
+                   :coerce :string}
+   :upload-keys {:desc "Ensure local RSA keys are uploaded to server (checks server presence first)"
+                 :coerce :boolean}})
+
 (def entries
   [(core/command-entry ["sync" "status"] :sync-status "Show db-sync runtime status" {}
                        {:examples ["logseq sync status --graph my-graph"]})
@@ -38,7 +44,10 @@
                                    "logseq sync download --graph my-graph --progress"
                                    "logseq sync download --graph my-graph --e2ee-password \"my-secret\""]})
    (core/command-entry ["sync" "remote-graphs"] :sync-remote-graphs "List remote graphs" {})
-   (core/command-entry ["sync" "ensure-keys"] :sync-ensure-keys "Ensure user RSA keys for sync/e2ee" {})
+   (core/command-entry ["sync" "ensure-keys"] :sync-ensure-keys "Ensure user RSA keys for sync/e2ee" sync-ensure-keys-spec
+                       {:examples ["logseq sync ensure-keys"
+                                   "logseq sync ensure-keys --upload-keys"
+                                   "logseq sync ensure-keys --e2ee-password \"my-secret\" --upload-keys"]})
    (core/command-entry ["sync" "grant-access"] :sync-grant-access "Grant graph access to an email" sync-grant-access-spec
                        {:examples ["logseq sync grant-access --graph my-graph --graph-id 8b6ecdd0-1fab-4a9f-b3fb-3069c5f76e95 --email teammate@example.com"]})
    (core/command-entry ["sync" "config" "set"] :sync-config-set "Set sync config key" {}
@@ -221,6 +230,16 @@
                                           error))
                      (p/rejected error)))))))
 
+(declare invoke-global)
+
+(defn- <verify-and-save-e2ee-password-if-provided!
+  [config {:keys [e2ee-password]}]
+  (if (seq e2ee-password)
+    (p/let [refresh-token (ensure-refresh-token! config)
+            _ (invoke-global config :thread-api/verify-and-save-e2ee-password [refresh-token e2ee-password])]
+      nil)
+    (p/resolved nil)))
+
 (defn- parse-config-key
   [raw-key]
   (let [raw-key (some-> raw-key string/trim string/lower-case)
@@ -262,6 +281,13 @@
               :progress (:progress options)
               :progress-explicit? (contains? options :progress)
               :e2ee-password (:e2ee-password options)}}))
+
+(defn- build-sync-ensure-keys-action
+  [options]
+  {:ok? true
+   :action {:type :sync-ensure-keys
+            :e2ee-password (:e2ee-password options)
+            :upload-keys (:upload-keys options)}})
 
 (defn- build-sync-grant-access-action
   [options repo]
@@ -349,8 +375,7 @@
      :action {:type :sync-remote-graphs}}
 
     :sync-ensure-keys
-    {:ok? true
-     :action {:type :sync-ensure-keys}}
+    (build-sync-ensure-keys-action options)
 
     :sync-grant-access
     (build-sync-grant-access-action options repo)
@@ -659,10 +684,23 @@
       (p/catch (fn [error]
                  (exception->error error nil)))))
 
+(defn- sync-ensure-keys-upload-options
+  [{:keys [upload-keys e2ee-password]}]
+  (when (true? upload-keys)
+    (cond-> {:ensure-server? true}
+      (seq e2ee-password) (assoc :password e2ee-password))))
+
 (defn- run-sync-ensure-keys
   [action config]
   (-> (p/let [config' (resolve-runtime-config! action config)
-              result (invoke-global config' :thread-api/db-sync-ensure-user-rsa-keys [])]
+              upload-options (sync-ensure-keys-upload-options action)
+              _ (when-not upload-options
+                  (<verify-and-save-e2ee-password-if-provided! config' action))
+              result (invoke-global config'
+                                    :thread-api/db-sync-ensure-user-rsa-keys
+                                    (if upload-options [upload-options] []))
+              _ (when upload-options
+                  (<verify-and-save-e2ee-password-if-provided! config' action))]
         {:status :ok
          :data {:result result}})
       (p/catch (fn [error]

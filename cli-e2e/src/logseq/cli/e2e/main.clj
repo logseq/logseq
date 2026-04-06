@@ -23,6 +23,12 @@
     :else
     (vec cases)))
 
+(def default-suite :non-sync)
+
+(defn- suite-from-opts
+  [opts]
+  (or (:suite opts) default-suite))
+
 (defn- elapsed-ms
   [started-at]
   (long (/ (- (System/nanoTime) started-at) 1000000)))
@@ -68,6 +74,7 @@
     :as opts}]
   (let [run-command (or run-command shell/run!)
         run-case (or (:run-case opts) runner/run-case!)
+        suite (suite-from-opts opts)
         targeted-run? (or (:case opts) (seq (:include opts)))
         on-preflight-start (:on-preflight-start opts)
         on-preflight-complete (:on-preflight-complete opts)
@@ -76,8 +83,8 @@
       (on-preflight-start {:skip-build skip-build}))
     (let [preflight-result (preflight/run! {:skip-build skip-build
                                             :run-command run-command})
-          inventory (or inventory (manifests/load-inventory))
-          cases (or cases (manifests/load-cases))]
+          inventory (or inventory (manifests/load-inventory suite))
+          cases (or cases (manifests/load-cases suite))]
       (when on-preflight-complete
         (on-preflight-complete preflight-result))
       (let [selected-cases (select-cases cases opts)
@@ -100,9 +107,13 @@
   (preflight/run! opts))
 
 (defn list-cases!
-  [_opts]
-  (doseq [{:keys [id]} (manifests/load-cases)]
+  [opts]
+  (doseq [{:keys [id]} (manifests/load-cases (suite-from-opts opts))]
     (println id)))
+
+(defn list-sync-cases!
+  [opts]
+  (list-cases! (assoc opts :suite :sync)))
 
 (defn- print-cleanup-help!
   []
@@ -165,8 +176,8 @@
     (flush)))
 
 (defn- print-test-help!
-  []
-  (println "Usage: bb -f cli-e2e/bb.edn test [options]")
+  [command-name]
+  (println (str "Usage: bb -f cli-e2e/bb.edn " command-name " [options]"))
   (println)
   (println "Options:")
   (println "  -h, --help           Show this help and exit")
@@ -176,79 +187,93 @@
   (println "      --verbose        Enable verbose output")
   (println)
   (println "Examples:")
-  (println "  bb -f cli-e2e/bb.edn test --skip-build")
-  (println "  bb -f cli-e2e/bb.edn test --skip-build -i smoke")
-  (println "  bb -f cli-e2e/bb.edn test --skip-build --case global-help")
+  (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build"))
+  (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build -i smoke"))
+  (println (str "  bb -f cli-e2e/bb.edn " command-name " --skip-build --case global-help"))
   (flush))
+
+(defn- test-suite!
+  [opts {:keys [suite command-name]
+         :or {suite default-suite
+              command-name "test"}}]
+  (let [suite (or suite default-suite)
+        opts (assoc opts :suite suite)]
+    (if (:help opts)
+      (do
+        (print-test-help! command-name)
+        {:status :help})
+      (let [started-at (System/nanoTime)
+            passed (atom 0)
+            failed (atom 0)
+            total-count (atom 0)
+            detailed-case-log? (some? (:case opts))
+            base-run-command (or (:run-command opts) shell/run!)
+            run-command (if detailed-case-log?
+                          (fn [{:keys [cmd phase step-index step-total] :as command-opts}]
+                            (let [prefix (case phase
+                                           :setup (format "    [setup %d/%d]" step-index step-total)
+                                           :main (format "    [main %d/%d]" (or step-index 1) (or step-total 1))
+                                           :cleanup (format "    [cleanup %d/%d]" step-index step-total)
+                                           "    [command]")]
+                              (println (str prefix " $ " cmd))
+                              (flush)
+                              (base-run-command (assoc command-opts :stream-output? true))))
+                          base-run-command)]
+        (println "==> Running cli-e2e cases")
+        (when detailed-case-log?
+          (println (format "==> Detailed case logging enabled (--case %s)" (:case opts))))
+        (flush)
+        (try
+          (run! (assoc opts
+                       :run-command run-command
+                       :detailed-log? detailed-case-log?
+                       :on-preflight-start (fn [_]
+                                             (println "==> Build preflight: running...")
+                                             (flush))
+                       :on-preflight-complete (fn [{:keys [status]}]
+                                                (println (case status
+                                                           :skipped "==> Build preflight: skipped (--skip-build)"
+                                                           "==> Build preflight: completed"))
+                                                (flush))
+                       :on-cases-ready (fn [{:keys [total]}]
+                                         (reset! total-count total)
+                                         (println (format "==> Prepared %d case(s), starting execution" total))
+                                         (flush))
+                       :on-case-start (fn [{:keys [index total case]}]
+                                        (println (format "[%d/%d] ▶ %s" index total (:id case)))
+                                        (flush))
+                       :on-case-success (fn [{:keys [index total result elapsed-ms]}]
+                                          (swap! passed inc)
+                                          (println (format "[%d/%d] ✓ %s (%dms)"
+                                                           index
+                                                           total
+                                                           (:id result)
+                                                           elapsed-ms))
+                                          (flush))
+                       :on-case-failure (fn [{:keys [index total case error elapsed-ms]}]
+                                          (swap! failed inc)
+                                          (println (format "[%d/%d] ✗ %s (%dms)"
+                                                           index
+                                                           total
+                                                           (:id case)
+                                                           elapsed-ms))
+                                          (print-failure-details! error))))
+          (println (format "Summary: %d passed, %d failed" @passed @failed))
+          (println (str "Selected cases: " @total-count))
+          (println (str "Duration: " (format-duration started-at)))
+          (catch Exception error
+            (let [failed-count (max 1 @failed)]
+              (println (format "Summary: %d passed, %d failed" @passed failed-count))
+              (println (str "Selected cases: " (max @total-count failed-count)))
+              (println (str "Duration: " (format-duration started-at))))
+            (throw error)))))))
 
 (defn test!
   [opts]
-  (if (:help opts)
-    (do
-      (print-test-help!)
-      {:status :help})
-    (let [started-at (System/nanoTime)
-          passed (atom 0)
-          failed (atom 0)
-          total-count (atom 0)
-          detailed-case-log? (some? (:case opts))
-          base-run-command (or (:run-command opts) shell/run!)
-          run-command (if detailed-case-log?
-                        (fn [{:keys [cmd phase step-index step-total] :as command-opts}]
-                          (let [prefix (case phase
-                                         :setup (format "    [setup %d/%d]" step-index step-total)
-                                         :main (format "    [main %d/%d]" (or step-index 1) (or step-total 1))
-                                         :cleanup (format "    [cleanup %d/%d]" step-index step-total)
-                                         "    [command]")]
-                            (println (str prefix " $ " cmd))
-                            (flush)
-                            (base-run-command (assoc command-opts :stream-output? true))))
-                        base-run-command)]
-      (println "==> Running cli-e2e cases")
-      (when detailed-case-log?
-        (println (format "==> Detailed case logging enabled (--case %s)" (:case opts))))
-      (flush)
-      (try
-        (run! (assoc opts
-                     :run-command run-command
-                     :detailed-log? detailed-case-log?
-                     :on-preflight-start (fn [_]
-                                           (println "==> Build preflight: running...")
-                                           (flush))
-                     :on-preflight-complete (fn [{:keys [status]}]
-                                              (println (case status
-                                                         :skipped "==> Build preflight: skipped (--skip-build)"
-                                                         "==> Build preflight: completed"))
-                                              (flush))
-                     :on-cases-ready (fn [{:keys [total]}]
-                                       (reset! total-count total)
-                                       (println (format "==> Prepared %d case(s), starting execution" total))
-                                       (flush))
-                     :on-case-start (fn [{:keys [index total case]}]
-                                      (println (format "[%d/%d] ▶ %s" index total (:id case)))
-                                      (flush))
-                     :on-case-success (fn [{:keys [index total result elapsed-ms]}]
-                                        (swap! passed inc)
-                                        (println (format "[%d/%d] ✓ %s (%dms)"
-                                                         index
-                                                         total
-                                                         (:id result)
-                                                         elapsed-ms))
-                                        (flush))
-                     :on-case-failure (fn [{:keys [index total case error elapsed-ms]}]
-                                        (swap! failed inc)
-                                        (println (format "[%d/%d] ✗ %s (%dms)"
-                                                         index
-                                                         total
-                                                         (:id case)
-                                                         elapsed-ms))
-                                        (print-failure-details! error))))
-        (println (format "Summary: %d passed, %d failed" @passed @failed))
-        (println (str "Selected cases: " @total-count))
-        (println (str "Duration: " (format-duration started-at)))
-        (catch Exception error
-          (let [failed-count (max 1 @failed)]
-            (println (format "Summary: %d passed, %d failed" @passed failed-count))
-            (println (str "Selected cases: " (max @total-count failed-count)))
-            (println (str "Duration: " (format-duration started-at))))
-          (throw error))))))
+  (test-suite! opts {:suite :non-sync
+                     :command-name "test"}))
+
+(defn test-sync!
+  [opts]
+  (test-suite! opts {:suite :sync
+                     :command-name "test-sync"}))

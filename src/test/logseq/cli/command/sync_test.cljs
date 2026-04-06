@@ -67,13 +67,18 @@
       (is (false? (:ok? unset-result)))
       (is (= :invalid-options (get-in unset-result [:error :code])))))
 
-  (testing "sync start and download actions carry e2ee-password option"
+  (testing "sync start, download and ensure-keys actions carry e2ee-password option"
     (let [start-result (sync-command/build-action :sync-start {:e2ee-password "pw"} [] "logseq_db_demo")
-          download-result (sync-command/build-action :sync-download {:e2ee-password "pw"} [] "logseq_db_demo")]
+          download-result (sync-command/build-action :sync-download {:e2ee-password "pw"} [] "logseq_db_demo")
+          ensure-keys-result (sync-command/build-action :sync-ensure-keys {:e2ee-password "pw"
+                                                                            :upload-keys true} [] nil)]
       (is (true? (:ok? start-result)))
       (is (= "pw" (get-in start-result [:action :e2ee-password])))
       (is (true? (:ok? download-result)))
-      (is (= "pw" (get-in download-result [:action :e2ee-password])))))
+      (is (= "pw" (get-in download-result [:action :e2ee-password])))
+      (is (true? (:ok? ensure-keys-result)))
+      (is (= "pw" (get-in ensure-keys-result [:action :e2ee-password])))
+      (is (= true (get-in ensure-keys-result [:action :upload-keys])))))
 
   (testing "sync grant-access requires graph-id and email"
     (let [missing-graph-id (sync-command/build-action :sync-grant-access {:email "user@example.com"} [] "logseq_db_demo")
@@ -939,8 +944,8 @@
                                                   (swap! invoke-calls conj [method direct-pass? args])
                                                   (p/resolved {:ok true}))]
                  (p/let [_ (execute-with-runtime-auth {:type :sync-ensure-keys}
-                                                 {:base-url "http://example"
-                                                  :data-dir "/tmp"})]
+                                                      {:base-url "http://example"
+                                                       :data-dir "/tmp"})]
                    (is (= [] @ensure-calls))
                    (is (= :thread-api/sync-app-state (get-in @invoke-calls [0 0])))
                    (is (= "runtime-token" (get-in @invoke-calls [0 2 0 :auth/id-token])))
@@ -949,6 +954,63 @@
                           (nth @invoke-calls 1)))
                    (is (= [:thread-api/db-sync-ensure-user-rsa-keys false []]
                           (nth @invoke-calls 2)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-sync-ensure-keys-verifies-and-persists-e2ee-password-when-provided
+  (async done
+         (let [invoke-calls (atom [])]
+           (-> (p/with-redefs [transport/invoke (fn [_ method direct-pass? args]
+                                                  (swap! invoke-calls conj [method direct-pass? args])
+                                                  (p/resolved {:ok true}))]
+                 (p/let [_ (sync-command/execute {:type :sync-ensure-keys
+                                                  :e2ee-password "pw"}
+                                                 {:base-url "http://example"
+                                                  :data-dir "/tmp"
+                                                  :refresh-token "refresh-token"
+                                                  :id-token "runtime-token"})]
+                   (is (= [:thread-api/sync-app-state
+                           :thread-api/set-db-sync-config
+                           :thread-api/verify-and-save-e2ee-password
+                           :thread-api/sync-app-state
+                           :thread-api/set-db-sync-config
+                           :thread-api/db-sync-ensure-user-rsa-keys]
+                          (mapv first @invoke-calls)))
+                   (is (some #(= [:thread-api/verify-and-save-e2ee-password false ["refresh-token" "pw"]]
+                                 %)
+                             @invoke-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-sync-ensure-keys-upload-keys-enables-server-upload-flow
+  (async done
+         (let [invoke-calls (atom [])]
+           (-> (p/with-redefs [transport/invoke (fn [_ method direct-pass? args]
+                                                  (swap! invoke-calls conj [method direct-pass? args])
+                                                  (p/resolved {:ok true}))]
+                 (p/let [_ (sync-command/execute {:type :sync-ensure-keys
+                                                  :upload-keys true
+                                                  :e2ee-password "pw"}
+                                                 {:base-url "http://example"
+                                                  :data-dir "/tmp"
+                                                  :refresh-token "refresh-token"
+                                                  :id-token "runtime-token"})]
+                   (is (= [:thread-api/sync-app-state
+                           :thread-api/set-db-sync-config
+                           :thread-api/db-sync-ensure-user-rsa-keys
+                           :thread-api/sync-app-state
+                           :thread-api/set-db-sync-config
+                           :thread-api/verify-and-save-e2ee-password]
+                          (mapv first @invoke-calls)))
+                   (is (some #(= [:thread-api/db-sync-ensure-user-rsa-keys false [{:ensure-server? true
+                                                                                     :password "pw"}]]
+                                 %)
+                             @invoke-calls))
+                   (is (some #(= [:thread-api/verify-and-save-e2ee-password false ["refresh-token" "pw"]]
+                                 %)
+                             @invoke-calls))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))

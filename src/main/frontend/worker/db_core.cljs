@@ -503,8 +503,8 @@
   (sync-crypt/<grant-graph-access! repo graph-id target-email))
 
 (def-thread-api :thread-api/db-sync-ensure-user-rsa-keys
-  []
-  (sync-crypt/ensure-user-rsa-keys!))
+  [& [opts]]
+  (sync-crypt/ensure-user-rsa-keys! opts))
 
 (def-thread-api :thread-api/db-sync-list-remote-graphs
   []
