@@ -310,7 +310,7 @@
     (usable-history-ops inverse-outliner-ops)
     (usable-history-ops forward-outliner-ops)))
 
-(declare precreate-missing-save-blocks! replay-canonical-outliner-op!)
+(declare replay-canonical-outliner-op!)
 
 (defn- inline-history-action
   [tx-meta]
@@ -392,7 +392,6 @@
                conn
                tx-meta'
                (fn [row-conn]
-                 ;; (precreate-missing-save-blocks! row-conn ops)
                  (doseq [op ops]
                    (replay-canonical-outliner-op! row-conn op))))
               {:applied? true
@@ -597,38 +596,6 @@
 (defn- replay-entity-id-coll
   [db ids]
   (mapv #(or (replay-entity-id-value db %) %) ids))
-
-(defn- precreate-missing-save-blocks!
-  [conn ops]
-  (doseq [[op args] ops
-          :when (= :save-block op)]
-    (let [[block _opts] args
-          db @conn
-          block-uuid (:block/uuid block)
-          missing-block? (and block-uuid
-                              (nil? (d/entity db [:block/uuid block-uuid])))
-          has-structure? (or (:block/page block)
-                             (:block/parent block))]
-      (when (and missing-block? has-structure?)
-        (let [target-ref (or (:block/parent block)
-                             (:block/page block))
-              target-block (d/entity db target-ref)]
-          (when-not target-block
-            (invalid-rebase-op! op {:args args
-                                    :reason :missing-target-block}))
-          (let [now (.now js/Date)
-                create-block (-> block
-                                 (dissoc :db/id)
-                                 (assoc :block/created-at now)
-                                 (assoc :block/updated-at now))]
-            (when-not (or (:block/parent block)
-                          (:block/page block))
-              (throw (ex-info "block doesn't have both parent and page"
-                              block)))
-            (ldb/transact! conn
-                           [create-block]
-                           {:outliner-op :save-block
-                            :persist-op? false})))))))
 
 (defn- ^:large-vars/cleanup-todo replay-canonical-outliner-op!
   [conn [op args]]
@@ -864,10 +831,8 @@
          (if (= [[:transact nil]] outliner-ops)
            (when-let [tx-data (seq (:tx local-tx))]
              (ldb/transact! conn tx-data {:outliner-op :transact}))
-           (do
-             ;; (precreate-missing-save-blocks! conn outliner-ops)
-             (doseq [op outliner-ops]
-               (replay-canonical-outliner-op! conn op))))))
+           (doseq [op outliner-ops]
+             (replay-canonical-outliner-op! conn op)))))
       (catch :default error
         (let [drop-log {:tx-id (:tx-id local-tx)
                         :outliner-ops outliner-ops
