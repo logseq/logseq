@@ -1,17 +1,17 @@
 (ns logseq.cli.command.show
   "Show-related CLI commands."
   (:require ["fs" :as fs]
+            [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
-            [logseq.cli.command.id :as id-command]
             [logseq.cli.command.core :as core]
+            [logseq.cli.command.id :as id-command]
             [logseq.cli.server :as cli-server]
             [logseq.cli.style :as style]
             [logseq.cli.transport :as transport]
             [logseq.common.util :as common-util]
-            [promesa.core :as p]
-            [clojure.set :as set]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [promesa.core :as p]))
 
 (def ^:private show-spec
   {:id {:desc "Block db/id or EDN vector of ids"}
@@ -43,11 +43,13 @@
 
 (defn- normalize-stdin-id
   [value]
-  (let [text (string/trim (or value ""))]
+  (let [text (string/trim (or value ""))
+        last-line (-> text string/split-lines last (or "") string/trim)]
     (cond
       (string/blank? text) text
       (string/starts-with? text "[") text
       (re-matches #"-?\d+" text) text
+      (re-matches #"\[[\d\s,]*\]" last-line) last-line
       :else
       (let [tokens (->> (string/split text #"\s+")
                         (remove string/blank?))]
@@ -266,13 +268,6 @@
                    (when-let [title (property-title-for property-titles property-key)]
                      (format-property-lines indent title values))))
          vec)))
-
-(defn- status-from-ident
-  [ident]
-  (let [name* (name ident)
-        parts (string/split name* #"\.")
-        status (or (last parts) name*)]
-    (string/upper-case status)))
 
 (def ^:private status-color-map
   {:logseq.property/status.backlog style/magenta
@@ -1063,7 +1058,7 @@
                  :data {:message (string/join multi-id-delimiter messages)}})))
           (p/let [tree-data (build-tree-data cfg action)]
             (case format
-             :edn
+              :edn
               (let [tree-data (-> tree-data
                                   strip-show-internal-data
                                   strip-block-uuid)]
@@ -1071,7 +1066,7 @@
                  :data tree-data
                  :output-format :edn})
 
-             :json
+              :json
               (let [tree-data (-> tree-data
                                   strip-show-internal-data
                                   strip-block-uuid)]
