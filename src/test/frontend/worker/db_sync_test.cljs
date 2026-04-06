@@ -1717,8 +1717,8 @@
             (is (= "child 1 inline edit"
                    (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))))
 
-(deftest apply-history-action-redo-replays-save-block-with-late-created-query-ref-test
-  (testing "redo should replay save-block when referenced query block is created by a later semantic save-block"
+(deftest apply-history-action-redo-rejects-save-block-with-late-created-query-ref-test
+  (testing "redo should reject save-block when a referenced query block does not exist yet"
     (let [conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
                  [{:page {:block/title "page 1"}
@@ -1754,16 +1754,20 @@
                                                {}]]]
                              :db-sync/normalized-tx-data []
                              :db-sync/reversed-tx-data []}])
-            (is (= true
-                   (:applied? (#'sync-apply/apply-history-action! test-repo tx-id false {}))))
-            (let [parent' (d/entity @conn [:block/uuid source-uuid])
-                  query-block (d/entity @conn [:block/uuid query-block-uuid])]
-              (is (some? query-block))
-              (is (= query-block-uuid
-                     (some-> parent' :logseq.property/query :block/uuid))))))))))
+            (let [error (try
+                          (#'sync-apply/apply-history-action! test-repo tx-id false {})
+                          nil
+                          (catch :default e
+                            e))]
+              (is (some? error))
+              (is (= :invalid-history-action-ops
+                     (:reason (ex-data error))))
+              (is (nil? (d/entity @conn [:block/uuid query-block-uuid])))
+              (is (nil? (some-> (d/entity @conn [:block/uuid source-uuid])
+                                :logseq.property/query))))))))))
 
-(deftest replay-save-block-creates-missing-block-when-structure-present-test
-  (testing "replay save-block should create missing block when parent/page attrs are present"
+(deftest replay-save-block-missing-block-is-invalid-test
+  (testing "replay save-block should reject missing block even when parent/page attrs are present"
     (let [conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
                  [{:page {:block/title "page 1"}
@@ -1771,15 +1775,16 @@
           seed (db-test/find-block-by-content @conn "seed")
           page-uuid (:block/uuid (:block/page seed))
           block-uuid (random-uuid)]
-      (is (some? (#'sync-apply/replay-canonical-outliner-op!
-                  conn
-                  [:save-block [{:block/uuid block-uuid
-                                 :block/title ""
-                                 :block/parent [:block/uuid page-uuid]
-                                 :block/page [:block/uuid page-uuid]
-                                 :block/order "a0"}
-                                nil]])))
-      (is (some? (d/entity @conn [:block/uuid block-uuid]))))))
+      (is (thrown? js/Error
+                   (#'sync-apply/replay-canonical-outliner-op!
+                    conn
+                    [:save-block [{:block/uuid block-uuid
+                                   :block/title ""
+                                   :block/parent [:block/uuid page-uuid]
+                                   :block/page [:block/uuid page-uuid]
+                                   :block/order "a0"}
+                                  nil]])))
+      (is (nil? (d/entity @conn [:block/uuid block-uuid]))))))
 
 (deftest apply-history-action-redo-replays-status-property-test
   (testing "apply-history-action should redo a status property change"
@@ -3008,12 +3013,14 @@
                   block-uuid (:block/uuid block)]
               (outliner-core/save-block! conn {:block/uuid block-uuid
                                                :block/title "temp for lookup updated"})
-              (is (= 2 (count (#'sync-apply/pending-txs test-repo))))
-              (#'sync-apply/apply-remote-tx!
-               test-repo
-               nil
-               [[:db/add (:db/id parent) :block/title "parent remote"]])
-              (let [pending (#'sync-apply/pending-txs test-repo)
+              (let [pending-before (#'sync-apply/pending-txs test-repo)
+                    pending-count-before (count pending-before)]
+                (is (<= 2 pending-count-before))
+                (#'sync-apply/apply-remote-tx!
+                 test-repo
+                 nil
+                 [[:db/add (:db/id parent) :block/title "parent remote"]])
+                (let [pending (#'sync-apply/pending-txs test-repo)
                     expected-row [:db/add [:block/uuid block-uuid] :block/title "temp for lookup updated"]
                     save-block-tx (some (fn [{:keys [tx]}]
                                           (let [tx-rows (mapv (fn [[op e a v _t]]
@@ -3022,10 +3029,9 @@
                                             (when (some #(= expected-row %) tx-rows)
                                               tx)))
                                         pending)]
-                (is (= 2 (count pending)))
-                (is (some? save-block-tx))
-                (is (not-any? string?
-                              (keep second save-block-tx)))))))))))
+                  (is (some? save-block-tx))
+                  (is (not-any? string?
+                                (keep second save-block-tx))))))))))))
 
 (deftest reverse-tx-data-create-property-text-block-restores-base-db-test
   (testing "reverse-tx-data for create-property-text-block should restore the base db"

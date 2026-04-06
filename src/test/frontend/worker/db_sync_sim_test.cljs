@@ -2084,6 +2084,82 @@
                 (d/unlisten! conn-a listener-a)
                 (d/unlisten! conn-b listener-b)))))))))
 
+(deftest two-clients-empty-child-undo-redo-reconnect-keeps-checksum-cache-aligned-test
+  (testing "A online add empty child; B offline add empty child + undo/redo; reconnect keeps checksum cache aligned"
+    (let [base-uuid (uuid "81111111-1111-1111-1111-111111111111")
+          root-uuid (uuid "82222222-2222-2222-2222-222222222222")
+          child-a-uuid (uuid "83333333-3333-3333-3333-333333333333")
+          child-b-uuid (uuid "84444444-4444-4444-4444-444444444444")
+          conn-a (db-test/create-conn)
+          conn-b (db-test/create-conn)
+          ops-a (d/create-conn client-op/schema-in-db)
+          ops-b (d/create-conn client-op/schema-in-db)
+          client-a (make-client repo-a)
+          client-b (make-client repo-b)
+          server (make-server)]
+      (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}
+                        repo-b {:conn conn-b :ops-conn ops-b}}
+        (fn []
+          (let [listener-a ::checksum-sync-a
+                listener-b ::checksum-sync-b
+                update-local-checksum!
+                (fn [repo conn listener-key]
+                  (d/listen! conn listener-key
+                             (fn [tx-report]
+                               (when-not (:batch-tx? @conn)
+                                 (when (seq (:tx-data tx-report))
+                                   (db-sync/update-local-sync-checksum! repo tx-report)))))
+                  nil)]
+            (update-local-checksum! repo-a conn-a listener-a)
+            (update-local-checksum! repo-b conn-b listener-b)
+            (try
+              (reset! db-sync/*repo->latest-remote-tx {})
+              (doseq [repo [repo-a repo-b]]
+                (client-op/update-local-tx repo 0))
+
+              ;; Both clients start with one shared block.
+              (ensure-base-page! conn-a base-uuid)
+              (let [base-a (d/entity @conn-a [:block/uuid base-uuid])]
+                (create-block! conn-a base-a "1" root-uuid))
+
+              (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                        {:repo repo-b :conn conn-b :client client-b :online? true}]
+                                128)
+              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a))
+              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b))
+
+              ;; A stays online and adds an empty child under block 1.
+              (create-block! conn-a (d/entity @conn-a [:block/uuid root-uuid]) "" child-a-uuid)
+              (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                        {:repo repo-b :conn conn-b :client client-b :online? false}]
+                                128)
+
+              ;; B offline adds an empty child under block 1, then undo + redo.
+              (create-block! conn-b (d/entity @conn-b [:block/uuid root-uuid]) "" child-b-uuid)
+              (is (not= :frontend.worker.undo-redo/empty-undo-stack
+                        (undo-redo/undo repo-b)))
+              (is (not= :frontend.worker.undo-redo/empty-redo-stack
+                        (undo-redo/redo repo-b)))
+
+              ;; B reconnects.
+              (let [rounds (sync-until-idle! server [{:repo repo-a :conn conn-a :client client-a :online? true}
+                                                     {:repo repo-b :conn conn-b :client client-b :online? true}]
+                                            300)]
+                (is (< rounds 300)))
+
+              (let [checksum-a (sync-checksum/recompute-checksum @conn-a)
+                    checksum-b (sync-checksum/recompute-checksum @conn-b)
+                    checksum-server (sync-checksum/recompute-checksum @(get @server :conn))
+                    cached-a (client-op/get-local-checksum repo-a)
+                    cached-b (client-op/get-local-checksum repo-b)]
+                (is (= checksum-a checksum-b))
+                (is (= checksum-a checksum-server))
+                (is (= checksum-a cached-a))
+                (is (= checksum-b cached-b)))
+              (finally
+                (d/unlisten! conn-a listener-a)
+                (d/unlisten! conn-b listener-b)))))))))
+
 (deftest ^:long ^:large-vars/cleanup-todo all-core-outliner-ops-local-undo-redo-random-sim-test
   (testing "local randomized stress simulation runs weighted ops and keeps undo-all/redo-all roundtrips valid"
     (let [seed (or (env-seed) default-seed)
