@@ -75,7 +75,16 @@
                                             "logseq_db_demo")]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))
-      (is (string/includes? (get-in result [:error :message]) "id")))))
+      (is (string/includes? (get-in result [:error :message]) "id"))))
+
+  (testing "extracts id from upsert blocks output"
+    (let [result (show-command/build-action {:id ""
+                                             :id-from-stdin? true
+                                             :stdin "Upserted blocks:\n[10 20 30]"}
+                                            "logseq_db_demo")]
+      (is (true? (:ok? result)))
+      (is (= [10 20 30] (get-in result [:action :ids])))
+      (is (true? (get-in result [:action :multi-id?]))))))
 
 (deftest test-merge-fetched-property-value
   (let [merge-value #'show-command/merge-fetched-property-value]
