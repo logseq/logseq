@@ -15,6 +15,7 @@
      (defkeywords
        :rtc.log/upload {:doc "rtc log type for upload-graph."}
        :rtc.log/download {:doc "rtc log type for upload-graph."}
+       :rtc.log/checksum-mismatch {:doc "local/remote checksum mismatch detected"}
        :rtc.asset.log/upload-assets {:doc "upload local assets to remote"}
        :rtc.asset.log/download-assets {:doc "download assets from remote"}
        :rtc.asset.log/remove-assets {:doc "remove remote assets"}
