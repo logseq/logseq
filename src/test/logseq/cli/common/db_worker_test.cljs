@@ -166,3 +166,65 @@
       (is (= default-ids invalid-created-after-ids))
       (is (= default-ids invalid-updated-after-ids)))))
 
+(deftest test-list-tasks-contract
+  (let [db0 (create-test-db)
+        visible-id (->> (d/q '[:find [?e ...]
+                               :in $ ?title
+                               :where [?e :block/title ?title]]
+                             db0 "Visible Page")
+                        first)
+        late-id (->> (d/q '[:find [?e ...]
+                            :in $ ?title
+                            :where [?e :block/title ?title]]
+                          db0 "Late Page")
+                     first)
+        db1 (d/db-with db0 [[:db/add visible-id :block/tags :logseq.class/Task]
+                            [:db/add visible-id :logseq.property/status :logseq.property/status.todo]
+                            [:db/add visible-id :logseq.property/priority :logseq.property/priority.high]
+                            [:db/add visible-id :logseq.property/scheduled "2026-02-10T08:00:00.000Z"]
+                            [:db/add visible-id :logseq.property/deadline "2026-02-12T18:00:00.000Z"]
+                            [:db/add late-id :block/tags :logseq.class/Task]
+                            [:db/add late-id :logseq.property/status :logseq.property/status.done]
+                            [:db/add late-id :logseq.property/priority :logseq.property/priority.low]
+                            [:db/add -1 :block/title "Task Block Alpha"]
+                            [:db/add -1 :block/page visible-id]
+                            [:db/add -1 :block/parent visible-id]
+                            [:db/add -1 :block/order "a"]
+                            [:db/add -1 :block/created-at 7000]
+                            [:db/add -1 :block/updated-at 7100]
+                            [:db/add -1 :block/tags :logseq.class/Task]
+                            [:db/add -1 :logseq.property/status :logseq.property/status.doing]
+                            [:db/add -1 :logseq.property/priority :logseq.property/priority.high]])
+        task-block-id (->> (d/q '[:find [?e ...]
+                                  :in $ ?title
+                                  :where
+                                  [?e :block/title ?title]
+                                  [?e :block/page]]
+                                db1 "Task Block Alpha")
+                           first)
+        all-ids (list-item-ids (cli-db-worker/list-tasks db1 {}))
+        status-ids (list-item-ids (cli-db-worker/list-tasks db1 {:status :logseq.property/status.todo}))
+        priority-ids (list-item-ids (cli-db-worker/list-tasks db1 {:priority :logseq.property/priority.high}))
+        content-ids (list-item-ids (cli-db-worker/list-tasks db1 {:content "aLpHa"}))
+        combined-ids (list-item-ids (cli-db-worker/list-tasks db1 {:status :logseq.property/status.doing
+                                                                    :priority :logseq.property/priority.high
+                                                                    :content "alpha"}))
+        visible-task (->> (cli-db-worker/list-tasks db1 {})
+                          (filter #(= visible-id (:db/id %)))
+                          first)]
+    (testing "task list includes task pages and task blocks"
+      (is (contains? all-ids visible-id))
+      (is (contains? all-ids late-id))
+      (is (contains? all-ids task-block-id)))
+
+    (testing "task filters apply status, priority, and content constraints"
+      (is (= #{visible-id} status-ids))
+      (is (= #{visible-id task-block-id} priority-ids))
+      (is (= #{task-block-id} content-ids))
+      (is (= #{task-block-id} combined-ids)))
+
+    (testing "task rows include task property fields"
+      (is (= :logseq.property/status.todo (:logseq.property/status visible-task)))
+      (is (= :logseq.property/priority.high (:logseq.property/priority visible-task)))
+      (is (= "2026-02-10T08:00:00.000Z" (:logseq.property/scheduled visible-task)))
+      (is (= "2026-02-12T18:00:00.000Z" (:logseq.property/deadline visible-task))))))

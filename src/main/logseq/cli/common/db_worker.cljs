@@ -1,6 +1,7 @@
 (ns logseq.cli.common.db-worker
   "Cli fns for use with db-worker"
-  (:require [datascript.core :as d]
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
             [logseq.db :as ldb]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]))
@@ -72,6 +73,41 @@
                     (update :logseq.property/description db-property/property-value-content))
                   (minimal-list-item e)))))))
 
+(defn- ref->ident
+  [value]
+  (cond
+    (keyword? value) value
+    (map? value) (:db/ident value)
+    :else nil))
+
+(defn- minimal-task-item
+  [e]
+  (cond-> (minimal-list-item e)
+    true (assoc :logseq.property/status (ref->ident (:logseq.property/status e))
+                :logseq.property/priority (ref->ident (:logseq.property/priority e))
+                :logseq.property/scheduled (:logseq.property/scheduled e)
+                :logseq.property/deadline (:logseq.property/deadline e))))
+
+(defn list-tasks
+  "List task nodes (both pages and blocks) tagged with :logseq.class/Task."
+  [db {:keys [status priority content]}]
+  (let [status* (ref->ident status)
+        priority* (ref->ident priority)
+        content* (some-> content str string/lower-case)]
+    (->> (d/datoms db :avet :block/tags :logseq.class/Task)
+         (map #(d/entity db (:e %)))
+         (remove (fn [e]
+                   (and status*
+                        (not= status* (ref->ident (:logseq.property/status e))))))
+         (remove (fn [e]
+                   (and priority*
+                        (not= priority* (ref->ident (:logseq.property/priority e))))))
+         (remove (fn [e]
+                   (and (seq content*)
+                        (not (string/includes? (string/lower-case (or (:block/title e) ""))
+                                               content*)))))
+         (map minimal-task-item))))
+
 (defn- parse-time
   [value]
   (cond
@@ -118,4 +154,3 @@
                       (cond-> (:db/ident e) (assoc :db/ident (:db/ident e)))
                       (update :block/uuid str))
                   (minimal-list-item e)))))))
-

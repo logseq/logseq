@@ -1098,6 +1098,11 @@
   (let [conn (worker-state/get-datascript-conn repo)]
     (cli-db-worker/list-pages @conn options)))
 
+(def-thread-api :thread-api/cli-list-tasks
+  [repo options]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (cli-db-worker/list-tasks @conn options)))
+
 ;; API server specific fns start with 'api-'
 (def-thread-api :thread-api/api-get-page-data
   [repo page-title]

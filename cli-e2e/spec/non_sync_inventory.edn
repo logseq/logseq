@@ -33,22 +33,27 @@
   :list
   {:commands ["list page"
               "list tag"
-              "list property"]
+              "list property"
+              "list task"]
    :options ["--expand"
              "--fields"
              "--limit"
              "--offset"
              "--sort"
              "--order"
+             "--status"
+             "--priority"
+             "--content"
              "--journal-only"
              "--with-properties"
              "--with-extends"
              "--with-classes"
-             "--with-type"]}
+              "--with-type"]}
 
   :upsert
   {:commands ["upsert block"
               "upsert page"
+              "upsert task"
               "upsert tag"
               "upsert property"]
    :options ["--id"
@@ -60,6 +65,7 @@
              "--content"
              "--blocks-file"
              "--status"
+             "--priority"
              "--update-tags"
              "--update-properties"
              "--remove-tags"

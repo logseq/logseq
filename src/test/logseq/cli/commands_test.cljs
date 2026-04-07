@@ -8,6 +8,7 @@
             [logseq.db.frontend.rules :as rules]
             [logseq.cli.command.show :as show-command]
             [logseq.cli.command.sync :as sync-command]
+            [logseq.cli.command.upsert :as upsert-command]
             [logseq.cli.commands :as commands]
             [logseq.cli.server :as cli-server]
             [logseq.cli.style :as style]
@@ -89,10 +90,12 @@
       (is (contains-bold? summary "list page"))
       (is (contains-bold? summary "list tag"))
       (is (contains-bold? summary "list property"))
+      (is (contains-bold? summary "list task"))
       (is (contains-bold? summary "upsert block"))
       (is (contains-bold? summary "upsert page"))
       (is (contains-bold? summary "upsert tag"))
       (is (contains-bold? summary "upsert property"))
+      (is (contains-bold? summary "upsert task"))
       (is (contains-bold? summary "remove block"))
       (is (contains-bold? summary "remove page"))
       (is (contains-bold? summary "remove tag"))
@@ -137,96 +140,55 @@
       (is (string/includes? plain-summary "Global options:"))
       (is (string/includes? plain-summary "Command options:")))))
 
-(deftest test-parse-args-help-groups
-  (testing "graph group shows subcommands"
-    (let [result (binding [style/*color-enabled?* true]
-                   (commands/parse-args ["graph"]))
-          summary (:summary result)
-          plain-summary (strip-ansi summary)]
-      (is (true? (:help? result)))
-      (is (string/includes? plain-summary "graph list"))
-      (is (string/includes? plain-summary "graph create"))
-      (is (string/includes? plain-summary "graph export"))
-      (is (string/includes? plain-summary "graph import"))
-      (is (contains-bold? summary "graph list"))
-      (is (contains-bold? summary "graph create"))
-      (is (contains-bold? summary "graph export"))
-      (is (contains-bold? summary "graph import"))))
+(deftest test-parse-args-help-groups-primary
+  (testing "graph/list/upsert/server groups show subcommands"
+    (doseq [[group plain-entries bold-entries]
+            [["graph"
+              ["graph list" "graph create" "graph export" "graph import"]
+              ["graph list" "graph create" "graph export" "graph import"]]
+             ["list"
+              ["list page" "list tag" "list property" "list task"]
+              ["list page" "list tag" "list property" "list task"]]
+             ["upsert"
+              ["upsert task" "upsert tag" "upsert property"]
+              ["upsert task" "upsert tag" "upsert property"]]
+             ["server"
+              ["server list" "server start"]
+              ["server list" "server start"]]]]
+      (let [result (binding [style/*color-enabled?* true]
+                     (commands/parse-args [group]))
+            summary (:summary result)
+            plain-summary (strip-ansi summary)]
+        (is (true? (:help? result)))
+        (doseq [entry plain-entries]
+          (is (string/includes? plain-summary entry)))
+        (doseq [entry bold-entries]
+          (is (contains-bold? summary entry)))
+        (when (= "list" group)
+          (is (string/includes? plain-summary "Global options:"))
+          (is (string/includes? plain-summary "Command options:")))))))
 
-  (testing "list group shows subcommands"
-    (let [result (binding [style/*color-enabled?* true]
-                   (commands/parse-args ["list"]))
-          summary (:summary result)
-          plain-summary (strip-ansi summary)]
-      (is (true? (:help? result)))
-      (is (string/includes? plain-summary "list page"))
-      (is (string/includes? plain-summary "list tag"))
-      (is (string/includes? plain-summary "list property"))
-      (is (contains-bold? summary "list page"))
-      (is (contains-bold? summary "list tag"))
-      (is (contains-bold? summary "list property"))
-      (is (string/includes? plain-summary "Global options:"))
-      (is (string/includes? plain-summary "Command options:"))))
-
-  (testing "upsert group shows subcommands"
-    (let [result (binding [style/*color-enabled?* true]
-                   (commands/parse-args ["upsert"]))
-          summary (:summary result)
-          plain-summary (strip-ansi summary)]
-      (is (true? (:help? result)))
-      (is (string/includes? plain-summary "upsert tag"))
-      (is (string/includes? plain-summary "upsert property"))
-      (is (contains-bold? summary "upsert tag"))
-      (is (contains-bold? summary "upsert property"))))
-
-  (testing "server group shows subcommands"
-    (let [result (binding [style/*color-enabled?* true]
-                   (commands/parse-args ["server"]))
-          summary (:summary result)
-          plain-summary (strip-ansi summary)]
-      (is (true? (:help? result)))
-      (is (string/includes? plain-summary "server list"))
-      (is (string/includes? plain-summary "server start"))
-      (is (contains-bold? summary "server list"))
-      (is (contains-bold? summary "server start"))))
-
-  (testing "query group shows subcommands"
-    (let [result (binding [style/*color-enabled?* true]
-                   (commands/parse-args ["query"]))
-          summary (:summary result)
-          plain-summary (strip-ansi summary)]
-      (is (true? (:help? result)))
-      (is (string/includes? plain-summary "query list"))
-      (is (string/includes? plain-summary "query"))
-      (is (contains-bold? summary "query list"))
-      (is (contains-bold? summary "query"))))
-
-  (testing "search group shows subcommands"
-    (let [result (binding [style/*color-enabled?* true]
-                   (commands/parse-args ["search"]))
-          summary (:summary result)
-          plain-summary (strip-ansi summary)]
-      (is (true? (:help? result)))
-      (is (string/includes? plain-summary "search block"))
-      (is (string/includes? plain-summary "search page"))
-      (is (string/includes? plain-summary "search property"))
-      (is (string/includes? plain-summary "search tag"))
-      (is (contains-bold? summary "search block"))
-      (is (contains-bold? summary "search page"))
-      (is (contains-bold? summary "search property"))
-      (is (contains-bold? summary "search tag"))))
-
-  (testing "example group shows selectors"
-    (let [result (binding [style/*color-enabled?* true]
-                   (commands/parse-args ["example"]))
-          summary (:summary result)
-          plain-summary (strip-ansi summary)]
-      (is (true? (:help? result)))
-      (is (string/includes? plain-summary "example upsert"))
-      (is (string/includes? plain-summary "example upsert page"))
-      (is (string/includes? plain-summary "example show"))
-      (is (contains-bold? summary "example upsert"))
-      (is (contains-bold? summary "example show"))))
+(deftest test-parse-args-help-groups-secondary
+  (testing "query/search/example groups show subcommands"
+    (doseq [[group plain-entries bold-entries]
+            [["query"
+              ["query list" "query"]
+              ["query list" "query"]]
+             ["search"
+              ["search block" "search page" "search property" "search tag"]
+              ["search block" "search page" "search property" "search tag"]]
+             ["example"
+              ["example upsert" "example upsert page" "example show"]
+              ["example upsert" "example show"]]]]
+      (let [result (binding [style/*color-enabled?* true]
+                     (commands/parse-args [group]))
+            summary (:summary result)
+            plain-summary (strip-ansi summary)]
+        (is (true? (:help? result)))
+        (doseq [entry plain-entries]
+          (is (string/includes? plain-summary entry)))
+        (doseq [entry bold-entries]
+          (is (contains-bold? summary entry))))))
 
   (testing "group help command list omits [options]"
     (let [summary (:summary (binding [style/*color-enabled?* true]
@@ -446,10 +408,12 @@
       (is (string/includes? plain-summary "upsert page"))
       (is (string/includes? plain-summary "upsert tag"))
       (is (string/includes? plain-summary "upsert property"))
+      (is (string/includes? plain-summary "upsert task"))
       (is (contains-bold? summary "upsert block"))
       (is (contains-bold? summary "upsert page"))
       (is (contains-bold? summary "upsert tag"))
-      (is (contains-bold? summary "upsert property")))))
+      (is (contains-bold? summary "upsert property"))
+      (is (contains-bold? summary "upsert task")))))
 
 (deftest test-parse-args-help-alignment
   (testing "graph group aligns subcommand columns"
@@ -1107,7 +1071,28 @@
       (is (true? (get-in result [:options :with-classes])))
       (is (true? (get-in result [:options :with-type])))
       (is (= "cardinality" (get-in result [:options :sort])))
-      (is (= "name,type,cardinality" (get-in result [:options :fields]))))))
+      (is (= "name,type,cardinality" (get-in result [:options :fields])))))
+
+  (testing "list task parses"
+    (let [result (commands/parse-args ["list" "task"
+                                       "--status" "doing"
+                                       "--priority" "high"
+                                       "--content" "alpha"
+                                       "--fields" "id,title,status,priority"
+                                       "--limit" "10"
+                                       "--offset" "2"
+                                       "--sort" "priority"
+                                       "--order" "desc"])]
+      (is (true? (:ok? result)))
+      (is (= :list-task (:command result)))
+      (is (= "doing" (get-in result [:options :status])))
+      (is (= "high" (get-in result [:options :priority])))
+      (is (= "alpha" (get-in result [:options :content])))
+      (is (= "id,title,status,priority" (get-in result [:options :fields])))
+      (is (= 10 (get-in result [:options :limit])))
+      (is (= 2 (get-in result [:options :offset])))
+      (is (= "priority" (get-in result [:options :sort])))
+      (is (= "desc" (get-in result [:options :order]))))))
 
 (deftest test-search-subcommand-parse
   (testing "search block parses --content option"
@@ -1185,6 +1170,16 @@
 
   (testing "list property rejects invalid sort field"
     (let [result (commands/parse-args ["list" "property" "--sort" "wat"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "list task rejects invalid sort field"
+    (let [result (commands/parse-args ["list" "task" "--sort" "wat"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "list task rejects invalid priority"
+    (let [result (commands/parse-args ["list" "task" "--priority" "wat"])]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code]))))))
 
@@ -1536,6 +1531,77 @@
     (let [result (commands/parse-args ["add" "tag" "--name" "Quote"])]
       (is (false? (:ok? result)))
       (is (= :unknown-command (get-in result [:error :code]))))))
+
+(deftest test-verb-subcommand-parse-upsert-task-mode
+  (testing "upsert task parses block create mode"
+    (let [result (commands/parse-args ["upsert" "task"
+                                       "--content" "Ship CLI tasks"
+                                       "--target-page" "Home"
+                                       "--status" "todo"
+                                       "--priority" "high"])]
+      (is (true? (:ok? result)))
+      (is (= :upsert-task (:command result)))
+      (is (= "Ship CLI tasks" (get-in result [:options :content])))
+      (is (= "Home" (get-in result [:options :target-page])))
+      (is (= "todo" (get-in result [:options :status])))
+      (is (= "high" (get-in result [:options :priority])))))
+
+  (testing "upsert task parses page mode"
+    (let [result (commands/parse-args ["upsert" "task" "--page" "Weekly Plan"])]
+      (is (true? (:ok? result)))
+      (is (= :upsert-task (:command result)))
+      (is (= "Weekly Plan" (get-in result [:options :page])))))
+
+  (testing "upsert task parses id update mode"
+    (let [result (commands/parse-args ["upsert" "task"
+                                       "--id" "42"
+                                       "--status" "done"
+                                       "--priority" "medium"])]
+      (is (true? (:ok? result)))
+      (is (= :upsert-task (:command result)))
+      (is (= 42 (get-in result [:options :id])))
+      (is (= "done" (get-in result [:options :status])))
+      (is (= "medium" (get-in result [:options :priority])))))
+
+  (testing "upsert task requires selector, page, or content"
+    (let [result (commands/parse-args ["upsert" "task"])]
+      (is (false? (:ok? result)))
+      (is (= :missing-target (get-in result [:error :code])))))
+
+  (testing "upsert task rejects selector conflicts"
+    (let [result (commands/parse-args ["upsert" "task"
+                                       "--id" "42"
+                                       "--uuid" "11111111-1111-1111-1111-111111111111"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "upsert task rejects page and content combination"
+    (let [result (commands/parse-args ["upsert" "task"
+                                       "--page" "Home"
+                                       "--content" "Task block"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "upsert task rejects id and content combination"
+    (let [result (commands/parse-args ["upsert" "task"
+                                       "--id" "42"
+                                       "--content" "Task block"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "upsert task rejects target options in page mode"
+    (let [result (commands/parse-args ["upsert" "task"
+                                       "--page" "Home"
+                                       "--target-page" "Elsewhere"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "upsert task rejects invalid priority"
+    (let [result (commands/parse-args ["upsert" "task"
+                                       "--content" "Alpha"
+                                       "--priority" "wat"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code]))))))
 
 (deftest test-verb-subcommand-parse-update-target-page
   (testing "upsert block update mode parses with target page"
@@ -2020,6 +2086,12 @@
       (is (false? (:ok? result)))
       (is (= :missing-repo (get-in result [:error :code])))))
 
+  (testing "list task builds action"
+    (let [parsed {:ok? true :command :list-task :options {:status "todo"}}
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :list-task (get-in result [:action :type])))))
+
   (testing "search page builds action from --content option"
     (let [parsed {:ok? true :command :search-page :options {:content "project home"} :args []}
           result (commands/build-action parsed {:graph "demo"})]
@@ -2072,7 +2144,15 @@
           result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= :update (get-in result [:action :mode])))
-      (is (= 42 (get-in result [:action :id]))))))
+      (is (= 42 (get-in result [:action :id])))))
+
+  (testing "upsert task builds action"
+    (let [parsed {:ok? true
+                  :command :upsert-task
+                  :options {:content "Task from CLI" :status "todo"}}
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :upsert-task (get-in result [:action :type]))))))
 
 (deftest test-build-action-upsert-tag-property
 
@@ -3012,6 +3092,30 @@
                  (is (= [{:db/id 1 :block/title "Quote"}] (get-in result [:data :items])))))
              (p/catch (fn [e] (is false (str "unexpected error: " e))))
              (p/finally done))))
+
+(deftest test-execute-task-dispatch
+  (async done
+         (let [calls* (atom [])]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               list-command/execute-list-task (fn [action _]
+                                                                (swap! calls* conj action)
+                                                                (p/resolved {:status :ok
+                                                                             :data {:items []}}))
+                               upsert-command/execute-upsert-task (fn [action _]
+                                                                    (swap! calls* conj action)
+                                                                    (p/resolved {:status :ok
+                                                                                 :data {:result [101]}}))]
+                 (p/let [list-result (commands/execute {:type :list-task :repo "logseq_db_demo"} {})
+                         upsert-result (commands/execute {:type :upsert-task :repo "logseq_db_demo"} {})]
+                   (is (= :ok (:status list-result)))
+                   (is (= :list-task (:command list-result)))
+                   (is (= :ok (:status upsert-result)))
+                   (is (= :upsert-task (:command upsert-result)))
+                   (is (= [:list-task :upsert-task]
+                          (mapv :type @calls*)))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
 (deftest test-execute-requires-existing-graph
   (async done
