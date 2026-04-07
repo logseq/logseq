@@ -8,6 +8,7 @@
             [frontend.worker.sync.auth :as sync-auth]
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.crypt :as sync-crypt]
+            [frontend.worker.sync.log-and-state :as sync-log-state]
             [frontend.worker.sync.presence :as sync-presence]
             [frontend.worker.sync.transport :as sync-transport]
             [lambdaisland.glogi :as log]
@@ -127,16 +128,17 @@
              (checksum-compare-ready? repo client local-tx remote-tx))
     (let [local-checksum (local-sync-checksum repo)]
       (when-not (= local-checksum remote-checksum)
-        (when worker-util/dev?
-          (log/warn :db-sync/checksum-mismatch
-                    (merge context
-                           {:type :db-sync/checksum-mismatch
-                            :repo repo
-                            :message-type (:type context)
-                            :local-tx local-tx
-                            :remote-tx remote-tx
-                            :local-checksum local-checksum
-                            :remote-checksum remote-checksum})))))))
+        (let [mismatch-data (merge context
+                                   {:type :db-sync/checksum-mismatch
+                                    :repo repo
+                                    :message-type (:type context)
+                                    :local-tx local-tx
+                                    :remote-tx remote-tx
+                                    :local-checksum local-checksum
+                                    :remote-checksum remote-checksum})]
+          (sync-log-state/rtc-log :rtc.log/checksum-mismatch mismatch-data)
+          (when worker-util/dev?
+            (log/warn :db-sync/checksum-mismatch mismatch-data)))))))
 
 (defn- handle-tx-reject!
   [repo client message local-tx]
