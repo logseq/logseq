@@ -36,11 +36,12 @@ const FALLBACK_PAGE_NAME = 'op-sim-scratch';
 const DEFAULT_VERIFY_CHECKSUM = true;
 const DEFAULT_CLEANUP_TODAY_PAGE = true;
 const DEFAULT_SYNC_SETTLE_TIMEOUT_MS = 3000;
-const AGENT_BROWSER_ACTION_TIMEOUT_MS = 120000;
-const PROCESS_TIMEOUT_MS = 120000;
+const AGENT_BROWSER_ACTION_TIMEOUT_MS = 1000000;
+const PROCESS_TIMEOUT_MS = 1000000;
 const AGENT_BROWSER_RETRY_COUNT = 2;
-const BOOTSTRAP_EVAL_TIMEOUT_MS = 15000;
+const BOOTSTRAP_EVAL_TIMEOUT_MS = 150000;
 const RENDERER_EVAL_BASE_TIMEOUT_MS = 30000;
+const DEFAULT_ARTIFACT_BASE_DIR = path.join('tmp', 'db-sync-repro');
 
 function usage() {
   return [
@@ -64,6 +65,8 @@ function usage() {
     `  --ops <n>                   Total operations across all instances per round (must be >= 1, default: ${DEFAULT_OPS})`,
     `  --op-profile <name>         Operation profile: fast|full (default: ${DEFAULT_OP_PROFILE})`,
     `  --op-timeout-ms <n>         Timeout per operation in renderer (default: ${DEFAULT_OP_TIMEOUT_MS})`,
+    '  --seed <text|number>        Deterministic seed for operation ordering/jitter',
+    '  --replay <artifact.json>    Replay a prior captured artifact run',
     `  --rounds <n>                Number of operation rounds per instance (default: ${DEFAULT_ROUNDS})`,
     `  --undo-redo-delay-ms <n>    Wait time after undo/redo command (default: ${DEFAULT_UNDO_REDO_DELAY_MS})`,
     `  --sync-settle-timeout-ms <n> Timeout waiting for local/remote tx to settle before checksum verify (default: ${DEFAULT_SYNC_SETTLE_TIMEOUT_MS})`,
@@ -108,6 +111,8 @@ function parseArgs(argv) {
     ops: DEFAULT_OPS,
     opProfile: DEFAULT_OP_PROFILE,
     opTimeoutMs: DEFAULT_OP_TIMEOUT_MS,
+    seed: null,
+    replay: null,
     rounds: DEFAULT_ROUNDS,
     undoRedoDelayMs: DEFAULT_UNDO_REDO_DELAY_MS,
     syncSettleTimeoutMs: DEFAULT_SYNC_SETTLE_TIMEOUT_MS,
@@ -256,6 +261,24 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (arg === '--seed') {
+      if (typeof next !== 'string' || next.length === 0) {
+        throw new Error('--seed must be a non-empty string');
+      }
+      result.seed = next;
+      i += 1;
+      continue;
+    }
+
+    if (arg === '--replay') {
+      if (typeof next !== 'string' || next.length === 0) {
+        throw new Error('--replay must be a non-empty path');
+      }
+      result.replay = next;
+      i += 1;
+      continue;
+    }
+
     if (arg === '--rounds') {
       result.rounds = parsePositiveInteger(next, '--rounds');
       i += 1;
@@ -378,6 +401,34 @@ function parseJsonOutput(output) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function hashSeed(input) {
+  const text = String(input ?? '');
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function createSeededRng(seedInput) {
+  let state = hashSeed(seedInput);
+  if (state === 0) {
+    state = 0x9e3779b9;
+  }
+  return () => {
+    state = (state + 0x6D2B79F5) >>> 0;
+    let payload = state;
+    payload = Math.imul(payload ^ (payload >>> 15), payload | 1);
+    payload ^= payload + Math.imul(payload ^ (payload >>> 7), payload | 61);
+    return ((payload ^ (payload >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function deriveSeed(baseSeed, ...parts) {
+  return hashSeed([String(baseSeed ?? ''), ...parts.map((it) => String(it))].join('::'));
 }
 
 function sanitizeForFilename(value) {
@@ -681,8 +732,35 @@ function buildRendererProgram(config) {
   return `(() => (async () => {
     const config = ${JSON.stringify(config)};
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-    const randomItem = (items) => items[Math.floor(Math.random() * items.length)];
-    const shuffle = (items) => [...items].sort(() => Math.random() - 0.5);
+    const createSeededRng = (seedInput) => {
+      const text = String(seedInput ?? '');
+      let hash = 2166136261;
+      for (let i = 0; i < text.length; i += 1) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+      let state = hash >>> 0;
+      if (state === 0) state = 0x9e3779b9;
+      return () => {
+        state = (state + 0x6D2B79F5) >>> 0;
+        let payload = state;
+        payload = Math.imul(payload ^ (payload >>> 15), payload | 1);
+        payload ^= payload + Math.imul(payload ^ (payload >>> 7), payload | 61);
+        return ((payload ^ (payload >>> 14)) >>> 0) / 4294967296;
+      };
+    };
+    const nextRandom = createSeededRng(config.seed);
+    const randomItem = (items) => items[Math.floor(nextRandom() * items.length)];
+    const shuffle = (items) => {
+      const arr = Array.isArray(items) ? [...items] : [];
+      for (let i = arr.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(nextRandom() * (i + 1));
+        const tmp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = tmp;
+      }
+      return arr;
+    };
     const describeError = (error) => String(error?.message || error);
     const asPageName = (pageLike) => {
       if (typeof pageLike === 'string' && pageLike.length > 0) return pageLike;
@@ -728,8 +806,11 @@ function buildRendererProgram(config) {
         ? config.runPrefix
         : config.markerPrefix;
     const checksumWarningToken = 'db-sync/checksum-mismatch';
-    const checksumWarningStateKey = '__logseqOpChecksumWarnings';
-    const checksumWarningPatchKey = '__logseqOpChecksumWarningPatchInstalled';
+    const txRejectedWarningToken = 'db-sync/tx-rejected';
+    const checksumWarningTokenLower = checksumWarningToken.toLowerCase();
+    const txRejectedWarningTokenLower = txRejectedWarningToken.toLowerCase();
+    const fatalWarningStateKey = '__logseqOpFatalWarnings';
+    const fatalWarningPatchKey = '__logseqOpFatalWarningPatchInstalled';
 
     const chooseRunnableOperation = (requestedOperation, operableCount) => {
       if (
@@ -757,13 +838,13 @@ function buildRendererProgram(config) {
       }
     };
 
-    const installChecksumWarningTrap = () => {
-      const warningList = Array.isArray(window[checksumWarningStateKey])
-        ? window[checksumWarningStateKey]
+    const installFatalWarningTrap = () => {
+      const warningList = Array.isArray(window[fatalWarningStateKey])
+        ? window[fatalWarningStateKey]
         : [];
-      window[checksumWarningStateKey] = warningList;
-      if (window[checksumWarningPatchKey]) return;
-      window[checksumWarningPatchKey] = true;
+      window[fatalWarningStateKey] = warningList;
+      if (window[fatalWarningPatchKey]) return;
+      window[fatalWarningPatchKey] = true;
 
       const trapMethod = (method) => {
         const original = console[method];
@@ -771,8 +852,16 @@ function buildRendererProgram(config) {
         console[method] = (...args) => {
           try {
             const text = args.map(stringifyConsoleArg).join(' ');
-            if (text.includes(checksumWarningToken)) {
+            const textLower = text.toLowerCase();
+            if (
+              textLower.includes(checksumWarningTokenLower) ||
+              textLower.includes(txRejectedWarningTokenLower)
+            ) {
+              const kind = textLower.includes(checksumWarningTokenLower)
+                ? 'checksum_mismatch'
+                : 'tx_rejected';
               warningList.push({
+                kind,
                 level: method,
                 text,
                 createdAt: Date.now(),
@@ -790,9 +879,9 @@ function buildRendererProgram(config) {
       trapMethod('log');
     };
 
-    const latestChecksumWarning = () => {
-      const warningList = Array.isArray(window[checksumWarningStateKey])
-        ? window[checksumWarningStateKey]
+    const latestFatalWarning = () => {
+      const warningList = Array.isArray(window[fatalWarningStateKey])
+        ? window[fatalWarningStateKey]
         : [];
       return warningList.length > 0 ? warningList[warningList.length - 1] : null;
     };
@@ -830,14 +919,40 @@ function buildRendererProgram(config) {
       }
     };
 
-    const failIfChecksumWarningSeen = () => {
-      const rtcLog = latestChecksumMismatchRtcLog();
-      if (rtcLog) {
-        throw new Error('checksum mismatch rtc-log detected: ' + JSON.stringify(rtcLog));
+    const latestTxRejectedRtcLog = () => {
+      try {
+        if (!globalThis.logseq?.api?.get_state_from_store) return null;
+        const entry = logseq.api.get_state_from_store(['rtc/log']);
+        if (!entry || typeof entry !== 'object') return null;
+
+        const type = String(entry.type || '').toLowerCase();
+        if (!type.includes('tx-rejected')) return null;
+        return {
+          type: entry.type || null,
+          messageType: entry['message-type'] || entry.messageType || null,
+          reason: entry.reason || null,
+          remoteTx: entry['t'] || entry.t || null,
+        };
+      } catch (_error) {
+        return null;
       }
-      const warning = latestChecksumWarning();
+    };
+
+    const failIfFatalSignalSeen = () => {
+      const checksumRtcLog = latestChecksumMismatchRtcLog();
+      if (checksumRtcLog) {
+        throw new Error('checksum mismatch rtc-log detected: ' + JSON.stringify(checksumRtcLog));
+      }
+      const txRejectedRtcLog = latestTxRejectedRtcLog();
+      if (txRejectedRtcLog) {
+        throw new Error('tx rejected rtc-log detected: ' + JSON.stringify(txRejectedRtcLog));
+      }
+      const warning = latestFatalWarning();
       if (!warning) return;
       const details = String(warning.text || '').slice(0, 500);
+      if (warning.kind === 'tx_rejected') {
+        throw new Error('tx-rejected warning detected: ' + details);
+      }
       throw new Error('checksum warning detected: ' + details);
     };
 
@@ -1012,7 +1127,7 @@ function buildRendererProgram(config) {
       const pool = shuffle(blocks);
       const lower = Math.max(1, Math.min(minSize, pool.length));
       const upper = Math.max(lower, Math.min(maxSize, pool.length));
-      const size = lower + Math.floor(Math.random() * (upper - lower + 1));
+      const size = lower + Math.floor(nextRandom() * (upper - lower + 1));
       return pool.slice(0, size);
     };
 
@@ -1245,8 +1360,8 @@ function buildRendererProgram(config) {
     const phaseTimeoutMs = Math.max(5000, Number(config.readyTimeoutMs || 0) + 5000);
     const opReadTimeoutMs = Math.max(2000, Number(config.opTimeoutMs || 0) * 2);
 
-    installChecksumWarningTrap();
-    failIfChecksumWarningSeen();
+    installFatalWarningTrap();
+    failIfFatalSignalSeen();
 
     await withTimeout(waitForEditorReady(), phaseTimeoutMs, 'waitForEditorReady');
     const anchor = await withTimeout(getAnchor(), phaseTimeoutMs, 'getAnchor');
@@ -1268,7 +1383,7 @@ function buildRendererProgram(config) {
     let executed = 0;
 
     for (let i = 0; i < config.plan.length; i += 1) {
-      failIfChecksumWarningSeen();
+      failIfFatalSignalSeen();
       const requested = config.plan[i];
       const operable = await withTimeout(
         listOperableBlocks(),
@@ -1281,13 +1396,13 @@ function buildRendererProgram(config) {
       }
 
       try {
-        await sleep(Math.floor(Math.random() * 10));
+        await sleep(Math.floor(nextRandom() * 10));
 
         const runOperation = async () => {
           if (operation === 'add') {
             const target = operable.length > 0 ? randomItem(operable) : anchor;
-            const content = Math.random() < 0.2 ? '' : config.markerPrefix + ' add-' + i;
-            const asChild = operable.length > 0 && Math.random() < 0.35;
+            const content = nextRandom() < 0.2 ? '' : config.markerPrefix + ' add-' + i;
+            const asChild = operable.length > 0 && nextRandom() < 0.35;
             await logseq.api.insert_block(target.uuid, content, {
               sibling: !asChild,
               before: false,
@@ -1367,7 +1482,7 @@ function buildRendererProgram(config) {
             const candidates = operable.filter((block) => block.uuid !== source.uuid);
             const target = randomItem(candidates);
             await logseq.api.move_block(source.uuid, target.uuid, {
-              before: Math.random() < 0.5,
+              before: nextRandom() < 0.5,
               children: false,
             });
           }
@@ -1404,7 +1519,7 @@ function buildRendererProgram(config) {
         };
 
         await withTimeout(runOperation(), config.opTimeoutMs, operation + ' operation');
-        failIfChecksumWarningSeen();
+        failIfFatalSignalSeen();
 
         counts[operation] += 1;
         executed += 1;
@@ -1450,7 +1565,7 @@ function buildRendererProgram(config) {
     }
 
     let checksum = null;
-    failIfChecksumWarningSeen();
+    failIfFatalSignalSeen();
     if (config.verifyChecksum) {
       try {
         checksum = await withTimeout(
@@ -1497,6 +1612,8 @@ function buildRendererProgram(config) {
       })),
       errorCount: errors.length,
       errors: errors.slice(0, 20),
+      requestedPlan: Array.isArray(config.plan) ? [...config.plan] : [],
+      opLog: operationLog,
       opLogSample: operationLog.slice(0, 20),
       checksum,
     };
@@ -2187,10 +2304,10 @@ function buildSimulationOperationPlan(totalOps, profile) {
   return plan;
 }
 
-function shuffleOperationPlan(plan) {
+function shuffleOperationPlan(plan, rng = Math.random) {
   const shuffled = Array.isArray(plan) ? [...plan] : [];
   for (let i = shuffled.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(rng() * (i + 1));
     const tmp = shuffled[i];
     shuffled[i] = shuffled[j];
     shuffled[j] = tmp;
@@ -2200,7 +2317,7 @@ function shuffleOperationPlan(plan) {
 
 function computeRendererEvalTimeoutMs(syncSettleTimeoutMs, opCount) {
   return Math.max(
-    120000,
+    1200000,
     RENDERER_EVAL_BASE_TIMEOUT_MS +
       (syncSettleTimeoutMs * 2) +
       (opCount * 500) +
@@ -2233,18 +2350,35 @@ async function runSimulationForSession(sessionName, index, args, sharedConfig) {
 
   const rounds = [];
   let bootstrap = null;
+  const fixedPlanForInstance =
+    sharedConfig.fixedPlansByInstance instanceof Map
+      ? sharedConfig.fixedPlansByInstance.get(index + 1)
+      : null;
   const rendererEvalTimeoutMs = computeRendererEvalTimeoutMs(
     args.syncSettleTimeoutMs,
-    sharedConfig.plan.length
+    Array.isArray(fixedPlanForInstance) && fixedPlanForInstance.length > 0
+      ? fixedPlanForInstance.length
+      : sharedConfig.plan.length
   );
   for (let round = 0; round < args.rounds; round += 1) {
+    const roundSeed = deriveSeed(
+      sharedConfig.seed ?? sharedConfig.runId,
+      sessionName,
+      index + 1,
+      round + 1
+    );
+    const roundRng = createSeededRng(roundSeed);
     bootstrap = await runGraphBootstrap(sessionName, args, runOptions);
-    const clientPlan = shuffleOperationPlan(sharedConfig.plan);
+    const clientPlan =
+      Array.isArray(fixedPlanForInstance) && fixedPlanForInstance.length > 0
+        ? [...fixedPlanForInstance]
+        : shuffleOperationPlan(sharedConfig.plan, roundRng);
     const markerPrefix = `${sharedConfig.runPrefix}r${round + 1}-client-${index + 1}-`;
     const rendererProgram = buildRendererProgram({
       runPrefix: sharedConfig.runPrefix,
       markerPrefix,
       plan: clientPlan,
+      seed: roundSeed,
       undoRedoDelayMs: args.undoRedoDelayMs,
       readyTimeoutMs: RENDERER_READY_TIMEOUT_MS,
       readyPollDelayMs: RENDERER_READY_POLL_DELAY_MS,
@@ -2310,6 +2444,7 @@ async function runSimulationForSession(sessionName, index, args, sharedConfig) {
     rounds: args.rounds,
     opProfile: args.opProfile,
     opTimeoutMs: args.opTimeoutMs,
+    seed: args.seed,
     verifyChecksum: args.verifyChecksum,
     cleanupTodayPage: args.cleanupTodayPage,
     autoConnect: args.autoConnect,
@@ -2344,6 +2479,192 @@ async function runPostSimulationCleanup(sessionName, index, args, sharedConfig) 
   return cleanupEval?.data?.result || null;
 }
 
+function formatFailureText(reason) {
+  return String(reason?.stack || reason?.message || reason);
+}
+
+function classifySimulationFailure(reason) {
+  const text = formatFailureText(reason).toLowerCase();
+  if (
+    text.includes('checksum mismatch rtc-log detected') ||
+    text.includes('db-sync/checksum-mismatch') ||
+    text.includes(':rtc.log/checksum-mismatch')
+  ) {
+    return 'checksum_mismatch';
+  }
+  if (
+    text.includes('tx rejected rtc-log detected') ||
+    text.includes('tx-rejected warning detected') ||
+    text.includes('db-sync/tx-rejected') ||
+    text.includes(':rtc.log/tx-rejected')
+  ) {
+    return 'tx_rejected';
+  }
+  return 'other';
+}
+
+function buildRejectedResultEntry(sessionName, index, reason, failFastState) {
+  const failureType = classifySimulationFailure(reason);
+  const error = formatFailureText(reason);
+  const peerCancelledByFailFast =
+    (failFastState?.reasonType === 'checksum_mismatch' ||
+      failFastState?.reasonType === 'tx_rejected') &&
+    Number.isInteger(failFastState?.sourceIndex) &&
+    failFastState.sourceIndex !== index;
+
+  if (peerCancelledByFailFast) {
+    const cancelledReason =
+      failFastState.reasonType === 'tx_rejected'
+        ? 'cancelled_due_to_peer_tx_rejected'
+        : 'cancelled_due_to_peer_checksum_mismatch';
+    return {
+      session: sessionName,
+      instanceIndex: index + 1,
+      ok: false,
+      cancelled: true,
+      cancelledReason,
+      peerInstanceIndex: failFastState.sourceIndex + 1,
+      error,
+      failureType: 'peer_cancelled',
+    };
+  }
+
+  return {
+    session: sessionName,
+    instanceIndex: index + 1,
+    ok: false,
+    error,
+    failureType,
+  };
+}
+
+function extractChecksumMismatchDetailsFromError(errorText) {
+  const text = String(errorText || '');
+  const marker = 'checksum mismatch rtc-log detected:';
+  const markerIndex = text.toLowerCase().indexOf(marker);
+  if (markerIndex === -1) return null;
+
+  const afterMarker = text.slice(markerIndex + marker.length);
+  const match = afterMarker.match(/\{[\s\S]*?\}/);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[0]);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function extractTxRejectedDetailsFromError(errorText) {
+  const text = String(errorText || '');
+  const marker = 'tx rejected rtc-log detected:';
+  const markerIndex = text.toLowerCase().indexOf(marker);
+  if (markerIndex === -1) return null;
+
+  const afterMarker = text.slice(markerIndex + marker.length);
+  const match = afterMarker.match(/\{[\s\S]*?\}/);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[0]);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function buildRunArtifact({ output, args, runContext, failFastState }) {
+  const safeOutput = output && typeof output === 'object' ? output : {};
+  const resultItems = Array.isArray(safeOutput.results) ? safeOutput.results : [];
+  const clients = resultItems.map((item) => {
+    const errorText = item?.error ? String(item.error) : null;
+    const mismatch = errorText ? extractChecksumMismatchDetailsFromError(errorText) : null;
+    const txRejected = errorText ? extractTxRejectedDetailsFromError(errorText) : null;
+    return {
+      session: item?.session || null,
+      instanceIndex: Number.isInteger(item?.instanceIndex) ? item.instanceIndex : null,
+      ok: Boolean(item?.ok),
+      cancelled: item?.cancelled === true,
+      cancelledReason: item?.cancelledReason || null,
+      failureType: item?.failureType || null,
+      error: errorText,
+      mismatch,
+      txRejected,
+      requestedOps: Number(item?.result?.requestedOps || 0),
+      executedOps: Number(item?.result?.executedOps || 0),
+      errorCount: Number(item?.result?.errorCount || 0),
+      failedRounds: Array.isArray(item?.result?.failedRounds) ? item.result.failedRounds : [],
+      requestedPlan: Array.isArray(item?.result?.rounds?.[0]?.requestedPlan)
+        ? item.result.rounds[0].requestedPlan
+        : [],
+      opLogTail: Array.isArray(item?.result?.rounds?.[0]?.opLog)
+        ? item.result.rounds[0].opLog.slice(-50)
+        : [],
+      opLogSample: Array.isArray(item?.result?.rounds?.[0]?.opLogSample)
+        ? item.result.rounds[0].opLogSample
+        : [],
+      errors: Array.isArray(item?.result?.rounds?.[0]?.errors)
+        ? item.result.rounds[0].errors
+        : [],
+    };
+  });
+
+  return {
+    createdAt: new Date().toISOString(),
+    runId: runContext?.runId || null,
+    runPrefix: runContext?.runPrefix || null,
+    args: args || {},
+    summary: {
+      ok: Boolean(safeOutput.ok),
+      instances: Number(safeOutput.instances || clients.length || 0),
+      successCount: Number(safeOutput.successCount || 0),
+      failureCount: Number(safeOutput.failureCount || 0),
+    },
+    failFast: {
+      triggered: Boolean(failFastState?.triggered),
+      sourceIndex: Number.isInteger(failFastState?.sourceIndex)
+        ? failFastState.sourceIndex
+        : null,
+      reasonType: failFastState?.reasonType || null,
+    },
+    mismatchCount: clients.filter((item) => item.mismatch).length,
+    txRejectedCount: clients.filter((item) => item.txRejected).length,
+    clients,
+  };
+}
+
+function extractReplayContext(artifact) {
+  const argsOverride =
+    artifact && typeof artifact.args === 'object' && artifact.args
+      ? { ...artifact.args }
+      : {};
+  const fixedPlansByInstance = new Map();
+  const clients = Array.isArray(artifact?.clients) ? artifact.clients : [];
+  for (const client of clients) {
+    const instanceIndex = Number(client?.instanceIndex);
+    if (!Number.isInteger(instanceIndex) || instanceIndex <= 0) continue;
+    if (!Array.isArray(client?.requestedPlan)) continue;
+    fixedPlansByInstance.set(instanceIndex, [...client.requestedPlan]);
+  }
+  return {
+    argsOverride,
+    fixedPlansByInstance,
+  };
+}
+
+async function writeRunArtifact(artifact, baseDir = DEFAULT_ARTIFACT_BASE_DIR) {
+  const runId = String(artifact?.runId || Date.now());
+  const artifactDir = path.join(baseDir, runId);
+  await fsPromises.mkdir(artifactDir, { recursive: true });
+  await fsPromises.writeFile(
+    path.join(artifactDir, 'artifact.json'),
+    JSON.stringify(artifact, null, 2),
+    'utf8'
+  );
+  return artifactDir;
+}
+
 async function main() {
   let args;
   try {
@@ -2360,6 +2681,26 @@ async function main() {
     return;
   }
 
+  let replayContext = {
+    sourceArtifactPath: null,
+    fixedPlansByInstance: new Map(),
+  };
+  if (args.replay) {
+    const replayPath = path.resolve(args.replay);
+    const replayContent = await fsPromises.readFile(replayPath, 'utf8');
+    const replayArtifact = JSON.parse(replayContent);
+    const extractedReplay = extractReplayContext(replayArtifact);
+    args = {
+      ...args,
+      ...extractedReplay.argsOverride,
+      replay: args.replay,
+    };
+    replayContext = {
+      sourceArtifactPath: replayPath,
+      fixedPlansByInstance: extractedReplay.fixedPlansByInstance,
+    };
+  }
+
   const preview = {
     url: args.url,
     session: args.session,
@@ -2374,6 +2715,8 @@ async function main() {
     ops: args.ops,
     opProfile: args.opProfile,
     opTimeoutMs: args.opTimeoutMs,
+    seed: args.seed,
+    replay: args.replay,
     rounds: args.rounds,
     undoRedoDelayMs: args.undoRedoDelayMs,
     syncSettleTimeoutMs: args.syncSettleTimeoutMs,
@@ -2419,8 +2762,13 @@ async function main() {
     }
   }
 
+  const runId = `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
   const sharedConfig = {
-    runPrefix: `op-sim-${Date.now()}-`,
+    runId,
+    runPrefix: `op-sim-${runId}-`,
+    seed: args.seed,
+    replaySource: replayContext.sourceArtifactPath,
+    fixedPlansByInstance: replayContext.fixedPlansByInstance,
     effectiveProfile,
     instanceProfiles,
     effectiveLaunchArgs,
@@ -2431,7 +2779,11 @@ async function main() {
     ),
   };
 
-  const failFastState = { triggered: false };
+  const failFastState = {
+    triggered: false,
+    sourceIndex: null,
+    reasonType: null,
+  };
   const closeOtherSessions = async (excludeIndex) => {
     await Promise.all(
       sessionNames.map((sessionName, index) => {
@@ -2451,6 +2803,8 @@ async function main() {
       } catch (error) {
         if (!failFastState.triggered) {
           failFastState.triggered = true;
+          failFastState.sourceIndex = index;
+          failFastState.reasonType = classifySimulationFailure(error);
           await closeOtherSessions(index);
         }
         throw error;
@@ -2472,7 +2826,16 @@ async function main() {
       reason: String(error?.message || error),
     };
   }
-  const expectedOps = sharedConfig.plan.length * args.rounds;
+  const expectedOpsForInstance = (instanceIndex) => {
+    const fixedPlan =
+      sharedConfig.fixedPlansByInstance instanceof Map
+        ? sharedConfig.fixedPlansByInstance.get(instanceIndex)
+        : null;
+    const perRound = Array.isArray(fixedPlan) && fixedPlan.length > 0
+      ? fixedPlan.length
+      : sharedConfig.plan.length;
+    return perRound * args.rounds;
+  };
 
   if (sessionNames.length === 1) {
     const single = settled[0];
@@ -2481,8 +2844,31 @@ async function main() {
     }
     const value = single.value;
     value.cleanupTodayPage = cleanupTodayPage;
+    try {
+      const singleOutput = {
+        ok: value.ok,
+        instances: 1,
+        successCount: value.ok ? 1 : 0,
+        failureCount: value.ok ? 0 : 1,
+        results: [{
+          session: sessionNames[0],
+          instanceIndex: 1,
+          ok: value.ok,
+          result: value,
+        }],
+      };
+      const artifact = buildRunArtifact({
+        output: singleOutput,
+        args,
+        runContext: sharedConfig,
+        failFastState,
+      });
+      value.artifactDir = await writeRunArtifact(artifact);
+    } catch (error) {
+      value.artifactError = String(error?.message || error);
+    }
     console.log(JSON.stringify(value, null, 2));
-    if (!value.ok || value.executedOps < expectedOps) {
+    if (!value.ok || value.executedOps < expectedOpsForInstance(1)) {
       process.exitCode = 2;
     }
     return;
@@ -2492,7 +2878,9 @@ async function main() {
     const sessionName = sessionNames[idx];
     if (entry.status === 'fulfilled') {
       const value = entry.value;
-      const passed = Boolean(value?.ok) && Number(value?.executedOps || 0) >= expectedOps;
+      const passed =
+        Boolean(value?.ok) &&
+        Number(value?.executedOps || 0) >= expectedOpsForInstance(idx + 1);
       return {
         session: sessionName,
         instanceIndex: idx + 1,
@@ -2504,12 +2892,7 @@ async function main() {
       };
     }
 
-    return {
-      session: sessionName,
-      instanceIndex: idx + 1,
-      ok: false,
-      error: String(entry.reason?.stack || entry.reason?.message || entry.reason),
-    };
+    return buildRejectedResultEntry(sessionName, idx, entry.reason, failFastState);
   });
 
   const successCount = results.filter((item) => item.ok).length;
@@ -2520,6 +2903,18 @@ async function main() {
     failureCount: results.length - successCount,
     results,
   };
+
+  try {
+    const artifact = buildRunArtifact({
+      output,
+      args,
+      runContext: sharedConfig,
+      failFastState,
+    });
+    output.artifactDir = await writeRunArtifact(artifact);
+  } catch (error) {
+    output.artifactError = String(error?.message || error);
+  }
 
   console.log(JSON.stringify(output, null, 2));
   if (!output.ok) {
@@ -2538,4 +2933,12 @@ module.exports = {
   parseArgs,
   isRetryableAgentBrowserError,
   buildCleanupTodayPageProgram,
+  classifySimulationFailure,
+  buildRejectedResultEntry,
+  extractChecksumMismatchDetailsFromError,
+  extractTxRejectedDetailsFromError,
+  buildRunArtifact,
+  extractReplayContext,
+  createSeededRng,
+  shuffleOperationPlan,
 };
