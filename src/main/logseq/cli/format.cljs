@@ -271,6 +271,38 @@
   [items now-ms]
   (format-list-dynamic items now-ms list-property-columns))
 
+(defn- format-task-choice
+  [value prefix]
+  (let [ident (cond
+                (keyword? value) value
+                (map? value) (:db/ident value)
+                :else nil)]
+    (cond
+      ident (let [name' (name ident)]
+              (if (string/starts-with? name' prefix)
+                (subs name' (count prefix))
+                name'))
+      (string? value) value
+      :else "-")))
+
+(def ^:private list-task-columns
+  [["ID"         (fn [item _] (or (:db/id item) (:id item))) [:db/id :id]]
+   ["TITLE"      (fn [item _] (or (:title item) (:block/title item) (:name item))) [:title :block/title :name]]
+   ["STATUS"     (fn [item _] (format-task-choice (or (:status item) (:logseq.property/status item)) "status."))
+    [:status :logseq.property/status] true]
+   ["PRIORITY"   (fn [item _] (format-task-choice (or (:priority item) (:logseq.property/priority item)) "priority."))
+    [:priority :logseq.property/priority] true]
+   ["SCHEDULED"  (fn [item _] (or (:scheduled item) (:logseq.property/scheduled item) "-"))
+    [:scheduled :logseq.property/scheduled] true]
+   ["DEADLINE"   (fn [item _] (or (:deadline item) (:logseq.property/deadline item) "-"))
+    [:deadline :logseq.property/deadline] true]
+   ["UPDATED-AT" (fn [item now-ms] (human-ago (or (:updated-at item) (:block/updated-at item)) now-ms)) [:updated-at :block/updated-at] true]
+   ["CREATED-AT" (fn [item now-ms] (human-ago (or (:created-at item) (:block/created-at item)) now-ms)) [:created-at :block/created-at] true]])
+
+(defn- format-list-task
+  [items now-ms]
+  (format-list-dynamic items now-ms list-task-columns))
+
 (defn- quote-posix-shell
   [value]
   (str "'" (string/replace (normalize-cell value) #"'" "'\"'\"'") "'"))
@@ -642,6 +674,10 @@
   [_context ids]
   (str "Upserted page:\n" (pr-str (vec (or ids [])))))
 
+(defn- format-upsert-task
+  [_context ids]
+  (str "Upserted task:\n" (pr-str (vec (or ids [])))))
+
 (defn- format-upsert-tag
   [_context ids]
   (str "Upserted tag:\n" (pr-str (vec (or ids [])))))
@@ -776,10 +812,12 @@
         :list-page (format-list-page (:items data) now-ms)
         :list-tag (format-list-tag (:items data) now-ms)
         :list-property (format-list-property (:items data) now-ms)
+        :list-task (format-list-task (:items data) now-ms)
         (:search-block :search-page :search-property :search-tag)
         (format-list-page (:items data) now-ms)
         :upsert-block (format-upsert-block context (:result data))
         :upsert-page (format-upsert-page context (:result data))
+        :upsert-task (format-upsert-task context (:result data))
         :upsert-tag (format-upsert-tag context (:result data))
         :upsert-property (format-upsert-property context (:result data))
         :remove-block (format-remove-block context)

@@ -34,7 +34,8 @@
                  :complete :file}
    :status {:desc "Set task status"
             :validate #{"todo" "doing" "done" "now" "later" "wait" "waiting"
-                        "backlog" "canceled" "cancelled" "in-review" "in-progress"}}
+                        "backlog" "canceled" "cancelled"
+                        "in-review" "in_review" "inreview" "in-progress"}}
    :update-tags {:desc "Tags to add/update (EDN vector)"}
    :update-properties {:desc "Properties to add/update (EDN map)"}
    :remove-tags {:desc "Tags to remove (EDN vector) [update only]"}
@@ -45,6 +46,35 @@
         :coerce :long}
    :page {:desc "Page name"
           :complete :pages}
+   :update-tags {:desc "Tags to add/update (EDN vector)"}
+   :update-properties {:desc "Properties to add/update (EDN map)"}
+   :remove-tags {:desc "Tags to remove (EDN vector) [update only]"}
+   :remove-properties {:desc "Properties to remove (EDN vector) [update only]"}})
+
+(def ^:private upsert-task-spec
+  {:id {:desc "Target node db/id (forces update mode) [update only]"
+        :coerce :long}
+   :uuid {:desc "Target node UUID (forces update mode) [update only]"
+          :validate {:pred (comp parse-uuid str)
+                     :ex-msg (constantly "Option uuid must be a valid UUID string")}}
+   :page {:desc "Task page name"
+          :complete :pages}
+   :content {:alias :c
+             :desc "Task block content (create mode)"}
+   :target-id {:desc "Target block db/id [create only]"
+               :coerce :long}
+   :target-uuid {:desc "Target block UUID [create only]"
+                 :validate {:pred (comp parse-uuid str)
+                            :ex-msg (constantly "Option target-uuid must be a valid UUID string")}}
+   :target-page {:desc "Target page name [create only]"
+                 :complete :pages}
+   :pos {:desc "Position. Default: last-child"
+         :validate #{"first-child" "last-child" "sibling"}}
+   :status {:desc "Set task status"
+            :validate #{"todo" "doing" "done" "now" "later" "wait" "waiting"
+                        "backlog" "canceled" "cancelled" "in-review" "in-progress"}}
+   :priority {:desc "Set task priority"
+              :validate #{"low" "medium" "high" "urgent"}}
    :update-tags {:desc "Tags to add/update (EDN vector)"}
    :update-properties {:desc "Properties to add/update (EDN map)"}
    :remove-tags {:desc "Tags to remove (EDN vector) [update only]"}
@@ -82,6 +112,10 @@
    (core/command-entry ["upsert" "page"] :upsert-page "Upsert page" upsert-page-spec
                        {:examples ["logseq upsert page --graph my-graph --page Home --update-tags '[\"project\"]'"
                                    "logseq upsert page --graph my-graph --id 999 --update-properties '{:logseq.property/description \"Example\"}'"]})
+   (core/command-entry ["upsert" "task"] :upsert-task "Upsert task" upsert-task-spec
+                       {:examples ["logseq upsert task --graph my-graph --content \"Ship release\" --target-page Home --status todo --priority high"
+                                   "logseq upsert task --graph my-graph --page Weekly Plan --status doing"
+                                   "logseq upsert task --graph my-graph --id 123 --status done"]})
    (core/command-entry ["upsert" "tag"] :upsert-tag "Upsert tag" upsert-tag-spec
                        {:examples ["logseq upsert tag --graph my-graph --name project"
                                    "logseq upsert tag --graph my-graph --id 200 --name Project Renamed"]})
@@ -113,6 +147,18 @@
       "db.cardinality/many" "many"
       v)))
 
+(def ^:private priority-aliases
+  {"low" :logseq.property/priority.low
+   "medium" :logseq.property/priority.medium
+   "high" :logseq.property/priority.high
+   "urgent" :logseq.property/priority.urgent})
+
+(defn- normalize-priority
+  [value]
+  (let [text (some-> value string/trim string/lower-case)]
+    (when (seq text)
+      (get priority-aliases text))))
+
 (defn invalid-options?
   [command opts]
   (case command
@@ -137,6 +183,42 @@
           selectors (filter some? [(:id opts) page])]
       (when (> (count selectors) 1)
         "only one of --id or --page is allowed"))
+
+    :upsert-task
+    (let [id (:id opts)
+          uuid (some-> (:uuid opts) string/trim)
+          page (some-> (:page opts) string/trim)
+          content (some-> (:content opts) string/trim)
+          selectors (filter some? [id uuid page])
+          target-selectors (filter some? [(:target-id opts)
+                                          (:target-uuid opts)
+                                          (some-> (:target-page opts) string/trim)])
+          pos (some-> (:pos opts) string/trim string/lower-case)
+          selector-mode? (or (some? id) (seq uuid) (seq page))]
+      (cond
+        (> (count selectors) 1)
+        "only one of --id, --uuid, or --page is allowed"
+
+        (and (seq page) (seq content))
+        "--content and --page are mutually exclusive"
+
+        (and (or (some? id) (seq uuid)) (seq content))
+        "--content is only valid when creating a block task"
+
+        (> (count target-selectors) 1)
+        "only one of --target-id, --target-uuid, or --target-page is allowed"
+
+        (and selector-mode? (or (seq target-selectors) (seq pos)))
+        "--target-* and --pos are only valid when creating a block task with --content"
+
+        (and (seq pos) (empty? target-selectors))
+        "--pos is only valid when a target option is provided"
+
+        (and (= pos "sibling") (seq (some-> (:target-page opts) string/trim)))
+        "--pos sibling is only valid for block targets"
+
+        :else
+        nil))
 
     :upsert-tag
     (let [name-provided? (contains? opts :name)
@@ -249,6 +331,102 @@
                           :remove-properties (:value remove-properties-result)}
                    (some? id) (assoc :id id)
                    (seq page) (assoc :page page))}))))
+
+(defn build-task-action
+  [options repo]
+  (if-not (seq repo)
+    {:ok? false
+     :error {:code :missing-repo
+             :message "repo is required for upsert"}}
+    (let [id (:id options)
+          uuid (some-> (:uuid options) string/trim)
+          page (some-> (:page options) string/trim)
+          content (some-> (:content options) string/trim)
+          status-provided? (contains? options :status)
+          status-text (some-> (:status options) string/trim)
+          status (when (seq status-text)
+                   (add-command/normalize-status status-text))
+          priority-provided? (contains? options :priority)
+          priority-text (some-> (:priority options) string/trim)
+          priority (when (seq priority-text)
+                     (normalize-priority priority-text))
+          task-properties (cond-> {}
+                            status (assoc :logseq.property/status status)
+                            priority (assoc :logseq.property/priority priority))
+          update-tags-result (add-command/parse-tags-option (:update-tags options))
+          update-properties-result (add-command/parse-properties-option
+                                    (:update-properties options)
+                                    {:allow-non-built-in? true})
+          remove-tags-result (add-command/parse-tags-vector-option (:remove-tags options))
+          remove-properties-result (add-command/parse-properties-vector-option
+                                    (:remove-properties options)
+                                    {:allow-non-built-in? true})
+          mode (cond
+                 (seq page) :page
+                 (or (some? id) (seq uuid)) :update
+                 :else :create)
+          create-options (cond-> options
+                           (seq (:target-page options))
+                           (assoc :target-page-name (:target-page options))
+                           true
+                           (dissoc :target-page))
+          create-result (when (= mode :create)
+                          (add-command/build-add-block-action create-options [] repo))
+          invalid-message (invalid-options? :upsert-task options)]
+      (cond
+        (seq invalid-message)
+        {:ok? false
+         :error {:code :invalid-options
+                 :message invalid-message}}
+
+        (and status-provided? (not status))
+        {:ok? false
+         :error {:code :invalid-options
+                 :message (str "invalid status: " (:status options))}}
+
+        (and priority-provided? (not priority))
+        {:ok? false
+         :error {:code :invalid-options
+                 :message (str "invalid priority: " (:priority options))}}
+
+        (and (not (some? id)) (not (seq uuid)) (not (seq page)) (not (seq content)))
+        {:ok? false
+         :error {:code :missing-target
+                 :message "block or page is required"}}
+
+        (not (:ok? update-tags-result))
+        update-tags-result
+
+        (not (:ok? update-properties-result))
+        update-properties-result
+
+        (not (:ok? remove-tags-result))
+        remove-tags-result
+
+        (not (:ok? remove-properties-result))
+        remove-properties-result
+
+        (and (= mode :create) (not (:ok? create-result)))
+        create-result
+
+        :else
+        {:ok? true
+         :action (cond-> (if (= mode :create)
+                           (-> (:action create-result)
+                               (assoc :type :upsert-task))
+                           {:type :upsert-task
+                            :repo repo
+                            :graph (core/repo->graph repo)})
+                   true (assoc :mode mode
+                               :update-tags (:value update-tags-result)
+                               :update-properties (merge (or (:value update-properties-result) {})
+                                                         task-properties)
+                               :remove-tags (:value remove-tags-result)
+                               :remove-properties (:value remove-properties-result))
+                   (some? id) (assoc :id id)
+                   (seq uuid) (assoc :uuid uuid)
+                   (seq page) (assoc :page page)
+                   (and (seq content) (not= mode :page)) (assoc :content content))}))))
 
 (defn build-tag-action
   [options repo]
@@ -497,6 +675,98 @@
       :else
       entity)))
 
+(def ^:private task-selector
+  [:db/id :block/uuid :block/name :block/title])
+
+(def ^:private task-tag-ident
+  :logseq.class/Task)
+
+(defn- normalize-lookup-uuid
+  [value]
+  (cond
+    (uuid? value) value
+    (and (string? value) (common-util/uuid-string? (string/trim value)))
+    (uuid (string/trim value))
+    :else nil))
+
+(defn- pull-entity-by-uuid
+  [config repo selector uuid-value]
+  (when-let [uuid* (normalize-lookup-uuid uuid-value)]
+    (transport/invoke config :thread-api/pull false
+                      [repo selector [:block/uuid uuid*]])))
+
+(defn- ensure-task-node!
+  [config repo {:keys [id uuid]}]
+  (p/let [entity (cond
+                   (some? id)
+                   (pull-entity-by-id config repo task-selector id)
+
+                   (seq uuid)
+                   (pull-entity-by-uuid config repo task-selector uuid)
+
+                   :else
+                   nil)]
+    (if (:db/id entity)
+      entity
+      (throw (ex-info "node not found for selector"
+                      {:code upsert-id-not-found-code
+                       :id id
+                       :uuid uuid})))))
+
+(defn- ensure-task-tag-id!
+  [config repo]
+  (p/let [entity (transport/invoke config :thread-api/pull false
+                                   [repo [:db/id] [:db/ident task-tag-ident]])]
+    (if-let [tag-id (:db/id entity)]
+      tag-id
+      (throw (ex-info "task tag not found"
+                      {:code :task-tag-not-found})))))
+
+(defn- task-property-overrides
+  [action]
+  (cond-> {}
+    (:status action) (assoc :logseq.property/status (:status action))
+    (:priority action) (assoc :logseq.property/priority (:priority action))))
+
+(declare append-tag-and-property-ops)
+
+(defn- execute-upsert-task-ops!
+  [action cfg block-ids]
+  (if (seq block-ids)
+    (p/let [task-tag-id (ensure-task-tag-id! cfg (:repo action))
+            update-tags (add-command/resolve-tags cfg (:repo action) (:update-tags action))
+            remove-tags (add-command/resolve-tags cfg (:repo action) (:remove-tags action))
+            update-properties (add-command/resolve-properties cfg (:repo action) (:update-properties action)
+                                                              {:allow-non-built-in? true})
+            update-properties (merge (or update-properties {})
+                                     (task-property-overrides action))
+            remove-properties (add-command/resolve-property-identifiers cfg (:repo action)
+                                                                        (:remove-properties action)
+                                                                        {:allow-non-built-in? true})
+            _ (ensure-property-identifiers-exist! cfg (:repo action) (keys update-properties))
+            _ (ensure-property-identifiers-exist! cfg (:repo action) remove-properties)
+            update-tag-ids (->> update-tags
+                                (map :db/id)
+                                (remove nil?)
+                                (cons task-tag-id)
+                                distinct
+                                vec)
+            remove-tag-ids (->> remove-tags (map :db/id) (remove nil?) distinct vec)
+            _ (when (some #{task-tag-id} remove-tag-ids)
+                (throw (ex-info "cannot remove #Task tag in upsert task"
+                                {:code :invalid-options
+                                 :message "cannot remove #Task tag in upsert task"})))
+            ops (append-tag-and-property-ops []
+                                             block-ids
+                                             {:update-tag-ids update-tag-ids
+                                              :remove-tag-ids remove-tag-ids
+                                              :update-properties update-properties
+                                              :remove-properties remove-properties})]
+      (when (seq ops)
+        (transport/invoke cfg :thread-api/apply-outliner-ops false
+                          [(:repo action) ops {}])))
+    (p/resolved nil)))
+
 (defn- append-tag-and-property-ops
   [ops block-ids {:keys [update-tag-ids remove-tag-ids update-properties remove-properties]}]
   (cond-> ops
@@ -588,6 +858,39 @@
                                     [(:repo action) ops {}]))]
         {:status :ok
          :data {:result [page-id]}})
+      (p/catch (fn [e]
+                 {:status :error
+                  :error {:code (or (get-in (ex-data e) [:code]) :exception)
+                          :message (or (ex-message e) (str e))}}))))
+
+(defn execute-upsert-task
+  [action config]
+  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))]
+        (case (:mode action)
+          :create
+          (p/let [result (add-command/execute-add-block (assoc action :type :add-block) config)
+                  created-ids (vec (or (get-in result [:data :result]) []))
+                  _ (execute-upsert-task-ops! action cfg created-ids)]
+            {:status :ok
+             :data {:result created-ids}})
+
+          :page
+          (p/let [page (ensure-page-entity! cfg (:repo action) (:page action))
+                  page-id (:db/id page)
+                  _ (execute-upsert-task-ops! action cfg [page-id])]
+            {:status :ok
+             :data {:result [page-id]}})
+
+          :update
+          (p/let [entity (ensure-task-node! cfg (:repo action) action)
+                  node-id (:db/id entity)
+                  _ (execute-upsert-task-ops! action cfg [node-id])]
+            {:status :ok
+             :data {:result [node-id]}})
+
+          {:status :error
+           :error {:code :invalid-options
+                   :message "invalid upsert task mode"}}))
       (p/catch (fn [e]
                  {:status :error
                   :error {:code (or (get-in (ex-data e) [:code]) :exception)
