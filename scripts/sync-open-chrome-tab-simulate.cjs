@@ -15,6 +15,8 @@ const DEFAULT_SESSION_NAME = 'logseq-op-sim';
 const DEFAULT_CHROME_PROFILE = 'auto';
 const DEFAULT_INSTANCES = 1;
 const DEFAULT_OPS = 50;
+const DEFAULT_OP_PROFILE = 'fast';
+const DEFAULT_OP_TIMEOUT_MS = 1000;
 const DEFAULT_ROUNDS = 1;
 const DEFAULT_UNDO_REDO_DELAY_MS = 350;
 const DEFAULT_HEADED = true;
@@ -22,7 +24,7 @@ const DEFAULT_AUTO_CONNECT = false;
 const DEFAULT_RESET_SESSION = true;
 const DEFAULT_TARGET_GRAPH = 'db1';
 const DEFAULT_E2E_PASSWORD = '12345';
-const DEFAULT_SWITCH_GRAPH_TIMEOUT_MS = 120000;
+const DEFAULT_SWITCH_GRAPH_TIMEOUT_MS = 100000;
 const DEFAULT_CHROME_LAUNCH_ARGS = [
   '--new-window',
   '--no-first-run',
@@ -33,10 +35,12 @@ const RENDERER_READY_POLL_DELAY_MS = 250;
 const FALLBACK_PAGE_NAME = 'op-sim-scratch';
 const DEFAULT_VERIFY_CHECKSUM = true;
 const DEFAULT_CLEANUP_TODAY_PAGE = true;
-const DEFAULT_SYNC_SETTLE_TIMEOUT_MS = 120000;
-const AGENT_BROWSER_ACTION_TIMEOUT_MS = 180000;
-const PROCESS_TIMEOUT_MS = 240000;
-const AGENT_BROWSER_RETRY_COUNT = 5;
+const DEFAULT_SYNC_SETTLE_TIMEOUT_MS = 3000;
+const AGENT_BROWSER_ACTION_TIMEOUT_MS = 120000;
+const PROCESS_TIMEOUT_MS = 120000;
+const AGENT_BROWSER_RETRY_COUNT = 2;
+const BOOTSTRAP_EVAL_TIMEOUT_MS = 15000;
+const RENDERER_EVAL_BASE_TIMEOUT_MS = 30000;
 
 function usage() {
   return [
@@ -57,7 +61,9 @@ function usage() {
     '  --no-auto-connect           Disable auto-connect to a running Chrome instance',
     '  --no-reset-session          Do not close the target agent-browser session before starting',
     `  --switch-timeout-ms <n>     Timeout for graph switch/download bootstrap (default: ${DEFAULT_SWITCH_GRAPH_TIMEOUT_MS})`,
-    `  --ops <n>                   Total operations to execute (must be >= 1, default: ${DEFAULT_OPS})`,
+    `  --ops <n>                   Total operations across all instances per round (must be >= 1, default: ${DEFAULT_OPS})`,
+    `  --op-profile <name>         Operation profile: fast|full (default: ${DEFAULT_OP_PROFILE})`,
+    `  --op-timeout-ms <n>         Timeout per operation in renderer (default: ${DEFAULT_OP_TIMEOUT_MS})`,
     `  --rounds <n>                Number of operation rounds per instance (default: ${DEFAULT_ROUNDS})`,
     `  --undo-redo-delay-ms <n>    Wait time after undo/redo command (default: ${DEFAULT_UNDO_REDO_DELAY_MS})`,
     `  --sync-settle-timeout-ms <n> Timeout waiting for local/remote tx to settle before checksum verify (default: ${DEFAULT_SYNC_SETTLE_TIMEOUT_MS})`,
@@ -100,6 +106,8 @@ function parseArgs(argv) {
     resetSession: DEFAULT_RESET_SESSION,
     switchTimeoutMs: DEFAULT_SWITCH_GRAPH_TIMEOUT_MS,
     ops: DEFAULT_OPS,
+    opProfile: DEFAULT_OP_PROFILE,
+    opTimeoutMs: DEFAULT_OP_TIMEOUT_MS,
     rounds: DEFAULT_ROUNDS,
     undoRedoDelayMs: DEFAULT_UNDO_REDO_DELAY_MS,
     syncSettleTimeoutMs: DEFAULT_SYNC_SETTLE_TIMEOUT_MS,
@@ -225,6 +233,25 @@ function parseArgs(argv) {
 
     if (arg === '--ops') {
       result.ops = parsePositiveInteger(next, '--ops');
+      i += 1;
+      continue;
+    }
+
+    if (arg === '--op-profile') {
+      if (typeof next !== 'string' || next.length === 0) {
+        throw new Error('--op-profile must be a non-empty string');
+      }
+      const normalized = next.toLowerCase();
+      if (normalized !== 'fast' && normalized !== 'full') {
+        throw new Error('--op-profile must be one of: fast, full');
+      }
+      result.opProfile = normalized;
+      i += 1;
+      continue;
+    }
+
+    if (arg === '--op-timeout-ms') {
+      result.opTimeoutMs = parsePositiveInteger(next, '--op-timeout-ms');
       i += 1;
       continue;
     }
@@ -451,7 +478,15 @@ function isRetryableAgentBrowserError(error) {
     /daemon may be busy or unresponsive/i.test(message) ||
     /resource temporarily unavailable/i.test(message) ||
     /os error 35/i.test(message) ||
-    /EAGAIN/i.test(message)
+    /EAGAIN/i.test(message) ||
+    /inspected target navigated or closed/i.test(message) ||
+    /execution context was destroyed/i.test(message) ||
+    /cannot find context with specified id/i.test(message) ||
+    /target closed/i.test(message) ||
+    /session closed/i.test(message) ||
+    /cdp command timed out/i.test(message) ||
+    /cdp response channel closed/i.test(message) ||
+    /operation timed out\. the page may still be loading/i.test(message)
   );
 }
 
@@ -585,7 +620,10 @@ async function runAgentBrowser(session, commandArgs, options = {}) {
 
       const parsed = parseJsonOutput(stdout);
       if (!parsed || parsed.success !== true) {
-        const fallback = stderr.trim() || stdout.trim();
+        const fallback =
+          String(parsed?.error || '').trim() ||
+          stderr.trim() ||
+          stdout.trim();
         throw new Error('agent-browser command failed: ' + (fallback || 'unknown error'));
       }
       return parsed;
@@ -689,12 +727,137 @@ function buildRendererProgram(config) {
       typeof config.runPrefix === 'string' && config.runPrefix.length > 0
         ? config.runPrefix
         : config.markerPrefix;
+    const checksumWarningToken = 'db-sync/checksum-mismatch';
+    const checksumWarningStateKey = '__logseqOpChecksumWarnings';
+    const checksumWarningPatchKey = '__logseqOpChecksumWarningPatchInstalled';
 
     const chooseRunnableOperation = (requestedOperation, operableCount) => {
-      if (requestedOperation === 'move' || requestedOperation === 'delete') {
+      if (
+        requestedOperation === 'move' ||
+        requestedOperation === 'delete' ||
+        requestedOperation === 'indent'
+      ) {
         return operableCount >= 2 ? requestedOperation : 'add';
       }
+      if (
+        requestedOperation === 'copyPaste' ||
+        requestedOperation === 'copyPasteTreeToEmptyTarget'
+      ) {
+        return operableCount >= 1 ? requestedOperation : 'add';
+      }
       return requestedOperation;
+    };
+
+    const stringifyConsoleArg = (value) => {
+      if (typeof value === 'string') return value;
+      try {
+        return JSON.stringify(value);
+      } catch (_error) {
+        return String(value);
+      }
+    };
+
+    const installChecksumWarningTrap = () => {
+      const warningList = Array.isArray(window[checksumWarningStateKey])
+        ? window[checksumWarningStateKey]
+        : [];
+      window[checksumWarningStateKey] = warningList;
+      if (window[checksumWarningPatchKey]) return;
+      window[checksumWarningPatchKey] = true;
+
+      const trapMethod = (method) => {
+        const original = console[method];
+        if (typeof original !== 'function') return;
+        console[method] = (...args) => {
+          try {
+            const text = args.map(stringifyConsoleArg).join(' ');
+            if (text.includes(checksumWarningToken)) {
+              warningList.push({
+                level: method,
+                text,
+                createdAt: Date.now(),
+              });
+            }
+          } catch (_error) {
+            // noop
+          }
+          return original.apply(console, args);
+        };
+      };
+
+      trapMethod('warn');
+      trapMethod('error');
+      trapMethod('log');
+    };
+
+    const latestChecksumWarning = () => {
+      const warningList = Array.isArray(window[checksumWarningStateKey])
+        ? window[checksumWarningStateKey]
+        : [];
+      return warningList.length > 0 ? warningList[warningList.length - 1] : null;
+    };
+
+    const latestChecksumMismatchRtcLog = () => {
+      try {
+        if (!globalThis.logseq?.api?.get_state_from_store) return null;
+        const entry = logseq.api.get_state_from_store(['rtc/log']);
+        if (!entry || typeof entry !== 'object') return null;
+
+        const type = String(entry.type || '').toLowerCase();
+        const localChecksum = String(
+          entry['local-checksum'] || entry.localChecksum || entry.local_checksum || ''
+        );
+        const remoteChecksum = String(
+          entry['remote-checksum'] || entry.remoteChecksum || entry.remote_checksum || ''
+        );
+        const hasMismatchType = type.includes('checksum-mismatch');
+        const hasDifferentChecksums =
+          localChecksum.length > 0 &&
+          remoteChecksum.length > 0 &&
+          localChecksum !== remoteChecksum;
+
+        if (!hasMismatchType && !hasDifferentChecksums) return null;
+        return {
+          type: entry.type || null,
+          messageType: entry['message-type'] || entry.messageType || null,
+          localTx: entry['local-tx'] || entry.localTx || null,
+          remoteTx: entry['remote-tx'] || entry.remoteTx || null,
+          localChecksum,
+          remoteChecksum,
+        };
+      } catch (_error) {
+        return null;
+      }
+    };
+
+    const failIfChecksumWarningSeen = () => {
+      const rtcLog = latestChecksumMismatchRtcLog();
+      if (rtcLog) {
+        throw new Error('checksum mismatch rtc-log detected: ' + JSON.stringify(rtcLog));
+      }
+      const warning = latestChecksumWarning();
+      if (!warning) return;
+      const details = String(warning.text || '').slice(0, 500);
+      throw new Error('checksum warning detected: ' + details);
+    };
+
+    const withTimeout = async (promise, timeoutMs, label) => {
+      if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+        return promise;
+      }
+      let timer = null;
+      try {
+        return await Promise.race([
+          promise,
+          new Promise((_, reject) => {
+            timer = setTimeout(() => {
+              reject(new Error(label + ' timed out after ' + timeoutMs + 'ms'));
+            }, timeoutMs);
+          }),
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
     };
 
     const flattenBlocks = (nodes, acc = []) => {
@@ -718,7 +881,17 @@ function buildRendererProgram(config) {
     const isClientRootBlock = (block) =>
       typeof block?.content === 'string' && block.content === (config.markerPrefix + ' client-root');
 
+    let operationPageName = null;
+
     const listPageBlocks = async () => {
+      if (
+        typeof operationPageName === 'string' &&
+        operationPageName.length > 0 &&
+        typeof logseq.api.get_page_blocks_tree === 'function'
+      ) {
+        const tree = await logseq.api.get_page_blocks_tree(operationPageName);
+        return flattenBlocks(tree, []);
+      }
       const tree = await logseq.api.get_current_page_blocks_tree();
       return flattenBlocks(tree, []);
     };
@@ -741,6 +914,7 @@ function buildRendererProgram(config) {
         before: false,
         focus: false,
       });
+
       if (!inserted?.uuid) {
         throw new Error('Failed to create client root block');
       }
@@ -853,28 +1027,11 @@ function buildRendererProgram(config) {
 
       while (Date.now() < deadline) {
         try {
-          const currentBlock = await logseq.api.get_current_block();
-          if (currentBlock && currentBlock.uuid) {
-            return currentBlock;
-          }
-
-          if (typeof logseq.api.get_current_page === 'function') {
-            const currentPage = await logseq.api.get_current_page();
-            const currentPageName = asPageName(currentPage);
-            if (currentPageName) {
-              const seeded = await logseq.api.append_block_in_page(
-                currentPageName,
-                config.markerPrefix + ' anchor',
-                {}
-              );
-              if (seeded?.uuid) return seeded;
-            }
-          }
-
           if (typeof logseq.api.get_today_page === 'function') {
             const todayPage = await logseq.api.get_today_page();
             const todayPageName = asPageName(todayPage);
             if (todayPageName) {
+              operationPageName = todayPageName;
               const seeded = await logseq.api.append_block_in_page(
                 todayPageName,
                 config.markerPrefix + ' anchor',
@@ -884,7 +1041,27 @@ function buildRendererProgram(config) {
             }
           }
 
+          if (typeof logseq.api.get_current_page === 'function') {
+            const currentPage = await logseq.api.get_current_page();
+            const currentPageName = asPageName(currentPage);
+            if (currentPageName) {
+              operationPageName = currentPageName;
+              const seeded = await logseq.api.append_block_in_page(
+                currentPageName,
+                config.markerPrefix + ' anchor',
+                {}
+              );
+              if (seeded?.uuid) return seeded;
+            }
+          }
+
+          const currentBlock = await logseq.api.get_current_block();
+          if (currentBlock && currentBlock.uuid) {
+            return currentBlock;
+          }
+
           {
+            operationPageName = config.fallbackPageName;
             const seeded = await logseq.api.append_block_in_page(
               config.fallbackPageName,
               config.markerPrefix + ' anchor',
@@ -1065,149 +1242,169 @@ function buildRendererProgram(config) {
 
     const errors = [];
     const operationLog = [];
+    const phaseTimeoutMs = Math.max(5000, Number(config.readyTimeoutMs || 0) + 5000);
+    const opReadTimeoutMs = Math.max(2000, Number(config.opTimeoutMs || 0) * 2);
 
-    await waitForEditorReady();
-    const anchor = await getAnchor();
-    await ensureClientRootBlock(anchor);
+    installChecksumWarningTrap();
+    failIfChecksumWarningSeen();
 
-    if (!(await listManagedBlocks()).length) {
-      await logseq.api.insert_block(anchor.uuid, config.markerPrefix + ' seed', {
-        sibling: true,
-        before: false,
-        focus: false,
-      });
+    await withTimeout(waitForEditorReady(), phaseTimeoutMs, 'waitForEditorReady');
+    const anchor = await withTimeout(getAnchor(), phaseTimeoutMs, 'getAnchor');
+    await withTimeout(ensureClientRootBlock(anchor), phaseTimeoutMs, 'ensureClientRootBlock');
+
+    const initialManaged = await withTimeout(listManagedBlocks(), phaseTimeoutMs, 'listManagedBlocks');
+    if (!initialManaged.length) {
+      await withTimeout(
+        logseq.api.insert_block(anchor.uuid, config.markerPrefix + ' seed', {
+          sibling: true,
+          before: false,
+          focus: false,
+        }),
+        phaseTimeoutMs,
+        'insert seed block'
+      );
     }
 
     let executed = 0;
 
     for (let i = 0; i < config.plan.length; i += 1) {
+      failIfChecksumWarningSeen();
       const requested = config.plan[i];
-      const operable = await listOperableBlocks();
+      const operable = await withTimeout(
+        listOperableBlocks(),
+        opReadTimeoutMs,
+        'listOperableBlocks before operation'
+      );
       let operation = chooseRunnableOperation(requested, operable.length);
       if (operation !== requested) {
         counts.fallbackAdd += 1;
       }
 
       try {
-        await sleep(Math.floor(Math.random() * 40));
+        await sleep(Math.floor(Math.random() * 10));
 
-        if (operation === 'add') {
-          const target = operable.length > 0 ? randomItem(operable) : anchor;
-          const content = Math.random() < 0.2 ? '' : config.markerPrefix + ' add-' + i;
-          const asChild = operable.length > 0 && Math.random() < 0.35;
-          await logseq.api.insert_block(target.uuid, content, {
-            sibling: !asChild,
-            before: false,
-            focus: false,
-          });
-        }
-
-        if (operation === 'copyPaste') {
-          const pageBlocks = await listPageBlocks();
-          const copyPool = (operable.length > 0 ? operable : pageBlocks).filter((b) => b?.uuid);
-          if (copyPool.length === 0) {
-            throw new Error('No blocks available for copyPaste');
+        const runOperation = async () => {
+          if (operation === 'add') {
+            const target = operable.length > 0 ? randomItem(operable) : anchor;
+            const content = Math.random() < 0.2 ? '' : config.markerPrefix + ' add-' + i;
+            const asChild = operable.length > 0 && Math.random() < 0.35;
+            await logseq.api.insert_block(target.uuid, content, {
+              sibling: !asChild,
+              before: false,
+              focus: false,
+            });
           }
-          const source = randomItem(copyPool);
-          const target = randomItem(copyPool);
-          await logseq.api.select_block(source.uuid);
-          await logseq.api.invoke_external_command('logseq.editor/copy');
-          const latestSource = await logseq.api.get_block(source.uuid);
-          const sourceContent = latestSource?.content || source.content || '';
-          const copiedContent =
-            config.markerPrefix + ' copy-' + i + (sourceContent ? ' :: ' + sourceContent : '');
-          await logseq.api.insert_block(target.uuid, copiedContent, {
-            sibling: true,
-            before: false,
-            focus: false,
-          });
-        }
 
-        if (operation === 'copyPasteTreeToEmptyTarget') {
-          const pageBlocks = await listPageBlocks();
-          const treePool = (operable.length >= 2 ? operable : pageBlocks).filter((b) => b?.uuid);
-          if (treePool.length < 2) {
-            throw new Error('Not enough blocks available for multi-block copy');
+          if (operation === 'copyPaste') {
+            const pageBlocks = await listPageBlocks();
+            const copyPool = (operable.length > 0 ? operable : pageBlocks).filter((b) => b?.uuid);
+            if (copyPool.length === 0) {
+              throw new Error('No blocks available for copyPaste');
+            }
+            const source = randomItem(copyPool);
+            const target = randomItem(copyPool);
+            await logseq.api.select_block(source.uuid);
+            await logseq.api.invoke_external_command('logseq.editor/copy');
+            const latestSource = await logseq.api.get_block(source.uuid);
+            const sourceContent = latestSource?.content || source.content || '';
+            const copiedContent =
+              config.markerPrefix + ' copy-' + i + (sourceContent ? ' :: ' + sourceContent : '');
+            await logseq.api.insert_block(target.uuid, copiedContent, {
+              sibling: true,
+              before: false,
+              focus: false,
+            });
           }
-          const sources = pickRandomGroup(treePool, 2, 4);
-          const sourceTrees = [];
-          for (const source of sources) {
-            const sourceTree = await logseq.api.get_block(source.uuid, { includeChildren: true });
-            if (sourceTree?.uuid) {
-              sourceTrees.push(sourceTree);
+
+          if (operation === 'copyPasteTreeToEmptyTarget') {
+            const pageBlocks = await listPageBlocks();
+            const treePool = (operable.length >= 2 ? operable : pageBlocks).filter((b) => b?.uuid);
+            if (treePool.length < 2) {
+              throw new Error('Not enough blocks available for multi-block copy');
+            }
+            const sources = pickRandomGroup(treePool, 2, 4);
+            const sourceTrees = [];
+            for (const source of sources) {
+              const sourceTree = await logseq.api.get_block(source.uuid, { includeChildren: true });
+              if (sourceTree?.uuid) {
+                sourceTrees.push(sourceTree);
+              }
+            }
+            if (sourceTrees.length === 0) {
+              throw new Error('Failed to load source tree blocks');
+            }
+
+            const treeTarget = operable.length > 0 ? randomItem(operable) : anchor;
+            const emptyTarget = await logseq.api.insert_block(treeTarget.uuid, '', {
+              sibling: true,
+              before: false,
+              focus: false,
+            });
+            if (!emptyTarget?.uuid) {
+              throw new Error('Failed to create empty target block');
+            }
+
+            await logseq.api.update_block(emptyTarget.uuid, '');
+            const payload = sourceTrees.map((tree, idx) => {
+              const node = toBatchTree(tree);
+              const origin = typeof node.content === 'string' && node.content.length > 0
+                ? ' :: ' + node.content
+                : '';
+              node.content = config.markerPrefix + ' tree-copy-' + i + '-' + idx + origin;
+              return node;
+            });
+            try {
+              await logseq.api.insert_batch_block(emptyTarget.uuid, payload, { sibling: false });
+            } catch (_error) {
+              for (const tree of sourceTrees) {
+                await logseq.api.insert_batch_block(emptyTarget.uuid, toBatchTree(tree), { sibling: false });
+              }
             }
           }
-          if (sourceTrees.length === 0) {
-            throw new Error('Failed to load source tree blocks');
+
+          if (operation === 'move') {
+            const source = randomItem(operable);
+            const candidates = operable.filter((block) => block.uuid !== source.uuid);
+            const target = randomItem(candidates);
+            await logseq.api.move_block(source.uuid, target.uuid, {
+              before: Math.random() < 0.5,
+              children: false,
+            });
           }
 
-          const treeTarget = operable.length > 0 ? randomItem(operable) : anchor;
-          const emptyTarget = await logseq.api.insert_block(treeTarget.uuid, '', {
-            sibling: true,
-            before: false,
-            focus: false,
-          });
-          if (!emptyTarget?.uuid) {
-            throw new Error('Failed to create empty target block');
+          if (operation === 'indent') {
+            const candidate = await ensureIndentCandidate(operable, anchor, i);
+            await runIndent(candidate);
           }
 
-          await logseq.api.update_block(emptyTarget.uuid, '');
-          const payload = sourceTrees.map((tree, idx) => {
-            const node = toBatchTree(tree);
-            const origin = typeof node.content === 'string' && node.content.length > 0
-              ? ' :: ' + node.content
-              : '';
-            node.content = config.markerPrefix + ' tree-copy-' + i + '-' + idx + origin;
-            return node;
-          });
-          try {
-            await logseq.api.insert_batch_block(emptyTarget.uuid, payload, { sibling: false });
-          } catch (_error) {
-            for (const tree of sourceTrees) {
-              await logseq.api.insert_batch_block(emptyTarget.uuid, toBatchTree(tree), { sibling: false });
+          if (operation === 'outdent') {
+            const candidate = await ensureOutdentCandidate(operable, anchor, i);
+            await runOutdent(candidate);
+          }
+
+          if (operation === 'delete') {
+            const candidates = operable.filter((block) => block.uuid !== anchor.uuid && !isClientRootBlock(block));
+            const victimPool = candidates.length > 0 ? candidates : operable;
+            const victim = randomItem(victimPool);
+            if (isClientRootBlock(victim)) {
+              throw new Error('Skip deleting protected client root block');
             }
+            await logseq.api.remove_block(victim.uuid);
           }
-        }
 
-        if (operation === 'move') {
-          const source = randomItem(operable);
-          const candidates = operable.filter((block) => block.uuid !== source.uuid);
-          const target = randomItem(candidates);
-          await logseq.api.move_block(source.uuid, target.uuid, {
-            before: Math.random() < 0.5,
-            children: false,
-          });
-        }
-
-        if (operation === 'indent') {
-          const candidate = await ensureIndentCandidate(operable, anchor, i);
-          await runIndent(candidate);
-        }
-
-        if (operation === 'outdent') {
-          const candidate = await ensureOutdentCandidate(operable, anchor, i);
-          await runOutdent(candidate);
-        }
-
-        if (operation === 'delete') {
-          const candidates = operable.filter((block) => block.uuid !== anchor.uuid && !isClientRootBlock(block));
-          const victimPool = candidates.length > 0 ? candidates : operable;
-          const victim = randomItem(victimPool);
-          if (isClientRootBlock(victim)) {
-            throw new Error('Skip deleting protected client root block');
+          if (operation === 'undo') {
+            await logseq.api.invoke_external_command('logseq.editor/undo');
+            await sleep(config.undoRedoDelayMs);
           }
-          await logseq.api.remove_block(victim.uuid);
-        }
 
-        if (operation === 'undo') {
-          await logseq.api.invoke_external_command('logseq.editor/undo');
-          await sleep(config.undoRedoDelayMs);
-        }
+          if (operation === 'redo') {
+            await logseq.api.invoke_external_command('logseq.editor/redo');
+            await sleep(config.undoRedoDelayMs);
+          }
+        };
 
-        if (operation === 'redo') {
-          await logseq.api.invoke_external_command('logseq.editor/redo');
-          await sleep(config.undoRedoDelayMs);
-        }
+        await withTimeout(runOperation(), config.opTimeoutMs, operation + ' operation');
+        failIfChecksumWarningSeen();
 
         counts[operation] += 1;
         executed += 1;
@@ -1222,13 +1419,21 @@ function buildRendererProgram(config) {
         });
 
         try {
-          const recoveryOperable = await listOperableBlocks();
+          const recoveryOperable = await withTimeout(
+            listOperableBlocks(),
+            opReadTimeoutMs,
+            'listOperableBlocks for recovery'
+          );
           const target = recoveryOperable.length > 0 ? randomItem(recoveryOperable) : anchor;
-          await logseq.api.insert_block(target.uuid, config.markerPrefix + ' recovery-' + i, {
-            sibling: true,
-            before: false,
-            focus: false,
-          });
+          await withTimeout(
+            logseq.api.insert_block(target.uuid, config.markerPrefix + ' recovery-' + i, {
+              sibling: true,
+              before: false,
+              focus: false,
+            }),
+            opReadTimeoutMs,
+            'insert recovery block'
+          );
           counts.add += 1;
           executed += 1;
           operationLog.push({ index: i, requested, executedAs: 'add' });
@@ -1245,8 +1450,26 @@ function buildRendererProgram(config) {
     }
 
     let checksum = null;
+    failIfChecksumWarningSeen();
     if (config.verifyChecksum) {
-      checksum = await runChecksumDiagnostics();
+      try {
+        checksum = await withTimeout(
+          runChecksumDiagnostics(),
+          Math.max(
+            45000,
+            Number(config.syncSettleTimeoutMs || 0) +
+              Number(config.readyTimeoutMs || 0) +
+              10000
+          ),
+          'runChecksumDiagnostics'
+        );
+      } catch (error) {
+        checksum = {
+          ok: false,
+          reason: String(error?.message || error),
+          timedOut: true,
+        };
+      }
       if (!checksum.ok) {
         counts.errors += 1;
         errors.push({
@@ -1259,7 +1482,7 @@ function buildRendererProgram(config) {
       }
     }
 
-    const finalManaged = await listManagedBlocks();
+    const finalManaged = await withTimeout(listManagedBlocks(), phaseTimeoutMs, 'final listManagedBlocks');
     return {
       ok: errors.length === 0,
       requestedOps: config.plan.length,
@@ -1280,8 +1503,14 @@ function buildRendererProgram(config) {
   })())()`;
 }
 
-function buildCleanupTodayPageProgram() {
+function buildCleanupTodayPageProgram(config = {}) {
+  const cleanupConfig = {
+    cleanupTodayPage: true,
+    ...(config || {}),
+  };
+
   return `(() => (async () => {
+    const config = ${JSON.stringify(cleanupConfig)};
     const asPageName = (pageLike) => {
       if (typeof pageLike === 'string' && pageLike.length > 0) return pageLike;
       if (!pageLike || typeof pageLike !== 'object') return null;
@@ -1291,19 +1520,76 @@ function buildCleanupTodayPageProgram() {
       return null;
     };
 
-    try {
-      if (!globalThis.logseq?.api?.get_today_page || !globalThis.logseq?.api?.delete_page) {
-        return { ok: false, reason: 'today page APIs unavailable' };
+    const purgePageBlocks = async (pageName) => {
+      if (!pageName) {
+        return { ok: false, pageName, reason: 'empty page name' };
+      }
+      if (!globalThis.logseq?.api?.get_page_blocks_tree || !globalThis.logseq?.api?.remove_block) {
+        return { ok: false, pageName, reason: 'page block APIs unavailable' };
       }
 
+      let tree = [];
+      try {
+        tree = await logseq.api.get_page_blocks_tree(pageName);
+      } catch (error) {
+        return { ok: false, pageName, reason: 'failed to read page tree: ' + String(error?.message || error) };
+      }
+
+      const topLevel = Array.isArray(tree)
+        ? tree.map((block) => block?.uuid).filter(Boolean)
+        : [];
+      for (const uuid of topLevel) {
+        try {
+          await logseq.api.remove_block(uuid);
+        } catch (_error) {
+          // best-effort cleanup; continue deleting remaining blocks
+        }
+      }
+
+      return {
+        ok: true,
+        pageName,
+        removedBlocks: topLevel.length,
+      };
+    };
+
+    try {
+      const pages = [];
+
+      if (!globalThis.logseq?.api?.get_today_page) {
+        return { ok: false, reason: 'today page API unavailable' };
+      }
       const today = await logseq.api.get_today_page();
       const todayName = asPageName(today);
-      if (!todayName) {
-        return { ok: false, reason: 'today page missing' };
+      if (todayName) {
+        pages.push(todayName);
       }
 
-      await logseq.api.delete_page(todayName);
-      return { ok: true, deleted: todayName };
+      const uniquePages = Array.from(new Set(pages.filter(Boolean)));
+      const pageResults = [];
+      for (const pageName of uniquePages) {
+        const pageResult = await purgePageBlocks(pageName);
+        let deleted = false;
+        let deleteError = null;
+        if (globalThis.logseq?.api?.delete_page) {
+          try {
+            await logseq.api.delete_page(pageName);
+            deleted = true;
+          } catch (error) {
+            deleteError = String(error?.message || error);
+          }
+        }
+        pageResults.push({
+          ...pageResult,
+          deleted,
+          deleteError,
+        });
+      }
+
+      return {
+        ok: pageResults.every((item) => item.ok),
+        pages: pageResults,
+      };
     } catch (error) {
       return { ok: false, reason: String(error?.message || error) };
     }
@@ -1773,6 +2059,7 @@ async function runGraphBootstrap(sessionName, args, runOptions) {
       ['eval', '--stdin'],
       {
         input: bootstrapProgram,
+        timeoutMs: BOOTSTRAP_EVAL_TIMEOUT_MS,
         ...runOptions,
       }
     );
@@ -1877,6 +2164,29 @@ function buildSessionNames(baseSession, instances) {
   return sessions;
 }
 
+function buildSimulationOperationPlan(totalOps, profile) {
+  if (profile === 'full') {
+    return buildOperationPlan(totalOps);
+  }
+
+  const fastOperationOrder = [
+    'add',
+    'add',
+    'move',
+    'delete',
+    'indent',
+    'outdent',
+    'add',
+    'move',
+  ];
+
+  const plan = [];
+  for (let i = 0; i < totalOps; i += 1) {
+    plan.push(fastOperationOrder[i % fastOperationOrder.length]);
+  }
+  return plan;
+}
+
 function shuffleOperationPlan(plan) {
   const shuffled = Array.isArray(plan) ? [...plan] : [];
   for (let i = shuffled.length - 1; i > 0; i -= 1) {
@@ -1886,6 +2196,16 @@ function shuffleOperationPlan(plan) {
     shuffled[j] = tmp;
   }
   return shuffled;
+}
+
+function computeRendererEvalTimeoutMs(syncSettleTimeoutMs, opCount) {
+  return Math.max(
+    120000,
+    RENDERER_EVAL_BASE_TIMEOUT_MS +
+      (syncSettleTimeoutMs * 2) +
+      (opCount * 500) +
+      30000
+  );
 }
 
 async function runSimulationForSession(sessionName, index, args, sharedConfig) {
@@ -1913,6 +2233,10 @@ async function runSimulationForSession(sessionName, index, args, sharedConfig) {
 
   const rounds = [];
   let bootstrap = null;
+  const rendererEvalTimeoutMs = computeRendererEvalTimeoutMs(
+    args.syncSettleTimeoutMs,
+    sharedConfig.plan.length
+  );
   for (let round = 0; round < args.rounds; round += 1) {
     bootstrap = await runGraphBootstrap(sessionName, args, runOptions);
     const clientPlan = shuffleOperationPlan(sharedConfig.plan);
@@ -1925,6 +2249,7 @@ async function runSimulationForSession(sessionName, index, args, sharedConfig) {
       readyTimeoutMs: RENDERER_READY_TIMEOUT_MS,
       readyPollDelayMs: RENDERER_READY_POLL_DELAY_MS,
       syncSettleTimeoutMs: args.syncSettleTimeoutMs,
+      opTimeoutMs: args.opTimeoutMs,
       fallbackPageName: FALLBACK_PAGE_NAME,
       verifyChecksum: args.verifyChecksum,
     });
@@ -1934,6 +2259,7 @@ async function runSimulationForSession(sessionName, index, args, sharedConfig) {
       ['eval', '--stdin'],
       {
         input: rendererProgram,
+        timeoutMs: rendererEvalTimeoutMs,
         ...runOptions,
       }
     );
@@ -1945,19 +2271,6 @@ async function runSimulationForSession(sessionName, index, args, sharedConfig) {
       round: round + 1,
       ...value,
     });
-  }
-
-  let cleanupTodayPage = null;
-  if (args.cleanupTodayPage && index === 0) {
-    const cleanupEval = await runAgentBrowser(
-      sessionName,
-      ['eval', '--stdin'],
-      {
-        input: buildCleanupTodayPageProgram(),
-        ...runOptions,
-      }
-    );
-    cleanupTodayPage = cleanupEval?.data?.result || null;
   }
 
   const summary = rounds.reduce(
@@ -1985,7 +2298,6 @@ async function runSimulationForSession(sessionName, index, args, sharedConfig) {
     counts: summary.counts,
     errorCount: summary.errorCount,
     failedRounds: summary.failedRounds,
-    cleanupTodayPage,
   };
 
   value.runtime = {
@@ -1996,6 +2308,8 @@ async function runSimulationForSession(sessionName, index, args, sharedConfig) {
     effectiveExecutablePath: sharedConfig.effectiveExecutablePath,
     bootstrap,
     rounds: args.rounds,
+    opProfile: args.opProfile,
+    opTimeoutMs: args.opTimeoutMs,
     verifyChecksum: args.verifyChecksum,
     cleanupTodayPage: args.cleanupTodayPage,
     autoConnect: args.autoConnect,
@@ -2003,6 +2317,31 @@ async function runSimulationForSession(sessionName, index, args, sharedConfig) {
   };
 
   return value;
+}
+
+async function runPostSimulationCleanup(sessionName, index, args, sharedConfig) {
+  if (!args.cleanupTodayPage) return null;
+
+  const runOptions = {
+    headed: args.headed,
+    autoConnect: args.autoConnect,
+    profile: sharedConfig.instanceProfiles[index] ?? null,
+    launchArgs: sharedConfig.effectiveLaunchArgs,
+    executablePath: sharedConfig.effectiveExecutablePath,
+  };
+
+  const cleanupEval = await runAgentBrowser(
+    sessionName,
+    ['eval', '--stdin'],
+    {
+      input: buildCleanupTodayPageProgram({
+        cleanupTodayPage: args.cleanupTodayPage,
+      }),
+      timeoutMs: 30000,
+      ...runOptions,
+    }
+  );
+  return cleanupEval?.data?.result || null;
 }
 
 async function main() {
@@ -2033,6 +2372,8 @@ async function main() {
     autoConnect: args.autoConnect,
     resetSession: args.resetSession,
     ops: args.ops,
+    opProfile: args.opProfile,
+    opTimeoutMs: args.opTimeoutMs,
     rounds: args.rounds,
     undoRedoDelayMs: args.undoRedoDelayMs,
     syncSettleTimeoutMs: args.syncSettleTimeoutMs,
@@ -2072,8 +2413,7 @@ async function main() {
       instanceProfiles.push(effectiveProfile);
     }
   } else {
-    instanceProfiles.push(effectiveProfile);
-    for (let i = 1; i < args.instances; i += 1) {
+    for (let i = 0; i < args.instances; i += 1) {
       const isolated = await createIsolatedChromeUserDataDir(effectiveProfile, i + 1);
       instanceProfiles.push(isolated);
     }
@@ -2085,14 +2425,54 @@ async function main() {
     instanceProfiles,
     effectiveLaunchArgs,
     effectiveExecutablePath,
-    plan: buildOperationPlan(args.ops),
+    plan: buildSimulationOperationPlan(
+      Math.max(1, Math.ceil(args.ops / args.instances)),
+      args.opProfile
+    ),
+  };
+
+  const failFastState = { triggered: false };
+  const closeOtherSessions = async (excludeIndex) => {
+    await Promise.all(
+      sessionNames.map((sessionName, index) => {
+        if (index === excludeIndex) return Promise.resolve();
+        return runAgentBrowser(sessionName, ['close'], {
+          autoConnect: false,
+          headed: false,
+        }).catch(() => null);
+      })
+    );
   };
 
   const tasks = sessionNames.map((sessionName, index) =>
-    runSimulationForSession(sessionName, index, args, sharedConfig)
+    (async () => {
+      try {
+        return await runSimulationForSession(sessionName, index, args, sharedConfig);
+      } catch (error) {
+        if (!failFastState.triggered) {
+          failFastState.triggered = true;
+          await closeOtherSessions(index);
+        }
+        throw error;
+      }
+    })()
   );
   const settled = await Promise.allSettled(tasks);
-  const expectedOps = args.ops * args.rounds;
+  let cleanupTodayPage = null;
+  try {
+    cleanupTodayPage = await runPostSimulationCleanup(
+      sessionNames[0],
+      0,
+      args,
+      sharedConfig
+    );
+  } catch (error) {
+    cleanupTodayPage = {
+      ok: false,
+      reason: String(error?.message || error),
+    };
+  }
+  const expectedOps = sharedConfig.plan.length * args.rounds;
 
   if (sessionNames.length === 1) {
     const single = settled[0];
@@ -2100,6 +2480,7 @@ async function main() {
       throw single.reason;
     }
     const value = single.value;
+    value.cleanupTodayPage = cleanupTodayPage;
     console.log(JSON.stringify(value, null, 2));
     if (!value.ok || value.executedOps < expectedOps) {
       process.exitCode = 2;
@@ -2116,7 +2497,10 @@ async function main() {
         session: sessionName,
         instanceIndex: idx + 1,
         ok: passed,
-        result: value,
+        result: {
+          ...value,
+          cleanupTodayPage: idx === 0 ? cleanupTodayPage : null,
+        },
       };
     }
 
@@ -2143,7 +2527,15 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error.stack || String(error));
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error.stack || String(error));
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  parseArgs,
+  isRetryableAgentBrowserError,
+  buildCleanupTodayPageProgram,
+};
