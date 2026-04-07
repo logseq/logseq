@@ -1,5 +1,6 @@
 (ns logseq.db-sync.worker.handler.sync
-  (:require [clojure.string :as string]
+  (:require [clojure.set :as set]
+            [clojure.string :as string]
             [datascript.core :as d]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
@@ -296,10 +297,32 @@
 
 (defn- sanitize-tx
   [db outliner-op tx-data]
-  (if (= outliner-op :fix)
-    (remove (fn [[_ id]]
-              (nil? (d/entity db id))) tx-data)
-    tx-data))
+  (let [retract-op? (fn [item]
+                      (and (vector? item)
+                           (= 2 (count item))
+                           (contains? #{:db/retractEntity :db.fn/retractEntity} (first item))))
+        ->eid (fn [entity-ref]
+                (some-> (d/entity db entity-ref) :db/id))
+        retract-eids (->> tx-data
+                          (keep (fn [item]
+                                  (when (retract-op? item)
+                                    (->eid (second item)))))
+                          set)
+        descendant-retract-eids (->> retract-eids
+                                     (mapcat (fn [eid]
+                                               (let [entity (d/entity db eid)]
+                                                 (when (:block/uuid entity)
+                                                   (ldb/get-block-full-children-ids db eid)))))
+                                     (remove nil?)
+                                     set)
+        missing-retract-eids (sort (set/difference descendant-retract-eids retract-eids))
+        tx-data' (cond-> (vec tx-data)
+                   (seq missing-retract-eids)
+                   (into (map (fn [eid] [:db/retractEntity eid]) missing-retract-eids)))]
+    (if (= outliner-op :fix)
+      (remove (fn [[_ id]]
+                (nil? (d/entity db id))) tx-data')
+      tx-data')))
 
 (defn- apply-tx-entry!
   [conn {:keys [tx outliner-op]}]
