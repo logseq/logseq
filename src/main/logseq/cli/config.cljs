@@ -13,6 +13,23 @@
   (when (and (some? value) (not (string/blank? value)))
     (js/parseInt value 10)))
 
+(def ^:private list-title-max-display-width-default 40)
+
+(defn- parse-positive-int
+  [value]
+  (cond
+    (and (number? value)
+         (integer? value)
+         (pos? value))
+    value
+
+    (string? value)
+    (let [trimmed (string/trim value)]
+      (when (re-matches #"[1-9]\d*" trimmed)
+        (js/parseInt trimmed 10)))
+
+    :else nil))
+
 (def ^:private output-formats
   #{:human :json :edn})
 
@@ -98,6 +115,7 @@
   (let [defaults {:timeout-ms 10000
                   :login-timeout-ms 300000
                   :logout-timeout-ms 120000
+                  :list-title-max-display-width list-title-max-display-width-default
                   :output-format nil
                   :data-dir (common-graph/get-default-graphs-dir)
                   :ws-url "wss://api-staging.logseq.io/sync/%s"
@@ -114,6 +132,9 @@
                           (parse-output-format (:output env))
                           (parse-output-format (:output-format file-config))
                           (parse-output-format (:output file-config)))
-        merged (merge defaults file-config env opts {:config-path config-path})]
+        merged (merge defaults file-config env opts {:config-path config-path})
+        list-title-max-display-width (or (parse-positive-int (:list-title-max-display-width merged))
+                                         list-title-max-display-width-default)]
     (cond-> merged
-      output-format (assoc :output-format output-format))))
+      output-format (assoc :output-format output-format)
+      true (assoc :list-title-max-display-width list-title-max-display-width))))
