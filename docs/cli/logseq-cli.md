@@ -213,6 +213,7 @@ Inspect and edit commands:
 - `list page [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list pages (defaults to `--sort updated-at`)
 - `list tag [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list tags (defaults to `--sort updated-at`)
 - `list property [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list properties (defaults to `--sort updated-at`; `TYPE` and `CARDINALITY` are included by default even without `--expand`; missing schema cardinality is treated as `one`)
+- `list task [--status <status>] [--priority <low|medium|high|urgent>] [--content <text>] [--fields <csv>] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list task nodes tagged with `#Task` (supports both pages and blocks; defaults to `--sort updated-at`)
 - `upsert block --content <text> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - create blocks; defaults to today’s journal page if no target is given
 - `upsert block --blocks <edn> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks via EDN vector
 - `upsert block --blocks-file <path> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks from an EDN file
@@ -220,6 +221,9 @@ Inspect and edit commands:
   - When both `--status` and `--update-properties` set `:logseq.property/status`, the value from `--update-properties` takes precedence.
 - `upsert page --page <name> [--update-tags <edn-vector>] [--update-properties <edn-map>] [--remove-tags <edn-vector>] [--remove-properties <edn-vector>]` - create (or update by page name) a page
 - `upsert page --id <id> [--update-tags <edn-vector>] [--update-properties <edn-map>] [--remove-tags <edn-vector>] [--remove-properties <edn-vector>]` - update a page by id (cannot be combined with `--page`)
+- `upsert task --content <text> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling] [--status <status>] [--priority <low|medium|high|urgent>] [--update-tags <edn-vector>] [--update-properties <edn-map>] [--remove-tags <edn-vector>] [--remove-properties <edn-vector>]` - create a task block and ensure `#Task` is attached
+- `upsert task --page <name> [--status <status>] [--priority <low|medium|high|urgent>] [--update-tags <edn-vector>] [--update-properties <edn-map>] [--remove-tags <edn-vector>] [--remove-properties <edn-vector>]` - create/update a task page and ensure `#Task` is attached
+- `upsert task --id <id>|--uuid <uuid> [--status <status>] [--priority <low|medium|high|urgent>] [--update-tags <edn-vector>] [--update-properties <edn-map>] [--remove-tags <edn-vector>] [--remove-properties <edn-vector>]` - update an existing node and ensure `#Task` is attached
 - `upsert tag --name <name>` - create or upsert a tag by name
 - `upsert tag --id <id> [--name <name>]` - validate a tag by id; when `--name` is provided, rename that tag id (no-op if normalized name is unchanged)
 - `upsert tag --id <id> --name <name>` conflicts: returns `tag-name-conflict` when target name is a non-tag page, and `tag-rename-conflict` when target name is another existing tag
@@ -245,8 +249,10 @@ Subcommands:
   list page [options]      List pages
   list tag [options]       List tags
   list property [options]  List properties
+  list task [options]      List tasks
   upsert block [options]   Upsert block
   upsert page [options]    Upsert page
+  upsert task [options]    Upsert task
   upsert tag [options]     Upsert tag
   upsert property [options] Upsert property
   move [options]           Move block
@@ -305,7 +311,7 @@ JSON key migration (flat -> namespaced):
 | `data.items[].type` | `data.items[].logseq.property/type` |
 | `data.items[].cardinality` | `data.items[].db/cardinality` |
 | `data.root.children[]` | `data.root.block/children[]` |
-- `upsert page` and `upsert block` return entity ids in `data.result` for JSON/EDN output, and include ids in human output.
+- `upsert page`, `upsert block`, and `upsert task` return entity ids in `data.result` for JSON/EDN output, and include ids in human output.
   - Human example:
     ```text
     Upserted page:

@@ -239,6 +239,16 @@
            (not (seq (:page opts))))
       (missing-page-name-result summary)
 
+      (and (= command :upsert-task) (upsert-command/invalid-options? command opts))
+      (command-core/invalid-options-result summary (upsert-command/invalid-options? command opts))
+
+      (and (= command :upsert-task)
+           (not (some? (:id opts)))
+           (not (seq (some-> (:uuid opts) string/trim)))
+           (not (seq (some-> (:page opts) string/trim)))
+           (not (seq (some-> (:content opts) string/trim))))
+      (missing-target-result summary)
+
       (and (= command :upsert-tag) (upsert-command/invalid-options? command opts))
       (command-core/invalid-options-result summary (upsert-command/invalid-options? command opts))
 
@@ -284,7 +294,7 @@
            (not (seq (some-> (:content opts) str string/trim))))
       (assoc (missing-query-text-result summary) :command command)
 
-      (and (#{:list-page :list-tag :list-property} command)
+      (and (#{:list-page :list-tag :list-property :list-task} command)
            (list-command/invalid-options? opts))
       (command-core/invalid-options-result summary (list-command/invalid-options? opts))
 
@@ -513,7 +523,7 @@
         (:server-list :server-status :server-start :server-stop :server-restart)
         (server-command/build-action command server-repo)
 
-        (:list-page :list-tag :list-property)
+        (:list-page :list-tag :list-property :list-task)
         (list-command/build-action command options repo)
 
         (:search-block :search-page :search-property :search-tag)
@@ -524,6 +534,9 @@
 
         :upsert-page
         (upsert-command/build-page-action options repo)
+
+        :upsert-task
+        (upsert-command/build-task-action options repo)
 
         :upsert-tag
         (upsert-command/build-tag-action options repo)
@@ -598,12 +611,14 @@
                          :list-page (list-command/execute-list-page action config)
                          :list-tag (list-command/execute-list-tag action config)
                          :list-property (list-command/execute-list-property action config)
+                         :list-task (list-command/execute-list-task action config)
                          :search-block (search-command/execute-search-block action config)
                          :search-page (search-command/execute-search-page action config)
                          :search-property (search-command/execute-search-property action config)
                          :search-tag (search-command/execute-search-tag action config)
                          :upsert-block (upsert-command/execute-upsert-block action config)
                          :upsert-page (upsert-command/execute-upsert-page action config)
+                         :upsert-task (upsert-command/execute-upsert-task action config)
                          :upsert-tag (upsert-command/execute-upsert-tag action config)
                          :upsert-property (upsert-command/execute-upsert-property action config)
                          :remove-block (remove-command/execute-remove-block action config)
@@ -640,6 +655,7 @@
                                              :schema :query :lookup :selector
                                              :source :target :update-tags :update-properties
                                              :remove-tags :remove-properties
+                                             :status :priority
                                              :src :dst :backup-name
                                              :export-type :file :import-type :input
                                              :graph-id :email :config-key :config-value])))))

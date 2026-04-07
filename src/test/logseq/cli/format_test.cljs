@@ -246,6 +246,26 @@
                   "Count: 2")
              result)))))
 
+(deftest test-human-output-list-task
+  (let [result (format/format-result {:status :ok
+                                      :command :list-task
+                                      :data {:items [{:db/id 12
+                                                      :block/title "Alpha task"
+                                                      :logseq.property/status :logseq.property/status.todo
+                                                      :logseq.property/priority :logseq.property/priority.high
+                                                      :logseq.property/scheduled "2026-02-10T08:00:00.000Z"
+                                                      :logseq.property/deadline "2026-02-12T18:00:00.000Z"
+                                                      :block/created-at 40000
+                                                      :block/updated-at 90000}]}}
+                                     {:output-format nil
+                                      :now-ms 100000})]
+    (is (string/includes? result "STATUS"))
+    (is (string/includes? result "PRIORITY"))
+    (is (string/includes? result "SCHEDULED"))
+    (is (string/includes? result "DEADLINE"))
+    (is (string/includes? result "Alpha task"))
+    (is (string/includes? result "Count: 1"))))
+
 (deftest test-human-output-search
   (testing "search block renders the list table contract"
     (let [result (format/format-result {:status :ok
@@ -319,102 +339,104 @@
     (is (= "logseq.class/Tag" (get-in parsed-json [:data :item :db/ident])))
     (is (= "2a847b91-1565-49cc-9f9f-0f6ee25ca0f3" (get-in parsed-json [:data :item :block/uuid])))))
 
-(deftest test-human-output-add-upsert-remove
-  (testing "upsert block renders ids in two lines"
-    (let [result (format/format-result {:status :ok
-                                        :command :upsert-block
-                                        :context {:repo "demo-repo"
-                                                  :blocks ["a" "b"]}
-                                        :data {:result [201 202]}}
-                                       {:output-format nil})]
-      (is (= "Upserted blocks:\n[201 202]" result))))
+(deftest test-human-output-upsert-success-lines
+  (doseq [[label payload expected]
+          [["upsert block renders ids in two lines"
+            {:status :ok
+             :command :upsert-block
+             :context {:repo "demo-repo"
+                       :blocks ["a" "b"]}
+             :data {:result [201 202]}}
+            "Upserted blocks:\n[201 202]"]
+           ["upsert page renders ids in two lines"
+            {:status :ok
+             :command :upsert-page
+             :context {:repo "demo-repo"
+                       :page "Home"}
+             :data {:result [123]}}
+            "Upserted page:\n[123]"]
+           ["upsert tag renders ids in two lines"
+            {:status :ok
+             :command :upsert-tag
+             :context {:repo "demo-repo"
+                       :name "Quote"}
+             :data {:result [321]}}
+            "Upserted tag:\n[321]"]
+           ["upsert property renders ids in two lines"
+            {:status :ok
+             :command :upsert-property
+             :context {:repo "demo-repo"
+                       :name "owner"}
+             :data {:result [654]}}
+            "Upserted property:\n[654]"]
+           ["upsert task renders ids in two lines"
+            {:status :ok
+             :command :upsert-task
+             :context {:repo "demo-repo"
+                       :page "Weekly Plan"}
+             :data {:result [987]}}
+            "Upserted task:\n[987]"]]]
+    (testing label
+      (let [result (format/format-result payload {:output-format nil})]
+        (is (= expected result))))))
 
-  (testing "upsert page renders ids in two lines"
-    (let [result (format/format-result {:status :ok
-                                        :command :upsert-page
-                                        :context {:repo "demo-repo"
-                                                  :page "Home"}
-                                        :data {:result [123]}}
-                                       {:output-format nil})]
-      (is (= "Upserted page:\n[123]" result))))
+(deftest test-human-output-remove-success-lines
+  (doseq [[label payload expected]
+          [["remove page renders a succinct success line"
+            {:status :ok
+             :command :remove-page
+             :context {:repo "demo-repo"
+                       :page "Home"}
+             :data {:result {:ok true}}}
+            "Removed page: Home (repo: demo-repo)"]
+           ["remove block with id list renders block count"
+            {:status :ok
+             :command :remove-block
+             :context {:repo "demo-repo"
+                       :ids [1 2 3]}
+             :data {:result {:ok true}}}
+            "Removed blocks: 3 (repo: demo-repo)"]
+           ["remove tag renders a succinct success line"
+            {:status :ok
+             :command :remove-tag
+             :context {:repo "demo-repo"
+                       :name "Quote"}
+             :data {:result {:ok true}}}
+            "Removed tag: Quote (repo: demo-repo)"]
+           ["remove property renders a succinct success line"
+            {:status :ok
+             :command :remove-property
+             :context {:repo "demo-repo"
+                       :name "owner"}
+             :data {:result {:ok true}}}
+            "Removed property: owner (repo: demo-repo)"]]]
+    (testing label
+      (let [result (format/format-result payload {:output-format nil})]
+        (is (= expected result))))))
 
-  (testing "upsert tag renders ids in two lines"
-    (let [result (format/format-result {:status :ok
-                                        :command :upsert-tag
-                                        :context {:repo "demo-repo"
-                                                  :name "Quote"}
-                                        :data {:result [321]}}
-                                       {:output-format nil})]
-      (is (= "Upserted tag:\n[321]" result))))
-
-  (testing "upsert property renders ids in two lines"
-    (let [result (format/format-result {:status :ok
-                                        :command :upsert-property
-                                        :context {:repo "demo-repo"
-                                                  :name "owner"}
-                                        :data {:result [654]}}
-                                       {:output-format nil})]
-      (is (= "Upserted property:\n[654]" result))))
-
-  (testing "remove page renders a succinct success line"
-    (let [result (format/format-result {:status :ok
-                                        :command :remove-page
-                                        :context {:repo "demo-repo"
-                                                  :page "Home"}
-                                        :data {:result {:ok true}}}
-                                       {:output-format nil})]
-      (is (= "Removed page: Home (repo: demo-repo)" result))))
-
-  (testing "remove block with id list renders block count"
-    (let [result (format/format-result {:status :ok
-                                        :command :remove-block
-                                        :context {:repo "demo-repo"
-                                                  :ids [1 2 3]}
-                                        :data {:result {:ok true}}}
-                                       {:output-format nil})]
-      (is (= "Removed blocks: 3 (repo: demo-repo)" result))))
-
-  (testing "remove tag renders a succinct success line"
-    (let [result (format/format-result {:status :ok
-                                        :command :remove-tag
-                                        :context {:repo "demo-repo"
-                                                  :name "Quote"}
-                                        :data {:result {:ok true}}}
-                                       {:output-format nil})]
-      (is (= "Removed tag: Quote (repo: demo-repo)" result))))
-
-  (testing "remove property renders a succinct success line"
-    (let [result (format/format-result {:status :ok
-                                        :command :remove-property
-                                        :context {:repo "demo-repo"
-                                                  :name "owner"}
-                                        :data {:result {:ok true}}}
-                                       {:output-format nil})]
-      (is (= "Removed property: owner (repo: demo-repo)" result))))
-
-  (testing "upsert block update mode renders a succinct success line"
-    (let [result (format/format-result {:status :ok
-                                        :command :upsert-block
-                                        :context {:repo "demo-repo"
-                                                  :source "source-uuid"
-                                                  :target "target-uuid"
-                                                  :update-tags ["TagA"]
-                                                  :update-properties {:logseq.property/publishing-public? true}
-                                                  :remove-tags ["TagB"]
-                                                  :remove-properties [:logseq.property/deadline]}
-                                        :data {:result {:ok true}}}
-                                       {:output-format nil})]
-      (is (= "Upserted block: source-uuid -> target-uuid (repo: demo-repo, tags:+1, properties:+1, remove-tags:+1, remove-properties:+1)" result))))
-
-  (testing "upsert block update without move target renders a succinct success line"
-    (let [result (format/format-result {:status :ok
-                                        :command :upsert-block
-                                        :context {:repo "demo-repo"
-                                                  :source "source-uuid"
-                                                  :update-tags ["TagA"]}
-                                        :data {:result {:ok true}}}
-                                       {:output-format nil})]
-      (is (= "Upserted block: source-uuid (repo: demo-repo, tags:+1)" result)))))
+(deftest test-human-output-upsert-block-update-summary
+  (doseq [[label context expected]
+          [["upsert block update mode renders a succinct success line"
+            {:repo "demo-repo"
+             :source "source-uuid"
+             :target "target-uuid"
+             :update-tags ["TagA"]
+             :update-properties {:logseq.property/publishing-public? true}
+             :remove-tags ["TagB"]
+             :remove-properties [:logseq.property/deadline]}
+            "Upserted block: source-uuid -> target-uuid (repo: demo-repo, tags:+1, properties:+1, remove-tags:+1, remove-properties:+1)"]
+           ["upsert block update without move target renders a succinct success line"
+            {:repo "demo-repo"
+             :source "source-uuid"
+             :update-tags ["TagA"]}
+            "Upserted block: source-uuid (repo: demo-repo, tags:+1)"]]]
+    (testing label
+      (let [result (format/format-result {:status :ok
+                                          :command :upsert-block
+                                          :context context
+                                          :data {:result {:ok true}}}
+                                         {:output-format nil})]
+        (is (= expected result))))))
 
 (deftest test-human-output-graph-import-export
   (testing "graph export renders a succinct success line"

@@ -1,6 +1,7 @@
 (ns logseq.cli.command.list
   "List-related CLI commands."
   (:require [clojure.string :as string]
+            [logseq.cli.command.add :as add-command]
             [logseq.cli.command.core :as core]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
@@ -23,6 +24,12 @@
            :validate #{"asc" "desc"}}})
 
 (def ^:private default-sort-field "updated-at")
+
+(def ^:private task-priority-aliases
+  {"low" :logseq.property/priority.low
+   "medium" :logseq.property/priority.medium
+   "high" :logseq.property/priority.high
+   "urgent" :logseq.property/priority.urgent})
 
 (defn- effective-sort-field
   [options]
@@ -103,6 +110,30 @@
                 :default true
                 :coerce :boolean}}))
 
+(def ^:private list-task-field-map
+  {"id" :db/id
+   "title" :block/title
+   "status" :logseq.property/status
+   "priority" :logseq.property/priority
+   "scheduled" :logseq.property/scheduled
+   "deadline" :logseq.property/deadline
+   "updated-at" :block/updated-at
+   "created-at" :block/created-at})
+
+(def ^:private list-task-spec
+  (merge-with
+   merge
+   list-common-spec
+   {:status {:desc "Filter by task status"
+             :validate #{"todo" "doing" "done" "now" "later" "wait" "waiting"
+                         "backlog" "canceled" "cancelled"
+                         "in-review" "in_review" "inreview" "in-progress"}}
+    :priority {:desc "Filter by task priority"
+               :validate #{"low" "medium" "high" "urgent"}}
+    :content {:desc "Filter by task title content"}
+    :sort {:validate (set (keys list-task-field-map))}
+    :fields {:multiple-values (keys list-task-field-map)}}))
+
 (def entries
   [(core/command-entry ["list" "page"] :list-page "List pages" list-page-spec
                        {:examples ["logseq list page --graph my-graph"
@@ -113,7 +144,10 @@
                                    "logseq list tag --graph my-graph --include-built-in --limit 20 --output json"]})
    (core/command-entry ["list" "property"] :list-property "List properties" list-property-spec
                        {:examples ["logseq list property --graph my-graph --with-type"
-                                   "logseq list property --graph my-graph --include-built-in --limit 20 --output json"]})])
+                                   "logseq list property --graph my-graph --include-built-in --limit 20 --output json"]})
+   (core/command-entry ["list" "task"] :list-task "List tasks" list-task-spec
+                       {:examples ["logseq list task --graph my-graph --status todo --priority high"
+                                   "logseq list task --graph my-graph --content \"release\" --sort updated-at --order desc"]})])
 
 (defn invalid-options?
   [opts]
@@ -232,5 +266,31 @@
               sorted (apply-sort prepared sort-field order list-property-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
               final (apply-fields limited fields list-property-field-map)]
+        {:status :ok
+         :data {:items final}})))
+
+(defn- normalize-priority
+  [value]
+  (let [text (some-> value string/trim string/lower-case)]
+    (when (seq text)
+      (get task-priority-aliases text))))
+
+(defn execute-list-task
+  [action config]
+  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+              options (:options action)
+              normalized-options (cond-> options
+                                   (seq (some-> (:status options) string/trim))
+                                   (assoc :status (add-command/normalize-status (:status options)))
+                                   (seq (some-> (:priority options) string/trim))
+                                   (assoc :priority (normalize-priority (:priority options))))
+              items (transport/invoke cfg :thread-api/cli-list-tasks false
+                                      [(:repo action) normalized-options])
+              sort-field (effective-sort-field normalized-options)
+              order (or (:order normalized-options) "asc")
+              fields (parse-field-list (:fields normalized-options))
+              sorted (apply-sort items sort-field order list-task-field-map)
+              limited (apply-offset-limit sorted (:offset normalized-options) (:limit normalized-options))
+              final (apply-fields limited fields list-task-field-map)]
         {:status :ok
          :data {:items final}})))
