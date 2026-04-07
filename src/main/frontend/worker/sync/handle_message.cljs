@@ -122,23 +122,33 @@
         checksum)
       (fail-fast :db-sync/missing-db {:repo repo :op :checksum}))))
 
+(defn- recompute-and-store-local-sync-checksum
+  [repo]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [checksum (sync-checksum/recompute-checksum @conn)]
+      (client-op/update-local-checksum repo checksum)
+      checksum)))
+
 (defn- verify-sync-checksum!
   [repo client local-tx remote-tx remote-checksum context]
   (when (and (string? remote-checksum)
              (checksum-compare-ready? repo client local-tx remote-tx))
     (let [local-checksum (local-sync-checksum repo)]
       (when-not (= local-checksum remote-checksum)
-        (let [mismatch-data (merge context
-                                   {:type :db-sync/checksum-mismatch
-                                    :repo repo
-                                    :message-type (:type context)
-                                    :local-tx local-tx
-                                    :remote-tx remote-tx
-                                    :local-checksum local-checksum
-                                    :remote-checksum remote-checksum})]
-          (sync-log-state/rtc-log :rtc.log/checksum-mismatch mismatch-data)
-          (when worker-util/dev?
-            (log/warn :db-sync/checksum-mismatch mismatch-data)))))))
+        (let [recomputed-checksum (recompute-and-store-local-sync-checksum repo)]
+          (when-not (= recomputed-checksum remote-checksum)
+            (let [mismatch-data (merge context
+                                       {:type :db-sync/checksum-mismatch
+                                        :repo repo
+                                        :message-type (:type context)
+                                        :local-tx local-tx
+                                        :remote-tx remote-tx
+                                        :local-checksum (or recomputed-checksum local-checksum)
+                                        :cached-local-checksum local-checksum
+                                        :remote-checksum remote-checksum})]
+              (sync-log-state/rtc-log :rtc.log/checksum-mismatch mismatch-data)
+              (when worker-util/dev?
+                (log/warn :db-sync/checksum-mismatch mismatch-data)))))))))
 
 (defn- handle-tx-reject!
   [repo client message local-tx]
@@ -159,14 +169,16 @@
                                   {:repo repo
                                    :type "tx/reject"
                                    :reason reason
-                                   :field :data}))]
+                                   :field :data}))
+            rejected-data (cond-> {:type :db-sync/tx-rejected
+                                   :repo repo
+                                   :message-type "tx/reject"
+                                   :reason reason}
+                            (contains? message :t) (assoc :t remote-tx)
+                            (some? data) (assoc :data data))]
+        (sync-log-state/rtc-log :rtc.log/tx-rejected rejected-data)
         (fail-fast :db-sync/tx-rejected
-                   (cond-> {:type :db-sync/tx-rejected
-                            :repo repo
-                            :message-type "tx/reject"
-                            :reason reason}
-                     (contains? message :t) (assoc :t remote-tx)
-                     (some? data) (assoc :data data)))))))
+                   rejected-data)))))
 
 (defn- handle-hello!
   [repo client local-tx remote-tx remote-checksum]
