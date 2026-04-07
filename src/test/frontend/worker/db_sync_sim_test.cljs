@@ -248,7 +248,35 @@
                  (reduce
                   (fn [{:keys [t txs conn] :as state} tx-entry]
                     (let [tx-data (:tx-data tx-entry)
-                          {:keys [db-before db-after tx-data]} (ldb/transact! conn tx-data {:op :apply-client-tx})
+                          {:keys [db-before db-after tx-data]}
+                          (try
+                            (ldb/transact! conn tx-data {:op :apply-client-tx})
+                            (catch :default error
+                              (let [missing-entity-id (some-> (ex-data error) :entity-id)
+                                    same-entity-txs
+                                    (when missing-entity-id
+                                      (->> tx-entries
+                                           (keep-indexed
+                                            (fn [idx entry]
+                                              (let [entry-tx (:tx-data entry)
+                                                    touches? (some #(or (= missing-entity-id (second %))
+                                                                        (= missing-entity-id (nth % 3 nil)))
+                                                                   entry-tx)]
+                                                (when touches?
+                                                  {:idx idx
+                                                   :tx-id (:tx-id entry)
+                                                   :outliner-op (:outliner-op entry)
+                                                   :tx-data entry-tx}))))
+                                           vec))]
+                              (throw (ex-info "server upload transact failed"
+                                              {:type :db-sync-sim/server-upload-transact-failed
+                                               :t-before t-before
+                                               :server-t t
+                                               :missing-entity-id missing-entity-id
+                                               :matching-entries same-entity-txs
+                                               :tx-entry tx-entry
+                                               :tx-data tx-data}
+                                              error)))))
                           normalized-data (->> tx-data
                                                (db-normalize/normalize-tx-data db-after db-before))
                           next-t (inc t)]
@@ -258,15 +286,8 @@
     {:accepted? @accepted?
      :t (:t @server)}))
 
-(defn- build-upload-entries [conn pending]
-  (->> pending
-       (mapv (fn [{:keys [tx] :as pending-entry}]
-               (assoc pending-entry
-                      :tx-data (->> tx
-                                    (db-normalize/remove-retract-entity-ref @conn)
-                                    distinct
-                                    vec))))
-       (filterv (comp seq :tx-data))))
+(defn- build-upload-plan [conn pending]
+  (#'sync-apply/prepare-upload-tx-entries conn pending))
 
 (defn- sync-client! [server {:keys [repo conn client online?]}]
   (when online?
@@ -288,21 +309,20 @@
             local-tx' (or (client-op/get-local-tx repo) 0)
             server-t' (:t @server)]
         (when (and (seq pending) (= local-tx' server-t'))
-          (let [tx-entries (build-upload-entries conn pending)
-                tx-ids (mapv :tx-id pending)]
+          (let [{:keys [tx-entries drop-tx-ids]} (build-upload-plan conn pending)]
+            (when (seq drop-tx-ids)
+              (#'sync-apply/remove-pending-txs! repo drop-tx-ids)
+              (reset! progress? true))
             ;; (prn :debug :upload :repo repo :tx-entries tx-entries)
             (if (seq tx-entries)
-              (let [{:keys [accepted? t]} (server-upload! server local-tx' tx-entries)]
+              (let [{:keys [accepted? t]} (server-upload! server local-tx' tx-entries)
+                    tx-ids (mapv :tx-id tx-entries)]
                 (when accepted?
                   (#'sync-apply/remove-pending-txs! repo tx-ids)
                   (when (seq tx-ids)
                     (client-op/update-local-tx repo t)
                     (reset! progress? true))))
-              (do
-                (#'sync-apply/remove-pending-txs! repo tx-ids)
-                (when (seq tx-ids)
-                  (client-op/update-local-tx repo (:t @server))
-                  (reset! progress? true)))))))
+              nil))))
       @progress?)))
 
 (defn- active-block-uuids
