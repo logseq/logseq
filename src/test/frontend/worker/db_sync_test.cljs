@@ -16,6 +16,7 @@
             [frontend.worker.sync.crypt :as sync-crypt]
             [frontend.worker.sync.handle-message :as sync-handle-message]
             [frontend.worker.sync.large-title :as sync-large-title]
+            [frontend.worker.sync.log-and-state :as sync-log-state]
             [frontend.worker.sync.presence :as sync-presence]
             [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
             [frontend.worker.sync.upload :as sync-upload]
@@ -433,9 +434,10 @@
                                   (done))))))))))
 
 (deftest tx-reject-db-transact-failed-surfaces-rejected-tx-test
-  (testing "tx/reject with db transact failed includes parsed rejected tx for debugging"
+  (testing "tx/reject with db transact failed includes parsed rejected tx and emits rtc-log"
     (let [rejected-tx {:tx (sqlite-util/write-transit-str [[:db/add [:block/uuid (random-uuid)] :block/title "bad"]])
                        :outliner-op :save-block}
+          *captured (atom nil)
           raw-message (js/JSON.stringify
                        (clj->js {:type "tx/reject"
                                  :reason "db transact failed"
@@ -447,14 +449,21 @@
                   :online-users (atom [])
                   :ws-state (atom :open)}]
       (with-redefs [client-op/get-local-tx (constantly 0)]
-        (try
-          (sync-handle-message/handle-message! test-repo client raw-message)
-          (is false "expected tx/reject to fail-fast with rejected tx details")
-          (catch :default error
-            (let [data (ex-data error)]
-              (is (= :db-sync/tx-rejected (:type data)))
-              (is (= "db transact failed" (:reason data)))
-              (is (= rejected-tx (:data data))))))))))
+        (with-redefs [sync-log-state/rtc-log (fn [type payload]
+                                               (reset! *captured {:type type
+                                                                  :payload payload}))]
+          (try
+            (sync-handle-message/handle-message! test-repo client raw-message)
+            (is false "expected tx/reject to fail-fast with rejected tx details")
+            (catch :default error
+              (let [data (ex-data error)
+                    captured @*captured]
+                (is (= :db-sync/tx-rejected (:type data)))
+                (is (= "db transact failed" (:reason data)))
+                (is (= rejected-tx (:data data)))
+                (is (= :rtc.log/tx-rejected (:type captured)))
+                (is (= :db-sync/tx-rejected (-> captured :payload :type)))
+                (is (= rejected-tx (-> captured :payload :data)))))))))))
 
 (deftest hello-checksum-mismatch-logs-warning-test
   (testing "hello with matching t but mismatched checksum logs warning without throwing"
@@ -2428,6 +2437,58 @@
                    :ok
                    (catch :default _error
                      :thrown)))))))))
+
+(deftest tx-batch-ok-real-checksum-mismatch-emits-rtc-log-test
+  (testing "tx/batch/ok mismatch emits :rtc.log/checksum-mismatch payload"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          stale-checksum "0000000000000000"
+          remote-checksum "ffffffffffffffff"
+          *captured (atom nil)
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}
+          raw-message (js/JSON.stringify (clj->js {:type "tx/batch/ok"
+                                                   :t 0
+                                                   :checksum remote-checksum}))]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (with-redefs [sync-log-state/rtc-log (fn [type payload]
+                                                 (reset! *captured {:type type
+                                                                    :payload payload}))]
+            (client-op/update-local-checksum test-repo stale-checksum)
+            (sync-handle-message/handle-message! test-repo client raw-message)
+            (let [{:keys [type payload]} @*captured]
+              (is (= :rtc.log/checksum-mismatch type))
+              (is (= "tx/batch/ok" (:message-type payload)))
+              (is (= stale-checksum (:cached-local-checksum payload)))
+              (is (string? (:local-checksum payload)))
+              (is (= remote-checksum (:remote-checksum payload))))))))))
+
+(deftest tx-batch-ok-stale-local-checksum-cache-does-not-emit-mismatch-test
+  (testing "stale cached local checksum is corrected by recompute before mismatch logging"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          stale-checksum "0000000000000000"
+          actual-checksum (sync-checksum/recompute-checksum @conn)
+          *captured (atom nil)
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}
+          raw-message (js/JSON.stringify (clj->js {:type "tx/batch/ok"
+                                                   :t 0
+                                                   :checksum actual-checksum}))]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (with-redefs [sync-log-state/rtc-log (fn [type payload]
+                                                 (reset! *captured {:type type
+                                                                    :payload payload}))]
+            (client-op/update-local-checksum test-repo stale-checksum)
+            (sync-handle-message/handle-message! test-repo client raw-message)
+            (is (= actual-checksum (client-op/get-local-checksum test-repo)))
+            (is (nil? @*captured))))))))
 
 (deftest local-checksum-stays-in-sync-after-undo-redo-sequence-test
   (testing "insert/delete/indent/outdent with undo-all/redo-all keeps cached checksum aligned"
