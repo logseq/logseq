@@ -227,11 +227,25 @@
                             :db-sync/created-at now}])
       (worker-undo-redo/gen-undo-ops! repo tx-report tx-id
                                       {:apply-history-action! apply-history-action!})
-      (when should-inc-pending?
-        (client-op/adjust-pending-local-tx-count! repo 1)
-        (when-let [client (current-client repo)]
-          (broadcast-rtc-state! client)))
+        (when should-inc-pending?
+          (client-op/adjust-pending-local-tx-count! repo 1)
+          (when-let [client (current-client repo)]
+            (broadcast-rtc-state! client)))
       tx-id)))
+
+(defn prepare-upload-tx-entries
+  [_conn pending]
+  (let [entries (mapv (fn [{:keys [tx-id tx outliner-op]}]
+                        {:tx-id tx-id
+                         :outliner-op outliner-op
+                         :tx-data (vec tx)})
+                      pending)
+        empty-tx-ids (->> entries
+                          (filter (comp empty? :tx-data))
+                          (mapv :tx-id))
+        tx-entries (filterv (comp seq :tx-data) entries)]
+    {:tx-entries tx-entries
+     :drop-tx-ids empty-tx-ids}))
 
 (defn pending-txs
   [repo & {:keys [limit]}]
@@ -429,21 +443,16 @@
         local-tx (or (client-op/get-local-tx repo) 0)
         remote-tx (get @*repo->latest-remote-tx repo)
         conn (worker-state/get-datascript-conn repo)]
-    (when (and conn (= local-tx remote-tx))        ; rebase
+    (when (and conn (= local-tx remote-tx)) ; rebase
       (when (empty? inflight)
         (when-let [ws (:ws client)]
           (when (and (ws-open? ws) (worker-state/online?))
             (let [batch (pending-txs repo {:limit 50})]
               (when (seq batch)
-                (let [tx-entries (->> batch
-                                      (mapv (fn [{:keys [tx-id tx outliner-op]}]
-                                              {:tx-id tx-id
-                                               :outliner-op outliner-op
-                                               :tx-data (vec tx)}))
-                                      (filterv (comp seq :tx-data)))
-                      tx-ids (mapv :tx-id batch)]
-                  (if (empty? tx-entries)
-                    (remove-pending-txs! repo tx-ids)
+                (let [{:keys [tx-entries drop-tx-ids]} (prepare-upload-tx-entries conn batch)]
+                  (when (seq drop-tx-ids)
+                    (remove-pending-txs! repo drop-tx-ids))
+                  (when (seq tx-entries)
                     (-> (p/let [aes-key (when (sync-crypt/graph-e2ee? repo)
                                           (sync-crypt/<ensure-graph-aes-key repo (:graph-id client)))
                                 _ (when (and (sync-crypt/graph-e2ee? repo) (nil? aes-key))
@@ -464,7 +473,8 @@
                                                 (cond-> {:tx (sqlite-util/write-transit-str tx-data)}
                                                   outliner-op
                                                   (assoc :outliner-op outliner-op)))
-                                              tx-entries*)]
+                                              tx-entries*)
+                                tx-ids (mapv :tx-id tx-entries)]
                           (reset! (:inflight client) tx-ids)
                           (send! ws {:type "tx/batch"
                                      :t-before local-tx
@@ -654,20 +664,17 @@
               fallback-target (:fallback-target opts')
               fallback-target' (or (replay-entity-id-value @conn fallback-target)
                                    fallback-target)
-              target-block (d/entity @conn target-id')
               use-fallback? (and sibling?
-                                 (nil? target-block)
+                                 (nil? target)
                                  (some? fallback-target))
               target-block' (if use-fallback?
                               (d/entity @conn fallback-target')
-                              target-block)
+                              target)
               move-opts (cond-> (-> opts'
                                     (dissoc :fallback-target)
                                     (assoc :persist-op? false))
                           use-fallback?
                           (assoc :sibling? false))]
-          (when-not target-block'
-            (invalid-rebase-op! op {:args args}))
           (outliner-core/move-blocks! conn blocks target-block' move-opts))))
 
     :move-blocks-up-down
@@ -826,7 +833,10 @@
     (try
       (ldb/batch-transact-with-temp-conn!
        conn
-       {:outliner-op :rebase}
+       {:outliner-op :rebase
+        ;; Keep stable tx-id across rebases so one logical pending op
+        ;; doesn't fan out into duplicated pending rows.
+        :db-sync/tx-id (:tx-id local-tx)}
        (fn [conn]
          (if (= [[:transact nil]] outliner-ops)
            (when-let [tx-data (seq (:tx local-tx))]
@@ -877,7 +887,16 @@
 
         (fix-tx! conn tx-report {:outliner-op :fix}))
 
-      (remove-pending-txs! repo (map :tx-id local-txs))
+      ;; Successful rebases persist with the original tx-id.
+      ;; Only drop entries that failed to rebase or became empty no-op txs.
+      (let [rebased-tx-ids (->> @*rebase-tx-reports
+                                (keep (comp :db-sync/tx-id :tx-meta))
+                                set)
+            stale-tx-ids (->> local-txs
+                              (map :tx-id)
+                              (remove rebased-tx-ids)
+                              vec)]
+        (remove-pending-txs! repo stale-tx-ids))
 
       (catch :default e
         (js/console.error e)
