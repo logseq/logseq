@@ -5,7 +5,8 @@
             [clojure.walk :as walk]
             [logseq.cli.command.core :as command-core]
             [logseq.cli.style :as style]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            ["string-width" :default string-width]))
 
 (defn- keyword->json-string
   [kw]
@@ -63,13 +64,9 @@
           (set! (.-data obj) (clj->js (normalize-json data))))))
     (js/JSON.stringify obj)))
 
-(defn- pad-right
-  [value width]
-  (let [text (str value)
-        missing (- width (count text))]
-    (if (pos? missing)
-      (str text (apply str (repeat missing " ")))
-      text)))
+(def ^:private list-human-title-max-display-width-default 40)
+(def ^:private truncation-suffix "…")
+(def ^:private truncation-suffix-width (string-width truncation-suffix))
 
 (defn- normalize-cell
   [value]
@@ -77,6 +74,53 @@
     (nil? value) "-"
     (keyword? value) (str value)
     :else (str value)))
+
+(defn- display-width
+  [value]
+  (string-width (normalize-cell value)))
+
+(defn- pad-right
+  [value width]
+  (let [text (normalize-cell value)
+        missing (- width (display-width text))]
+    (if (pos? missing)
+      (str text (apply str (repeat missing " ")))
+      text)))
+
+(defn- take-to-display-width
+  [text max-width]
+  (loop [remaining-chars (seq (js/Array.from text))
+         acc ""]
+    (if-let [ch (first remaining-chars)]
+      (let [candidate (str acc ch)]
+        (if (<= (display-width candidate) max-width)
+          (recur (next remaining-chars) candidate)
+          acc))
+      acc)))
+
+(defn- truncate-line-to-display-width
+  [line max-width]
+  (if (<= (display-width line) max-width)
+    line
+    (if (<= max-width truncation-suffix-width)
+      (take-to-display-width truncation-suffix max-width)
+      (str (take-to-display-width line (- max-width truncation-suffix-width))
+           truncation-suffix))))
+
+(defn- truncate-title-to-display-width
+  [value max-width]
+  (let [max-width (max 1 max-width)]
+    (->> (string/split (normalize-cell value) #"\n" -1)
+         (map #(truncate-line-to-display-width % max-width))
+         (string/join "\n"))))
+
+(defn- resolve-list-title-max-display-width
+  [value]
+  (if (and (number? value)
+           (integer? value)
+           (pos? value))
+    value
+    list-human-title-max-display-width-default))
 
 (defn- render-table
   [headers rows]
@@ -89,8 +133,8 @@
                      (string/replace value #"\s+$" ""))
         widths (mapv (fn [idx header]
                        (reduce max
-                               (count header)
-                               (mapcat #(map count (nth % idx)) normalized-rows)))
+                               (display-width header)
+                               (mapcat #(map display-width (nth % idx)) normalized-rows)))
                      (range (count headers))
                      headers)
         render-row (fn [row]
@@ -206,20 +250,28 @@
    ["CREATED-AT" (fn [item now-ms] (human-ago (or (:created-at item) (:block/created-at item)) now-ms)) [:created-at :block/created-at]]])
 
 (defn- format-list-dynamic
-  [items now-ms columns]
+  [items now-ms columns {:keys [title-max-display-width]}]
   (let [items (or items [])
         active (filterv (fn [[_ _ ks always?]]
                           (or always? (apply items-have-key? items ks)))
                         columns)
         headers (mapv first active)
         rows (mapv (fn [item]
-                     (mapv (fn [[_ extractor _]] (extractor item now-ms)) active))
+                     (mapv (fn [[header extractor _]]
+                             (let [cell (extractor item now-ms)]
+                               (if (and (= header "TITLE")
+                                        (number? title-max-display-width))
+                                 (truncate-title-to-display-width cell title-max-display-width)
+                                 cell)))
+                           active))
                    items)]
     (format-counted-table headers rows)))
 
 (defn- format-list-page
-  [items now-ms]
-  (format-list-dynamic items now-ms list-page-columns))
+  ([items now-ms]
+   (format-list-page items now-ms nil))
+  ([items now-ms title-max-display-width]
+   (format-list-dynamic items now-ms list-page-columns {:title-max-display-width title-max-display-width})))
 
 (defn- format-extends
   [classes]
@@ -241,8 +293,10 @@
    ["CREATED-AT" (fn [item now-ms] (human-ago (or (:created-at item) (:block/created-at item)) now-ms)) [:created-at :block/created-at]]])
 
 (defn- format-list-tag
-  [items now-ms]
-  (format-list-dynamic items now-ms list-tag-columns))
+  ([items now-ms]
+   (format-list-tag items now-ms nil))
+  ([items now-ms title-max-display-width]
+   (format-list-dynamic items now-ms list-tag-columns {:title-max-display-width title-max-display-width})))
 
 (defn- normalize-property-type
   [value]
@@ -268,8 +322,10 @@
    ["CREATED-AT" (fn [item now-ms] (human-ago (or (:created-at item) (:block/created-at item)) now-ms)) [:created-at :block/created-at]]])
 
 (defn- format-list-property
-  [items now-ms]
-  (format-list-dynamic items now-ms list-property-columns))
+  ([items now-ms]
+   (format-list-property items now-ms nil))
+  ([items now-ms title-max-display-width]
+   (format-list-dynamic items now-ms list-property-columns {:title-max-display-width title-max-display-width})))
 
 (defn- format-task-choice
   [value prefix]
@@ -300,8 +356,10 @@
    ["CREATED-AT" (fn [item now-ms] (human-ago (or (:created-at item) (:block/created-at item)) now-ms)) [:created-at :block/created-at] true]])
 
 (defn- format-list-task
-  [items now-ms]
-  (format-list-dynamic items now-ms list-task-columns))
+  ([items now-ms]
+   (format-list-task items now-ms nil))
+  ([items now-ms title-max-display-width]
+   (format-list-dynamic items now-ms list-task-columns {:title-max-display-width title-max-display-width})))
 
 (defn- quote-posix-shell
   [value]
@@ -781,8 +839,10 @@
     (string/join "\n" (into [header] check-lines))))
 
 (defn- ->human
-  [{:keys [status data error command context human]} {:keys [now-ms graph data-dir]}]
-  (let [now-ms (or now-ms (js/Date.now))]
+  [{:keys [status data error command context human]}
+   {:keys [now-ms graph data-dir list-title-max-display-width]}]
+  (let [now-ms (or now-ms (js/Date.now))
+        list-title-max-display-width (resolve-list-title-max-display-width list-title-max-display-width)]
     (case status
       :ok
       (case command
@@ -809,10 +869,10 @@
         :sync-config-unset (format-sync-config-unset data)
         :login (format-login data)
         :logout (format-logout data)
-        :list-page (format-list-page (:items data) now-ms)
-        :list-tag (format-list-tag (:items data) now-ms)
-        :list-property (format-list-property (:items data) now-ms)
-        :list-task (format-list-task (:items data) now-ms)
+        :list-page (format-list-page (:items data) now-ms list-title-max-display-width)
+        :list-tag (format-list-tag (:items data) now-ms list-title-max-display-width)
+        :list-property (format-list-property (:items data) now-ms list-title-max-display-width)
+        :list-task (format-list-task (:items data) now-ms list-title-max-display-width)
         (:search-block :search-page :search-property :search-tag)
         (format-list-page (:items data) now-ms)
         :upsert-block (format-upsert-block context (:result data))

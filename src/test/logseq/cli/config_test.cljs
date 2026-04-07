@@ -1,6 +1,6 @@
 (ns logseq.cli.config-test
   (:require [cljs.reader :as reader]
-            [cljs.test :refer [deftest is]]
+            [cljs.test :refer [deftest is testing]]
             [frontend.test.node-helper :as node-helper]
             [goog.object :as gobj]
             [logseq.cli.config :as config]
@@ -98,7 +98,27 @@
     (is (= "https://api-staging.logseq.io" (:http-base result)))
     (is (= 10000 (:timeout-ms result)))
     (is (= 300000 (:login-timeout-ms result)))
-    (is (= 120000 (:logout-timeout-ms result)))))
+    (is (= 120000 (:logout-timeout-ms result)))
+    (is (= 40 (:list-title-max-display-width result)))))
+
+(deftest test-list-title-max-display-width-config
+  (testing "reads valid list-title-max-display-width from cli.edn"
+    (let [dir (node-helper/create-tmp-dir)
+          cfg-path (node-path/join dir "cli.edn")
+          _ (fs/writeFileSync cfg-path "{:list-title-max-display-width 72}")
+          result (config/resolve-config {:config-path cfg-path})]
+      (is (= 72 (:list-title-max-display-width result)))))
+
+  (testing "falls back to default when cli.edn value is invalid"
+    (doseq [[label file-value]
+            [["zero" "0"]
+             ["negative" "-3"]
+             ["non-numeric" "\"abc\""]]]
+      (let [dir (node-helper/create-tmp-dir)
+            cfg-path (node-path/join dir "cli.edn")
+            _ (fs/writeFileSync cfg-path (str "{:list-title-max-display-width " file-value "}"))
+            result (config/resolve-config {:config-path cfg-path})]
+        (is (= 40 (:list-title-max-display-width result)) label)))))
 
 (deftest test-update-config
   (let [dir (node-helper/create-tmp-dir "cli")

@@ -4,7 +4,8 @@
             [clojure.string :as string]
             [logseq.cli.command.show :as show-command]
             [logseq.cli.format :as format]
-            [logseq.cli.style :as style]))
+            [logseq.cli.style :as style]
+            ["string-width" :default string-width]))
 
 (deftest test-format-success
   (testing "json output via output-format"
@@ -265,6 +266,69 @@
     (is (string/includes? result "DEADLINE"))
     (is (string/includes? result "Alpha task"))
     (is (string/includes? result "Count: 1"))))
+
+(deftest test-human-output-list-title-max-display-width
+  (doseq [[label command item]
+          [["list page truncates title by configured display width"
+            :list-page
+            {:db/id 1
+             :block/title "ABCDEFGH"
+             :block/updated-at 90000
+             :block/created-at 40000}]
+           ["list tag truncates title by configured display width"
+            :list-tag
+            {:db/id 2
+             :block/title "ABCDEFGH"
+             :block/updated-at 90000
+             :block/created-at 40000}]
+           ["list property truncates title by configured display width"
+            :list-property
+            {:db/id 3
+             :block/title "ABCDEFGH"
+             :logseq.property/type :node
+             :db/cardinality :db.cardinality/one
+             :block/updated-at 90000
+             :block/created-at 40000}]
+           ["list task truncates title by configured display width"
+            :list-task
+            {:db/id 4
+             :block/title "ABCDEFGH"
+             :block/updated-at 90000
+             :block/created-at 40000}]]]
+    (testing label
+      (let [result (format/format-result {:status :ok
+                                          :command command
+                                          :data {:items [item]}}
+                                         {:output-format nil
+                                          :now-ms 100000
+                                          :list-title-max-display-width 6})]
+        (is (string/includes? result "ABCDE…"))
+        (is (not (string/includes? result "ABCDEFGH")))))))
+
+(deftest test-human-output-list-cjk-title-alignment
+  (let [result (format/format-result {:status :ok
+                                      :command :list-page
+                                      :data {:items [{:db/id 1
+                                                      :block/title "ABCD"
+                                                      :block/updated-at 90000
+                                                      :block/created-at 40000}
+                                                     {:db/id 2
+                                                      :block/title "你好"
+                                                      :block/updated-at 90000
+                                                      :block/created-at 40000}]}}
+                                     {:output-format nil
+                                      :now-ms 100000
+                                      :list-title-max-display-width 10})
+        lines (string/split-lines result)
+        line-1 (nth lines 1)
+        line-2 (nth lines 2)
+        updated-at-idx-1 (.indexOf line-1 "10s ago")
+        updated-at-idx-2 (.indexOf line-2 "10s ago")
+        prefix-width-1 (string-width (subs line-1 0 updated-at-idx-1))
+        prefix-width-2 (string-width (subs line-2 0 updated-at-idx-2))]
+    (is (pos? updated-at-idx-1))
+    (is (pos? updated-at-idx-2))
+    (is (= prefix-width-1 prefix-width-2))))
 
 (deftest test-human-output-search
   (testing "search block renders the list table contract"
