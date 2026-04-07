@@ -488,6 +488,7 @@
               selection-end (util/get-selection-end input)
               [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
               insert-above? (and (string/blank? fst-block-text) (not (string/blank? snd-block-text)))
+              right-sibling (if insert-above? block right-sibling)
               block' (or (db/entity [:block/uuid block-id]) block)
               original-block (:original-block config)
               block'' (or
