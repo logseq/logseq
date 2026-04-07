@@ -258,7 +258,112 @@
                               "--graph"
                               "--data-dir"
                               "--output"]}}
+ :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"
+            "{{cli}} --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json server stop --graph {{graph-arg}}"
+            "python3 '{{repo-root}}/cli-e2e/scripts/db_sync_server.py' stop --pid-file '{{tmp-dir}}/db-sync-server.pid'"]
+  :tags [:sync :happy-path :steady-state :status]}
+
+ {:id "sync-random-bidirectional-block-ops"
+  :graph "sync-e2e-random-bidirectional-block-ops"
+  :vars {:sync-port "18080"
+         :sync-http-base "http://127.0.0.1:18080"
+         :sync-ws-url "ws://127.0.0.1:18080/sync/%s"
+         :random-page "SyncRandomOpsHome"
+         :rounds-per-client "100"
+         :random-seed "424242"
+         :home-dir "{{tmp-dir}}/home"
+         :auth-path "{{tmp-dir}}/home/logseq/auth.json"
+         :cli-home "HOME='{{tmp-dir}}/home' {{cli}}"}
+  :setup ["mkdir -p '{{tmp-dir}}/graphs-b'"
+          "mkdir -p '{{tmp-dir}}/home/logseq'"
+          "cp ~/logseq/auth.json '{{tmp-dir}}/home/logseq/auth.json'"
+          "python3 '{{repo-root}}/cli-e2e/scripts/prepare_sync_config.py' --output '{{config-path}}' --auth-path '{{auth-path}}' --http-base '{{sync-http-base}}' --ws-url '{{sync-ws-url}}'"
+          "python3 '{{repo-root}}/cli-e2e/scripts/prepare_sync_config.py' --output '{{tmp-dir}}/cli-b.edn' --auth-path '{{auth-path}}' --http-base '{{sync-http-base}}' --ws-url '{{sync-ws-url}}'"
+          "python3 '{{repo-root}}/cli-e2e/scripts/db_sync_server.py' start --repo-root '{{repo-root}}' --pid-file '{{tmp-dir}}/db-sync-server.pid' --log-file '{{tmp-dir}}/db-sync-server.log' --data-dir '{{tmp-dir}}/db-sync-server-data' --port {{sync-port}} --auth-path '{{auth-path}}'"
+          "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync ensure-keys --graph {{graph-arg}} --e2ee-password '11111' --upload-keys"
+          "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page '{{random-page}}' >/dev/null"]
+  :cmds ["{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync upload --graph {{graph-arg}}"
+         "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync start --graph {{graph-arg}} --e2ee-password '11111'"
+         "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --data-dir '{{data-dir}}' --config '{{config-path}}' --graph '{{graph}}' --timeout-s 120 --interval-s 1"
+         "{{cli-home}} --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json sync download --graph {{graph-arg}} --e2ee-password '11111'"
+         "{{cli-home}} --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json sync start --graph {{graph-arg}} --e2ee-password '11111'"
+         "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --graph '{{graph}}' --timeout-s 120 --interval-s 1"
+         "python3 '{{repo-root}}/cli-e2e/scripts/random_bidirectional_block_ops.py' --cli '{{repo-root}}/static/logseq-cli.js' --graph '{{graph}}' --config-a '{{config-path}}' --data-dir-a '{{data-dir}}' --config-b '{{tmp-dir}}/cli-b.edn' --data-dir-b '{{tmp-dir}}/graphs-b' --page '{{random-page}}' --rounds-per-client {{rounds-per-client}} --seed {{random-seed}}"
+         "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --data-dir '{{data-dir}}' --config '{{config-path}}' --graph '{{graph}}' --timeout-s 180 --interval-s 1"
+         "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --graph '{{graph}}' --timeout-s 180 --interval-s 1"
+         "python3 '{{repo-root}}/cli-e2e/scripts/compare_graph_queries.py' --cli '{{repo-root}}/static/logseq-cli.js' --graph '{{graph}}' --config-a '{{config-path}}' --data-dir-a '{{data-dir}}' --config-b '{{tmp-dir}}/cli-b.edn' --data-dir-b '{{tmp-dir}}/graphs-b' --query '[:find (pull ?b [:block/uuid :block/title :block/order {:block/parent [:block/uuid]}]) :where [?p :block/title \"{{random-page}}\"] [?b :block/page ?p] [?b :block/uuid]]' --require-result"
+         "{{cli-home}} --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json sync status --graph {{graph-arg}}"]
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :pending-local] 0
+                               [:data :pending-asset] 0
+                               [:data :pending-server] 0
+                               [:data :last-error] nil}}
+  :covers {:commands ["sync upload"
+                      "sync download"
+                      "sync status"]
+           :options {:global ["--config"
+                              "--graph"
+                              "--data-dir"
+                              "--output"]}}
   :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"
             "{{cli}} --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json server stop --graph {{graph-arg}}"
             "python3 '{{repo-root}}/cli-e2e/scripts/db_sync_server.py' stop --pid-file '{{tmp-dir}}/db-sync-server.pid'"]
-  :tags [:sync :happy-path :steady-state :status]}]
+  :tags [:sync :stress :bidirectional :random :block-ops]}
+
+ {:id "sync-offline-random-bidirectional-block-ops"
+  :graph "sync-e2e-offline-random-bidirectional-block-ops"
+  :vars {:sync-port "18080"
+         :sync-http-base "http://127.0.0.1:18080"
+         :sync-ws-url "ws://127.0.0.1:18080/sync/%s"
+         :random-page "SyncOfflineRandomOpsHome"
+         :seed-marker "sync-offline-random-seed-marker"
+         :rounds-per-client "100"
+         :random-seed "989898"
+         :home-dir "{{tmp-dir}}/home"
+         :auth-path "{{tmp-dir}}/home/logseq/auth.json"
+         :cli-home "HOME='{{tmp-dir}}/home' {{cli}}"}
+  :setup ["mkdir -p '{{tmp-dir}}/graphs-b'"
+          "mkdir -p '{{tmp-dir}}/home/logseq'"
+          "cp ~/logseq/auth.json '{{tmp-dir}}/home/logseq/auth.json'"
+          "python3 '{{repo-root}}/cli-e2e/scripts/prepare_sync_config.py' --output '{{config-path}}' --auth-path '{{auth-path}}' --http-base '{{sync-http-base}}' --ws-url '{{sync-ws-url}}'"
+          "python3 '{{repo-root}}/cli-e2e/scripts/prepare_sync_config.py' --output '{{tmp-dir}}/cli-b.edn' --auth-path '{{auth-path}}' --http-base '{{sync-http-base}}' --ws-url '{{sync-ws-url}}'"
+          "python3 '{{repo-root}}/cli-e2e/scripts/db_sync_server.py' start --repo-root '{{repo-root}}' --pid-file '{{tmp-dir}}/db-sync-server.pid' --log-file '{{tmp-dir}}/db-sync-server.log' --data-dir '{{tmp-dir}}/db-sync-server-data' --port {{sync-port}} --auth-path '{{auth-path}}'"
+          "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
+          "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync ensure-keys --graph {{graph-arg}} --e2ee-password '11111' --upload-keys"
+          "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page '{{random-page}}' >/dev/null"
+          "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert block --graph {{graph-arg}} --target-page '{{random-page}}' --content '{{seed-marker}}' >/dev/null"]
+  :cmds ["{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync upload --graph {{graph-arg}}"
+         "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync start --graph {{graph-arg}} --e2ee-password '11111'"
+         "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --data-dir '{{data-dir}}' --config '{{config-path}}' --graph '{{graph}}' --timeout-s 120 --interval-s 1"
+         "{{cli-home}} --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json sync download --graph {{graph-arg}} --e2ee-password '11111'"
+         "{{cli-home}} --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json sync start --graph {{graph-arg}} --e2ee-password '11111'"
+         "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --graph '{{graph}}' --timeout-s 120 --interval-s 1"
+         "python3 '{{repo-root}}/cli-e2e/scripts/compare_graph_queries.py' --cli '{{repo-root}}/static/logseq-cli.js' --graph '{{graph}}' --config-a '{{config-path}}' --data-dir-a '{{data-dir}}' --config-b '{{tmp-dir}}/cli-b.edn' --data-dir-b '{{tmp-dir}}/graphs-b' --query '[:find ?title :where [?b :block/title ?title] [(= ?title \"{{seed-marker}}\")] ]' --require-result"
+         "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync stop --graph {{graph-arg}}"
+         "{{cli-home}} --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json sync stop --graph {{graph-arg}}"
+         "python3 '{{repo-root}}/cli-e2e/scripts/random_bidirectional_block_ops.py' --cli '{{repo-root}}/static/logseq-cli.js' --graph '{{graph}}' --config-a '{{config-path}}' --data-dir-a '{{data-dir}}' --config-b '{{tmp-dir}}/cli-b.edn' --data-dir-b '{{tmp-dir}}/graphs-b' --page '{{random-page}}' --rounds-per-client {{rounds-per-client}} --seed {{random-seed}}"
+         "{{cli-home}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json sync start --graph {{graph-arg}} --e2ee-password '11111'"
+         "{{cli-home}} --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json sync start --graph {{graph-arg}} --e2ee-password '11111'"
+         "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --data-dir '{{data-dir}}' --config '{{config-path}}' --graph '{{graph}}' --timeout-s 240 --interval-s 1"
+         "python3 '{{repo-root}}/cli-e2e/scripts/wait_sync_status.py' --cli '{{repo-root}}/static/logseq-cli.js' --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --graph '{{graph}}' --timeout-s 240 --interval-s 1"
+         "python3 '{{repo-root}}/cli-e2e/scripts/compare_graph_queries.py' --cli '{{repo-root}}/static/logseq-cli.js' --graph '{{graph}}' --config-a '{{config-path}}' --data-dir-a '{{data-dir}}' --config-b '{{tmp-dir}}/cli-b.edn' --data-dir-b '{{tmp-dir}}/graphs-b' --query '[:find (pull ?b [:block/uuid :block/title :block/order {:block/parent [:block/uuid]}]) :where [?p :block/title \"{{random-page}}\"] [?b :block/page ?p] [?b :block/uuid]]' --require-result"
+         "{{cli-home}} --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json sync status --graph {{graph-arg}}"]
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :pending-local] 0
+                               [:data :pending-asset] 0
+                               [:data :pending-server] 0
+                               [:data :last-error] nil}}
+  :covers {:commands ["sync upload"
+                      "sync download"
+                      "sync status"]
+           :options {:global ["--config"
+                              "--graph"
+                              "--data-dir"
+                              "--output"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"
+            "{{cli}} --data-dir '{{tmp-dir}}/graphs-b' --config '{{tmp-dir}}/cli-b.edn' --output json server stop --graph {{graph-arg}}"
+            "python3 '{{repo-root}}/cli-e2e/scripts/db_sync_server.py' stop --pid-file '{{tmp-dir}}/db-sync-server.pid'"]
+  :tags [:sync :stress :offline :bidirectional :random :block-ops]}]
