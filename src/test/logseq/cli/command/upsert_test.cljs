@@ -92,6 +92,11 @@
                           add-command/resolve-property-identifiers (fn [_ _ _ _] (p/resolved []))
                           transport/invoke (fn [_ method _ args]
                                              (case method
+                                               :thread-api/q
+                                               (p/resolved [:logseq.property/status.todo
+                                                            :logseq.property/status.doing
+                                                            :logseq.property/status.done])
+
                                                :thread-api/pull
                                                (let [[_ selector lookup] args]
                                                  (cond

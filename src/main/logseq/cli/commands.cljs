@@ -181,6 +181,10 @@
            (re-find #"Unknown option:\s*:properties" (or message "")))
       "unknown option: --properties; use --update-properties"
 
+      (and (= ["upsert" "block"] subcommand)
+           (re-find #"Unknown option:\s*:status" (or message "")))
+      "unknown option: --status; use upsert task --status"
+
       (and (= ["upsert" "page"] subcommand)
            (re-find #"Unknown option:\s*:tags" (or message "")))
       "unknown option: --tags; use --update-tags"
