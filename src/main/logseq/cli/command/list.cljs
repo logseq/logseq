@@ -7,7 +7,8 @@
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
             [logseq.common.util :as common-util]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db.frontend.property :as db-property]))
 
 (def ^:private list-common-spec
   {:expand {:desc "Include expanded metadata"
@@ -126,9 +127,12 @@
   (merge-with
    merge
    list-common-spec
-   {:status {:desc "Filter by task status"}
+   {:status {:desc "Filter by task status"
+             :values (mapv (comp string/lower-case :value)
+                           (db-property/built-in-closed-values :logseq.property/status))}
     :priority {:desc "Filter by task priority"
-               :validate #{"low" "medium" "high" "urgent"}}
+               :validate (set (map (comp string/lower-case :value)
+                                   (db-property/built-in-closed-values :logseq.property/priority)))}
     :content {:desc "Filter by task title content"
               :alias :c}
     :sort {:validate (set (keys list-task-field-map))}
@@ -147,8 +151,11 @@
   (merge-with
    merge
    list-common-spec
-   {:tags {:desc "Filter by tags (comma separated selectors)"}
-    :properties {:desc "Filter by properties (comma separated selectors)"}
+   {:tags {:desc "Filter by tags (comma separated selectors)"
+           ;; Autocomplete first tag until there is comma-delimited tags completion
+           :complete :tags}
+    :properties {:desc "Filter by properties (comma separated selectors)"
+                 :complete :properties}
     :sort {:validate (set (keys list-node-field-map))}
     :fields {:multiple-values (keys list-node-field-map)}}))
 
