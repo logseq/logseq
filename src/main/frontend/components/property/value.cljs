@@ -615,7 +615,7 @@
                               (remove nil?)
                               (remove #(= :logseq.property/empty-placeholder %))
                               set)
-        clear-value (str "No " (:block/title property))
+        clear-value (t :property/no-value (db-property/built-in-display-title property t))
         clear-value-label [:div.flex.flex-row.items-center.gap-1.text-sm
                            (ui/icon "x" {:size 14})
                            [:div clear-value]]
@@ -787,13 +787,7 @@
                  :items options
                  :selected-choices selected-choices
                  :dropdown? dropdown?
-                 :input-default-placeholder (cond
-                                              tags?
-                                              "Set tags"
-                                              alias?
-                                              "Set alias"
-                                              :else
-                                              (str "Set " (:block/title property)))
+                 :input-default-placeholder (t :property/set-placeholder (db-property/built-in-display-title property t))
                  :show-new-when-not-exact-match? (not
                                                   (or (and extends-property?
                                                            (or (contains? (set children-pages) (:db/id block))
@@ -989,7 +983,7 @@
                      :selected-choices selected-choices
                      :dropdown? dropdown?
                      :show-new-when-not-exact-match? (not (or closed-values? (= :date type)))
-                     :input-default-placeholder (str "Set " (:block/title property))
+                     :input-default-placeholder (t :property/set-placeholder (db-property/built-in-display-title property t))
                      :extract-chosen-fn :value
                      :extract-fn (fn [x] (or (:label-value x) (:label x)))
                      :content-props content-props
@@ -1653,5 +1647,5 @@
                :as-child true}
               value-cp)
              (shui/tooltip-content
-              (str "Change " (:block/title property)))))
+              (t :property/change-tooltip (db-property/built-in-display-title property t)))))
            value-cp))))))
