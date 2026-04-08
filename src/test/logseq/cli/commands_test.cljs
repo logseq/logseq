@@ -868,7 +868,23 @@
       (is (string/includes? (strip-ansi summary) "--update-tags"))
       (is (string/includes? (strip-ansi summary) "--update-properties"))
       (is (not (string/includes? (strip-ansi summary) "--tags")))
-      (is (not (string/includes? (strip-ansi summary) "--properties"))))))
+      (is (not (string/includes? (strip-ansi summary) "--properties")))))
+
+  (testing "upsert task help includes paired task set/clear options"
+    (let [summary (strip-ansi (:summary (binding [style/*color-enabled?* true]
+                                          (commands/parse-args ["upsert" "task" "--help"]))))]
+      (is (string/includes? summary "--status"))
+      (is (string/includes? summary "--priority"))
+      (is (string/includes? summary "--scheduled"))
+      (is (string/includes? summary "--deadline"))
+      (is (string/includes? summary "--no-status"))
+      (is (string/includes? summary "--no-priority"))
+      (is (string/includes? summary "--no-scheduled"))
+      (is (string/includes? summary "--no-deadline"))
+      (is (not (string/includes? summary "--update-tags")))
+      (is (not (string/includes? summary "--update-properties")))
+      (is (not (string/includes? summary "--remove-tags")))
+      (is (not (string/includes? summary "--remove-properties"))))))
 
 (deftest test-show-json-edn-strips-block-uuid
   (testing "show json/edn removes :block/uuid recursively while keeping :db/id"
@@ -1658,19 +1674,38 @@
       (is (false? (:ok? result)))
       (is (= :unknown-command (get-in result [:error :code]))))))
 
-(deftest test-verb-subcommand-parse-upsert-task-mode
-  (testing "upsert task parses block create mode"
+(deftest ^:large-vars/cleanup-todo test-verb-subcommand-parse-upsert-task-mode
+  (testing "upsert task parses block create mode with task fields"
     (let [result (commands/parse-args ["upsert" "task"
                                        "--content" "Ship CLI tasks"
                                        "--target-page" "Home"
                                        "--status" "todo"
-                                       "--priority" "high"])]
+                                       "--priority" "high"
+                                       "--scheduled" "2026-02-10T08:00:00.000Z"
+                                       "--deadline" "2026-02-12T18:00:00.000Z"])]
       (is (true? (:ok? result)))
       (is (= :upsert-task (:command result)))
       (is (= "Ship CLI tasks" (get-in result [:options :content])))
       (is (= "Home" (get-in result [:options :target-page])))
       (is (= "todo" (get-in result [:options :status])))
-      (is (= "high" (get-in result [:options :priority])))))
+      (is (= "high" (get-in result [:options :priority])))
+      (is (= "2026-02-10T08:00:00.000Z" (get-in result [:options :scheduled])))
+      (is (= "2026-02-12T18:00:00.000Z" (get-in result [:options :deadline])))))
+
+  (testing "upsert task parses explicit clear flags"
+    (let [result (commands/parse-args ["upsert" "task"
+                                       "--id" "42"
+                                       "--no-status"
+                                       "--no-priority"
+                                       "--no-scheduled"
+                                       "--no-deadline"])]
+      (is (true? (:ok? result)))
+      (is (= :upsert-task (:command result)))
+      (is (= 42 (get-in result [:options :id])))
+      (is (= true (get-in result [:options :no-status])))
+      (is (= true (get-in result [:options :no-priority])))
+      (is (= true (get-in result [:options :no-scheduled])))
+      (is (= true (get-in result [:options :no-deadline])))))
 
   (testing "upsert task parses page mode"
     (let [result (commands/parse-args ["upsert" "task" "--page" "Weekly Plan"])]
@@ -1689,6 +1724,22 @@
       (is (= "done" (get-in result [:options :status])))
       (is (= "medium" (get-in result [:options :priority])))))
 
+  (testing "upsert task rejects removed generic mutation options and guides to upsert block"
+    (doseq [legacy-option ["--update-tags" "--update-properties" "--remove-tags" "--remove-properties"]]
+      (let [result (commands/parse-args ["upsert" "task"
+                                         "--id" "42"
+                                         legacy-option
+                                         (if (or (= legacy-option "--update-tags")
+                                                 (= legacy-option "--remove-tags"))
+                                           "[\"TagA\"]"
+                                           (if (= legacy-option "--update-properties")
+                                             "{:logseq.property/publishing-public? true}"
+                                             "[:logseq.property/publishing-public?]"))])
+            message (strip-ansi (get-in result [:error :message]))]
+        (is (false? (:ok? result)))
+        (is (= :invalid-options (get-in result [:error :code])))
+        (is (string/includes? message "upsert block")))))
+
   (testing "upsert task defers unknown --status to runtime validation"
     (let [result (commands/parse-args ["upsert" "task"
                                        "--id" "42"
@@ -1696,6 +1747,15 @@
       (is (true? (:ok? result)))
       (is (= :upsert-task (:command result)))
       (is (= "custom-review" (get-in result [:options :status])))))
+
+  (testing "upsert task rejects set/no conflicts for the same field"
+    (doseq [args [["upsert" "task" "--id" "42" "--status" "todo" "--no-status"]
+                  ["upsert" "task" "--id" "42" "--priority" "high" "--no-priority"]
+                  ["upsert" "task" "--id" "42" "--scheduled" "2026-02-10T08:00:00.000Z" "--no-scheduled"]
+                  ["upsert" "task" "--id" "42" "--deadline" "2026-02-12T18:00:00.000Z" "--no-deadline"]]]
+      (let [result (commands/parse-args args)]
+        (is (false? (:ok? result)))
+        (is (= :invalid-options (get-in result [:error :code]))))))
 
   (testing "upsert task requires selector, page, or content"
     (let [result (commands/parse-args ["upsert" "task"])]
@@ -1733,9 +1793,12 @@
   (testing "upsert task rejects invalid priority"
     (let [result (commands/parse-args ["upsert" "task"
                                        "--content" "Alpha"
-                                       "--priority" "wat"])]
+                                       "--priority" "wat"])
+          message (or (some-> (get-in result [:error :message]) strip-ansi) "")]
       (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code]))))))
+      (is (= :invalid-options (get-in result [:error :code])))
+      (is (string/includes? message "Invalid value for option :priority: wat"))
+      (is (string/includes? message "Available values: low, medium, high, urgent")))))
 
 (deftest test-verb-subcommand-parse-update-target-page
   (testing "upsert block update mode parses with target page"
