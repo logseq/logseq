@@ -345,15 +345,15 @@
   [["ID"         (fn [item _] (or (:db/id item) (:id item))) [:db/id :id]]
    ["TITLE"      (fn [item _] (or (:title item) (:block/title item) (:name item))) [:title :block/title :name]]
    ["STATUS"     (fn [item _] (format-task-choice (or (:status item) (:logseq.property/status item)) "status."))
-    [:status :logseq.property/status] true]
+    [:status :logseq.property/status]]
    ["PRIORITY"   (fn [item _] (format-task-choice (or (:priority item) (:logseq.property/priority item)) "priority."))
-    [:priority :logseq.property/priority] true]
+    [:priority :logseq.property/priority]]
    ["SCHEDULED"  (fn [item _] (or (:scheduled item) (:logseq.property/scheduled item) "-"))
-    [:scheduled :logseq.property/scheduled] true]
+    [:scheduled :logseq.property/scheduled]]
    ["DEADLINE"   (fn [item _] (or (:deadline item) (:logseq.property/deadline item) "-"))
-    [:deadline :logseq.property/deadline] true]
-   ["UPDATED-AT" (fn [item now-ms] (human-ago (or (:updated-at item) (:block/updated-at item)) now-ms)) [:updated-at :block/updated-at] true]
-   ["CREATED-AT" (fn [item now-ms] (human-ago (or (:created-at item) (:block/created-at item)) now-ms)) [:created-at :block/created-at] true]])
+    [:deadline :logseq.property/deadline]]
+   ["UPDATED-AT" (fn [item now-ms] (human-ago (or (:updated-at item) (:block/updated-at item)) now-ms)) [:updated-at :block/updated-at]]
+   ["CREATED-AT" (fn [item now-ms] (human-ago (or (:created-at item) (:block/created-at item)) now-ms)) [:created-at :block/created-at]]])
 
 (defn- format-list-task
   ([items now-ms]
