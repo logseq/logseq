@@ -789,19 +789,13 @@
 (defn- move-root->restore-op
   [db-before root]
   (let [root-id (:db/id root)
-        [target-id sibling?] (block-restore-target root)
-        parent-id (some-> root :block/parent :db/id)
-        page-id (some-> root :block/page :db/id)
-        fallback-target (or (when parent-id (stable-entity-ref db-before parent-id))
-                            (when page-id (stable-entity-ref db-before page-id)))]
+        [target-id sibling?] (block-restore-target root)]
     (when (and (some? root-id)
                (some? target-id))
       [:move-blocks
        [[(stable-entity-ref db-before root-id)]
         (stable-entity-ref db-before target-id)
-        (cond-> {:sibling? (boolean sibling?)}
-          sibling?
-          (assoc :fallback-target fallback-target))]])))
+        {:sibling? (boolean sibling?)}]])))
 
 (defn- build-inverse-move-blocks
   [db-before ids]

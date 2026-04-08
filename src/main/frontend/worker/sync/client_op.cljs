@@ -42,6 +42,7 @@
    :db-sync/tx-id {:db/unique :db.unique/identity}
    :db-sync/created-at {:db/index true}
    :db-sync/pending? {:db/index true}
+   :db-sync/failed? {:db/index true}
    :db-sync/outliner-op {}
    :db-sync/forward-outliner-ops {}
    :db-sync/inverse-outliner-ops {}

@@ -157,8 +157,10 @@
           tx-report)
         (d/transact! conn tx-data tx-meta)))
     (catch :default e
-      (prn :debug :transact-failed :tx-meta tx-meta :tx-data tx-data)
-      (js/console.error e)
+      (when-not (and (:db-sync/suppress-stale-rebase-transact-failed-log? tx-meta)
+                     (= :entity-id/missing (:error (ex-data e))))
+        (prn :debug :transact-failed :tx-meta tx-meta :tx-data tx-data)
+        (js/console.error e))
       (throw e))))
 
 (defn transact!
