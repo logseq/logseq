@@ -309,12 +309,12 @@
          (shui/select-content
           (map (fn [choice]
                  (shui/select-item {:key (str (:db/id choice))
-                                    :value (:db/id choice)} (:block/title choice))) properties)))
+                                    :value (:db/id choice)} (db-property/built-in-display-title choice t))) properties)))
         [:div.flex.flex-row.gap-1
          [:div.text-muted-foreground
           (t :property.repeat/is-label)]
          (when done-choice
-           (db-property/property-value-content done-choice))]])]))
+           (db-property/built-in-display-title done-choice t))]])]))
 
 (rum/defcs calendar-inner < rum/reactive db-mixins/query
   (rum/local (str "calendar-inner-" (js/Date.now)) ::identity)
@@ -939,7 +939,8 @@
                                    (remove (fn [b] (contains? #{:logseq.property.repeat/recur-unit.minute :logseq.property.repeat/recur-unit.hour} (:db/ident b)))))]
                       (keep (fn [block]
                               (let [icon (pu/get-block-property-value block :logseq.property/icon)
-                                    value (db-property/closed-value-content block)]
+                                    value (or (db-property/built-in-display-title block t)
+                                              (db-property/closed-value-content block))]
                                 {:label (if icon
                                           [:div.flex.flex-row.gap-1.items-center
                                            (icon-component/icon icon {:color? true})
@@ -1142,7 +1143,8 @@
     (let [eid (if (entity-map? value) (:db/id value) [:block/uuid value])
           block (or (db/sub-block (:db/id (db/entity eid))) value)
           property-block? (db-property/property-created-block? block)
-          value' (db-property/closed-value-content block)
+          value' (or (db-property/built-in-display-title block t)
+                     (db-property/closed-value-content block))
           icon (pu/get-block-property-value block :logseq.property/icon)]
       (cond
         icon
