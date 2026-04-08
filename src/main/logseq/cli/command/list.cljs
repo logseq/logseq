@@ -1,8 +1,8 @@
 (ns logseq.cli.command.list
   "List-related CLI commands."
   (:require [clojure.string :as string]
-            [logseq.cli.command.add :as add-command]
             [logseq.cli.command.core :as core]
+            [logseq.cli.command.task-status :as task-status-command]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
             [promesa.core :as p]))
@@ -124,13 +124,11 @@
   (merge-with
    merge
    list-common-spec
-   {:status {:desc "Filter by task status"
-             :validate #{"todo" "doing" "done" "now" "later" "wait" "waiting"
-                         "backlog" "canceled" "cancelled"
-                         "in-review" "in_review" "inreview" "in-progress"}}
+   {:status {:desc "Filter by task status"}
     :priority {:desc "Filter by task priority"
                :validate #{"low" "medium" "high" "urgent"}}
-    :content {:desc "Filter by task title content"}
+    :content {:desc "Filter by task title content"
+              :alias :c}
     :sort {:validate (set (keys list-task-field-map))}
     :fields {:multiple-values (keys list-task-field-map)}}))
 
@@ -279,18 +277,29 @@
   [action config]
   (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
               options (:options action)
-              normalized-options (cond-> options
-                                   (seq (some-> (:status options) string/trim))
-                                   (assoc :status (add-command/normalize-status (:status options)))
-                                   (seq (some-> (:priority options) string/trim))
-                                   (assoc :priority (normalize-priority (:priority options))))
-              items (transport/invoke cfg :thread-api/cli-list-tasks false
-                                      [(:repo action) normalized-options])
-              sort-field (effective-sort-field normalized-options)
-              order (or (:order normalized-options) "asc")
-              fields (parse-field-list (:fields normalized-options))
-              sorted (apply-sort items sort-field order list-task-field-map)
-              limited (apply-offset-limit sorted (:offset normalized-options) (:limit normalized-options))
-              final (apply-fields limited fields list-task-field-map)]
-        {:status :ok
-         :data {:items final}})))
+              status-input (some-> (:status options) string/trim)
+              available-statuses (when (seq status-input)
+                                   (transport/invoke cfg :thread-api/q false
+                                                     [(:repo action)
+                                                      [task-status-command/status-closed-values-query]]))
+              resolved-status (when (seq status-input)
+                                (task-status-command/resolve-status-ident status-input available-statuses))]
+        (if (and (seq status-input) (not resolved-status))
+          {:status :error
+           :error {:code :invalid-options
+                   :message (task-status-command/invalid-status-message status-input available-statuses)}}
+          (let [normalized-options (cond-> options
+                                     resolved-status
+                                     (assoc :status resolved-status)
+                                     (seq (some-> (:priority options) string/trim))
+                                     (assoc :priority (normalize-priority (:priority options))))]
+            (p/let [items (transport/invoke cfg :thread-api/cli-list-tasks false
+                                            [(:repo action) normalized-options])
+                    sort-field (effective-sort-field normalized-options)
+                    order (or (:order normalized-options) "asc")
+                    fields (parse-field-list (:fields normalized-options))
+                    sorted (apply-sort items sort-field order list-task-field-map)
+                    limited (apply-offset-limit sorted (:offset normalized-options) (:limit normalized-options))
+                    final (apply-fields limited fields list-task-field-map)]
+              {:status :ok
+               :data {:items final}}))))))

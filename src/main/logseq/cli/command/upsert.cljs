@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [logseq.cli.command.add :as add-command]
             [logseq.cli.command.core :as core]
+            [logseq.cli.command.task-status :as task-status-command]
             [logseq.cli.command.update :as update-command]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
@@ -32,10 +33,6 @@
    :blocks-file {:desc "EDN file of blocks [create only]"
                  :coerce common-graph/expand-home
                  :complete :file}
-   :status {:desc "Set task status"
-            :validate #{"todo" "doing" "done" "now" "later" "wait" "waiting"
-                        "backlog" "canceled" "cancelled"
-                        "in-review" "in_review" "inreview" "in-progress"}}
    :update-tags {:desc "Tags to add/update (EDN vector)"}
    :update-properties {:desc "Properties to add/update (EDN map)"}
    :remove-tags {:desc "Tags to remove (EDN vector) [update only]"}
@@ -70,9 +67,7 @@
                  :complete :pages}
    :pos {:desc "Position. Default: last-child"
          :validate #{"first-child" "last-child" "sibling"}}
-   :status {:desc "Set task status"
-            :validate #{"todo" "doing" "done" "now" "later" "wait" "waiting"
-                        "backlog" "canceled" "cancelled" "in-review" "in-progress"}}
+   :status {:desc "Set task status"}
    :priority {:desc "Set task priority"
               :validate #{"low" "medium" "high" "urgent"}}
    :update-tags {:desc "Tags to add/update (EDN vector)"}
@@ -107,8 +102,7 @@
                                    "logseq upsert block --graph my-graph --id 123 --content \"Updated content\""
                                    "logseq upsert block --graph my-graph --id 123 --target-page Home"
                                    "logseq upsert block --graph my-graph --target-page Meeting Notes --content \"AI summary of the discussion\" --update-tags '[\"AI-GENERATED\"]'"
-                                   "logseq upsert block --graph my-graph --blocks '[{:block/title \"A\"} {:block/title \"B\"}]'"
-                                   "logseq upsert block --graph my-graph --id 123 --status done"]})
+                                   "logseq upsert block --graph my-graph --blocks '[{:block/title \"A\"} {:block/title \"B\"}]'"]})
    (core/command-entry ["upsert" "page"] :upsert-page "Upsert page" upsert-page-spec
                        {:examples ["logseq upsert page --graph my-graph --page Home --update-tags '[\"project\"]'"
                                    "logseq upsert page --graph my-graph --id 999 --update-properties '{:logseq.property/description \"Example\"}'"]})
@@ -379,7 +373,7 @@
          :error {:code :invalid-options
                  :message invalid-message}}
 
-        (and status-provided? (not status))
+        (and status-provided? (not (seq status-text)))
         {:ok? false
          :error {:code :invalid-options
                  :message (str "invalid status: " (:status options))}}
@@ -426,6 +420,7 @@
                    (some? id) (assoc :id id)
                    (seq uuid) (assoc :uuid uuid)
                    (seq page) (assoc :page page)
+                   (seq status-text) (assoc :status-input status-text)
                    (and (seq content) (not= mode :page)) (assoc :content content))}))))
 
 (defn build-tag-action
@@ -863,34 +858,65 @@
                   :error {:code (or (get-in (ex-data e) [:code]) :exception)
                           :message (or (ex-message e) (str e))}}))))
 
+(defn- normalize-status-input
+  [value]
+  (when (some? value)
+    (let [text (string/trim (if (string? value) value (str value)))]
+      (when (seq text)
+        text))))
+
+(defn- resolve-task-status-action
+  [action cfg]
+  (let [status-input (or (normalize-status-input (:status-input action))
+                         (normalize-status-input (:status action)))]
+    (if (seq status-input)
+      (p/let [available-statuses (transport/invoke cfg :thread-api/q false
+                                                   [(:repo action)
+                                                    [task-status-command/status-closed-values-query]])
+              resolved-status (task-status-command/resolve-status-ident status-input available-statuses)]
+        (if resolved-status
+          {:ok? true
+           :action (-> action
+                       (assoc :status resolved-status)
+                       (dissoc :status-input))}
+          {:ok? false
+           :error {:code :invalid-options
+                   :message (task-status-command/invalid-status-message status-input available-statuses)}}))
+      (p/resolved {:ok? true :action action}))))
+
 (defn execute-upsert-task
   [action config]
-  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))]
-        (case (:mode action)
-          :create
-          (p/let [result (add-command/execute-add-block (assoc action :type :add-block) config)
-                  created-ids (vec (or (get-in result [:data :result]) []))
-                  _ (execute-upsert-task-ops! action cfg created-ids)]
-            {:status :ok
-             :data {:result created-ids}})
-
-          :page
-          (p/let [page (ensure-page-entity! cfg (:repo action) (:page action))
-                  page-id (:db/id page)
-                  _ (execute-upsert-task-ops! action cfg [page-id])]
-            {:status :ok
-             :data {:result [page-id]}})
-
-          :update
-          (p/let [entity (ensure-task-node! cfg (:repo action) action)
-                  node-id (:db/id entity)
-                  _ (execute-upsert-task-ops! action cfg [node-id])]
-            {:status :ok
-             :data {:result [node-id]}})
-
+  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+              status-check (resolve-task-status-action action cfg)]
+        (if-not (:ok? status-check)
           {:status :error
-           :error {:code :invalid-options
-                   :message "invalid upsert task mode"}}))
+           :error (:error status-check)}
+          (let [action* (:action status-check)]
+            (case (:mode action*)
+              :create
+              (p/let [result (add-command/execute-add-block (assoc action* :type :add-block) config)
+                      created-ids (vec (or (get-in result [:data :result]) []))
+                      _ (execute-upsert-task-ops! action* cfg created-ids)]
+                {:status :ok
+                 :data {:result created-ids}})
+
+              :page
+              (p/let [page (ensure-page-entity! cfg (:repo action*) (:page action*))
+                      page-id (:db/id page)
+                      _ (execute-upsert-task-ops! action* cfg [page-id])]
+                {:status :ok
+                 :data {:result [page-id]}})
+
+              :update
+              (p/let [entity (ensure-task-node! cfg (:repo action*) action*)
+                      node-id (:db/id entity)
+                      _ (execute-upsert-task-ops! action* cfg [node-id])]
+                {:status :ok
+                 :data {:result [node-id]}})
+
+              {:status :error
+               :error {:code :invalid-options
+                       :message "invalid upsert task mode"}}))))
       (p/catch (fn [e]
                  {:status :error
                   :error {:code (or (get-in (ex-data e) [:code]) :exception)

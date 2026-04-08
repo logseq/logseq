@@ -54,7 +54,8 @@
   (let [entries list-command/entries
         page-entry (first (filter #(= :list-page (:command %)) entries))
         tag-entry (first (filter #(= :list-tag (:command %)) entries))
-        property-entry (first (filter #(= :list-property (:command %)) entries))]
+        property-entry (first (filter #(= :list-property (:command %)) entries))
+        task-entry (first (filter #(= :list-task (:command %)) entries))]
     (testing "page-spec :sort has some correct values"
       (is (contains? (get-in page-entry [:spec :sort :validate]) "title")))
     (testing "tag-spec :sort has some correct values"
@@ -68,7 +69,9 @@
       (let [mv (get-in tag-entry [:spec :fields :multiple-values])]
         (is (seq mv))
         (is (some #{"title"} mv))
-        (is (some #{"uuid"} mv))))))
+        (is (some #{"uuid"} mv))))
+    (testing "list task :content has -c alias"
+      (is (= :c (get-in task-entry [:spec :content :alias]))))))
 
 (deftest test-upsert-spec-metadata
   (let [entries upsert-command/entries
@@ -79,8 +82,8 @@
     (testing "block-spec :pos has :validate set"
       (is (= #{"first-child" "last-child" "sibling"}
              (get-in block-entry [:spec :pos :validate]))))
-    (testing "block-spec :status has :validate set"
-      (is (seq (get-in block-entry [:spec :status :validate]))))
+    (testing "block-spec does not expose :status option"
+      (is (nil? (get-in block-entry [:spec :status]))))
     (testing "block-spec :target-page has :complete :pages"
       (is (= :pages (get-in block-entry [:spec :target-page :complete]))))
     (testing "block-spec :blocks-file has :complete :file"
@@ -275,7 +278,8 @@
       (is (not (string/includes? output "-c[Path to cli.edn (default ~/logseq/cli.edn)]:file:_files'"))))
     (testing "-c is available as content alias in command-specific completion"
       (is (re-find #"(?s)_logseq_search_block\(\).*?-c\[Search content text\]" output))
-      (is (re-find #"(?s)_logseq_upsert_block\(\).*?-c\[Block content" output)))
+      (is (re-find #"(?s)_logseq_upsert_block\(\).*?-c\[Block content" output))
+      (is (re-find #"(?s)_logseq_list_task\(\).*?-c\[Filter by task title content\]" output)))
     (testing ":alias emits grouping without --no- for global flags"
       (is (re-find #"\(-h --help\)" output)))))
 
