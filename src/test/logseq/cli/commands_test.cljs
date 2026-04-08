@@ -3120,6 +3120,29 @@
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest test-execute-show-page-skips-recycled-page
+  ;; `execute-show` throws `ex-info` with `:code :page-not-found` rather than
+  ;; returning `:status :error`; the top-level CLI catches it. The test
+  ;; mirrors that contract by inspecting the rejected promise.
+  (async done
+         (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                             cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                             transport/invoke (fn [_ method _ _]
+                                                (case method
+                                                  :thread-api/pull {:db/id 50
+                                                                    :block/uuid (uuid "00000000-0000-0000-0000-0000000000ee")
+                                                                    :block/title "Home"
+                                                                    :logseq.property/deleted-at 1712000000000}
+                                                  :thread-api/q []
+                                                  (throw (ex-info "unexpected invoke" {:method method}))))]
+               (-> (commands/execute {:type :show :repo "demo" :page "Home"} {})
+                   (p/then (fn [result]
+                             (is false (str "expected page-not-found error, got: " result))))
+                   (p/catch (fn [e]
+                              (is (= :page-not-found (:code (ex-data e))))
+                              (is (= "page not found" (ex-message e)))))))
+             (p/finally done))))
+
 (deftest test-build-action-upsert-page-accepts-user-property
   (testing "upsert page accepts user property key in update-properties"
     (let [parsed (commands/parse-args ["upsert" "page"
@@ -3192,6 +3215,25 @@
                           (second @ops*)))))
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
+
+(deftest test-execute-remove-page-skips-recycled-page
+  (async done
+         (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                             cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                             transport/invoke (fn [_ method _ _]
+                                                (case method
+                                                  :thread-api/pull {:db/id 11
+                                                                    :block/title "Recycled"
+                                                                    :block/uuid (uuid "00000000-0000-0000-0000-00000000bee5")
+                                                                    :logseq.property/deleted-at 1712000000000}
+                                                  :thread-api/apply-outliner-ops
+                                                  (throw (ex-info "should not delete a recycled page" {:method method}))
+                                                  (throw (ex-info "unexpected invoke" {:method method}))))]
+               (p/let [result (commands/execute {:type :remove-page :repo "demo" :page "Recycled"} {})]
+                 (is (= :error (:status result)))
+                 (is (= :page-not-found (get-in result [:error :code])))))
+             (p/catch (fn [e] (is false (str "unexpected error: " e))))
+             (p/finally done))))
 
 (deftest test-execute-remove-page-returns-true-result-on-success
   (async done

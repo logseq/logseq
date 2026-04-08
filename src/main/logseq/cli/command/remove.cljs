@@ -6,6 +6,7 @@
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
             [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (def ^:private remove-block-spec
@@ -87,7 +88,7 @@
   [:db/id :block/uuid])
 
 (def ^:private page-id-selector
-  [:db/id :block/uuid :block/name :block/title])
+  [:db/id :block/uuid :block/name :block/title :logseq.property/deleted-at])
 
 (def ^:private entity-selector
   [:db/id :db/ident :block/uuid :block/name :block/title
@@ -165,8 +166,12 @@
 
 (defn- resolve-page-by-name
   [config repo name]
-  (transport/invoke config :thread-api/pull false
-                    [repo page-id-selector [:block/name (common-util/page-name-sanity-lc name)]]))
+  (p/let [entity (transport/invoke config :thread-api/pull false
+                                   [repo page-id-selector [:block/name (common-util/page-name-sanity-lc name)]])]
+    ;; Treat recycled pages as not found so re-running `remove page` reports
+    ;; "page not found" instead of silently re-recycling.
+    (when-not (ldb/recycled? entity)
+      entity)))
 
 (defn- item-id
   [item]
