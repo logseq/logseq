@@ -313,6 +313,22 @@
          (when done-choice
            (db-property/property-value-content done-choice))]])]))
 
+(defn- <resolve-journal-page-for-date
+  ([^js d]
+   (<resolve-journal-page-for-date d
+                                   state/get-current-repo
+                                   db-async/<get-block
+                                   page-handler/<create!
+                                   date/js-date->journal-title))
+  ([^js d get-current-repo-f get-block-f create-page-f journal-title-f]
+   (p/let [journal (journal-title-f d)
+           page (get-block-f (get-current-repo-f) journal {:children? false})
+           journal-page (when (:block/journal-day page)
+                          page)]
+     (if journal-page
+       journal-page
+       (create-page-f journal {:redirect? false})))))
+
 (rum/defcs calendar-inner < rum/reactive db-mixins/query
   (rum/local (str "calendar-inner-" (js/Date.now)) ::identity)
   {:init (fn [state]
@@ -353,13 +369,8 @@
         select-handler!
         (fn [^js d]
           (when d
-            (p/let [journal (date/js-date->journal-title d)
-                    page (db-async/<get-block (state/get-current-repo) journal {:children? false})
-                    journal-page (when (:block/journal-day page)
-                                   page)]
+            (p/let [journal-page (<resolve-journal-page-for-date d)]
               (p/do!
-               (when-not journal-page
-                 (page-handler/<create! journal {:redirect? false}))
                (when (fn? on-change)
                  (let [value (if datetime? (tc/to-long d) journal-page)]
                    (on-change value)))
