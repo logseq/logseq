@@ -311,14 +311,14 @@
         (when (and (seq pending) (= local-tx' server-t'))
           (let [{:keys [tx-entries drop-tx-ids]} (build-upload-plan conn pending)]
             (when (seq drop-tx-ids)
-              (#'sync-apply/remove-pending-txs! repo drop-tx-ids)
+              (#'sync-apply/mark-pending-txs-false! repo drop-tx-ids)
               (reset! progress? true))
             ;; (prn :debug :upload :repo repo :tx-entries tx-entries)
             (if (seq tx-entries)
               (let [{:keys [accepted? t]} (server-upload! server local-tx' tx-entries)
                     tx-ids (mapv :tx-id tx-entries)]
                 (when accepted?
-                  (#'sync-apply/remove-pending-txs! repo tx-ids)
+                  (#'sync-apply/mark-pending-txs-false! repo tx-ids)
                   (when (seq tx-ids)
                     (client-op/update-local-tx repo t)
                     (reset! progress? true))))
@@ -2328,6 +2328,36 @@
            " tx-meta=" (pr-str (:tx-meta @repro))
            " errors=" (pr-str (:errors @repro)))))
 
+(defn- assert-checksum-cache-aligned!
+  [seed _history server repo+conn]
+  (let [states (mapv (fn [{:keys [repo conn]}]
+                       {:repo repo
+                        :full (sync-checksum/recompute-checksum @conn)
+                        :cached (client-op/get-local-checksum repo)})
+                     repo+conn)
+        full-checksums (mapv :full states)
+        server-checksum (sync-checksum/recompute-checksum @(get @server :conn))]
+    (when-not (and (= 1 (count (distinct full-checksums)))
+                   (every? (fn [{:keys [full cached]}] (= full cached)) states)
+                   (= (first full-checksums) server-checksum))
+      (prn :db-sync-sim-checksum-cache-mismatch
+           {:seed seed
+            :states states
+            :server-checksum server-checksum}))
+    (is (= 1 (count (distinct full-checksums)))
+        (str "full checksums diverged seed=" seed
+             " states=" (pr-str states)))
+    (doseq [{:keys [repo full cached]} states]
+      (is (= full cached)
+          (str "cached checksum mismatch seed=" seed
+               " repo=" repo
+               " full=" full
+               " cached=" cached)))
+    (is (= (first full-checksums) server-checksum)
+        (str "server checksum mismatch seed=" seed
+             " server=" server-checksum
+             " client-full=" (first full-checksums)))))
+
 (deftest ^:long two-clients-online-sim-test
   (testing "db-sync convergence with two online clients"
     (let [seed (or (env-seed) default-seed)
@@ -2671,7 +2701,21 @@
                         repo-b {:conn conn-b :ops-conn ops-b}
                         repo-c {:conn conn-c :ops-conn ops-c}}
         (fn []
-          (let [{:keys [restore]} (install-invalid-tx-repro! seed history)]
+          (let [listener-a ::checksum-sync-a
+                listener-b ::checksum-sync-b
+                listener-c ::checksum-sync-c
+                update-local-checksum!
+                (fn [repo conn listener-key]
+                  (d/listen! conn listener-key
+                             (fn [tx-report]
+                               (when-not (:batch-tx? @conn)
+                                 (when (seq (:tx-data tx-report))
+                                   (db-sync/update-local-sync-checksum! repo tx-report)))))
+                  nil)
+                {:keys [restore]} (install-invalid-tx-repro! seed history)]
+            (update-local-checksum! repo-a conn-a listener-a)
+            (update-local-checksum! repo-b conn-b listener-b)
+            (update-local-checksum! repo-c conn-c listener-c)
             (try
               (reset! db-sync/*repo->latest-remote-tx {})
               (record-meta! history {:seed seed :base-uuid base-uuid})
@@ -2679,6 +2723,9 @@
                 (ensure-base-page! conn base-uuid))
               (doseq [repo [repo-a repo-b repo-c]]
                 (client-op/update-local-tx repo 0))
+              (client-op/update-local-checksum repo-a (sync-checksum/recompute-checksum @conn-a))
+              (client-op/update-local-checksum repo-b (sync-checksum/recompute-checksum @conn-b))
+              (client-op/update-local-checksum repo-c (sync-checksum/recompute-checksum @conn-c))
               (let [clients [{:repo repo-a :conn conn-a :client client-a :online? true :gen-uuid gen-uuid}
                              {:repo repo-b :conn conn-b :client client-b :online? true :gen-uuid gen-uuid}
                              {:repo repo-c :conn conn-c :client client-c :online? true :gen-uuid gen-uuid}]
@@ -2757,6 +2804,16 @@
                   (let [attrs-a (block-attr-map @conn-a)
                         attrs-b (block-attr-map @conn-b)
                         attrs-c (block-attr-map @conn-c)]
-                    (assert-synced-attrs! seed history attrs-a attrs-b attrs-c))))
+                    (assert-synced-attrs! seed history attrs-a attrs-b attrs-c))
+                  (assert-checksum-cache-aligned!
+                   seed
+                   history
+                   server
+                   [{:repo repo-a :conn conn-a}
+                    {:repo repo-b :conn conn-b}
+                    {:repo repo-c :conn conn-c}])))
               (finally
-                (restore)))))))))
+                (restore)
+                (d/unlisten! conn-a listener-a)
+                (d/unlisten! conn-b listener-b)
+                (d/unlisten! conn-c listener-c)))))))))

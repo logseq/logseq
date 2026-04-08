@@ -18,6 +18,7 @@
             [frontend.worker.sync.large-title :as sync-large-title]
             [frontend.worker.sync.log-and-state :as sync-log-state]
             [frontend.worker.sync.presence :as sync-presence]
+            [frontend.worker.sync.transport :as sync-transport]
             [frontend.worker.sync.temp-sqlite :as sync-temp-sqlite]
             [frontend.worker.sync.upload :as sync-upload]
             [frontend.worker.undo-redo :as undo-redo]
@@ -326,6 +327,26 @@
              @(:online-users client)))
       (is (= 1 (count @broadcasts))))))
 
+(deftest ws-send-tx-batch-serializes-tx-id-as-uuid-string-test
+  (let [sent-raw (atom nil)
+        ws (doto (js-obj)
+             (aset "readyState" 1)
+             (aset "send" (fn [raw]
+                            (reset! sent-raw raw))))
+        tx-id (str (random-uuid))]
+    (sync-transport/send! sync-transport/coerce-ws-client-message
+                          ws
+                          {:type "tx/batch"
+                           :t-before 99
+                           :txs [{:tx "[]"
+                                  :tx-id tx-id
+                                  :outliner-op :move-blocks}]})
+    (let [payload (js->clj (js/JSON.parse @sent-raw) :keywordize-keys true)
+          payload-tx-id (get-in payload [:txs 0 :tx-id])]
+      (is (= "tx/batch" (:type payload)))
+      (is (= tx-id payload-tx-id))
+      (is (string? payload-tx-id)))))
+
 (deftest sync-counts-counts-only-true-pending-local-ops-test
   (testing "pending-local should count only rows with :db-sync/pending? true"
     (let [{:keys [conn client-ops-conn]} (setup-parent-child)]
@@ -464,6 +485,121 @@
                 (is (= :rtc.log/tx-rejected (:type captured)))
                 (is (= :db-sync/tx-rejected (-> captured :payload :type)))
                 (is (= rejected-tx (-> captured :payload :data)))))))))))
+
+(deftest tx-reject-db-transact-failed-marks-inflight-op-failed-test
+  (testing "non-stale tx/reject should mark inflight ops failed and clear pending state"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          tx-id (random-uuid)
+          raw-message (js/JSON.stringify
+                       (clj->js {:type "tx/reject"
+                                 :reason "db transact failed"
+                                 :t 3
+                                 :data (sqlite-util/write-transit-str
+                                        {:tx (sqlite-util/write-transit-str [[:db/add [:block/uuid (random-uuid)]
+                                                                              :block/title
+                                                                              "bad"]])
+                                         :outliner-op :save-block})}))
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [tx-id])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (ldb/transact! client-ops-conn
+                         [{:db-sync/tx-id tx-id
+                           :db-sync/created-at 1
+                           :db-sync/pending? true}])
+          (with-redefs [client-op/get-local-tx (constantly 0)]
+            (let [error (try
+                          (sync-handle-message/handle-message! test-repo client raw-message)
+                          nil
+                          (catch :default e
+                            e))
+                  ent (d/entity @client-ops-conn [:db-sync/tx-id tx-id])]
+              (is (some? error))
+              (is (= [] @(:inflight client)))
+              (is (= false (:db-sync/pending? ent)))
+              (is (= true (:db-sync/failed? ent))))))))))
+
+(deftest tx-reject-db-transact-failed-selectively-updates-inflight-ops-test
+  (testing "tx/reject should mark success txs as non-pending and failed tx as failed, leaving later inflight pending"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          success-tx-id (random-uuid)
+          failed-tx-id (random-uuid)
+          untouched-tx-id (random-uuid)
+          raw-message (js/JSON.stringify
+                       (clj->js {:type "tx/reject"
+                                 :reason "db transact failed"
+                                 :t 3
+                                 :success-tx-ids [(str success-tx-id)]
+                                 :failed-tx-id (str failed-tx-id)}))
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [success-tx-id failed-tx-id untouched-tx-id])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (ldb/transact! client-ops-conn
+                         [{:db-sync/tx-id success-tx-id
+                           :db-sync/created-at 1
+                           :db-sync/pending? true}
+                          {:db-sync/tx-id failed-tx-id
+                           :db-sync/created-at 2
+                           :db-sync/pending? true}
+                          {:db-sync/tx-id untouched-tx-id
+                           :db-sync/created-at 3
+                           :db-sync/pending? true}])
+          (with-redefs [client-op/get-local-tx (constantly 0)]
+            (let [error (try
+                          (sync-handle-message/handle-message! test-repo client raw-message)
+                          nil
+                          (catch :default e
+                            e))
+                  success-ent (d/entity @client-ops-conn [:db-sync/tx-id success-tx-id])
+                  failed-ent (d/entity @client-ops-conn [:db-sync/tx-id failed-tx-id])
+                  untouched-ent (d/entity @client-ops-conn [:db-sync/tx-id untouched-tx-id])]
+              (is (some? error))
+              (is (= [] @(:inflight client)))
+              (is (= false (:db-sync/pending? success-ent)))
+              (is (not= true (:db-sync/failed? success-ent)))
+              (is (= false (:db-sync/pending? failed-ent)))
+              (is (= true (:db-sync/failed? failed-ent)))
+              (is (= true (:db-sync/pending? untouched-ent)))
+              (is (not= true (:db-sync/failed? untouched-ent))))))))))
+
+(deftest tx-reject-stale-keeps-inflight-op-pending-test
+  (testing "stale tx/reject should keep inflight ops pending for retry"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          tx-id (random-uuid)
+          *sent (atom [])
+          raw-message (js/JSON.stringify
+                       (clj->js {:type "tx/reject"
+                                 :reason "stale"
+                                 :t 3}))
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :ws #js {}
+                  :inflight (atom [tx-id])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (ldb/transact! client-ops-conn
+                         [{:db-sync/tx-id tx-id
+                           :db-sync/created-at 1
+                           :db-sync/pending? true}])
+          (with-redefs [client-op/get-local-tx (constantly 0)
+                        sync-transport/ws-open? (constantly true)
+                        sync-transport/send! (fn [_coerce-f _ws message]
+                                               (swap! *sent conj message))]
+            (sync-handle-message/handle-message! test-repo client raw-message)
+            (let [ent (d/entity @client-ops-conn [:db-sync/tx-id tx-id])]
+              (is (= [{:type "pull" :since 0}] @*sent))
+              (is (= [tx-id] @(:inflight client)))
+              (is (= true (:db-sync/pending? ent)))
+              (is (not= true (:db-sync/failed? ent))))))))))
 
 (deftest hello-checksum-mismatch-logs-warning-test
   (testing "hello with matching t but mismatched checksum logs warning without throwing"
@@ -1226,6 +1362,25 @@
           (let [reports (#'sync-apply/reverse-local-txs! conn [local-tx])]
             (is (= 1 (count reports)))
             (is (= "raw reverse"
+                   (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))))
+
+(deftest reverse-local-txs-drops-missing-entity-order-adds-test
+  (testing "reverse should ignore :db/add :block/order for missing entities"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          tx-id (random-uuid)
+          child-id (:db/id child1)
+          child-uuid (:block/uuid child1)
+          missing-uuid (random-uuid)
+          local-tx {:tx-id tx-id
+                    :outliner-op :save-block
+                    :reversed-tx [[:db/add [:block/uuid missing-uuid] :block/order "a0"]
+                                  [:db/add child-id :block/title "reverse-kept"]]}]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (is (nil? (d/entity @conn [:block/uuid missing-uuid])))
+          (let [reports (#'sync-apply/reverse-local-txs! conn [local-tx])]
+            (is (= 1 (count reports)))
+            (is (= "reverse-kept"
                    (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))))
 
 (deftest enqueue-local-tx-keeps-mixed-semantic-forward-outliner-ops-test
@@ -2376,8 +2531,8 @@
             (let [after-count (count (#'sync-apply/pending-txs test-repo))]
               (is (> after-count before-count)))))))))
 
-(deftest rebase-drops-whole-pending-reaction-tx-when-target-deleted-test
-  (testing "if a pending user action becomes invalid during rebase, the whole tx is dropped"
+(deftest rebase-marks-stale-reaction-tx-non-pending-immediately-test
+  (testing "stale pending reaction tx is marked non-pending during rebase to avoid re-upload"
     (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
           target-uuid (:block/uuid parent)
           remote-delete-tx (:tx-data (outliner-core/delete-blocks @conn [parent] {}))]
@@ -2386,12 +2541,18 @@
           (outliner-op/apply-ops! conn
                                   [[:toggle-reaction [target-uuid "+1" nil]]]
                                   local-tx-meta)
-          (is (= 1 (count (#'sync-apply/pending-txs test-repo))))
-          (#'sync-apply/apply-remote-tx!
-           test-repo
-           nil
-           remote-delete-tx)
-          (is (empty? (#'sync-apply/pending-txs test-repo))))))))
+          (let [pending-before (#'sync-apply/pending-txs test-repo)
+                tx-id-before (:tx-id (first pending-before))]
+            (is (= 1 (count pending-before)))
+            (#'sync-apply/apply-remote-tx!
+             test-repo
+             nil
+             remote-delete-tx)
+            (let [pending-after (#'sync-apply/pending-txs test-repo)
+                  tx-ent-after (d/entity @client-ops-conn [:db-sync/tx-id tx-id-before])]
+              (is (empty? pending-after))
+              (is (some? tx-ent-after))
+              (is (= false (:db-sync/pending? tx-ent-after))))))))))
 
 (deftest tx-batch-ok-removes-acked-pending-txs-test
   (testing "tx/batch/ok clears inflight and removes acked pending txs"
@@ -2414,6 +2575,109 @@
             (is (= [] @(:inflight client)))
             (is (empty? (#'sync-apply/pending-txs test-repo)))
             (is (= 1 (client-op/get-local-tx test-repo)))))))))
+
+(deftest tx-batch-ok-removes-only-inflight-acked-pending-txs-test
+  (testing "tx/batch/ok should only clear pending txs tracked in inflight"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}
+          raw-message (js/JSON.stringify (clj->js {:type "tx/batch/ok"
+                                                   :t 1}))]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (worker-page/create! conn "Ack Page A" :uuid (random-uuid))
+          (worker-page/create! conn "Ack Page B" :uuid (random-uuid))
+          (let [pending-before (#'sync-apply/pending-txs test-repo)
+                [acked-tx-id unacked-tx-id] (mapv :tx-id pending-before)]
+            (is (= 2 (count pending-before)))
+            (reset! (:inflight client) [acked-tx-id])
+            (sync-handle-message/handle-message! test-repo client raw-message)
+            (is (= [] @(:inflight client)))
+            (is (= [unacked-tx-id]
+                   (mapv :tx-id (#'sync-apply/pending-txs test-repo))))
+            (is (= 1 (client-op/get-local-tx test-repo)))))))))
+
+(deftest apply-remote-tx-does-not-clear-pending-without-ack-test
+  (testing "apply-remote-tx should not clear local pending txs before tx/batch/ok ack"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          parent-uuid (:block/uuid parent)
+          block-uuid (random-uuid)
+          remote-conn (d/conn-from-db @conn)
+          *remote-tx (atom nil)]
+      (d/listen! remote-conn ::capture-remote-same-insert
+                 (fn [tx-report]
+                   (when (seq (:tx-data tx-report))
+                     (reset! *remote-tx
+                             (db-normalize/normalize-tx-data
+                              (:db-after tx-report)
+                              (:db-before tx-report)
+                              (:tx-data tx-report))))))
+      (try
+        (with-datascript-conns conn client-ops-conn
+          (fn []
+            (outliner-core/insert-blocks! conn
+                                          [{:block/title "same insert"
+                                            :block/uuid block-uuid}]
+                                          parent
+                                          {:sibling? false
+                                           :keep-uuid? true})
+            (let [pending-before (#'sync-apply/pending-txs test-repo)
+                  pending-before-tx-ids (mapv :tx-id pending-before)
+                  remote-parent (d/entity @remote-conn [:block/uuid parent-uuid])]
+              (is (= 1 (count pending-before)))
+              (outliner-core/insert-blocks! remote-conn
+                                            [{:block/title "same insert"
+                                              :block/uuid block-uuid}]
+                                            remote-parent
+                                            {:sibling? false
+                                             :keep-uuid? true})
+              (is (seq @*remote-tx))
+              (#'sync-apply/apply-remote-tx! test-repo nil @*remote-tx)
+              (let [pending-after (#'sync-apply/pending-txs test-repo)]
+                (is (= pending-before-tx-ids
+                       (mapv :tx-id pending-after)))
+                (is (= 1 (count pending-after)))))))
+        (finally
+          (d/unlisten! remote-conn ::capture-remote-same-insert))))))
+
+(deftest tx-batch-ok-stale-ack-does-not-regress-local-or-remote-checksum-state-test
+  (testing "stale tx/batch/ok should not regress local tx or latest remote checksum state"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          actual-checksum (sync-checksum/recompute-checksum @conn)
+          stale-checksum "ffffffffffffffff"
+          latest-tx-prev @db-sync/*repo->latest-remote-tx
+          latest-checksum-prev @db-sync/*repo->latest-remote-checksum
+          *captured (atom nil)
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}
+          raw-message (js/JSON.stringify (clj->js {:type "tx/batch/ok"
+                                                   :t 4
+                                                   :checksum stale-checksum}))]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (reset! db-sync/*repo->latest-remote-tx {test-repo 5})
+          (reset! db-sync/*repo->latest-remote-checksum {test-repo actual-checksum})
+          (client-op/update-local-tx test-repo 5)
+          (client-op/update-local-checksum test-repo actual-checksum)
+          (try
+            (with-redefs [sync-log-state/rtc-log (fn [type payload]
+                                                   (reset! *captured {:type type
+                                                                      :payload payload}))]
+              (sync-handle-message/handle-message! test-repo client raw-message))
+            (is (= [] @(:inflight client)))
+            (is (= 5 (client-op/get-local-tx test-repo)))
+            (is (= 5 (get @db-sync/*repo->latest-remote-tx test-repo)))
+            (is (= actual-checksum (get @db-sync/*repo->latest-remote-checksum test-repo)))
+            (is (nil? @*captured))
+            (finally
+              (reset! db-sync/*repo->latest-remote-tx latest-tx-prev)
+              (reset! db-sync/*repo->latest-remote-checksum latest-checksum-prev))))))))
 
 (deftest tx-batch-ok-real-checksum-mismatch-logs-warning-test
   (testing "tx/batch/ok logs warning on true checksum mismatch without throwing"
@@ -2465,6 +2729,32 @@
               (is (= stale-checksum (:cached-local-checksum payload)))
               (is (string? (:local-checksum payload)))
               (is (= remote-checksum (:remote-checksum payload))))))))))
+
+(deftest tx-batch-ok-real-checksum-mismatch-heals-remote-checksum-cache-test
+  (testing "tx/batch/ok mismatch should repair latest remote checksum cache to local recomputed checksum"
+    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+          stale-checksum "0000000000000000"
+          remote-checksum "ffffffffffffffff"
+          actual-checksum (sync-checksum/recompute-checksum @conn)
+          latest-checksum-prev @db-sync/*repo->latest-remote-checksum
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}
+          raw-message (js/JSON.stringify (clj->js {:type "tx/batch/ok"
+                                                   :t 0
+                                                   :checksum remote-checksum}))]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (try
+            (reset! db-sync/*repo->latest-remote-checksum {})
+            (client-op/update-local-checksum test-repo stale-checksum)
+            (sync-handle-message/handle-message! test-repo client raw-message)
+            (is (= actual-checksum
+                   (get @db-sync/*repo->latest-remote-checksum test-repo)))
+            (finally
+              (reset! db-sync/*repo->latest-remote-checksum latest-checksum-prev))))))))
 
 (deftest tx-batch-ok-stale-local-checksum-cache-does-not-emit-mismatch-test
   (testing "stale cached local checksum is corrected by recompute before mismatch logging"
@@ -2549,52 +2839,98 @@
 
 (deftest two-children-cycle-test
   (testing "conflicting parent updates can retain the local cycle shape (2 children)"
-    (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)]
+    (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
+          remote-conn (d/conn-from-db @conn)
+          child1-uuid (:block/uuid child1)
+          child2-uuid (:block/uuid child2)
+          *remote-tx (atom nil)]
+      (d/listen! remote-conn ::capture-two-children-cycle-remote
+                 (fn [tx-report]
+                   (when-not @*remote-tx
+                     (reset! *remote-tx
+                             (db-normalize/normalize-tx-data
+                              (:db-after tx-report)
+                              (:db-before tx-report)
+                              (:tx-data tx-report))))))
       (with-datascript-conns conn client-ops-conn
         (fn []
           (d/transact! conn [[:db/add (:db/id child1) :block/parent (:db/id child2)]])
-          (#'sync-apply/apply-remote-tx!
-           test-repo
-           nil
-           [[:db/add (:db/id child2) :block/parent (:db/id child1)]])
-          (let [child1' (d/entity @conn (:db/id child1))
-                child2' (d/entity @conn (:db/id child2))]
+          (let [remote-child1 (d/entity @remote-conn [:block/uuid child1-uuid])
+                remote-child2 (d/entity @remote-conn [:block/uuid child2-uuid])]
+            (outliner-core/move-blocks! remote-conn
+                                        [remote-child2]
+                                        remote-child1
+                                        {:sibling? false}))
+          (is (seq @*remote-tx))
+          (#'sync-apply/apply-remote-tx! test-repo nil @*remote-tx)
+          (let [child1' (d/entity @conn [:block/uuid child1-uuid])
+                child2' (d/entity @conn [:block/uuid child2-uuid])]
             (is (= "parent" (:block/title (:block/parent child1'))))
-            (is (= "child 1" (:block/title (:block/parent child2'))))))))))
+            (is (= "child 1" (:block/title (:block/parent child2')))))))
+      (d/unlisten! remote-conn ::capture-two-children-cycle-remote))))
 
 (deftest three-children-cycle-test
   (testing "conflicting parent updates can retain a cycle shape (3 children)"
-    (let [{:keys [conn client-ops-conn child1 child2 child3]} (setup-parent-child)]
+    (let [{:keys [conn client-ops-conn child1 child2 child3]} (setup-parent-child)
+          remote-conn (d/conn-from-db @conn)
+          child1-uuid (:block/uuid child1)
+          child2-uuid (:block/uuid child2)
+          child3-uuid (:block/uuid child3)
+          *remote-txs (atom [])]
+      (d/listen! remote-conn ::capture-three-children-cycle-remote
+                 (fn [tx-report]
+                   (when (seq (:tx-data tx-report))
+                     (swap! *remote-txs conj
+                            (db-normalize/normalize-tx-data
+                             (:db-after tx-report)
+                             (:db-before tx-report)
+                             (:tx-data tx-report))))))
       (with-datascript-conns conn client-ops-conn
         (fn []
           (d/transact! conn [[:db/add (:db/id child2) :block/parent (:db/id child1)]
                              [:db/add (:db/id child3) :block/parent (:db/id child2)]])
-          (#'sync-apply/apply-remote-tx!
-           test-repo
-           nil
-           [[:db/add (:db/id child2) :block/parent (:db/id child3)]
-            [:db/add (:db/id child1) :block/parent (:db/id child2)]])
-          (let [child' (d/entity @conn (:db/id child1))
-                child2' (d/entity @conn (:db/id child2))
-                child3' (d/entity @conn (:db/id child3))]
+          (let [remote-child1 (d/entity @remote-conn [:block/uuid child1-uuid])
+                remote-child2 (d/entity @remote-conn [:block/uuid child2-uuid])
+                remote-child3 (d/entity @remote-conn [:block/uuid child3-uuid])]
+            (outliner-core/move-blocks! remote-conn
+                                        [remote-child2]
+                                        remote-child3
+                                        {:sibling? false})
+            (outliner-core/move-blocks! remote-conn
+                                        [remote-child1]
+                                        remote-child2
+                                        {:sibling? false}))
+          (is (= 2 (count @*remote-txs)))
+          (#'sync-apply/apply-remote-txs! test-repo nil (mapv (fn [tx-data] {:tx-data tx-data}) @*remote-txs))
+          (let [child' (d/entity @conn [:block/uuid child1-uuid])
+                child2' (d/entity @conn [:block/uuid child2-uuid])
+                child3' (d/entity @conn [:block/uuid child3-uuid])]
             (is (= "child 2" (:block/title (:block/parent child'))))
             (is (= "child 3" (:block/title (:block/parent child2'))))
-            (is (= "parent" (:block/title (:block/parent child3'))))))))))
+            (is (= "parent" (:block/title (:block/parent child3')))))))
+      (d/unlisten! remote-conn ::capture-three-children-cycle-remote))))
 
 (deftest ignore-missing-parent-update-after-local-delete-test
-  (testing "remote hard delete drops dependent pending insert and removes descendants"
+  (testing "remote hard delete removes descendants and marks stale local insert as non-pending"
     (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
           child-uuid (:block/uuid child1)]
       (with-datascript-conns conn client-ops-conn
         (fn []
           (outliner-core/insert-blocks! conn [{:block/title "child 4"}] parent {:sibling? false})
-          (#'sync-apply/apply-remote-tx!
-           test-repo
-           nil
-           (:tx-data (outliner-core/delete-blocks @conn [parent] {})))
-          (let [child' (d/entity @conn [:block/uuid child-uuid])]
-            (is (nil? child'))
-            (is (empty? (#'sync-apply/pending-txs test-repo)))))))))
+          (let [pending-before (#'sync-apply/pending-txs test-repo)
+                tx-id-before (:tx-id (first pending-before))]
+            (is (= 1 (count pending-before)))
+            (#'sync-apply/apply-remote-tx!
+             test-repo
+             nil
+             (:tx-data (outliner-core/delete-blocks @conn [parent] {})))
+            (let [child' (d/entity @conn [:block/uuid child-uuid])
+                  pending-after (#'sync-apply/pending-txs test-repo)
+                  tx-ent-after (d/entity @client-ops-conn [:db-sync/tx-id tx-id-before])]
+              (is (nil? child'))
+              (is (empty? pending-after))
+              (is (some? tx-ent-after))
+              (is (= false (:db-sync/pending? tx-ent-after))))))))))
 
 (deftest missing-parent-after-remote-delete-removes-descendants-test
   (testing "remote hard delete tx removes descendants when full delete tx-data is provided"
@@ -2640,15 +2976,8 @@
             (outliner-page/delete! conn-b (:block/uuid (d/entity @conn-b :user.property/p2)))
             (#'sync-apply/apply-remote-tx! test-repo nil @remote-tx)
             (let [local-block' (db-test/find-block-by-content @conn-a "local object")
-                  validation (db-validate/validate-local-db! @conn-a)
-                  pending (#'sync-apply/pending-txs test-repo)]
+                  validation (db-validate/validate-local-db! @conn-a)]
               (is (nil? (:user.property/p2 local-block')))
-              (is (not-any? (fn [{:keys [tx]}]
-                              (some (fn [item]
-                                      (and (vector? item)
-                                           (= :user.property/p2 (nth item 2 nil))))
-                                    tx))
-                            pending))
               (is (empty? (non-recycle-validation-entities validation))
                   (str (:errors validation))))))
         (finally
@@ -2682,15 +3011,8 @@
             (outliner-page/delete! conn-b (:block/uuid (d/entity @conn-b :user.class/Tag1)))
             (#'sync-apply/apply-remote-tx! test-repo nil @remote-tx)
             (let [local-block' (db-test/find-block-by-content @conn-a "local object")
-                  validation (db-validate/validate-local-db! @conn-a)
-                  pending (#'sync-apply/pending-txs test-repo)]
+                  validation (db-validate/validate-local-db! @conn-a)]
               (is (empty? (:block/tags local-block')))
-              (is (not-any? (fn [{:keys [tx]}]
-                              (some (fn [item]
-                                      (and (vector? item)
-                                           (= :block/tags (nth item 2 nil))))
-                                    tx))
-                            pending))
               (is (empty? (non-recycle-validation-entities validation))
                   (str (:errors validation))))))
         (finally
@@ -3033,13 +3355,18 @@
           (fn []
             (d/transact! conn [[:db/add (:db/id child1) :block/title "child 1 local"]])
             (d/transact! conn [[:db/add (:db/id child2) :block/title "child 2 local"]])
-            (is (= 2 (count (#'sync-apply/pending-txs test-repo))))
+            (let [pending-before (#'sync-apply/pending-txs test-repo)
+                  tx-ids-before (mapv :tx-id pending-before)]
+              (is (= 2 (count pending-before)))
             (#'sync-apply/apply-remote-tx!
              test-repo
              nil
              [[:db/add (:db/id parent) :block/title "parent remote"]])
-            (let [pending (#'sync-apply/pending-txs test-repo)]
-              (is (= 0 (count pending))))))))))
+              (let [pending-after (#'sync-apply/pending-txs test-repo)
+                    tx-ids-after (mapv :tx-id pending-after)]
+                (is (= 2 (count pending-after)))
+                (is (= tx-ids-before tx-ids-after))
+                (is (= 2 (count (distinct tx-ids-after))))))))))))
 
 (deftest rebase-keeps-pending-when-rebased-empty-test
   (testing "pending txs stay when rebased txs are empty"
@@ -3052,12 +3379,16 @@
         (with-datascript-conns conn client-ops-conn
           (fn []
             (d/transact! conn [[:db/add (:db/id child1) :block/title "same"]])
-            (is (= 1 (count (#'sync-apply/pending-txs test-repo))))
+            (let [pending-before (#'sync-apply/pending-txs test-repo)
+                  tx-id-before (:tx-id (first pending-before))]
+              (is (= 1 (count pending-before)))
             (#'sync-apply/apply-remote-tx!
              test-repo
              nil
              [[:db/add (:db/id child1) :block/title "same"]])
-            (is (= 0 (count (#'sync-apply/pending-txs test-repo))))))))))
+              (let [pending-after (#'sync-apply/pending-txs test-repo)]
+                (is (= 1 (count pending-after)))
+                (is (= tx-id-before (:tx-id (first pending-after))))))))))))
 
 (deftest rebase-later-tx-for-new-block-uses-lookup-ref-test
   (testing "rebased tx after creating a block should use lookup ref instead of stale tempid"
@@ -3082,14 +3413,14 @@
                  nil
                  [[:db/add (:db/id parent) :block/title "parent remote"]])
                 (let [pending (#'sync-apply/pending-txs test-repo)
-                    expected-row [:db/add [:block/uuid block-uuid] :block/title "temp for lookup updated"]
-                    save-block-tx (some (fn [{:keys [tx]}]
-                                          (let [tx-rows (mapv (fn [[op e a v _t]]
-                                                                [op e a v])
-                                                              tx)]
-                                            (when (some #(= expected-row %) tx-rows)
-                                              tx)))
-                                        pending)]
+                      expected-row [:db/add [:block/uuid block-uuid] :block/title "temp for lookup updated"]
+                      save-block-tx (some (fn [{:keys [tx]}]
+                                            (let [tx-rows (mapv (fn [[op e a v _t]]
+                                                                  [op e a v])
+                                                                tx)]
+                                              (when (some #(= expected-row %) tx-rows)
+                                                tx)))
+                                          pending)]
                   (is (some? save-block-tx))
                   (is (not-any? string?
                                 (keep second save-block-tx))))))))))))
@@ -3485,6 +3816,58 @@
                 (str "target missing with no pending txs for uuid=" target-uuid))
             (when target'
               (is (= "remote-restored" (:block/title target'))))))))))
+
+(deftest rebase-persisted-row-contains-forward-and-inverse-outliner-ops-test
+  (testing "rebased pending tx should always persist both forward and inverse outliner ops"
+    (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
+          tx-id-holder (atom nil)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (outliner-core/delete-blocks! conn [child1] {})
+          (let [pending-before (first (#'sync-apply/pending-txs test-repo))
+                tx-id (:tx-id pending-before)]
+            (reset! tx-id-holder tx-id)
+            (is (seq (:forward-outliner-ops pending-before)))
+            (is (seq (:inverse-outliner-ops pending-before))))
+
+          (#'sync-apply/apply-remote-tx!
+           test-repo
+           nil
+           [[:db/add (:db/id parent) :block/title "parent remote"]])
+
+          (let [pending-after (#'sync-apply/pending-tx-by-id test-repo @tx-id-holder)]
+            (is (some? pending-after))
+            (is (= :rebase (:outliner-op pending-after)))
+            (is (seq (:forward-outliner-ops pending-after)))
+            (is (seq (:inverse-outliner-ops pending-after)))))))))
+
+(deftest legacy-rebase-row-with-missing-history-ops-gets-persisted-with-both-ops-test
+  (testing "legacy pending :rebase rows missing history ops should be rewritten with forward+inverse ops"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
+          tx-id (random-uuid)
+          parent-uuid (:block/uuid parent)
+          parent-title (:block/title parent)
+          remote-title "parent remote refresh"]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (ldb/transact! client-ops-conn
+                         [{:db-sync/tx-id tx-id
+                           :db-sync/pending? true
+                           :db-sync/created-at 1000
+                           :db-sync/outliner-op :rebase
+                           :db-sync/normalized-tx-data
+                           [[:db/add [:block/uuid parent-uuid] :block/title "legacy local title"]]
+                           :db-sync/reversed-tx-data
+                           [[:db/add [:block/uuid parent-uuid] :block/title parent-title]]}])
+          (#'sync-apply/apply-remote-tx!
+           test-repo
+           nil
+           [[:db/add [:block/uuid parent-uuid] :block/title remote-title]])
+          (let [pending-after (#'sync-apply/pending-tx-by-id test-repo tx-id)]
+            (is (some? pending-after))
+            (is (= :rebase (:outliner-op pending-after)))
+            (is (seq (:forward-outliner-ops pending-after)))
+            (is (seq (:inverse-outliner-ops pending-after)))))))))
 
 (deftest offload-large-title-test
   (testing "large titles are offloaded to object storage with placeholder"
