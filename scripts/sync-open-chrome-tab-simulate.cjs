@@ -35,6 +35,7 @@ const RENDERER_READY_POLL_DELAY_MS = 250;
 const FALLBACK_PAGE_NAME = 'op-sim-scratch';
 const DEFAULT_VERIFY_CHECKSUM = true;
 const DEFAULT_CLEANUP_TODAY_PAGE = true;
+const DEFAULT_CAPTURE_REPLAY = true;
 const DEFAULT_SYNC_SETTLE_TIMEOUT_MS = 3000;
 const AGENT_BROWSER_ACTION_TIMEOUT_MS = 1000000;
 const PROCESS_TIMEOUT_MS = 1000000;
@@ -72,6 +73,8 @@ function usage() {
     `  --sync-settle-timeout-ms <n> Timeout waiting for local/remote tx to settle before checksum verify (default: ${DEFAULT_SYNC_SETTLE_TIMEOUT_MS})`,
     '  --verify-checksum           Run dev checksum diagnostics after each round (default: enabled)',
     '  --no-verify-checksum        Skip post-round checksum diagnostics',
+    '  --capture-replay            Capture initial DB + per-op tx stream for local replay (default: enabled)',
+    '  --no-capture-replay         Skip replay capture payloads',
     '  --cleanup-today-page        Delete today page after simulation (default: enabled)',
     '  --no-cleanup-today-page     Keep today page unchanged after simulation',
     '  --headless                  Run agent-browser in headless mode',
@@ -117,6 +120,7 @@ function parseArgs(argv) {
     undoRedoDelayMs: DEFAULT_UNDO_REDO_DELAY_MS,
     syncSettleTimeoutMs: DEFAULT_SYNC_SETTLE_TIMEOUT_MS,
     verifyChecksum: DEFAULT_VERIFY_CHECKSUM,
+    captureReplay: DEFAULT_CAPTURE_REPLAY,
     cleanupTodayPage: DEFAULT_CLEANUP_TODAY_PAGE,
     headed: DEFAULT_HEADED,
     printOnly: false,
@@ -156,6 +160,16 @@ function parseArgs(argv) {
 
     if (arg === '--no-cleanup-today-page') {
       result.cleanupTodayPage = false;
+      continue;
+    }
+
+    if (arg === '--capture-replay') {
+      result.captureReplay = true;
+      continue;
+    }
+
+    if (arg === '--no-capture-replay') {
+      result.captureReplay = false;
       continue;
     }
 
@@ -811,6 +825,7 @@ function buildRendererProgram(config) {
     const txRejectedWarningTokenLower = txRejectedWarningToken.toLowerCase();
     const fatalWarningStateKey = '__logseqOpFatalWarnings';
     const fatalWarningPatchKey = '__logseqOpFatalWarningPatchInstalled';
+    const runStartedAtMs = Date.now();
 
     const chooseRunnableOperation = (requestedOperation, operableCount) => {
       if (
@@ -886,34 +901,64 @@ function buildRendererProgram(config) {
       return warningList.length > 0 ? warningList[warningList.length - 1] : null;
     };
 
+    const parseCreatedAtMs = (value) => {
+      if (value == null) return null;
+      if (typeof value === 'number' && Number.isFinite(value)) return value;
+      if (value instanceof Date) {
+        const ms = value.getTime();
+        return Number.isFinite(ms) ? ms : null;
+      }
+      const ms = new Date(value).getTime();
+      return Number.isFinite(ms) ? ms : null;
+    };
+
+    const getRtcLogList = () => {
+      try {
+        if (!globalThis.logseq?.api?.get_state_from_store) return [];
+        const logs = logseq.api.get_state_from_store(['rtc/logs']);
+        if (Array.isArray(logs) && logs.length > 0) return logs;
+        const latest = logseq.api.get_state_from_store(['rtc/log']);
+        return latest && typeof latest === 'object' ? [latest] : [];
+      } catch (_error) {
+        return [];
+      }
+    };
+
     const latestChecksumMismatchRtcLog = () => {
       try {
-        if (!globalThis.logseq?.api?.get_state_from_store) return null;
-        const entry = logseq.api.get_state_from_store(['rtc/log']);
-        if (!entry || typeof entry !== 'object') return null;
+        const logs = getRtcLogList();
+        for (let i = logs.length - 1; i >= 0; i -= 1) {
+          const entry = logs[i];
+          if (!entry || typeof entry !== 'object') continue;
+          const createdAtMs = parseCreatedAtMs(entry['created-at'] || entry.createdAt);
+          if (Number.isFinite(createdAtMs) && createdAtMs < runStartedAtMs) continue;
 
-        const type = String(entry.type || '').toLowerCase();
-        const localChecksum = String(
-          entry['local-checksum'] || entry.localChecksum || entry.local_checksum || ''
-        );
-        const remoteChecksum = String(
-          entry['remote-checksum'] || entry.remoteChecksum || entry.remote_checksum || ''
-        );
-        const hasMismatchType = type.includes('checksum-mismatch');
-        const hasDifferentChecksums =
-          localChecksum.length > 0 &&
-          remoteChecksum.length > 0 &&
-          localChecksum !== remoteChecksum;
+          const type = String(entry.type || '').toLowerCase();
+          const localChecksum = String(
+            entry['local-checksum'] || entry.localChecksum || entry.local_checksum || ''
+          );
+          const remoteChecksum = String(
+            entry['remote-checksum'] || entry.remoteChecksum || entry.remote_checksum || ''
+          );
+          const hasMismatchType = type.includes('checksum-mismatch');
+          const hasDifferentChecksums =
+            localChecksum.length > 0 &&
+            remoteChecksum.length > 0 &&
+            localChecksum !== remoteChecksum;
 
-        if (!hasMismatchType && !hasDifferentChecksums) return null;
-        return {
-          type: entry.type || null,
-          messageType: entry['message-type'] || entry.messageType || null,
-          localTx: entry['local-tx'] || entry.localTx || null,
-          remoteTx: entry['remote-tx'] || entry.remoteTx || null,
-          localChecksum,
-          remoteChecksum,
-        };
+          if (!hasMismatchType && !hasDifferentChecksums) continue;
+          return {
+            type: entry.type || null,
+            messageType: entry['message-type'] || entry.messageType || null,
+            localTx: entry['local-tx'] || entry.localTx || null,
+            remoteTx: entry['remote-tx'] || entry.remoteTx || null,
+            localChecksum,
+            remoteChecksum,
+            createdAt: entry['created-at'] || entry.createdAt || null,
+            raw: entry,
+          };
+        }
+        return null;
       } catch (_error) {
         return null;
       }
@@ -921,18 +966,25 @@ function buildRendererProgram(config) {
 
     const latestTxRejectedRtcLog = () => {
       try {
-        if (!globalThis.logseq?.api?.get_state_from_store) return null;
-        const entry = logseq.api.get_state_from_store(['rtc/log']);
-        if (!entry || typeof entry !== 'object') return null;
+        const logs = getRtcLogList();
+        for (let i = logs.length - 1; i >= 0; i -= 1) {
+          const entry = logs[i];
+          if (!entry || typeof entry !== 'object') continue;
+          const createdAtMs = parseCreatedAtMs(entry['created-at'] || entry.createdAt);
+          if (Number.isFinite(createdAtMs) && createdAtMs < runStartedAtMs) continue;
 
-        const type = String(entry.type || '').toLowerCase();
-        if (!type.includes('tx-rejected')) return null;
-        return {
-          type: entry.type || null,
-          messageType: entry['message-type'] || entry.messageType || null,
-          reason: entry.reason || null,
-          remoteTx: entry['t'] || entry.t || null,
-        };
+          const type = String(entry.type || '').toLowerCase();
+          if (!type.includes('tx-rejected')) continue;
+          return {
+            type: entry.type || null,
+            messageType: entry['message-type'] || entry.messageType || null,
+            reason: entry.reason || null,
+            remoteTx: entry['t'] || entry.t || null,
+            createdAt: entry['created-at'] || entry.createdAt || null,
+            raw: entry,
+          };
+        }
+        return null;
       } catch (_error) {
         return null;
       }
@@ -954,6 +1006,28 @@ function buildRendererProgram(config) {
         throw new Error('tx-rejected warning detected: ' + details);
       }
       throw new Error('checksum warning detected: ' + details);
+    };
+
+    const clearFatalSignalState = () => {
+      try {
+        const warningList = Array.isArray(window[fatalWarningStateKey])
+          ? window[fatalWarningStateKey]
+          : null;
+        if (warningList) {
+          warningList.length = 0;
+        }
+      } catch (_error) {
+        // noop
+      }
+
+      try {
+        if (globalThis.logseq?.api?.set_state_from_store) {
+          logseq.api.set_state_from_store(['rtc/log'], null);
+          logseq.api.set_state_from_store(['rtc/logs'], []);
+        }
+      } catch (_error) {
+        // noop
+      }
     };
 
     const withTimeout = async (promise, timeoutMs, label) => {
@@ -1341,6 +1415,322 @@ function buildRendererProgram(config) {
       };
     };
 
+    const replayCaptureEnabled = config.captureReplay !== false;
+    const replayCaptureStoreKey = '__logseqOpReplayCaptureStore';
+    const replayAttrByNormalizedName = {
+      uuid: ':block/uuid',
+      title: ':block/title',
+      name: ':block/name',
+      parent: ':block/parent',
+      page: ':block/page',
+      order: ':block/order',
+    };
+    const replayCaptureState = {
+      installed: false,
+      installReason: null,
+      enabled: false,
+      currentOpIndex: null,
+      txLog: [],
+    };
+    const replayCaptureStoreRoot =
+      window[replayCaptureStoreKey] && typeof window[replayCaptureStoreKey] === 'object'
+        ? window[replayCaptureStoreKey]
+        : {};
+    window[replayCaptureStoreKey] = replayCaptureStoreRoot;
+    const replayCaptureStoreEntry =
+      replayCaptureStoreRoot[config.markerPrefix] &&
+      typeof replayCaptureStoreRoot[config.markerPrefix] === 'object'
+        ? replayCaptureStoreRoot[config.markerPrefix]
+        : {};
+    replayCaptureStoreEntry.markerPrefix = config.markerPrefix;
+    replayCaptureStoreEntry.updatedAt = Date.now();
+    replayCaptureStoreEntry.initialDb = null;
+    replayCaptureStoreEntry.opLog = [];
+    replayCaptureStoreEntry.txCapture = {
+      enabled: replayCaptureEnabled,
+      installed: false,
+      installReason: null,
+      totalTx: 0,
+      txLog: [],
+    };
+    replayCaptureStoreRoot[config.markerPrefix] = replayCaptureStoreEntry;
+
+    const readAny = (value, keys) => {
+      if (!value || typeof value !== 'object') return undefined;
+      for (const key of keys) {
+        if (Object.prototype.hasOwnProperty.call(value, key)) {
+          return value[key];
+        }
+      }
+      return undefined;
+    };
+
+    const normalizeReplayAttr = (value) => {
+      if (typeof value !== 'string') return null;
+      const text = value.trim();
+      if (!text) return null;
+      if (text.startsWith(':')) {
+        return text;
+      }
+      if (text.includes('/')) {
+        return ':' + text;
+      }
+      return replayAttrByNormalizedName[text] || null;
+    };
+
+    const normalizeReplayDatom = (datom) => {
+      if (!datom || typeof datom !== 'object') return null;
+      const eRaw = readAny(datom, ['e', ':e']);
+      const aRaw = readAny(datom, ['a', ':a']);
+      const vRaw = readAny(datom, ['v', ':v']);
+      const addedRaw = readAny(datom, ['added', ':added']);
+      const e = Number(eRaw);
+      if (!Number.isInteger(e)) return null;
+      const attr = normalizeReplayAttr(typeof aRaw === 'string' ? aRaw : String(aRaw || ''));
+      if (!attr) return null;
+      let v = vRaw;
+      if (attr === ':block/uuid' && typeof vRaw === 'string') {
+        v = vRaw;
+      } else if ((attr === ':block/parent' || attr === ':block/page') && Number.isFinite(Number(vRaw))) {
+        v = Number(vRaw);
+      }
+      return {
+        e,
+        a: attr,
+        v,
+        added: addedRaw !== false,
+      };
+    };
+
+    const installReplayTxCapture = () => {
+      if (!replayCaptureEnabled) {
+        replayCaptureState.installReason = 'disabled by config';
+        replayCaptureStoreEntry.txCapture.installReason = replayCaptureState.installReason;
+        return;
+      }
+      const core = window.LSPluginCore;
+      if (!core || typeof core.hookDb !== 'function') {
+        replayCaptureState.installReason = 'LSPluginCore.hookDb unavailable';
+        replayCaptureStoreEntry.txCapture.installReason = replayCaptureState.installReason;
+        return;
+      }
+      const sinkKey = '__logseqOpReplayCaptureSinks';
+      const patchInstalledKey = '__logseqOpReplayCapturePatchInstalled';
+      const sinks = Array.isArray(window[sinkKey]) ? window[sinkKey] : [];
+      window[sinkKey] = sinks;
+
+      const sink = (type, payload) => {
+        try {
+          if (replayCaptureState.enabled && String(type || '') === 'changed' && payload && typeof payload === 'object') {
+            const rawDatoms = readAny(payload, ['txData', ':tx-data', 'tx-data', 'tx_data']);
+            const datoms = Array.isArray(rawDatoms)
+              ? rawDatoms.map(normalizeReplayDatom).filter(Boolean)
+              : [];
+            if (datoms.length > 0) {
+              const entry = {
+                capturedAt: Date.now(),
+                opIndex: Number.isInteger(replayCaptureState.currentOpIndex)
+                  ? replayCaptureState.currentOpIndex
+                  : null,
+                datoms,
+              };
+              replayCaptureState.txLog.push(entry);
+              replayCaptureStoreEntry.txCapture.txLog.push(entry);
+              replayCaptureStoreEntry.txCapture.totalTx = replayCaptureStoreEntry.txCapture.txLog.length;
+              replayCaptureStoreEntry.updatedAt = Date.now();
+            }
+          }
+        } catch (_error) {
+          // keep capture best-effort
+        }
+      };
+      sinks.push(sink);
+
+      if (window[patchInstalledKey] !== true) {
+        const original = core.hookDb.bind(core);
+        core.hookDb = (type, payload, pluginId) => {
+          try {
+            const listeners = Array.isArray(window[sinkKey]) ? window[sinkKey] : [];
+            for (const listener of listeners) {
+              if (typeof listener === 'function') {
+                listener(type, payload);
+              }
+            }
+          } catch (_error) {
+            // keep hook best-effort
+          }
+          return original(type, payload, pluginId);
+        };
+        window[patchInstalledKey] = true;
+      }
+
+      replayCaptureState.installed = true;
+      replayCaptureState.enabled = true;
+      replayCaptureState.installReason = null;
+      replayCaptureStoreEntry.txCapture.installed = true;
+      replayCaptureStoreEntry.txCapture.enabled = true;
+      replayCaptureStoreEntry.txCapture.installReason = null;
+      replayCaptureStoreEntry.updatedAt = Date.now();
+    };
+
+    const flattenAnyObjects = (value, acc = []) => {
+      if (Array.isArray(value)) {
+        for (const item of value) flattenAnyObjects(item, acc);
+        return acc;
+      }
+      if (value && typeof value === 'object') {
+        acc.push(value);
+      }
+      return acc;
+    };
+
+    const normalizeSnapshotBlock = (block) => {
+      if (!block || typeof block !== 'object') return null;
+      const id = Number(readAny(block, ['id', 'db/id', ':db/id']));
+      const uuid = readAny(block, ['uuid', 'block/uuid', ':block/uuid']);
+      if (!Number.isInteger(id) || typeof uuid !== 'string' || uuid.length === 0) return null;
+      const parent = readAny(block, ['parent', 'block/parent', ':block/parent']);
+      const page = readAny(block, ['page', 'block/page', ':block/page']);
+      const parentId = Number(readAny(parent, ['id', 'db/id', ':db/id']));
+      const pageId = Number(readAny(page, ['id', 'db/id', ':db/id']));
+      const title = readAny(block, ['title', 'block/title', ':block/title']);
+      const name = readAny(block, ['name', 'block/name', ':block/name']);
+      const order = readAny(block, ['order', 'block/order', ':block/order']);
+      return {
+        id,
+        uuid,
+        parentId: Number.isInteger(parentId) ? parentId : null,
+        pageId: Number.isInteger(pageId) ? pageId : null,
+        title: typeof title === 'string' ? title : null,
+        name: typeof name === 'string' ? name : null,
+        order: typeof order === 'string' ? order : null,
+      };
+    };
+
+    const captureInitialDbSnapshot = async () => {
+      if (!replayCaptureEnabled) {
+        return {
+          ok: false,
+          reason: 'disabled by config',
+          blockCount: 0,
+          blocks: [],
+        };
+      }
+      if (typeof logseq.api.datascript_query !== 'function') {
+        return {
+          ok: false,
+          reason: 'datascript_query API unavailable',
+          blockCount: 0,
+          blocks: [],
+        };
+      }
+
+      try {
+        const query = '[:find (pull ?b [:db/id :block/uuid :block/title :block/name :block/order {:block/parent [:db/id :block/uuid]} {:block/page [:db/id :block/uuid]}]) :where [?b :block/uuid]]';
+        const raw = await logseq.api.datascript_query(query);
+        const objects = flattenAnyObjects(raw, []);
+        const blocks = objects
+          .map(normalizeSnapshotBlock)
+          .filter(Boolean);
+        const dedup = new Map();
+        for (const block of blocks) {
+          dedup.set(block.id, block);
+        }
+        const normalized = Array.from(dedup.values())
+          .sort((a, b) => a.id - b.id);
+        return {
+          ok: true,
+          blockCount: normalized.length,
+          blocks: normalized,
+        };
+      } catch (error) {
+        return {
+          ok: false,
+          reason: describeError(error),
+          blockCount: 0,
+          blocks: [],
+        };
+      }
+    };
+
+    const snapshotBlocksToStateMap = (blocks) => {
+      const stateMap = new Map();
+      if (!Array.isArray(blocks)) return stateMap;
+      for (const block of blocks) {
+        if (!block || typeof block !== 'object') continue;
+        const id = Number(block.id);
+        if (!Number.isInteger(id)) continue;
+        stateMap.set(id, {
+          id,
+          uuid: typeof block.uuid === 'string' ? block.uuid : null,
+          title: typeof block.title === 'string' ? block.title : null,
+          name: typeof block.name === 'string' ? block.name : null,
+          order: typeof block.order === 'string' ? block.order : null,
+          parentId: Number.isInteger(block.parentId) ? block.parentId : null,
+          pageId: Number.isInteger(block.pageId) ? block.pageId : null,
+        });
+      }
+      return stateMap;
+    };
+
+    const captureChecksumStateMap = async () => {
+      const snapshot = await captureInitialDbSnapshot();
+      return {
+        ok: snapshot.ok === true,
+        reason: snapshot.reason || null,
+        state: snapshotBlocksToStateMap(snapshot.blocks),
+      };
+    };
+
+    const replayDatomEntriesFromStateDiff = (beforeMap, afterMap) => {
+      const datoms = [];
+      const allIds = new Set();
+      for (const id of beforeMap.keys()) allIds.add(id);
+      for (const id of afterMap.keys()) allIds.add(id);
+
+      const scalarAttrs = [
+        ['uuid', ':block/uuid'],
+        ['title', ':block/title'],
+        ['name', ':block/name'],
+        ['order', ':block/order'],
+      ];
+      const refAttrs = [
+        ['parentId', ':block/parent'],
+        ['pageId', ':block/page'],
+      ];
+
+      for (const id of allIds) {
+        const before = beforeMap.get(id) || null;
+        const after = afterMap.get(id) || null;
+
+        for (const [key, attr] of scalarAttrs) {
+          const beforeValue = before ? before[key] : null;
+          const afterValue = after ? after[key] : null;
+          if (beforeValue === afterValue) continue;
+          if (typeof beforeValue === 'string') {
+            datoms.push({ e: id, a: attr, v: beforeValue, added: false });
+          }
+          if (typeof afterValue === 'string') {
+            datoms.push({ e: id, a: attr, v: afterValue, added: true });
+          }
+        }
+
+        for (const [key, attr] of refAttrs) {
+          const beforeValue = before ? before[key] : null;
+          const afterValue = after ? after[key] : null;
+          if (beforeValue === afterValue) continue;
+          if (Number.isInteger(beforeValue)) {
+            datoms.push({ e: id, a: attr, v: beforeValue, added: false });
+          }
+          if (Number.isInteger(afterValue)) {
+            datoms.push({ e: id, a: attr, v: afterValue, added: true });
+          }
+        }
+      }
+
+      return datoms;
+    };
+
     const counts = {
       add: 0,
       delete: 0,
@@ -1361,11 +1751,14 @@ function buildRendererProgram(config) {
     const opReadTimeoutMs = Math.max(2000, Number(config.opTimeoutMs || 0) * 2);
 
     installFatalWarningTrap();
-    failIfFatalSignalSeen();
+    clearFatalSignalState();
 
     await withTimeout(waitForEditorReady(), phaseTimeoutMs, 'waitForEditorReady');
+    failIfFatalSignalSeen();
     const anchor = await withTimeout(getAnchor(), phaseTimeoutMs, 'getAnchor');
     await withTimeout(ensureClientRootBlock(anchor), phaseTimeoutMs, 'ensureClientRootBlock');
+
+    installReplayTxCapture();
 
     const initialManaged = await withTimeout(listManagedBlocks(), phaseTimeoutMs, 'listManagedBlocks');
     if (!initialManaged.length) {
@@ -1379,6 +1772,47 @@ function buildRendererProgram(config) {
         'insert seed block'
       );
     }
+
+    const initialDb = await withTimeout(
+      captureInitialDbSnapshot(),
+      phaseTimeoutMs,
+      'captureInitialDbSnapshot'
+    );
+    replayCaptureStoreEntry.initialDb = initialDb;
+    replayCaptureStoreEntry.updatedAt = Date.now();
+    let replaySnapshotState = {
+      ok: initialDb?.ok === true,
+      reason: initialDb?.reason || null,
+      state: snapshotBlocksToStateMap(initialDb?.blocks),
+    };
+
+    const appendReplayFallbackTxFromSnapshot = async (opIndex) => {
+      if (!replayCaptureEnabled) return;
+      const nextSnapshot = await captureChecksumStateMap();
+      if (!nextSnapshot || nextSnapshot.ok !== true || !nextSnapshot.state) {
+        replaySnapshotState = nextSnapshot;
+        return;
+      }
+      if (!replaySnapshotState || replaySnapshotState.ok !== true || !replaySnapshotState.state) {
+        replaySnapshotState = nextSnapshot;
+        return;
+      }
+      const alreadyCaptured = replayCaptureState.txLog.some((entry) => entry?.opIndex === opIndex);
+      const datoms = replayDatomEntriesFromStateDiff(replaySnapshotState.state, nextSnapshot.state);
+      if (!alreadyCaptured && datoms.length > 0) {
+        const entry = {
+          capturedAt: Date.now(),
+          opIndex,
+          source: 'snapshot-diff',
+          datoms,
+        };
+        replayCaptureState.txLog.push(entry);
+        replayCaptureStoreEntry.txCapture.txLog.push(entry);
+        replayCaptureStoreEntry.txCapture.totalTx = replayCaptureStoreEntry.txCapture.txLog.length;
+        replayCaptureStoreEntry.updatedAt = Date.now();
+      }
+      replaySnapshotState = nextSnapshot;
+    };
 
     let executed = 0;
 
@@ -1397,17 +1831,26 @@ function buildRendererProgram(config) {
 
       try {
         await sleep(Math.floor(nextRandom() * 10));
+        replayCaptureState.currentOpIndex = i;
 
         const runOperation = async () => {
           if (operation === 'add') {
             const target = operable.length > 0 ? randomItem(operable) : anchor;
             const content = nextRandom() < 0.2 ? '' : config.markerPrefix + ' add-' + i;
             const asChild = operable.length > 0 && nextRandom() < 0.35;
-            await logseq.api.insert_block(target.uuid, content, {
+            const inserted = await logseq.api.insert_block(target.uuid, content, {
               sibling: !asChild,
               before: false,
               focus: false,
             });
+            return {
+              kind: 'add',
+              targetUuid: target.uuid || null,
+              insertedUuid: inserted?.uuid || null,
+              content,
+              sibling: !asChild,
+              before: false,
+            };
           }
 
           if (operation === 'copyPaste') {
@@ -1424,11 +1867,18 @@ function buildRendererProgram(config) {
             const sourceContent = latestSource?.content || source.content || '';
             const copiedContent =
               config.markerPrefix + ' copy-' + i + (sourceContent ? ' :: ' + sourceContent : '');
-            await logseq.api.insert_block(target.uuid, copiedContent, {
+            const inserted = await logseq.api.insert_block(target.uuid, copiedContent, {
               sibling: true,
               before: false,
               focus: false,
             });
+            return {
+              kind: 'copyPaste',
+              sourceUuid: source.uuid || null,
+              targetUuid: target.uuid || null,
+              insertedUuid: inserted?.uuid || null,
+              copiedContent,
+            };
           }
 
           if (operation === 'copyPasteTreeToEmptyTarget') {
@@ -1468,33 +1918,85 @@ function buildRendererProgram(config) {
               node.content = config.markerPrefix + ' tree-copy-' + i + '-' + idx + origin;
               return node;
             });
+            let fallbackToSingleTree = false;
             try {
               await logseq.api.insert_batch_block(emptyTarget.uuid, payload, { sibling: false });
             } catch (_error) {
+              fallbackToSingleTree = true;
               for (const tree of sourceTrees) {
                 await logseq.api.insert_batch_block(emptyTarget.uuid, toBatchTree(tree), { sibling: false });
               }
             }
+            return {
+              kind: 'copyPasteTreeToEmptyTarget',
+              treeTargetUuid: treeTarget.uuid || null,
+              emptyTargetUuid: emptyTarget.uuid || null,
+              sourceUuids: sourceTrees.map((tree) => tree?.uuid).filter(Boolean),
+              payloadSize: payload.length,
+              fallbackToSingleTree,
+            };
           }
 
           if (operation === 'move') {
             const source = randomItem(operable);
             const candidates = operable.filter((block) => block.uuid !== source.uuid);
             const target = randomItem(candidates);
+            const before = nextRandom() < 0.5;
             await logseq.api.move_block(source.uuid, target.uuid, {
-              before: nextRandom() < 0.5,
+              before,
               children: false,
             });
+            return {
+              kind: 'move',
+              sourceUuid: source.uuid || null,
+              targetUuid: target.uuid || null,
+              before,
+              children: false,
+            };
           }
 
           if (operation === 'indent') {
             const candidate = await ensureIndentCandidate(operable, anchor, i);
-            await runIndent(candidate);
+            const prevUuid = await getPreviousSiblingUuid(candidate.uuid);
+            if (!prevUuid) {
+              throw new Error('No previous sibling for indent candidate');
+            }
+            await logseq.api.move_block(candidate.uuid, prevUuid, {
+              before: false,
+              children: true,
+            });
+            return {
+              kind: 'indent',
+              candidateUuid: candidate.uuid || null,
+              targetUuid: prevUuid,
+              before: false,
+              children: true,
+            };
           }
 
           if (operation === 'outdent') {
             const candidate = await ensureOutdentCandidate(operable, anchor, i);
-            await runOutdent(candidate);
+            const full = await logseq.api.get_block(candidate.uuid, { includeChildren: false });
+            const parentId = full?.parent?.id;
+            const pageId = full?.page?.id;
+            if (!parentId || !pageId || parentId === pageId) {
+              throw new Error('Outdent candidate is not nested');
+            }
+            const parent = await logseq.api.get_block(parentId, { includeChildren: false });
+            if (!parent?.uuid) {
+              throw new Error('Cannot resolve parent block for outdent');
+            }
+            await logseq.api.move_block(candidate.uuid, parent.uuid, {
+              before: false,
+              children: false,
+            });
+            return {
+              kind: 'outdent',
+              candidateUuid: candidate.uuid || null,
+              targetUuid: parent.uuid || null,
+              before: false,
+              children: false,
+            };
           }
 
           if (operation === 'delete') {
@@ -1505,25 +2007,45 @@ function buildRendererProgram(config) {
               throw new Error('Skip deleting protected client root block');
             }
             await logseq.api.remove_block(victim.uuid);
+            return {
+              kind: 'delete',
+              victimUuid: victim.uuid || null,
+            };
           }
 
           if (operation === 'undo') {
             await logseq.api.invoke_external_command('logseq.editor/undo');
             await sleep(config.undoRedoDelayMs);
+            return { kind: 'undo' };
           }
 
           if (operation === 'redo') {
             await logseq.api.invoke_external_command('logseq.editor/redo');
             await sleep(config.undoRedoDelayMs);
+            return { kind: 'redo' };
           }
+
+          return { kind: operation };
         };
 
-        await withTimeout(runOperation(), config.opTimeoutMs, operation + ' operation');
+        const opDetail = await withTimeout(runOperation(), config.opTimeoutMs, operation + ' operation');
         failIfFatalSignalSeen();
+        try {
+          await withTimeout(
+            appendReplayFallbackTxFromSnapshot(i),
+            opReadTimeoutMs,
+            'appendReplayFallbackTxFromSnapshot'
+          );
+        } catch (_error) {
+          // best-effort fallback capture
+        }
 
         counts[operation] += 1;
         executed += 1;
-        operationLog.push({ index: i, requested, executedAs: operation });
+        const opEntry = { index: i, requested, executedAs: operation, detail: opDetail || null };
+        operationLog.push(opEntry);
+        replayCaptureStoreEntry.opLog.push(opEntry);
+        replayCaptureStoreEntry.updatedAt = Date.now();
       } catch (error) {
         counts.errors += 1;
         errors.push({
@@ -1551,7 +2073,27 @@ function buildRendererProgram(config) {
           );
           counts.add += 1;
           executed += 1;
-          operationLog.push({ index: i, requested, executedAs: 'add' });
+          try {
+            await withTimeout(
+              appendReplayFallbackTxFromSnapshot(i),
+              opReadTimeoutMs,
+              'appendReplayFallbackTxFromSnapshot-recovery'
+            );
+          } catch (_error) {
+            // best-effort fallback capture
+          }
+          const opEntry = {
+            index: i,
+            requested,
+            executedAs: 'add',
+            detail: {
+              kind: 'recovery-add',
+              targetUuid: target.uuid || null,
+            },
+          };
+          operationLog.push(opEntry);
+          replayCaptureStoreEntry.opLog.push(opEntry);
+          replayCaptureStoreEntry.updatedAt = Date.now();
         } catch (recoveryError) {
           errors.push({
             index: i,
@@ -1561,6 +2103,8 @@ function buildRendererProgram(config) {
           });
           break;
         }
+      } finally {
+        replayCaptureState.currentOpIndex = null;
       }
     }
 
@@ -1598,6 +2142,16 @@ function buildRendererProgram(config) {
     }
 
     const finalManaged = await withTimeout(listManagedBlocks(), phaseTimeoutMs, 'final listManagedBlocks');
+    replayCaptureState.enabled = false;
+    const replayTxCapture = {
+      enabled: replayCaptureEnabled,
+      installed: replayCaptureState.installed === true,
+      installReason: replayCaptureState.installReason,
+      totalTx: replayCaptureState.txLog.length,
+      txLog: replayCaptureState.txLog,
+    };
+    replayCaptureStoreEntry.txCapture = replayTxCapture;
+    replayCaptureStoreEntry.updatedAt = Date.now();
     return {
       ok: errors.length === 0,
       requestedOps: config.plan.length,
@@ -1612,9 +2166,12 @@ function buildRendererProgram(config) {
       })),
       errorCount: errors.length,
       errors: errors.slice(0, 20),
+      rtcLogs: getRtcLogList(),
       requestedPlan: Array.isArray(config.plan) ? [...config.plan] : [],
       opLog: operationLog,
       opLogSample: operationLog.slice(0, 20),
+      initialDb,
+      txCapture: replayTxCapture,
       checksum,
     };
   })())()`;
@@ -2325,6 +2882,55 @@ function computeRendererEvalTimeoutMs(syncSettleTimeoutMs, opCount) {
   );
 }
 
+function buildReplayCaptureProbeProgram(markerPrefix) {
+  return `(() => {
+    const key = '__logseqOpReplayCaptureStore';
+    const marker = ${JSON.stringify(String(markerPrefix || ''))};
+    const store = window[key];
+    if (!store || typeof store !== 'object') return null;
+    const entry = store[marker];
+    if (!entry || typeof entry !== 'object') return null;
+    return entry;
+  })()`;
+}
+
+async function collectFailureReplayCapture(sessionName, markerPrefix, runOptions) {
+  try {
+    const evaluation = await runAgentBrowser(
+      sessionName,
+      ['eval', '--stdin'],
+      {
+        input: buildReplayCaptureProbeProgram(markerPrefix),
+        timeoutMs: 20000,
+        ...runOptions,
+      }
+    );
+    const value = evaluation?.data?.result;
+    return value && typeof value === 'object' ? value : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function summarizeRounds(rounds) {
+  return rounds.reduce(
+    (acc, round) => {
+      const roundCounts = round?.counts && typeof round.counts === 'object' ? round.counts : {};
+      for (const [k, v] of Object.entries(roundCounts)) {
+        acc.counts[k] = (acc.counts[k] || 0) + (Number(v) || 0);
+      }
+      acc.requestedOps += Number(round.requestedOps || 0);
+      acc.executedOps += Number(round.executedOps || 0);
+      acc.errorCount += Number(round.errorCount || 0);
+      if (round.ok !== true) {
+        acc.failedRounds.push(round.round);
+      }
+      return acc;
+    },
+    { counts: {}, requestedOps: 0, executedOps: 0, errorCount: 0, failedRounds: [] }
+  );
+}
+
 async function runSimulationForSession(sessionName, index, args, sharedConfig) {
   if (args.resetSession) {
     try {
@@ -2386,43 +2992,79 @@ async function runSimulationForSession(sessionName, index, args, sharedConfig) {
       opTimeoutMs: args.opTimeoutMs,
       fallbackPageName: FALLBACK_PAGE_NAME,
       verifyChecksum: args.verifyChecksum,
+      captureReplay: args.captureReplay,
     });
 
-    const evaluation = await runAgentBrowser(
-      sessionName,
-      ['eval', '--stdin'],
-      {
-        input: rendererProgram,
-        timeoutMs: rendererEvalTimeoutMs,
-        ...runOptions,
+    try {
+      const evaluation = await runAgentBrowser(
+        sessionName,
+        ['eval', '--stdin'],
+        {
+          input: rendererProgram,
+          timeoutMs: rendererEvalTimeoutMs,
+          ...runOptions,
+        }
+      );
+      const value = evaluation?.data?.result;
+      if (!value) {
+        throw new Error(`Unexpected empty result from agent-browser eval (round ${round + 1})`);
       }
-    );
-    const value = evaluation?.data?.result;
-    if (!value) {
-      throw new Error(`Unexpected empty result from agent-browser eval (round ${round + 1})`);
+      rounds.push({
+        round: round + 1,
+        ...value,
+      });
+    } catch (error) {
+      const captured = await collectFailureReplayCapture(sessionName, markerPrefix, runOptions);
+      if (captured && typeof captured === 'object') {
+        const fallbackOpLog = Array.isArray(captured.opLog) ? captured.opLog : [];
+        const fallbackTxCapture =
+          captured.txCapture && typeof captured.txCapture === 'object'
+            ? captured.txCapture
+            : null;
+        const fallbackInitialDb =
+          captured.initialDb && typeof captured.initialDb === 'object'
+            ? captured.initialDb
+            : null;
+        const fallbackExecutedOps = fallbackOpLog.length;
+        const roundResult = {
+          round: round + 1,
+          ok: false,
+          requestedOps: clientPlan.length,
+          executedOps: fallbackExecutedOps,
+          counts: {},
+          markerPrefix,
+          anchorUuid: null,
+          finalManagedCount: 0,
+          sampleManaged: [],
+          errorCount: 1,
+          errors: [
+            {
+              index: fallbackExecutedOps,
+              requested: 'eval',
+              attempted: 'eval',
+              message: String(error?.message || error),
+            },
+          ],
+          requestedPlan: Array.isArray(clientPlan) ? [...clientPlan] : [],
+          opLog: fallbackOpLog,
+          opLogSample: fallbackOpLog.slice(0, 20),
+          initialDb: fallbackInitialDb,
+          txCapture: fallbackTxCapture,
+          checksum: null,
+          recoveredFromEvalFailure: true,
+        };
+        rounds.push(roundResult);
+      }
+      error.partialResult = {
+        ok: false,
+        rounds: [...rounds],
+        ...summarizeRounds(rounds),
+      };
+      throw error;
     }
-    rounds.push({
-      round: round + 1,
-      ...value,
-    });
   }
 
-  const summary = rounds.reduce(
-    (acc, round) => {
-      const roundCounts = round?.counts && typeof round.counts === 'object' ? round.counts : {};
-      for (const [k, v] of Object.entries(roundCounts)) {
-        acc.counts[k] = (acc.counts[k] || 0) + (Number(v) || 0);
-      }
-      acc.requestedOps += Number(round.requestedOps || 0);
-      acc.executedOps += Number(round.executedOps || 0);
-      acc.errorCount += Number(round.errorCount || 0);
-      if (round.ok !== true) {
-        acc.failedRounds.push(round.round);
-      }
-      return acc;
-    },
-    { counts: {}, requestedOps: 0, executedOps: 0, errorCount: 0, failedRounds: [] }
-  );
+  const summary = summarizeRounds(rounds);
 
   const value = {
     ok: summary.failedRounds.length === 0,
@@ -2446,6 +3088,7 @@ async function runSimulationForSession(sessionName, index, args, sharedConfig) {
     opTimeoutMs: args.opTimeoutMs,
     seed: args.seed,
     verifyChecksum: args.verifyChecksum,
+    captureReplay: args.captureReplay,
     cleanupTodayPage: args.cleanupTodayPage,
     autoConnect: args.autoConnect,
     headed: args.headed,
@@ -2506,6 +3149,10 @@ function classifySimulationFailure(reason) {
 function buildRejectedResultEntry(sessionName, index, reason, failFastState) {
   const failureType = classifySimulationFailure(reason);
   const error = formatFailureText(reason);
+  const partialResult =
+    reason && typeof reason === 'object' && reason.partialResult && typeof reason.partialResult === 'object'
+      ? reason.partialResult
+      : null;
   const peerCancelledByFailFast =
     (failFastState?.reasonType === 'checksum_mismatch' ||
       failFastState?.reasonType === 'tx_rejected') &&
@@ -2526,6 +3173,7 @@ function buildRejectedResultEntry(sessionName, index, reason, failFastState) {
       peerInstanceIndex: failFastState.sourceIndex + 1,
       error,
       failureType: 'peer_cancelled',
+      result: partialResult,
     };
   }
 
@@ -2535,6 +3183,7 @@ function buildRejectedResultEntry(sessionName, index, reason, failFastState) {
     ok: false,
     error,
     failureType,
+    result: partialResult,
   };
 }
 
@@ -2581,6 +3230,30 @@ function buildRunArtifact({ output, args, runContext, failFastState }) {
     const errorText = item?.error ? String(item.error) : null;
     const mismatch = errorText ? extractChecksumMismatchDetailsFromError(errorText) : null;
     const txRejected = errorText ? extractTxRejectedDetailsFromError(errorText) : null;
+    const rounds = Array.isArray(item?.result?.rounds)
+      ? item.result.rounds.map((round) => ({
+        round: Number(round?.round || 0),
+        requestedOps: Number(round?.requestedOps || 0),
+        executedOps: Number(round?.executedOps || 0),
+        errorCount: Number(round?.errorCount || 0),
+        requestedPlan: Array.isArray(round?.requestedPlan)
+          ? round.requestedPlan
+          : [],
+        opLog: Array.isArray(round?.opLog)
+          ? round.opLog
+          : [],
+        errors: Array.isArray(round?.errors)
+          ? round.errors
+          : [],
+        initialDb: round?.initialDb && typeof round.initialDb === 'object'
+          ? round.initialDb
+          : null,
+        txCapture: round?.txCapture && typeof round.txCapture === 'object'
+          ? round.txCapture
+          : null,
+      }))
+      : [];
+
     return {
       session: item?.session || null,
       instanceIndex: Number.isInteger(item?.instanceIndex) ? item.instanceIndex : null,
@@ -2607,6 +3280,7 @@ function buildRunArtifact({ output, args, runContext, failFastState }) {
       errors: Array.isArray(item?.result?.rounds?.[0]?.errors)
         ? item.result.rounds[0].errors
         : [],
+      rounds,
     };
   });
 
@@ -2721,6 +3395,7 @@ async function main() {
     undoRedoDelayMs: args.undoRedoDelayMs,
     syncSettleTimeoutMs: args.syncSettleTimeoutMs,
     verifyChecksum: args.verifyChecksum,
+    captureReplay: args.captureReplay,
     cleanupTodayPage: args.cleanupTodayPage,
     headed: args.headed,
   };
@@ -2769,6 +3444,7 @@ async function main() {
     seed: args.seed,
     replaySource: replayContext.sourceArtifactPath,
     fixedPlansByInstance: replayContext.fixedPlansByInstance,
+    captureReplay: args.captureReplay,
     effectiveProfile,
     instanceProfiles,
     effectiveLaunchArgs,
