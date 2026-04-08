@@ -205,7 +205,9 @@
 
 (defn- ^:large-vars/cleanup-todo finalize-command
   [summary {:keys [command opts args cmds spec long-desc examples]}]
-  (let [opts (command-core/normalize-opts opts)
+  (let [opts (-> opts
+                 command-core/normalize-opts
+                 (#(list-command/normalize-options command %)))
         args (vec args)
         cmd-summary (command-core/command-summary {:cmds cmds
                                                    :spec spec
@@ -298,9 +300,9 @@
            (not (seq (some-> (:content opts) str string/trim))))
       (assoc (missing-query-text-result summary) :command command)
 
-      (and (#{:list-page :list-tag :list-property :list-task} command)
-           (list-command/invalid-options? opts))
-      (command-core/invalid-options-result summary (list-command/invalid-options? opts))
+      (and (#{:list-page :list-tag :list-property :list-task :list-node} command)
+           (list-command/invalid-options? command opts))
+      (command-core/invalid-options-result summary (list-command/invalid-options? command opts))
 
       (and (#{:remove-block :remove-page :remove-tag :remove-property} command)
            (remove-command/invalid-options? command opts))
@@ -527,7 +529,7 @@
         (:server-list :server-status :server-start :server-stop :server-restart)
         (server-command/build-action command server-repo)
 
-        (:list-page :list-tag :list-property :list-task)
+        (:list-page :list-tag :list-property :list-task :list-node)
         (list-command/build-action command options repo)
 
         (:search-block :search-page :search-property :search-tag)
@@ -616,6 +618,7 @@
                          :list-tag (list-command/execute-list-tag action config)
                          :list-property (list-command/execute-list-property action config)
                          :list-task (list-command/execute-list-task action config)
+                         :list-node (list-command/execute-list-node action config)
                          :search-block (search-command/execute-search-block action config)
                          :search-page (search-command/execute-search-page action config)
                          :search-property (search-command/execute-search-property action config)

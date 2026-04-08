@@ -108,6 +108,63 @@
                                                content*)))))
          (map minimal-task-item))))
 
+(defn- schema-definition-entity?
+  [entity]
+  (let [tag-idents (->> (:block/tags entity)
+                        (map :db/ident)
+                        set)]
+    (or (contains? tag-idents :logseq.class/Tag)
+        (contains? tag-idents :logseq.class/Property))))
+
+(defn- ordinary-node-entities
+  [db]
+  (let [pages (->> (d/datoms db :avet :block/name)
+                   (map #(d/entity db (:e %))))
+        blocks (->> (d/datoms db :avet :block/page)
+                    (map #(d/entity db (:e %))))]
+    (->> (concat pages blocks)
+         (remove schema-definition-entity?)
+         (reduce (fn [acc entity]
+                   (assoc acc (:db/id entity) entity))
+                 {})
+         vals)))
+
+(defn- has-all-tag-ids?
+  [entity tag-ids]
+  (if (seq tag-ids)
+    (let [node-tag-ids (->> (:block/tags entity)
+                            (map :db/id)
+                            set)]
+      (every? node-tag-ids tag-ids))
+    true))
+
+(defn- has-all-properties?
+  [entity property-idents]
+  (if (seq property-idents)
+    (every? #(contains? entity %) property-idents)
+    true))
+
+(defn- minimal-node-item
+  [entity]
+  (let [page (:block/page entity)
+        block? (some? page)]
+    (cond-> (assoc (minimal-list-item entity)
+                   :node/type (if block? "block" "page")
+                   :block/uuid (:block/uuid entity))
+      (:db/ident entity) (assoc :db/ident (:db/ident entity))
+      block? (assoc :block/page-id (:db/id page)
+                    :block/page-title (:block/title page)))))
+
+(defn list-nodes
+  "List ordinary nodes (pages and blocks) filtered by tags/properties."
+  [db {:keys [tag-ids property-idents]}]
+  (let [tag-ids (->> tag-ids (remove nil?) vec)
+        property-idents (->> property-idents (remove nil?) vec)]
+    (->> (ordinary-node-entities db)
+         (filter #(has-all-tag-ids? % tag-ids))
+         (filter #(has-all-properties? % property-idents))
+         (map minimal-node-item))))
+
 (defn- parse-time
   [value]
   (cond

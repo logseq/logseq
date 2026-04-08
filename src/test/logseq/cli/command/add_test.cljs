@@ -143,3 +143,93 @@
                                 (is (string/includes? (ex-message e) "not a date"))))))
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
+
+(def ^:private selector-tag-uuid (uuid "11111111-1111-1111-1111-111111111111"))
+(def ^:private selector-property-uuid (uuid "22222222-2222-2222-2222-222222222222"))
+
+(def ^:private selector-tag-entity
+  {:db/id 701
+   :block/name "projecttag"
+   :block/title "ProjectTag"
+   :block/uuid selector-tag-uuid
+   :block/tags [{:db/ident :logseq.class/Tag}]
+   :logseq.property/public? true
+   :logseq.property/built-in? false})
+
+(def ^:private selector-property-entity
+  {:db/id 801
+   :db/ident :demo/custom-priority
+   :block/name "custompriority"
+   :block/title "CustomPriority"
+   :block/uuid selector-property-uuid
+   :logseq.property/type :default
+   :db/cardinality :db.cardinality/one
+   :logseq.property/public? true})
+
+(def ^:private selector-mock-transport-invoke
+  (fn [_ method _ args]
+    (case method
+      :thread-api/q
+      (let [[_ [_ name-arg]] args]
+        (p/resolved
+         (cond
+           (= name-arg "projecttag") [selector-tag-entity]
+           (= name-arg "custompriority") [selector-property-entity]
+           :else [])))
+
+      :thread-api/pull
+      (let [[_ _ lookup] args]
+        (p/resolved
+         (cond
+           (or (= lookup 701)
+               (= lookup [:db/ident :demo/project-tag])
+               (= lookup [:block/uuid selector-tag-uuid]))
+           selector-tag-entity
+
+           (or (= lookup 801)
+               (= lookup [:db/ident :demo/custom-priority])
+               (= lookup [:block/uuid selector-property-uuid]))
+           selector-property-entity
+
+           :else {})))
+
+      (p/rejected (ex-info "unexpected method" {:method method :args args})))))
+
+(deftest test-resolve-tags-supports-id-uuid-ident-and-name-selectors
+  (async done
+         (-> (p/with-redefs [transport/invoke selector-mock-transport-invoke]
+               (p/let [result (add-command/resolve-tags
+                               {}
+                               "demo"
+                               [701
+                                selector-tag-uuid
+                                (str selector-tag-uuid)
+                                :demo/project-tag
+                                "ProjectTag"])]
+                 (is (= [701 701 701 701 701]
+                        (mapv :db/id result)))))
+             (p/catch (fn [e]
+                        (is false (str "unexpected error: " e))))
+             (p/finally done))))
+
+(deftest test-resolve-property-identifiers-supports-id-uuid-ident-and-name-selectors
+  (async done
+         (-> (p/with-redefs [transport/invoke selector-mock-transport-invoke]
+               (p/let [result (add-command/resolve-property-identifiers
+                               {}
+                               "demo"
+                               [801
+                                selector-property-uuid
+                                (str selector-property-uuid)
+                                :demo/custom-priority
+                                "CustomPriority"]
+                               {:allow-non-built-in? true})]
+                 (is (= [:demo/custom-priority
+                         :demo/custom-priority
+                         :demo/custom-priority
+                         :demo/custom-priority
+                         :demo/custom-priority]
+                        result))))
+             (p/catch (fn [e]
+                        (is false (str "unexpected error: " e))))
+             (p/finally done))))

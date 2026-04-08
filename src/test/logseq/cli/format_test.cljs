@@ -267,6 +267,34 @@
     (is (string/includes? result "Alpha task"))
     (is (string/includes? result "Count: 1"))))
 
+(deftest test-human-output-list-node
+  (let [result (format/format-result {:status :ok
+                                      :command :list-node
+                                      :data {:items [{:db/id 1
+                                                      :block/title "Node Page"
+                                                      :node/type "page"
+                                                      :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
+                                                      :block/created-at 40000
+                                                      :block/updated-at 90000}
+                                                     {:db/id 2
+                                                      :block/title "Node Block"
+                                                      :node/type "block"
+                                                      :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                                                      :block/page-id 1
+                                                      :block/page-title "Node Page"
+                                                      :block/created-at 45000
+                                                      :block/updated-at 95000}]}}
+                                     {:output-format nil
+                                      :now-ms 100000})]
+    (is (string/includes? result "TYPE"))
+    (is (string/includes? result "PAGE-ID"))
+    (is (string/includes? result "PAGE-TITLE"))
+    (is (not (string/includes? result "UUID")))
+    (is (not (string/includes? result "11111111-1111-1111-1111-111111111111")))
+    (is (string/includes? result "Node Page"))
+    (is (string/includes? result "Node Block"))
+    (is (string/includes? result "Count: 2"))))
+
 (deftest test-human-output-list-title-max-display-width
   (doseq [[label command item]
           [["list page truncates title by configured display width"
@@ -293,6 +321,13 @@
             :list-task
             {:db/id 4
              :block/title "ABCDEFGH"
+             :block/updated-at 90000
+             :block/created-at 40000}]
+           ["list node truncates title by configured display width"
+            :list-node
+            {:db/id 5
+             :block/title "ABCDEFGH"
+             :node/type "page"
              :block/updated-at 90000
              :block/created-at 40000}]]]
     (testing label

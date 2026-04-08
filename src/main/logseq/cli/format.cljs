@@ -361,6 +361,29 @@
   ([items now-ms title-max-display-width]
    (format-list-dynamic items now-ms list-task-columns {:title-max-display-width title-max-display-width})))
 
+(defn- normalize-node-type
+  [value]
+  (cond
+    (keyword? value) (name value)
+    (string? value) value
+    :else "-"))
+
+(def ^:private list-node-columns
+  [["ID"         (fn [item _] (or (:db/id item) (:id item))) [:db/id :id]]
+   ["TITLE"      (fn [item _] (or (:title item) (:block/title item) (:name item))) [:title :block/title :name]]
+   ["TYPE"       (fn [item _] (normalize-node-type (:node/type item))) [:node/type] true]
+   ["PAGE-ID"    (fn [item _] (:block/page-id item)) [:block/page-id]]
+   ["PAGE-TITLE" (fn [item _] (:block/page-title item)) [:block/page-title]]
+   ["IDENT"      (fn [item _] (:db/ident item)) [:db/ident]]
+   ["UPDATED-AT" (fn [item now-ms] (human-ago (or (:updated-at item) (:block/updated-at item)) now-ms)) [:updated-at :block/updated-at]]
+   ["CREATED-AT" (fn [item now-ms] (human-ago (or (:created-at item) (:block/created-at item)) now-ms)) [:created-at :block/created-at]]])
+
+(defn- format-list-node
+  ([items now-ms]
+   (format-list-node items now-ms nil))
+  ([items now-ms title-max-display-width]
+   (format-list-dynamic items now-ms list-node-columns {:title-max-display-width title-max-display-width})))
+
 (defn- quote-posix-shell
   [value]
   (str "'" (string/replace (normalize-cell value) #"'" "'\"'\"'") "'"))
@@ -873,6 +896,7 @@
         :list-tag (format-list-tag (:items data) now-ms list-title-max-display-width)
         :list-property (format-list-property (:items data) now-ms list-title-max-display-width)
         :list-task (format-list-task (:items data) now-ms list-title-max-display-width)
+        :list-node (format-list-node (:items data) now-ms list-title-max-display-width)
         (:search-block :search-page :search-property :search-tag)
         (format-list-page (:items data) now-ms)
         :upsert-block (format-upsert-block context (:result data))

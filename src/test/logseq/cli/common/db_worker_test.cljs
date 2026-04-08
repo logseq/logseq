@@ -228,3 +228,117 @@
       (is (= :logseq.property/priority.high (:logseq.property/priority visible-task)))
       (is (= "2026-02-10T08:00:00.000Z" (:logseq.property/scheduled visible-task)))
       (is (= "2026-02-12T18:00:00.000Z" (:logseq.property/deadline visible-task))))))
+
+(defn- create-list-node-test-db
+  []
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:tag-alpha {}
+                         :tag-beta {}
+                         :tag-gamma {}}
+               :properties {:prop-alpha {:logseq.property/type :default}
+                            :prop-beta {:logseq.property/type :default}
+                            :prop-gamma {:logseq.property/type :default}}
+               :pages-and-blocks [{:page {:block/title "Node Page AB"
+                                          :block/created-at 1000
+                                          :block/updated-at 2000
+                                          :build/tags [:tag-alpha :tag-beta]
+                                          :build/properties {:prop-alpha "a"
+                                                             :prop-beta "b"}}
+                                  :blocks [{:block/title "Node Block AB"
+                                            :build/tags [:tag-alpha :tag-beta]
+                                            :build/properties {:prop-alpha "a"
+                                                               :prop-beta "b"}}
+                                           {:block/title "Node Block A"
+                                            :build/tags [:tag-alpha]
+                                            :build/properties {:prop-alpha "a"}}]}
+                                 {:page {:block/title "Node Page A"
+                                         :block/created-at 3000
+                                         :block/updated-at 4000
+                                         :build/tags [:tag-alpha]
+                                         :build/properties {:prop-alpha "a"}}}
+                                 {:page {:block/title "Node Page B"
+                                         :block/created-at 5000
+                                         :block/updated-at 6000
+                                         :build/tags [:tag-beta]
+                                         :build/properties {:prop-beta "b"}}}]})]
+    @conn))
+
+(defn- title->id
+  [db title]
+  (->> (d/q '[:find [?e ...]
+              :in $ ?title
+              :where [?e :block/title ?title]]
+            db title)
+       first))
+
+(defn- block-title->id
+  [db title]
+  (->> (d/q '[:find [?e ...]
+              :in $ ?title
+              :where
+              [?e :block/title ?title]
+              [?e :block/page]]
+            db title)
+       first))
+
+(defn- invoke-list-nodes
+  [db options]
+  (when-let [list-nodes-fn (resolve 'logseq.cli.common.db-worker/list-nodes)]
+    (list-nodes-fn db options)))
+
+(defn- class-entity-id-by-name
+  [db class-ident block-name]
+  (->> (d/q '[:find [?e ...]
+              :in $ ?class-ident ?block-name
+              :where
+              [?e :block/name ?block-name]
+              [?e :block/tags ?class]
+              [?class :db/ident ?class-ident]]
+            db class-ident block-name)
+       first))
+
+(defn- property-ident-by-name
+  [db block-name]
+  (some-> (class-entity-id-by-name db :logseq.class/Property block-name)
+          ((fn [id] (d/entity db id)))
+          :db/ident))
+
+(deftest test-list-nodes-filter-contract
+  (let [db (create-list-node-test-db)
+        tag-alpha-id (class-entity-id-by-name db :logseq.class/Tag "tag-alpha")
+        tag-beta-id (class-entity-id-by-name db :logseq.class/Tag "tag-beta")
+        prop-alpha-ident (property-ident-by-name db "prop-alpha")
+        prop-beta-ident (property-ident-by-name db "prop-beta")
+        page-ab-id (title->id db "Node Page AB")
+        page-a-id (title->id db "Node Page A")
+        page-b-id (title->id db "Node Page B")
+        block-ab-id (block-title->id db "Node Block AB")
+        block-a-id (block-title->id db "Node Block A")
+        tag-match-ids (list-item-ids (or (invoke-list-nodes db {:tag-ids [tag-alpha-id tag-beta-id]}) []))
+        property-match-ids (list-item-ids (or (invoke-list-nodes db {:property-idents [prop-alpha-ident prop-beta-ident]}) []))
+        combined-match-ids (list-item-ids (or (invoke-list-nodes db {:tag-ids [tag-alpha-id tag-beta-id]
+                                                                     :property-idents [prop-alpha-ident prop-beta-ident]}) []))
+        schema-definition-ids (->> (concat (d/datoms db :avet :block/tags :logseq.class/Tag)
+                                           (d/datoms db :avet :block/tags :logseq.class/Property))
+                                   (map :e)
+                                   set)]
+    (testing "list-nodes function must exist"
+      (is (some? (resolve 'logseq.cli.common.db-worker/list-nodes))))
+
+    (testing "tag filter uses all-of semantics"
+      (is (= #{page-ab-id block-ab-id} tag-match-ids))
+      (is (not (contains? tag-match-ids page-a-id)))
+      (is (not (contains? tag-match-ids page-b-id))))
+
+    (testing "property filter uses all-of semantics"
+      (is (= #{page-ab-id block-ab-id} property-match-ids))
+      (is (not (contains? property-match-ids page-a-id)))
+      (is (not (contains? property-match-ids block-a-id))))
+
+    (testing "tag/property filters combine with AND semantics"
+      (is (= #{page-ab-id block-ab-id} combined-match-ids)))
+
+    (testing "schema-definition entities are excluded from node results"
+      (is (empty? (set/intersection tag-match-ids schema-definition-ids)))
+      (is (empty? (set/intersection property-match-ids schema-definition-ids)))
+      (is (empty? (set/intersection combined-match-ids schema-definition-ids))))))
