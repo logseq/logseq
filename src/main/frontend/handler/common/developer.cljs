@@ -95,6 +95,31 @@
       (string/replace #"[\\/]+" "_")
       (str "_checksum_" (quot (util/time-ms) 1000))))
 
+(defn- client-ops-export-file-name
+  [repo]
+  (-> (or repo "graph")
+      (string/replace #"^/+" "")
+      (string/replace #"[\\/]+" "_")
+      (str "_client_ops_" (quot (util/time-ms) 1000))))
+
+(defn- ->uint8array
+  [data]
+  (cond
+    (instance? js/Uint8Array data)
+    data
+
+    (js/ArrayBuffer.isView data)
+    (js/Uint8Array. (.-buffer data) (.-byteOffset data) (.-byteLength data))
+
+    (instance? js/ArrayBuffer data)
+    (js/Uint8Array. data)
+
+    (array? data)
+    (js/Uint8Array. data)
+
+    :else
+    nil))
+
 (defn- <fetch-server-checksum-diagnostics
   [repo]
   (let [base (rtc-handler/http-base)
@@ -197,6 +222,29 @@
         (p/catch (fn [error]
                    (js/console.error "recompute-checksum-diagnostics failed:" error)
                    (notification/show! "Failed to compute graph checksum diagnostics." :error))))
+    (notification/show! "No graph found" :warning)))
+
+(defn ^:export export-client-ops-sqlite
+  []
+  (if-let [repo (state/get-current-repo)]
+    (-> (state/<invoke-db-worker-direct-pass :thread-api/export-client-ops-db repo)
+        (p/then (fn [data]
+                  (if-let [payload (->uint8array data)]
+                    (let [filename (client-ops-export-file-name repo)
+                          blob (js/Blob. #js [payload] (clj->js {:type "application/octet-stream"}))]
+                      (utils/saveToFile blob filename "sqlite")
+                      (notification/show!
+                       (str "Client ops SQLite exported: " filename ".sqlite")
+                       :success
+                       false))
+                    (notification/show!
+                     (str "Client ops SQLite export failed: invalid payload type "
+                          (pr-str (type data))
+                          ".")
+                     :warning))))
+        (p/catch (fn [error]
+                   (js/console.error "export-client-ops-sqlite failed:" error)
+                   (notification/show! "Failed to export client ops SQLite." :error))))
     (notification/show! "No graph found" :warning)))
 
 (defn import-chosen-graph
