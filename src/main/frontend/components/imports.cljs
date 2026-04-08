@@ -444,7 +444,7 @@
   (let [{:keys [total current-idx current-page label]} (state/sub :graph/importing-state)
         label (or label (t :import/loading))
         left-label (if (and current-idx total (= current-idx total))
-                     [:div.flex.flex-row.font-bold "Loading ..."]
+                     [:div.flex.flex-row.font-bold (t :ui/loading)]
                      [:div.flex.flex-row.font-bold
                       label
                       [:div.hidden.md:flex.flex-row
@@ -483,14 +483,14 @@
         [:article.flex.flex-col.items-center.importer.py-16.px-8
          (when-not (util/mobile?)
            [:section.c.text-center
-            [:h1 (t :on-boarding/importing-title)]
-            [:h2 (t :on-boarding/importing-desc)]])
+            [:h1 (t :onboarding.import/title)]
+            [:h2 (t :onboarding.import/desc)]])
          [:section.d.md:flex.flex-col
           [:label.action-input.flex.items-center.mx-2.my-2
            [:span.as-flex-center [:i (svg/logo 28)]]
            [:span.flex.flex-col
-            [[:strong "SQLite"]
-             [:small (t :on-boarding/importing-sqlite-desc)]]]
+              [[:strong (t :import/sqlite-title)]
+             [:small (t :onboarding.import/sqlite-desc)]]]
            [:input.absolute.hidden
             {:id "import-sqlite-db"
              :type "file"
@@ -501,8 +501,8 @@
           [:label.action-input.flex.items-center.mx-2.my-2
            [:span.as-flex-center [:i (svg/logo 28)]]
            [:span.flex.flex-col
-            [[:strong "SQLite + assets (.zip)"]
-             [:small "Import a zip containing db.sqlite and an assets folder"]]]
+              [[:strong (t :import/sqlite-and-assets-title)]
+               [:small (t :import/sqlite-and-assets-desc)]]]
            [:input.absolute.hidden
             {:id "import-sqlite-zip"
              :type "file"
@@ -515,8 +515,8 @@
             [:label.action-input.flex.items-center.mx-2.my-2
              [:span.as-flex-center [:i (svg/logo 28)]]
              [:span.flex.flex-col
-              [[:strong "File to DB graph"]
-               [:small "Import a file-based Logseq graph folder into a new DB graph"]]]
+              [[:strong (t :import/file-to-db-title)]
+               [:small (t :import/file-to-db-desc)]]]
              ;; Test form style changes
              #_[:a.button {:on-click #(import-file-to-db-handler nil {:import-graph-fn js/alert})} "Open"]
              [:input.absolute.hidden
@@ -530,8 +530,8 @@
           [:label.action-input.flex.items-center.mx-2.my-2
            [:span.as-flex-center [:i (svg/logo 28)]]
            [:span.flex.flex-col
-            [[:strong "Debug Transit"]
-             [:small "Import debug transit file into a new DB graph"]]]
+              [[:strong (t :import/debug-transit-title)]
+               [:small (t :import/debug-transit-desc)]]]
            [:input.absolute.hidden
             {:id "import-debug-transit"
              :type "file"
@@ -542,8 +542,8 @@
           [:label.action-input.flex.items-center.mx-2.my-2
            [:span.as-flex-center [:i (svg/logo 28)]]
            [:span.flex.flex-col
-            [[:strong "EDN to DB graph"]
-             [:small "Import a DB graph's EDN export into a new DB graph"]]]
+              [[:strong (t :import/db-edn-title)]
+               [:small (t :import/db-edn-desc)]]]
            [:input.absolute.hidden
             {:id "import-db-edn"
              :type "file"

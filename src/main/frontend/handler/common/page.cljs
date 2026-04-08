@@ -55,12 +55,12 @@
                       title)]
        (cond
          (and has-tags? (nil? title'))
-         (notification/show! (t :page/page-name-cannot-include-hash) :error)
+         (notification/show! (t :page.validation/name-no-hash) :error)
 
          (and has-tags?
               (seq (set/intersection ldb/private-tags (set (map :db/ident (:block/tags parsed-result))))))
          (notification/show! (i18n/interpolate-rich-text-node
-                              (t :page/new-page-cant-set-built-in-tags)
+                              (t :page.validation/cant-set-built-in-tags)
                               [(i18n/locale-join-rich-text-node
                                 (keep #(when (ldb/private-tags (:db/ident %))
                                          (pr-str (:block/title %)))
@@ -148,7 +148,7 @@
              (p/do!
               (config-handler/set-config! :default-home (dissoc default-home :page))
               (config-handler/set-config! :feature/enable-journals? true)
-              (notification/show! (t :settings/journals-enabled) :success)))
+              (notification/show! (t :settings.features/journals-enabled) :success)))
            (-> (p/let [res (ui-outliner-tx/transact!
                             {:outliner-op :delete-page}
                             (outliner-op/delete-page! page-uuid))]

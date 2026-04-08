@@ -73,15 +73,15 @@
   (testing "t keeps locale-specific punctuation around placeholders"
     (set-language! :en)
     (is (= "Page \"Inbox\" was deleted successfully!"
-           (i18n/t :page/deleted-successfully "Inbox")))
+           (i18n/t :page.delete/success "Inbox")))
 
     (set-language! :zh-CN)
     (is (= "页面“Inbox”已成功删除！"
-           (i18n/t :page/deleted-successfully "Inbox")))
+           (i18n/t :page.delete/success "Inbox")))
 
     (set-language! :zh-Hant)
     (is (= "頁面「Inbox」已成功刪除！"
-           (i18n/t :page/deleted-successfully "Inbox")))))
+           (i18n/t :page.delete/success "Inbox")))))
 
 (deftest tt-test
   (testing "tt returns the first translated key"
@@ -203,12 +203,16 @@
         opts {:year "numeric" :month "long" :day "numeric"}]
     (set-language! :en)
     (is (= "4/5/2026"
+           (i18n/locale-format-date d {})))
+    (is (= "Apr 5, 2026"
            (i18n/locale-format-date d)))
     (is (= "April 5, 2026"
            (i18n/locale-format-date d opts)))
 
     (set-language! :zh-CN)
     (is (= "2026/4/5"
+           (i18n/locale-format-date d {})))
+    (is (= "2026年4月5日"
            (i18n/locale-format-date d)))
     (is (= "2026年4月5日"
            (i18n/locale-format-date d opts)))))
@@ -226,3 +230,85 @@
     (set-language! :id)
     (is (= "09.07"
            (i18n/locale-format-time d)))))
+
+(deftest interpolate-sentence-test
+  (testing "plain text with no substitution"
+    (is (= [:<> "No substitution needed."]
+           (i18n/interpolate-sentence "No substitution needed."))))
+
+  (testing "placeholders only replace {1} {2} in order"
+    (is (= [:<> "Hello Bob, you have 3 unread alerts."]
+           (i18n/interpolate-sentence
+            "Hello {1}, you have {2} unread alerts."
+            :placeholders ["Bob" "3"]))))
+
+  (testing "single placeholder with unused extra placeholders"
+    (is (= [:<> "Status: active."]
+           (i18n/interpolate-sentence
+            "Status: {1}."
+            :placeholders ["active" "ignored"]))))
+
+  (testing "array links replace all {{text}} in order"
+    (is (= [:<>
+            "Click "
+            [:a {:href "/signup" :target "_blank"} "Sign up"]
+            " to continue."]
+           (i18n/interpolate-sentence
+            "Click {{Sign up}} to continue."
+            :links [{:href "/signup" :target "_blank"}]))))
+
+  (testing "array links with multiple {{text}} use successive link attrs"
+    (is (= [:<>
+            "Check "
+            [:a {:href "/terms"} "Terms"]
+            " and "
+            [:a {:href "/privacy"} "Privacy Policy"]
+            "."]
+           (i18n/interpolate-sentence
+            "Check {{Terms}} and {{Privacy Policy}}."
+            :links [{:href "/terms"} {:href "/privacy"}]))))
+
+  (testing "hash links replace $key{{text}} by matching keys"
+    (is (= [:<>
+            "Visit "
+            [:a {:href "https://github.com/example" :target "_blank"} "GitHub"]
+            " to report issues or read "
+            [:a {:href "https://docs.example.com"} "documentation"]
+            "."]
+           (i18n/interpolate-sentence
+            "Visit $github{{GitHub}} to report issues or read $docs{{documentation}}."
+            :links {:github {:href "https://github.com/example" :target "_blank"}
+                    :docs {:href "https://docs.example.com"}}))))
+
+  (testing "hash links skip unknown keys gracefully"
+    (is (= [:<>
+            "See "
+            [:a {:href "/faq"} "FAQ"]
+            "."]
+           (i18n/interpolate-sentence
+            "See $faq{{FAQ}}."
+            :links {:faq {:href "/faq"} :unused {:href "/nowhere"}}))))
+
+  (testing "placeholders applied before link substitution"
+    (is (= [:<>
+            "Hello Alice, your browser doesn't support "
+            [:a {:href "https://example.com/api" :target "_blank"} "The Storage API"]
+            "."]
+           (i18n/interpolate-sentence
+            "Hello {1}, your browser doesn't support {{The Storage API}}."
+            :placeholders ["Alice"]
+            :links [{:href "https://example.com/api" :target "_blank"}]))))
+
+  (testing "template with no link markers returns plain text fragment"
+    (is (= [:<> "Nothing to link here."]
+           (i18n/interpolate-sentence
+            "Nothing to link here."
+            :links [{:href "/somewhere"}]))))
+
+  (testing "empty text segments before link are omitted"
+    (is (= [:<>
+            [:a {:href "/start"} "Start here"]
+            " to begin."]
+           (i18n/interpolate-sentence
+            "{{Start here}} to begin."
+            :links [{:href "/start"}])))))

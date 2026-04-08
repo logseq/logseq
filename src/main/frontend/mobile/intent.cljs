@@ -54,13 +54,13 @@
 (defn open-or-share-file
   "Share file to mobile platform"
   [uri]
-  (p/let [options [{:title "Open"
+  (p/let [options [{:title (t :ui/open)
                     :style "DEFAULT"}
-                   {:title "Share"}
-                   {:title "Cancel"
+                   {:title (t :mobile.intent/share)}
+                   {:title (t :ui/cancel)
                     :style "CANCEL"}]
-          result (.showActions ActionSheet (clj->js {:title "File Options"
-                                                     :message "Select an option to perform"
+          result (.showActions ActionSheet (clj->js {:title (t :mobile.intent/file-options)
+                                                     :message (t :mobile.intent/select-option-prompt)
                                                      :options options}))
           index (.-index result)]
 
@@ -68,8 +68,8 @@
       (if (and (= index 0) (mobile-util/native-android?))
         (.openFile mobile-util/folder-picker (clj->js {:uri uri}))
         (.share Share (clj->js {:url uri
-                                :dialogTitle "Open file with your favorite app"
-                                :title "Open file with your favorite app"}))))))
+                                :dialogTitle (t :mobile.intent/open-with-app)
+                                :title (t :mobile.intent/open-with-app)}))))))
 
 (defn- is-link
   [url]
@@ -127,7 +127,7 @@
     (-> (embed-asset-file url format)
         (p/catch (fn [error]
                    (log/error :share-import-media-failed {:error error :url url})
-                   (notification/show! (t :mobile/shared-media-import-failed) :error false))))))
+                   (notification/show! (t :mobile.share/media-import-failed) :error false))))))
 
 (defn- handle-received-application [result]
   (p/let [{:keys [url type]} result
@@ -182,7 +182,7 @@
         result)
       (p/catch (fn [error]
                  (log/error :handle-asset-file {:error error :url url})
-                 (notification/show! (t :mobile/shared-file-import-failed) :error false)))))
+                 (notification/show! (t :mobile.share/file-import-failed) :error false)))))
 
 (defn- handle-payload-resource
   [{:keys [type name ext url] :as resource} format]

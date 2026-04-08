@@ -433,7 +433,7 @@
         (if recycled?
           [:div.flex-1.page.relative.cp__page-inner-wrap
            [:div.relative.grid.gap-4.sm:gap-8.page-inner.mb-16
-            [:div.opacity-75 "Node has been moved to Recycle"]]]
+            [:div.opacity-75 (t :page/moved-to-recycle)]]]
           [:div.flex-1.page.relative.cp__page-inner-wrap
            (merge (if (seq (:block/tags page))
                     (let [page-names (map :block/title (:block/tags page))]
@@ -507,7 +507,7 @@
                             class-page? property-page?)
                 [:div.fade-in.delay {:key "page-unlinked-references"}
                  (reference/unlinked-references page {:sidebar? sidebar?})])])]))
-      [:div.opacity-75 "Page not found"])))
+      [:div.opacity-75 (t :page/not-found)])))
 
 (rum/defcs page-aux < rum/reactive
   {:init (fn [state]
@@ -609,8 +609,8 @@
   [state]
   (let [*simulation-paused? pixi/*simulation-paused?]
     [:div.flex.flex-col.mb-2
-     [:p {:title "Pause simulation"}
-      "Pause simulation"]
+     [:p {:title (t :graph/pause-simulation)}
+      (t :graph/pause-simulation)]
      (ui/toggle
       (rum/react *simulation-paused?)
       (fn []
@@ -653,7 +653,7 @@
       [:div.shadow-xl.rounded-sm
        [:ul
         (graph-filter-section
-         [:span.font-medium "Nodes"]
+         [:span.font-medium (t :graph/nodes)]
          (fn [open?]
            (filter-expand-area
             open?
@@ -681,7 +681,7 @@
                 ;;      (set-setting! :layout value))
                 ;;    {:class "graph-layout"})]
               [:div.flex.items-center.justify-between.mb-2
-               [:span (t :settings/enable-journals)]
+               [:span (t :settings.features/enable-journals)]
                  ;; FIXME: why it's not aligned well?
                [:div.mt-1
                 (ui/toggle journal?
@@ -691,7 +691,7 @@
                                (set-setting! :journal? value)))
                            true)]]
               [:div.flex.items-center.justify-between.mb-2
-               [:span "Orphan pages"]
+               [:span (t :graph/orphan-pages)]
                [:div.mt-1
                 (ui/toggle orphan-pages?
                            (fn []
@@ -700,7 +700,7 @@
                                (set-setting! :orphan-pages? value)))
                            true)]]
               [:div.flex.items-center.justify-between.mb-2
-               [:span "Built-in pages"]
+               [:span (t :graph/built-in-pages)]
                [:div.mt-1
                 (ui/toggle builtin-pages?
                            (fn []
@@ -709,7 +709,7 @@
                                (set-setting! :builtin-pages? value)))
                            true)]]
               [:div.flex.items-center.justify-between.mb-2
-               [:span "Excluded pages"]
+               [:span (t :graph/excluded-pages)]
                [:div.mt-1
                 (ui/toggle excluded-pages?
                            (fn []
@@ -719,7 +719,7 @@
                            true)]]
 
               [:div.flex.flex-col.mb-2
-               [:p "Created before"]
+               [:p (t :graph/created-before)]
                (when created-at-filter
                  [:div (.toDateString (js/Date. (+ created-at-filter (get-in graph [:all-pages :created-at-min]))))])
 
@@ -737,8 +737,8 @@
 
               (when (seq focus-nodes)
                 [:div.flex.flex-col.mb-2
-                 [:p {:title "N hops from selected nodes"}
-                  "N hops from selected nodes"]
+                 [:p {:title (t :graph/n-hops-from-selected-nodes)}
+                  (t :graph/n-hops-from-selected-nodes)]
                  (ui/tooltip
                   (ui/slider (or n-hops 10)
                              {:min 1
@@ -753,10 +753,10 @@
                                                       (reset! *created-at-filter nil)
                                                       (set-setting! :created-at-filter nil)
                                                       (state/clear-search-filters!))}
-               "Reset Graph"]]]))
+               (t :graph/reset)]]]))
          {})
         (graph-filter-section
-         [:span.font-medium "Search"]
+         [:span.font-medium (t :graph/search)]
          (fn [open?]
            (filter-expand-area
             open?
@@ -770,12 +770,12 @@
                     svg/close]])
 
                 [:a.opacity-70.opacity-100 {:on-click state/clear-search-filters!}
-                 "Clear All"]]
+                 (t :notification/clear-all)]]
                [:a.opacity-70.opacity-100 {:on-click #(route-handler/go-to-search! :graph)}
-                "Click to search"])]))
+                (t :graph/click-to-search)])]))
          {:search-filters search-graph-filters})
         (graph-filter-section
-         [:span.font-medium "Forces"]
+         [:span.font-medium (t :graph/forces)]
          (fn [open?]
            (filter-expand-area
             open?
@@ -788,8 +788,8 @@
               (simulation-switch)
 
               [:div.flex.flex-col.mb-2
-               [:p {:title "Link Distance"}
-                "Link Distance"]
+               [:p {:title (t :graph/link-distance)}
+                (t :graph/link-distance)]
                (ui/tooltip
                 (ui/slider (/ link-dist 10)
                            {:min 1                                  ;; 10
@@ -800,8 +800,8 @@
                 [:div link-dist])]
 
               [:div.flex.flex-col.mb-2
-               [:p {:title "Charge Strength"}
-                "Charge Strength"]
+               [:p {:title (t :graph/charge-strength)}
+                (t :graph/charge-strength)]
                (ui/tooltip
                 (ui/slider (/ charge-strength 100)
                            {:min -10                                ;;-1000
@@ -812,8 +812,8 @@
                 [:div charge-strength])]
 
               [:div.flex.flex-col.mb-2
-               [:p {:title "Charge Range"}
-                "Charge Range"]
+               [:p {:title (t :graph/charge-range)}
+                (t :graph/charge-range)]
                (ui/tooltip
                 (ui/slider (/ charge-range 100)
                            {:min 5                                  ;;500
@@ -829,17 +829,17 @@
                             (reset! *link-dist 70)
                             (reset! *charge-strength -600)
                             (reset! *charge-range 600))}
-               "Reset Forces"]]]))
+               (t :graph/reset-forces)]]]))
          {})
         (graph-filter-section
-         [:span.font-medium "Export"]
+         [:span.font-medium (t :ui/export)]
          (fn [open?]
            (filter-expand-area
             open?
             (when-let [canvas (js/document.querySelector "#global-graph canvas")]
               [:div.p-6
                  ;; We'll get an empty image if we don't wrap this in a requestAnimationFrame
-               [:div [:a {:on-click #(.requestAnimationFrame js/window (fn [] (utils/canvasToImage canvas "graph" "png")))} "as PNG"]]])))
+               [:div [:a {:on-click #(.requestAnimationFrame js/window (fn [] (utils/canvasToImage canvas "graph" "png")))} (t :graph/as-png)]]])))
          {:search-filters search-graph-filters})]]]]))
 
 (defonce last-node-position (atom nil))
@@ -940,7 +940,7 @@
   (let [show-journals-in-page-graph? (rum/react *show-journals-in-page-graph?)]
     [:div.sidebar-item.flex-col
      [:div.flex.items-center.justify-between.mb-0
-      [:span (t :right-side-bar/show-journals)]
+      [:span (t :graph.page/show-journals)]
       [:div.mt-1
        (ui/toggle show-journals-in-page-graph? ;my-val;
                   (fn []
@@ -994,7 +994,7 @@
         (ui/icon "alert-triangle")]]
       [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
        [:h3#modal-headline.text-lg.leading-6.font-medium
-        (t :page/delete-confirmation)]]]
+        (t :page.delete/confirm-title)]]]
 
      [:ol.p-2.pt-4
       (for [page-item pages]
@@ -1002,7 +1002,7 @@
          [:a {:href (rfe/href :page {:name (:block/uuid page-item)})}
           (component-block/page-cp {} page-item)]])]
 
-     [:p.px-2.opacity-50 [:small (t :page/delete-total (count pages))]]
+     [:p.px-2.opacity-50 [:small (t :page.delete/total (count pages))]]
 
      [:div.pt-6.flex.justify-end.gap-4
       (ui/button
@@ -1022,7 +1022,7 @@
                                                                        (swap! failed-pages conj (:block/name page)))}))
                                            pages))]
                        (if (seq @failed-pages)
-                         (notification/show! (t :page/failed-to-delete-pages (string/join ", " (map pr-str @failed-pages)))
+                         (notification/show! (t :page.delete/warning (string/join ", " (map pr-str @failed-pages)))
                                              :warning false)
                          (notification/show! (t :ui/all-done) :success))))
                    (js/setTimeout #(refresh-fn) 200)))]]))

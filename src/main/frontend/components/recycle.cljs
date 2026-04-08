@@ -66,14 +66,16 @@
       (deleted-by-avatar user)
       [:div.min-w-0
        [:div.truncate
-        (t (if (ldb/page? root) :nav/page-deleted :nav/block-deleted)
+        (t (if (ldb/page? root)
+             :storage.recycle/page-deleted-at
+             :storage.recycle/block-deleted-at)
            (i18n/locale-format-date (js/Date. deleted-at)))]]]
      (shui/button
       {:variant :ghost
        :size :xs
        :class "!py-0 !px-1 h-4"
        :on-click #(page-handler/restore-recycled! (:block/uuid root))}
-      (t :nav/restore))]))
+      (t :storage.recycle/restore))]))
 (defn- deleted-root-outliner
   [root]
   (component-block/block-container
@@ -108,4 +110,4 @@
              [:div {:key (str (:block/uuid root))}
               (deleted-root-header db* root)
               (deleted-root-outliner root)])]])
-       [:div.text-sm.text-muted-foreground "Recycle is empty."])]))
+       [:div.text-sm.text-muted-foreground (t :storage.recycle/empty)])]))

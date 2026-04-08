@@ -40,7 +40,7 @@
          [:div.w-10.h-10.rounded-full.flex.items-center.justify-center.text-base.font-semibold
           initial]
          [:div.flex.flex-col.items-start
-          [:span.text-base.font-semibold (or username (t :mobile/settings-account))]
+          [:span.text-base.font-semibold (or username (t :mobile.settings/account))]
           [:span.text-xs email]]]])]))
 
 (defn theme-select
@@ -51,14 +51,13 @@
     :on-change (fn [e]
                  (let [new-value (.. e -target -value)]
                    (on-change new-value)))}
-   [:option {:value "system"} (t :settings/theme-system)]
-   [:option {:value "light"}  (t :settings/theme-light)]
-   [:option {:value "dark"}   (t :settings/theme-dark)]])
+   [:option {:value "system"} (t :settings.general/theme-system)]
+   [:option {:value "light"}  (t :settings.general/theme-light)]
+   [:option {:value "dark"}   (t :settings.general/theme-dark)]])
 
 (rum/defc log
   []
-  (let [_preferred-language                 (state/sub :preferred-language)
-        [error-only? set-error-only!]       (hooks/use-state false)
+  (let [[error-only? set-error-only!]       (hooks/use-state false)
         [reversed? set-reversed!]           (hooks/use-state false)
         [show-worker-log? set-show-worker-log!] (hooks/use-state false)
         [worker-records set-worker-records!] (hooks/use-state [])]
@@ -69,7 +68,7 @@
      [])
     [:div.flex.flex-col.gap-1.p-2.ls-debug-log
      [:div.flex.flex-row.justify-between
-      [:div.text-lg.font-medium.mb-2 (str (t :mobile/log-full) ": ")]
+      [:div.text-lg.font-medium.mb-2 (str (t :mobile.log/full) ": ")]
 
       (shui/button
        {:variant :ghost
@@ -78,29 +77,29 @@
                     (util/copy-to-clipboard! (str (string/join "\n\n" @mobile-state/*log)
                                                   "\n\n================================================================\n\n"
                                                   (string/join "\n\n" worker-records))))}
-       (t :mobile/log-copy))]
+       (t :mobile.log/copy))]
 
      [:div.flex.flex-row.gap-2
       (shui/button
        {:size :sm
         :on-click (fn [] (set-error-only! (not error-only?)))}
        (if error-only?
-         (t :mobile/log-all)
-         (t :mobile/log-errors-only)))
+         (t :mobile.log/all)
+         (t :mobile.log/errors-only)))
 
       (shui/button
        {:size :sm
         :on-click (fn [] (set-reversed! (not reversed?)))}
        (if reversed?
-         (t :mobile/log-new-first)
-         (t :mobile/log-old-first)))
+         (t :mobile.log/new-first)
+         (t :mobile.log/old-first)))
 
       (shui/button
        {:size :sm
         :on-click (fn [] (set-show-worker-log! (not show-worker-log?)))}
        (if show-worker-log?
-         (t :mobile/log-ui)
-         (t :mobile/log-worker)))]
+         (t :mobile.log/ui)
+         (t :mobile.log/worker)))]
 
      (let [records (cond->> (if show-worker-log? worker-records @mobile-state/*log)
                      error-only?
@@ -113,8 +112,7 @@
 
 (rum/defc page < rum/reactive
   []
-  (let [_preferred-language (state/sub :preferred-language)
-        login? (and (state/sub :auth/id-token)
+  (let [login? (and (state/sub :auth/id-token)
                     (user-handler/logged-in?))
         theme (state/sub :ui/theme)
         system-theme? (state/sub :ui/system-theme?)
@@ -125,31 +123,31 @@
      (user-profile login?)
      [:div.space-y-4
       [:div.mobile-setting-item
-       [:span.text-base (t :mobile/settings-theme)]
+       [:span.text-base (t :mobile.settings/theme)]
        [:div.flex.items-center
         (theme-select {:value theme-value
                        :on-change state/use-theme-mode!})]]
 
       [:div.mobile-setting-item
-       [:span.text-base (t :mobile/settings-version)]
+       [:span.text-base (t :mobile.settings/version)]
        [:span.text-sm version/version]]
 
       (let [revision (string/replace config/revision "-dirty" "")]
         [:div.mobile-setting-item
          {:on-click (fn []
                       (js/window.open (str "https://github.com/logseq/logseq/commit/" revision)))}
-         [:span.text-base (t :mobile/settings-revision)]
+         [:span.text-base (t :mobile.settings/revision)]
          [:span.text-sm revision]])
 
       [:div.mobile-setting-item
        {:on-click (fn []
                     (js/window.open "https://github.com/logseq/db-test/issues"))}
-       [:span.text-base (t :mobile/settings-report-bug)]]
+       [:span.text-base (t :mobile.settings/report-bug)]]
 
       [:div.mobile-setting-item
        {:on-click (fn []
                     (shui/popup-show! nil (fn [] (log)) {}))}
-       [:span.text-base (t :mobile/settings-check-log)]]
+       [:span.text-base (t :mobile.settings/check-log)]]
 
       (when login?
         [:div.mobile-setting-item
@@ -164,14 +162,14 @@
             :target "_blank"}
         [:div.flex.items-center
          (ui/icon "brand-discord")
-         [:span.ml-1 (t :mobile/settings-discord-community)]]]
+         [:span.ml-1 (t :mobile.settings/discord-community)]]]
        [:a {:href "https://discuss.logseq.com"
             :target "_blank"}
         [:div.flex.items-center
          (ui/icon "message")
-         [:span.ml-1 (t :mobile/settings-forum)]]]
+         [:span.ml-1 (t :mobile.settings/forum)]]]
        [:a {:href "https://github.com/logseq/logseq"
             :target "_blank"}
         [:div.flex.items-center
          (ui/icon "brand-github")
-         [:span.ml-1 (t :mobile/settings-github)]]]]]]))
+         [:span.ml-1 (t :mobile.settings/github)]]]]]]))

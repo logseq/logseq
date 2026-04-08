@@ -54,7 +54,7 @@
 (defmethod events/handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
 
-(defmethod events/handle :command/run [_]
+(defmethod events/handle :shell/run [_]
   (when (util/electron?)
     (shui/dialog-open! shell/shell)))
 
@@ -271,7 +271,7 @@
   (shui/dialog-open!
    repo/new-db-graph
    {:id :new-db-graph
-    :title [:h2 "Create a new graph"]
+    :title [:h2 (t :graph/create-new)]
     :align (if (util/mobile?) :top :center)
     :style {:max-width "500px"}}))
 

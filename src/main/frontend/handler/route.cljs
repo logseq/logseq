@@ -115,7 +115,7 @@
     :all-files
     (t :nav/all-files)
     :all-pages
-    (t :nav/all-pages)
+    (t :nav.all-pages/title)
     :all-journals
     (t :nav/all-journals)
     :file

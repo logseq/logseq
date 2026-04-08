@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [fipp.edn :as fipp]
             [frontend.common.missionary :as c.m]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.db-based.vector-search-flows :as vector-search-flows]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -103,7 +104,7 @@
                             :succ (constantly nil)))}
       (shui/select-trigger
        (shui/select-value
-        {:placeholder "Select a model(need force-embedding-all-graph-blocks again)"}))
+        {:placeholder (t :ai/vector-search-model-placeholder)}))
       (shui/select-content
        (shui/select-group
         (let [graph-text-embedding-model-name (:graph-text-embedding-model-name model-info)]

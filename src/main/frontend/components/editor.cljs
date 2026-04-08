@@ -368,7 +368,7 @@
      matched-templates
      {:on-chosen   (editor-handler/template-on-chosen-handler id)
       :on-enter    (fn [_state] (state/clear-editor-action!))
-      :empty-placeholder [:div.text-gray-500.px-4.py-2.text-sm "Search for a template"]
+      :empty-placeholder [:div.text-gray-500.px-4.py-2.text-sm (t :editor/search-template-placeholder)]
       :item-render (fn [template]
                      (:block/title template))
       :class       "black"})))

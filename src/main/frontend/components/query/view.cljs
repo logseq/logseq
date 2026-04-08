@@ -32,7 +32,7 @@
     [:div.query-result.w-full
      (views/view
       {:config (assoc {:custom-query? true} :sidebar? (:sidebar? config))
-       :title-key :views.table/live-query-title
+       :title-key :view.table/live-query-title
        :view-entity view-entity
        :view-feature-type :query-result
        :data ids

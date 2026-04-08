@@ -1,6 +1,7 @@
 (ns frontend.components.plugins-settings
   (:require [cljs-bean.core :as bean]
             [frontend.components.lazy-editor :as lazy-editor]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.security :as security]
@@ -179,4 +180,4 @@
               key)))]]
 
       ;; no settings
-      [:h2.font-bold.text-lg.py-4.warning "No Settings Schema!"])))
+      [:h2.font-bold.text-lg.py-4.warning (t :plugin/no-settings-schema)])))

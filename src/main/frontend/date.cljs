@@ -12,15 +12,16 @@
             [logseq.common.date :as common-date]
             [logseq.common.util.date-time :as date-time-util]))
 
+(def ^:private custom-formatter (tf/formatter "yyyy-MM-dd'T'HH:mm:ssZZ"))
+(def ^:private custom-formatter-2 (tf/formatter "yyyy-MM-dd-HH-mm-ss"))
+(def ^:private mmm-do-yyyy-formatter (tf/formatter "MMM do, yyyy"))
+(def ^:private yyyy-MM-dd-HH-mm-formatter (tf/formatter "yyyy-MM-dd HH:mm"))
+(def ^:private iso-parser (tf/formatter "yyyy-MM-dd'T'HH:mm:ss.SSSS'Z'"))
+
 (defn nld-parse
   [s]
   (when (string? s)
     ((gobj/get chrono "parseDate") s)))
-
-(def custom-formatter (tf/formatter "yyyy-MM-dd'T'HH:mm:ssZZ"))
-
-(def ^:private mmm-do-yyyy-formatter (tf/formatter "MMM do, yyyy"))
-(def ^:private yyyy-MM-dd-HH-mm-formatter (tf/formatter "yyyy-MM-dd HH:mm"))
 
 (defn journal-title-formatters
   []
@@ -34,20 +35,11 @@
                  (tf/formatter formatter-str)
                  custom-formatter) date-time)))
 
-(defn get-locale-string
-  "Accepts a :date-time-no-ms string representation, or a cljs-time date object"
-  [input]
-  (try
-    (->> (cond->> input
-           (string? input) (tf/parse (tf/formatters :date-time-no-ms)))
-         (t/to-default-time-zone)
-         (tf/unparse mmm-do-yyyy-formatter))
-    (catch :default _e
-      nil)))
-
-(def custom-formatter-2 (tf/formatter "yyyy-MM-dd-HH-mm-ss"))
-(defn get-date-time-string-2 []
-  (tf/unparse custom-formatter-2 (tl/local-now)))
+(defn get-date-time-string-2
+  ([]
+   (get-date-time-string-2 (tl/local-now)))
+  ([date-time]
+   (tf/unparse custom-formatter-2 date-time)))
 
 (defn journal-name
   ([]
@@ -113,7 +105,6 @@
    yyyy-MM-dd-HH-mm-formatter
    (t/to-default-time-zone (tc/from-long n))))
 
-(def iso-parser (tf/formatter "yyyy-MM-dd'T'HH:mm:ss.SSSS'Z'"))
 (defn parse-iso [string]
   (tf/parse iso-parser string))
 

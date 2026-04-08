@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [frontend.components.block :as block]
             [frontend.components.content :as content]
+            [frontend.context.i18n :refer [t]]
             [frontend.components.editor :as editor]
             [frontend.date :as date]
             [frontend.db.async :as db-async]
@@ -29,7 +30,7 @@
     (when (seq scheduled-or-deadlines)
       [:div.scheduled-or-deadlines
        (ui/foldable
-        [:div.text-sm.font-medium "Scheduled and Deadline"]
+        [:div.text-sm.font-medium (t :page/scheduled-and-deadline)]
         (fn []
           [:div.scheduled-deadlines.references-blocks.mb-6
            (let [ref-hiccup (block/->hiccup scheduled-or-deadlines
