@@ -60,7 +60,7 @@
 (defn delete-recycled-permanently!
   [root-uuid]
   (when-let [root (db/entity [:block/uuid root-uuid])]
-    (when-let [tx-data (seq (outliner-recycle/permanently-delete-tx-data (db/get-db) root))]
+    (when (seq (outliner-recycle/permanently-delete-tx-data (db/get-db) root))
       (p/do!
        (ui-outliner-tx/transact!
         {:outliner-op :recycle-delete-permanently}
