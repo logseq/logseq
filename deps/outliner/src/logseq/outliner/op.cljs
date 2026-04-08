@@ -8,6 +8,7 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.property :as outliner-property]
+            [logseq.outliner.recycle :as outliner-recycle]
             [logseq.outliner.transaction :as outliner-tx]
             [malli.core :as m]))
 
@@ -127,6 +128,11 @@
     [:catn
      [:op :keyword]
      [:args [:tuple ::uuid ::option]]]]
+
+   [:recycle-delete-permanently
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::uuid]]]]
 
    [:toggle-reaction
     [:catn
@@ -345,6 +351,10 @@
     :delete-page
     (let [[page-uuid opts] args]
       (outliner-page/delete! conn page-uuid (merge opts opts')))
+
+    :recycle-delete-permanently
+    (let [[root-uuid] args]
+      (outliner-recycle/permanently-delete! conn root-uuid))
 
     :toggle-reaction
     (reset! *result (apply toggle-reaction! conn args))
