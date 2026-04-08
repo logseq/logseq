@@ -114,6 +114,44 @@
       nil)))
 
 (def repo-path "/db.sqlite")
+(def client-ops-repo-path (str "client-ops-" repo-path))
+
+(defn- ->uint8array
+  [data]
+  (cond
+    (instance? js/Uint8Array data)
+    data
+
+    (js/ArrayBuffer.isView data)
+    (js/Uint8Array. (.-buffer data) (.-byteOffset data) (.-byteLength data))
+
+    (instance? js/ArrayBuffer data)
+    (js/Uint8Array. data)
+
+    (array? data)
+    (js/Uint8Array. data)
+
+    :else
+    data))
+
+(defn- export-db-file-with-paths
+  [repo path-candidates]
+  (p/let [^js pool (<get-opfs-pool repo)]
+    (when pool
+      (loop [paths (->> path-candidates
+                        (filter string?)
+                        (remove string/blank?)
+                        distinct
+                        vec)]
+        (when-let [path (first paths)]
+          (let [result (try
+                         (.exportFile ^js pool path)
+                         (catch :default _e
+                           nil))
+                payload (->uint8array result)]
+            (if (instance? js/Uint8Array payload)
+              payload
+              (recur (subvec paths 1)))))))))
 
 (defn- <export-db-file
   ([repo]
@@ -251,7 +289,7 @@
                 (.unpauseVfs pool))
             db (new (.-OpfsSAHPoolDb pool) repo-path)
             search-db (new (.-OpfsSAHPoolDb pool) (str "search" repo-path))
-            client-ops-db (new (.-OpfsSAHPoolDb pool) (str "client-ops-" repo-path))]
+            client-ops-db (new (.-OpfsSAHPoolDb pool) client-ops-repo-path)]
       [db search-db client-ops-db])))
 
 (defn- gc-sqlite-dbs!
@@ -765,8 +803,24 @@
   [repo]
   (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
     (.exec db "PRAGMA wal_checkpoint(2)"))
-  (p/let [data (<export-db-file repo)]
-    (Comlink/transfer data #js [(.-buffer data)])))
+  (p/let [data (<export-db-file repo)
+          payload (->uint8array data)]
+    (Comlink/transfer payload #js [(.-buffer payload)])))
+
+(def-thread-api :thread-api/export-client-ops-db
+  [repo]
+  (when-let [^js db (worker-state/get-sqlite-conn repo :client-ops)]
+    (.exec db "PRAGMA wal_checkpoint(2)"))
+  (let [^js client-ops-db (worker-state/get-sqlite-conn repo :client-ops)
+        db-filename (some-> client-ops-db (gobj/get "filename"))
+        export-paths [db-filename
+                      client-ops-repo-path
+                      (str "/" client-ops-repo-path)
+                      (str "client-ops" repo-path)
+                      (str "/client-ops" repo-path)]]
+    (p/let [payload (export-db-file-with-paths repo export-paths)]
+      (when (instance? js/Uint8Array payload)
+        (Comlink/transfer payload #js [(.-buffer payload)])))))
 
 (def-thread-api :thread-api/import-db
   [repo data]
