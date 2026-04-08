@@ -800,6 +800,27 @@
       (ldb/transact! conn tx-data
                      {:outliner-op :restore-recycled}))
 
+    :recycle-delete-permanently
+    (let [[root-id] args
+          root-ref (cond
+                     (and (vector? root-id)
+                          (= :block/uuid (first root-id)))
+                     root-id
+
+                     (uuid? root-id)
+                     [:block/uuid root-id]
+
+                     :else
+                     root-id)
+          root (d/entity @conn root-ref)
+          tx-data (when root
+                    (seq (outliner-recycle/permanently-delete-tx-data @conn root)))]
+      ;; Keep replay idempotent under concurrent edits where the recycled root may
+      ;; already be permanently removed by a preceding remote tx.
+      (when (seq tx-data)
+        (ldb/transact! conn tx-data
+                       {:outliner-op :recycle-delete-permanently})))
+
     :set-block-property
     (let [[block-eid property-id v] args
           block-eid' (or (replay-entity-id-value @conn block-eid)

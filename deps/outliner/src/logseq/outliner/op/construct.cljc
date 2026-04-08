@@ -22,6 +22,7 @@
     :rename-page
     :delete-page
     :restore-recycled
+    :recycle-delete-permanently
     :set-block-property
     :remove-block-property
     :batch-set-property
@@ -440,6 +441,10 @@
     :restore-recycled
     (let [[root-id] args]
       [:restore-recycled [root-id]])
+
+    :recycle-delete-permanently
+    (let [[root-id] args]
+      [:recycle-delete-permanently [(stable-entity-ref db root-id)]])
 
     :set-block-property
     (let [[block-eid property-id v] args]

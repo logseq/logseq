@@ -229,6 +229,26 @@
       (ldb/transact! conn tx-data {:outliner-op :restore-recycled})
       true)))
 
+(defn ^:api permanently-delete-tx-data
+  [db root]
+  (when (and root (recycled? root))
+    (->> (if (ldb/page? root)
+           (keep (fn [id]
+                   (some-> (d/entity db id) :block/uuid))
+                 (page-tree-ids db root))
+           (keep :block/uuid (block-subtree db root)))
+         (map (fn [block-uuid]
+                [:db/retractEntity [:block/uuid block-uuid]]))
+         distinct
+         seq)))
+
+(defn ^:api permanently-delete!
+  [conn root-uuid]
+  (when-let [root (d/entity @conn [:block/uuid root-uuid])]
+    (when-let [tx-data (permanently-delete-tx-data @conn root)]
+      (ldb/transact! conn tx-data {:outliner-op :recycle-delete-permanently})
+      true)))
+
 (defn- gc-tx-data
   [db {:keys [now-ms] :or {now-ms (common-util/time-ms)}}]
   (let [cutoff (- now-ms retention-ms)]

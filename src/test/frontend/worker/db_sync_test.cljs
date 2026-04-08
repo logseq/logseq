@@ -1776,6 +1776,34 @@
           (is (= #{"page y"}
                  (set (map :block/name (:user.property/x7 block'))))))))))
 
+(deftest replay-recycle-delete-permanently-removes-recycled-page-test
+  (testing "replay should permanently delete a recycled page subtree"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page 1"}
+                  :blocks [{:block/title "child 1"}]}])
+          page (db-test/find-page-by-title @conn "page 1")
+          child (db-test/find-block-by-content @conn "child 1")
+          page-uuid (:block/uuid page)
+          child-uuid (:block/uuid child)]
+      (outliner-page/delete! conn page-uuid {})
+      (is (true? (ldb/recycled? (d/entity @conn [:block/uuid page-uuid]))))
+      (is (nil? (#'sync-apply/replay-canonical-outliner-op!
+                 conn
+                 [:recycle-delete-permanently [[:block/uuid page-uuid]]]
+                 nil)))
+      (is (nil? (d/entity @conn [:block/uuid page-uuid])))
+      (is (nil? (d/entity @conn [:block/uuid child-uuid]))))))
+
+(deftest replay-recycle-delete-permanently-missing-root-is-idempotent-test
+  (testing "replay should no-op when recycled root has already been removed"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page 1"}}])
+          missing-uuid (random-uuid)]
+      (is (nil? (#'sync-apply/replay-canonical-outliner-op!
+                 conn
+                 [:recycle-delete-permanently [[:block/uuid missing-uuid]]]
+                 nil))))))
+
 (deftest replay-set-block-property-converts-raw-uuid-to-eid-test
   (testing "replay should resolve raw block uuid ids for set-block-property"
     (let [graph {:classes {:tag1 {}}
