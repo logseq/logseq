@@ -26,7 +26,8 @@
    [logseq.outliner.page :as outliner-page]
    [logseq.outliner.property :as outliner-property]
    [logseq.outliner.recycle :as outliner-recycle]
-   [promesa.core :as p]))
+   [promesa.core :as p]
+   [logseq.common.util :as common-util]))
 
 (defonce *repo->latest-remote-tx (atom {}))
 (defonce *repo->latest-remote-checksum (atom {}))
@@ -226,11 +227,25 @@
                             :db-sync/created-at now}])
       (worker-undo-redo/gen-undo-ops! repo tx-report tx-id
                                       {:apply-history-action! apply-history-action!})
-      (when should-inc-pending?
-        (client-op/adjust-pending-local-tx-count! repo 1)
-        (when-let [client (current-client repo)]
-          (broadcast-rtc-state! client)))
+        (when should-inc-pending?
+          (client-op/adjust-pending-local-tx-count! repo 1)
+          (when-let [client (current-client repo)]
+            (broadcast-rtc-state! client)))
       tx-id)))
+
+(defn prepare-upload-tx-entries
+  [_conn pending]
+  (let [entries (mapv (fn [{:keys [tx-id tx outliner-op]}]
+                        {:tx-id tx-id
+                         :outliner-op outliner-op
+                         :tx-data (vec tx)})
+                      pending)
+        empty-tx-ids (->> entries
+                          (filter (comp empty? :tx-data))
+                          (mapv :tx-id))
+        tx-entries (filterv (comp seq :tx-data) entries)]
+    {:tx-entries tx-entries
+     :drop-tx-ids empty-tx-ids}))
 
 (defn pending-txs
   [repo & {:keys [limit]}]
@@ -309,7 +324,7 @@
     (usable-history-ops inverse-outliner-ops)
     (usable-history-ops forward-outliner-ops)))
 
-(declare precreate-missing-save-blocks! replay-canonical-outliner-op!)
+(declare replay-canonical-outliner-op!)
 
 (defn- inline-history-action
   [tx-meta]
@@ -391,7 +406,6 @@
                conn
                tx-meta'
                (fn [row-conn]
-                 (precreate-missing-save-blocks! row-conn ops)
                  (doseq [op ops]
                    (replay-canonical-outliner-op! row-conn op))))
               {:applied? true
@@ -429,21 +443,16 @@
         local-tx (or (client-op/get-local-tx repo) 0)
         remote-tx (get @*repo->latest-remote-tx repo)
         conn (worker-state/get-datascript-conn repo)]
-    (when (and conn (= local-tx remote-tx))        ; rebase
+    (when (and conn (= local-tx remote-tx)) ; rebase
       (when (empty? inflight)
         (when-let [ws (:ws client)]
           (when (and (ws-open? ws) (worker-state/online?))
             (let [batch (pending-txs repo {:limit 50})]
               (when (seq batch)
-                (let [tx-entries (->> batch
-                                      (mapv (fn [{:keys [tx-id tx outliner-op]}]
-                                              {:tx-id tx-id
-                                               :outliner-op outliner-op
-                                               :tx-data (vec tx)}))
-                                      (filterv (comp seq :tx-data)))
-                      tx-ids (mapv :tx-id batch)]
-                  (if (empty? tx-entries)
-                    (remove-pending-txs! repo tx-ids)
+                (let [{:keys [tx-entries drop-tx-ids]} (prepare-upload-tx-entries conn batch)]
+                  (when (seq drop-tx-ids)
+                    (remove-pending-txs! repo drop-tx-ids))
+                  (when (seq tx-entries)
                     (-> (p/let [aes-key (when (sync-crypt/graph-e2ee? repo)
                                           (sync-crypt/<ensure-graph-aes-key repo (:graph-id client)))
                                 _ (when (and (sync-crypt/graph-e2ee? repo) (nil? aes-key))
@@ -464,7 +473,8 @@
                                                 (cond-> {:tx (sqlite-util/write-transit-str tx-data)}
                                                   outliner-op
                                                   (assoc :outliner-op outliner-op)))
-                                              tx-entries*)]
+                                              tx-entries*)
+                                tx-ids (mapv :tx-id tx-entries)]
                           (reset! (:inflight client) tx-ids)
                           (send! ws {:type "tx/batch"
                                      :t-before local-tx
@@ -481,32 +491,51 @@
                          :tx-id (:tx-id local-tx)
                          :outliner-op (:outliner-op local-tx)})))
 
+(defn- replace-uuid-str-with-eid
+  [db v]
+  (if (and (string? v) (common-util/uuid-string? v))
+    (if-let [entity (d/entity db [:block/uuid (uuid v)])]
+      (:db/id entity)
+      v)
+    v))
+
+(defn- resolve-temp-id
+  [db datom-v]
+  (if (and (= (count datom-v) 5)
+           (= (first datom-v) :db/add))
+    (let [[op e a v t] datom-v
+          e' (replace-uuid-str-with-eid db e)
+          v' (replace-uuid-str-with-eid db v)]
+      [op e' a v' t])
+    datom-v))
+
 (defn- transact-remote-txs!
   [conn remote-txs]
   (loop [remaining remote-txs
          index 0
          results []]
-    (if-let [remote-tx (first remaining)]
-      (let [tx-data (->> (:tx-data remote-tx)
-                         seq)
-            report (try
-                     (ldb/transact! conn tx-data {:transact-remote? true})
-                     (catch :default e
-                       (js/console.error e)
-                       (log/error ::transact-remote-txs! {:remote-tx remote-tx
-                                                          :index (inc index)
-                                                          :total (count remote-txs)})
-                       (throw e)))
-            results' (cond-> results
-                       tx-data
-                       (conj {:tx-data tx-data
-                              :report report}))]
-        (recur (next remaining) (inc index) results'))
-      results)))
+    (let [db @conn]
+      (if-let [remote-tx (first remaining)]
+       (let [tx-data (->> (:tx-data remote-tx)
+                          (map (partial resolve-temp-id db))
+                          seq)
+             report (try
+                      (ldb/transact! conn tx-data {:transact-remote? true})
+                      (catch :default e
+                        (js/console.error e)
+                        (log/error ::transact-remote-txs! {:remote-tx remote-tx
+                                                           :index (inc index)
+                                                           :total (count remote-txs)})
+                        (throw e)))
+             results' (cond-> results
+                        tx-data
+                        (conj {:tx-data tx-data
+                               :report report}))]
+         (recur (next remaining) (inc index) results'))
+       results))))
 
 (defn reverse-local-txs!
   [conn local-txs]
-  ;; (prn :debug :local-txs local-txs)
   (doall
    (->> local-txs
         reverse
@@ -578,38 +607,6 @@
   [db ids]
   (mapv #(or (replay-entity-id-value db %) %) ids))
 
-(defn- precreate-missing-save-blocks!
-  [conn ops]
-  (doseq [[op args] ops
-          :when (= :save-block op)]
-    (let [[block _opts] args
-          db @conn
-          block-uuid (:block/uuid block)
-          missing-block? (and block-uuid
-                              (nil? (d/entity db [:block/uuid block-uuid])))
-          has-structure? (or (:block/page block)
-                             (:block/parent block))]
-      (when (and missing-block? has-structure?)
-        (let [target-ref (or (:block/parent block)
-                             (:block/page block))
-              target-block (d/entity db target-ref)]
-          (when-not target-block
-            (invalid-rebase-op! op {:args args
-                                    :reason :missing-target-block}))
-          (let [now (.now js/Date)
-                create-block (-> block
-                                 (dissoc :db/id)
-                                 (assoc :block/created-at now)
-                                 (assoc :block/updated-at now))]
-            (when-not (or (:block/parent block)
-                          (:block/page block))
-              (throw (ex-info "block doesn't have both parent and page"
-                              block)))
-            (ldb/transact! conn
-                           [create-block]
-                           {:outliner-op :save-block
-                            :persist-op? false})))))))
-
 (defn- ^:large-vars/cleanup-todo replay-canonical-outliner-op!
   [conn [op args]]
   (case op
@@ -622,29 +619,10 @@
           block-base (dissoc block :db/id :block/order)
           block' (merge block-base
                         (op-construct/rewrite-block-title-with-retracted-refs db block-base))]
-      (if (some? block-ent)
-        (outliner-core/save-block! conn
-                                   block'
-                                   (assoc (or opts {}) :persist-op? false))
-        (if (and (:block/uuid block')
-                 (or (:block/page block')
-                     (:block/parent block')))
-          (let [target-ref (or (:block/parent block')
-                               (:block/page block'))
-                target-block (d/entity db target-ref)]
-            (when-not target-block
-              (invalid-rebase-op! op {:args args
-                                      :reason :missing-target-block}))
-            (let [now (.now js/Date)
-                  create-block (-> block'
-                                   (assoc :block/created-at now)
-                                   (assoc :block/updated-at now))]
-              (ldb/transact! conn
-                             [create-block]
-                             {:outliner-op :save-block
-                              :persist-op? false})))
-          (invalid-rebase-op! op {:args args
-                                  :reason :missing-block}))))
+      (when (nil? block-ent)
+        (invalid-rebase-op! op {:args args
+                                :reason :missing-block}))
+      (outliner-core/save-block! conn block' opts))
 
     :insert-blocks
     (let [[blocks target-id opts] args
@@ -676,8 +654,9 @@
     (let [[ids target-id opts] args
           ids' (replay-entity-id-coll @conn ids)
           target-id' (or (replay-entity-id-value @conn target-id) target-id)
-          blocks (keep #(d/entity @conn %) ids')]
-      (when (empty? blocks)
+          blocks (keep #(d/entity @conn %) ids')
+          target (d/entity @conn target-id')]
+      (when (or (empty? blocks) (nil? target))
         (invalid-rebase-op! op {:args args}))
       (when (seq blocks)
         (let [opts' (or opts {})
@@ -685,20 +664,17 @@
               fallback-target (:fallback-target opts')
               fallback-target' (or (replay-entity-id-value @conn fallback-target)
                                    fallback-target)
-              target-block (d/entity @conn target-id')
               use-fallback? (and sibling?
-                                 (nil? target-block)
+                                 (nil? target)
                                  (some? fallback-target))
               target-block' (if use-fallback?
                               (d/entity @conn fallback-target')
-                              target-block)
+                              target)
               move-opts (cond-> (-> opts'
                                     (dissoc :fallback-target)
                                     (assoc :persist-op? false))
                           use-fallback?
                           (assoc :sibling? false))]
-          (when-not target-block'
-            (invalid-rebase-op! op {:args args}))
           (outliner-core/move-blocks! conn blocks target-block' move-opts))))
 
     :move-blocks-up-down
@@ -857,16 +833,16 @@
     (try
       (ldb/batch-transact-with-temp-conn!
        conn
-       {:outliner-op :rebase}
+       {:outliner-op :rebase
+        ;; Keep stable tx-id across rebases so one logical pending op
+        ;; doesn't fan out into duplicated pending rows.
+        :db-sync/tx-id (:tx-id local-tx)}
        (fn [conn]
          (if (= [[:transact nil]] outliner-ops)
            (when-let [tx-data (seq (:tx local-tx))]
-             (prn :debug :transact :tx-data tx-data)
              (ldb/transact! conn tx-data {:outliner-op :transact}))
-           (do
-             (precreate-missing-save-blocks! conn outliner-ops)
-             (doseq [op outliner-ops]
-               (replay-canonical-outliner-op! conn op))))))
+           (doseq [op outliner-ops]
+             (replay-canonical-outliner-op! conn op)))))
       (catch :default error
         (let [drop-log {:tx-id (:tx-id local-tx)
                         :outliner-ops outliner-ops
@@ -906,12 +882,21 @@
                                      (when (and (= :rebase (:outliner-op tx-meta))
                                                 (seq tx-data))
                                        (swap! *rebase-tx-reports conj tx-report)))})]
+        (doseq [tx-report @*rebase-tx-reports]
+          (handle-local-tx! repo tx-report))
+
         (fix-tx! conn tx-report {:outliner-op :fix}))
 
-      (doseq [tx-report @*rebase-tx-reports]
-        (handle-local-tx! repo tx-report))
-
-      (remove-pending-txs! repo (map :tx-id local-txs))
+      ;; Successful rebases persist with the original tx-id.
+      ;; Only drop entries that failed to rebase or became empty no-op txs.
+      (let [rebased-tx-ids (->> @*rebase-tx-reports
+                                (keep (comp :db-sync/tx-id :tx-meta))
+                                set)
+            stale-tx-ids (->> local-txs
+                              (map :tx-id)
+                              (remove rebased-tx-ids)
+                              vec)]
+        (remove-pending-txs! repo stale-tx-ids))
 
       (catch :default e
         (js/console.error e)
@@ -922,7 +907,7 @@
 
 (defn- apply-remote-tx-without-local-changes!
   [{:keys [conn remote-txs]}]
-  (ldb/batch-transact-with-temp-conn!
+  (ldb/batch-transact!
    conn
    {:rtc-tx? true
     :without-local-changes? true}
@@ -985,13 +970,22 @@
   (apply-remote-txs! repo client [{:tx-data tx-data}]))
 
 (defn- enqueue-local-tx-aux
-  [repo {:keys [tx-data db-after db-before] :as tx-report}]
+  [repo {:keys [tx-data db-after db-before tx-meta] :as tx-report}]
   (let [normalized (normalize-tx-data db-after db-before tx-data)
         reversed-datoms (reverse-tx-data db-before db-after tx-data)]
     ;; (prn :debug :enqueue-local-tx :tx-data)
     ;; (cljs.pprint/pprint tx-data)
     ;; (prn :debug :enqueue-local-tx :normalized)
     ;; (cljs.pprint/pprint normalized)
+    (when (and (= (:outliner-op tx-meta) :insert-blocks)
+               (not (:undo? tx-meta))
+               (not (some (fn [x]
+                            (and (= 5 (count x))
+                                 (= :db/add (first x))
+                                 (= :block/parent (nth x 2))))
+                          normalized)))
+      (throw (ex-info "no :block/parent provided when insert-blocks" {})))
+
     (when (seq normalized)
       (persist-local-tx! repo tx-report normalized reversed-datoms)
       (when-let [client @worker-state/*db-sync-client]
@@ -1027,11 +1021,11 @@
   (when (and (seq tx-data)
              (not (:rtc-tx? tx-meta))
              (not (:sync-download-graph? tx-meta))
-             (:persist-op? tx-meta true)
-             (:kv/value (d/entity db-after :logseq.kv/graph-remote?)))
+             (:persist-op? tx-meta true))
     (enqueue-local-tx! repo tx-report)
     (when-let [client @worker-state/*db-sync-client]
-      (when (= repo (:repo client))
+      (when (and (= repo (:repo client))
+                 (:kv/value (d/entity db-after :logseq.kv/graph-remote?)))
         (sync-assets/enqueue-asset-sync!
          repo client
          {:enqueue-asset-task-f enqueue-asset-task!

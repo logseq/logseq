@@ -95,12 +95,6 @@
       (string/replace #"[\\/]+" "_")
       (str "_checksum_" (quot (util/time-ms) 1000))))
 
-(defn- client-server-checksum-mismatch?
-  [local-checksum remote-checksum]
-  (and (string? local-checksum)
-       (string? remote-checksum)
-       (not= local-checksum remote-checksum)))
-
 (defn- <fetch-server-checksum-diagnostics
   [repo]
   (let [base (rtc-handler/http-base)
@@ -164,7 +158,9 @@
                      :server-checksum (:checksum server-diagnostics)
                      :different-blocks diff-blocks}]
     (pprint/pprint diff-data)
-    (js/console.warn "Checksum mismatch between client and server. Diff data:" diff-data)))
+    (when (seq diff-blocks)
+      (js/console.warn "Checksum mismatch between client and server. Diff data:" diff-data))))
+
 
 (defn ^:export recompute-checksum-diagnostics
   []
@@ -184,11 +180,10 @@
                           content (with-out-str (pprint/pprint export-edn))
                           blob (js/Blob. #js [content] (clj->js {:type "text/edn;charset=utf-8"}))
                           filename (checksum-export-file-name repo)]
-                      (p/let [_ (when (client-server-checksum-mismatch? local-checksum remote-checksum)
-                                  (-> (<log-checksum-mismatch-diff! repo export-edn)
-                                      (p/catch (fn [error]
-                                                 (js/console.error "checksum mismatch diff fetch failed:" error)
-                                                 nil))))]
+                      (p/let [_ (-> (<log-checksum-mismatch-diff! repo export-edn)
+                                    (p/catch (fn [error]
+                                               (js/console.error "checksum mismatch diff fetch failed:" error)
+                                               nil)))]
                         (utils/saveToFile blob filename "edn")
                         (notification/show!
                          (str "Checksum recomputed. Recomputed: " recomputed-checksum

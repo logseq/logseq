@@ -193,8 +193,14 @@
   (when db (.close db))
   (when search (.close search))
   (when client-ops (.close client-ops))
+  (sync-download/close-import-state-for-repo! repo)
   (when-let [^js pool (worker-state/get-opfs-pool repo)]
-    (.pauseVfs pool))
+    (try
+      (.pauseVfs pool)
+      (catch :default e
+        (log/warn :db-worker/pause-vfs-failed
+                  {:repo repo
+                   :error (str e)}))))
   (swap! *opfs-pools dissoc repo))
 
 (defn- <invalidate-search-db!
@@ -741,8 +747,14 @@
 
 (def-thread-api :thread-api/release-access-handles
   [repo]
+  (sync-download/close-import-state-for-repo! repo)
   (when-let [^js pool (worker-state/get-opfs-pool repo)]
-    (.pauseVfs pool)
+    (try
+      (.pauseVfs pool)
+      (catch :default e
+        (log/warn :db-worker/pause-vfs-failed
+                  {:repo repo
+                   :error (str e)})))
     nil))
 
 (def-thread-api :thread-api/db-exists
