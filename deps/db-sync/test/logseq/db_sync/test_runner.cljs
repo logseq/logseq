@@ -8,6 +8,7 @@
             [logseq.db-sync.node-server-test]
             [logseq.db-sync.normalize-test]
             [logseq.db-sync.platform-test]
+            [logseq.db-sync.storage-test]
             [logseq.db-sync.worker-auth-test]
             [logseq.db-sync.worker-dispatch-test]
             [logseq.db-sync.worker-handler-assets-test]
