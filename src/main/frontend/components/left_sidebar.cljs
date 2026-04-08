@@ -6,7 +6,7 @@
             [frontend.components.icon :as icon]
             [frontend.components.repo :as repo]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t tt]]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as db-model]
@@ -58,12 +58,12 @@
                                   :on-click #(page-handler/<unfavorite-page! (str (:block/uuid page)))}
                                  (ctx-icon "star-off")
                                  (t :page/unfavorite)
-                                 (ui/dropdown-shortcut :command/toggle-favorite)))
+                                 (ui/dropdown-shortcut :page/toggle-favorite)))
                               (x-menu-item
                                {:key "open in sidebar"
                                 :on-click open-in-sidebar}
                                (ctx-icon "layout-sidebar-right")
-                               (t :content/open-in-sidebar)
+                               (t :sidebar.right/open)
                                (ui/dropdown-shortcut "shift+click"))]))]
 
     ;; TODO: move to standalone component
@@ -132,6 +132,15 @@
   [:div.sidebar-graphs
    (repo/graphs-selector)])
 
+(defn navigation-label-key
+  [nav]
+  (case nav
+    :flashcards :nav/flashcards
+    :all-pages :nav.all-pages/label
+    :graph-view :nav/graph-view
+    :tag/tasks :nav/tasks
+    :tag/assets :nav/assets))
+
 (rum/defc sidebar-navigations-edit-content
   [{:keys [_id navs checked-navs set-checked-navs!]}]
   (let [[local-navs set-local-navs!] (rum/use-state checked-navs)]
@@ -141,8 +150,7 @@
        (set-checked-navs! local-navs))
      [local-navs])
 
-    (for [nav navs
-          :let [name' (name nav)]]
+    (for [nav navs]
       (shui/dropdown-menu-checkbox-item
        {:checked (contains? (set local-navs) nav)
         :onCheckedChange (fn [v] (set-local-navs!
@@ -150,8 +158,7 @@
                                     (if v
                                       (conj local-navs nav)
                                       (filterv #(not= nav %) local-navs)))))}
-       (tt (keyword "left-side-bar" name')
-           (keyword "right-side-bar" name'))))))
+       (t (navigation-label-key nav))))))
 
 (rum/defc sidebar-content-group < rum/reactive
   [name {:keys [class count more header-props enter-show-more? collapsable?]} child]
@@ -186,7 +193,7 @@
      [checked-navs])
 
     (sidebar-content-group
-     [:a.wrap-th [:strong.flex-1 "Navigations"]]
+      [:a.wrap-th [:strong.flex-1 (t :sidebar.left/navigations)]]
      {:collapsable? false
       :enter-show-more? true
       :header-props {:on-click (fn [^js e] (when-let [^js _el (some-> (.-target e) (.closest ".as-edit"))]
@@ -218,7 +225,7 @@
              {:class "journals-nav"
               :active (and (not srs-open?)
                            (or (= route-name :all-journals) (= route-name :home)))
-              :title (t :left-side-bar/journals)
+              :title (t :nav/journals)
               :on-click-handler (fn [e]
                                   (if (gobj/get e "shiftKey")
                                     (route-handler/sidebar-journals!)
@@ -233,7 +240,7 @@
             (let [num (state/sub :srs/cards-due-count)]
               (sidebar-item
                {:class "flashcards-nav"
-                :title (t :right-side-bar/flashcards)
+                :title (t :nav/flashcards)
                 :icon "infinity"
                 :shortcut :go/flashcards
                 :active srs-open?
@@ -245,7 +252,7 @@
           (= nav :graph-view)
           (sidebar-item
            {:class "graph-view-nav"
-            :title (t :right-side-bar/graph-view)
+            :title (t :nav/graph-view)
             :href (rfe/href :graph)
             :active (and (not srs-open?) (= route-name :graph))
             :icon "hierarchy"
@@ -254,7 +261,7 @@
           (= nav :all-pages)
           (sidebar-item
            {:class "all-pages-nav"
-            :title (t :right-side-bar/all-pages)
+            :title (t :nav.all-pages/label)
             :href (rfe/href :all-pages)
             :active (and (not srs-open?) (= route-name :all-pages))
             :icon "files"})
@@ -265,8 +272,7 @@
             (when-let [tag-uuid (and class-ident (:block/uuid (db/entity class-ident)))]
               (sidebar-item
                {:class (str "tag-view-nav " name'')
-                :title (tt (keyword "left-side-bar" name'')
-                           (keyword "right-side-bar" name''))
+                :title (t (navigation-label-key nav))
                 :href (rfe/href :page {:name tag-uuid})
                 :active (= (str tag-uuid) (get-in route-match [:path-params :name]))
                 :icon "hash"})))))])))
@@ -277,7 +283,7 @@
         favorite-entities (page-handler/get-favorites)]
     (sidebar-content-group
      [:a.wrap-th
-      [:strong.flex-1 (t :left-side-bar/nav-favorites)]]
+      [:strong.flex-1 (t :sidebar.left/favorites)]]
 
      {:class "favorites"
       :count (count favorite-entities)
@@ -301,7 +307,7 @@
   []
   (let [pages (recent-handler/get-recent-pages)]
     (sidebar-content-group
-     [:a.wrap-th [:strong.flex-1 (t :left-side-bar/nav-recent-pages)]]
+     [:a.wrap-th [:strong.flex-1 (t :sidebar.left/recent-pages)]]
 
      {:class "recent"
       :count (count pages)}

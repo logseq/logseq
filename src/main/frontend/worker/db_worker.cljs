@@ -1186,7 +1186,7 @@
                  (not worker-util/dev?))
     (shared-service/broadcast-to-clients! :notification
                                           [["Invalid data writing to db!"] :error nil nil nil
-                                           {:i18n-key :outliner/invalid-data-writing}])
+                                           {:i18n-key :storage/invalid-data-writing}])
     (worker-util/post-message :capture-error
                               {:error (ex-info "Invalid data writing to db" tx-meta)
                                :payload {}

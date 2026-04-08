@@ -61,7 +61,7 @@
                                  :enabled (.-canPaste edit-flags)
                                  :role "paste"}))
               (. menu append
-                 (MenuItem. #js {:label (t :views/select-all)
+                 (MenuItem. #js {:label (t :view.table/select-all)
                                  :enabled (.-canSelectAll edit-flags)
                                  :role "selectAll"})))
 

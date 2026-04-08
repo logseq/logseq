@@ -60,26 +60,26 @@
   (let [current-page (state/get-current-page)]
     (->>
      [(when current-page
-        {:filter {:group :current-page} :text (t :cmdk/filter-current-page) :info (t :cmdk/filter-add) :icon-theme :gray :icon "file"})
-      {:filter {:group :nodes} :text (t :cmdk/filter-nodes) :info (t :cmdk/filter-add) :icon-theme :gray :icon "point-filled"}
-      {:filter {:group :codes} :text (t :cmdk/filter-codes) :info (t :cmdk/filter-add) :icon-theme :gray :icon "code"}
-      {:filter {:group :commands} :text (t :cmdk/filter-commands) :info (t :cmdk/filter-add) :icon-theme :gray :icon "command"}
-      {:filter {:group :files} :text (t :cmdk/filter-files) :info (t :cmdk/filter-add) :icon-theme :gray :icon "file"}
-      {:filter {:group :themes} :text (t :cmdk/filter-themes) :info (t :cmdk/filter-add) :icon-theme :gray :icon "palette"}]
+        {:filter {:group :current-page} :text (t :cmdk.filter/current-page) :info (t :cmdk.filter/add) :icon-theme :gray :icon "file"})
+      {:filter {:group :nodes} :text (t :cmdk.filter/nodes) :info (t :cmdk.filter/add) :icon-theme :gray :icon "point-filled"}
+      {:filter {:group :codes} :text (t :cmdk.filter/codes) :info (t :cmdk.filter/add) :icon-theme :gray :icon "code"}
+      {:filter {:group :commands} :text (t :cmdk.filter/commands) :info (t :cmdk.filter/add) :icon-theme :gray :icon "command"}
+      {:filter {:group :files} :text (t :cmdk.filter/files) :info (t :cmdk.filter/add) :icon-theme :gray :icon "file"}
+      {:filter {:group :themes} :text (t :cmdk.filter/themes) :info (t :cmdk.filter/add) :icon-theme :gray :icon "palette"}]
      (remove nil?))))
 
 (defn- group-label
   [group]
   (case group
-    :filters (t :cmdk/group-filters)
-    :current-page (t :cmdk/group-current-page)
-    :nodes (t :cmdk/group-nodes)
-    :codes (t :cmdk/group-codes)
-    :files (t :cmdk/group-files)
-    :create (t :cmdk/group-create)
-    :recently-updated-pages (t :cmdk/group-recently-updated)
-    :commands (t :cmdk/group-commands)
-    :themes (t :cmdk/group-themes)
+    :filters (t :cmdk.group/filters)
+    :current-page (t :cmdk.group/current-page)
+    :nodes (t :cmdk.group/nodes)
+    :codes (t :cmdk.group/codes)
+    :files (t :cmdk.group/files)
+    :create (t :cmdk.group/create)
+    :recently-updated-pages (t :cmdk.group/recently-updated)
+    :commands (t :cmdk.group/commands)
+    :themes (t :cmdk.group/themes)
     (name group)))
 
 ;; The results are separated into groups, and loaded/fetched/queried separately
@@ -108,18 +108,18 @@
                   (when (ldb/class? class)
                     class))]
       (->> [{:text (cond
-                     class (t :cmdk/create-configure-tag)
-                     class? (t :cmdk/create-tag)
-                     :else (t :cmdk/create-page))
+                     class (t :cmdk.create/configure-tag)
+                     class? (t :cmdk.create/tag)
+                     :else (t :cmdk.create/page))
              :icon (if class "settings" "new-page")
              :icon-theme :gray
              :info (cond
                      class
-                     (t :cmdk/info-configure-tag class-name)
+                     (t :cmdk.info/configure-tag class-name)
                      class?
-                     (t :cmdk/info-create-tag class-name)
+                     (t :cmdk.info/create-tag class-name)
                      :else
-                     (t :cmdk/info-create-page q))
+                     (t :cmdk.info/create-page q))
              :source-create :page
              :class class}]
            (remove nil?)))))
@@ -937,7 +937,7 @@
                          (:block/properties page'))]
         (if link
           (js/window.open link)
-          (notification/show! (t :cmdk/no-page-link) :warning)))
+          (notification/show! (t :cmdk.error/no-page-link) :warning)))
 
       (:source-block item)
       (p/let [block-id (:block/uuid (:source-block item))
@@ -946,9 +946,9 @@
               link (re-find editor-handler/url-regex (:block/title block))]
         (if link
           (js/window.open link)
-          (notification/show! (t :cmdk/no-block-link) :warning)))
+          (notification/show! (t :cmdk.error/no-block-link) :warning)))
       :else
-      (notification/show! (t :cmdk/no-search-item-link) :warning))))
+      (notification/show! (t :cmdk.error/no-search-item-link) :warning))))
 
 (defn- keydown-handler
   [state e]
@@ -1034,16 +1034,16 @@
         action (get-action)]
     (cond
       (= action :move-blocks)
-      (t :cmdk/input-move-blocks)
+      (t :cmdk.input/move-blocks-placeholder)
 
       (= search-mode :graph)
-      (t :cmdk/input-add-graph-filter)
+      (t :cmdk.input/add-graph-filter-placeholder)
 
       (= action :new-page)
-      (t :cmdk/input-type-page-name)
+      (t :cmdk.input/type-page-name-placeholder)
 
       :else
-      (t :cmdk/input-default))))
+      (t :cmdk.input/default-placeholder))))
 
 (rum/defc input-row
   [state all-items opts]
@@ -1111,8 +1111,8 @@
 (defn rand-tip
   []
   (rand-nth
-   [(tip-with-shortcut (t :cmdk/tip-filter-results) "/")
-    (tip-with-shortcut (t :cmdk/tip-open-sidebar) ["mod" "enter"] {:style :combo})]))
+   [(tip-with-shortcut (t :cmdk.tip/filter-results) "/")
+    (tip-with-shortcut (t :cmdk.tip/open-sidebar) ["mod" "enter"] {:style :combo})]))
 
 (rum/defcs tip <
   {:init (fn [state]
@@ -1121,7 +1121,7 @@
   (let [filter' @(::filter state)]
     (cond
       filter'
-      (tip-with-shortcut (t :cmdk/tip-clear-filter) "esc")
+      (tip-with-shortcut (t :cmdk.tip/clear-filter) "esc")
 
       :else
       (::rand-tip inner-state))))
@@ -1157,39 +1157,39 @@
       [:div.hints
        [:div.text-sm.leading-6
         [:div.flex.flex-row.gap-1.items-center]
-        [:div.font-medium.text-gray-12 (t :cmdk/tip-label)
+        [:div.font-medium.text-gray-12 (t :cmdk.tip/label)
          (tip state)]]
 
        [:div.gap-2.hidden.md:flex {:style {:margin-right -6}}
         (case action
           :open
           [:<>
-           (button-fn (t :cmdk/action-open) ["return"])
-           (button-fn (t :cmdk/action-open-in-sidebar) ["shift" "return"] {:open-sidebar? true})
-           (when (:source-block @(::highlighted-item state)) (button-fn (t :cmdk/action-copy-ref) ["cmd" "c"]))]
+           (button-fn (t :cmdk.action/open) ["return"])
+           (button-fn (t :cmdk.action/open-in-sidebar) ["shift" "return"] {:open-sidebar? true})
+           (when (:source-block @(::highlighted-item state)) (button-fn (t :cmdk.action/copy-ref) ["cmd" "c"]))]
 
           :search
           [:<>
-           (button-fn (t :cmdk/action-search) ["return"])]
+           (button-fn (t :cmdk.action/search) ["return"])]
 
           :trigger
           [:<>
-           (button-fn (t :cmdk/action-trigger) ["return"])]
+           (button-fn (t :cmdk.action/trigger) ["return"])]
 
           :create
           [:<>
-           (button-fn (t :cmdk/action-create) ["return"])]
+           (button-fn (t :cmdk.action/create) ["return"])]
 
           :filter
           [:<>
-           (button-fn (t :cmdk/action-filter) ["return"])]
+           (button-fn (t :cmdk.action/filter) ["return"])]
 
           nil)]])))
 
 (rum/defc search-only
   [state group-name]
   [:div.flex.flex-row.gap-1.items-center
-   [:div (t :cmdk/search-only)]
+   [:div (t :cmdk.filter/only-label)]
    [:div group-name]
    (shui/button
     {:variant  :ghost

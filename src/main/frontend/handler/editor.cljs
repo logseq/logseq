@@ -2564,7 +2564,7 @@
              (= key commands/hashtag))
         (do
           (util/stop e)
-          (notification/show! (t :page/page-name-cannot-include-hash) :warning))
+          (notification/show! (t :page.validation/name-no-hash) :warning))
         ;; stop accepting edits if the new block is not created yet
         (some? @(:editor/async-unsaved-chars @state/state))
         (do

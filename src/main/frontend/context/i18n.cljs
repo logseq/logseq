@@ -39,6 +39,12 @@
 (def ^:private placeholder-split-pattern
   #"\{\d+\}")
 
+(def ^:private sentence-link-pattern
+  #"\{\{([^}]+)\}\}")
+
+(def ^:private sentence-keyed-link-pattern
+  #"\$([a-zA-Z_-]+)\{\{([^}]+)\}\}")
+
 (def ^:private rich-text-separator-by-locale
   {:ar "، "
    :fa "، "
@@ -164,7 +170,7 @@
 
 (defn locale-format-date
   "Format a js/Date using Intl.DateTimeFormat with the application locale."
-  ([d] (locale-format-date d {}))
+  ([d] (locale-format-date d {:year "numeric" :month "short" :day "numeric"}))
   ([d opts]
    (let [tag (locale-tag (state/sub :preferred-language))]
      (.format (js/Intl.DateTimeFormat. tag (clj->js opts)) d))))
@@ -174,6 +180,63 @@
    application locale."
   [d]
   (locale-format-date d {:hour "2-digit" :minute "2-digit" :hourCycle "h23"}))
+
+(defn- split-by-sentence-links
+  "Split `template` into segments for sentence link interpolation.
+   When `keyed?` is true, matches $key{{text}} patterns; otherwise matches {{text}}."
+  [template keyed?]
+  (let [pat (if keyed? sentence-keyed-link-pattern sentence-link-pattern)]
+    (loop [remaining template
+           result []]
+      (if-let [m (first (re-seq pat remaining))]
+        (let [full-match (first m)
+              idx (string/index-of remaining full-match)
+              before (subs remaining 0 idx)
+              after (subs remaining (+ idx (count full-match)))]
+          (recur after
+                 (if keyed?
+                   (conj result {:text before :key (keyword (second m)) :link-text (nth m 2)})
+                   (conj result {:text before :link-text (second m)}))))
+        (conj result {:text remaining})))))
+
+(defn interpolate-sentence
+  "Interpolate a translated complete-sentence template that may contain:
+   - Numeric placeholders {1}, {2}, etc. (text substitution via :placeholders)
+   - Link placeholders {{display text}} or $key{{display text}} (via :links)
+
+   :placeholders — vector of strings substituted for {1}, {2}, etc. in order
+   :links        — either:
+     - vector of link-attrs maps, applied to each {{text}} in sequence
+     - map of keyword->link-attrs, applied to each $key{{text}} by key
+
+   Returns a [:<> ...] hiccup fragment."
+  [template & {:keys [placeholders links]}]
+  (let [template' (if (seq placeholders)
+                    (loop [t template
+                           idx 1
+                           remaining placeholders]
+                      (if (empty? remaining)
+                        t
+                        (recur (string/replace t (str "{" idx "}") (str (first remaining)))
+                               (inc idx)
+                               (rest remaining))))
+                    template)
+        keyed? (map? links)
+        segments (split-by-sentence-links template' keyed?)
+        link-idx (atom 0)
+        fragments (reduce
+                   (fn [acc {:keys [text key link-text]}]
+                     (let [acc' (if (empty? text) acc (conj acc text))]
+                       (if link-text
+                         (let [attrs (if keyed?
+                                       (get links key)
+                                       (nth links @link-idx nil))]
+                           (when-not keyed? (swap! link-idx inc))
+                           (conj acc' [:a attrs link-text]))
+                         acc')))
+                   []
+                   segments)]
+    (into [:<>] fragments)))
 
 (defn- fetch-local-language []
   (.. js/window -navigator -language))

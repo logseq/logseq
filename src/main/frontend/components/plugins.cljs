@@ -5,7 +5,7 @@
             [frontend.components.plugins-settings :as plugins-settings]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :refer [interpolate-rich-text-node t]]
             [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
@@ -158,7 +158,7 @@
    [unpacked-pkg-path])
 
   (when unpacked-pkg-path
-    [:strong.inline-flex.px-3 "Loading ..."]))
+    [:strong.inline-flex.px-3 (t :ui/loading)]))
 
 (rum/defc category-tabs
   [t total-nums category on-action]
@@ -364,10 +364,10 @@
       [:div.flag.is-top.flex.items-center.space-x-2
        (cond
          (false? (:supportsDB item))
-         [:a.flex.cursor-help {:title "Not supports DB graph"}
+         [:a.flex.cursor-help {:title (t :plugin/does-not-support-db)}
           (shui/tabler-icon "database-off" {:size 17})]
          (true? (:supportsDB item))
-         [:a.flex.cursor-help {:title "Supports DB graph"}
+         [:a.flex.cursor-help {:title (t :plugin/supports-db)}
           (shui/tabler-icon "database-heart" {:size 17})])
        (when repo
          [:a.flex {:target "_blank"
@@ -425,13 +425,13 @@
         *test-input (rum/create-ref)
         disabled?   (or (= (:type opts) "system") (= (:type opts) "direct"))]
     [:div.cp__settings-network-proxy-cnt
-     [:h1.mb-2.text-2xl.font-bold (t :settings/network-proxy)]
+     [:h1.mb-2.text-2xl.font-bold (t :settings.advanced/network-proxy)]
      [:div.p-2
       [:p [:label [:strong (t :ui/type)]
-           (ui/select [{:label "System" :value "system" :selected (= type "system")}
-                       {:label "Direct" :value "direct" :selected (= type "direct")}
-                       {:label "HTTP" :value "http" :selected (= type "http")}
-                       {:label "SOCKS5" :value "socks5" :selected (= type "socks5")}]
+             (ui/select [{:label (t :plugin.proxy/system) :value "system" :selected (= type "system")}
+                         {:label (t :plugin.proxy/direct) :value "direct" :selected (= type "direct")}
+                         {:label (t :plugin.proxy/http) :value "http" :selected (= type "http")}
+                         {:label (t :plugin.proxy/socks5) :value "socks5" :selected (= type "socks5")}]
                       (fn [_e value]
                         (set-opts! (assoc opts :type value :protocol value))))]]
       [:p.flex
@@ -527,7 +527,7 @@
         [pending set-pending!] (rum/use-state false)
         *input (rum/use-ref nil)]
     [:div.p-4.flex.flex-col.pb-0
-     (shui/input {:placeholder "GitHub repo url"
+     (shui/input {:placeholder (t :plugin.install-from-web-url/repo-url-placeholder)
                   :value url
                   :ref *input
                   :on-change #(set-url! (util/evalue %))
@@ -536,11 +536,11 @@
       [:label.flex.items-center.gap-2
        (shui/checkbox {:checked (:theme? opts)
                        :on-checked-change #(set-opts! (assoc opts :theme? %))})
-       [:span.opacity-60 "theme?"]]
+       [:span.opacity-60 (t :plugin.install-from-web-url/theme-label)]]
       [:label.flex.items-center.gap-2
        (shui/checkbox {:checked (:effect? opts)
                        :on-checked-change #(set-opts! (assoc opts :effect? %))})
-       [:span.opacity-60 "effect?"]]]
+       [:span.opacity-60 (t :plugin.install-from-web-url/effect-label)]]]
      [:div.flex.justify-end.pt-3
       (shui/button
        {:on-click (fn []
@@ -703,7 +703,7 @@
                               :options {:on-click #(plugin-handler/user-check-enabled-for-updates! (not= :plugins category))}}])
 
                           (when (util/electron?)
-                            [{:title   [:span.flex.items-center.gap-1 (ui/icon "world") (t :settings/network-proxy)]
+                            [{:title   [:span.flex.items-center.gap-1 (ui/icon "world") (t :settings.advanced/network-proxy)]
                               :options {:on-click #(state/pub-event! [:go/proxy-settings agent-opts])}}
 
                              {:title   [:span.flex.items-center.gap-1 (ui/icon "arrow-down-circle") (t :plugin.install-from-file/menu-title)]
@@ -1051,7 +1051,7 @@
         (lazy-items-loader load-more-pages!)
         [:div.flex.items-center.justify-center.py-28.flex-col.gap-2.opacity-30
          (shui/tabler-icon "list-search" {:size 40})
-         [:span.text-sm "Nothing Found."]])]]))
+         [:span.text-sm (t :plugin/empty)]])]]))
 
 (rum/defcs waiting-coming-updates
   < rum/reactive
@@ -1508,7 +1508,7 @@
         (when-let [^js pl (and focused (= @*cache focused)
                                (plugin-handler/get-plugin-inst focused))]
           (ui/catch-error
-           [:p.warning.text-lg.mt-5 "Settings schema Error!"]
+            [:p.warning.text-lg.mt-5 (t :plugin/settings-schema-error)]
            (plugins-settings/settings-container
             (bean/->clj (.-settingsSchema pl)) pl)))]]]]))
 
@@ -1526,16 +1526,15 @@
   [pid name url]
   [:div
    [:span.block.whitespace-normal
-    "This plugin "
-    [:strong.text-error "#" name]
-    " takes too long to load, affecting the application startup time and
-     potentially causing other plugins to fail to load."]
+    (interpolate-rich-text-node
+     (t :plugin/perf-tip)
+     [[:strong.text-error (str "#" name)]])]
 
    [:path.opacity-50
     [:small [:span.pr-1 (ui/icon "folder")] url]]
 
    [:p
-    (ui/button "Disable now"
+    (ui/button (t :plugin/disable-now)
                :small? true
                :on-click
                (fn []
@@ -1543,9 +1542,10 @@
                      (p/then #(do
                                 (notification/clear! pid)
                                 (notification/show!
-                                 [:span "The plugin "
-                                  [:strong.text-error "#" name]
-                                  " is disabled."] :success
+                                 (interpolate-rich-text-node
+                                  (t :plugin/perf-disabled)
+                                  [[:strong.text-error (str "#" name)]])
+                                 :success
                                  true nil 3000 nil)))
                      (p/catch #(js/console.error %)))))]])
 

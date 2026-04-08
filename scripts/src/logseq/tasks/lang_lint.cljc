@@ -65,9 +65,14 @@
 ;; Lists literal strings that are intentionally excluded from hardcoded UI findings.
 (def ^:private ignored-hardcoded-texts
   #{"Logseq"
+    "Logseq "
+    "ID: "
+    "DOING"
+    "TODO"
     "http://"
     "https://"
     "{}"
+    "Ag"
     "git commit -m ..."})
 
 (defn- make-finding
@@ -237,13 +242,13 @@
     #{}))
 
 (defn left-sidebar-translation-keys
-  "Return `:left-side-bar/*` translation keys derived from tag nav entries in
-  the left sidebar `navs` vector."
+  "Return left sidebar navigation translation keys derived from tag nav entries
+  in the left sidebar `navs` vector."
   [content]
   (if-let [[_ navs-content] (re-find left-sidebar-navs-pattern content)]
     (->> (re-seq tag-nav-key-pattern navs-content)
          (map second)
-         (map #(keyword "left-side-bar" %))
+         (map #(keyword "nav" %))
          set)
     #{}))
 
@@ -272,7 +277,7 @@
   "Return translation keys derived from supported non-literal UI patterns.
 
   This combines conditional calls, fallback calls, option keys, built-in color
-  labels, left-sidebar tag nav labels, and shortcut category labels."
+  labels, left-sidebar derived nav labels, and shortcut category labels."
   [content]
   (->> [(conditional-translation-keys content)
         (translation-call-fallback-keys content)

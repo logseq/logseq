@@ -3,7 +3,7 @@
             [cljs-time.core :as t]
             [cljs.pprint :as pprint]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :refer [interpolate-rich-text-node interpolate-sentence t]]
             [frontend.db :as db]
             [frontend.handler.block :as block-handler]
             [frontend.handler.db-based.export :as db-export-handler]
@@ -32,31 +32,31 @@
         repo (state/get-current-repo)]
     [:div.flex.flex-col.gap-4
      [:div.font-medium.opacity-50
-      "Schedule backup"]
+      (t :export.backup/schedule)]
      (if (utils/nfsSupported)
        [:<>
         (if backup-folder
           [:div.flex.flex-row.items-center.gap-1.text-sm
-               [:div.opacity-50 "Backup folder:"]
+           [:div.opacity-50 (t :export.backup/folder)]
            backup-folder
            (shui/button
             {:variant :ghost
              :class "!px-1 !py-1"
-             :title "Change backup folder"
+             :title (t :export.backup/cancel)
              :on-click (fn []
                          (p/do!
                           (db/transact! [[:db/retractEntity :logseq.kv/graph-backup-folder]])
                           (reset! *backup-folder nil)))
              :size :sm}
-            (ui/icon "edit"))]
+            (ui/icon "x"))]
           (shui/button
            {:variant :default
             :on-click (fn []
                         (p/let [[folder-name _handle] (export/choose-backup-folder repo)]
                           (reset! *backup-folder folder-name)))}
-           "Set backup folder first"))
+           (t :export.backup/set-folder-first)))
         [:div.opacity-50.text-sm
-         "Backup will be created every hour."]
+         (t :export.backup/hourly-note)]
 
         (when backup-folder
           (shui/button
@@ -74,14 +74,13 @@
                          (p/catch (fn [error]
                                     (println "Failed to backup.")
                                     (js/console.error error)))))}
-           "Backup now"))]
+           (t :export.backup/backup-now)))]
        [:div
-        [:span "Your browser doesn't support "]
-        [:a
-         {:href "https://developer.chrome.com/docs/capabilities/web-apis/file-system-access"
-          :target "_blank"}
-         "The File System Access API"]
-        [:span ", please switch to a Chromium-based browser."]])]))
+        [:span
+         (interpolate-sentence
+          (t :export.backup/unsupported-desc)
+          :links [{:href "https://developer.chrome.com/docs/capabilities/web-apis/file-system-access"
+                   :target "_blank"}])]])]))
 
 (rum/defc export
   []
@@ -93,17 +92,17 @@
       [:div
        [:a.font-medium {:on-click #(export/export-repo-as-sqlite-db! current-repo)}
         (t :export/sqlite-db)]
-       [:p.text-sm.opacity-70.mb-0 "Primary way to backup graph's content to a single .sqlite file."]]
+       [:p.text-sm.opacity-70.mb-0 (t :export.backup/sqlite-description)]]
       [:div
        [:a.font-medium {:on-click #(export/export-repo-as-zip! current-repo)}
         (t :export/zip)]
-       [:p.text-sm.opacity-70.mb-0 "Primary way to backup graph's content and assets to a .zip file."]]
+       [:p.text-sm.opacity-70.mb-0 (t :export.backup/zip-description)]]
 
       (when-not (util/mobile?)
         [:div
          [:a.font-medium {:on-click #(db-export-handler/export-repo-as-db-edn! current-repo)}
           (t :export/db-edn)]
-         [:p.text-sm.opacity-70.mb-0 "Exports to a readable and editable .edn file. Don't rely on this as a primary backup."]])
+         [:p.text-sm.opacity-70.mb-0 (t :export/edn-desc)]])
       (when-not (mobile-util/native-platform?)
         [:div
          [:a.font-medium {:on-click #(export-text/export-repo-as-markdown! current-repo)}
@@ -116,17 +115,19 @@
 
       [:div
        [:a.font-medium {:on-click #(export/export-repo-as-debug-transit! current-repo)}
-        "Export debug transit file"]
-       [:p.text-sm.opacity-70.mb-0 "Exports to a .transit file to send to us for debugging. Any sensitive data will be removed in the exported file."]]
+        (t :export/debug-transit-file)]
+       [:p.text-sm.opacity-70.mb-0 (t :export/debug-transit-desc)]]
 
       (if (util/electron?)
         [:div
          [:hr]
-         [:div "Hourly backups are enabled for this graph, "
-          [:a.ml-1 {:on-click (fn []
-                                (let [path (config/get-electron-backup-dir (state/get-current-repo))]
-                                  (js/window.apis.openPath path)))}
-           "open backups folder for this graph"]]]
+         [:div
+          (interpolate-rich-text-node
+           (t :export.backup/enabled-desc)
+           [[:a.ml-1 {:on-click (fn []
+                                  (let [path (config/get-electron-backup-dir (state/get-current-repo))]
+                                    (js/window.apis.openPath path)))}
+             (t :export.backup/open-folder)]])]]
         (when (and util/web-platform?
                    (not (util/mobile?)))
           [:div
@@ -135,11 +136,11 @@
 
 (def *export-block-type (atom :text))
 
-(def text-indent-style-options [{:label "dashes"
+(def text-indent-style-options [{:title-key :export/indent-style-dashes
                                  :selected false}
-                                {:label "spaces"
+                                {:title-key :export/indent-style-spaces
                                  :selected false}
-                                {:label "no-indent"
+                                {:title-key :export/indent-style-none
                                  :selected false}])
 
 (defn- export-helper
@@ -280,7 +281,7 @@
       (if (= :png tp)
         [:div.flex.items-center.justify-center.relative
          (when (not @*content) [:div.absolute (ui/loading "")])
-         [:img {:alt "export preview" :id "export-preview" :class "my-4" :style {:visibility (when (not @*content) "hidden")}}]]
+        [:img {:alt (t :export/preview-alt) :id "export-preview" :class "my-4" :style {:visibility (when (not @*content) "hidden")}}]]
 
         [:textarea.overflow-y-auto.h-96 {:value @*content :read-only true}])
 
@@ -293,13 +294,13 @@
                                     (get-image-blob top-level-uuids (merge options {:transparent-bg? e.currentTarget.checked}) (fn [blob] (reset! *content blob))))})]
         (let [options (->> text-indent-style-options
                            (mapv (fn [opt]
-                                   (if (= @*text-indent-style (:label opt))
+                                   (if (= @*text-indent-style (:title-key opt))
                                      (assoc opt :selected true)
                                      opt))))]
           [:div [:div.flex.items-center
                  [:label.mr-4
                   {:style {:visibility (if (= :text tp) "visible" "hidden")}}
-                  "Indentation style:"]
+                  (t :export/indent-style-label)]
                  [:select.block.my-2.text-lg.rounded.border.py-0.px-1
                   {:style {:visibility (if (= :text tp) "visible" "hidden")}
                    :on-change (fn [e]
@@ -307,13 +308,13 @@
                                   (state/set-export-block-text-indent-style! value)
                                   (reset! *text-indent-style value)
                                   (reset! *content (export-helper top-level-uuids))))}
-                  (for [{:keys [label value selected]} options]
+                  (for [{:keys [title-key value selected]} options]
                     [:option (cond->
-                              {:key label
-                               :value (or value label)}
+                              {:key title-key
+                               :value (or value (name title-key))}
                                selected
                                (assoc :selected selected))
-                     label])]]
+                     (t title-key)])]]
            [:div.flex.items-center
             (ui/checkbox {:class "mr-2"
                           :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}

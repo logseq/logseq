@@ -233,11 +233,11 @@
           (if (contains? #{:show-cloze :show-answer} next-phase)
             (btn-with-shortcut {:btn-text (case next-phase
                                             :show-answer
-                                            (t :flashcards/modal-btn-show-answers)
+                                            (t :flashcard.review/show-answers)
                                             :show-cloze
-                                            (t :flashcards/modal-btn-show-clozes)
+                                            (t :flashcard.review/show-clozes)
                                             :init
-                                            (t :flashcards/modal-btn-hide-answers))
+                                            (t :flashcard.review/hide-answers))
                                 :shortcut "s"
                                 :id "card-answers"
                                 :on-click #(swap! *phase
@@ -311,7 +311,7 @@
          (shui/select-trigger
           {:class "!px-2 !py-0 !h-8 w-64"}
           (shui/select-value
-           {:placeholder "Select cards"}))
+           {:placeholder (t :flashcard/select-cards)}))
          (shui/select-content
           (shui/select-group
            (for [card-entity all-cards]
@@ -321,7 +321,7 @@
          {:variant :ghost
           :id "ls-cards-add"
           :size :sm
-          :title "Add new query"
+          :title (t :flashcard/add-query)
           :class "!px-1 text-muted-foreground"
           :on-click (fn []
                       (p/let [saved-block (<create-cards-block!)]
@@ -341,13 +341,13 @@
 
            (empty? block-ids)
            [:div.ls-card.content.ml-2
-            [:h2.font-medium (t :flashcards/modal-welcome-title)]
+            [:h2.font-medium (t :flashcard.empty/title)]
 
             [:div
-             [:p (t :flashcards/modal-welcome-desc "#Card")]]]
+             [:p (t :flashcard.empty/desc "#Card")]]]
 
            :else
-           [:p (t :flashcards/modal-finished)]))])))
+           [:p (t :flashcard.review/finished)]))])))
 
 (defonce ^:private *last-update-due-cards-count-canceler (atom nil))
 (def ^:private new-task--update-due-cards-count

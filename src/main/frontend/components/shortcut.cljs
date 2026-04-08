@@ -164,7 +164,7 @@
           {:on-click (fn [^js e]
                        (.stopPropagation e)
                        (clear!))
-           :aria-label "Remove filter"}
+           :aria-label (t :keymap/remove-filter)}
           (ui/icon "x" {:size 12})]])
       (when-not has-keystroke?
         [:span.shortcut-input-placeholder (t :keymap/press-keys-to-filter)])]
@@ -298,7 +298,7 @@
       {:on-click (fn []
                    (set-q! "")
                    (js/setTimeout #(some-> (rum/deref *search-ref) (.focus)) 50))
-       :aria-label "Clear search"}
+       :aria-label (t :keymap/clear-search)}
       (ui/icon "x" {:size 12})])])
 
 (defn- open-keystroke-filter!
@@ -340,7 +340,7 @@
         {:on-click (fn [^js e]
                      (.stopPropagation e)
                      (set-keystroke! ""))
-         :aria-label "Clear keystroke filter"}
+         :aria-label (t :keymap/clear-keystroke-filter)}
         (ui/icon "x" {:size 12})]])))
 
 (defn- pane-filter-pills
@@ -364,12 +364,12 @@
      [:button.flex.items-center.icon-link
       {:tab-index -1
        :on-click toggle-categories-fn
-       :aria-label "Toggle categories pane"}
+       :aria-label (t :keymap/toggle-categories-pane)}
       (ui/icon "fold")]
      [:button.flex.items-center.icon-link
       {:tab-index -1
        :on-click refresh-shortcuts-list!
-       :aria-label "Refresh all"}
+       :aria-label (t :keymap/refresh-all)}
       (ui/icon "refresh")]]))
 
 (rum/defc pane-controls
@@ -942,7 +942,7 @@
          (shui/shortcut x {:chord-separator (t :keymap/chord-separator)})
          (when (#{:idle :accepted :esc-hint :removed :reset} render-state)
            [:button.shortcut-binding-remove
-            {:aria-label "Remove binding"
+            {:aria-label (t :keymap/remove-binding)
              :on-click (fn [^js e]
                          (.stopPropagation e)
                          (let [new-binding (vec (concat (subvec current-binding 0 idx)
@@ -960,7 +960,7 @@
          (shui/shortcut keystroke)
          (when (#{:conflict-cross :conflict-same} render-state)
            [:button.shortcut-binding-remove
-            {:aria-label "Remove binding"
+            {:aria-label (t :keymap/remove-binding)
              :on-click (fn [^js e]
                          (.stopPropagation e)
                          (cancel-fn!))}

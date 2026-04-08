@@ -47,7 +47,7 @@
     (if @*query-error
       (do
         (log/error :exception @*query-error)
-        [:div.warning.my-1 "Query failed: "
+        [:div.warning.my-1 (t :query/error)
          [:p (.-message @*query-error)]])
       [:div.custom-query-results
        (cond
@@ -57,8 +57,7 @@
                         (catch :default error
                           (log/error :custom-view-failed {:error error
                                                           :result result})
-                          [:div "Custom view failed: "
-                           (str error)]))]
+                          [:div (t :query/custom-view-error (str error))]))]
            (util/hiccup-keywordize result))
 
          (not (:built-in-query? config))

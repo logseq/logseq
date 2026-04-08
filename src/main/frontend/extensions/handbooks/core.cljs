@@ -137,7 +137,7 @@
      [:a.select-trigger
       {:on-click #(set-open? (not open?))
        :tabIndex "0"}
-      [:small "Current chapter"]
+      [:small (t :help.handbook/current-chapter)]
       [:strong (:title topic)]
       (if open?
         (ui/icon "chevron-down")
@@ -251,9 +251,9 @@
                          next (when-not (= idx (dec chapters-len)) (inc idx))]
 
                      [:div.controls.flex.justify-between.pt-4
-                      [:div (when prev (ui/button [:span.flex.items-center (ui/icon "arrow-left") "Prev chapter"]
+                      [:div (when prev (ui/button [:span.flex.items-center (ui/icon "arrow-left") (t :help.handbook/prev-chapter)]
                                                   :small? true :on-click #(nav! [:topic-detail (nth chapters prev) (:title parent)] pane-state)))]
-                      [:div (when next (ui/button [:span.flex.items-center "Next chapter" (ui/icon "arrow-right")]
+                      [:div (when next (ui/button [:span.flex.items-center (t :help.handbook/next-chapter) (ui/icon "arrow-right")]
                                                   :small? true :on-click #(nav! [:topic-detail (nth chapters next) (:title parent)] pane-state)))]]))])]]))))))
 
 (rum/defc pane-dashboard
@@ -262,25 +262,25 @@
     [:div.pane.dashboard-pane
      (when-let [popular-topics (:popular-topics root)]
        [:<>
-        [:h2 (t :handbook/popular-topics)]
+        [:h2 (t :help.handbook/popular-topics)]
         [:div.topics-list
          (for [topic-key popular-topics]
            (when-let [topic (and (string? topic-key)
                                  (->> (util/safe-lower-case topic-key)
                                       (csk/->snake_case_string)
                                       (get handbooks-nodes)))]
-             (topic-card topic #(nav-to-pane! [:topic-detail topic (t :handbook/title)] [:dashboard]) nil)))]])
+             (topic-card topic #(nav-to-pane! [:topic-detail topic (t :help.handbook/title)] [:dashboard]) nil)))]])
 
-     [:h2 (t :handbook/help-categories)]
+     [:h2 (t :help.handbook/help-categories)]
      [:div.categories-list
       (let [categories (:children root)
             categories (conj (vec categories)
                              {:key      :ls-shortcuts
-                              :title    [:span "Keyboard shortcuts"]
-                              :children [:span (->> (vals @shortcut-config/*config)
-                                                    (map count)
-                                                    (apply +))
-                                         " shortcuts"]
+                              :title    [:span (t :help.handbook/keyboard-shortcuts)]
+                              :children [:span (t :help.handbook/shortcuts-count
+                                                  (->> (vals @shortcut-config/*config)
+                                                       (map count)
+                                                       (apply +)))]
                               :color    "#2563EB"
                               :icon     "command"})]
         (for [{:keys [key title children color icon] :as category} categories
@@ -303,16 +303,16 @@
               children
 
               :else
-              [:span (str total " " (util/safe-lower-case (t :handbook/topics)))])]]))]]))
+              [:span (str total " " (util/safe-lower-case (t :help.handbook/topics)))])]]))]]))
 
 (rum/defc pane-settings
   [dev-watch? set-dev-watch?]
   [:div.pane.pane-settings
    [:div.item
     [:p.flex.items-center.space-x-3.mb-0
-     [:strong "Writing mode (preview in time)"]
+     [:strong (t :help.handbook/writing-mode)]
      (ui/toggle dev-watch? #(set-dev-watch? (not dev-watch?)) true)]
-    [:small.opacity-30 (str "Resources from " (get-handbooks-endpoint "/"))]]])
+    [:small.opacity-30 (t :help.handbook/resources-from (get-handbooks-endpoint "/"))]]])
 
 (rum/defc search-bar
   [pane-state nav! handbooks-nodes search-state set-search-state!]
@@ -362,7 +362,7 @@
        {:style {:top 6 :left 7}}
        (ui/icon "search" {:size 12})]
 
-      [:input {:placeholder   (t :handbook/search)
+      [:input {:placeholder   (t :help.handbook/search-placeholder)
                :auto-focus    true
                :default-value q
                :on-change     #(set-q! (util/evalue %))
@@ -457,30 +457,30 @@
        {:class "flex-1" :href "https://discord.gg/KpN4eHY"}
        [:div.inner.flex.space-x-1.flex-col
         (ui/icon "brand-discord" {:class "opacity-30" :size 26})
-        [:h1.font-medium.py-1 "Chat on Discord"]
-        [:h2.text-xs.leading-4.opacity-40 "Ask quick questions, meet fellow users, and learn new workflows."]
+        [:h1.font-medium.py-1 (t :help.handbook/chat-on-discord)]
+        [:h2.text-xs.leading-4.opacity-40 (t :help.handbook/chat-on-discord-desc)]
         [:small.flex.items-center.pt-1.5
          [:i.block.rounded-full.bg-green-500 {:style {:width "8px" :height "8px"}}]
          [:span.pl-2.opacity-90
           [:strong.opacity-60 (or discord-count "?")]
-          [:span.opacity-70.font-light " users online"]]]])
+          [:span.opacity-70.font-light (str " " (t :help.handbook/users-online))]]]])
 
       (link-card
        {:class "flex-1" :href "https://discuss.logseq.com"}
        [:div.inner.flex.space-x-1.flex-col
         (ui/icon "message-dots" {:class "opacity-30" :size 26})
-        [:h1.font-medium.py-1 "Visit the forum"]
-        [:h2.text-xs.leading-4.opacity-40 "Give feedback, request features, and have in-depth conversations."]
+        [:h1.font-medium.py-1 (t :help.handbook/visit-the-forum)]
+        [:h2.text-xs.leading-4.opacity-40 (t :help.handbook/visit-the-forum-desc)]
         [:small.flex.items-center.pt-1.5
          [:i.flex.items-center.opacity-50 (ui/icon "bolt" {:size 14})]
          [:span.pl-1.opacity-90
-          [:strong.opacity-60 "800+"]
-          [:span.opacity-70.font-light " monthly posts"]]]])]]))
+          [:strong.opacity-60 "800+"] ;; TODO: fetch real data
+          [:span.opacity-70.font-light (str " " (t :help.handbook/monthly-posts))]]]])]]))
 
 (rum/defc ^:large-vars/data-var content
   []
   (let [[active-pane-state, set-active-pane-state!]
-        (rum/use-state [:dashboard nil (t :handbook/title)])
+        (rum/use-state [:dashboard nil (t :help.handbook/title)])
 
         [handbooks-state, set-handbooks-state!]
         (rum/use-state nil)
@@ -551,7 +551,7 @@
              (let [v (<! c)]
                (when (not= v :return)
                  (when-let [to (get handbooks-nodes v)]
-                   (nav-to-pane! [:topic-detail to (t :handbook/title)] [:dashboard]))
+                   (nav-to-pane! [:topic-detail to (t :help.handbook/title)] [:dashboard]))
                  (recur))))
            #(async/go (>! c :return)))))
      [handbooks-nodes])
@@ -589,7 +589,7 @@
       [:div.hd.flex.justify-between.select-none.draggable-handle
        [:h1.text-xl.flex.items-center.font-bold
         (if pane-dashboard?
-          [:span (t :handbook/title)]
+          [:span (t :help.handbook/title)]
           [:button.active:opacity-80.flex.items-center.cursor-pointer
            {:on-click (fn [] (let [prev (first history-state)
                                    prev (cond-> prev
@@ -598,34 +598,34 @@
                                (set-active-pane-state! prev)
                                (set-history-state! (rest history-state))))}
            [:span.pr-2.flex.items-center (ui/icon "chevron-left")]
-           (let [title (or (last active-pane-state) (t :handbook/title) "")]
+           (let [title (or (last active-pane-state) (t :help.handbook/title) "")]
              [:span.truncate.title {:title title} title])])]
 
        [:div.flex.items-center.space-x-3
         (when (> (count history-state) 1)
-          [:a.flex.items-center {:aria-label (t :handbook/home) :tabIndex "0" :on-click #(force-nav-dashboard!)} (ui/icon "home")])
+          [:a.flex.items-center {:aria-label (t :help.handbook/home) :tabIndex "0" :on-click #(force-nav-dashboard!)} (ui/icon "home")])
         (when pane-topic?
           [:a.flex.items-center
-           {:aria-label "Copy topic link" :tabIndex "0"
+           {:aria-label (t :help.handbook/copy-topic-link) :tabIndex "0"
             :on-click   (fn []
                           (let [s (str "logseq://handbook/" (:key (second active-pane-state)))]
                             (util/copy-to-clipboard! s)
                             (notification/show!
-                             [:div [:strong.block "Handbook link copied!"]
+                             [:div [:strong.block (t :help.handbook/link-copied)]
                               [:label.opacity-50 s]] :success)))}
            (ui/icon "copy")])
         (when (state/developer-mode?)
-          [:a.flex.items-center {:aria-label (t :handbook/settings)
+          [:a.flex.items-center {:aria-label (t :help.handbook/settings)
                                  :tabIndex   "0"
-                                 :on-click   #(nav-to-pane! [:settings nil "Settings"] active-pane-state)}
+                                 :on-click   #(nav-to-pane! [:settings nil (t :help.handbook/settings)] active-pane-state)}
            (ui/icon "settings")])
-        [:a.flex.items-center {:aria-label (t :handbook/close) :tabIndex "0" :on-click #(state/toggle! :ui/handbooks-open?)}
+        [:a.flex.items-center {:aria-label (t :help.handbook/close) :tabIndex "0" :on-click #(state/toggle! :ui/handbooks-open?)}
          (ui/icon "x")]]]
 
       (when (and (not pane-settings?) (not handbooks-loaded?))
         [:div.flex.items-center.justify-center.pt-32
          (if-not (:error handbooks-state)
-           (ui/loading "Loading ...")
+           (ui/loading (t :ui/loading))
            [:code (:error handbooks-state)])])
 
       (when (or pane-settings? handbooks-loaded?)

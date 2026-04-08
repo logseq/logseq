@@ -209,7 +209,7 @@
 
 (rum/defc confirm-inner
   [config]
-  (let [{:keys [id deferred outside-cancel? data-reminder]} config
+  (let [{:keys [id deferred outside-cancel? data-reminder data-reminder-label]} config
         reminder? (boolean (and id data-reminder))
         [ready?, set-ready!] (rum/use-state (not reminder?))
         *ok-ref (rum/use-ref nil)
@@ -245,10 +245,10 @@
               :footer
               [:<>
                [:span.flex.items-center.pt-1
-                (when (and id data-reminder)
+                (when (and id data-reminder data-reminder-label)
                   [:label.flex.items-center.gap-1.text-sm
                    (form/checkbox {:ref *reminder-ref})
-                   [:span.opacity-50 "Don't remind me again"]])]
+                   [:span.opacity-50 data-reminder-label]])]
                [:span.flex.gap-2
                 (base/button
                  {:key "cancel"

@@ -80,8 +80,8 @@
            (-> (.confirm ^js Dialog
                          #js {:title (t :ui/confirm)
                               :message (if (entity-util/page? block)
-                                         (t :mobile/header-delete-page-confirmation)
-                                         (t :mobile/header-delete-block-confirmation))})
+                                         (t :mobile.header/delete-page-confirm-desc)
+                                         (t :mobile.header/delete-block-confirm-desc))})
                (p/then
                 (fn [^js result]
                   (let [value (.-value result)]
@@ -97,7 +97,7 @@
        [:span.text-lg.flex.gap-2.items-center.text-red-700
         (shui/tabler-icon "trash" {:class "opacity-80" :size 22})
         (t :ui/delete)])])
-   {:title (t :mobile/header-actions)
+   {:title (t :mobile.header/actions)
     :default-height false}))
 
 (defn- open-graph-switch!
@@ -110,7 +110,7 @@
        {:on-click #(p/do!
                     (shui/popup-hide!)
                     (state/pub-event! [:graph/new-db-graph]))}
-       (t :mobile/header-create-graph))])
+       (t :mobile.header/create-graph))])
    {:default-height false}))
 
 (defn- register-native-top-bar-events! [*configure-top-bar-f]

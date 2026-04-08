@@ -47,11 +47,11 @@
   "Converts a Page to a Tag"
   [page-entity]
   (cond (db/page-exists? (:block/title page-entity) #{:logseq.class/Tag})
-        (notification/show! (t :page/tag-name-already-exists (:block/title page-entity)) :warning false)
+        (notification/show! (t :page.convert/page-to-tag-duplicate (:block/title page-entity)) :warning false)
         (:block/parent page-entity)
-        (notification/show! (t :page/namespaced-pages-cant-be-tags) :error false)
+        (notification/show! (t :page.convert/page-to-tag-namespaced) :error false)
         (ldb/built-in? page-entity)
-        (notification/show! (t :page/built-in-pages-cant-be-tags) :error)
+        (notification/show! (t :page.convert/page-to-tag-built-in) :error)
         :else
         (let [txs [(db-class/build-new-class (db/get-db)
                                              {:db/id (:db/id page-entity)
@@ -64,12 +64,12 @@
 (defn convert-tag-to-page!
   [entity]
   (cond (db/page-exists? (:block/title entity) #{:logseq.class/Page})
-        (notification/show! (t :page/page-name-already-exists (:block/title entity)) :warning false)
+        (notification/show! (t :page.convert/tag-to-page-duplicate (:block/title entity)) :warning false)
         (ldb/built-in? entity)
-        (notification/show! (t :page/built-in-tags-cant-be-pages) :error)
+        (notification/show! (t :page.convert/tag-to-page-built-in) :error)
         :else
         (if (seq (:logseq.property.class/_extends entity))
-          (notification/show! (t :page/tag-has-children-cant-convert) :error false)
+          (notification/show! (t :page.convert/tag-to-page-has-children) :error false)
           (p/let [objects (db-async/<get-tag-objects (state/get-current-repo) (:db/id entity))]
             (let [convert-fn
                   (fn convert-fn []
@@ -87,9 +87,10 @@
                           txs (concat page-txs obj-txs)]
                       (db/transact! (state/get-current-repo) txs {:outliner-op :save-block})))]
               (-> (shui/dialog-confirm!
-                   (t :page/convert-tag-to-page-confirm)
+                   (t :page.convert/tag-to-page-confirm-desc)
                    {:id :convert-tag-to-page
-                    :data-reminder :ok})
+                    :data-reminder :ok
+                    :data-reminder-label (t :ui/dont-remind-me-again)})
                   (p/then convert-fn)))))))
 
 (defn <create-class!

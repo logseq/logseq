@@ -45,20 +45,20 @@
 
 (defn db-based-export-repo-as-zip!
   [repo]
-  (state/pub-event! [:dialog/export-zip "Preparing zip"])
+  (state/pub-event! [:dialog/export-zip (t :export/preparing-zip)])
   (-> (p/let [db-data (persist-db/<export-db repo {:return-data? true})
               filename "db.sqlite"
               repo-name (common-sqlite/sanitize-db-name repo)
               _ (state/set-state! :graph/exporting-state {:total 100
                                                           :current-idx 20
-                                                          :current-page "Collecting assets"
-                                                          :label "Exporting"})
+                                                          :current-page (t :export/collecting-assets)
+                                                          :label (t :export/exporting)})
               assets (assets-handler/<get-all-assets)
               files (cons [filename db-data] assets)
               _ (state/set-state! :graph/exporting-state {:total 100
                                                           :current-idx 40
-                                                          :current-page "Creating zip"
-                                                          :label "Exporting"})
+                                                          :current-page (t :export/creating-zip)
+                                                          :label (t :export/exporting)})
               zipfile (zip/make-zip repo-name files repo
                                     {:compression "STORE"
                                      :progress-fn (fn [percent]
@@ -66,12 +66,12 @@
                                                       (state/set-state! :graph/exporting-state
                                                                         {:total 100
                                                                          :current-idx (js/Math.round scaled)
-                                                                         :current-page "Creating zip"
-                                                                         :label "Exporting"})))})]
+                                                                         :current-page (t :export/creating-zip)
+                                                                         :label (t :export/exporting)})))})]
         (state/set-state! :graph/exporting-state {:total 100
                                                   :current-idx 100
-                                                  :current-page "Finalizing"
-                                                  :label "Exporting"})
+                                                  :current-page (t :export/finalizing)
+                                                  :label (t :export/exporting)})
         (when-let [anchor (gdom/getElement "download-as-zip")]
           (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
           (.setAttribute anchor "download" (.-name zipfile))

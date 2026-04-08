@@ -224,14 +224,14 @@
            (throw (ex-info "Cannot create this page unless all parents are pages"
                            {:type :notification
                             :payload {:message "Cannot create this page unless all parents are pages."
-                                      :i18n-key :outliner/page-parents-must-be-pages
+                                      :i18n-key :page.validation/parents-must-be-pages
                                       :type :warning}}))
 
            (and class? (not (every? ldb/class? pages)))
            (throw (ex-info "Cannot create this tag unless all parents are tags"
                            {:type :notification
                             :payload {:message "Cannot create this tag unless all parents are tags."
-                                      :i18n-key :outliner/tag-parents-must-be-tags
+                                      :i18n-key :class.validation/parents-must-be-tags
                                       :type :warning}}))
 
            :else

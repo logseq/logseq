@@ -2,6 +2,7 @@
   "Provides table views for class objects and property related objects"
   (:require [frontend.components.filepicker :as filepicker]
             [frontend.components.views :as views]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.react :as react]
@@ -84,7 +85,7 @@
                               (shui/dialog-open!
                                (fn []
                                  [:div.flex.flex-col.gap-2
-                                  [:div.font-medium "Add assets"]
+                                  [:div.font-medium (t :asset/add-assets)]
                                   (filepicker/picker
                                    {:on-change (fn [_e files]
                                                  (p/let [entities (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)]

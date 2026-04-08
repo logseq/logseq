@@ -372,11 +372,11 @@
                                              :inactive config/publishing?
                                              :fn      #(state/pub-event! [:publish/open-dialog])}
 
-   :command/run                             {:binding  "mod+shift+1"
+   :shell/run                               {:binding  "mod+shift+1"
                                              :inactive (not (util/electron?))
                                              :fn       #(do
                                                           (editor-handler/escape-editing {:select? true})
-                                                          (state/pub-event! [:command/run]))}
+                                                          (state/pub-event! [:shell/run]))}
 
    :go/home                                 {:binding "g h"
                                              :fn      #(route-handler/redirect-to-home!)}
@@ -429,7 +429,7 @@
    :ui/toggle-contents                      {:binding "alt+shift+c"
                                              :fn      ui-handler/toggle-contents!}
 
-   :command/toggle-favorite                 {:binding "mod+shift+f"
+   :page/toggle-favorite                    {:binding "mod+shift+f"
                                              :fn      page-handler/toggle-favorite!}
 
    :editor/quick-add                        {:binding (if mac? "mod+e" "mod+alt+e")
@@ -634,7 +634,7 @@
           :editor/copy
           :editor/copy-text
           :editor/cut
-          :command/toggle-favorite
+          :page/toggle-favorite
           :editor/jump])
         (with-meta {:before m/enable-when-not-component-editing!}))
 
@@ -658,7 +658,7 @@
           :search/re-index
           :sidebar/open-today-page
           :sidebar/clear
-          :command/run
+          :shell/run
           :publish/open-dialog
           :command-palette/toggle
           :editor/add-property
@@ -846,8 +846,8 @@
      :pdf/next-page
      :pdf/close
      :pdf/find
-     :command/toggle-favorite
-     :command/run
+     :page/toggle-favorite
+     :shell/run
      :graph/export-as-html
      :graph/open
      :graph/remove

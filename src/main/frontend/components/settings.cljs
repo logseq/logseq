@@ -8,7 +8,7 @@
             [frontend.components.shortcut :as shortcut]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [interpolate-rich-text-node locale-join-rich-text-node t]]
+            [frontend.context.i18n :refer [interpolate-rich-text-node locale-join-rich-text-node locale-format-date t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.dicts :as dicts]
@@ -62,19 +62,19 @@
        [:div (cond
                (mobile-util/native-android?)
                (ui/button
-                (t :settings/check-for-updates)
+                (t :settings.general/check-for-updates)
                 :class "text-sm mr-1"
                 :href "https://github.com/logseq/logseq/releases")
 
                (mobile-util/native-ios?)
                (ui/button
-                (t :settings/check-for-updates)
+                (t :settings.general/check-for-updates)
                 :class "text-sm mr-1"
                 :href "https://apps.apple.com/app/logseq/id1601013908")
 
                (util/electron?)
                (ui/button
-                (if update-pending? (t :settings/checking) (t :settings/check-for-updates))
+                (if update-pending? (t :settings.general/checking) (t :settings.general/check-for-updates))
                 :class "text-sm mr-1"
                 :disabled update-pending?
                 :on-click #(js/window.apis.checkForUpdates false))
@@ -83,7 +83,7 @@
                nil)]
 
        [:div.text-sm.cursor
-        {:title (t :settings/revision config/revision)
+        {:title (t :settings.general/revision config/revision)
          :on-click (fn []
                      (notification/show! [:div
                                           [:span (t :notification/current-revision)]
@@ -98,19 +98,19 @@
        [:a.text-sm.fade-link.underline.inline
         {:target "_blank"
          :href "https://docs.logseq.com/#/page/changelog"}
-        (t :settings/changelog)]]]
+        (t :settings.general/changelog)]]]
 
      (when-not (or update-pending?
                    (string/blank? type))
        [:div.update-state.text-sm
         (case type
           "update-not-available"
-          [:p (t :settings/app-updated)]
+          [:p (t :settings.general/app-updated)]
 
           "update-available"
           (let [{:keys [name url]} payload]
             [:p
-             [:span (t :settings/update-available)]
+             [:span (t :settings.general/update-available)]
              [:a.link
               {:on-click
                (fn [e]
@@ -127,10 +127,10 @@
                     (js/window.apis.openExternal "https://github.com/logseq/logseq/releases")
                     (util/stop e))}
                  svg/external-link
-                 (t :settings/release-channel)]]
+                 (t :settings.general/release-channel)]]
             [:p
              (interpolate-rich-text-node
-              (t :settings/update-error)
+              (t :settings.general/update-error)
               [release-channel-link]
               true)]))])]))
 
@@ -140,10 +140,10 @@
    {:style {:box-shadow "0 4px 20px 4px rgba(0, 20, 60, .1), 0 4px 80px -8px rgba(0, 20, 60, .2)"}}
    [:div {:style {:margin "12px" :max-width "500px"}}
     [:p.text-sm
-     (t :settings/preferred-outdenting-tip)
+     (t :settings.editor/preferred-outdenting-tip)
      [:a.text-sm
       {:target "_blank" :href "https://discuss.logseq.com/t/whats-your-preferred-outdent-behavior-the-direct-one-or-the-logical-one/978"}
-      (t :settings/preferred-outdenting-tip-more)]]
+      (t :settings.editor/preferred-outdenting-tip-more)]]
     [:img {:src    "https://discuss.logseq.com/uploads/default/original/1X/e8ea82f63a5e01f6d21b5da827927f538f3277b9.gif"
            :width  500
            :height 500}]]])
@@ -154,7 +154,7 @@
    {:style {:box-shadow "0 4px 20px 4px rgba(0, 20, 60, .1), 0 4px 80px -8px rgba(0, 20, 60, .2)"}}
    [:div {:style {:margin "12px" :max-width "500px"}}
     [:p.text-sm
-     (t :settings/auto-expand-block-refs-tip)]
+     (t :settings.editor/auto-expand-block-refs-tip)]
     [:img {:src    "https://user-images.githubusercontent.com/28241963/225818326-118deda9-9d1e-477d-b0ce-771ca0bcd976.gif"
            :width  500
            :height 500}]]])
@@ -187,32 +187,32 @@
 
 (defn edit-config-edn []
   (row-with-button-action
-   {:left-label   (t :settings/custom-configuration)
-    :button-label (t :settings/edit-config-edn)
+   {:left-label   (t :settings.general/custom-configuration)
+    :button-label (t :settings.general/edit-config-edn)
     :href         (rfe/href :file {:path (config/get-repo-config-path)})
     :on-click     ui-handler/toggle-settings-modal!
     :-for         "config_edn"}))
 
 (defn edit-global-config-edn []
   (row-with-button-action
-   {:left-label   (t :settings/custom-global-configuration)
-    :button-label (t :settings/edit-global-config-edn)
+   {:left-label   (t :settings.general/custom-global-configuration)
+    :button-label (t :settings.general/edit-global-config-edn)
     :href         (rfe/href :file {:path (global-config-handler/global-config-path)})
     :on-click     ui-handler/toggle-settings-modal!
     :-for         "global_config_edn"}))
 
 (defn edit-custom-css []
   (row-with-button-action
-   {:left-label   (t :settings/custom-theme)
-    :button-label (t :settings/edit-custom-css)
+   {:left-label   (t :settings.general/custom-theme)
+    :button-label (t :settings.general/edit-custom-css)
     :href         (rfe/href :file {:path (config/get-custom-css-path)})
     :on-click     ui-handler/toggle-settings-modal!
     :-for         "customize_css"}))
 
 (defn edit-export-css []
   (row-with-button-action
-   {:left-label   (t :settings/export-theme)
-    :button-label (t :settings/edit-export-css)
+   {:left-label   (t :settings.general/export-theme)
+    :button-label (t :settings.general/edit-export-css)
     :href         (rfe/href :file {:path (config/get-export-css-path)})
     :on-click     ui-handler/toggle-settings-modal!
     :-for         "export_css"}))
@@ -221,7 +221,7 @@
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "show_brackets"}
-    (t :settings/show-brackets)]
+    (t :settings.editor/show-brackets)]
    [:div
     [:div.rounded-md.sm:max-w-xs
      (ui/toggle show-brackets?
@@ -236,7 +236,7 @@
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "wide_mode"}
-    (t :settings/wide-mode)]
+    (t :settings.editor/wide-mode)]
    [:div
     [:div.rounded-md.sm:max-w-xs
      (ui/toggle wide-mode?
@@ -251,7 +251,7 @@
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "font_family"}
-    (t :settings/editor-font)]
+    (t :settings.general/editor-font)]
    [:div.flex.flex-col.col-span-2
     [:div.flex.gap-2
      (for [t [:default :serif :mono]
@@ -271,14 +271,14 @@
      [:label.w-full.flex.items-center.cursor-pointer
       (shui/checkbox {:checked (boolean global)
                       :on-checked-change #(state/set-editor-font! {:global %})})
-      [:span.pl-1.text-sm.opacity-70 "Set as global font family"]]]]])
+      [:span.pl-1.text-sm.opacity-70 (t :settings.general/editor-font-set-global)]]]]])
 
 (rum/defcs switch-spell-check-row < rum/reactive
   [state t]
   (let [enabled? (state/sub [:electron/user-cfgs :spell-check])]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
      [:label.block.text-sm.font-medium.leading-5.opacity-70
-      (t :settings/spell-checker)]
+      (t :settings.editor/spell-checker)]
      [:div
       [:div.rounded-md.sm:max-w-xs
        (ui/toggle
@@ -294,7 +294,7 @@
   (let [enabled? (state/sub [:electron/user-cfgs :auto-update])
         enabled? (if (nil? enabled?) true enabled?)]
     (toggle "usage-diagnostics"
-            (t :settings/auto-updater)
+            (t :settings.advanced/auto-updater)
             enabled?
             #((state/set-state! [:electron/user-cfgs :auto-update] (not enabled?))
               (ipc/ipc :userAppCfgs :auto-update (not enabled?))))))
@@ -310,7 +310,7 @@
                   (let [lang-code (name (:value language))
                         lang-label (:label language)]
                     [:option {:key lang-code :value lang-code} lang-label]))]]
-    (row-with-button-action {:left-label (t :settings/language)
+    (row-with-button-action {:left-label (t :settings.general/language)
                              :-for       "preferred_language"
                              :action     action})))
 
@@ -320,15 +320,19 @@
         dark? (= "dark" theme)
         system-theme? (state/sub :ui/system-theme?)
         switch-theme (if dark? "light" "dark")
+        switch-theme-label (case switch-theme
+                             "light" (t :settings.general/theme-light)
+                             "dark" (t :settings.general/theme-dark)
+                             (t :settings.general/theme-system))
         color-accent (state/sub :ui/radix-color)
         pick-theme [:ul.cp__theme-modes-options
                     [:li {:on-click (partial state/use-theme-mode! "light")
-                          :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light {:class (when color-accent "radix")}] [:strong (t :settings/theme-light)]]
+                          :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light {:class (when color-accent "radix")}] [:strong (t :settings.general/theme-light)]]
                     [:li {:on-click (partial state/use-theme-mode! "dark")
-                          :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark {:class (when color-accent "radix")}] [:strong (t :settings/theme-dark)]]
+                          :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark {:class (when color-accent "radix")}] [:strong (t :settings.general/theme-dark)]]
                     [:li {:on-click (partial state/use-theme-mode! "system")
-                          :class    (classnames [{:active system-theme?}])} [:i.mode-system {:class (when color-accent "radix")}] [:strong (t :settings/theme-system)]]]]
-    (row-with-button-action {:left-label (t :right-side-bar/switch-theme (string/capitalize switch-theme))
+                          :class    (classnames [{:active system-theme?}])} [:i.mode-system {:class (when color-accent "radix")}] [:strong (t :settings.general/theme-system)]]]]
+    (row-with-button-action {:left-label (t :theme/switch-to switch-theme-label)
                              :-for       "toggle_theme"
                              :action     pick-theme
                              :desc       (ui/render-keyboard-shortcut
@@ -369,7 +373,7 @@
 
     [:div
      (row-with-button-action
-      {:left-label (t :settings/accent-color)
+      {:left-label (t :settings.general/accent-color)
        :-for "toggle_radix_theme"
        :desc (when-not _in-modal?
                [:span.pl-6 (ui/render-keyboard-shortcut
@@ -378,7 +382,7 @@
        :stretch (boolean _in-modal?)
        :action pick-theme})
      [:div.text-sm.opacity-50.mt-1
-      (t :settings/accent-color-alert)]]))
+      (t :settings.general/accent-color-alert)]]))
 
 (rum/defc appearance < rum/reactive
   []
@@ -393,7 +397,7 @@
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "custom_date_format"}
-    (t :settings/custom-date-format)]
+    (t :settings.editor/custom-date-format)]
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div.max-w-lg.rounded-md
      [:select.form-select.is-small
@@ -412,7 +416,7 @@
 
 (defn outdenting-row [t logical-outdenting?]
   (toggle "preferred_outdenting"
-          [(t :settings/preferred-outdenting)
+          [(t :settings.editor/preferred-outdenting)
            (ui/tooltip [:span.flex.px-2 (svg/info)]
                        (outdenting-hint) {:content-props {:side "right"}})]
           logical-outdenting?
@@ -420,21 +424,21 @@
 
 (defn showing-full-blocks [t show-full-blocks?]
   (toggle "show_full_blocks"
-          (t :settings/show-full-blocks)
+          (t :settings.editor/show-full-blocks)
           show-full-blocks?
           config-handler/toggle-show-full-blocks!))
 
 (defn preferred-pasting-file [t preferred-pasting-file?]
   (toggle "preferred_pasting_file"
-          [(t :settings/preferred-pasting-file)
+          [(t :settings.editor/preferred-pasting-file)
            (ui/tooltip [:span.flex.px-2 (svg/info)]
-                       [:span.block.w-64 (t :settings/preferred-pasting-file-hint)])]
+                       [:span.block.w-64 (t :settings.editor/preferred-pasting-file-hint)])]
           preferred-pasting-file?
           config-handler/toggle-preferred-pasting-file!))
 
 (defn auto-expand-row [t auto-expand-block-refs?]
   (toggle "auto_expand_block_refs"
-          [(t :settings/auto-expand-block-refs)
+          [(t :settings.editor/auto-expand-block-refs)
            (ui/tooltip [:span.flex.px-2 (svg/info)]
                        (auto-expand-hint))]
           auto-expand-block-refs?
@@ -442,14 +446,14 @@
 
 (defn tooltip-row [t enable-tooltip?]
   (toggle "enable_tooltip"
-          (t :settings/enable-tooltip)
+          (t :settings.editor/enable-tooltip)
           enable-tooltip?
           (fn []
             (config-handler/toggle-ui-enable-tooltip!))))
 
 (defn shortcut-tooltip-row [t enable-shortcut-tooltip?]
   (toggle "enable_tooltip"
-          (t :settings/enable-shortcut-tooltip)
+          (t :settings.editor/enable-shortcut-tooltip)
           enable-shortcut-tooltip?
           (fn []
             (state/toggle-shortcut-tooltip!))))
@@ -464,21 +468,21 @@
         (p/do!
          (config-handler/set-config! :default-home new-home)
          (config-handler/set-config! :feature/enable-journals? true)
-         (notification/show! (t :settings/journals-enabled) :success)))
+         (notification/show! (t :settings.features/journals-enabled) :success)))
 
       ;; FIXME: home page should be db id instead of page name
       (ldb/get-page (db/get-db) value)
       (let [home (get (state/get-config) :default-home {})
             new-home (assoc home :page value)]
         (config-handler/set-config! :default-home new-home)
-        (notification/show! (t :settings/home-default-page-updated) :success))
+        (notification/show! (t :settings.features/home-default-page-updated) :success))
 
       :else
-      (notification/show! (t :settings/page-not-found value) :warning))))
+      (notification/show! (t :settings.features/page-not-found value) :warning))))
 
 (defn journal-row [enable-journals?]
   (toggle "enable_journals"
-          (t :settings/enable-journals)
+          (t :settings.features/enable-journals)
           enable-journals?
           (fn []
             (let [value (not enable-journals?)]
@@ -486,7 +490,7 @@
 
 (defn enable-all-pages-public-row [t enable-all-pages-public?]
   (toggle "all pages public"
-          (t :settings/enable-all-pages-public)
+          (t :settings.editor/enable-all-pages-public)
           enable-all-pages-public?
           (fn []
             (let [value (not enable-all-pages-public?)]
@@ -494,31 +498,31 @@
 
 (defn usage-diagnostics-row [t instrument-disabled?]
   (toggle "usage-diagnostics"
-          (t :settings/disable-sentry)
+          (t :settings.advanced/disable-sentry)
           (not instrument-disabled?)
           (fn [] (instrument/disable-instrument
                   (not instrument-disabled?)))
-          [:span.text-sm.opacity-50 (t :settings/disable-sentry-desc)]))
+          [:span.text-sm.opacity-50 (t :settings.advanced/disable-sentry-desc)]))
 
 ;; (defn clear-cache-row [t]
-;;   (row-with-button-action {:left-label   (t :settings/clear-cache)
-;;                            :button-label (t :settings/clear)
+;;   (row-with-button-action {:left-label   (t :settings.advanced/clear-cache)
+;;                            :button-label (t :settings.advanced/clear)
 ;;                            :on-click     #(state/pub-event! [:graph/clear-cache!])
 ;;                            :-for         "clear_cache"}))
 
 (defn version-row [t version]
-  (row-with-button-action {:left-label (t :settings/current-version)
+  (row-with-button-action {:left-label (t :settings.general/current-version)
                            :action     (app-updater version)
                            :-for       "current-version"}))
 
 (defn developer-mode-row [t developer-mode?]
   (toggle "developer_mode"
-          (t :settings/developer-mode)
+          (t :settings.advanced/developer-mode)
           developer-mode?
           (fn []
             (let [mode (not developer-mode?)]
               (state/set-developer-mode! mode)))
-          [:div.text-sm.opacity-50 (t :settings/developer-mode-desc)]))
+          [:div.text-sm.opacity-50 (t :settings.advanced/developer-mode-desc)]))
 
 (rum/defc plugin-enabled-switcher
   [t]
@@ -572,22 +576,22 @@
 
 (defn plugin-system-switcher-row []
   (row-with-button-action
-   {:left-label (t :settings/plugin-system)
+   {:left-label (t :settings.features/plugin-system)
     :action (plugin-enabled-switcher t)}))
 
 (defn http-server-switcher-row []
   (row-with-button-action
-   {:left-label (t :server/http-api-server)
+   {:left-label (t :server/title)
     :action (http-server-enabled-switcher t)}))
 
 (defn flashcards-switcher-row [enable-flashcards?]
   (row-with-button-action
-   {:left-label (t :settings/enable-flashcards)
+   {:left-label (t :settings.features/enable-flashcards)
     :action (flashcards-enabled-switcher enable-flashcards?)}))
 
 (defn https-user-agent-row [agent-opts]
   (row-with-button-action
-   {:left-label (t :settings/network-proxy)
+   {:left-label (t :settings.advanced/network-proxy)
     :action (user-proxy-settings agent-opts)}))
 
 (rum/defcs auto-chmod-row < rum/reactive
@@ -597,25 +601,25 @@
                    (state/sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))]
     (toggle
      "automatic-chmod"
-     (t :settings/auto-chmod)
+     (t :settings.advanced/auto-chmod)
      enabled?
      #(do
         (state/set-state! [:electron/user-cfgs :feature/enable-automatic-chmod?] (not enabled?))
         (ipc/ipc :userAppCfgs :feature/enable-automatic-chmod? (not enabled?)))
-     [:span.text-sm.opacity-50 (t :settings/auto-chmod-desc)])))
+     [:span.text-sm.opacity-50 (t :settings.advanced/auto-chmod-desc)])))
 
 (rum/defcs native-titlebar-row < rum/reactive
   [state t]
   (let [enabled? (state/sub [:electron/user-cfgs :window/native-titlebar?])]
     (toggle
      "native-titlebar"
-     (t :settings/native-titlebar)
+     (t :settings.general/native-titlebar)
      enabled?
      #(when (js/confirm (t :ui/relaunch-confirm))
         (state/set-state! [:electron/user-cfgs :window/native-titlebar?] (not enabled?))
         (ipc/ipc :userAppCfgs :window/native-titlebar? (not enabled?))
         (js/logseq.api.relaunch))
-     [:span.text-sm.opacity-50 (t :settings/native-titlebar-desc)])))
+     [:span.text-sm.opacity-50 (t :settings.general/native-titlebar-desc)])))
 
 (rum/defcs settings-general < rum/reactive
   [_state current-repo]
@@ -678,7 +682,7 @@
 
      ;; (ui/admonition
      ;;  :warning
-     ;;  [:p (t :settings/clear-cache-warning)])
+     ;;  [:p (t :settings.advanced/clear-cache-warning)])
      ]))
 
 (rum/defc settings-account-usage-description [pro-account? graph-usage]
@@ -703,10 +707,10 @@
         count-percent-node [:strong.text-white (str count-percent "%")]
         storage-percent-node [:strong.text-white (str storage-percent-formatted "%")]
         synced-graphs-summary (interpolate-rich-text-node
-                               (t :settings/synced-graphs)
+                               (t :settings.account/synced-graphs)
                                [count-usage count-limit count-percent-node])
         storage-usage-summary (interpolate-rich-text-node
-                               (t :settings/storage-usage)
+                               (t :settings.account/storage-usage)
                                [storage-usage-formatted storage-limit storage-percent-node])]
     [:div.text-sm
      (if pro-account?
@@ -743,125 +747,131 @@
       (cond
         logged-in?
         [:div.grid.grid-cols-3.gap-8.pt-2
-         [:div "Current plan"]
+         [:div (t :account/current-plan)]
          [:div.col-span-2
           [:div {:class "w-full bg-gray-500/10 rounded-lg p-4 flex flex-col gap-4"}
            [:div.flex.gap-4.items-center
             (if pro-account?
-              [:div.flex-1 "Pro"]
-              [:div.flex-1 "Free"])
+              [:div.flex-1 (t :account/plan-pro)]
+              [:div.flex-1 (t :account/plan-free)])
             (cond
               has-subscribed?
-              (ui/button "Manage plan" {:class "p-1 h-8 justify-center"
-                                        :disabled true
-                                        :icon "upload"})
+              (ui/button (t :account/manage-plan) {:class "p-1 h-8 justify-center"
+                                                   :disabled true
+                                                   :icon "upload"})
                                          ; :on-click user-handler/upgrade})
               (not pro-account?)
-              (ui/button "Upgrade plan" {:class "p-1 h-8 justify-center"
-                                         :icon "upload"
-                                         :on-click user-handler/upgrade})
+              (ui/button (t :account/upgrade-plan) {:class "p-1 h-8 justify-center"
+                                                    :icon "upload"
+                                                    :on-click user-handler/upgrade})
               :else nil)]
            (settings-account-usage-graphs pro-account? graph-usage)
            (settings-account-usage-description pro-account? graph-usage)]]
          (when has-subscribed?
            [:<>
-            [:div "Billing"]
+            [:div (t :account/billing)]
             [:div.col-span-2.flex.flex-col.gap-4
              (cond
               ;; If there is no expiration date, print the renewal date
                (and renewal-date (nil? expiration-date))
                [:div
-                [:strong.font-semibold "Next billing date: "
-                 (date/get-locale-string renewal-date)]]
+                [:strong.font-semibold
+                 (t :account/billing-next-date-label
+                    (locale-format-date renewal-date))]]
               ;; If the expiration date is in the future, word it as such
                (< (js/Date.) expiration-date)
                [:div
-                [:strong.font-semibold "Pro plan expires on: "
-                 (date/get-locale-string expiration-date)]]
+                [:strong.font-semibold
+                 (t :account/billing-expires-on-label
+                    (locale-format-date expiration-date))]]
               ;; Otherwise, ind
                :else
                [:div
-                [:strong.font-semibold "Pro plan expired on: "
-                 (date/get-locale-string expiration-date)]])
+                [:strong.font-semibold
+                 (t :account/billing-expired-on-label
+                    (locale-format-date expiration-date))]])
 
-             [:div (ui/button "Open invoices" {:class "w-full h-8 p-1 justify-center"
-                                               :disabled true
-                                               :background "gray"
-                                               :icon "receipt"})]]])
-         [:div "Profile"]
+             [:div (ui/button (t :account/open-invoices) {:class "w-full h-8 p-1 justify-center"
+                                                          :disabled true
+                                                          :background "gray"
+                                                          :icon "receipt"})]]])
+         [:div (t :account/profile)]
          [:div.col-span-2.grid.grid-cols-2.gap-4
           [:div.flex.flex-col.gap-2.box-border {:class "basis-1/2"}
-           [:label.text-sm.font-semibold "First name"]
+           [:label.text-sm.font-semibold (t :account/first-name)]
            [:input.rounded.border.px-2.py-1.box-border {:class "border-blue-500 bg-black/25 w-full"}]]
           [:div.flex.flex-col.gap-2 {:class "basis-1/2"}
-           [:label.text-sm.font-semibold "Last name"]
+           [:label.text-sm.font-semibold (t :account/last-name)]
            [:input.rounded.border.px-2.py-1.box-border {:class "border-blue-500 bg-black/25 w-full"}]]
           [:div.flex-1.flex.flex-col.gap-2.col-span-2
-           [:label.text-sm.font-semibold "Username"]
+           [:label.text-sm.font-semibold (t :account/username)]
            [:input.rounded.border.px-2.py-1.box-border {:class "border-blue-500 bg-black/25"
                                                         :value (user-handler/email)}]]]
-         [:div "Authentication"]
+         [:div (t :account/authentication)]
          [:div.col-span-2
           [:div.grid.grid-cols-2.gap-4
            [:div (ui/button (t :ui/logout) {:class "p-1 h-8 justify-center w-full"
-                                         :background "gray"
-                                         :icon "logout"
-                                         :on-click user-handler/logout})]
-           [:div (ui/button "Reset password" {:class "p-1 h-8 justify-center w-full"
-                                              :disabled true
-                                              :background "gray"
-                                              :icon "key"
-                                              :on-click user-handler/logout})]
-           [:div.col-span-2 (ui/button "Delete Account" {:class "p-1 h-8 justify-center w-full"
+                                            :background "gray"
+                                            :icon "logout"
+                                            :on-click user-handler/logout})]
+           [:div (ui/button (t :account/reset-password) {:class "p-1 h-8 justify-center w-full"
                                                          :disabled true
-                                                         :background "red"})]]]]
+                                                         :background "gray"
+                                                         :icon "key"
+                                                         :on-click user-handler/logout})]
+           [:div.col-span-2 (ui/button (t :account/delete-account) {:class "p-1 h-8 justify-center w-full"
+                                                                    :disabled true
+                                                                    :background "red"})]]]]
 
         (not logged-in?)
         [:div.grid.grid-cols-3.gap-8.pt-2
-         [:div "Authentication"]
+         [:div (t :account/authentication)]
          [:div.col-span-2.flex.flex-wrap.gap-4
-          [:div.w-full.text-white "With a Logseq account, you can access cloud-based services like Logseq Sync and alpha/beta features."]
-          [:div.flex-1 (ui/button "Sign up" {:class "h-8 w-full text-center justify-center"
-                                             :on-click (fn []
-                                                         (state/close-settings!)
-                                                         (state/pub-event! [:user/login]))})]
-          [:div.flex-1 (ui/button (t :ui/login) {:icon "login"
-                                              :class "h-8 w-full text-center justify-center"
-                                              :background "gray"
-                                              :on-click (fn []
-                                                          (state/close-settings!)
-                                                          (state/pub-event! [:user/login]))})]]
+          [:div.w-full.text-white (t :account/benefits-desc)]
+          [:div.flex-1
+           (ui/button (t :account/sign-up) {:class "h-8 w-full text-center justify-center"
+                                            :on-click (fn []
+                                                        (state/close-settings!)
+                                                        (state/pub-event! [:user/login]))})]
+          [:div.flex-1
+           (ui/button (t :ui/login) {:icon "login"
+                                     :class "h-8 w-full text-center justify-center"
+                                     :background "gray"
+                                     :on-click (fn []
+                                                 (state/close-settings!)
+                                                 (state/pub-event! [:user/login]))})]]
          [:div.col-span-3.flex.flex-col.gap-4 {:class "bg-black/20 p-4 rounded-lg"}
           [:div.flex.w-full.items-center
            [:div {:class "w-1/2 text-lg"}
-            "Discover the power of "
-            [:strong {:class "text-white/80"} "Logseq Sync"]]
+            (interpolate-rich-text-node
+             (t :account/discover-sync-desc)
+             [[:strong {:class "text-white/80"} "Logseq Sync"]])]
            [:div {:class "w-1/2 bg-gradient-to-r from-white/10 to-transparent p-3 rounded-lg flex items-center gap-2 px-5 ml-5"}
             [:div.w-3.h-3.rounded-full.bg-green-500]
-            "Synced"]]
+            (t :account/synced-status)]]
           [:div.flex.w-full.gap-4
            [:div {:class "w-1/2 bg-black/50 rounded-lg p-4 pt-10 relative flex flex-col gap-4"}
-            [:div.absolute.top-0.left-4.bg-gray-700.uppercase.px-2.py-1.rounded-b-lg.font-bold.text-xs "Free"]
+            [:div.absolute.top-0.left-4.bg-gray-700.uppercase.px-2.py-1.rounded-b-lg.font-bold.text-xs (t :account/plan-free)]
             [:div
-             [:strong.text-white.text-xl.font-normal "$0"]]
-            [:div.text-white.font-bold {:class "h-[2.5rem] "} "Get started with basic syncing"]
+             [:strong.text-white.text-xl.font-normal (t :account/price-free)]]
+            [:div.text-white.font-bold {:class "h-[2.5rem] "} (t :account/plan-free-summary)]
             [:ul.text-xs.list-none.m-0.flex.flex-col.gap-0.5
-             [:li "Unlimited unsynced graphs"]
-             [:li "1 synced graph (up to 50MB, notes only)"]
-             [:li "No asset syncing"]
-             [:li "Access to core Logseq features"]]]
+             [:li (t :account/unlimited-unsynced-graphs)]
+             [:li (t :account/free-plan-sync-limit)]
+             [:li (t :account/no-asset-syncing)]
+             [:li (t :account/core-features)]]]
            [:div {:class "w-1/2 bg-black/50 rounded-lg p-4 pt-10 relative flex flex-col gap-4"}
-            [:div.absolute.top-0.left-4.bg-blue-700.uppercase.px-2.py-1.rounded-b-lg.font-bold.text-xs "Pro"]
+            [:div.absolute.top-0.left-4.bg-blue-700.uppercase.px-2.py-1.rounded-b-lg.font-bold.text-xs (t :account/plan-pro)]
             [:div
              [:strong.text-white.text-xl.font-normal "$10"]
-             [:span.text-xs.font-base {:class "ml-0.5"} "/ month"]]
-            [:div.text-white.font-bold {:class "h-[2.5rem]"} "Unlock advanced syncing and more"]
+             [:span.text-xs.font-base {:class "ml-0.5"} " / " (t :account.billing/month)]]
+            [:div.text-white.font-bold {:class "h-[2.5rem]"} (t :account/plan-pro-summary)]
             [:ul.text-xs.list-none.m-0.flex.flex-col.gap-0.5
-             [:li "Unlimited unsynced graphs"]
-             [:li "10 synced graphs (up to 5GB each)"]
-             [:li "Sync assets up to 100MB per file"]
-             [:li "Early access to alpha/beta features"]
-             [:li "Upcoming cloud-based features, including Logseq Publish"]]]]]])]]))
+             [:li (t :account/unlimited-unsynced-graphs)]
+             [:li (t :account/pro-plan-sync-limit)]
+             [:li (t :account/sync-assets-limit)]
+             [:li (t :account/early-access-alpha-beta)]
+             [:li (t :account/upcoming-cloud-features)]]]]]])]]))
 
 (rum/defc settings-features < rum/reactive
   []
@@ -875,7 +885,7 @@
        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
         [:label.block.text-sm.font-medium.leading-5.opacity-70
          {:for "default page"}
-         (t :settings/home-default-page)]
+         (t :settings.features/home-default-page)]
         [:div.mt-1.sm:mt-0.sm:col-span-2
          [:div.max-w-lg.rounded-md.sm:max-w-xs
           [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
@@ -896,15 +906,15 @@
           [:div
            (user-handler/email)
            [:p (ui/button (t :ui/logout) {:class "p-1"
-                                       :icon "logout"
-                                       :on-click user-handler/logout})]]
+                                          :icon "logout"
+                                          :on-click user-handler/logout})]]
           [:div
            (ui/button (t :ui/login) {:class "p-1"
-                                  :icon "login"
-                                  :on-click (fn []
-                                              (state/close-settings!)
-                                              (state/pub-event! [:user/login]))})
-           [:p.text-sm.opacity-50 (t :settings/login-prompt)]])])]))
+                                     :icon "login"
+                                     :on-click (fn []
+                                                 (state/close-settings!)
+                                                 (state/pub-event! [:user/login]))})
+           [:p.text-sm.opacity-50 (t :settings.features/login-prompt)]])])]))
 
 (def DEFAULT-ACTIVE-TAB-STATE (if config/ENABLE-SETTINGS-ACCOUNT-TAB [:account :account] [:general :general]))
 
@@ -947,7 +957,7 @@
      {:on-key-press (fn [e]
                       (when (= "Enter" (.-key e))
                         (invite-user!)))}
-     [:h2.opacity-50.font-medium "Members:"]
+     [:h2.opacity-50.font-medium (t :collaboration/members)]
      [:div.users.flex.flex-col.gap-1
       (if loading?
         (for [i (range 2)]
@@ -986,19 +996,19 @@
                                        (p/then (fn []
                                                  (rtc-handler/<rtc-get-users-info)))
                                        (p/catch (fn [e]
-                                                  (notification/show! (t :settings/member-remove-failed) :error)
+                                                  (notification/show! (t :settings.collaboration/member-remove-failed) :error)
                                                   (log/error :db-sync/remove-member-failed {:error e
                                                                                             :graph-uuid graph-uuid
                                                                                             :member-id member-id})))))))}
-                  "Remove access"))))])))]
+                  (t :collaboration/remove-access)))))])))]
      [:div.flex.flex-col.gap-4.mt-4
       (shui/input
-       {:placeholder   "Email address"
+       {:placeholder   (t :collaboration/email-address)
         :on-change     #(set-invite-email!
                          (string/trim (util/evalue %)))})
       (shui/button
        {:on-click invite-user!}
-       "Invite")]]))
+       (t :collaboration/invite))]]))
 
 (rum/defc settings-collaboration
   []
@@ -1012,17 +1022,17 @@
         <force-reset-password-fn
         (fn []
           (-> (p/do!
-               (set-force-reset-status! (t :e2ee/force-resetting-password))
+               (set-force-reset-status! (t :encryption/force-resetting-password))
                (state/<invoke-db-worker :thread-api/reset-user-rsa-key-pair
                                         token refresh-token user-uuid new-password)
-               (set-force-reset-status! (t :e2ee/force-reset-password-successfully)))
+               (set-force-reset-status! (t :encryption/force-reset-password-successfully)))
               (p/catch (fn [e]
                          (log/error :forgot-password e)
-                         (set-force-reset-status! (t :e2ee/failed-to-force-reset-password))))))]
+                         (set-force-reset-status! (t :encryption/failed-to-force-reset-password))))))]
     [:div.flex.flex-col.gap-4
      [:p
-      (t :e2ee/forgot-password-warning)]
-     [:label.opacity-70 {:for "new-password"} (t :e2ee/set-new-password)]
+      (t :encryption/forgot-password-warning)]
+     [:label.opacity-70 {:for "new-password"} (t :encryption/set-new-password)]
      (shui/toggle-password
       {:id "new-password"
        :value new-password
@@ -1031,7 +1041,7 @@
      (shui/button
       {:on-click <force-reset-password-fn
        :disabled (string/blank? new-password)}
-      (t :e2ee/force-reset-password))]))
+      (t :encryption/force-reset-password))]))
 
 (rum/defc reset-encryption-password
   [current-password new-password {:keys [set-new-password!
@@ -1045,12 +1055,12 @@
       (forgot-password token refresh-token user-uuid)
       reset?
       [:div.flex.flex-col.gap-4
-       [:label.opacity-70 {:for "current-password"} (t :e2ee/current-password)]
+       [:label.opacity-70 {:for "current-password"} (t :encryption/current-password)]
        (shui/toggle-password
         {:id "current-password"
          :value current-password
          :on-change #(set-current-password! (util/evalue %))})
-       [:label.opacity-70 {:for "new-password"} (t :e2ee/set-new-password)]
+       [:label.opacity-70 {:for "new-password"} (t :encryption/set-new-password)]
        (shui/toggle-password
         {:id "new-password"
          :value new-password
@@ -1059,12 +1069,12 @@
        (shui/button
         {:on-click on-click
          :disabled (string/blank? new-password)}
-        (t :e2ee/reset-password))
+        (t :encryption/reset-password))
        [:a.opacity-70.hover:opacity-100 {:on-click #(set-forgot! true)}
-        (t :e2ee/forgot-password-question)]]
+        (t :encryption/forgot-password-question)]]
       :else
       [:a.opacity-70.hover:opacity-100 {:on-click #(set-reset! true)}
-       (t :e2ee/reset-password)])))
+       (t :encryption/reset-password)])))
 
 (rum/defc encryption
   []
@@ -1093,12 +1103,12 @@
       (when (and user-uuid token)
         (cond
           get-key-err
-          [:p (t :e2ee/fetch-key-pair-error get-key-err)]
+          [:p (t :encryption/fetch-key-pair-error get-key-err)]
           (= rsa-key-pair :not-inited)
-          [:p (t :e2ee/fetching-key-pair)]
+          [:p (t :encryption/fetching-key-pair)]
           (nil? rsa-key-pair)
           [:div.flex.flex-col.gap-2
-           (when init-key-err [:p (t :e2ee/init-key-pair-error init-key-err)])
+           (when init-key-err [:p (t :encryption/init-key-pair-error init-key-err)])
            (shui/button
             {:on-click (fn []
                          (-> (p/do!
@@ -1109,23 +1119,23 @@
                               (p/let [r (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)]
                                 (set-rsa-key-pair! r)))
                              (p/catch set-init-key-err!)))}
-            (t :e2ee/init-key-pair))]
+            (t :encryption/init-key-pair))]
           rsa-key-pair
           (let [on-submit (fn []
                             (-> (p/do!
-                                 (set-reset-password-status! (t :e2ee/updating-password))
+                                 (set-reset-password-status! (t :encryption/updating-password))
                                  (state/<invoke-db-worker :thread-api/change-e2ee-password
                                                           token refresh-token user-uuid current-password new-password)
-                                 (set-reset-password-status! (t :e2ee/password-updated-successfully)))
+                                 (set-reset-password-status! (t :encryption/password-updated-successfully)))
                                 (p/catch (fn [e]
                                            (log/error :reset-password-failed e)
-                                           (set-reset-password-status! (t :e2ee/failed-to-update-password))))))]
+                                           (set-reset-password-status! (t :encryption/failed-to-update-password))))))]
             [:div.flex.flex-col.gap-4
              ;; [:p "E2EE key-pair already generated!"]
              (when-not forgot?
                [:div.flex.flex-col
-                [:p (t :e2ee/remember-password-rich)]
-                [:p (t :e2ee/cloud-password-rich)]])
+                [:p (t :encryption/remember-password-rich)]
+                [:p (t :encryption/cloud-password-rich)]])
              (reset-encryption-password current-password new-password
                                         {:reset-password-status reset-password-status
                                          :set-new-password! set-new-password!
@@ -1160,11 +1170,11 @@
                                          (ipc/ipc :server/do :restart))))
                             (p/catch #(notification/show! (str %) :error)))))]
       (toggle "mcp-server"
-              (t :settings/enable-mcp-server)
+              (t :settings.ai/enable-mcp-server)
               checked
               on-toggle
               [:span.text-sm.opacity-50
-               (t :settings/enable-mcp-server-desc)]))))
+               (t :settings.ai/enable-mcp-server-desc)]))))
 
 (rum/defc settings-ai
   []
@@ -1204,13 +1214,13 @@
      (when (util/electron?)
        (mcp-server-row t))
      [:div.flex.flex-col.gap-2.mt-4
-      [:div.font-medium.text-muted-foreground.text-sm "Semantic search:"]
+      [:div.font-medium.text-muted-foreground.text-sm (t :ai/search-title)]
 
       [:div.flex.flex-col.gap-2
        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
         [:label.block.text-sm.font-medium.leading-8.opacity-70
          {:for "local-embedding-model"}
-         "Local embedding model"]
+         (t :ai/local-embedding-model)]
         [:div.rounded-md.sm:max-w-tss.sm:col-span-2
          (if webgpu?
            [:div.flex.flex-col.gap-2
@@ -1233,7 +1243,7 @@
              (shui/select-trigger
               {:class "h-8"}
               (shui/select-value
-               {:placeholder "Select a model"}))
+               {:placeholder (t :ai/select-model)}))
 
              (shui/select-content
               (shui/select-group
@@ -1245,17 +1255,18 @@
                (let [{:keys [file progress loaded total]} load-model-progress]
                  (case status
                    ("progress" "download" "initiate")
-                   (str "Downloading " file
-                        (when progress
-                          (util/format " %d/%dm"
-                                       (int (/ loaded 1024 1024))
-                                       (int (/ total 1024 1024)))))
+                   (t :ai/model-download-progress
+                      file
+                      (when progress
+                        (util/format "%d/%dm"
+                                     (int (/ loaded 1024 1024))
+                                     (int (/ total 1024 1024)))))
                    "done"
-                   (str "Downloaded " file)
+                   (t :ai/model-downloaded file)
                    "ready"
-                   "Model is ready  🚀"
+                   (t :ai/model-ready)
                    nil))])]
-           [:div.warning "WebGPU is not supported on this browser, please upgrade it or using another browser."])]]]]]))
+           [:div.warning (t :ai/webgpu-unsupported)])]]]]]))
 
 (rum/defcs ^:large-vars/cleanup-todo settings
   < (rum/local DEFAULT-ACTIVE-TAB-STATE ::active)
@@ -1291,23 +1302,23 @@
        [:ul.settings-menu
         (for [[label id text icon]
               [(when config/ENABLE-SETTINGS-ACCOUNT-TAB
-                 [:account "account" (t :settings/tab-account) (ui/icon "user-circle")])
-               [:general "general" (t :settings/tab-general) (ui/icon "adjustments")]
-               [:editor "editor" (t :settings/tab-editor) (ui/icon "writing")]
-               [:keymap "keymap" (t :settings/tab-keymap) (ui/icon "keyboard")]
+                 [:account "account" (t :settings/account) (ui/icon "user-circle")])
+               [:general "general" (t :settings/general) (ui/icon "adjustments")]
+               [:editor "editor" (t :settings/editor) (ui/icon "writing")]
+               [:keymap "keymap" (t :settings/keymap) (ui/icon "keyboard")]
 
-               [:ai "ai" (t :settings/tab-ai) (ui/icon "wand")]
+               [:ai "ai" (t :settings/ai) (ui/icon "wand")]
 
-               [:advanced "advanced" (t :settings/tab-advanced) (ui/icon "bulb")]
-               [:features "features" (t :settings/tab-features) (ui/icon "app-feature")]
+               [:advanced "advanced" (t :settings/advanced) (ui/icon "bulb")]
+               [:features "features" (t :settings/features) (ui/icon "app-feature")]
                (when logged-in?
-                 [:collaboration "collaboration" (t :settings/tab-collaboration) (ui/icon "users")])
+                 [:collaboration "collaboration" (t :settings/collaboration) (ui/icon "users")])
 
                (when logged-in?
-                 [:encryption "encryption" (t :settings/tab-encryption) (ui/icon "lock")])
+                 [:encryption "encryption" (t :settings/encryption) (ui/icon "lock")])
 
                (when plugins-of-settings
-                 [:plugins-setting "plugins" (t :nav/settings-of-plugins) (ui/icon "puzzle")])]]
+                 [:plugins-setting "plugins" (t :settings/plugins) (ui/icon "puzzle")])]]
 
           (when label
             [:li.settings-menu-item
@@ -1323,44 +1334,44 @@
 
       [:article
        [:header.cp__settings-header
-        [:h1.cp__settings-category-title (t (keyword (str "settings/tab-" (name (first @*active)))))]]
+        [:h1.cp__settings-category-title (t (keyword (str "settings/" (name (first @*active)))))]]
 
-       (case (first @*active)
+      (case (first @*active)
 
-         :plugins-setting
-         (let [label (second @*active)]
-           (state/pub-event! [:go/plugins-settings (:id (first plugins-of-settings))])
-           (reset! *active [label label])
-           nil)
+        :plugins-setting
+        (let [label (second @*active)]
+          (state/pub-event! [:go/plugins-settings (:id (first plugins-of-settings))])
+          (reset! *active [label label])
+          nil)
 
-         :account
-         (settings-account)
+        :account
+        (settings-account)
 
-         :general
-         (settings-general current-repo)
+        :general
+        (settings-general current-repo)
 
-         :editor
-         (settings-editor)
+        :editor
+        (settings-editor)
 
-         :keymap
-         (shortcut/shortcut-keymap-x)
+        :keymap
+        (shortcut/shortcut-keymap-x)
 
-         :assets
-         (assets/settings-content)
+        :assets
+        (assets/settings-content)
 
-         :advanced
-         (settings-advanced)
+        :advanced
+        (settings-advanced)
 
-         :features
-         (settings-features)
+        :features
+        (settings-features)
 
-         :collaboration
-         (settings-collaboration)
+        :collaboration
+        (settings-collaboration)
 
-         :encryption
-         (encryption)
+        :encryption
+        (encryption)
 
-         :ai
-         (settings-ai)
+        :ai
+        (settings-ai)
 
-         nil)]]]))
+        nil)]]]))

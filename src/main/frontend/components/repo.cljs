@@ -241,7 +241,7 @@
              [:h2.text-lg.font-medium.mb-4 (t :graph/remote-graphs)]
              [:div
               (ui/button
-               [:span.flex.items-center "Refresh"
+               [:span.flex.items-center (t :ui/refresh)
                 (when remotes-loading? [:small.pl-2 (ui/loading nil)])]
                :background "gray"
                :disabled remotes-loading?
@@ -270,9 +270,9 @@
                                                   {:title (str "<" GraphName "> #" GraphUUID)}
                                                   (ui/icon (if graph-e2ee? "lock" "cloud") {:size 18})
                                                   (when-not ready-for-use?
-                                                    [:span.opacity.text-sm.pl-1 "preparing"])
+                                                    [:span.opacity.text-sm.pl-1 (t :graph/preparing)])
                                                   (when downloading?
-                                                    [:span.opacity.text-sm.pl-1 "downloading"])])]
+                                                    [:span.opacity.text-sm.pl-1 (t :graph/downloading)])])]
                            :hover-detail repo-url ;; show full path on hover
                            :options {:on-click
                                      (fn [e]
@@ -341,7 +341,7 @@
         items-fn #(repos-dropdown-links repos current-repo downloading-graph-id opts)
         header-fn #(when (> (count repos) 1) ; show switch to if there are multiple repos
                      [:div.font-medium.md:text-sm.md:opacity-50.p-2.flex.flex-row.justify-between.items-center
-                      [:h4.pb-1 (t :left-side-bar/switch)]
+                      [:h4.pb-1 (t :graph.switch/prompt)]
 
                       (when login?
                         (if remotes-loading?
@@ -349,7 +349,7 @@
                           (shui/button
                            {:variant :ghost
                             :size :sm
-                            :title "Refresh remote graphs"
+                            :title (t :graph/refresh-remote-graphs)
                             :class "!h-6 !px-1 relative right-[-4px]"
                             :on-click (fn []
                                         (rtc-handler/<get-remote-graphs))}
@@ -422,7 +422,7 @@
   []
   (notification/show!
    [:div
-    [:p "Graph name can't contain following reserved characters:"]
+    [:p (t :graph/name-reserved-characters-warning)]
     [:ul
      [:li "< (less than)"]
      [:li "> (greater than)"]
@@ -516,7 +516,7 @@
      (shui/input
       {:disabled creating-db?
        :ref input-ref
-       :placeholder "your graph name"
+       :placeholder (t :graph/name-placeholder)
        :on-key-down submit!
        :autoComplete "off"})
      (when rtc-group?

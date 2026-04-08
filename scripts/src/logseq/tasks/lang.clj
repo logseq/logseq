@@ -184,7 +184,7 @@
 (defn- grep-derived-translation-keys
   "Scan candidate source files for translation keys derived from supported
   dynamic patterns such as `if`/`or` translation calls, option keys, built-in
-  colors, left-sidebar tag navs, and shortcut category labels."
+  colors, left-sidebar derived nav labels, and shortcut category labels."
   []
   (->> (rg-matching-files translated-code-source-paths derived-ui-key-candidate-rg-pattern)
        (mapcat #(lang-lint/derived-translation-keys (slurp %)))
@@ -292,6 +292,9 @@
 (def ^:private hardcoded-ignored-path-patterns
   [#"^deps/shui/src/logseq/shui/demo\d*\.cljs$"
    #"^deps/cli/src/logseq/cli/common/mcp/"
+   #"^deps/publish/"
+   #"^deps/db/src/logseq/db/frontend/class\.cljs$"
+   #"^deps/db/src/logseq/db/frontend/property\.cljs$"
    #"^src/main/frontend/worker/commands\.cljs$"
    #"^src/main/frontend/dicts\.cljc$"])
 

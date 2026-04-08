@@ -13,8 +13,8 @@
   [:table.classic-table.w-full
    [:thead
     [:tr
-     [:th.text-left [:b (t :help/shortcuts-triggers)]]
-     [:th.text-right [:b (t :help/shortcut)]]]]
+     [:th.text-left [:b (t :help.shortcuts/triggers)]]
+     [:th.text-right [:b (t :help.shortcuts/shortcut-column)]]]]
    [:tbody
     [:tr
      [:td.text-left (t :help/slash-autocomplete)]
@@ -60,7 +60,7 @@
                   :pre (highlight/highlight "help-highlight" {:data-lang "clojure"} "(println \"Hello world!\")")
                   :img [:img {:style {:float "right" :width 32 :height 32}
                               :src "https://asset.logseq.com/static/img/logo.png"
-                              :alt "image"}]}]
+                              :alt (t :ui/image)}]}]
 
     [:table.classic-table.w-full
      [:thead
@@ -79,7 +79,7 @@
     :or {show-title? true}}]
   [:div.cp__shortcut-page.px-2
    {:class "-mt-2"}
-   (when show-title? [:h1.title (t :help/shortcut-page-title)])
+   (when show-title? [:h1.title (t :help.shortcuts/title)])
    (trigger-table)
    (markdown-syntax)
    (shortcut/shortcut-keymap-x)])
