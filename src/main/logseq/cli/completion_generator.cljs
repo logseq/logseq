@@ -71,6 +71,40 @@
   (mapv spec->token spec))
 
 ;; ---------------------------------------------------------------------------
+;; Value-quoting helpers (handle whitespace in :values entries)
+;; ---------------------------------------------------------------------------
+
+(defn- contains-whitespace?
+  "Return true if any value in `values` contains whitespace."
+  [values]
+  (boolean (some #(re-find #"\s" %) values)))
+
+(defn- zsh-paren-value
+  "Backslash-escape whitespace in `v` so it stays a single token inside a zsh
+   `_arguments` parenthesized action like `(item1 item2 ...)`. Values without
+   whitespace are returned unchanged."
+  [v]
+  (string/replace v #"\s" #(str "\\" %)))
+
+(defn- zsh-shell-value
+  "Wrap `v` in double quotes if it contains whitespace, so the value survives
+   shell word-splitting inside a zsh `{shell-cmd}` action. Values without
+   whitespace are returned unchanged."
+  [v]
+  (if (re-find #"\s" v)
+    (str "\"" v "\"")
+    v))
+
+(defn- bash-quote-value
+  "Single-quote `v` for bash if it contains whitespace, escaping any embedded
+   single quotes via the standard `'\\''` idiom. Values without whitespace are
+   returned unchanged."
+  [v]
+  (if (re-find #"\s" v)
+    (str "'" (string/replace v "'" "'\\''") "'")
+    v))
+
+;; ---------------------------------------------------------------------------
 ;; Zsh dynamic helpers (verbatim preamble)
 ;; ---------------------------------------------------------------------------
 
@@ -212,7 +246,7 @@ _logseq_multi_values() {
       (string/replace "]" "\\]")
       (string/replace "'" "'\\''")))
 
-(defn- zsh-token-for
+(defn zsh-token-for
   "Generate zsh _arguments token strings for a spec token descriptor.
    Returns a vector of one or two strings. Aliased value-taking options produce
    separate long (--opt=) and short (-o+) specs so that -o=val is not suggested
@@ -237,14 +271,14 @@ _logseq_multi_values() {
              (str "'" long-opt "[" desc* "]'"))]))
 
       :enum
-      (let [vals-str (string/join " " values)]
+      (let [vals-str (->> values (map zsh-paren-value) (string/join " "))]
         (if alias
           [(str "'" excl long-opt "=[" desc* "]:value:(" vals-str ")'")
            (str "'" excl alias-short "[" desc* "]:value:(" vals-str ")'")]
           [(str "'" long-opt "=[" desc* "]:value:(" vals-str ")'")]))
 
       :multi
-      (let [vals-str (string/join " " values)]
+      (let [vals-str (->> values (map zsh-shell-value) (string/join " "))]
         (if alias
           [(str "'" excl long-opt "=[" desc* "]:value:{_logseq_multi_values " vals-str "}'")
            (str "'" excl alias-short "[" desc* "]:value:{_logseq_multi_values " vals-str "}'")]
@@ -552,6 +586,19 @@ _logseq_compadd_lines() {
   done < <(\"$source_fn\" \"$@\")
 }
 
+_logseq_enum_values_bash() {
+  # Complete a fixed value list, preserving values that contain whitespace.
+  # Usage: _logseq_enum_values_bash \"$cur\" val1 val2 ...
+  local cur=\"$1\"; shift
+  COMPREPLY=()
+  local v
+  for v in \"$@\"; do
+    if [[ \"$v\" == \"$cur\"* ]]; then
+      COMPREPLY+=( \"$v\" )
+    fi
+  done
+}
+
 _logseq_multi_values_bash() {
   # Complete comma-delimited lists. Usage: _logseq_multi_values_bash \"$cur\" val1 val2 ...
   local cur=\"$1\"; shift
@@ -726,7 +773,7 @@ _logseq_multi_values_bash() {
          "  printf '%s' \"$opts\"\n"
          "}\n")))
 
-(defn- bash-prev-completion-case
+(defn bash-prev-completion-case
   "Generate a case branch for prev-word value completion."
   [{:keys [key type alias values complete]}]
   (let [long-opt (bash-option-name key)
@@ -735,13 +782,19 @@ _logseq_multi_values_bash() {
                   long-opt)]
     (case type
       :enum
-      (str "    " pattern ")\n"
-           "      COMPREPLY=( $(compgen -W '" (string/join " " values) "' -- \"$cur\") )\n"
-           "      return ;;")
+      (if (contains-whitespace? values)
+        (str "    " pattern ")\n"
+             "      _logseq_enum_values_bash \"$cur\" "
+             (->> values (map bash-quote-value) (string/join " ")) "\n"
+             "      return ;;")
+        (str "    " pattern ")\n"
+             "      COMPREPLY=( $(compgen -W '" (string/join " " values) "' -- \"$cur\") )\n"
+             "      return ;;"))
 
       :multi
       (str "    " pattern ")\n"
-           "      _logseq_multi_values_bash \"$cur\" " (string/join " " values) "\n"
+           "      _logseq_multi_values_bash \"$cur\" "
+           (->> values (map bash-quote-value) (string/join " ")) "\n"
            "      return ;;")
 
       :dynamic
@@ -843,10 +896,16 @@ _logseq_multi_values_bash() {
                     (str "[[ \"$__cmd\" == '" cmd "' ]]"))]
     (case (:type token)
       :enum
-      (str "      if " condition "; then\n"
-           "        COMPREPLY=( $(compgen -W '" (string/join " " (:values token)) "' -- \"$cur\") )\n"
-           "        return\n"
-           "      fi")
+      (if (contains-whitespace? (:values token))
+        (str "      if " condition "; then\n"
+             "        _logseq_enum_values_bash \"$cur\" "
+             (->> (:values token) (map bash-quote-value) (string/join " ")) "\n"
+             "        return\n"
+             "      fi")
+        (str "      if " condition "; then\n"
+             "        COMPREPLY=( $(compgen -W '" (string/join " " (:values token)) "' -- \"$cur\") )\n"
+             "        return\n"
+             "      fi"))
 
       :dynamic
       (case (:complete token)
@@ -894,7 +953,8 @@ _logseq_multi_values_bash() {
 
       :multi
       (str "      if " condition "; then\n"
-           "        _logseq_multi_values_bash \"$cur\" " (string/join " " (:values token)) "\n"
+           "        _logseq_multi_values_bash \"$cur\" "
+           (->> (:values token) (map bash-quote-value) (string/join " ")) "\n"
            "        return\n"
            "      fi")
 
