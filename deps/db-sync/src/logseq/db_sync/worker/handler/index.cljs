@@ -23,6 +23,10 @@
 
 (defn- <delete-graph-do! [^js env ^js url graph-id]
   (let [^js namespace (.-LOGSEQ_SYNC_DO env)
+        _ (when-not namespace
+            (throw (ex-info "missing LOGSEQ_SYNC_DO binding"
+                            {:graph-id graph-id
+                             :binding "LOGSEQ_SYNC_DO"})))
         do-id (.idFromName namespace graph-id)
         stub (.get namespace do-id)
         reset-url (str (.-origin url) "/admin/reset")]
@@ -33,10 +37,17 @@
                          :status (.-status resp)})))
       resp)))
 
+(defn- <delete-graph-storage!
+  [^js env ^js url graph-id]
+  (let [delete-graph-fn (aget env "DB_SYNC_DELETE_GRAPH")]
+    (if (fn? delete-graph-fn)
+      (delete-graph-fn graph-id)
+      (<delete-graph-do! env url graph-id))))
+
 (defn- <delete-graph! [db ^js env ^js url graph-id]
   (p/do!
    (index/<graph-delete-metadata! db graph-id)
-   (<delete-graph-do! env url graph-id)
+   (<delete-graph-storage! env url graph-id)
    (index/<graph-delete-index-entry! db graph-id)))
 
 (defn ^:large-vars/cleanup-todo handle [{:keys [db ^js env request url claims route]}]

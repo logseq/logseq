@@ -230,6 +230,66 @@
       (is (= full-final checksum-b))
       (is (= one-shot-checksum checksum-b)))))
 
+(deftest incremental-checksum-is-invariant-across-commuting-batch-order-test
+  (testing "incremental checksum converges when commuting tx batches are applied in different order"
+    (let [db0 (sample-db)
+          checksum0 (checksum/recompute-checksum db0)
+          tx-a [[:db/add 3 :block/title "Parent v2"]
+                [:db/add 4 :block/order "a9"]]
+          tx-b [[:db/add 1 :block/name "page-a-v2"]
+                [:db/add 2 :block/title "Page B v2"]]
+          report-a (d/with db0 tx-a)
+          checksum-a (checksum/update-checksum checksum0 report-a)
+          db-a (:db-after report-a)
+          report-b-after-a (d/with db-a tx-b)
+          checksum-ab (checksum/update-checksum checksum-a report-b-after-a)
+          db-ab (:db-after report-b-after-a)
+          full-ab (checksum/recompute-checksum db-ab)
+
+          report-b (d/with db0 tx-b)
+          checksum-b (checksum/update-checksum checksum0 report-b)
+          db-b (:db-after report-b)
+          report-a-after-b (d/with db-b tx-a)
+          checksum-ba (checksum/update-checksum checksum-b report-a-after-b)
+          db-ba (:db-after report-a-after-b)
+          full-ba (checksum/recompute-checksum db-ba)]
+      (is (= full-ab full-ba))
+      (is (= full-ab checksum-ab))
+      (is (= full-ba checksum-ba))
+      (is (= checksum-ab checksum-ba)))))
+
+(deftest incremental-checksum-is-invariant-across-intra-batch-datom-order-test
+  (testing "incremental checksum converges when same tx-data uses different datom order"
+    (let [db0 (sample-db)
+          checksum0 (checksum/recompute-checksum db0)
+          uuid-a (random-uuid)
+          uuid-b (random-uuid)
+          tx-order-a [{:db/id -1
+                       :block/uuid uuid-a
+                       :block/title "Inserted A"
+                       :block/order "a5"
+                       :block/parent 3
+                       :block/page 1}
+                      {:db/id -2
+                       :block/uuid uuid-b
+                       :block/title "Inserted B"
+                       :block/order "a6"
+                       :block/parent 3
+                       :block/page 1}]
+          tx-order-b (vec (reverse tx-order-a))
+          report-a (d/with db0 tx-order-a)
+          db-a (:db-after report-a)
+          full-a (checksum/recompute-checksum db-a)
+          incremental-a (checksum/update-checksum checksum0 report-a)
+          report-b (d/with db0 tx-order-b)
+          db-b (:db-after report-b)
+          full-b (checksum/recompute-checksum db-b)
+          incremental-b (checksum/update-checksum checksum0 report-b)]
+      (is (= full-a full-b))
+      (is (= full-a incremental-a))
+      (is (= full-b incremental-b))
+      (is (= incremental-a incremental-b)))))
+
 (deftest incremental-checksum-handles-rebase-like-toggle-churn-test
   (testing "incremental checksum uses net tuple delta when batch contains add/retract/add churn"
     (let [db0 (sample-db)
