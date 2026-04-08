@@ -34,7 +34,8 @@
   {:commands ["list page"
               "list tag"
               "list property"
-              "list task"]
+              "list task"
+              "list node"]
    :options ["--expand"
              "--fields"
              "--limit"
@@ -44,11 +45,13 @@
              "--status"
              "--priority"
              "--content"
+             "--tags"
+             "--properties"
              "--journal-only"
              "--with-properties"
              "--with-extends"
              "--with-classes"
-              "--with-type"]}
+             "--with-type"]}
 
   :upsert
   {:commands ["upsert block"
