@@ -10,7 +10,8 @@
             [logseq.common.graph :as common-graph]
             [logseq.common.util :as common-util]
             [logseq.db.frontend.property.type :as db-property-type]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db.frontend.property :as db-property]))
 
 (def ^:private upsert-block-spec
   {:id {:desc "Source block db/id (forces update mode) [update only]"
@@ -67,7 +68,9 @@
                  :complete :pages}
    :pos {:desc "Position. Default: last-child"
          :validate #{"first-child" "last-child" "sibling"}}
-   :status {:desc "Set task status"}
+   :status {:desc "Set task status"
+            :values (mapv (comp string/lower-case :value)
+                          (db-property/built-in-closed-values :logseq.property/status))}
    :priority {:desc "Set task priority"}
    :scheduled {:desc "Set task scheduled datetime"}
    :deadline {:desc "Set task deadline datetime"}
