@@ -86,6 +86,20 @@
   (is (= 1 (:db/id (db/entity test-db 1))))
   (is (= 1 (:db/id (db/entity (conn/get-db test-db) 1)))))
 
+(deftest get-latest-journals-should-exclude-recycled-journal-pages
+  (load-test-files
+   [{:page {:build/journal 20240101}}
+    {:page {:build/journal 20240102}}
+    {:page {:build/journal 20240103}}])
+  (let [journal-2024-01-02-id (ffirst (d/q '[:find ?e
+                                              :where
+                                              [?e :block/journal-day 20240102]]
+                                            (conn/get-db test-db)))]
+    (db/transact! test-db [{:db/id journal-2024-01-02-id
+                            :logseq.property/deleted-at 1704196800000}]))
+  (is (= [20240103 20240101]
+         (mapv :block/journal-day (model/get-latest-journals test-db 10)))))
+
 (deftest get-block-by-page-name-and-block-route-name
   (load-test-files
    [{:page {:block/title "foo"}
