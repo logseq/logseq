@@ -360,6 +360,43 @@
     (testing "--fields case calls _logseq_multi_values_bash for list tag context"
       (is (string/includes? output "_logseq_multi_values_bash \"$cur\" created-at")))))
 
+(deftest test-values-with-whitespace
+  (testing "zsh enum action escapes whitespace inside parenthesized list"
+    (let [token {:key :status :type :enum :desc "Filter status"
+                 :values ["backlog" "in review" "todo"]}
+          [spec] (gen/zsh-token-for token #{})]
+      (is (string/includes? spec "(backlog in\\ review todo)"))))
+  (testing "zsh multi action quotes whitespace values for shell call"
+    (let [token {:key :tags :type :multi :desc "Tags"
+                 :values ["alpha" "two words" "beta"]}
+          [spec] (gen/zsh-token-for token #{})]
+      (is (string/includes? spec "{_logseq_multi_values alpha \"two words\" beta}"))))
+  (testing "bash enum branch with whitespace uses _logseq_enum_values_bash helper"
+    (let [token {:key :status :type :enum :desc "Filter status"
+                 :values ["backlog" "in review" "todo"]}
+          branch (gen/bash-prev-completion-case token)]
+      (is (string/includes? branch "_logseq_enum_values_bash \"$cur\" backlog 'in review' todo"))
+      (is (not (string/includes? branch "compgen -W")))))
+  (testing "bash enum branch without whitespace keeps compgen -W form"
+    (let [token {:key :order :type :enum :desc "Order"
+                 :values ["asc" "desc"]}
+          branch (gen/bash-prev-completion-case token)]
+      (is (string/includes? branch "compgen -W 'asc desc'"))
+      (is (not (string/includes? branch "_logseq_enum_values_bash")))))
+  (testing "bash multi branch with whitespace single-quotes affected values"
+    (let [token {:key :fields :type :multi :desc "Fields"
+                 :values ["alpha" "two words" "beta"]}
+          branch (gen/bash-prev-completion-case token)]
+      (is (string/includes? branch "_logseq_multi_values_bash \"$cur\" alpha 'two words' beta"))))
+  (testing "single quote in a whitespace value is escaped via the standard '\\'' idiom"
+    (let [token {:key :tags :type :enum :desc "Tags"
+                 :values ["it's a test"]}
+          branch (gen/bash-prev-completion-case token)]
+      (is (string/includes? branch "'it'\\''s a test'"))))
+  (testing "bash preamble defines _logseq_enum_values_bash helper"
+    (let [output (gen/generate-completions "bash" full-table)]
+      (is (string/includes? output "_logseq_enum_values_bash()")))))
+
 (deftest test-zsh-all-commands-present
   (let [output (gen/generate-completions "zsh" full-table)]
     (testing "every command from the table appears"
