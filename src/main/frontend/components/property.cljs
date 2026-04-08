@@ -73,7 +73,7 @@
                           *show-class-select?
                           default-open? class-schema?]
                    :as opts}]
-  (let [property-name (or (and *property-name @*property-name) (:block/title property))
+  (let [property-name (or (and *property-name @*property-name) (db-property/built-in-display-title property t))
         property-schema (or (and *property-schema @*property-schema)
                             (select-keys property [:logseq.property/type]))
         schema-types (->> (concat db-property-type/user-built-in-property-types
@@ -280,7 +280,7 @@
    :a
    {:tabIndex 0
     :title (or (:block/title (:logseq.property/description property))
-               (:block/title property))
+               (db-property/built-in-display-title property t))
     :class "property-k flex select-none jtrigger w-full"
     :on-pointer-down (fn [^js e]
                        (when (util/meta-key? e)
@@ -303,7 +303,7 @@
                                      :dropdown-menu? true
                                      :as-dropdown? true})))}
 
-   (:block/title property)))
+   (db-property/built-in-display-title property t)))
 
 (rum/defc property-key-cp < rum/static
   [block property {:keys [other-position? class-schema?]}]
@@ -340,7 +340,7 @@
      (if config/publishing?
        [:a.property-k.flex.select-none.jtrigger
         {:on-click #(route-handler/redirect-to-page! (:block/uuid property))}
-        (:block/title property)]
+        (db-property/built-in-display-title property t)]
        (property-key-title block property class-schema?))]))
 
 (defn- bidirectional-property-icon-cp

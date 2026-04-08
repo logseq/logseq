@@ -397,7 +397,7 @@
                                    (fn [row] (db-view/get-property-value-for-search row property)))]
                    {:id ident
                     :name (or (:name property)
-                              (:block/title property))
+                              (db-property/built-in-display-title property t))
                     :header (or (:header property)
                                 header-cp)
                     :cell (or (:cell property)
@@ -1108,7 +1108,7 @@
                    timestamp?
                    (merge option
                           {:items (timestamp-options)
-                           :input-default-placeholder (if property (:block/title property) (t :select/default-prompt))
+                           :input-default-placeholder (if property (db-property/built-in-display-title property t) (t :select/default-prompt))
                            :on-chosen (fn [value _ _ e]
                                         (shui/popup-hide!)
                                         (let [set-filter-fn (fn [value]
@@ -1132,7 +1132,7 @@
                                   {:value false :label (string/lower-case (t :ui/false))}]]
                        (merge option
                               {:items items
-                               :input-default-placeholder (if property (:block/title property) (t :select/default-prompt))
+                               :input-default-placeholder (if property (db-property/built-in-display-title property t) (t :select/default-prompt))
                                :on-chosen (fn [value]
                                             (let [filters' (conj (:filters filters) [(:db/ident property) :is value])]
                                               (set-filters! {:or? (:or? filters)
@@ -1140,7 +1140,7 @@
                      (let [items values]
                        (merge option
                               {:items items
-                               :input-default-placeholder (if property (:block/title property) (t :select/default-prompt))
+                               :input-default-placeholder (if property (db-property/built-in-display-title property t) (t :select/default-prompt))
                                :multiple-choices? true
                                :on-chosen (fn [_value _selected? selected]
                                             (let [selected-value (if (and (map? (first selected))
@@ -1344,7 +1344,7 @@
                        (.-target e)
                        (fn []
                          (let [option (cond->
-                                       {:input-default-placeholder (:block/title property)
+                                       {:input-default-placeholder (db-property/built-in-display-title property t)
                                         :input-opts {:class "!px-3 !py-1"}
                                         :items items
                                         :extract-fn :label
@@ -1474,7 +1474,7 @@
                 :variant "ghost"
                 :size :sm
                 :disabled true}
-               [:span.text-xs (:block/title property)])
+               [:span.text-xs (db-property/built-in-display-title property t)])
               (filter-operator property operator filters set-filters! idx)
               (filter-value view-entity table property operator value filters set-filters! idx opts)
               (shui/button
