@@ -10,6 +10,7 @@
             [logseq.cli.style :as style]
             [logseq.cli.transport :as transport]
             [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [promesa.core :as p]))
 
@@ -771,14 +772,17 @@
       (seq page)
       (p/let [page-entity (transport/invoke config :thread-api/pull false
                                             [repo [:db/id :db/ident :block/uuid :block/title
+                                                   :logseq.property/deleted-at
                                                    {:logseq.property/status [:db/ident :block/title]}
                                                    {:block/tags [:db/id :block/name :block/title :block/uuid]}]
                                              [:block/name page]])]
         (p/let [page-entity (attach-user-properties-to-entity config repo page-entity)]
-          (if-let [page-id (:db/id page-entity)]
+          (if-let [page-id (and (not (ldb/recycled? page-entity))
+                                (:db/id page-entity))]
             (p/let [blocks (fetch-blocks-for-page config repo page-id)
                     children (build-tree blocks page-id max-depth)]
-              {:root (assoc page-entity :block/children children)})
+              {:root (assoc (dissoc page-entity :logseq.property/deleted-at)
+                            :block/children children)})
             (throw (ex-info "page not found" {:code :page-not-found})))))
 
       :else
