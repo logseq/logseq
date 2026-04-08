@@ -136,9 +136,7 @@
 
 (def ^:private list-node-field-map
   {"id" :db/id
-   "ident" :db/ident
    "title" :block/title
-   "uuid" :block/uuid
    "type" :node/type
    "page-id" :block/page-id
    "page-title" :block/page-title
