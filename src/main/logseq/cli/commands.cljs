@@ -171,27 +171,35 @@
 
 (defn- legacy-upsert-option-guidance
   [args message]
-  (let [subcommand (vec (take 2 args))]
+  (let [subcommand (vec (take 2 args))
+        message (or message "")]
     (cond
       (and (= ["upsert" "block"] subcommand)
-           (re-find #"Unknown option:\s*:tags" (or message "")))
+           (re-find #"Unknown option:\s*:tags" message))
       "unknown option: --tags; use --update-tags"
 
       (and (= ["upsert" "block"] subcommand)
-           (re-find #"Unknown option:\s*:properties" (or message "")))
+           (re-find #"Unknown option:\s*:properties" message))
       "unknown option: --properties; use --update-properties"
 
       (and (= ["upsert" "block"] subcommand)
-           (re-find #"Unknown option:\s*:status" (or message "")))
+           (re-find #"Unknown option:\s*:status" message))
       "unknown option: --status; use upsert task --status"
 
       (and (= ["upsert" "page"] subcommand)
-           (re-find #"Unknown option:\s*:tags" (or message "")))
+           (re-find #"Unknown option:\s*:tags" message))
       "unknown option: --tags; use --update-tags"
 
       (and (= ["upsert" "page"] subcommand)
-           (re-find #"Unknown option:\s*:properties" (or message "")))
+           (re-find #"Unknown option:\s*:properties" message))
       "unknown option: --properties; use --update-properties"
+
+      (and (= ["upsert" "task"] subcommand)
+           (or (re-find #"Unknown option:\s*:update-tags" message)
+               (re-find #"Unknown option:\s*:update-properties" message)
+               (re-find #"Unknown option:\s*:remove-tags" message)
+               (re-find #"Unknown option:\s*:remove-properties" message)))
+      "unknown option: use upsert block for --update-tags/--update-properties/--remove-tags/--remove-properties"
 
       :else
       nil)))

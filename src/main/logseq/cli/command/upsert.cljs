@@ -68,12 +68,17 @@
    :pos {:desc "Position. Default: last-child"
          :validate #{"first-child" "last-child" "sibling"}}
    :status {:desc "Set task status"}
-   :priority {:desc "Set task priority"
-              :validate #{"low" "medium" "high" "urgent"}}
-   :update-tags {:desc "Tags to add/update (EDN vector)"}
-   :update-properties {:desc "Properties to add/update (EDN map)"}
-   :remove-tags {:desc "Tags to remove (EDN vector) [update only]"}
-   :remove-properties {:desc "Properties to remove (EDN vector) [update only]"}})
+   :priority {:desc "Set task priority"}
+   :scheduled {:desc "Set task scheduled datetime"}
+   :deadline {:desc "Set task deadline datetime"}
+   :no-status {:desc "Clear task status"
+               :coerce :boolean}
+   :no-priority {:desc "Clear task priority"
+                 :coerce :boolean}
+   :no-scheduled {:desc "Clear task scheduled datetime"
+                  :coerce :boolean}
+   :no-deadline {:desc "Clear task deadline datetime"
+                 :coerce :boolean}})
 
 (def ^:private upsert-tag-spec
   {:id {:desc "Target tag db/id (forces update mode)"
@@ -107,9 +112,9 @@
                        {:examples ["logseq upsert page --graph my-graph --page Home --update-tags '[\"project\"]'"
                                    "logseq upsert page --graph my-graph --id 999 --update-properties '{:logseq.property/description \"Example\"}'"]})
    (core/command-entry ["upsert" "task"] :upsert-task "Upsert task" upsert-task-spec
-                       {:examples ["logseq upsert task --graph my-graph --content \"Ship release\" --target-page Home --status todo --priority high"
+                       {:examples ["logseq upsert task --graph my-graph --content \"Ship release\" --target-page Home --status todo --priority high --scheduled \"2026-02-10T08:00:00.000Z\" --deadline \"2026-02-12T18:00:00.000Z\""
                                    "logseq upsert task --graph my-graph --page Weekly Plan --status doing"
-                                   "logseq upsert task --graph my-graph --id 123 --status done"]})
+                                   "logseq upsert task --graph my-graph --id 123 --no-status --no-priority"]})
    (core/command-entry ["upsert" "tag"] :upsert-tag "Upsert tag" upsert-tag-spec
                        {:examples ["logseq upsert tag --graph my-graph --name project"
                                    "logseq upsert tag --graph my-graph --id 200 --name Project Renamed"]})
@@ -141,6 +146,9 @@
       "db.cardinality/many" "many"
       v)))
 
+(def ^:private available-priority-values
+  ["low" "medium" "high" "urgent"])
+
 (def ^:private priority-aliases
   {"low" :logseq.property/priority.low
    "medium" :logseq.property/priority.medium
@@ -152,6 +160,12 @@
   (let [text (some-> value string/trim string/lower-case)]
     (when (seq text)
       (get priority-aliases text))))
+
+(defn- invalid-priority-message
+  [priority-input]
+  (str "Invalid value for option :priority: " priority-input
+       ". Available values: "
+       (string/join ", " available-priority-values)))
 
 (defn invalid-options?
   [command opts]
@@ -183,12 +197,31 @@
           uuid (some-> (:uuid opts) string/trim)
           page (some-> (:page opts) string/trim)
           content (some-> (:content opts) string/trim)
+          status-text (some-> (:status opts) string/trim)
+          priority-text (some-> (:priority opts) string/trim)
+          scheduled-text (some-> (:scheduled opts) string/trim)
+          deadline-text (some-> (:deadline opts) string/trim)
           selectors (filter some? [id uuid page])
           target-selectors (filter some? [(:target-id opts)
                                           (:target-uuid opts)
                                           (some-> (:target-page opts) string/trim)])
           pos (some-> (:pos opts) string/trim string/lower-case)
-          selector-mode? (or (some? id) (seq uuid) (seq page))]
+          selector-mode? (or (some? id) (seq uuid) (seq page))
+          set-clear-conflict (cond
+                               (and (seq status-text) (:no-status opts))
+                               "--status and --no-status are mutually exclusive"
+
+                               (and (seq priority-text) (:no-priority opts))
+                               "--priority and --no-priority are mutually exclusive"
+
+                               (and (seq scheduled-text) (:no-scheduled opts))
+                               "--scheduled and --no-scheduled are mutually exclusive"
+
+                               (and (seq deadline-text) (:no-deadline opts))
+                               "--deadline and --no-deadline are mutually exclusive"
+
+                               :else
+                               nil)]
       (cond
         (> (count selectors) 1)
         "only one of --id, --uuid, or --page is allowed"
@@ -210,6 +243,12 @@
 
         (and (= pos "sibling") (seq (some-> (:target-page opts) string/trim)))
         "--pos sibling is only valid for block targets"
+
+        (seq set-clear-conflict)
+        set-clear-conflict
+
+        (and (seq priority-text) (not (normalize-priority priority-text)))
+        (invalid-priority-message priority-text)
 
         :else
         nil))
@@ -326,7 +365,7 @@
                    (some? id) (assoc :id id)
                    (seq page) (assoc :page page))}))))
 
-(defn build-task-action
+(defn ^:large-vars/cleanup-todo build-task-action
   [options repo]
   (if-not (seq repo)
     {:ok? false
@@ -344,17 +383,24 @@
           priority-text (some-> (:priority options) string/trim)
           priority (when (seq priority-text)
                      (normalize-priority priority-text))
-          task-properties (cond-> {}
-                            status (assoc :logseq.property/status status)
-                            priority (assoc :logseq.property/priority priority))
-          update-tags-result (add-command/parse-tags-option (:update-tags options))
-          update-properties-result (add-command/parse-properties-option
-                                    (:update-properties options)
-                                    {:allow-non-built-in? true})
-          remove-tags-result (add-command/parse-tags-vector-option (:remove-tags options))
-          remove-properties-result (add-command/parse-properties-vector-option
-                                    (:remove-properties options)
-                                    {:allow-non-built-in? true})
+          scheduled-provided? (contains? options :scheduled)
+          scheduled-text (some-> (:scheduled options) string/trim)
+          deadline-provided? (contains? options :deadline)
+          deadline-text (some-> (:deadline options) string/trim)
+          clear-properties (cond-> []
+                             (:no-status options) (conj :logseq.property/status)
+                             (:no-priority options) (conj :logseq.property/priority)
+                             (:no-scheduled options) (conj :logseq.property/scheduled)
+                             (:no-deadline options) (conj :logseq.property/deadline))
+          task-properties-input (cond-> {}
+                                  status (assoc :logseq.property/status status)
+                                  priority (assoc :logseq.property/priority priority)
+                                  (seq scheduled-text) (assoc :logseq.property/scheduled scheduled-text)
+                                  (seq deadline-text) (assoc :logseq.property/deadline deadline-text))
+          task-properties-result (if (seq task-properties-input)
+                                   (add-command/parse-properties-option (pr-str task-properties-input)
+                                                                        {:allow-non-built-in? true})
+                                   {:ok? true :value {}})
           mode (cond
                  (seq page) :page
                  (or (some? id) (seq uuid)) :update
@@ -381,24 +427,25 @@
         (and priority-provided? (not priority))
         {:ok? false
          :error {:code :invalid-options
-                 :message (str "invalid priority: " (:priority options))}}
+                 :message (invalid-priority-message (:priority options))}}
+
+        (and scheduled-provided? (not (seq scheduled-text)))
+        {:ok? false
+         :error {:code :invalid-options
+                 :message (str "invalid scheduled: " (:scheduled options))}}
+
+        (and deadline-provided? (not (seq deadline-text)))
+        {:ok? false
+         :error {:code :invalid-options
+                 :message (str "invalid deadline: " (:deadline options))}}
+
+        (not (:ok? task-properties-result))
+        task-properties-result
 
         (and (not (some? id)) (not (seq uuid)) (not (seq page)) (not (seq content)))
         {:ok? false
          :error {:code :missing-target
                  :message "block or page is required"}}
-
-        (not (:ok? update-tags-result))
-        update-tags-result
-
-        (not (:ok? update-properties-result))
-        update-properties-result
-
-        (not (:ok? remove-tags-result))
-        remove-tags-result
-
-        (not (:ok? remove-properties-result))
-        remove-properties-result
 
         (and (= mode :create) (not (:ok? create-result)))
         create-result
@@ -412,11 +459,8 @@
                             :repo repo
                             :graph (core/repo->graph repo)})
                    true (assoc :mode mode
-                               :update-tags (:value update-tags-result)
-                               :update-properties (merge (or (:value update-properties-result) {})
-                                                         task-properties)
-                               :remove-tags (:value remove-tags-result)
-                               :remove-properties (:value remove-properties-result))
+                               :update-properties (:value task-properties-result)
+                               :clear-properties (vec (distinct clear-properties)))
                    (some? id) (assoc :id id)
                    (seq uuid) (assoc :uuid uuid)
                    (seq page) (assoc :page page)
@@ -721,7 +765,9 @@
   [action]
   (cond-> {}
     (:status action) (assoc :logseq.property/status (:status action))
-    (:priority action) (assoc :logseq.property/priority (:priority action))))
+    (:priority action) (assoc :logseq.property/priority (:priority action))
+    (:scheduled action) (assoc :logseq.property/scheduled (:scheduled action))
+    (:deadline action) (assoc :logseq.property/deadline (:deadline action))))
 
 (declare append-tag-and-property-ops)
 
@@ -729,34 +775,16 @@
   [action cfg block-ids]
   (if (seq block-ids)
     (p/let [task-tag-id (ensure-task-tag-id! cfg (:repo action))
-            update-tags (add-command/resolve-tags cfg (:repo action) (:update-tags action))
-            remove-tags (add-command/resolve-tags cfg (:repo action) (:remove-tags action))
-            update-properties (add-command/resolve-properties cfg (:repo action) (:update-properties action)
-                                                              {:allow-non-built-in? true})
-            update-properties (merge (or update-properties {})
+            update-properties (merge (or (:update-properties action) {})
                                      (task-property-overrides action))
-            remove-properties (add-command/resolve-property-identifiers cfg (:repo action)
-                                                                        (:remove-properties action)
-                                                                        {:allow-non-built-in? true})
+            clear-properties (vec (distinct (or (:clear-properties action) [])))
             _ (ensure-property-identifiers-exist! cfg (:repo action) (keys update-properties))
-            _ (ensure-property-identifiers-exist! cfg (:repo action) remove-properties)
-            update-tag-ids (->> update-tags
-                                (map :db/id)
-                                (remove nil?)
-                                (cons task-tag-id)
-                                distinct
-                                vec)
-            remove-tag-ids (->> remove-tags (map :db/id) (remove nil?) distinct vec)
-            _ (when (some #{task-tag-id} remove-tag-ids)
-                (throw (ex-info "cannot remove #Task tag in upsert task"
-                                {:code :invalid-options
-                                 :message "cannot remove #Task tag in upsert task"})))
+            _ (ensure-property-identifiers-exist! cfg (:repo action) clear-properties)
             ops (append-tag-and-property-ops []
                                              block-ids
-                                             {:update-tag-ids update-tag-ids
-                                              :remove-tag-ids remove-tag-ids
+                                             {:update-tag-ids [task-tag-id]
                                               :update-properties update-properties
-                                              :remove-properties remove-properties})]
+                                              :remove-properties clear-properties})]
       (when (seq ops)
         (transport/invoke cfg :thread-api/apply-outliner-ops false
                           [(:repo action) ops {}])))

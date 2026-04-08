@@ -77,6 +77,7 @@
   (let [entries upsert-command/entries
         block-entry (first (filter #(= :upsert-block (:command %)) entries))
         page-entry (first (filter #(= :upsert-page (:command %)) entries))
+        task-entry (first (filter #(= :upsert-task (:command %)) entries))
         tag-entry (first (filter #(= :upsert-tag (:command %)) entries))
         property-entry (first (filter #(= :upsert-property (:command %)) entries))]
     (testing "block-spec :pos has :validate set"
@@ -90,6 +91,19 @@
       (is (= :file (get-in block-entry [:spec :blocks-file :complete]))))
     (testing "page-spec :page has :complete :pages"
       (is (= :pages (get-in page-entry [:spec :page :complete]))))
+    (testing "task-spec contains paired task set/clear options"
+      (is (contains? (:spec task-entry) :status))
+      (is (contains? (:spec task-entry) :priority))
+      (is (contains? (:spec task-entry) :scheduled))
+      (is (contains? (:spec task-entry) :deadline))
+      (is (contains? (:spec task-entry) :no-status))
+      (is (contains? (:spec task-entry) :no-priority))
+      (is (contains? (:spec task-entry) :no-scheduled))
+      (is (contains? (:spec task-entry) :no-deadline))
+      (is (not (contains? (:spec task-entry) :update-tags)))
+      (is (not (contains? (:spec task-entry) :update-properties)))
+      (is (not (contains? (:spec task-entry) :remove-tags)))
+      (is (not (contains? (:spec task-entry) :remove-properties))))
     (testing "tag-spec :name has :complete :tags"
       (is (= :tags (get-in tag-entry [:spec :name :complete]))))
     (testing "property-spec :name has :complete :properties"
@@ -309,14 +323,24 @@
     (testing "--no- tokens have Negate description"
       (is (string/includes? output "--no-include-built-in[Negate --include-built-in]")))
     (testing "--no- and positive form are mutually exclusive"
-      (is (string/includes? output "(--include-built-in --no-include-built-in)")))))
+      (is (string/includes? output "(--include-built-in --no-include-built-in)")))
+    (testing "explicit no-* options do not produce --no-no-* artifacts"
+      (is (not (string/includes? output "--no-no-status")))
+      (is (not (string/includes? output "--no-no-priority")))
+      (is (not (string/includes? output "--no-no-scheduled")))
+      (is (not (string/includes? output "--no-no-deadline"))))))
 
 (deftest test-bash-no-prefix-for-command-booleans
   (let [output (gen/generate-completions "bash" full-table)]
     (testing "--no-include-built-in appears in bash wordlist"
       (is (string/includes? output "--no-include-built-in")))
     (testing "--no-with-type appears in bash wordlist"
-      (is (string/includes? output "--no-with-type")))))
+      (is (string/includes? output "--no-with-type")))
+    (testing "explicit no-* options do not produce --no-no-* artifacts"
+      (is (not (string/includes? output "--no-no-status")))
+      (is (not (string/includes? output "--no-no-priority")))
+      (is (not (string/includes? output "--no-no-scheduled")))
+      (is (not (string/includes? output "--no-no-deadline"))))))
 
 (deftest test-zsh-multi-value-completion
   (let [output (gen/generate-completions "zsh" full-table)]

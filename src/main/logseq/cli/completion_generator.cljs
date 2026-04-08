@@ -302,7 +302,8 @@ _logseq_multi_values() {
   (let [tokens (spec->tokens spec)
         no-prefix-keys (->> tokens
                             (keep #(when (and (= :flag (:type %))
-                                              (not (contains? global-keys (:key %))))
+                                              (not (contains? global-keys (:key %)))
+                                              (not (string/starts-with? (name (:key %)) "no-")))
                                      (:key %)))
                             set)]
     (into (vec (mapcat #(zsh-token-for % no-prefix-keys) tokens))
@@ -599,7 +600,8 @@ _logseq_multi_values_bash() {
         base (if (:alias spec-map)
                [long-opt (str "-" (name (:alias spec-map)))]
                [long-opt])]
-    (if (= :boolean (:coerce spec-map))
+    (if (and (= :boolean (:coerce spec-map))
+             (not (string/starts-with? (name k) "no-")))
       (conj base (str "--no-" (name k)))
       base)))
 
