@@ -258,7 +258,7 @@
   (let [import-inputs (atom {:import-data "" :import-block? false})]
     (shui/dialog-open!
      [:div
-      [:label.flex.my-2.text-lg "Import EDN Data"]
+      [:label.flex.my-2.text-lg (t :command.misc/import-edn-data)]
       #_[:label.block.flex.items-center.py-3
          (shui/checkbox {:on-checked-change #(swap! import-inputs update :import-block? not)})
          [:small.pl-2 (str "Import into current block")]]

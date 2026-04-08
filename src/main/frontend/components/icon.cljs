@@ -4,6 +4,7 @@
             [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [frontend.context.i18n :refer [t]]
             [frontend.config :as config]
             [frontend.search :as search]
             [frontend.storage :as storage]
@@ -211,7 +212,7 @@
                            (filterv #(= :emoji (:type %)) used-items))
         sections (cond-> []
                    (and show-used? (seq emoji-used-items))
-                   (conj {:title "Frequently used"
+                   (conj {:title (t :ui/frequently-used)
                           :items emoji-used-items
                           :virtual-list? false})
                    true

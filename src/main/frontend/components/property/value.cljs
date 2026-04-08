@@ -265,11 +265,13 @@
                                                       (db-property-handler/remove-block-property! (:db/id block)
                                                                                                   :logseq.property.repeat/temporal-property)))))]
        (if (#{:logseq.property/deadline :logseq.property/scheduled} (:db/ident property))
-         [:div "Repeat task"]
-         [:div "Repeat " (if (= :date (:logseq.property/type property)) "date" "datetime")])]]
+           [:div (t :property.repeat/task)]
+           [:div (t (if (= :date (:logseq.property/type property))
+                      :property.repeat/date
+                      :property.repeat/datetime))])]]
      [:div.flex.flex-row.gap-2.ls-repeat-task-frequency
       [:div.flex.text-muted-foreground
-       "Every"]
+         (t :property.repeat/every)]
 
       ;; recur frequency
       [:div.w-10.mr-2
@@ -293,7 +295,7 @@
                         (db/entity :logseq.property/status.done))]
        [:div.flex.flex-col.gap-2
         [:div.text-muted-foreground
-         "When"]
+         (t :property.repeat/when)]
         (shui/select
          (cond->
           {:on-value-change (fn [v]
@@ -303,14 +305,14 @@
            property-id
            (assoc :default-value property-id))
          (shui/select-trigger
-          (shui/select-value {:placeholder "Select a property"}))
+          (shui/select-value {:placeholder (t :property/select-property-placeholder)}))
          (shui/select-content
           (map (fn [choice]
                  (shui/select-item {:key (str (:db/id choice))
                                     :value (:db/id choice)} (:block/title choice))) properties)))
         [:div.flex.flex-row.gap-1
          [:div.text-muted-foreground
-          "is:"]
+          (t :property.repeat/is-label)]
          (when done-choice
            (db-property/property-value-content done-choice))]])]))
 
@@ -395,7 +397,7 @@
     (let [overdue? (when date (t/after? current-time (t/plus date (t/seconds 59))))]
       [:div
        (cond-> {} overdue? (assoc :class "overdue"
-                                  :title "Overdue"))
+                                  :title (t :property/overdue)))
        content])))
 
 (defn- start-of-local-day [^js d]
@@ -959,9 +961,9 @@
                          (distinct)))
             items (->> (cond
                          (= :checkbox type)
-                         [{:label "True"
+                         [{:label (t :ui/true)
                            :value true}
-                          {:label "False"
+                          {:label (t :ui/false)
                            :value false}]
                          (= :date type)
                          (map (fn [m] (let [label (:block/title (db/entity (:value m)))]
@@ -1611,7 +1613,7 @@
               (not= :logseq.class/Tag
                     (:db/ident (db/entity (:db/id block)))))
        [:div.flex.flex-row.items-center.gap-1
-        [:div.warning "Self reference"]
+                  [:div.warning (t :property/self-reference)]
         (shui/button {:variant :outline
                       :size :sm
                       :class "h-5"

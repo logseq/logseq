@@ -151,8 +151,8 @@
            (lang-lint/translation-call-fallback-keys content)))))
 
 (deftest option-translation-keys-detect-literal-config-keys
-  (let [content "{:prompt-key :select/graph-prompt}\n{:title-key :page/table-title}\n"]
-    (is (= #{:select/graph-prompt}
+  (let [content "{:prompt-key :graph.switch/select-prompt}\n{:title-key :page/table-title}\n"]
+    (is (= #{:graph.switch/select-prompt}
            (lang-lint/option-translation-keys content :prompt-key)))
     (is (= #{:page/table-title}
            (lang-lint/option-translation-keys content :title-key)))))
@@ -164,8 +164,8 @@
 
 (deftest left-sidebar-translation-keys-detect-nav-derived-keys
   (let [content "(let [navs [:flashcards :all-pages :graph-view :tag/tasks :tag/assets]])"]
-    (is (= #{:left-side-bar/tasks
-             :left-side-bar/assets}
+    (is (= #{:nav/tasks
+             :nav/assets}
            (lang-lint/left-sidebar-translation-keys content)))))
 
 (deftest shortcut-command-keys-detect-command-translations-from-shortcut-ids
@@ -190,14 +190,14 @@
                  (let [navs [:flashcards :tag/tasks]
                  i18n-key (if delete? :outliner/cant-remove-tag-built-in :outliner/cant-set-tag-built-in)]\n
                  [(t (or title-key :views.table/default-title) props)
-                  {:prompt-key :select/graph-prompt
+                  {:prompt-key :graph.switch/select-prompt
                    :title-key :page/table-title}])"]
     (is (= #{:color/yellow
              :shortcut.category/basics
-             :left-side-bar/tasks
+             :nav/tasks
              :outliner/cant-remove-tag-built-in
              :outliner/cant-set-tag-built-in
-             :select/graph-prompt
+             :graph.switch/select-prompt
              :page/table-title
              :views.table/default-title}
            (lang-lint/derived-translation-keys content)))))

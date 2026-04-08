@@ -1,6 +1,7 @@
 (ns frontend.commands
   "Provides functionality for commands and advanced commands"
   (:require [clojure.string :as string]
+            [frontend.context.i18n :refer [interpolate-sentence t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.extensions.video.youtube :as youtube]
@@ -29,7 +30,7 @@
 
 (def query-doc
   [:div {:on-pointer-down (fn [e] (.stopPropagation e))}
-   [:div.font-medium.text-lg.mb-2 "Query examples:"]
+   [:div.font-medium.text-lg.mb-2 (t :query/examples-title)]
    [:ul.mb-1
     [:li.mb-1 [:code "{{query #tag}}"]]
     [:li.mb-1 [:code "{{query [[page]]}}"]]
@@ -40,31 +41,31 @@
     [:li.mb-1 [:code "{{query (property key value)}}"]]
     [:li.mb-1 [:code "{{query (tags #tag)}}"]]]
 
-   [:p "Check more examples at "
-    [:a {:href "https://docs.logseq.com/#/page/queries"
-         :target "_blank"}
-     "Queries documentation"]
-    "."]])
+   [:p
+    (interpolate-sentence
+     (t :query/examples-desc)
+     :links [{:href "https://docs.logseq.com/#/page/queries"
+              :target "_blank"}])]])
 
 (defn link-steps []
   [[:editor/input (str command-trigger "link")]
    [:editor/show-input [{:command :link
                          :id :link
-                         :placeholder "Link"
+                         :placeholder (t :ui/link)
                          :autoFocus true}
                         {:command :link
                          :id :label
-                         :placeholder "Label"}]]])
+                         :placeholder (t :ui/label)}]]])
 
 (defn image-link-steps []
   [[:editor/input (str command-trigger "link")]
    [:editor/show-input [{:command :image-link
                          :id :link
-                         :placeholder "Link"
+                         :placeholder (t :ui/link)
                          :autoFocus true}
                         {:command :image-link
                          :id :label
-                         :placeholder "Label"}]]])
+                         :placeholder (t :ui/label)}]]])
 
 (def *extend-slash-commands (atom []))
 
@@ -650,7 +651,7 @@
        (contains? #{:scheduled :deadline} type)
        (string/blank? (gobj/get (state/get-input) "value")))
     (do
-      (notification/show! [:div "Please add some content first."] :warning)
+      (notification/show! [:div (t :notification/add-content-first)] :warning)
       (restore-state))
     (do
       (state/set-timestamp-block! nil)

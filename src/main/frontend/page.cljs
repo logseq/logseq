@@ -3,7 +3,7 @@
   (:require [frontend.components.container :as container]
             [frontend.components.plugins :as plugin]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :refer [interpolate-sentence t]]
             [frontend.handler.export :as export]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
@@ -46,14 +46,14 @@
            [:div
           ;; TODO: Enable once multi-window case doesn't result in possible data loss
             #_[:div.flex.flex-row.justify-between.align-items.mb-2
-               [:div.flex.flex-col.items-start
-                [:div.text-2xs.uppercase (t :page/step "1")]
-                [:div [:span.font-bold "Reload"] " the app"]]
+              [:div.flex.flex-col.items-start
+               [:div.text-2xs.uppercase (t :page/step "1")]
+               [:div [:span.font-bold (t :plugin/reload)] (str " " (t :page/the-app))]]
                [:div (ui/icon "command") (ui/icon "letter-r")]]
             [:div.flex.flex-row.justify-between.align-items.mb-2.items-center.py-4
              [:div.flex.flex-col.items-start
               [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "1")]
-              [:div [:span.highlighted.font-bold "Rebuild"] [:span.toned-down " search index"]]]
+              [:div [:span.highlighted.font-bold (t :page/rebuild)] [:span.toned-down (str " " (t :page/search-index))]]]
              [:div
               (ui/button (t :page/try)
                          :small? true
@@ -62,25 +62,25 @@
             [:div.flex.flex-row.justify-between.align-items.mb-2.items-center.separator-top.py-4
              [:div.flex.flex-col.items-start
               [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "2")]
-              [:div [:span.highlighted.font-bold "Relaunch"] [:span.toned-down " the app"]]
-              [:div.text-xs.toned-down "Quit the app and then reopen it."]]
+              [:div [:span.highlighted.font-bold (t :page/relaunch)] [:span.toned-down (str " " (t :page/the-app))]]]
+              [:div.text-xs.toned-down (t :page/relaunch-desc)]]
              [:div (shui/shortcut ["cmd" (if (util/electron?) "q" "r")])]]
             [:div.flex.flex-row.justify-between.align-items.mb-4.items-center.separator-top.py-4
              [:div.flex.flex-col.items-start.mr-2
               [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "3")]
-              [:div [:span.highlighted.font-bold "Export"] [:span.toned-down " current graph as SQLite db"]]
-              [:div.text-xs.toned-down "You can send it to help@logseq.com for debugging."]
+              [:div [:span.highlighted.font-bold (t :ui/export)] [:span.toned-down (str " " (t :page/current-graph-as-sqlite-db))]]
+              [:div.text-xs.toned-down (t :page/send-db-for-debugging)]
               [:a#download-as-sqlite-db.hidden]]
              [:div
-              (ui/button "Export graph"
+              (ui/button (t :export/graph)
                          :small? true
                          :on-click #(export/export-repo-as-sqlite-db! current-repo))]]
 
             [:div.flex.flex-row.justify-between.align-items.mb-4.items-center.separator-top.py-4
              [:div.flex.flex-col.items-start
               [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "4")]
-              [:div [:span.highlighted.font-bold "Clear"] [:span.toned-down " local storage"]]
-              [:div.text-xs.toned-down "This does delete minor preferences like dark/light theme preference."]]
+              [:div [:span.highlighted.font-bold (t :page/clear)] [:span.toned-down (str " " (t :page/local-storage))]]
+              [:div.text-xs.toned-down (t :page/clear-local-storage-desc)]]
              [:div
               (ui/button (t :page/try)
                          :small? true
@@ -88,28 +88,29 @@
                                      (.clear js/localStorage)
                                      (notification/show! (t :page/cleared) :success)))]]]
            [:div
-            [:p "You can also go to "
-             [:a {:title "All graphs"
-                  :on-click (fn []
-                              (set! (.-href js/window.location) (rfe/href :graphs))
-                              (.reload js/window.location))}
-              "All graphs"]
-             " to switch to another graph."]
-            [:p "If these troubleshooting steps have not solved your problem, please "
-             [:a.underline
-              {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"}
-              "open an issue."]]]]]]]]]
+            [:p
+             (interpolate-sentence
+              (t :page/open-all-graphs-desc)
+              :links
+              [{:on-click (fn []
+                            (set! (.-href js/window.location) (rfe/href :graphs))
+                            (.reload js/window.location))}])]
+            [:p
+             (interpolate-sentence
+              (t :page/open-issue-desc)
+              :links
+              [{:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"}])]]]]]]]
      (ui/notification)]))
 
 (rum/defc not-found
   []
   [:div {:class "flex flex-col items-center justify-center min-h-screen bg-background"}
    [:h1 {:class "text-6xl font-bold text-gray-12 mb-4"} "404"]
-   [:h2 {:class "text-2xl font-semibold text-gray-10 mb-6"} "Page Not Found"]
-   [:p {:class "text-gray-500 mb-8"} "Oops! The page you're looking for doesn't exist."]
+   [:h2 {:class "text-2xl font-semibold text-gray-10 mb-6"} (t :page/not-found-title)]
+   [:p {:class "text-gray-500 mb-8"} (t :page/not-found-desc)]
    (shui/button {:on-click #(rfe/push-state :home)
                  :variant :outline}
-                (shui/tabler-icon "home") "Go back home")])
+                (shui/tabler-icon "home") (t :page/go-back-home))])
 
 (rum/defc current-page < rum/reactive
   {:did-mount    (fn [state]

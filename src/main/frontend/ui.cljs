@@ -1090,7 +1090,7 @@
 
      (shui/input
       {:type "text"
-       :placeholder "e.g. Next week"
+       :placeholder (t :ui/date-natural-language-placeholder)
        :class "mx-3 mb-3"
        :style {:width "initial"
                :tab-index -1}

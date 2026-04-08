@@ -850,7 +850,7 @@
       [:div.extensions__pdf-viewer-cnt.visible-scrollbar
        [:div.extensions__pdf-viewer.overflow-x-auto.absolute
         {:ref *el-ref :class (util/classnames [{:is-area-dashed area-dashed?}])}
-        [:div.pdfViewer "viewer pdf"]
+        [:div.pdfViewer (t :pdf/viewer)]
         [:div.pp-holder]
 
         ;; block hls refs
@@ -877,23 +877,23 @@
   [state confirm-fn]
   (let [password (get state ::password)]
     [:div.container
-     [:div.text-lg.mb-4 "Password required"]
+     [:div.text-lg.mb-4 (t :pdf/password-required)]
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.leading-6.font-medium
-        "This document is password protected. Please enter a password:"]]]
+        (t :pdf/password-protected-desc)]]
 
-     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
-      {:auto-focus true
-       :on-change (fn [e]
-                    (reset! password (util/evalue e)))}]
+      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
+       {:auto-focus true
+        :on-change (fn [e]
+                     (reset! password (util/evalue e)))}]
 
-     [:div.mt-5.sm:mt-4.flex
-      (ui/button
-       "Submit"
-       {:on-click (fn []
-                    (let [password @password]
-                      (confirm-fn password)))})]]))
+      [:div.mt-5.sm:mt-4.flex
+       (ui/button
+        "Submit"
+        {:on-click (fn []
+                     (let [password @password]
+                       (confirm-fn password)))})]]]))
 
 (defonce debounced-set-property!
   (debounce property-handler/set-block-property! 300))

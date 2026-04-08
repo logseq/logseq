@@ -594,12 +594,14 @@
       (-> (shui/dialog-confirm!
            [:p (t :property/delete-from-tag-confirm)]
            {:id :delete-property-from-class
-            :data-reminder :ok})
+            :data-reminder :ok
+            :data-reminder-label (t :ui/dont-remind-me-again)})
           (p/then remove!))
       (-> (shui/dialog-confirm!
            (t :property/delete-from-node-confirm)
            {:id :delete-property-from-node
-            :data-reminder :ok})
+            :data-reminder :ok
+            :data-reminder-label (t :ui/dont-remind-me-again)})
           (p/then remove!)))))
 
 (rum/defc property-type-sub-pane

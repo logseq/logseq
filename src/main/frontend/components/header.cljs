@@ -73,7 +73,7 @@
                                {:on-click #(shui/dialog-open!
                                             (fn []
                                               [:div.p-2.-mb-8
-                                               [:h1.text-3xl.-mt-2.-ml-2 "Collaborators:"]
+                                               [:h1.text-3xl.-mt-2.-ml-2 (t :collaboration/members)]
                                                (settings/settings-collaboration)])
                                             {:id :rtc-collaborators})})
 
@@ -136,7 +136,7 @@
                                       (if favorited?
                                         (page-handler/<unfavorite-page! block-id-str)
                                         (page-handler/<favorite-page! block-id-str)))}}
-                         {:title   "Publish page"
+                         {:title   (t :publish/dialog-title)
                           :options {:on-click #(shui/dialog-open! (fn [] (page-menu/publish-page-dialog page))
                                                                   {:class "w-auto max-w-md"})}}])))
         page-menu-and-hr (concat page-menu [{:hr true}])
@@ -158,7 +158,7 @@
                    :icon (ui/icon "color-swatch")}
 
                   (when (db/get-page common-config/recycle-page-name)
-                    {:title "Recycle"
+                    {:title (t :storage/recycle)
                      :options {:on-click page-handler/open-recycle!}
                      :icon (ui/icon "trash")})
 
@@ -325,7 +325,7 @@
      (shui/button
       {:variant :ghost
        :size :sm
-       :title "Quit highlight recent blocks"
+       :title (t :header/quit-highlight-recent-blocks)
        :class "opacity-50 hover:opacity-100"
        :on-click (fn [] (state/toggle-highlight-recent-blocks!))}
       (ui/icon "x" {:size 16}))]))

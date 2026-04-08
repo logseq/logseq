@@ -1,6 +1,7 @@
 (ns frontend.extensions.zotero
   (:require [clojure.edn :refer [read-string]]
             [clojure.string :as string]
+            [frontend.context.i18n :refer [t]]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -11,7 +12,7 @@
 (defn open-button [full-path]
   (if (string/ends-with? (string/lower-case full-path) "pdf")
     (ui/button
-     "open"
+     (t :ui/open)
      :small? true
      :on-click
      (fn [e]
@@ -19,7 +20,7 @@
          (util/stop e)
          (state/set-state! :pdf/current current))))
     (ui/button
-     "open"
+     (t :ui/open)
      :small? true
      :target "_blank"
      :href full-path)))
@@ -32,14 +33,19 @@
   {:type                                    :user
    :prefer-citekey?                         true
    :include-attachments?                    true
-   :attachments-block-text                  "[[Attachments]]"
    :include-notes?                          true
    :overwrite-mode?                         false
-   :notes-block-text                        "[[Notes]]"
    :zotero-data-directory                   ""
    :zotero-linked-attachment-base-directory ""
    :extra-tags                              ""
    :page-insert-prefix                      "@"})
+
+(defn default-setting
+  [k]
+  (case k
+    :attachments-block-text (t :zotero/attachments)
+    :notes-block-text (t :zotero/notes)
+    (get default-settings k)))
 
 (defn all-profiles []
   (let [profiles (-> (sub-zotero-config) keys set)
@@ -56,7 +62,7 @@
   (let [profile (get-profile)]
     (-> (sub-zotero-config)
         (get profile)
-        (get k (get default-settings k)))))
+        (get k (default-setting k)))))
 
 (defn zotero-full-path
   [item-key filename]
@@ -70,7 +76,7 @@
 (rum/defc zotero-imported-file
   [item-key filename]
   (if (string/blank? (setting :zotero-data-directory))
-    [:p.warning "This is a zotero imported file, setting Zotero data directory would allow you to open the file in Logseq"]
+    [:p.warning (t :zotero.imported-file/warning)]
     (let [filename (read-string filename)
           full-path (zotero-full-path item-key filename)]
       (open-button full-path))))
@@ -78,7 +84,7 @@
 (rum/defc zotero-linked-file
   [path]
   (if (string/blank? (setting :zotero-linked-attachment-base-directory))
-    [:p.warning "This is a zotero linked file, setting Zotero linked attachment base directory would allow you to open the file in Logseq"]
+    [:p.warning (t :zotero.linked-file/warning)]
     (let [path (read-string path)
           full-path
           (str "file://"

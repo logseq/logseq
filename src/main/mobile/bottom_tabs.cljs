@@ -151,15 +151,15 @@
       :systemImage "house"
       :role "normal"}
      {:id "graphs"
-      :title (t :mobile/tab-graphs)
+      :title (t :mobile.tab/graphs)
       :systemImage "app.background.dotted"
       :role "normal"}
      {:id "capture"
-      :title (t :mobile/tab-capture)
+      :title (t :mobile.tab/capture)
       :systemImage "tray"
       :role "normal"}
      {:id "go to"
-      :title (t :mobile/tab-go-to)
+      :title (t :mobile.tab/go-to)
       :systemImage "square.stack.3d.down.right"
       :role "normal"}]
      (mobile-util/native-android?)

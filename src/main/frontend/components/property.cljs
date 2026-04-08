@@ -63,7 +63,7 @@
                 _ (when add-class-property?
                     (pv/<add-property! entity (:db/ident property) "" {:class-schema? class-schema? :exit-edit? false}))]
           property)
-        (notification/show! (t :property/invalid-name) :error)))))
+        (notification/show! (t :property.validation/invalid-name) :error)))))
 
 ;; TODO: This component should be cleaned up as it's only used for new properties and used to be used for existing properties
 (rum/defcs property-type-select <
@@ -135,7 +135,7 @@
       (shui/select-trigger
        {:class "!px-2 !py-0 !h-8"}
        (shui/select-value
-        {:placeholder "Select a property type"}))
+        {:placeholder (t :property/select-type-placeholder)}))
       (shui/select-content
        (shui/select-group
         (for [{:keys [label value disabled]} schema-types]
@@ -145,7 +145,7 @@
                                               (util/stop-propagation e)))} label)))))
      (when show-type-change-hints?
        (ui/tooltip (svg/info)
-                   [:span "Changing the property type clears some property configurations."]))]))
+                   [:span (t :property/type-change-warning)]))]))
 
 (rum/defc property-select
   [select-opts]
@@ -363,7 +363,7 @@
     (if (and blocks-container (seq entities))
       [:div.property-block-container.content.w-full
        (blocks-container config entities)]
-      [:span.opacity-60 "Empty"])))
+      [:span.opacity-60 (t :view.filter/empty)])))
 
 (rum/defc bidirectional-properties-section < rum/static
   [bidirectional-properties]
@@ -624,7 +624,7 @@
     [:details.my-1
      [:summary.text-sm.opacity-50.hover:opacity-90.cursor-pointer
       {:style {:margin-left 11}}
-      [:span.ml-1 "Hidden properties"]]
+      [:span.ml-1 (t :property/hidden-properties)]]
      [:div.mt-1
       (properties-section block hidden-properties opts)]]))
 

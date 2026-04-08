@@ -2,6 +2,7 @@
   "Profiler UI"
   (:require [clojure.set :as set]
             [fipp.edn :as fipp]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.profiler :as profiler-handler]
             [frontend.util :as util]
             [logseq.shui.ui :as shui]
@@ -17,13 +18,13 @@
         *mem-leak-reports (get state ::mem-leak-reports)
         *register-fn-name (get state ::register-fn-name)]
     [:div
-     [:b "Profiling fns(Only support UI thread now):"]
+     [:b "Profiling fns (Only support UI thread now):"]
      [:div.pb-4
       (for [f-name profiling-fns]
         [:div.flex.flex-row.items-center.gap-2
          [:pre.select-text (str f-name)]
          [:a.inline.close.flex.transition-opacity.duration-300.ease-in
-          {:title "Unregister"
+          {:title (t :profiler/unregister)
            :on-pointer-down
            (fn [e]
              (util/stop e)
@@ -38,9 +39,9 @@
       [:input.form-input.my-2.py-1
        {:on-change (fn [e] (reset! *register-fn-name (util/evalue e)))
         :on-focus (fn [e] (let [v (.-value (.-target e))]
-                            (when (= v "input fn name here")
+                            (when (= v (t :profiler/input-fn-placeholder))
                               (set! (.-value (.-target e)) ""))))
-        :placeholder "input fn name here"}]]
+        :placeholder (t :profiler/input-fn-placeholder)}]]
      [:div.flex.gap-2.flex-wrap.items-center.pb-3
       (shui/button
        {:size :sm
@@ -61,7 +62,7 @@
                (fipp/pprint {:width 20})
                with-out-str))]])
      [:hr]
-     [:b "Atom/Volatile Mem Leak Detect(Only support UI thread now):"]
+     [:b "Atom/Volatile Mem Leak Detect (Only support UI thread now):"]
      [:pre "Only check atoms/volatiles with a value type of `coll`.
 The report shows refs with coll-size > 5k and atom's watches-count > 1k.
 `ref` means atom or volatile.

@@ -32,7 +32,7 @@
       (when-not (:export-edn-error result)
         (.writeText js/navigator.clipboard pull-data)
         (println pull-data)
-        (notification/show! (t :notification/export-block-data-copied) :success)))
+        (notification/show! (t :export/block-data-copied) :success)))
     (notification/show! (t :notification/no-block-found) :warning)))
 
 (defn export-view-nodes-data [rows {:keys [group-by?]}]
@@ -44,7 +44,7 @@
       (notification/show! (:export-edn-error result) :error)
       (do (.writeText js/navigator.clipboard pull-data)
           (println pull-data)
-          (notification/show! (t :notification/export-view-nodes-data-copied) :success)))))
+          (notification/show! (t :export/view-nodes-data-copied) :success)))))
 
 (defn ^:export export-page-data []
   (if-let [page-id (page-util/get-current-page-id)]
@@ -54,7 +54,7 @@
         (notification/show! (:export-edn-error result) :error)
         (do (.writeText js/navigator.clipboard pull-data)
             (println pull-data)
-            (notification/show! (t :notification/export-page-data-copied) :success))))
+            (notification/show! (t :export/page-data-copied) :success))))
     (notification/show! (t :notification/no-page-found) :warning)))
 
 (defn ^:export export-graph-ontology-data []
@@ -67,7 +67,7 @@
       (println pull-data)
       (js/console.log (str "Exported " (count (:classes result)) " classes and "
                            (count (:properties result)) " properties"))
-      (notification/show! (t :notification/export-graph-ontology-data-copied) :success))))
+      (notification/show! (t :export/graph-ontology-data-copied) :success))))
 
 ;; Copied from handler.export
 (defn- file-name [repo extension]

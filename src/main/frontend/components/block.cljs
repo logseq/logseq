@@ -1118,7 +1118,7 @@
               (and (string? uuid-or-title) (string/ends-with? uuid-or-title ".excalidraw"))
               [:div.draw {:on-click (fn [e]
                                       (.stopPropagation e))}
-               [:div.warning "Excalidraw is no longer supported by default, we plan to support it through plugins."]]
+               [:div.warning (t :block/excalidraw-no-longer-supported)]]
 
               :else
               (let [blank-title? (string/blank? (:block/title block))]
@@ -1285,7 +1285,7 @@
   [config url s label title metadata full_text]
   (cond
     (string/blank? s)
-    [:span.warning {:title "Invalid link"} full_text]
+    [:span.warning {:title (t :block/invalid-link)} full_text]
 
     (= \# (first s))
     (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
@@ -1343,7 +1343,7 @@
             {:keys [link-depth]} config
             link-depth (or link-depth 0)]
         (if (> link-depth max-depth-of-links)
-          [:p.warning.text-sm "Block ref nesting is too deep"]
+          [:p.warning.text-sm (t :block/ref-nesting-too-deep)]
           (block-reference (assoc config
                                   :reference? true
                                   :link-depth (inc link-depth)
@@ -1511,9 +1511,9 @@
                 :src src
                 :width width
                 :height height}]))))
-      [:span.warning.mr-1 {:title "Invalid URL"}
+      [:span.warning.mr-1 {:title (t :block/invalid-url)}
        (macro->text "video" arguments)])
-    [:span.warning.mr-1 {:title "Empty URL"}
+    [:span.warning.mr-1 {:title (t :block/empty-url)}
      (macro->text "video" arguments)]))
 
 (defn- macro-else-cp
@@ -1615,7 +1615,7 @@
   [s]
   (let [result (common-util/safe-read-string s)
         result' (if (seq result) result
-                    [:div.warning {:title "Invalid hiccup"}
+                    [:div.warning {:title (t :block/invalid-hiccup)}
                      s])]
     (-> result'
         (hiccups.core/html)
@@ -1689,7 +1689,7 @@
 
     ["Inline_Hiccup" s]                                ;; String to hiccup
     (ui/catch-error
-     [:div.warning {:title "Invalid hiccup"} s]
+    [:div.warning {:title (t :block/invalid-hiccup)} s]
      [:span {:dangerouslySetInnerHTML
              {:__html (hiccup->html s)}}])
 
@@ -1965,8 +1965,8 @@
              (when-let [created-by (and (ldb/get-graph-rtc-uuid (db/get-db))
                                         (:logseq.property/created-by-ref block))]
                [:div (:block/title created-by)])
-             [:div "Created: " (date/int->local-time-2 (:block/created-at block))]
-             [:div "Last edited: " (date/int->local-time-2 (:block/updated-at block))]]))))]))
+             [:div (t :block/created-label (date/int->local-time-2 (:block/created-at block)))]
+             [:div (t :block/last-edited-label (date/int->local-time-2 (:block/updated-at block)))]]))))]))
 
 (rum/defc dnd-separator
   [move-to]
@@ -2080,8 +2080,8 @@
                                               (when *show-query? (swap! *show-query? not)))}
                           (ui/icon "settings"))
                          [:div.opacity-75 (if show-query?
-                                            "Hide query"
-                                            "Set query")]))]
+                                            (t :block/hide-query)
+                                            (t :block/set-query))]))]
     [:div
      (merge
       {:class (if query?
@@ -2094,7 +2094,7 @@
           {:on-click on-title-click})))
      (cond
        (and query? blank? (or advanced-query? show-query?))
-       [:span.opacity-75.hover:opacity-100 "Untitled query"]
+      [:span.opacity-75.hover:opacity-100 (t :block/untitled-query)]
        (and query? blank?)
        (query-builder-component/builder query {})
        :else
@@ -2111,8 +2111,8 @@
            :on-click (fn [e]
                        (util/stop e)
                        (state/pub-event! [:modal/show-cards (:db/id block)]))}
-          "Practice")
-         [:div "Practice cards"])])
+          (t :block/practice))
+         [:div (t :block/practice-cards)])])
      (when-let [property (:logseq.property/created-from-property block)]
        (when-let [message (when (= :url (:logseq.property/type property))
                             (first (outliner-property/validate-property-value (db/get-db) property (:db/id block))))]
@@ -2132,7 +2132,7 @@
         query? (ldb/class-instance? (entity-plus/entity-memoized db :logseq.class/Query) block')]
     (cond
       (and (:page-title? config) (ldb/page? block) (string/blank? (:block/title block)))
-      [:div.opacity-75 "Untitled"]
+      [:div.opacity-75 (t :ui/untitled)]
 
       (and (ldb/asset? block)
            (= :pdf (some-> (:logseq.property.asset/type block) string/lower-case keyword)))
@@ -2356,11 +2356,11 @@
                                   (shui/dropdown-menu-item
                                    {:key "Remove tag"
                                     :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
-                                   "Remove tag"))])
+                                   (t :block/remove-tag)))])
                              popup-opts))}
         (if (and @*hover? (not private-tag?) (not config/publishing?))
           [:a.inline-flex.text-muted-foreground
-           {:title "Remove this tag"
+             {:title (t :block/remove-this-tag)
             :style {:margin-top 1
                     :padding-left 2
                     :margin-right 2}
@@ -2410,7 +2410,7 @@
                                                      [:div.flex.flex-row.items-center.gap-1
                                                       (when-not (ldb/private-tags (:db/ident tag))
                                                         (shui/button
-                                                         {:title "Remove tag"
+                                                         {:title (t :block/remove-tag)
                                                           :variant :ghost
                                                           :class "!p-1 text-muted-foreground"
                                                           :size :sm
@@ -2521,7 +2521,7 @@
           {:variant :ghost
            :size :sm
            :class "px-1 py-0 h-6 text-muted-foreground hover:text-foreground"
-           :title "Add reaction"
+           :title (t :command.editor/add-reaction)
            :on-click open-picker!
            :on-pointer-down (fn [e]
                               (util/stop e))}
@@ -2532,9 +2532,9 @@
   (let [[sort-desc? set-sort-desc!] (rum/use-state true)]
     [:div.p-2.text-muted-foreground.text-sm.max-h-96
      [:div.font-medium.mb-2.flex.flex-row.gap-2.items-center
-      [:div "Status history"]
+      [:div (t :block/status-history)]
       (shui/button-ghost-icon (if sort-desc? :arrow-down :arrow-up)
-                              {:title "Sort order"
+                              {:title (t :block/sort-order)
                                :class "text-muted-foreground !h-4 !w-4"
                                :icon-props {:size 14}
                                :on-click #(set-sort-desc! (not sort-desc?))})]
@@ -2656,7 +2656,7 @@
   (when (> block-refs-count' 0)
     [:div.h-6
      (shui/button {:variant :ghost
-                   :title "Open block references"
+                   :title (t :block/open-block-references)
                    :class (str "px-1 py-0 w-5 h-5 opacity-70 hover:opacity-100" (when (and (util/mobile?)
                                                                                            (seq (:block/_parent block)))
                                                                                   " !pr-4"))
@@ -3244,7 +3244,7 @@
                             (let [element (dom/create-element "div")]
                               (-> element
                                   (dom/set-attr! "id" "dragging-ghost-element")
-                                  (dom/set-text! (t :editor/invalid-date (count blocks)))
+                                  (dom/set-text! (t :editor/moving-blocks-count (count blocks)))
                                   (dom/set-class! "p-2 rounded text-sm"))
                               element))]
               (doseq [block blocks]
@@ -3354,7 +3354,7 @@
           (if advanced-query?
             (src-cp (assoc config :code-block query) {:language "clojure"})
             [:div
-             [:div.opacity-75.ml-5.text-sm.mb-1 "Set query:"]
+             [:div.opacity-75.ml-5.text-sm.mb-1 (t :block/set-query-label)]
              (block-container config query)])]))
 
      (when (and (not (or (:table? config) (:property? config)))
@@ -3802,7 +3802,7 @@
                            {:__html (security/sanitize-html content)}}])
       ["Hiccup" content]
       (ui/catch-error
-       [:div.warning {:title "Invalid hiccup"}
+      [:div.warning {:title (t :block/invalid-hiccup)}
         content]
        [:div.hiccup_html {:dangerouslySetInnerHTML
                           {:__html (hiccup->html content)}}])

@@ -20,20 +20,20 @@
                     (shui/dialog-close!))]
     [:div.e2ee-password-modal-overlay
      [:div.encryption-password.max-w-2xl.e2ee-password-modal-content.flex.flex-col.gap-8.p-4
-      [:div.text-2xl.font-medium (t :e2ee/set-password-title)]
+      [:div.text-2xl.font-medium (t :encryption/set-password-title)]
 
       [:div.init-remote-pw-tips.space-x-4.hidden.sm:flex
        [:div.flex-1.flex.items-center
         [:span.px-3.flex (ui/icon "key")]
-        [:p (t :e2ee/remember-password-rich)]]
+        [:p (t :encryption/remember-password-rich)]]
 
        [:div.flex-1.flex.items-center
         [:span.px-3.flex (ui/icon "lock")]
-        [:p (t :e2ee/cloud-password-rich)]]]
+        [:p (t :encryption/cloud-password-rich)]]]
 
       [:div.flex.flex-col.gap-4
        (shui/toggle-password
-        {:placeholder (t :e2ee/enter-password)
+        {:placeholder (t :encryption/enter-password)
          :value password
          :on-change (fn [e] (set-password! (-> e .-target .-value)))
          :on-blur (fn []
@@ -42,14 +42,14 @@
 
        [:div.flex.flex-col.gap-2
         (shui/toggle-password
-         {:placeholder (t :e2ee/enter-password-again)
+         {:placeholder (t :encryption/enter-password-again)
           :value password-confirm
           :on-change (fn [e] (set-password-confirm! (-> e .-target .-value)))
           :on-blur (fn [] (set-matched! (= password-confirm password)))})
 
         (when (false? matched?)
           [:div.text-warning.text-sm
-           (t :e2ee/password-not-matched)])]
+           (t :encryption/password-not-matched)])]
 
        (shui/button
         {:on-click on-submit
@@ -72,7 +72,7 @@
                                   (set-decrypt-fail! true))))))]
     [:div.e2ee-password-modal-overlay
      [:div.e2ee-password-modal-content.flex.flex-col.gap-8.p-4
-      [:div.text-2xl.font-medium (t :e2ee/enter-password-title)]
+      [:div.text-2xl.font-medium (t :encryption/enter-password-title)]
       [:div.flex.flex-col.gap-4
        [:div.flex.flex-col.gap-1
         (shui/toggle-password
@@ -83,7 +83,7 @@
           :on-change (fn [e]
                        (set-decrypt-fail! false)
                        (set-password! (-> e .-target .-value)))})
-          (when decrypt-fail? [:p.text-warning.text-sm (t :e2ee/wrong-password)])]
+          (when decrypt-fail? [:p.text-warning.text-sm (t :encryption/wrong-password)])]
        (shui/button
         {:on-click on-submit
          :disabled (string/blank? password)
