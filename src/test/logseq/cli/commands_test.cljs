@@ -1092,7 +1092,13 @@
       (is (= 10 (get-in result [:options :limit])))
       (is (= 2 (get-in result [:options :offset])))
       (is (= "priority" (get-in result [:options :sort])))
-      (is (= "desc" (get-in result [:options :order]))))))
+      (is (= "desc" (get-in result [:options :order])))))
+
+  (testing "list task supports short -c alias for --content"
+    (let [result (commands/parse-args ["list" "task" "-c" "alpha"])]
+      (is (true? (:ok? result)))
+      (is (= :list-task (:command result)))
+      (is (= "alpha" (get-in result [:options :content]))))))
 
 (deftest test-search-subcommand-parse
   (testing "search block parses --content option"
@@ -1181,7 +1187,13 @@
   (testing "list task rejects invalid priority"
     (let [result (commands/parse-args ["list" "task" "--priority" "wat"])]
       (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code]))))))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "list task defers unknown --status to runtime validation"
+    (let [result (commands/parse-args ["list" "task" "--status" "custom-review"])]
+      (is (true? (:ok? result)))
+      (is (= :list-task (:command result)))
+      (is (= "custom-review" (get-in result [:options :status]))))))
 
 (deftest test-list-execute-default-sort-updated-at
   (async done
@@ -1254,6 +1266,67 @@
              (p/catch (fn [e]
                         (is false (str "unexpected error: " e))))
              (p/finally done))))
+
+(deftest test-task-runtime-invalid-status-includes-graph-values
+  (async done
+         (let [list-calls* (atom [])
+               upsert-calls* (atom [])]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               transport/invoke (fn [_ method _ args]
+                                                  (let [repo (first args)]
+                                                    (cond
+                                                      (= method :thread-api/q)
+                                                      (do
+                                                        (if (= repo "demo")
+                                                          (swap! list-calls* conj method)
+                                                          (swap! upsert-calls* conj method))
+                                                        [:logseq.property/status.todo
+                                                         :logseq.property/status.done
+                                                         :logseq.property/status.doing])
+
+                                                      (= method :thread-api/cli-list-tasks)
+                                                      (do
+                                                        (swap! list-calls* conj method)
+                                                        [])
+
+                                                      (= method :thread-api/pull)
+                                                      (do
+                                                        (swap! upsert-calls* conj method)
+                                                        {:db/id 1})
+
+                                                      (= method :thread-api/apply-outliner-ops)
+                                                      (do
+                                                        (swap! upsert-calls* conj method)
+                                                        {:result :ok})
+
+                                                      :else
+                                                      (throw (ex-info "unexpected invoke" {:method method :args args})))))]
+                 (p/let [list-result (list-command/execute-list-task
+                                      {:repo "demo"
+                                       :options {:status "invalid-status"}}
+                                      {})
+                         upsert-result (upsert-command/execute-upsert-task
+                                        {:repo "upsert-demo"
+                                         :mode :update
+                                         :id 1
+                                         :status "invalid-status"}
+                                        {})
+                         list-message (or (some-> (get-in list-result [:error :message]) strip-ansi) "")
+                         upsert-message (or (some-> (get-in upsert-result [:error :message]) strip-ansi) "")]
+                   (is (= :error (:status list-result)))
+                   (is (= :invalid-options (get-in list-result [:error :code])))
+                   (is (string/includes? list-message "Invalid value for option :status: invalid-status"))
+                   (is (string/includes? list-message "Available values (from current graph): doing, done, todo"))
+                   (is (= [:thread-api/q] @list-calls*))
+
+                   (is (= :error (:status upsert-result)))
+                   (is (= :invalid-options (get-in upsert-result [:error :code])))
+                   (is (string/includes? upsert-message "Invalid value for option :status: invalid-status"))
+                   (is (string/includes? upsert-message "Available values (from current graph): doing, done, todo"))
+                   (is (= [:thread-api/q] @upsert-calls*))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
 
 (deftest test-verb-subcommand-parse-upsert-remove
   (testing "remove block parses with id"
@@ -1389,13 +1462,14 @@
       (is (= :upsert-block (:command result)))
       (is (= "11111111-1111-1111-1111-111111111111" (get-in result [:options :uuid])))))
 
-  (testing "upsert block update mode accepts status-only updates"
+  (testing "upsert block rejects --status and guides migration to upsert task"
     (let [result (commands/parse-args ["upsert" "block" "--id" "1"
-                                       "--status" "done"])]
-      (is (true? (:ok? result)))
-      (is (= :upsert-block (:command result)))
-      (is (= 1 (get-in result [:options :id])))
-      (is (= "done" (get-in result [:options :status])))))
+                                       "--status" "done"])
+          message (strip-ansi (get-in result [:error :message]))]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))
+      (is (string/includes? message "--status"))
+      (is (string/includes? message "upsert task"))))
 
   (testing "upsert block update mode accepts content-only updates"
     (let [result (commands/parse-args ["upsert" "block" "--id" "1"
@@ -1562,6 +1636,14 @@
       (is (= 42 (get-in result [:options :id])))
       (is (= "done" (get-in result [:options :status])))
       (is (= "medium" (get-in result [:options :priority])))))
+
+  (testing "upsert task defers unknown --status to runtime validation"
+    (let [result (commands/parse-args ["upsert" "task"
+                                       "--id" "42"
+                                       "--status" "custom-review"])]
+      (is (true? (:ok? result)))
+      (is (= :upsert-task (:command result)))
+      (is (= "custom-review" (get-in result [:options :status])))))
 
   (testing "upsert task requires selector, page, or content"
     (let [result (commands/parse-args ["upsert" "task"])]
