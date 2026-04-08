@@ -374,7 +374,6 @@
    ["TYPE"       (fn [item _] (normalize-node-type (:node/type item))) [:node/type] true]
    ["PAGE-ID"    (fn [item _] (:block/page-id item)) [:block/page-id]]
    ["PAGE-TITLE" (fn [item _] (:block/page-title item)) [:block/page-title]]
-   ["IDENT"      (fn [item _] (:db/ident item)) [:db/ident]]
    ["UPDATED-AT" (fn [item now-ms] (human-ago (or (:updated-at item) (:block/updated-at item)) now-ms)) [:updated-at :block/updated-at]]
    ["CREATED-AT" (fn [item now-ms] (human-ago (or (:created-at item) (:block/created-at item)) now-ms)) [:created-at :block/created-at]]])
 
