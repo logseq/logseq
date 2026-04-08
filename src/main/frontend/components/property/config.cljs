@@ -649,7 +649,7 @@
   "property: block entity"
   [property owner-block values {:keys [class-schema? debug? with-title? more-options]
                                 :or {with-title? true}}]
-  (let [title (:block/title property)
+  (let [title (db-property/built-in-display-title property t)
         property-type (:logseq.property/type property)
         property-type-label' (some-> property-type (property-type-label))
         enable-closed-values? (contains? db-property-type/closed-value-property-types
