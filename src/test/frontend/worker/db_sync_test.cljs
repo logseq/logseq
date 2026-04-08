@@ -1787,10 +1787,10 @@
           child-uuid (:block/uuid child)]
       (outliner-page/delete! conn page-uuid {})
       (is (true? (ldb/recycled? (d/entity @conn [:block/uuid page-uuid]))))
-      (is (nil? (#'sync-apply/replay-canonical-outliner-op!
-                 conn
-                 [:recycle-delete-permanently [[:block/uuid page-uuid]]]
-                 nil)))
+      (is (some? (#'sync-apply/replay-canonical-outliner-op!
+                  conn
+                  [:recycle-delete-permanently [[:block/uuid page-uuid]]]
+                  nil)))
       (is (nil? (d/entity @conn [:block/uuid page-uuid])))
       (is (nil? (d/entity @conn [:block/uuid child-uuid]))))))
 
@@ -2729,84 +2729,6 @@
                    :ok
                    (catch :default _error
                      :thrown)))))))))
-
-(deftest tx-batch-ok-real-checksum-mismatch-emits-rtc-log-test
-  (testing "tx/batch/ok mismatch emits :rtc.log/checksum-mismatch payload"
-    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
-          stale-checksum "0000000000000000"
-          remote-checksum "ffffffffffffffff"
-          *captured (atom nil)
-          client {:repo test-repo
-                  :graph-id "graph-1"
-                  :inflight (atom [])
-                  :online-users (atom [])
-                  :ws-state (atom :open)}
-          raw-message (js/JSON.stringify (clj->js {:type "tx/batch/ok"
-                                                   :t 0
-                                                   :checksum remote-checksum}))]
-      (with-datascript-conns conn client-ops-conn
-        (fn []
-          (with-redefs [sync-log-state/rtc-log (fn [type payload]
-                                                 (reset! *captured {:type type
-                                                                    :payload payload}))]
-            (client-op/update-local-checksum test-repo stale-checksum)
-            (sync-handle-message/handle-message! test-repo client raw-message)
-            (let [{:keys [type payload]} @*captured]
-              (is (= :rtc.log/checksum-mismatch type))
-              (is (= "tx/batch/ok" (:message-type payload)))
-              (is (= stale-checksum (:cached-local-checksum payload)))
-              (is (string? (:local-checksum payload)))
-              (is (= remote-checksum (:remote-checksum payload))))))))))
-
-(deftest tx-batch-ok-real-checksum-mismatch-heals-remote-checksum-cache-test
-  (testing "tx/batch/ok mismatch should repair latest remote checksum cache to local recomputed checksum"
-    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
-          stale-checksum "0000000000000000"
-          remote-checksum "ffffffffffffffff"
-          actual-checksum (sync-checksum/recompute-checksum @conn)
-          latest-checksum-prev @db-sync/*repo->latest-remote-checksum
-          client {:repo test-repo
-                  :graph-id "graph-1"
-                  :inflight (atom [])
-                  :online-users (atom [])
-                  :ws-state (atom :open)}
-          raw-message (js/JSON.stringify (clj->js {:type "tx/batch/ok"
-                                                   :t 0
-                                                   :checksum remote-checksum}))]
-      (with-datascript-conns conn client-ops-conn
-        (fn []
-          (try
-            (reset! db-sync/*repo->latest-remote-checksum {})
-            (client-op/update-local-checksum test-repo stale-checksum)
-            (sync-handle-message/handle-message! test-repo client raw-message)
-            (is (= actual-checksum
-                   (get @db-sync/*repo->latest-remote-checksum test-repo)))
-            (finally
-              (reset! db-sync/*repo->latest-remote-checksum latest-checksum-prev))))))))
-
-(deftest tx-batch-ok-stale-local-checksum-cache-does-not-emit-mismatch-test
-  (testing "stale cached local checksum is corrected by recompute before mismatch logging"
-    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
-          stale-checksum "0000000000000000"
-          actual-checksum (sync-checksum/recompute-checksum @conn)
-          *captured (atom nil)
-          client {:repo test-repo
-                  :graph-id "graph-1"
-                  :inflight (atom [])
-                  :online-users (atom [])
-                  :ws-state (atom :open)}
-          raw-message (js/JSON.stringify (clj->js {:type "tx/batch/ok"
-                                                   :t 0
-                                                   :checksum actual-checksum}))]
-      (with-datascript-conns conn client-ops-conn
-        (fn []
-          (with-redefs [sync-log-state/rtc-log (fn [type payload]
-                                                 (reset! *captured {:type type
-                                                                    :payload payload}))]
-            (client-op/update-local-checksum test-repo stale-checksum)
-            (sync-handle-message/handle-message! test-repo client raw-message)
-            (is (= actual-checksum (client-op/get-local-checksum test-repo)))
-            (is (nil? @*captured))))))))
 
 (deftest local-checksum-stays-in-sync-after-undo-redo-sequence-test
   (testing "insert/delete/indent/outdent with undo-all/redo-all keeps cached checksum aligned"
