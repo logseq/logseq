@@ -216,6 +216,9 @@ Inspect and edit commands:
 - `list property [--expand] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list properties (defaults to `--sort updated-at`; `TYPE` and `CARDINALITY` are included by default even without `--expand`; missing schema cardinality is treated as `one`)
 - `list task [--status <status>] [--priority <low|medium|high|urgent>] [-c|--content <text>] [--fields <csv>] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list task nodes tagged with `#Task` (supports both pages and blocks; defaults to `--sort updated-at`)
   - `--status` is validated at runtime using values from the current graph; invalid values return an error that includes available values from that graph.
+- `list node [--tags <csv>] [--properties <csv>] [--fields <csv>] [--limit <n>] [--offset <n>] [--sort <field>] [--order asc|desc]` - list ordinary nodes (pages and blocks) filtered by tags/properties (supports selector forms id/uuid/ident/name; at least one of `--tags` or `--properties` is required; defaults to `--sort updated-at`)
+  - `--tags` and `--properties` use **all-of** semantics, and when both are present they are combined with **AND**.
+  - CSV tokens are trimmed and empty tokens are ignored; if a provided filter becomes empty after normalization, CLI returns `invalid-options`.
 - `upsert block --content <text> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - create blocks; defaults to today’s journal page if no target is given
 - `upsert block --blocks <edn> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks via EDN vector
 - `upsert block --blocks-file <path> [--target-page <name>|--target-id <id>|--target-uuid <uuid>] [--pos first-child|last-child|sibling]` - insert blocks from an EDN file
@@ -253,6 +256,7 @@ Subcommands:
   list tag [options]       List tags
   list property [options]  List properties
   list task [options]      List tasks
+  list node [options]      List nodes
   upsert block [options]   Upsert block
   upsert page [options]    Upsert page
   upsert task [options]    Upsert task
@@ -291,7 +295,7 @@ Output formats:
     139ms     └── cli.execute-action
     129ms         └── transport.invoke:thread-api/cli-list-pages
     ```
-- Human output is plain text. List/search commands render tables with a final `Count: N` line. For list and search subcommands, the ID column uses `:db/id` (not UUID). If `:db/ident` exists, an `IDENT` column is included. `list property` includes dedicated `TYPE` and `CARDINALITY` columns. Search table columns are `ID` and `TITLE`. For `list page|tag|property|task` in human output, the `TITLE` column is display-width-aware (CJK-safe), defaults to max width `40`, and truncates overflow with `…`; set `:list-title-max-display-width` in `cli.edn` to override. JSON/EDN outputs keep full titles (no truncation). Block titles can include multiple lines; multi-line rows align additional lines under the `TITLE` column. Times such as list `UPDATED-AT`/`CREATED-AT` and `graph info` `Created at` are shown in human-friendly relative form. Errors include error codes and may include a `Hint:` line. Use `--output json|edn` for structured output.
+- Human output is plain text. List/search commands render tables with a final `Count: N` line. For list and search subcommands, the ID column uses `:db/id` (not UUID). If `:db/ident` exists, an `IDENT` column is included. `list property` includes dedicated `TYPE` and `CARDINALITY` columns; `list node` includes a dedicated `TYPE` column (page/block) and page context columns for blocks. Search table columns are `ID` and `TITLE`. For `list page|tag|property|task|node` in human output, the `TITLE` column is display-width-aware (CJK-safe), defaults to max width `40`, and truncates overflow with `…`; set `:list-title-max-display-width` in `cli.edn` to override. JSON/EDN outputs keep full titles (no truncation). Block titles can include multiple lines; multi-line rows align additional lines under the `TITLE` column. Times such as list `UPDATED-AT`/`CREATED-AT` and `graph info` `Created at` are shown in human-friendly relative form. Errors include error codes and may include a `Hint:` line. Use `--output json|edn` for structured output.
 - `example` human output includes `Selector`, `Matched commands`, and `Examples` sections. Structured output (`json`/`edn`) includes `selector`, `matched-commands`, `examples`, and `message` fields under `data`.
 - `sync download` progress lines are streamed to stdout only when progress is enabled. In `json`/`edn` mode, progress is disabled by default unless `--progress true` is provided.
 - JSON machine output preserves namespaced keyword semantics:

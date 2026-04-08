@@ -91,6 +91,7 @@
       (is (contains-bold? summary "list tag"))
       (is (contains-bold? summary "list property"))
       (is (contains-bold? summary "list task"))
+      (is (contains-bold? summary "list node"))
       (is (contains-bold? summary "upsert block"))
       (is (contains-bold? summary "upsert page"))
       (is (contains-bold? summary "upsert tag"))
@@ -147,8 +148,8 @@
               ["graph list" "graph create" "graph export" "graph import"]
               ["graph list" "graph create" "graph export" "graph import"]]
              ["list"
-              ["list page" "list tag" "list property" "list task"]
-              ["list page" "list tag" "list property" "list task"]]
+              ["list page" "list tag" "list property" "list task" "list node"]
+              ["list page" "list tag" "list property" "list task" "list node"]]
              ["upsert"
               ["upsert task" "upsert tag" "upsert property"]
               ["upsert task" "upsert tag" "upsert property"]]
@@ -1098,7 +1099,28 @@
     (let [result (commands/parse-args ["list" "task" "-c" "alpha"])]
       (is (true? (:ok? result)))
       (is (= :list-task (:command result)))
-      (is (= "alpha" (get-in result [:options :content]))))))
+      (is (= "alpha" (get-in result [:options :content])))))
+
+  (testing "list node parses with tags/properties and common options"
+    (let [result (commands/parse-args ["list" "node"
+                                       "--tags" "project,work"
+                                       "--properties" "status,priority"
+                                       "--expand"
+                                       "--fields" "id,title,type,updated-at"
+                                       "--limit" "10"
+                                       "--offset" "2"
+                                       "--sort" "updated-at"
+                                       "--order" "desc"])]
+      (is (true? (:ok? result)))
+      (is (= :list-node (:command result)))
+      (is (= "project,work" (get-in result [:options :tags])))
+      (is (= "status,priority" (get-in result [:options :properties])))
+      (is (true? (get-in result [:options :expand])))
+      (is (= "id,title,type,updated-at" (get-in result [:options :fields])))
+      (is (= 10 (get-in result [:options :limit])))
+      (is (= 2 (get-in result [:options :offset])))
+      (is (= "updated-at" (get-in result [:options :sort])))
+      (is (= "desc" (get-in result [:options :order]))))))
 
 (deftest test-search-subcommand-parse
   (testing "search block parses --content option"
@@ -1193,7 +1215,37 @@
     (let [result (commands/parse-args ["list" "task" "--status" "custom-review"])]
       (is (true? (:ok? result)))
       (is (= :list-task (:command result)))
-      (is (= "custom-review" (get-in result [:options :status]))))))
+      (is (= "custom-review" (get-in result [:options :status])))))
+
+  (testing "list node requires at least one filter"
+    (let [result (commands/parse-args ["list" "node"])
+          message (strip-ansi (get-in result [:error :message]))]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))
+      (is (string/includes? message "list node requires at least one of --tags or --properties"))))
+
+  (testing "list node rejects blank --tags csv"
+    (let [result (commands/parse-args ["list" "node" "--tags" " , ,   "])
+          message (strip-ansi (get-in result [:error :message]))]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))
+      (is (string/includes? message "list node --tags must include at least one non-empty value"))))
+
+  (testing "list node rejects blank --properties csv"
+    (let [result (commands/parse-args ["list" "node" "--properties" " , ,   "])
+          message (strip-ansi (get-in result [:error :message]))]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))
+      (is (string/includes? message "list node --properties must include at least one non-empty value"))))
+
+  (testing "list node accepts normalized csv filters"
+    (let [result (commands/parse-args ["list" "node"
+                                       "--tags" "  project , , work  "
+                                       "--properties" "  status ,, priority "])]
+      (is (true? (:ok? result)))
+      (is (= :list-node (:command result)))
+      (is (= "project,work" (get-in result [:options :tags])))
+      (is (= "status,priority" (get-in result [:options :properties]))))))
 
 (deftest test-list-execute-default-sort-updated-at
   (async done
@@ -2173,6 +2225,15 @@
           result (commands/build-action parsed {:graph "demo"})]
       (is (true? (:ok? result)))
       (is (= :list-task (get-in result [:action :type])))))
+
+  (testing "list node builds action"
+    (let [parsed {:ok? true :command :list-node :options {:tags "project,work" :properties "status"}}
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :list-node (get-in result [:action :type])))
+      (is (= "logseq_db_demo" (get-in result [:action :repo])))
+      (is (= "project,work" (get-in result [:action :options :tags])))
+      (is (= "status" (get-in result [:action :options :properties])))))
 
   (testing "search page builds action from --content option"
     (let [parsed {:ok? true :command :search-page :options {:content "project home"} :args []}

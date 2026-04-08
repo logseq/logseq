@@ -659,8 +659,14 @@
   (let [tag-selector [:db/id :block/name :block/title :block/uuid
                       {:block/tags [:db/ident]}
                       :logseq.property/public? :logseq.property/built-in?]]
-    (p/let [entity (if (string? tag)
+    (p/let [entity (cond
+                     (and (string? tag) (common-util/uuid-string? (string/trim tag)))
+                     (pull-entity config repo tag-selector [:block/uuid (uuid (string/trim tag))])
+
+                     (string? tag)
                      (pull-tag-by-name config repo tag tag-selector)
+
+                     :else
                      (let [lookup (or (tag-lookup-ref tag)
                                       (throw (ex-info "invalid tag value" {:code :invalid-tag :tag tag})))]
                        (pull-entity config repo tag-selector lookup)))]
@@ -791,6 +797,9 @@
       (number? property-key)
       (pull-entity config repo property-entity-selector property-key)
 
+      (uuid? property-key)
+      (pull-entity config repo property-entity-selector [:block/uuid property-key])
+
       (keyword? property-key)
       (p/let [entity (pull-entity config repo property-entity-selector [:db/ident property-key])]
         (if (or (:db/id entity) (qualified-keyword? property-key))
@@ -802,12 +811,14 @@
             ident (normalize-property-key text)]
         (if-not (seq text)
           (p/resolved nil)
-          (p/let [entity (lookup-by-title text)]
-            (if (:db/id entity)
-              entity
-              (if ident
-                (pull-entity config repo property-entity-selector [:db/ident ident])
-                (p/resolved nil))))))
+          (if (common-util/uuid-string? text)
+            (pull-entity config repo property-entity-selector [:block/uuid (uuid text)])
+            (p/let [entity (lookup-by-title text)]
+              (if (:db/id entity)
+                entity
+                (if ident
+                  (pull-entity config repo property-entity-selector [:db/ident ident])
+                  (p/resolved nil)))))))
 
       :else
       (p/resolved nil))))
@@ -818,17 +829,17 @@
           ident (:db/ident entity)]
     (cond
       (nil? (:db/id entity))
-      (throw (ex-info (str "property not found: " (pr-str (name property-key)))
+      (throw (ex-info (str "property not found: " (pr-str property-key))
                       {:code :property-not-found
                        :property property-key}))
 
       (not (property-entity? entity))
-      (throw (ex-info (str "This is not a property: " (pr-str (name property-key)))
+      (throw (ex-info (str "This is not a property: " (pr-str property-key))
                       {:code :invalid-property-target
                        :property property-key}))
 
       (nil? ident)
-      (throw (ex-info (str "property not found: " (pr-str (name property-key)))
+      (throw (ex-info (str "property not found: " (pr-str property-key))
                       {:code :property-not-found
                        :property property-key}))
 

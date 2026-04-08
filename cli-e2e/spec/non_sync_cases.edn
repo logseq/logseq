@@ -164,6 +164,23 @@
   :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
   :tags [:upsert :list :smoke]}
 
+ {:id "node-list-by-tags-properties-json"
+  :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"]
+  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert tag --graph {{graph-arg}} --name NodeTag >/dev/null"
+         "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert property --graph {{graph-arg}} --name node-prop >/dev/null"
+         "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page NodeHome --update-tags '[\"NodeTag\"]' --update-properties '{:node-prop \"v\"}' >/dev/null"
+         "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json list node --graph {{graph-arg}} --tags NodeTag --properties node-prop --fields id,title,type --sort updated-at --order desc --limit 20"]
+  :expect {:exit 0
+           :stdout-json-paths {[:status] "ok"
+                               [:data :items 0 :block/title] "NodeHome"
+                               [:data :items 0 :node/type] "page"}}
+  :covers {:commands ["upsert tag" "upsert property" "upsert page" "list node"]
+           :options {:global ["--config" "--graph" "--data-dir" "--output"]
+                     :upsert ["--name" "--page" "--update-tags" "--update-properties"]
+                     :list ["--tags" "--properties" "--fields" "--limit" "--sort" "--order"]}}
+  :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
+  :tags [:upsert :list]}
+
  {:id "block-upsert-and-show-json"
   :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"
           "{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json upsert page --graph {{graph-arg}} --page Home >/dev/null"]

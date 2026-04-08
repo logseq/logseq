@@ -1,10 +1,12 @@
 (ns logseq.cli.command.list
   "List-related CLI commands."
   (:require [clojure.string :as string]
+            [logseq.cli.command.add :as add-command]
             [logseq.cli.command.core :as core]
             [logseq.cli.command.task-status :as task-status-command]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
+            [logseq.common.util :as common-util]
             [promesa.core :as p]))
 
 (def ^:private list-common-spec
@@ -132,6 +134,26 @@
     :sort {:validate (set (keys list-task-field-map))}
     :fields {:multiple-values (keys list-task-field-map)}}))
 
+(def ^:private list-node-field-map
+  {"id" :db/id
+   "ident" :db/ident
+   "title" :block/title
+   "uuid" :block/uuid
+   "type" :node/type
+   "page-id" :block/page-id
+   "page-title" :block/page-title
+   "created-at" :block/created-at
+   "updated-at" :block/updated-at})
+
+(def ^:private list-node-spec
+  (merge-with
+   merge
+   list-common-spec
+   {:tags {:desc "Filter by tags (comma separated selectors)"}
+    :properties {:desc "Filter by properties (comma separated selectors)"}
+    :sort {:validate (set (keys list-node-field-map))}
+    :fields {:multiple-values (keys list-node-field-map)}}))
+
 (def entries
   [(core/command-entry ["list" "page"] :list-page "List pages" list-page-spec
                        {:examples ["logseq list page --graph my-graph"
@@ -145,13 +167,54 @@
                                    "logseq list property --graph my-graph --include-built-in --limit 20 --output json"]})
    (core/command-entry ["list" "task"] :list-task "List tasks" list-task-spec
                        {:examples ["logseq list task --graph my-graph --status todo --priority high"
-                                   "logseq list task --graph my-graph --content \"release\" --sort updated-at --order desc"]})])
+                                   "logseq list task --graph my-graph --content \"release\" --sort updated-at --order desc"]})
+   (core/command-entry ["list" "node"] :list-node "List nodes" list-node-spec
+                       {:examples ["logseq list node --graph my-graph --tags project,work"
+                                   "logseq list node --graph my-graph --properties status,priority --sort updated-at --order desc"]})])
+
+(defn- parse-csv-option
+  [value]
+  (when (some? value)
+    (->> (string/split (str value) #",")
+         (map string/trim)
+         (remove string/blank?)
+         vec)))
+
+(defn- normalize-csv-option
+  [value]
+  (when-let [values (seq (parse-csv-option value))]
+    (string/join "," values)))
+
+(defn normalize-options
+  [command opts]
+  (if (= command :list-node)
+    (cond-> opts
+      (contains? opts :tags) (update :tags normalize-csv-option)
+      (contains? opts :properties) (update :properties normalize-csv-option))
+    opts))
 
 (defn invalid-options?
-  [opts]
-  (let [{:keys [include-journal journal-only]} opts]
-    (when (and include-journal journal-only)
-      "include-journal and journal-only are mutually exclusive")))
+  [command opts]
+  (let [{:keys [include-journal journal-only tags properties]} opts
+        tags-specified? (contains? opts :tags)
+        properties-specified? (contains? opts :properties)]
+    (cond
+      (and include-journal journal-only)
+      "include-journal and journal-only are mutually exclusive"
+
+      (and (= command :list-node) tags-specified? (not (seq tags)))
+      "list node --tags must include at least one non-empty value"
+
+      (and (= command :list-node) properties-specified? (not (seq properties)))
+      "list node --properties must include at least one non-empty value"
+
+      (and (= command :list-node)
+           (not (seq tags))
+           (not (seq properties)))
+      "list node requires at least one of --tags or --properties"
+
+      :else
+      nil)))
 
 (defn build-action
   [command options repo]
@@ -264,6 +327,60 @@
               sorted (apply-sort prepared sort-field order list-property-field-map)
               limited (apply-offset-limit sorted (:offset options) (:limit options))
               final (apply-fields limited fields list-property-field-map)]
+        {:status :ok
+         :data {:items final}})))
+
+(defn- parse-selector-token
+  [token]
+  (let [text (some-> token str string/trim)]
+    (cond
+      (not (seq text)) nil
+      (re-matches #"^-?\d+$" text) (js/parseInt text 10)
+      (common-util/uuid-string? text) (uuid text)
+      (common-util/valid-edn-keyword? text)
+      (let [value (common-util/safe-read-string {:log-error? false} text)]
+        (if (keyword? value) value text))
+      :else text)))
+
+(defn- parse-selector-csv
+  [value]
+  (->> (parse-csv-option value)
+       (map parse-selector-token)
+       (remove nil?)
+       vec))
+
+(defn- resolve-tag-ids
+  [config repo tags-csv]
+  (let [selectors (parse-selector-csv tags-csv)]
+    (if (seq selectors)
+      (p/let [entities (add-command/resolve-tags config repo selectors)]
+        (mapv :db/id entities))
+      (p/resolved nil))))
+
+(defn- resolve-property-idents
+  [config repo properties-csv]
+  (let [selectors (parse-selector-csv properties-csv)]
+    (if (seq selectors)
+      (add-command/resolve-property-identifiers config repo selectors {:allow-non-built-in? true})
+      (p/resolved nil))))
+
+(defn execute-list-node
+  [action config]
+  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
+              options (:options action)
+              tag-ids (resolve-tag-ids cfg (:repo action) (:tags options))
+              property-idents (resolve-property-idents cfg (:repo action) (:properties options))
+              worker-options (cond-> (dissoc options :tags :properties)
+                               (seq tag-ids) (assoc :tag-ids tag-ids)
+                               (seq property-idents) (assoc :property-idents property-idents))
+              items (transport/invoke cfg :thread-api/cli-list-nodes false
+                                      [(:repo action) worker-options])
+              sort-field (effective-sort-field options)
+              order (or (:order options) "asc")
+              fields (parse-field-list (:fields options))
+              sorted (apply-sort items sort-field order list-node-field-map)
+              limited (apply-offset-limit sorted (:offset options) (:limit options))
+              final (apply-fields limited fields list-node-field-map)]
         {:status :ok
          :data {:items final}})))
 
