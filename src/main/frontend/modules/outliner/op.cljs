@@ -163,3 +163,8 @@
   ([page-uuid opts]
    (op-transact!
     [:delete-page [page-uuid (current-user-delete-opts opts)]])))
+
+(defn recycle-delete-permanently!
+  [root-uuid]
+  (op-transact!
+   [:recycle-delete-permanently [root-uuid]]))
