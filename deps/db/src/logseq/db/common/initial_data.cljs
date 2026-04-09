@@ -256,7 +256,9 @@
          (keep (fn [d]
                  (when (<= (:v d) today)
                    (let [e (d/entity db (:e d))]
-                     (when (and (entity-util/journal? e) (:db/id e))
+                     (when (and (entity-util/journal? e)
+                                (:db/id e)
+                                (not (entity-util/recycled? e)))
                        e))))))))
 
 (defn- get-structured-datoms

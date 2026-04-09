@@ -93,6 +93,11 @@
   (when-not (sequential? value)
     (fail-fast :db-sync/invalid-field (assoc context :value value))))
 
+(defn- require-uuid
+  [value context]
+  (when-not (uuid? value)
+    (fail-fast :db-sync/invalid-field (assoc context :value value))))
+
 (defn- parse-transit
   [value context]
   (sync-transport/parse-transit fail-fast value context))
@@ -122,49 +127,54 @@
         checksum)
       (fail-fast :db-sync/missing-db {:repo repo :op :checksum}))))
 
-(defn- recompute-and-store-local-sync-checksum
-  [repo]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [checksum (sync-checksum/recompute-checksum @conn)]
-      (client-op/update-local-checksum repo checksum)
-      checksum)))
-
 (defn- verify-sync-checksum!
   [repo client local-tx remote-tx remote-checksum context]
   (when (and (string? remote-checksum)
              (checksum-compare-ready? repo client local-tx remote-tx))
     (let [local-checksum (local-sync-checksum repo)]
       (when-not (= local-checksum remote-checksum)
-        (let [recomputed-checksum (recompute-and-store-local-sync-checksum repo)]
-          (when-not (= recomputed-checksum remote-checksum)
-            (let [mismatch-data (merge context
-                                       {:type :db-sync/checksum-mismatch
-                                        :repo repo
-                                        :message-type (:type context)
-                                        :local-tx local-tx
-                                        :remote-tx remote-tx
-                                        :local-checksum (or recomputed-checksum local-checksum)
-                                        :cached-local-checksum local-checksum
-                                        :remote-checksum remote-checksum})]
-              (sync-log-state/rtc-log :rtc.log/checksum-mismatch mismatch-data)
-              (when worker-util/dev?
-                (log/warn :db-sync/checksum-mismatch mismatch-data)))))))))
+        (let [mismatch-data (merge context
+                                   {:type :db-sync/checksum-mismatch
+                                    :repo repo
+                                    :message-type (:type context)
+                                    :local-tx local-tx
+                                    :remote-tx remote-tx
+                                    :local-checksum local-checksum
+                                    :remote-checksum remote-checksum})]
+          (when worker-util/dev?
+            (sync-log-state/rtc-log :rtc.log/checksum-mismatch mismatch-data)
+            (log/warn :db-sync/checksum-mismatch mismatch-data)))))))
 
 (defn- handle-tx-reject!
   [repo client message local-tx]
   (let [reason (:reason message)
-        remote-tx (:t message)]
+        remote-tx (:t message)
+        success-tx-ids (:success-tx-ids message)
+        failed-tx-id (:failed-tx-id message)]
     (when (nil? reason)
       (fail-fast :db-sync/missing-field
                  {:repo repo :type "tx/reject" :field :reason}))
     (when (contains? message :t)
       (require-non-negative remote-tx {:repo repo :type "tx/reject"}))
+    (when (contains? message :success-tx-ids)
+      (require-seq success-tx-ids {:repo repo :type "tx/reject" :field :success-tx-ids})
+      (doseq [tx-id success-tx-ids]
+        (require-uuid tx-id {:repo repo :type "tx/reject" :field :success-tx-ids})))
+    (when (contains? message :failed-tx-id)
+      (require-uuid failed-tx-id {:repo repo :type "tx/reject" :field :failed-tx-id}))
     (case reason
       "stale"
       (when (and (:ws client) (ws-open? (:ws client)))
         (send! (:ws client) {:type "pull" :since local-tx}))
 
-      (let [data (when-let [raw-data (:data message)]
+      (let [inflight @(:inflight client)
+            inflight-set (set inflight)
+            successful-tx-ids (->> (or success-tx-ids [])
+                                   (filter inflight-set)
+                                   vec)
+            failed-tx-id (when (and failed-tx-id (contains? inflight-set failed-tx-id))
+                           failed-tx-id)
+            data (when-let [raw-data (:data message)]
                    (parse-transit raw-data
                                   {:repo repo
                                    :type "tx/reject"
@@ -175,7 +185,19 @@
                                    :message-type "tx/reject"
                                    :reason reason}
                             (contains? message :t) (assoc :t remote-tx)
+                            (seq successful-tx-ids) (assoc :success-tx-ids successful-tx-ids)
+                            (some? failed-tx-id) (assoc :failed-tx-id failed-tx-id)
                             (some? data) (assoc :data data))]
+        (if (or (contains? message :success-tx-ids)
+                (contains? message :failed-tx-id))
+          (do
+            (sync-apply/mark-pending-txs-false! repo successful-tx-ids)
+            (when failed-tx-id
+              (sync-apply/mark-failed-txs! repo [failed-tx-id])))
+          ;; Backward compatibility for older servers without per-tx reject metadata.
+          (sync-apply/mark-failed-txs! repo inflight))
+        (reset! (:inflight client) [])
+        (broadcast-rtc-state! client)
         (sync-log-state/rtc-log :rtc.log/tx-rejected rejected-data)
         (fail-fast :db-sync/tx-rejected
                    rejected-data)))))
@@ -212,12 +234,59 @@
 (defn- handle-tx-batch-ok!
   [repo client remote-tx remote-checksum]
   (require-non-negative remote-tx {:repo repo :type "tx/batch/ok"})
-  (client-op/update-local-tx repo remote-tx)
-  (broadcast-rtc-state! client)
-  (sync-apply/remove-pending-txs! repo @(:inflight client))
-  (reset! (:inflight client) [])
-  (verify-sync-checksum! repo client remote-tx remote-tx remote-checksum {:type "tx/batch/ok"})
-  (sync-apply/flush-pending! repo client))
+  (let [current-local-tx (or (client-op/get-local-tx repo) 0)
+        next-local-tx (max current-local-tx remote-tx)]
+    (client-op/update-local-tx repo next-local-tx)
+    (broadcast-rtc-state! client)
+    (sync-apply/mark-pending-txs-false! repo @(:inflight client))
+    (reset! (:inflight client) [])
+    (verify-sync-checksum! repo client next-local-tx remote-tx remote-checksum {:type "tx/batch/ok"})
+    (sync-apply/flush-pending! repo client)))
+
+(defn- update-latest-remote-state!
+  [repo message]
+  (let [remote-tx (:t message)
+        remote-checksum (:checksum message)
+        has-checksum? (contains? message :checksum)
+        latest-remote-tx (get @sync-apply/*repo->latest-remote-tx repo)
+        stale-remote-tx? (and (number? remote-tx)
+                              (number? latest-remote-tx)
+                              (< remote-tx latest-remote-tx))]
+    (when (number? remote-tx)
+      (swap! sync-apply/*repo->latest-remote-tx
+             update repo
+             (fn [prev]
+               (if (number? prev)
+                 (max prev remote-tx)
+                 remote-tx))))
+    (when (and has-checksum? (not stale-remote-tx?))
+      (swap! sync-apply/*repo->latest-remote-checksum assoc repo remote-checksum))
+    {:stale-remote-tx? stale-remote-tx?
+     :latest-remote-tx-before latest-remote-tx}))
+
+(declare handle-pull-ok! handle-changed!)
+
+(defn handle-message!
+  [repo client raw]
+  (let [message (-> raw
+                    sync-transport/parse-message
+                    sync-transport/coerce-ws-server-message)]
+    (when-not (map? message)
+      (fail-fast :db-sync/response-parse-failed {:repo repo :raw raw}))
+    (let [local-tx (or (client-op/get-local-tx repo) 0)
+          remote-tx (:t message)
+          remote-checksum (:checksum message)]
+      (update-latest-remote-state! repo message)
+      (case (:type message)
+        "hello" (handle-hello! repo client local-tx remote-tx remote-checksum)
+        "online-users" (handle-online-users! repo client message)
+        "presence" (handle-presence! client message)
+        "tx/batch/ok" (handle-tx-batch-ok! repo client remote-tx remote-checksum)
+        "pull/ok" (handle-pull-ok! repo client local-tx remote-tx remote-checksum message)
+        "changed" (handle-changed! repo client local-tx remote-tx)
+        "tx/reject" (handle-tx-reject! repo client message local-tx)
+        (fail-fast :db-sync/invalid-field
+                   {:repo repo :type (:type message)})))))
 
 (defn- handle-pull-ok!
   [repo client local-tx remote-tx remote-checksum message]
@@ -258,28 +327,3 @@
   (broadcast-rtc-state! client)
   (when (< local-tx remote-tx)
     (send! (:ws client) {:type "pull" :since local-tx})))
-
-(defn handle-message!
-  [repo client raw]
-  (let [message (-> raw
-                    sync-transport/parse-message
-                    sync-transport/coerce-ws-server-message)]
-    (when-not (map? message)
-      (fail-fast :db-sync/response-parse-failed {:repo repo :raw raw}))
-    (let [local-tx (or (client-op/get-local-tx repo) 0)
-          remote-tx (:t message)
-          remote-checksum (:checksum message)]
-      (when remote-tx
-        (swap! sync-apply/*repo->latest-remote-tx assoc repo remote-tx))
-      (when (contains? message :checksum)
-        (swap! sync-apply/*repo->latest-remote-checksum assoc repo remote-checksum))
-      (case (:type message)
-        "hello" (handle-hello! repo client local-tx remote-tx remote-checksum)
-        "online-users" (handle-online-users! repo client message)
-        "presence" (handle-presence! client message)
-        "tx/batch/ok" (handle-tx-batch-ok! repo client remote-tx remote-checksum)
-        "pull/ok" (handle-pull-ok! repo client local-tx remote-tx remote-checksum message)
-        "changed" (handle-changed! repo client local-tx remote-tx)
-        "tx/reject" (handle-tx-reject! repo client message local-tx)
-        (fail-fast :db-sync/invalid-field
-                   {:repo repo :type (:type message)})))))

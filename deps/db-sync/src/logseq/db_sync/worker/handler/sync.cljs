@@ -1,7 +1,5 @@
 (ns logseq.db-sync.worker.handler.sync
-  (:require [clojure.set :as set]
-            [clojure.string :as string]
-            [datascript.core :as d]
+  (:require [clojure.string :as string]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db-sync.batch :as batch]
@@ -11,6 +9,7 @@
             [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.snapshot :as snapshot]
             [logseq.db-sync.storage :as storage]
+            [logseq.db-sync.tx-sanitize :as tx-sanitize]
             [logseq.db-sync.worker.http :as http]
             [logseq.db-sync.worker.routes.sync :as sync-routes]
             [logseq.db-sync.worker.ws :as ws]
@@ -141,10 +140,17 @@
     stream))
 
 (defn- maybe-compress-stream [stream]
-  (when-not (exists? js/CompressionStream)
-    (throw (ex-info "gzip compression not supported"
-                    {:type :db-sync/compression-not-supported})))
   (.pipeThrough stream (js/CompressionStream. snapshot-content-encoding)))
+
+(defn- snapshot-stream-gzip-enabled?
+  [^js self]
+  (let [v (some-> self .-env (aget "DB_SYNC_SNAPSHOT_STREAM_GZIP"))]
+    (cond
+      (nil? v) true
+      (false? v) false
+      (string? v) (not (contains? #{"false" "0" "off" "no"}
+                                   (string/lower-case v)))
+      :else (boolean v))))
 
 ;; (defn- <buffer-stream
 ;;   [stream]
@@ -294,70 +300,58 @@
       (reset-import! sql))
     (import-snapshot-rows! sql "kvs" rows)))
 
-(defn- sanitize-tx
-  [db outliner-op tx-data]
-  (let [retract-op? (fn [item]
-                      (and (vector? item)
-                           (= 2 (count item))
-                           (contains? #{:db/retractEntity :db.fn/retractEntity} (first item))))
-        ->eid (fn [entity-ref]
-                (some-> (d/entity db entity-ref) :db/id))
-        retract-eids (->> tx-data
-                          (keep (fn [item]
-                                  (when (retract-op? item)
-                                    (->eid (second item)))))
-                          set)
-        descendant-retract-eids (->> retract-eids
-                                     (mapcat (fn [eid]
-                                               (let [entity (d/entity db eid)]
-                                                 (when (:block/uuid entity)
-                                                   (ldb/get-block-full-children-ids db eid)))))
-                                     (remove nil?)
-                                     set)
-        missing-retract-eids (sort (set/difference descendant-retract-eids retract-eids))
-        tx-data' (cond-> (vec tx-data)
-                   (seq missing-retract-eids)
-                   (into (map (fn [eid] [:db/retractEntity eid]) missing-retract-eids)))]
-    (if (= outliner-op :fix)
-      (remove (fn [[_ id]]
-                (nil? (d/entity db id))) tx-data')
-      tx-data')))
-
 (defn- apply-tx-entry!
   [conn {:keys [tx outliner-op]}]
-  (let [tx-data (->> (protocol/transit->tx tx)
-                     (sanitize-tx @conn outliner-op))]
-    (when (seq tx-data)
-      (ldb/transact! conn tx-data (cond-> {:op :apply-client-tx}
-                                    outliner-op (assoc :outliner-op outliner-op))))))
+  (let [tx-data (tx-sanitize/sanitize-tx @conn
+                                         (protocol/transit->tx tx)
+                                         {:drop-missing-retract-ops? (= outliner-op :fix)})]
+    (if (seq tx-data)
+      (try
+        (ldb/transact! conn tx-data (cond-> {:op :apply-client-tx}
+                                      outliner-op (assoc :outliner-op outliner-op)))
+        true
+        (catch :default e
+          ;; Rebase txs are inferred from local history and can become stale when
+          ;; concurrent remote edits remove referenced entities before upload.
+          ;; Treat stale :entity-id/missing rebases as no-op so sync can continue.
+          (if (and (= outliner-op :rebase)
+                   (= :entity-id/missing (:error (ex-data e))))
+            (do
+              (log/warn :db-sync/drop-stale-rebase-tx
+                        {:outliner-op outliner-op
+                         :tx-data tx-data
+                         :error (str e)})
+              false)
+            (throw e))))
+      false)))
 
-(defn- db-transact-failed-response
-  [sql tx-entry message]
-  {:type "tx/reject"
-   :reason (str "db transact failed: " message)
-   :t (storage/get-t sql)
-   :data (common/write-transit tx-entry)})
-
-(defn- apply-tx! [^js self sender tx-entries]
+(defn- apply-tx! [^js self tx-entries]
   (let [sql (.-sql self)]
     (ensure-conn! self)
     (let [conn (.-conn self)]
-      (loop [remaining tx-entries]
+      (loop [remaining tx-entries
+             applied? false
+             successful-tx-ids []]
         (if-let [tx-entry (first remaining)]
-          (let [result (try
-                         (apply-tx-entry! conn tx-entry)
-                         ::ok
-                         (catch :default e
-                           (throw e)
-                           (log/error :db-sync/transact-failed e)
-                           (db-transact-failed-response sql tx-entry (.-message e))))]
-            (if (= ::ok result)
-              (recur (next remaining))
-              result))
+          (let [tx-id (:tx-id tx-entry)
+                applied-entry? (try
+                                 (boolean (apply-tx-entry! conn tx-entry))
+                                 (catch :default e
+                                   (log/error :db-sync/transact-failed e)
+                                   (throw (ex-info "tx entry apply failed"
+                                                   (cond-> {:type :db-sync/tx-entry-failed
+                                                            :successful-tx-ids successful-tx-ids}
+                                                     tx-id (assoc :failed-tx-id tx-id))
+                                                   e))))
+                next-successful-tx-ids (cond-> successful-tx-ids
+                                         tx-id (conj tx-id))]
+            (recur (next remaining)
+                   (or applied? applied-entry?)
+                   next-successful-tx-ids))
           (let [new-t (storage/get-t sql)]
-            ;; FIXME: no need to broadcast if client tx is less than remote tx
-            (ws/broadcast! self sender {:type "changed" :t new-t})
-            new-t))))))
+            {:t new-t
+             :applied? applied?
+             :successful-tx-ids successful-tx-ids}))))))
 
 (defn handle-tx-batch! [^js self sender txs t-before]
   (let [current-t (t-now self)]
@@ -379,18 +373,28 @@
       :else
       (if (seq txs)
         (try
-          (let [new-t (apply-tx! self sender txs)]
-            (if (and (map? new-t) (= "tx/reject" (:type new-t)))
-              new-t
-              (let [checksum (current-checksum self)]
-                (cond-> {:type "tx/batch/ok"
-                         :t new-t}
-                  (string? checksum) (assoc :checksum checksum)))))
+          (let [{:keys [t applied?]} (apply-tx! self txs)
+                checksum (current-checksum self)]
+            (when applied?
+              ;; Broadcast once per processed batch after tx-log/checksum settle.
+              (ws/broadcast! self sender {:type "changed" :t t}))
+            (cond-> {:type "tx/batch/ok"
+                     :t t}
+              (string? checksum) (assoc :checksum checksum)))
           (catch :default e
-            (log/error :db-sync/transact-failed e)
-            {:type "tx/reject"
-             :reason "db transact failed"
-             :t (t-now self)}))
+            (let [new-t (t-now self)
+                  {:keys [successful-tx-ids failed-tx-id]}
+                  (ex-data e)]
+              (log/error :db-sync/transact-failed e)
+              (when (> new-t current-t)
+                ;; Broadcast once when partial batch writes advanced the graph.
+                (ws/broadcast! self sender {:type "changed" :t new-t}))
+              (cond-> {:type "tx/reject"
+                       :reason "db transact failed"
+                       :error-detail (str e)
+                       :t new-t}
+                (seq successful-tx-ids) (assoc :success-tx-ids successful-tx-ids)
+                failed-tx-id (assoc :failed-tx-id failed-tx-id)))))
         {:type "tx/reject"
          :reason "empty tx data"}))))
 
@@ -437,14 +441,19 @@
   (let [graph-id (graph-id-from-request request)]
     (if (not (seq graph-id))
       (http/bad-request "missing graph id")
-      (let [stream (-> (snapshot-export-stream self)
-                       (maybe-compress-stream))
-            row-count (snapshot-row-count (.-sql self))]
+      (let [gzip? (and (snapshot-stream-gzip-enabled? self)
+                       (exists? js/CompressionStream))
+            stream (cond-> (snapshot-export-stream self)
+                     gzip?
+                     (maybe-compress-stream))
+            row-count (snapshot-row-count (.-sql self))
+            headers (cond-> {"content-type" snapshot-content-type}
+                      gzip?
+                      (assoc "content-encoding" snapshot-content-encoding))]
         (js/Response. stream
                       #js {:status 200
                            :headers (js/Object.assign
-                                     #js {"content-type" snapshot-content-type
-                                          "content-encoding" snapshot-content-encoding}
+                                     (clj->js headers)
                                      #js {"x-snapshot-row-count" (str row-count)}
                                      (common/cors-headers))})))))
 
@@ -460,11 +469,16 @@
         (if-not ready-for-sync?
           (http/error-response "graph not ready" 409)
           (let [key (str "stream/" graph-id ".snapshot")
-                url (snapshot-stream-url request graph-id)]
-            (http/json-response :sync/snapshot-download {:ok true
-                                                         :key key
-                                                         :url url
-                                                         :content-encoding snapshot-content-encoding})))))))
+                url (snapshot-stream-url request graph-id)
+                content-encoding (when (and (snapshot-stream-gzip-enabled? self)
+                                            (exists? js/CompressionStream))
+                                   snapshot-content-encoding)]
+            (http/json-response :sync/snapshot-download
+                                (cond-> {:ok true
+                                         :key key
+                                         :url url}
+                                  content-encoding
+                                  (assoc :content-encoding content-encoding)))))))))
 
 (defn- handle-sync-admin-reset
   [^js self]

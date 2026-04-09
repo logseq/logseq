@@ -115,5 +115,14 @@
   [coerce-ws-client-message-f ws message]
   (when (ws-open? ws)
     (if-let [coerced (coerce-ws-client-message-f message)]
-      (.send ws (js/JSON.stringify (clj->js coerced)))
+      (let [message* (if (= "tx/batch" (:type coerced))
+                       (update coerced :txs
+                               (fn [txs]
+                                 (mapv (fn [tx-entry]
+                                         (if-let [tx-id (:tx-id tx-entry)]
+                                           (assoc tx-entry :tx-id (str tx-id))
+                                           tx-entry))
+                                       txs)))
+                       coerced)]
+        (.send ws (js/JSON.stringify (clj->js message*))))
       (log/error :db-sync/ws-request-invalid {:message message}))))

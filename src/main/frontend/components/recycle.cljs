@@ -4,9 +4,12 @@
             [datascript.core :as d]
             [frontend.components.block :as component-block]
             [frontend.db :as db]
+            [frontend.db-mixins :as db-mixins]
+            [frontend.db.react :as react]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
+            [frontend.util :as util]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
@@ -36,6 +39,20 @@
        (map #(d/entity db %))
        (sort-by :logseq.property/deleted-at #(compare %2 %1))))
 
+(defn- sub-deleted-root-ids
+  []
+  (when-let [repo (state/get-current-repo)]
+    (some-> (react/q repo
+                     [:frontend.worker.react/recycle-roots]
+                     {:query-fn (fn [db _]
+                                  (->> (d/q '[:find [?e ...]
+                                              :where
+                                              [?e :logseq.property/deleted-at]]
+                                            db)
+                                       vec))}
+                     nil)
+            util/react)))
+
 (defn- group-title
   [db root]
   (if (ldb/page? root)
@@ -59,7 +76,11 @@
 (defn- deleted-root-header
   [db root]
   (let [user (deleted-by db root)
-        deleted-at (:logseq.property/deleted-at root)]
+        deleted-at (:logseq.property/deleted-at root)
+        root-uuid (:block/uuid root)
+        delete-message (str "Permanently delete this "
+                            (if (ldb/page? root) "page" "block")
+                            " from Recycle? This cannot be undone.")]
     [:div.flex.items-center.justify-between.gap-4.text-xs.text-muted-foreground
      [:div.flex.items-center.gap-1.min-w-0.flex-1
       (deleted-by-avatar user)
@@ -68,12 +89,20 @@
         (str (if (ldb/page? root) "Page" "Block")
              " deleted "
              (.toLocaleString (js/Date. deleted-at)))]]]
-     (shui/button
-      {:variant :ghost
-       :size :xs
-       :class "!py-0 !px-1 h-4"
-       :on-click #(page-handler/restore-recycled! (:block/uuid root))}
-      "Restore")]))
+     [:div.flex.items-center.gap-1
+      (shui/button
+       {:variant :ghost
+        :size :xs
+        :class "!py-0 !px-1 h-4"
+        :on-click #(page-handler/restore-recycled! root-uuid)}
+       "Restore")
+      (shui/button
+       {:variant :ghost
+        :size :xs
+        :class "!py-0 !px-1 h-4 hover:text-destructive"
+        :on-click #(when (js/confirm delete-message)
+                     (page-handler/delete-recycled-permanently! root-uuid))}
+       "Delete permanently")]]))
 
 (defn- deleted-root-outliner
   [root]
@@ -88,10 +117,17 @@
     :id (str (:block/uuid root))}
    root))
 
-(rum/defc recycle-page
+(rum/defc recycle-page < rum/reactive db-mixins/query
   [_page]
   (let [db* (db/get-db)
-        groups (->> (deleted-roots db*)
+        root-ids (or (sub-deleted-root-ids)
+                     [])
+        roots (if (seq root-ids)
+                (->> root-ids
+                     (keep #(d/entity db* %))
+                     (sort-by :logseq.property/deleted-at #(compare %2 %1)))
+                (deleted-roots db*))
+        groups (->> roots
                     (group-by #(group-title db* %))
                     (sort-by (fn [[_ roots]]
                                (:logseq.property/deleted-at (first roots)))

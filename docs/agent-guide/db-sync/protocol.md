@@ -13,8 +13,9 @@
   - Update current editing block for presence (omit or null to clear).
 - `{"type":"pull","since":<t>}`
   - Request txs after `since` (defaults to 0).
-- `{"type":"tx/batch","t-before":<t>,"txs":["<tx-transit>", ...]}`
+- `{"type":"tx/batch","t-before":<t>,"txs":[{"tx":"<tx-transit>","tx-id":"<uuid?>","outliner-op":"<keyword?>"}, ...]}`
   - Upload a batch of txs based on `t-before` (required).
+  - `tx-id` is optional but recommended for per-entry ack/reject mapping.
 - `{"type":"ping"}`
   - Optional keepalive; server replies `pong`.
 
@@ -24,19 +25,20 @@
 - `{"type":"online-users","online-users":[{"user-id":"...","email":"...","username":"...","name":"..."}...]}`
   - Presence update
   - Optional `editing-block-uuid` indicates the block the user is editing.
-- `{"type":"pull/ok","t":<t>,"checksum":"<hex>","txs":[{"t":<t>,"tx":"<tx-transit>"}...]}`
+- `{"type":"pull/ok","t":<t>,"checksum":"<hex>","txs":[{"t":<t>,"tx":"<tx-transit>","outliner-op":"<keyword?>"}...]}`
   - Pull response with txs and post-apply entity checksum.
 - `{"type":"tx/batch/ok","t":<t>,"checksum":"<hex>"}`
   - Batch accepted; server advanced to t and returns the resulting entity checksum.
 - `{"type":"changed","t":<t>}`
-  - Broadcast that server state advanced; client should pull.
+  - Broadcast once after a handled `tx/batch` that advanced server state (`t` increased); client should pull.
 - `{"type":"tx/reject","reason":"stale","t":<t>}`
   - Client tx is based on stale t.
-- `{"type":"tx/reject","reason":"cycle","data":"<transit {:attr <kw> :server-values ...}>"}`
-  - Cycle detected with server values.
-- `{"type":"tx/reject","reason":"db transact failed","t":<t>,"data":"<transit {:tx \"<tx-transit>\" :outliner-op ...}>"}`
-  - Server-side transact/validation failed for one tx entry in the batch; `data` echoes the rejected tx entry for debugging.
-- `{"type":"tx/reject","reason":"empty tx data"|"invalid tx"|"invalid t-before"}`
+- `{"type":"tx/reject","reason":"db transact failed","t":<t>,"success-tx-ids":["<uuid>",...],"failed-tx-id":"<uuid>"}`
+  - Server-side transact/validation failed for one tx entry in the batch.
+  - `success-tx-ids` are entries already applied before the failure.
+  - `failed-tx-id` is the entry that failed.
+  - Legacy servers may return `data` with rejected tx payload for debugging.
+- `{"type":"tx/reject","reason":"empty tx data"|"invalid tx"|"invalid t-before"|"snapshot upload in progress"}`
   - Invalid batch.
 - `{"type":"pong"}`
   - Keepalive response.
@@ -87,11 +89,11 @@
 - `GET /sync/:graph-id/health`
   - Health check. Response: `{"ok":true}`.
 - `GET /sync/:graph-id/pull?since=<t>`
-  - Same as WS pull. Response: `{"type":"pull/ok","t":<t>,"checksum":"<hex>","txs":[{"t":<t>,"tx":"<tx-transit>"}...]}`.
+  - Same as WS pull. Response: `{"type":"pull/ok","t":<t>,"checksum":"<hex>","txs":[{"t":<t>,"tx":"<tx-transit>","outliner-op":"<keyword?>"}...]}`.
   - Error response (400): `{"error":"invalid since"}`.
   - Error response (409): `{"error":"graph not ready"}` when bootstrap upload/import has not finished.
 - `POST /sync/:graph-id/tx/batch`
-  - Same as WS tx/batch. Body: `{"t-before":<t>,"txs":["<tx-transit>", ...]}`.
+  - Same as WS tx/batch. Body: `{"t-before":<t>,"txs":[{"tx":"<tx-transit>","tx-id":"<uuid?>","outliner-op":"<keyword?>"}, ...]}`.
   - Response: `{"type":"tx/batch/ok","t":<t>,"checksum":"<hex>"}` or `{"type":"tx/reject","reason":...}`.
   - Error response (400): `{"error":"missing body"|"invalid tx"}`.
   - Error response (409): `{"error":"graph not ready"}` when bootstrap upload/import has not finished.

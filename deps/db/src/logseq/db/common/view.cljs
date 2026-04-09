@@ -373,13 +373,14 @@
                  entities)
          (remove nil?)
          (keep (fn [e]
-                 (when-let [label (get-property-value-content db e)]
-                   (when-not (or (string/blank? (str label))
-                                 (= empty-id (:db/id e)))
-                     {:label (str label)
-                      :value (if (de/entity? e)
-                               (select-keys e [:db/id :block/uuid])
-                               e)}))))
+                 (when-not (and (de/entity? e) (entity-util/recycled? e))
+                   (when-let [label (get-property-value-content db e)]
+                     (when-not (or (string/blank? (str label))
+                                   (= empty-id (:db/id e)))
+                       {:label (str label)
+                        :value (if (de/entity? e)
+                                 (select-keys e [:db/id :block/uuid])
+                                 e)})))))
          (common-util/distinct-by :label))))
 
 (defn ^:api get-property-values
@@ -394,22 +395,23 @@
                       (map (fn [d]
                              (:v d)))
                       distinct
-                      (map (fn [v]
-                             (let [e (when ref-type? (d/entity db v))
-                                   [label value] (cond ref-type?
-                                                       [(db-property/property-value-content e)
-                                                        (select-keys e [:db/id :block/uuid])]
-                                                       ;; FIXME: Move query concerns out of :label as UI labels are usually strings
-                                                       ;; All non-string values need to be passed to the query builder since non-ref prop values use the actual value
-                                                       ;; This check is less fragile than listing all the property types to support e.g. :datetime, :checkbox, :keyword, :any
-                                                       (not (string? v))
-                                                       [v v]
-                                                       :else
-                                                       [(str v) v])]
-                               {:label label
-                                :value value})))))]
+                      (keep (fn [v]
+                              (let [e (when ref-type? (d/entity db v))]
+                                (when-not (and ref-type? (entity-util/recycled? e))
+                                  (let [[label value] (cond ref-type?
+                                                            [(db-property/property-value-content e)
+                                                             (select-keys e [:db/id :block/uuid])]
+                                                            ;; FIXME: Move query concerns out of :label as UI labels are usually strings
+                                                            ;; All non-string values need to be passed to the query builder since non-ref prop values use the actual value
+                                                            ;; This check is less fragile than listing all the property types to support e.g. :datetime, :checkbox, :keyword, :any
+                                                            (not (string? v))
+                                                            [v v]
+                                                            :else
+                                                            [(str v) v])]
+                                    {:label label
+                                     :value value})))))))]
     (->>
-     (if default-value
+     (if (and default-value (not (entity-util/recycled? default-value)))
        (cons {:label (get-property-value-content db default-value)
               :value (select-keys default-value [:db/id :block/uuid])}
              values)

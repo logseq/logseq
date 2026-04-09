@@ -439,7 +439,7 @@
         display-blocks-tx-data (add-missing-properties-to-typed-display-blocks db-after tx-data tx-meta)
         ensure-query-tx-data (ensure-query-property-on-tag-additions tx-report)
         commands-tx (when-not (or (:undo? tx-meta)
-                                  (contains? #{:rebase} (:outliner-op tx-meta))
+                                  (= :rebase (:outliner-op tx-meta))
                                   (rtc-tx-or-download-graph? tx-meta))
                       (commands/run-commands tx-report))
         insert-templates-tx (when-not (rtc-tx-or-download-graph? tx-meta)
