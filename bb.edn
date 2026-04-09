@@ -159,6 +159,9 @@
   dev:lint-and-test
   logseq.tasks.dev/lint-and-test
 
+  dev:lint-test-deps
+  logseq.tasks.dev.lint-test-deps/run
+
   dev:e2e-basic-test
   logseq.tasks.dev/e2e-basic-test
 

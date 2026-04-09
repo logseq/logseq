@@ -106,20 +106,46 @@
                  (or @*debounce-fn d/store))]
          (f @conn))))))
 
+(defn- should-validate-tx?
+  [conn db tx-meta]
+  (and (entity-plus/db-based-graph? db)
+       (not
+        (or (:rtc-download-graph? tx-meta)
+            (:reset-conn! tx-meta)
+            (:initial-db? tx-meta)
+            (:skip-validate-db? tx-meta false)
+            ;; used by `batch-transact-with-temp-conn!`
+            (:skip-validate-db? @conn)
+            (:logseq.graph-parser.exporter/new-graph? tx-meta)))))
+
+(defn- tx-report-pipeline-data
+  [tx-report]
+  (map (fn [[e a v t]]
+         [e a v t])
+       (:tx-data tx-report)))
+
+(defn- invalid-tx-debug-data
+  [tx-meta tx-data errors tx-report]
+  {:tx-meta tx-meta
+   :tx-data tx-data
+   :errors errors
+   :pipeline-tx-data (tx-report-pipeline-data tx-report)})
+
+(defn- throw-invalid-tx!
+  [tx-meta tx-data errors tx-report]
+  ;; notify ui
+  (when-let [f @*transact-invalid-callback]
+    (f tx-report errors))
+  (let [debug-data (invalid-tx-debug-data tx-meta tx-data errors tx-report)]
+    (prn :debug :invalid-data debug-data)
+    (throw (ex-info "DB write failed with invalid data" debug-data))))
+
 (defn- transact-sync
   [conn tx-data tx-meta]
   (try
     (let [db @conn
-          db-based? (entity-plus/db-based-graph? db)]
-      (if (and db-based?
-               (not
-                (or (:rtc-download-graph? tx-meta)
-                    (:reset-conn! tx-meta)
-                    (:initial-db? tx-meta)
-                    (:skip-validate-db? tx-meta false)
-                    ;; used by `batch-transact-with-temp-conn!`
-                    (:skip-validate-db? @conn)
-                    (:logseq.graph-parser.exporter/new-graph? tx-meta))))
+          validate? (should-validate-tx? conn db tx-meta)]
+      (if validate?
         (let [tx-report* (d/with db tx-data tx-meta)
               pipeline-f @*transact-pipeline-fn
               tx-report (if pipeline-f (pipeline-f tx-report*) tx-report*)
@@ -135,25 +161,7 @@
               (dc/run-callbacks conn tx-report))
 
             :else
-            (do
-              ;; notify ui
-              (when-let [f @*transact-invalid-callback]
-                (f tx-report errors))
-              (prn :debug :invalid-data
-                   {:tx-meta tx-meta
-                    :tx-data tx-data
-                    :errors errors
-                    :pipeline-tx-data (map
-                                       (fn [[e a v t]]
-                                         [e a v t])
-                                       (:tx-data tx-report))})
-              (throw (ex-info "DB write failed with invalid data" {:tx-meta tx-meta
-                                                                   :tx-data tx-data
-                                                                   :errors errors
-                                                                   :pipeline-tx-data (map
-                                                                                      (fn [[e a v t]]
-                                                                                        [e a v t])
-                                                                                      (:tx-data tx-report))}))))
+            (throw-invalid-tx! tx-meta tx-data errors tx-report))
           tx-report)
         (d/transact! conn tx-data tx-meta)))
     (catch :default e
