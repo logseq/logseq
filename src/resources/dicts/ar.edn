@@ -389,11 +389,15 @@
  :graph/create-failed "فشل إنشاء الرسم البياني"
  :graph/creating "Creating graph"
  :graph/delete-local-action "Delete local graph"
+ :graph/delete-local-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
  :graph/delete-server-action "Delete from server"
+ :graph/delete-server-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
  :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/diff "Git diff"
  :graph/encrypt-data-label "Encrypt graph data"
  :graph/last-opened-at-label "Last opened at: {1}"
  :graph/leave-action "Leave this graph"
+ :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "فشل مغادرة الرسم البياني"
  :graph/left "تمت المغادرة"
  :graph/local-graphs "الرسوم المحلية"
@@ -405,18 +409,6 @@
  :graph/updated-switching "تم تحديث الرسم. جارٍ التبديل..."
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
-
- ;; Graph delete local
- :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
-
- ;; Graph delete server
- :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
-
- ;; Graph diff
- :graph.diff/title "Git diff"
-
- ;; Graph leave
- :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "عرض اليوميات"
@@ -480,6 +472,7 @@
  :page/contents "المحتويات"
  :page/convert-to-tag "تحويل إلى وسم"
  :page/copy-url "نسخ رابط الصفحة"
+ :page/create "Create a new page"
  :page/created-at "أُنشئ في"
  :page/delete "حذف"
  :page/hide-properties "إخفاء الخصائص"
@@ -511,9 +504,6 @@
  :page.convert/tag-to-page-duplicate "توجد صفحة بالاسم \"{1}\" بالفعل."
  :page.convert/tag-to-page-has-children "الوسم له عناصر فرعية ولا يمكن تحويله"
 
- ;; Page creation
- :page.create/title "Create a new page"
-
  ;; Page deletion
  :page.delete/confirm-title "هل أنت متأكد أنك تريد حذف هذه الصفحة؟"
  :page.delete/success "تم حذف الصفحة «{1}» بنجاح!"
@@ -539,13 +529,11 @@
  :block.macro/unsupported-name "Unsupported macro name: {1}"
 
  ;; Node
+ :node/built-in-cant-delete-error "لا يمكن حذف العناصر المدمجة."
  :node/new "عقدة جديدة"
 
- ;; Node validation
- :node.validation/built-in-cant-delete "لا يمكن حذف العناصر المدمجة."
-
- ;; Journal validation
- :journal.validation/page-not-journal "هذه الصفحة ليست صفحة يومية."
+ ;; Journal
+ :journal/page-cant-convert-warning "هذه الصفحة ليست صفحة يومية."
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -658,13 +646,11 @@
  :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
+ :reference/blocks "مرجع الكتلة"
  :reference/copy "نسخ المرجع"
  :reference/delete "حذف المرجع"
  :reference/replace-with-embed "استبدال بالتضمين"
  :reference/replace-with-text "استبدال بنص"
-
- ;; Block references
- :reference.block/title "مرجع الكتلة"
 
  ;; Reference filters
  :reference.filter/directions "انقر للتضمين، وShift+انقر للاستبعاد. وانقر مرة أخرى للإزالة."
@@ -687,6 +673,7 @@
  :property/choose-tags "اختر وسوماً"
  :property/configure "تكوين"
  :property/convert-page-to-property "Convert \"{1}\" to property"
+ :property/create-error "فشل إنشاء الخاصية."
  :property/default-value "القيمة الافتراضية"
  :property/delete-from-node "حذف من العقدة"
  :property/delete-from-node-confirm "حذف هذه الخاصية من العقدة؟"
@@ -740,9 +727,6 @@
  :property.choice/already-exists "الخيار موجود بالفعل."
  :property.choice/cant-delete-built-in "لا يمكن حذف خيار مدمج."
  :property.choice/invalid "اختيار غير صالح \"{1}\" لهذه الخاصية: {2}"
-
- ;; Property creation
- :property.create/failed "فشل إنشاء الخاصية."
 
  ;; Property validation
  :property.validation/cant-convert-to-number "لا يمكن تحويل \"{1}\" إلى رقم."
@@ -1004,9 +988,6 @@
  :settings.ai/enable-mcp-server "تفعيل خادم MCP"
  :settings.ai/enable-mcp-server-desc "تفعيل خادم MCP لتكامل الذكاء الاصطناعي"
 
- ;; Collaboration settings
- :settings.collaboration/member-remove-failed "فشل إزالة العضو"
-
  ;; Editor settings
  :settings.editor/auto-expand-block-refs "توسيع مراجع الكتل تلقائياً"
  :settings.editor/auto-expand-block-refs-tip "انقر لتوسيع مراجع الكتل تلقائياً"
@@ -1157,16 +1138,13 @@
 
  ;; Zotero
  :zotero/attachments "المرفقات"
+ :zotero/imported-file-warning "هذا ملف Zotero مستورد، عيّن دليل بيانات Zotero لفتح الملف في Logseq."
+ :zotero/linked-file-warning "هذا ملف Zotero مرتبط، عيّن الدليل الأساسي للمرفقات المرتبطة في Zotero لفتح الملف في Logseq."
  :zotero/notes "ملاحظات"
-
- ;; Zotero imported file
- :zotero.imported-file/warning "هذا ملف Zotero مستورد، عيّن دليل بيانات Zotero لفتح الملف في Logseq."
-
- ;; Zotero linked file
- :zotero.linked-file/warning "هذا ملف Zotero مرتبط، عيّن الدليل الأساسي للمرفقات المرتبطة في Zotero لفتح الملف في Logseq."
 
  ;; Server
  :server/error-notification "[الخادم] {1}"
+ :server/mcp-url-copied "تم نسخ رابط MCP"
  :server/start "بدء"
  :server/stop "إيقاف"
  :server/title "خادم HTTP API"
@@ -1177,9 +1155,6 @@
  :server.config/reset "إعادة تعيين"
  :server.config/save-and-apply "حفظ وتطبيق"
  :server.config/title "تكوين الخادم"
-
- ;; Local server MCP
- :server.mcp/url-copied "تم نسخ رابط MCP"
 
  ;; Local server status
  :server.status/closed "مغلق"
@@ -1209,8 +1184,8 @@
  :storage.recycle/page-deleted-at "تم حذف الصفحة «{1}»"
  :storage.recycle/restore "استعادة"
 
- ;; Account billing
- :account.billing/month "شهر"
+ ;; Account
+ :account/month "شهر"
 
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
@@ -1228,6 +1203,9 @@
  :sync/storage-exceed-limit "تم تجاوز حد التخزين"
  :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "المستخدم غير موجود بعد"
+
+ ;; Collaboration
+ :collaboration/remove-access-error "فشل إزالة العضو"
 
  ;; Encryption
  :encryption/cloud-password-rich (fn [] ["إذا فقدت كلمة المرور، فلن يكون بالإمكان فك تشفير أي من بياناتك في السحابة. " [:span "سيظل بإمكانك الوصول إلى النسخة المحلية من الرسم البياني الخاص بك."]])
@@ -1270,12 +1248,15 @@
 
  ;; Help
  :help/about "حول Logseq"
+ :help/about-title "حول"
  :help/awesome-logseq "Awesome Logseq"
  :help/block-reference "مرجع الكتلة"
  :help/blog "المدونة"
  :help/bug "الإبلاغ عن خطأ على GitHub"
  :help/changelog "سجل التغييرات"
+ :help/community-title "المجتمع"
  :help/context-menu "قائمة سياق الكتلة"
+ :help/development-title "التطوير"
  :help/docs "التوثيق"
  :help/feature "طلب ميزة"
  :help/forum-community "مجتمع المنتدى"
@@ -1288,15 +1269,8 @@
  :help/slash-autocomplete "إكمال تلقائي للشرطة المائلة"
  :help/start "البدء"
  :help/terms "الشروط"
-
- ;; About help
- :help.about/title "حول"
-
- ;; Community help
- :help.community/title "المجتمع"
-
- ;; Development help
- :help.development/title "التطوير"
+ :help/terms-title "الشروط"
+ :help/usage-title "الاستخدام"
 
  ;; Handbook help
  :help.handbook/close "إغلاق"
@@ -1314,12 +1288,6 @@
  :help.shortcuts/shortcut-column "الاختصارات"
  :help.shortcuts/title "اختصارات لوحة المفاتيح"
  :help.shortcuts/triggers "الاختصارات والمحفزات"
-
- ;; Terms help
- :help.terms/title "الشروط"
-
- ;; Usage help
- :help.usage/title "الاستخدام"
 
  ;; Bug report clipboard diagnostics
  :bug-report.clipboard/action-desc "فحص الحافظة"

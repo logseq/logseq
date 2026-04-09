@@ -389,11 +389,15 @@
  :graph/create-failed "创建图谱失败。"
  :graph/creating "正在创建图谱"
  :graph/delete-local-action "删除本地图谱"
+ :graph/delete-local-confirm-desc "确定要从 Logseq 中永久删除图谱“{1}”吗？"
  :graph/delete-server-action "从服务器删除"
+ :graph/delete-server-confirm-desc "确定要从我们的服务器中永久删除图谱“{1}”吗？"
  :graph/delete-warning "⚠️ 请注意，删除后我们无法恢复此图谱。删除前请确认你已做好备份。"
+ :graph/diff "Git 差异"
  :graph/encrypt-data-label "加密图谱数据"
  :graph/last-opened-at-label "上次打开于：{1}"
  :graph/leave-action "离开此图谱"
+ :graph/leave-confirm-desc "确定要离开这个图谱吗？"
  :graph/leave-failed "离开图谱失败。"
  :graph/left "已离开图谱。"
  :graph/local-graphs "本地图谱"
@@ -405,18 +409,6 @@
  :graph/updated-switching "图谱已更新！正在切换到图谱……"
  :graph/use-sync-beta "使用 Logseq Sync（Beta 测试）"
  :graph/use-sync-label "使用 Logseq Sync？"
-
- ;; Graph delete local
- :graph.delete-local/confirm-desc "确定要从 Logseq 中永久删除图谱“{1}”吗？"
-
- ;; Graph delete server
- :graph.delete-server/confirm-desc "确定要从我们的服务器中永久删除图谱“{1}”吗？"
-
- ;; Graph diff
- :graph.diff/title "Git 差异"
-
- ;; Graph leave
- :graph.leave/confirm-desc "确定要离开这个图谱吗？"
 
  ;; Graph page views
  :graph.page/show-journals "显示日记"
@@ -480,6 +472,7 @@
  :page/contents "目录"
  :page/convert-to-tag "转换为标签"
  :page/copy-url "复制页面 URL"
+ :page/create "创建新页面"
  :page/created-at "创建日期"
  :page/delete "删除本页"
  :page/hide-properties "收起属性"
@@ -511,9 +504,6 @@
  :page.convert/tag-to-page-duplicate "页面“{1}”已存在。"
  :page.convert/tag-to-page-has-children "此标签无法转换，因为它仍有子标签。必须先移除或转换所有子标签，才能转换此标签。"
 
- ;; Page creation
- :page.create/title "创建新页面"
-
  ;; Page deletion
  :page.delete/confirm-title "确认要删除此页面吗？"
  :page.delete/success "页面“{1}”已成功删除！"
@@ -539,13 +529,11 @@
  :block.macro/unsupported-name "不支持的宏名称：{1}"
 
  ;; Node
+ :node/built-in-cant-delete-error "无法删除内置项。"
  :node/new "新建节点"
 
- ;; Node validation
- :node.validation/built-in-cant-delete "无法删除内置项。"
-
- ;; Journal validation
- :journal.validation/page-not-journal "此页面不是日记页面。"
+ ;; Journal
+ :journal/page-cant-convert-warning "此页面不是日记页面。"
 
  ;; Natural language dates
  :date.nlp/last-friday "上周五"
@@ -658,13 +646,11 @@
  :editor.slash/yesterday-desc "插入昨天的日期"
 
  ;; Reference
+ :reference/blocks "块引用"
  :reference/copy "复制此引用"
  :reference/delete "删除此引用"
  :reference/replace-with-embed "替换为嵌入"
  :reference/replace-with-text "替换为文本"
-
- ;; Block references
- :reference.block/title "块引用"
 
  ;; Reference filters
  :reference.filter/directions "点击以包含，Shift+点击以排除，再次点击以移除。"
@@ -688,6 +674,7 @@
  :property/choose-tags "选择标签"
  :property/configure "配置属性"
  :property/convert-page-to-property "将“{1}”转换为属性"
+ :property/create-error "创建属性失败。"
  :property/default-value "默认值"
  :property/delete-from-node "从节点删除属性"
  :property/delete-from-node-confirm "确认要从此节点删除此属性吗？"
@@ -852,9 +839,6 @@
  :property.choice/already-exists "选项已存在。"
  :property.choice/cant-delete-built-in "无法删除内置选项。"
  :property.choice/invalid "此属性的选择“{1}”无效：{2}"
-
- ;; Property creation
- :property.create/failed "创建属性失败。"
 
  ;; Property priority
  :property.priority/high "高"
@@ -1165,9 +1149,6 @@
  :settings.ai/enable-mcp-server "MCP 服务器"
  :settings.ai/enable-mcp-server-desc "启用 MCP 服务器，允许与本地 AI 应用通信"
 
- ;; Collaboration settings
- :settings.collaboration/member-remove-failed "移除成员失败。"
-
  ;; Editor settings
  :settings.editor/auto-expand-block-refs "自动展开聚焦块的引用"
  :settings.editor/auto-expand-block-refs-tip "此选项控制是否在页面加载时展开块引用"
@@ -1319,16 +1300,13 @@
 
  ;; Zotero
  :zotero/attachments "附件"
+ :zotero/imported-file-warning "这是一个从 Zotero 导入的文件，设置 Zotero 数据目录 后即可在 Logseq 中打开该文件。"
+ :zotero/linked-file-warning "这是一个 Zotero 链接文件，设置 Zotero 链接附件基础目录 后即可在 Logseq 中打开该文件。"
  :zotero/notes "笔记"
-
- ;; Zotero imported file
- :zotero.imported-file/warning "这是一个从 Zotero 导入的文件，设置 Zotero 数据目录 后即可在 Logseq 中打开该文件。"
-
- ;; Zotero linked file
- :zotero.linked-file/warning "这是一个 Zotero 链接文件，设置 Zotero 链接附件基础目录 后即可在 Logseq 中打开该文件。"
 
  ;; Server
  :server/error-notification "[服务器] {1}"
+ :server/mcp-url-copied "MCP URL 已复制到剪贴板！"
  :server/start "启动服务器"
  :server/stop "停止服务器"
  :server/title "HTTP API 服务器"
@@ -1339,9 +1317,6 @@
  :server.config/reset "重置"
  :server.config/save-and-apply "保存并应用"
  :server.config/title "服务器配置"
-
- ;; Local server MCP
- :server.mcp/url-copied "MCP URL 已复制到剪贴板！"
 
  ;; Local server status
  :server.status/closed "已关闭"
@@ -1371,8 +1346,8 @@
  :storage.recycle/page-deleted-at "页面已删除 {1}"
  :storage.recycle/restore "恢复"
 
- ;; Account billing
- :account.billing/month "月"
+ ;; Account
+ :account/month "月"
 
  ;; Sync
  :sync/assets-downloading-count "正在下载资源（{1}）"
@@ -1390,6 +1365,9 @@
  :sync/storage-exceed-limit "同步存储超出限制"
  :sync/uploading "上传中..."
  :sync/user-doesnt-exist-yet "该用户尚不存在。"
+
+ ;; Collaboration
+ :collaboration/remove-access-error "移除成员失败。"
 
  ;; Encryption
  :encryption/cloud-password-rich (fn [] ["如果你丢失了密码，云端中的所有数据都将无法解密。" [:span "你仍然可以访问图谱的本地版本。"]])
@@ -1432,12 +1410,15 @@
 
  ;; Help
  :help/about "关于 Logseq"
+ :help/about-title "关于"
  :help/awesome-logseq "绝妙的 Logseq"
  :help/block-reference "块引用"
  :help/blog "Logseq 博客"
  :help/bug "Bug 反馈"
  :help/changelog "更新日志"
+ :help/community-title "社区"
  :help/context-menu "右键菜单"
+ :help/development-title "开发"
  :help/docs "文档"
  :help/feature "功能建议"
  :help/forum-community "论坛讨论"
@@ -1450,15 +1431,8 @@
  :help/slash-autocomplete "Slash 自动提示"
  :help/start "入门"
  :help/terms "服务条款"
-
- ;; About help
- :help.about/title "关于"
-
- ;; Community help
- :help.community/title "社区"
-
- ;; Development help
- :help.development/title "开发"
+ :help/terms-title "条款"
+ :help/usage-title "使用说明"
 
  ;; Handbook help
  :help.handbook/close "关闭"
@@ -1476,12 +1450,6 @@
  :help.shortcuts/shortcut-column "快捷键"
  :help.shortcuts/title "完整快捷键"
  :help.shortcuts/triggers "触发"
-
- ;; Terms help
- :help.terms/title "条款"
-
- ;; Usage help
- :help.usage/title "使用说明"
 
  ;; Bug report clipboard diagnostics
  :bug-report.clipboard/action-desc "检查和收集剪贴板数据"

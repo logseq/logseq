@@ -125,7 +125,7 @@
         :block-ref
         (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
           (when-let [block (db/entity repo lookup)]
-            [(t :reference.block/title)
+            [(t :reference/blocks)
              (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
 
         :block

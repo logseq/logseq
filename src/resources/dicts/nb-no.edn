@@ -389,11 +389,15 @@
  :graph/create-failed "Grafoppretting mislyktes"
  :graph/creating "Creating graph"
  :graph/delete-local-action "Delete local graph"
+ :graph/delete-local-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
  :graph/delete-server-action "Delete from server"
+ :graph/delete-server-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
  :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/diff "Git diff"
  :graph/encrypt-data-label "Encrypt graph data"
  :graph/last-opened-at-label "Last opened at: {1}"
  :graph/leave-action "Leave this graph"
+ :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Kunne ikke forlate graf"
  :graph/left "Forlot graf"
  :graph/local-graphs "Lokale grafer"
@@ -405,18 +409,6 @@
  :graph/updated-switching "Graf oppdatert. Bytter..."
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
-
- ;; Graph delete local
- :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
-
- ;; Graph delete server
- :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
-
- ;; Graph diff
- :graph.diff/title "Git diff"
-
- ;; Graph leave
- :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "Vis dagbøker"
@@ -480,6 +472,7 @@
  :page/contents "Innhold"
  :page/convert-to-tag "Konverter til tagg"
  :page/copy-url "Kopier side URL"
+ :page/create "Create a new page"
  :page/created-at "Opprettet"
  :page/delete "Slett side"
  :page/hide-properties "Skjul egenskaper"
@@ -511,9 +504,6 @@
  :page.convert/tag-to-page-duplicate "En side med navnet \"{1}\" eksisterer allerede."
  :page.convert/tag-to-page-has-children "Tagg har underordnede elementer og kan ikke konverteres"
 
- ;; Page creation
- :page.create/title "Create a new page"
-
  ;; Page deletion
  :page.delete/confirm-title "Er du sikker på at du vil slette denne siden?"
  :page.delete/success "Side \"{1}\" ble slettet!"
@@ -539,13 +529,11 @@
  :block.macro/unsupported-name "Unsupported macro name: {1}"
 
  ;; Node
+ :node/built-in-cant-delete-error "Innebygde elementer kan ikke slettes."
  :node/new "Ny node"
 
- ;; Node validation
- :node.validation/built-in-cant-delete "Innebygde elementer kan ikke slettes."
-
- ;; Journal validation
- :journal.validation/page-not-journal "Denne siden er ikke en dagbokside."
+ ;; Journal
+ :journal/page-cant-convert-warning "Denne siden er ikke en dagbokside."
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -658,13 +646,11 @@
  :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
+ :reference/blocks "Blokkreferanse"
  :reference/copy "Kopier referanse"
  :reference/delete "Slett referanse"
  :reference/replace-with-embed "Erstatt med innbygging"
  :reference/replace-with-text "Erstatt med tekst"
-
- ;; Block references
- :reference.block/title "Blokkreferanse"
 
  ;; Reference filters
  :reference.filter/directions "Filterretninger"
@@ -687,6 +673,7 @@
  :property/choose-tags "Velg tagger"
  :property/configure "Konfigurer"
  :property/convert-page-to-property "Convert \"{1}\" to property"
+ :property/create-error "Egenskapsoppretting mislyktes."
  :property/default-value "Standardverdi"
  :property/delete-from-node "Slett fra node"
  :property/delete-from-node-confirm "Slette denne egenskapen fra noden?"
@@ -740,9 +727,6 @@
  :property.choice/already-exists "Valget finnes allerede."
  :property.choice/cant-delete-built-in "Innebygd valg kan ikke slettes."
  :property.choice/invalid "Ugyldig valg \"{1}\" for denne egenskapen: {2}"
-
- ;; Property creation
- :property.create/failed "Egenskapsoppretting mislyktes."
 
  ;; Property validation
  :property.validation/cant-convert-to-number "Kan ikke konvertere \"{1}\" til et tall."
@@ -1004,9 +988,6 @@
  :settings.ai/enable-mcp-server "Aktiver MCP-server"
  :settings.ai/enable-mcp-server-desc "Aktiver MCP-server for AI-integrasjon"
 
- ;; Collaboration settings
- :settings.collaboration/member-remove-failed "Kunne ikke fjerne medlem"
-
  ;; Editor settings
  :settings.editor/auto-expand-block-refs "Utvid blokkreferanser automatisk"
  :settings.editor/auto-expand-block-refs-tip "Klikk for å utvide blokkreferanser automatisk"
@@ -1157,16 +1138,13 @@
 
  ;; Zotero
  :zotero/attachments "Vedlegg"
+ :zotero/imported-file-warning "Dette er en importert Zotero-fil, angi Zotero-datamappe for å åpne filen i Logseq."
+ :zotero/linked-file-warning "Dette er en lenket Zotero-fil, angi basemappe for Zotero-lenkede vedlegg for å åpne filen i Logseq."
  :zotero/notes "Notater"
-
- ;; Zotero imported file
- :zotero.imported-file/warning "Dette er en importert Zotero-fil, angi Zotero-datamappe for å åpne filen i Logseq."
-
- ;; Zotero linked file
- :zotero.linked-file/warning "Dette er en lenket Zotero-fil, angi basemappe for Zotero-lenkede vedlegg for å åpne filen i Logseq."
 
  ;; Server
  :server/error-notification "[Server] {1}"
+ :server/mcp-url-copied "MCP-URL kopiert"
  :server/start "Start"
  :server/stop "Stopp"
  :server/title "HTTP API-server"
@@ -1177,9 +1155,6 @@
  :server.config/reset "Tilbakestill"
  :server.config/save-and-apply "Lagre og bruk"
  :server.config/title "Serverkonfigurasjon"
-
- ;; Local server MCP
- :server.mcp/url-copied "MCP-URL kopiert"
 
  ;; Local server status
  :server.status/closed "Lukket"
@@ -1209,8 +1184,8 @@
  :storage.recycle/page-deleted-at "Side slettet {1}"
  :storage.recycle/restore "Gjenopprett"
 
- ;; Account billing
- :account.billing/month "måned"
+ ;; Account
+ :account/month "måned"
 
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
@@ -1228,6 +1203,9 @@
  :sync/storage-exceed-limit "Lagringsgrense overskredet"
  :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "Bruker finnes ikke ennå"
+
+ ;; Collaboration
+ :collaboration/remove-access-error "Kunne ikke fjerne medlem"
 
  ;; Encryption
  :encryption/cloud-password-rich (fn [] ["Hvis du mister passordet ditt, kan ingen av dataene dine i skyen dekrypteres. " [:span "Du vil fortsatt kunne få tilgang til den lokale versjonen av grafen din."]])
@@ -1270,12 +1248,15 @@
 
  ;; Help
  :help/about "Om Logseq"
+ :help/about-title "Om"
  :help/awesome-logseq "Awesome Logseq"
  :help/block-reference "Blokkreferanse"
  :help/blog "Blogg"
  :help/bug "Rapporter feil på GitHub"
  :help/changelog "Endringslogg"
+ :help/community-title "Fellesskap"
  :help/context-menu "Kontekstmeny"
+ :help/development-title "Utvikling"
  :help/docs "Dokumentasjon"
  :help/feature "Funksjonsønske"
  :help/forum-community "Forumfellesskap"
@@ -1288,15 +1269,8 @@
  :help/slash-autocomplete "Skråstrek Autofullføring"
  :help/start "Kom i gang"
  :help/terms "Vilkår"
-
- ;; About help
- :help.about/title "Om"
-
- ;; Community help
- :help.community/title "Fellesskap"
-
- ;; Development help
- :help.development/title "Utvikling"
+ :help/terms-title "Vilkår"
+ :help/usage-title "Bruk"
 
  ;; Handbook help
  :help.handbook/close "Lukk"
@@ -1314,12 +1288,6 @@
  :help.shortcuts/shortcut-column "Snarvei"
  :help.shortcuts/title "Tastatursnarveier"
  :help.shortcuts/triggers "Hurtigtaster og utløsere"
-
- ;; Terms help
- :help.terms/title "Vilkår"
-
- ;; Usage help
- :help.usage/title "Bruk"
 
  ;; Bug report clipboard diagnostics
  :bug-report.clipboard/action-desc "Sjekk utklippstavle"

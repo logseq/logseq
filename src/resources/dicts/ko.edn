@@ -389,11 +389,15 @@
  :graph/create-failed "그래프 생성에 실패했습니다"
  :graph/creating "Creating graph"
  :graph/delete-local-action "Delete local graph"
+ :graph/delete-local-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
  :graph/delete-server-action "Delete from server"
+ :graph/delete-server-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
  :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/diff "Git diff"
  :graph/encrypt-data-label "Encrypt graph data"
  :graph/last-opened-at-label "Last opened at: {1}"
  :graph/leave-action "Leave this graph"
+ :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "그래프 나가기에 실패했습니다"
  :graph/left "그래프를 나갔습니다"
  :graph/local-graphs "로컬 그래프"
@@ -405,18 +409,6 @@
  :graph/updated-switching "그래프가 업데이트되었습니다. 전환 중..."
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
-
- ;; Graph delete local
- :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
-
- ;; Graph delete server
- :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
-
- ;; Graph diff
- :graph.diff/title "Git diff"
-
- ;; Graph leave
- :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "저널 표시"
@@ -480,6 +472,7 @@
  :page/contents "목차"
  :page/convert-to-tag "태그로 변환"
  :page/copy-url "페이지 URL 복사"
+ :page/create "Create a new page"
  :page/created-at "생성일"
  :page/delete "페이지 삭제"
  :page/hide-properties "속성 숨기기"
@@ -511,9 +504,6 @@
  :page.convert/tag-to-page-duplicate "이름이 \"{1}\"인 페이지가 이미 존재합니다."
  :page.convert/tag-to-page-has-children "자식 요소가 있는 태그는 변환할 수 없습니다"
 
- ;; Page creation
- :page.create/title "Create a new page"
-
  ;; Page deletion
  :page.delete/confirm-title "이 페이지를 삭제하시겠습니까?"
  :page.delete/success "페이지 \"{1}\"이(가) 성공적으로 삭제되었습니다!"
@@ -539,13 +529,11 @@
  :block.macro/unsupported-name "Unsupported macro name: {1}"
 
  ;; Node
+ :node/built-in-cant-delete-error "내장 항목은 삭제할 수 없습니다."
  :node/new "새 노드"
 
- ;; Node validation
- :node.validation/built-in-cant-delete "내장 항목은 삭제할 수 없습니다."
-
- ;; Journal validation
- :journal.validation/page-not-journal "이 페이지는 저널 페이지가 아닙니다."
+ ;; Journal
+ :journal/page-cant-convert-warning "이 페이지는 저널 페이지가 아닙니다."
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -658,13 +646,11 @@
  :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
+ :reference/blocks "블록 참조"
  :reference/copy "참조 복사"
  :reference/delete "참조 삭제"
  :reference/replace-with-embed "임베드로 대체"
  :reference/replace-with-text "텍스트로 대체"
-
- ;; Block references
- :reference.block/title "블록 참조"
 
  ;; Reference filters
  :reference.filter/directions "필터 방향"
@@ -687,6 +673,7 @@
  :property/choose-tags "태그 선택"
  :property/configure "설정"
  :property/convert-page-to-property "Convert \"{1}\" to property"
+ :property/create-error "속성 생성에 실패했습니다."
  :property/default-value "기본값"
  :property/delete-from-node "노드에서 삭제"
  :property/delete-from-node-confirm "이 속성을 노드에서 삭제하시겠습니까?"
@@ -740,9 +727,6 @@
  :property.choice/already-exists "선택지가 이미 존재합니다."
  :property.choice/cant-delete-built-in "내장 선택지는 삭제할 수 없습니다."
  :property.choice/invalid "이 속성에 대한 잘못된 선택 \"{1}\": {2}"
-
- ;; Property creation
- :property.create/failed "속성 생성에 실패했습니다."
 
  ;; Property validation
  :property.validation/cant-convert-to-number "\"{1}\"을(를) 숫자로 변환할 수 없습니다."
@@ -1004,9 +988,6 @@
  :settings.ai/enable-mcp-server "MCP 서버 활성화"
  :settings.ai/enable-mcp-server-desc "MCP 서버를 활성화하여 AI 연동을 가능하게 합니다"
 
- ;; Collaboration settings
- :settings.collaboration/member-remove-failed "멤버 제거에 실패했습니다"
-
  ;; Editor settings
  :settings.editor/auto-expand-block-refs "블록 참조 자동 확장"
  :settings.editor/auto-expand-block-refs-tip "이 설정은 블록을 확대할 때 블록 참조를 자동으로 펼칠지를 결정합니다."
@@ -1157,16 +1138,13 @@
 
  ;; Zotero
  :zotero/attachments "첨부 파일"
+ :zotero/imported-file-warning "이 파일은 Zotero에서 가져온 파일입니다, Logseq에서 파일을 열려면 Zotero 데이터 디렉터리를 설정하세요."
+ :zotero/linked-file-warning "이 파일은 Zotero에 연결된 파일입니다, Logseq에서 파일을 열려면 Zotero 연결 첨부파일 기본 디렉터리를 설정하세요."
  :zotero/notes "노트"
-
- ;; Zotero imported file
- :zotero.imported-file/warning "이 파일은 Zotero에서 가져온 파일입니다, Logseq에서 파일을 열려면 Zotero 데이터 디렉터리를 설정하세요."
-
- ;; Zotero linked file
- :zotero.linked-file/warning "이 파일은 Zotero에 연결된 파일입니다, Logseq에서 파일을 열려면 Zotero 연결 첨부파일 기본 디렉터리를 설정하세요."
 
  ;; Server
  :server/error-notification "[서버] {1}"
+ :server/mcp-url-copied "MCP URL이 복사되었습니다"
  :server/start "시작"
  :server/stop "중지"
  :server/title "HTTP API 서버"
@@ -1177,9 +1155,6 @@
  :server.config/reset "초기화"
  :server.config/save-and-apply "저장 및 적용"
  :server.config/title "서버 설정"
-
- ;; Local server MCP
- :server.mcp/url-copied "MCP URL이 복사되었습니다"
 
  ;; Local server status
  :server.status/closed "종료"
@@ -1209,8 +1184,8 @@
  :storage.recycle/page-deleted-at "페이지가 삭제되었습니다. {1}"
  :storage.recycle/restore "복원"
 
- ;; Account billing
- :account.billing/month "월"
+ ;; Account
+ :account/month "월"
 
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
@@ -1228,6 +1203,9 @@
  :sync/storage-exceed-limit "저장 용량이 제한을 초과했습니다"
  :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "사용자가 아직 존재하지 않습니다"
+
+ ;; Collaboration
+ :collaboration/remove-access-error "멤버 제거에 실패했습니다"
 
  ;; Encryption
  :encryption/cloud-password-rich (fn [] ["비밀번호를 분실하면 클라우드에 있는 데이터는 복호화할 수 없습니다. " [:span "그래도 그래프의 로컬 버전에는 계속 접근할 수 있습니다."]])
@@ -1270,12 +1248,15 @@
 
  ;; Help
  :help/about "Logseq 소개"
+ :help/about-title "Logseq에 대해"
  :help/awesome-logseq "Awesome Logseq"
  :help/block-reference "블록 참조"
  :help/blog "Logseq 블로그"
  :help/bug "버그 보고"
  :help/changelog "변경 기록"
+ :help/community-title "커뮤니티"
  :help/context-menu "블록 컨텍스트 메뉴"
+ :help/development-title "개발"
  :help/docs "문서"
  :help/feature "기능 제안"
  :help/forum-community "포럼 커뮤니티"
@@ -1288,15 +1269,8 @@
  :help/slash-autocomplete "Slash 자동 완성"
  :help/start "시작하기"
  :help/terms "이용약관"
-
- ;; About help
- :help.about/title "Logseq에 대해"
-
- ;; Community help
- :help.community/title "커뮤니티"
-
- ;; Development help
- :help.development/title "개발"
+ :help/terms-title "약관"
+ :help/usage-title "사용법"
 
  ;; Handbook help
  :help.handbook/close "닫기"
@@ -1314,12 +1288,6 @@
  :help.shortcuts/shortcut-column "단축키"
  :help.shortcuts/title "키보드 단축키"
  :help.shortcuts/triggers "트리거"
-
- ;; Terms help
- :help.terms/title "약관"
-
- ;; Usage help
- :help.usage/title "사용법"
 
  ;; Bug report clipboard diagnostics
  :bug-report.clipboard/action-desc "클립보드 데이터를 검사하고 수정합니다"

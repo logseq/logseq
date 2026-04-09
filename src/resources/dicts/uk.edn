@@ -389,11 +389,15 @@
  :graph/create-failed "Не удалось створити граф"
  :graph/creating "Creating graph"
  :graph/delete-local-action "Delete local graph"
+ :graph/delete-local-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
  :graph/delete-server-action "Delete from server"
+ :graph/delete-server-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
  :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/diff "Git diff"
  :graph/encrypt-data-label "Encrypt graph data"
  :graph/last-opened-at-label "Last opened at: {1}"
  :graph/leave-action "Leave this graph"
+ :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Не удалось покинуть граф"
  :graph/left "Граф покинут"
  :graph/local-graphs "Локальні графи"
@@ -405,18 +409,6 @@
  :graph/updated-switching "Граф обновлён. Переключение..."
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
-
- ;; Graph delete local
- :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
-
- ;; Graph delete server
- :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
-
- ;; Graph diff
- :graph.diff/title "Git diff"
-
- ;; Graph leave
- :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "Показати журнали"
@@ -480,6 +472,7 @@
  :page/contents "Зміст"
  :page/convert-to-tag "Преобразовать в тег"
  :page/copy-url "Скопіювати URL сторінки"
+ :page/create "Create a new page"
  :page/created-at "Створенно у"
  :page/delete "Видалити сторінку"
  :page/hide-properties "Сховати властивості"
@@ -511,9 +504,6 @@
  :page.convert/tag-to-page-duplicate "Сторінка з назвою \"{1}\" вже існує."
  :page.convert/tag-to-page-has-children "Тег имеет дочірние элементы и не может быть преобразован"
 
- ;; Page creation
- :page.create/title "Create a new page"
-
  ;; Page deletion
  :page.delete/confirm-title "Ви впевнені, що хочете видалити цю сторінку?"
  :page.delete/success "Сторінка \"{1}\" успішно видалена!"
@@ -539,13 +529,11 @@
  :block.macro/unsupported-name "Unsupported macro name: {1}"
 
  ;; Node
+ :node/built-in-cant-delete-error "Вбудованые элементы нельзя видалити."
  :node/new "Новый узел"
 
- ;; Node validation
- :node.validation/built-in-cant-delete "Вбудованые элементы нельзя видалити."
-
- ;; Journal validation
- :journal.validation/page-not-journal "Эта сторінка не является сторінокей щоденника."
+ ;; Journal
+ :journal/page-cant-convert-warning "Эта сторінка не является сторінокей щоденника."
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -658,13 +646,11 @@
  :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
+ :reference/blocks "Посилання на блоки"
  :reference/copy "Копіювати це посилання"
  :reference/delete "Видалити це посилання"
  :reference/replace-with-embed "Замінити вбудованим"
  :reference/replace-with-text "Замінити текстом"
-
- ;; Block references
- :reference.block/title "Посилання на блоки"
 
  ;; Reference filters
  :reference.filter/directions "Направления фільтра"
@@ -687,6 +673,7 @@
  :property/choose-tags "Вибрати теги"
  :property/configure "Налаштувати"
  :property/convert-page-to-property "Convert \"{1}\" to property"
+ :property/create-error "Не удалось створити властивість."
  :property/default-value "Значение по умолчанию"
  :property/delete-from-node "Видалити из узла"
  :property/delete-from-node-confirm "Видалити это властивість из узла?"
@@ -740,9 +727,6 @@
  :property.choice/already-exists "Вариант уже существует."
  :property.choice/cant-delete-built-in "Вбудованый вариант нельзя видалити."
  :property.choice/invalid "Недійсний вибір \"{1}\" для цієї властивості: {2}"
-
- ;; Property creation
- :property.create/failed "Не удалось створити властивість."
 
  ;; Property validation
  :property.validation/cant-convert-to-number "Не вдається перетворити \"{1}\" на число."
@@ -1004,9 +988,6 @@
  :settings.ai/enable-mcp-server "Увімкнути сервер MCP"
  :settings.ai/enable-mcp-server-desc "Увімкнути сервер MCP для интеграции с ИИ"
 
- ;; Collaboration settings
- :settings.collaboration/member-remove-failed "Не удалось видалити участника"
-
  ;; Editor settings
  :settings.editor/auto-expand-block-refs "Автораскрытие ссылок на блоки"
  :settings.editor/auto-expand-block-refs-tip "Автоматически раскрывать ссылки на блоки при нажатии"
@@ -1157,16 +1138,13 @@
 
  ;; Zotero
  :zotero/attachments "Вкладення"
+ :zotero/imported-file-warning "Це імпортований файл Zotero, укажіть каталог даних Zotero, щоб відкрити файл у Logseq."
+ :zotero/linked-file-warning "Це пов’язаний файл Zotero, укажіть базовий каталог пов’язаних вкладень Zotero, щоб відкрити файл у Logseq."
  :zotero/notes "Нотатки"
-
- ;; Zotero imported file
- :zotero.imported-file/warning "Це імпортований файл Zotero, укажіть каталог даних Zotero, щоб відкрити файл у Logseq."
-
- ;; Zotero linked file
- :zotero.linked-file/warning "Це пов’язаний файл Zotero, укажіть базовий каталог пов’язаних вкладень Zotero, щоб відкрити файл у Logseq."
 
  ;; Server
  :server/error-notification "[Сервер] {1}"
+ :server/mcp-url-copied "URL MCP скопирован"
  :server/start "Запустити"
  :server/stop "Зупинити"
  :server/title "HTTP API сервер"
@@ -1177,9 +1155,6 @@
  :server.config/reset "Скинути"
  :server.config/save-and-apply "Зберегти и застосувати"
  :server.config/title "Налаштування сервера"
-
- ;; Local server MCP
- :server.mcp/url-copied "URL MCP скопирован"
 
  ;; Local server status
  :server.status/closed "Закрыт"
@@ -1209,8 +1184,8 @@
  :storage.recycle/page-deleted-at "Сторінку видалено {1}"
  :storage.recycle/restore "Відновити"
 
- ;; Account billing
- :account.billing/month "місяць"
+ ;; Account
+ :account/month "місяць"
 
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
@@ -1228,6 +1203,9 @@
  :sync/storage-exceed-limit "Превышен лимит хранилища"
  :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "Пользователь ещё не существует"
+
+ ;; Collaboration
+ :collaboration/remove-access-error "Не удалось видалити участника"
 
  ;; Encryption
  :encryption/cloud-password-rich (fn [] ["Якщо ви втратите пароль, дані в хмарі неможливо буде розшифрувати. " [:span "Водночас ви й далі матимете доступ до локальної версії свого графа."]])
@@ -1270,12 +1248,15 @@
 
  ;; Help
  :help/about "Про Logseq"
+ :help/about-title "Про програму"
  :help/awesome-logseq "Awesome Logseq"
  :help/block-reference "Посилання на блок"
  :help/blog "Блог Logseq"
  :help/bug "Повідомити про помилку на GitHub"
  :help/changelog "Журнал змін"
+ :help/community-title "Спільнота"
  :help/context-menu "Контекстне меню блоку"
+ :help/development-title "Розробка"
  :help/docs "Документація"
  :help/feature "Запит функції"
  :help/forum-community "Спільнота на форумі"
@@ -1288,15 +1269,8 @@
  :help/slash-autocomplete "Автозаповнення слешу"
  :help/start "Починаємо"
  :help/terms "Умови"
-
- ;; About help
- :help.about/title "Про програму"
-
- ;; Community help
- :help.community/title "Спільнота"
-
- ;; Development help
- :help.development/title "Розробка"
+ :help/terms-title "Умови"
+ :help/usage-title "Використання"
 
  ;; Handbook help
  :help.handbook/close "Закрити"
@@ -1314,12 +1288,6 @@
  :help.shortcuts/shortcut-column "Ярлик"
  :help.shortcuts/title "Кобмінації клавіш"
  :help.shortcuts/triggers "Тригер"
-
- ;; Terms help
- :help.terms/title "Умови"
-
- ;; Usage help
- :help.usage/title "Використання"
 
  ;; Bug report clipboard diagnostics
  :bug-report.clipboard/action-desc "Перевірити буфер обмена"
