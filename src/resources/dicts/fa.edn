@@ -6,13 +6,6 @@
  :command.auto-complete/prev "قبلی"
  :command.auto-complete/shift-complete "تکمیل با Shift"
 
- ;; Cards commands
- :command.cards/again "دوباره"
- :command.cards/easy "آسان"
- :command.cards/good "خوب"
- :command.cards/hard "سخت"
- :command.cards/toggle-answers "تغییر پاسخ‌ها"
-
  ;; Command Palette commands
  :command.command-palette/toggle "پالت دستورات"
 

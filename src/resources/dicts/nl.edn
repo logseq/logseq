@@ -6,13 +6,6 @@
  :command.auto-complete/prev "Automatisch aanvullen: Selecteer vorig item"
  :command.auto-complete/shift-complete "Automatisch aanvullen: Open geselecteerd item in zijbalk"
 
- ;; Cards commands
- :command.cards/again "Opnieuw"
- :command.cards/easy "Makkelijk"
- :command.cards/good "Goed"
- :command.cards/hard "Moeilijk"
- :command.cards/toggle-answers "Kaarten: toon/verberg antwoorden/clozes"
-
  ;; Command Palette commands
  :command.command-palette/toggle "Commandopalet"
 

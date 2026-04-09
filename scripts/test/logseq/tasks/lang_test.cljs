@@ -203,6 +203,12 @@
   (let [content ":shortcut.handler/misc {:misc/copy (:misc/copy all-built-in-keyboard-shortcuts)}"]
     (is (empty? (lang-lint/shortcut-command-keys content)))))
 
+(deftest shortcut-command-keys-ignore-exempt-cards-shortcuts-only
+  (let [content ":cards/toggle-answers {:binding \"s\"}\n:cards/again {:binding \"1\"}\n:cards/custom {:binding \"9\"}\n:page/toggle-favorite {:binding \"mod+shift+f\"}\n"]
+    (is (= #{:command.cards/custom
+             :command.page/toggle-favorite}
+           (lang-lint/shortcut-command-keys content)))))
+
 (deftest shortcut-category-translation-keys-detect-dynamic-category-labels
   (let [content "(defonce categories\n(vector :shortcut.category/basics :shortcut.category/others))"]
     (is (= #{:shortcut.category/basics

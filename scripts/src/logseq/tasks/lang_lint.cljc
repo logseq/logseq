@@ -65,6 +65,15 @@
 (def ^:private shortcut-command-id-pattern
   #"(?m)^\s*\{?:([A-Za-z0-9._-]+)/([A-Za-z0-9._-]+)\s+\{")
 
+;; Built-in card review shortcuts are local-only actions whose visible labels
+;; come from flashcard UI state instead of `:command.*` descriptions.
+(def ^:private shortcut-command-translation-exemptions
+  #{:cards/again
+    :cards/easy
+    :cards/good
+    :cards/hard
+    :cards/toggle-answers})
+
 ;; Matches literal shortcut category translation keys.
 (def ^:private shortcut-category-key-pattern
   #":shortcut\.category/[A-Za-z0-9._-]+")
@@ -319,13 +328,21 @@
   "Return `:command.*` translation keys derived from built-in shortcut ids.
 
   Shortcut handler ids like `:shortcut.handler/*` are ignored because they are
-  config group keys, not user-visible command ids."
+  config group keys, not user-visible command ids.
+
+  The five built-in `:cards/*` review shortcuts are also ignored because their
+  visible labels come from flashcard UI state, not `:command.*`
+  descriptions."
   [content]
   (->> (re-seq shortcut-command-id-pattern content)
-       (remove (fn [[_ shortcut-ns _]]
-                 (string/starts-with? shortcut-ns "shortcut.handler")))
        (map (fn [[_ shortcut-ns shortcut-name]]
-              (keyword (str "command." shortcut-ns) shortcut-name)))
+              (keyword shortcut-ns shortcut-name)))
+       (remove (fn [shortcut-id]
+                 (or (string/starts-with? (namespace shortcut-id) "shortcut.handler")
+                     (contains? shortcut-command-translation-exemptions shortcut-id))))
+       (map (fn [shortcut-id]
+              (keyword (str "command." (namespace shortcut-id))
+                       (name shortcut-id))))
        set))
 
 (defn shortcut-category-translation-keys

@@ -6,13 +6,6 @@
  :command.auto-complete/prev "Automatické doplňování: Výběr předchozí položky"
  :command.auto-complete/shift-complete "Automatické doplňování: Otevřít vybranou položku v postranním panelu"
 
- ;; Cards commands
- :command.cards/again "Znovu"
- :command.cards/easy "Snadné"
- :command.cards/good "Dobré"
- :command.cards/hard "Těžké"
- :command.cards/toggle-answers "Karty: zobrazit/skrýt odpovědi"
-
  ;; Command Palette commands
  :command.command-palette/toggle "Paleta příkazů"
 

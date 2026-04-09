@@ -6,13 +6,6 @@
  :command.auto-complete/prev "Autofullfør: Velg forrige punkt"
  :command.auto-complete/shift-complete "Autofullfør: Åpne valgt punkt i sidestolpen"
 
- ;; Cards commands
- :command.cards/again "Igjen"
- :command.cards/easy "Lett"
- :command.cards/good "Bra"
- :command.cards/hard "Vanskelig"
- :command.cards/toggle-answers "Kort: vis/skjul svar/clozes"
-
  ;; Command Palette commands
  :command.command-palette/toggle "Kommandopalett"
 

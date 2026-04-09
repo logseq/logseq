@@ -6,13 +6,6 @@
  :command.auto-complete/prev "Automatische Vervollständigung: Vorheriges Element auswählen"
  :command.auto-complete/shift-complete "Automatische Vervollständigung: Ausgewähltes Element in der Seitenleiste öffnen"
 
- ;; Cards commands
- :command.cards/again "Karten: Nochmal"
- :command.cards/easy "Karten: Einfach"
- :command.cards/good "Karten: Gut"
- :command.cards/hard "Karten: Schwer"
- :command.cards/toggle-answers "Karten: Antworten/Lücken ein-/ausblenden"
-
  ;; Command Palette commands
  :command.command-palette/toggle "Suchbefehle"
 

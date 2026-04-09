@@ -6,13 +6,6 @@
  :command.auto-complete/prev "Autocompletar: Selecione o item anterior"
  :command.auto-complete/shift-complete "Autocompletar: Abra o item selecionado na barra lateral"
 
- ;; Cards commands
- :command.cards/again "De novo"
- :command.cards/easy "Fácil"
- :command.cards/good "Bom"
- :command.cards/hard "Difícil"
- :command.cards/toggle-answers "Cartões: mostrar/esconder as respostas/clozes"
-
  ;; Command Palette commands
  :command.command-palette/toggle "Alternar paleta de comandos"
 

@@ -6,13 +6,6 @@
  :command.auto-complete/prev "자동완성: 이전 항목"
  :command.auto-complete/shift-complete "자동완성: 사이드바에서 열기"
 
- ;; Cards commands
- :command.cards/again "다시"
- :command.cards/easy "쉬움"
- :command.cards/good "좋음"
- :command.cards/hard "어려움"
- :command.cards/toggle-answers "카드: 답변/빈칸 표시/숨기기"
-
  ;; Command Palette commands
  :command.command-palette/toggle "명령 팔레트 전환"
 

@@ -6,13 +6,6 @@
  :command.auto-complete/prev "Auto completamento: Seleziona l'oggetto precedente"
  :command.auto-complete/shift-complete "Auto completamento: Apri l'oggetto selezionato nel pannello laterale"
 
- ;; Cards commands
- :command.cards/again "Di nuovo"
- :command.cards/easy "Facile"
- :command.cards/good "Bene"
- :command.cards/hard "Difficile"
- :command.cards/toggle-answers "Carte: mostra/nascondi risposte/chiusure"
-
  ;; Command Palette commands
  :command.command-palette/toggle "Cerca un comando"
 

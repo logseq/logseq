@@ -6,13 +6,6 @@
  :command.auto-complete/prev "自動完成：選擇上一項"
  :command.auto-complete/shift-complete "自動完成：在側邊欄開啟"
 
- ;; Cards commands
- :command.cards/again "再來一次"
- :command.cards/easy "容易"
- :command.cards/good "良好"
- :command.cards/hard "困難"
- :command.cards/toggle-answers "卡片：顯示/隱藏 答案/填空"
-
  ;; Command Palette commands
  :command.command-palette/toggle "切換指令面板"
 
