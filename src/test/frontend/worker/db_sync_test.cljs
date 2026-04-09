@@ -4178,8 +4178,7 @@
                       conn
                       [[:insert-blocks [[{:block/title "insert crash repro"}]
                                         (:db/id target)
-                                        {:sibling? true
-                                         :right-sibling-id (:db/id right-sibling)}]]]
+                                        {:sibling? true}]]]
                       {})
                      nil
                      (catch :default e
