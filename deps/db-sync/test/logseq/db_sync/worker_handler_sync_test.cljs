@@ -760,6 +760,54 @@
       (is (empty? (storage/fetch-tx-since sql t-before)))
       (is (empty? @changed-messages)))))
 
+(deftest tx-batch-ignores-stale-fix-with-missing-lookup-entity-test
+  (testing "stale fix lookup refs to missing entities are treated as no-op"
+    (let [sql (test-sql/make-sql)
+          conn (storage/open-conn sql)
+          self #js {:sql sql
+                    :conn conn
+                    :schema-ready true}
+          page-uuid (random-uuid)
+          sibling-uuid (random-uuid)
+          missing-block-uuid (random-uuid)
+          _ (d/transact! conn [{:block/uuid page-uuid
+                                :block/name "fix-stale-page"
+                                :block/title "fix-stale-page"}
+                               {:block/uuid sibling-uuid
+                                :block/title "existing-sibling"
+                                :block/order "a5Uzl"
+                                :block/parent [:block/uuid page-uuid]
+                                :block/page [:block/uuid page-uuid]}])
+          t-before (storage/get-t sql)
+          checksum-before (storage/get-checksum sql)
+          tx-entry {:tx (protocol/tx->transit
+                         [[:db/retract [:block/uuid missing-block-uuid]
+                           :block/order
+                           "a5Uzl"
+                           536871101]
+                          [:db/add [:block/uuid missing-block-uuid]
+                           :block/order
+                           "a5c"
+                           536871101]
+                          [:db/retract [:block/uuid sibling-uuid]
+                           :block/order
+                           "a5Uzl"
+                           536871101]
+                          [:db/add [:block/uuid sibling-uuid]
+                           :block/order
+                           "a5k"
+                           536871101]])
+                    :outliner-op :fix}
+          changed-messages (atom [])
+          response (with-redefs [ws/broadcast! (fn [_self _sender payload]
+                                                 (swap! changed-messages conj payload))]
+                     (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
+      (is (= "tx/batch/ok" (:type response)))
+      (is (= t-before (:t response)))
+      (is (= checksum-before (storage/get-checksum sql)))
+      (is (empty? (storage/fetch-tx-since sql t-before)))
+      (is (empty? @changed-messages)))))
+
 (deftest server-incremental-checksum-matches-full-recompute-fuzz-test
   (testing "server stored checksum stays equal to full recompute across randomized tx/rebase/no-op sequences"
     (doseq [seed (range 1 11)]
