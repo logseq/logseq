@@ -405,6 +405,33 @@
             (is (= 0 @send-calls)))
           (#'sync-apply/set-upload-stopped! test-repo false))))))
 
+(deftest prepare-upload-tx-entries-drops-empty-txs-test
+  (testing "empty tx rows should be dropped from upload batch"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          empty-tx-id (random-uuid)
+          valid-tx-id (random-uuid)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (ldb/transact! client-ops-conn
+                         [{:db-sync/tx-id empty-tx-id
+                           :db-sync/pending? true
+                           :db-sync/created-at 1
+                           :db-sync/outliner-op :transact
+                           :db-sync/normalized-tx-data []}
+                          {:db-sync/tx-id valid-tx-id
+                           :db-sync/pending? true
+                           :db-sync/created-at 2
+                           :db-sync/outliner-op :save-block
+                           :db-sync/normalized-tx-data
+                           [[:db/add [:block/uuid (:block/uuid child1)]
+                             :block/title
+                             "valid-title"]]}])
+          (let [pending (#'sync-apply/pending-txs test-repo)
+                {:keys [tx-entries drop-tx-ids]}
+                (sync-apply/prepare-upload-tx-entries conn pending)]
+            (is (= [empty-tx-id] drop-tx-ids))
+            (is (= [valid-tx-id] (mapv :tx-id tx-entries)))))))))
+
 (deftest sync-counts-counts-only-true-pending-local-ops-test
   (testing "pending-local should count only rows with :db-sync/pending? true"
     (let [{:keys [conn client-ops-conn]} (setup-parent-child)]
@@ -1504,24 +1531,31 @@
             (is (= "raw reverse"
                    (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))))
 
-(deftest reverse-local-txs-drops-missing-entity-order-adds-test
-  (testing "reverse should ignore :db/add :block/order for missing entities"
-    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+(deftest reverse-local-txs-keeps-order-add-for-restored-entity-test
+  (testing "reverse should keep :db/add :block/order when restoring a deleted block"
+    (let [{:keys [conn client-ops-conn parent]} (setup-parent-child)
           tx-id (random-uuid)
-          child-id (:db/id child1)
-          child-uuid (:block/uuid child1)
-          missing-uuid (random-uuid)
+          restored-id 999999
+          restored-uuid (random-uuid)
+          now (.now js/Date)
+          parent-id (:db/id parent)
           local-tx {:tx-id tx-id
-                    :outliner-op :save-block
-                    :reversed-tx [[:db/add [:block/uuid missing-uuid] :block/order "a0"]
-                                  [:db/add child-id :block/title "reverse-kept"]]}]
+                    :outliner-op :delete-block
+                    :reversed-tx [[:db/add restored-id :block/uuid restored-uuid]
+                                  [:db/add restored-id :block/title "reverse-restored"]
+                                  [:db/add restored-id :block/created-at now]
+                                  [:db/add restored-id :block/updated-at now]
+                                  [:db/add restored-id :block/page parent-id]
+                                  [:db/add restored-id :block/parent parent-id]
+                                  [:db/add restored-id :block/order "a0"]]}]
       (with-datascript-conns conn client-ops-conn
         (fn []
-          (is (nil? (d/entity @conn [:block/uuid missing-uuid])))
-          (let [reports (#'sync-apply/reverse-local-txs! conn [local-tx])]
+          (is (nil? (d/entity @conn [:block/uuid restored-uuid])))
+          (let [reports (#'sync-apply/reverse-local-txs! conn [local-tx])
+                restored (d/entity @conn [:block/uuid restored-uuid])]
             (is (= 1 (count reports)))
-            (is (= "reverse-kept"
-                   (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))))
+            (is (= "reverse-restored" (:block/title restored)))
+            (is (= "a0" (:block/order restored)))))))))
 
 (deftest enqueue-local-tx-keeps-mixed-semantic-forward-outliner-ops-test
   (testing "mixed semantic outliner ops stay semantic and preserve op ordering"
@@ -3458,6 +3492,66 @@
                 (is (= tx-ids-before tx-ids-after))
                 (is (= 2 (count (distinct tx-ids-after))))))))))))
 
+(deftest rebase-keeps-original-created-at-for-pending-tx-test
+  (testing "rebasing a pending tx should keep its original created-at ordering key"
+    (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)]
+      (with-redefs [db-sync/enqueue-local-tx!
+                    (let [orig db-sync/enqueue-local-tx!]
+                      (fn [repo tx-report]
+                        (when-not (:rtc-tx? (:tx-meta tx-report))
+                          (orig repo tx-report))))]
+        (with-datascript-conns conn client-ops-conn
+          (fn []
+            (d/transact! conn [[:db/add (:db/id child1) :block/title "child 1 local"]])
+            (let [{:keys [tx-id]} (first (#'sync-apply/pending-txs test-repo))
+                  created-at-before (:db-sync/created-at
+                                     (d/entity @client-ops-conn [:db-sync/tx-id tx-id]))]
+              (is (number? created-at-before))
+              (loop []
+                (when (<= (.now js/Date) created-at-before)
+                  (recur)))
+              (#'sync-apply/apply-remote-tx!
+               test-repo
+               nil
+               [[:db/add (:db/id parent) :block/title "parent remote"]])
+              (let [created-at-after (:db-sync/created-at
+                                      (d/entity @client-ops-conn [:db-sync/tx-id tx-id]))]
+                (is (= created-at-before created-at-after))))))))))
+
+(deftest persist-local-tx-keeps-created-at-for-existing-tx-id-test
+  (testing "persisting an existing tx-id should preserve created-at ordering"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          tx-id (random-uuid)
+          child-id (:db/id child1)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (with-redefs [undo-redo/gen-undo-ops! (fn [& _] nil)]
+            (let [tx-report-1 (d/with @conn
+                                      [[:db/add child-id :block/title "created-at-v1"]]
+                                      (assoc local-tx-meta
+                                             :db-sync/tx-id tx-id
+                                             :outliner-op :save-block))
+                  {:keys [normalized-tx-data reversed-datoms]}
+                  (#'sync-apply/normalize-rebased-pending-tx tx-report-1)]
+              (#'sync-apply/persist-local-tx! test-repo tx-report-1 normalized-tx-data reversed-datoms)
+              (let [created-at-before (:db-sync/created-at
+                                       (d/entity @client-ops-conn [:db-sync/tx-id tx-id]))]
+                (is (number? created-at-before))
+                (loop []
+                  (when (<= (.now js/Date) created-at-before)
+                    (recur)))
+                (let [tx-report-2 (d/with @conn
+                                          [[:db/add child-id :block/title "created-at-v2"]]
+                                          (assoc local-tx-meta
+                                                 :db-sync/tx-id tx-id
+                                                 :outliner-op :rebase))
+                      {:keys [normalized-tx-data reversed-datoms]}
+                      (#'sync-apply/normalize-rebased-pending-tx tx-report-2)]
+                  (#'sync-apply/persist-local-tx! test-repo tx-report-2 normalized-tx-data reversed-datoms)
+                  (let [created-at-after (:db-sync/created-at
+                                          (d/entity @client-ops-conn [:db-sync/tx-id tx-id]))]
+                    (is (= created-at-before created-at-after))))))))))))
+
 (deftest rebase-keeps-pending-when-rebased-empty-test
   (testing "pending txs stay when rebased txs are empty"
     (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)]
@@ -3514,6 +3608,70 @@
                   (is (some? save-block-tx))
                   (is (not-any? string?
                                 (keep second save-block-tx))))))))))))
+
+(deftest rebase-drops-stale-raw-pending-tx-with-missing-history-ops-test
+  (testing "legacy rebase rows without history ops should fallback to transact replay and be dropped when stale"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          block-uuid (:block/uuid child1)
+          previous-title (:block/title child1)
+          tx-id (random-uuid)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (ldb/transact! client-ops-conn
+                         [{:db-sync/tx-id tx-id
+                           :db-sync/pending? true
+                           :db-sync/created-at 1
+                           :db-sync/outliner-op :rebase
+                           :db-sync/forward-outliner-ops nil
+                           :db-sync/inverse-outliner-ops nil
+                           :db-sync/normalized-tx-data
+                           [[:db/add [:block/uuid block-uuid]
+                             :block/title
+                             "stale raw value"]]
+                           :db-sync/reversed-tx-data
+                           [[:db/add [:block/uuid block-uuid]
+                             :block/title
+                             previous-title]]}])
+          (is (= 1 (count (#'sync-apply/pending-txs test-repo))))
+          (#'sync-apply/apply-remote-txs!
+           test-repo
+           nil
+           [{:tx-data [[:db/retractEntity [:block/uuid block-uuid]]]}])
+          (is (empty? (#'sync-apply/pending-txs test-repo))))))))
+
+(deftest rebase-replays-title-only-raw-pending-tx-without-history-ops-test
+  (testing "metadata-less title-only raw pending tx should replay during rebase"
+    (let [{:keys [conn client-ops-conn child1 parent]} (setup-parent-child)
+          block-uuid (:block/uuid child1)
+          previous-title (:block/title child1)
+          parent-uuid (:block/uuid parent)
+          tx-id (random-uuid)
+          local-title "local raw title"]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (ldb/transact! client-ops-conn
+                         [{:db-sync/tx-id tx-id
+                           :db-sync/pending? true
+                           :db-sync/created-at 1
+                           :db-sync/outliner-op nil
+                           :db-sync/forward-outliner-ops nil
+                           :db-sync/inverse-outliner-ops nil
+                           :db-sync/normalized-tx-data
+                           [[:db/add [:block/uuid block-uuid]
+                             :block/title
+                             local-title]]
+                           :db-sync/reversed-tx-data
+                           [[:db/add [:block/uuid block-uuid]
+                             :block/title
+                             previous-title]]}])
+          (#'sync-apply/apply-remote-txs!
+           test-repo
+           nil
+           [{:tx-data [[:db/add [:block/uuid parent-uuid] :block/title "parent remote"]]}])
+          (let [pending (#'sync-apply/pending-txs test-repo)]
+            (is (= local-title (:block/title (d/entity @conn [:block/uuid block-uuid]))))
+            (is (= 1 (count pending)))
+            (is (= tx-id (:tx-id (first pending))))))))))
 
 (deftest reverse-tx-data-create-property-text-block-restores-base-db-test
   (testing "reverse-tx-data for create-property-text-block should restore the base db"
