@@ -107,7 +107,6 @@
   (when-let [ent (d/entity db eid)]
     (and (uuid? (:block/uuid ent))
          (not (ldb/built-in? ent))
-         (nil? (:logseq.property/deleted-at ent))
          (or (ldb/page? ent)
              (some? (:block/page ent))
              (some? (:block/name ent))))))
@@ -150,57 +149,14 @@
                  (when (checksum-eligible-entity? db e)
                    (entity-checksum-tuples db e e2ee?))))))
 
-(defn- referrer-eids-for-target
-  [db target-eid]
-  (when (number? target-eid)
-    (concat
-     (map :e (d/datoms db :avet :block/parent target-eid))
-     (map :e (d/datoms db :avet :block/page target-eid)))))
-
-(defn- tx-ref-target-eids
-  [tx-data]
-  (->> tx-data
-       (keep (fn [{:keys [e a v]}]
-               (case a
-                 (:block/parent :block/page)
-                 (when (number? v) v)
-
-                 :block/uuid
-                 (when (number? e) e)
-
-                 nil)))
-       set))
-
 (defn- touched-checksum-eids
   [db-before db-after tx-data]
-  (let [direct-eids
-        (->> tx-data
-             (keep :e)
-             (filter number?)
-             set)
-
-        ;; Any entity referenced by parent/page/uuid changes may affect
-        ;; normalized tuple values of other entities, so include referrers
-        ;; from both before and after DBs.
-        target-eids
-        (tx-ref-target-eids tx-data)
-
-        referrer-eids
-        (->> target-eids
-             (mapcat (fn [target-eid]
-                       (concat
-                        (referrer-eids-for-target db-before target-eid)
-                        (referrer-eids-for-target db-after target-eid))))
-             (filter number?)
-             set)
-
-        candidate-eids
-        (set/union direct-eids referrer-eids)]
-    (->> candidate-eids
-         (filter (fn [eid]
-                   (or (checksum-eligible-entity? db-before eid)
-                       (checksum-eligible-entity? db-after eid))))
-         set)))
+  (->> tx-data
+       (keep :e)
+       (filter (fn [eid]
+                 (or (checksum-eligible-entity? db-before eid)
+                     (checksum-eligible-entity? db-after eid))))
+       set))
 
 (defn- net-tuple-delta
   [db-before db-after e2ee? tx-data]
