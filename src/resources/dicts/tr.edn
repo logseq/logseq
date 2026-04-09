@@ -367,11 +367,20 @@
 
  ;; Color
  :color/blue "Mavi"
+ :color/crimson "Crimson"
+ :color/cyan "Cyan"
+ :color/grass "Grass"
  :color/gray "Gri"
  :color/green "Yeşil"
+ :color/indigo "Indigo"
+ :color/orange "Orange"
  :color/pink "Pembe"
+ :color/plum "Plum"
  :color/purple "Mor"
  :color/red "Kırmızı"
+ :color/teal "Teal"
+ :color/tomato "Tomato"
+ :color/violet "Violet"
  :color/yellow "Sarı"
 
  ;; Graph
@@ -403,6 +412,9 @@
  ;; Graph delete server
  :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
 
+ ;; Graph diff
+ :graph.diff/title "Git diff"
+
  ;; Graph leave
  :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
@@ -430,6 +442,15 @@
  :graph.switch/select-prompt "Bir graf seçin"
 
  ;; Graph validation
+ :graph.validation/config-arweave-gateway-warning "is no longer supported."
+ :graph.validation/config-block-hidden-properties-warning "is not used in DB graphs as hiding a property is done in its configuration"
+ :graph.validation/config-default-templates-warning "is replaced by #Template and the `Apply template to tags` property"
+ :graph.validation/config-editor-command-trigger-warning "is no longer supported. Please use '/' and report bugs on it."
+ :graph.validation/config-favorites-warning "is not stored in config for DB graphs"
+ :graph.validation/config-feature-enable-block-timestamps-warning "is not used in DB graphs as it is always enabled"
+ :graph.validation/config-preferred-format-warning "is not used in DB graphs as there is only markdown mode."
+ :graph.validation/config-property-pages-enabled-warning "is not used in DB graphs as all properties have pages"
+ :graph.validation/config-unused-in-db-graphs-warning "is not used in DB graphs"
  :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
  :graph.validation/valid "Your graph is valid! {1}"
 
@@ -437,9 +458,19 @@
  :file/config-duplicate-keys "'{1}' dosyasında yinelenen anahtarlar var. '{2}' anahtarı birden çok kez atandı."
  :file/config-invalid "Yapılandırma dosyası geçersiz"
  :file/format-not-supported ".{1} biçimi desteklenmiyor."
+ :file/label "File"
  :file/last-modified-at "Son değiştirilme tarihi"
  :file/name "Dosya adı"
  :file/no-data "Veri yok"
+ :file/title "File {1}"
+
+ ;; Config file validation
+ :file.config/deprecation-title "The file {1} has the following deprecations:"
+ :file.config/error-title "The file {1} has the following errors:"
+ :file.config/invalid-desc "Make sure the config is wrapped in {}."
+ :file.config/invalid-title "The file {1} is not valid."
+ :file.config/read-failed-desc "Make sure your config is wrapped in {}. Also make sure that the characters '( { [' have their corresponding closing character ') } ]'."
+ :file.config/read-failed-title "Failed to read file {1}"
 
  ;; Page
  :page/add-to-favorites "Sık kullanılanlara ekle"
@@ -479,6 +510,9 @@
  :page.convert/tag-to-page-confirm-desc "Bir etiketi sayfaya dönüştürmek, etiket özelliklerini ve bu etiketle işaretlenmiş tüm düğümlerden etiketi de kaldırır. Devam etmek istiyor musunuz?"
  :page.convert/tag-to-page-duplicate "\"{1}\" adında bir sayfa zaten mevcut."
  :page.convert/tag-to-page-has-children "Etiketin alt öğeleri var ve dönüştürülemez"
+
+ ;; Page creation
+ :page.create/title "Create a new page"
 
  ;; Page deletion
  :page.delete/confirm-title "Bu sayfayı silmek istediğinizden emin misiniz?"
@@ -800,6 +834,12 @@
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
+ :query.builder/filter-full-text-search-label "Full text search"
+ :query.builder/filter-page-label "Page"
+ :query.builder/filter-page-reference-label "Page reference"
+ :query.builder/filter-sample-label "Sample"
+ :query.builder/operator-and-label "and"
+ :query.builder/operator-not-label "not"
 
  ;; Asset
  :asset/align "Hizalama"
@@ -997,6 +1037,8 @@
  ;; General settings
  :settings.general/accent-color "Vurgu rengi"
  :settings.general/accent-color-alert "Renk uyarısı"
+ :settings.general/accent-color-logseq "Logseq classic color"
+ :settings.general/accent-color-none-desc "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."
  :settings.general/app-updated "Uygulama güncellendi 🎉"
  :settings.general/changelog "Değişiklik günlüğü"
  :settings.general/check-for-updates "Güncellemeleri kontrol et"
@@ -1023,6 +1065,7 @@
  :settings.general/update-error "⚠️ Ne yazık ki bir sorun oluştu!\nLütfen {1} kontrol edin."
 
  ;; Theme
+ :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "{1} temasına geç"
 
  ;; Plugin
@@ -1187,8 +1230,7 @@
  :sync/user-doesnt-exist-yet "Kullanıcı henüz mevcut değil"
 
  ;; Encryption
- :encryption/cloud-password-rich (fn [] ["Parolanızı kaybederseniz, buluttaki verilerinizin hiçbiri çözülemez. "
-                                 [:span "Yine de grafiğinizin yerel sürümüne erişmeye devam edebilirsiniz."]])
+ :encryption/cloud-password-rich (fn [] ["Parolanızı kaybederseniz, buluttaki verilerinizin hiçbiri çözülemez. " [:span "Yine de grafiğinizin yerel sürümüne erişmeye devam edebilirsiniz."]])
  :encryption/current-password "Mevcut şifre"
  :encryption/enter-password "Şifre girin"
  :encryption/enter-password-again "Şifreyi tekrar girin"
@@ -1206,10 +1248,7 @@
  :encryption/init-key-pair-error "Anahtar çiftini başlatma hatası: {1}"
  :encryption/password-not-matched "Şifreler eşleşmiyor"
  :encryption/password-updated-successfully "Şifre güncellendi"
- :encryption/remember-password-rich (fn [] [[:span "Lütfen "]
-                                    "belirlediğiniz parolayı mutlaka hatırlayın; unutursanız onu sıfırlayamaz veya geri getiremeyiz, "
-                                    [:span "ve size "]
-                                    "parolanın güvenli bir yedeğini saklamanızı öneririz."])
+ :encryption/remember-password-rich (fn [] [[:span "Lütfen "] "belirlediğiniz parolayı mutlaka hatırlayın; unutursanız onu sıfırlayamaz veya geri getiremeyiz, " [:span "ve size "] "parolanın güvenli bir yedeğini saklamanızı öneririz."])
  :encryption/reset-password "Şifreyi sıfırla"
  :encryption/set-new-password "Yeni şifre belirle"
  :encryption/set-password-title "Şifre belirle"
@@ -1347,8 +1386,10 @@
  :sidebar.right/toggle "Sağ paneli aç/kapat"
 
  ;; Context Menu
+ :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "Bilgi kartı oluştur"
  :context-menu/set-icon "Simge ayarla"
+ :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "Numaralı listeyi aç/kapat"
 
  ;; Window

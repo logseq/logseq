@@ -2,7 +2,7 @@
   "Common fns related to config.edn - global and repo"
   (:require [clojure.edn :as edn]
             [clojure.string :as string]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :as i18n :refer [t]]
             [frontend.handler.notification :as notification]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
@@ -26,6 +26,36 @@ nested keys or positional errors e.g. tuples"
   [path]
   [:a {:href (rfe/href :file {:path path})} path])
 
+(defn- normalize-config-key
+  [config-key]
+  (let [ns-str (namespace config-key)
+        clean-name (string/replace (name config-key) #"\?$" "")]
+    (if ns-str
+      (str ns-str "-" clean-name)
+      clean-name)))
+
+(defn- config-key->deprecation-i18n-key
+  [config-key]
+  (when config-key
+    (if (= common-config/unused-in-db-graphs-deprecation
+           (get common-config/file-only-config config-key))
+      :graph.validation/config-unused-in-db-graphs-warning
+      (keyword "graph.validation"
+               (str "config-" (normalize-config-key config-key) "-warning")))))
+
+(defn- config-deprecation-message
+  [config-key]
+  (some-> config-key
+          config-key->deprecation-i18n-key
+          t))
+
+(defn- deprecated-config-key?
+  [config-key]
+  (or (contains? common-config/file-only-config config-key)
+      (contains? #{:editor/command-trigger
+                   :arweave/gateway}
+                 config-key)))
+
 (defn- error-list
   [errors class]
   (map (fn [[k v]]
@@ -48,7 +78,9 @@ nested keys or positional errors e.g. tuples"
   [m schema path]
   (if-let [errors (->> m (m/explain schema) me/humanize)]
     (do
-      (config-notification-show! [:<> "The file " (file-link path) " has the following errors:"]
+      (config-notification-show! (i18n/interpolate-rich-text-node
+                                  (t :file.config/error-title)
+                                  [(file-link path)])
                                  (error-list (humanize-more errors) "text-error"))
       false)
     true))
@@ -74,14 +106,18 @@ nested keys or positional errors e.g. tuples"
 
       failed?
       (do
-        (config-notification-show! [:<> "Failed to read file " (file-link path)]
-                                   "Make sure your config is wrapped in {}. Also make sure that the characters '( { [' have their corresponding closing character ') } ]'.")
+        (config-notification-show! (i18n/interpolate-rich-text-node
+                                    (t :file.config/read-failed-title)
+                                    [(file-link path)])
+                                   (t :file.config/read-failed-desc))
         false)
       ;; Custom error message is better than malli's "invalid type" error
       (not (map? parsed-body))
       (do
-        (config-notification-show! [:<> "The file " (file-link path) " s not valid."]
-                                   "Make sure the config is wrapped in {}.")
+        (config-notification-show! (i18n/interpolate-rich-text-node
+                                    (t :file.config/invalid-title)
+                                    [(file-link path)])
+                                   (t :file.config/invalid-desc))
         false)
       :else
       (validate-config-map parsed-body schema path))))
@@ -90,13 +126,7 @@ nested keys or positional errors e.g. tuples"
   "Detects config keys that will or have been deprecated"
   [path content]
   (let [body (try (edn/read-string content)
-                  (catch :default _ ::failed-to-detect))
-        warnings (merge
-                  {:editor/command-trigger
-                   "is no longer supported. Please use '/' and report bugs on it."
-                   :arweave/gateway
-                   "is no longer supported."}
-                  common-config/file-only-config)]
+                  (catch :default _ ::failed-to-detect))]
     (cond
       (= body ::failed-to-detect)
       (log/info :msg "Skip deprecation check since config is not valid edn")
@@ -105,8 +135,13 @@ nested keys or positional errors e.g. tuples"
       (log/info :msg "Skip deprecation check since config is not a map")
 
       :else
-      (when-let [deprecations (seq (keep #(when (body (key %)) %) warnings))]
-        (config-notification-show! [:<> "The file " (file-link path) " has the following deprecations:"]
+      (when-let [deprecations (seq (keep (fn [config-key]
+                                          (when (deprecated-config-key? config-key)
+                                            [config-key (config-deprecation-message config-key)]))
+                                        (keys body)))]
+        (config-notification-show! (i18n/interpolate-rich-text-node
+                                    (t :file.config/deprecation-title)
+                                    [(file-link path)])
                                    (error-list deprecations "text-warning")
                                    :warning
                                    false)))))

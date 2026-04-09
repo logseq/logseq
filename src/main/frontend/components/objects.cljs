@@ -29,7 +29,7 @@
 (defn- build-asset-file-column
   [config]
   {:id :file
-   :name "File"
+   :name (t :file/label)
    :type :string
    :header views/header-cp
    :cell (fn [_table row _column]

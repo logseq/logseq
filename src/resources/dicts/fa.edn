@@ -367,11 +367,20 @@
 
  ;; Color
  :color/blue "آبی"
+ :color/crimson "Crimson"
+ :color/cyan "Cyan"
+ :color/grass "Grass"
  :color/gray "خاکستری"
  :color/green "سبز"
+ :color/indigo "Indigo"
+ :color/orange "Orange"
  :color/pink "صورتی"
+ :color/plum "Plum"
  :color/purple "بنفش"
  :color/red "قرمز"
+ :color/teal "Teal"
+ :color/tomato "Tomato"
+ :color/violet "Violet"
  :color/yellow "زرد"
 
  ;; Graph
@@ -403,6 +412,9 @@
  ;; Graph delete server
  :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
 
+ ;; Graph diff
+ :graph.diff/title "Git diff"
+
  ;; Graph leave
  :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
@@ -430,6 +442,15 @@
  :graph.switch/select-prompt "یک گراف انتخاب کنید"
 
  ;; Graph validation
+ :graph.validation/config-arweave-gateway-warning "is no longer supported."
+ :graph.validation/config-block-hidden-properties-warning "is not used in DB graphs as hiding a property is done in its configuration"
+ :graph.validation/config-default-templates-warning "is replaced by #Template and the `Apply template to tags` property"
+ :graph.validation/config-editor-command-trigger-warning "is no longer supported. Please use '/' and report bugs on it."
+ :graph.validation/config-favorites-warning "is not stored in config for DB graphs"
+ :graph.validation/config-feature-enable-block-timestamps-warning "is not used in DB graphs as it is always enabled"
+ :graph.validation/config-preferred-format-warning "is not used in DB graphs as there is only markdown mode."
+ :graph.validation/config-property-pages-enabled-warning "is not used in DB graphs as all properties have pages"
+ :graph.validation/config-unused-in-db-graphs-warning "is not used in DB graphs"
  :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
  :graph.validation/valid "Your graph is valid! {1}"
 
@@ -437,9 +458,19 @@
  :file/config-duplicate-keys "فایل \"{1}\" دارای کلیدهای تکراری است. کلید \"{2}\" چندین بار اختصاص داده شده است."
  :file/config-invalid "فایل پیکربندی نامعتبر است"
  :file/format-not-supported "قالب .{1} پشتیبانی نمی‌شود."
+ :file/label "File"
  :file/last-modified-at "آخرین تغییر در"
  :file/name "نام پرونده"
  :file/no-data "بدون داده"
+ :file/title "File {1}"
+
+ ;; Config file validation
+ :file.config/deprecation-title "The file {1} has the following deprecations:"
+ :file.config/error-title "The file {1} has the following errors:"
+ :file.config/invalid-desc "Make sure the config is wrapped in {}."
+ :file.config/invalid-title "The file {1} is not valid."
+ :file.config/read-failed-desc "Make sure your config is wrapped in {}. Also make sure that the characters '( { [' have their corresponding closing character ') } ]'."
+ :file.config/read-failed-title "Failed to read file {1}"
 
  ;; Page
  :page/add-to-favorites "افزودن به علاقه‌مندی‌ها"
@@ -479,6 +510,9 @@
  :page.convert/tag-to-page-confirm-desc "تبدیل یک برچسب به صفحه، ویژگی‌های برچسب آن و خود برچسب را نیز از همه گره‌هایی که با آن برچسب خورده‌اند حذف می‌کند. با این کار موافقید؟"
  :page.convert/tag-to-page-duplicate "صفحه ای با نام \"{1}\" از قبل وجود دارد."
  :page.convert/tag-to-page-has-children "برچسب دارای فرزندان است و نمی‌توان تبدیل کرد"
+
+ ;; Page creation
+ :page.create/title "Create a new page"
 
  ;; Page deletion
  :page.delete/confirm-title "آیا مطمئن هستید که می خواهید این صفحه را حذف کنید؟"
@@ -800,6 +834,12 @@
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
+ :query.builder/filter-full-text-search-label "Full text search"
+ :query.builder/filter-page-label "Page"
+ :query.builder/filter-page-reference-label "Page reference"
+ :query.builder/filter-sample-label "Sample"
+ :query.builder/operator-and-label "and"
+ :query.builder/operator-not-label "not"
 
  ;; Asset
  :asset/align "تراز"
@@ -997,6 +1037,8 @@
  ;; General settings
  :settings.general/accent-color "رنگ تأکیدی"
  :settings.general/accent-color-alert "انتخاب رنگ تأکیدی ممکن است پوسته‌ای را که انتخاب کرده‌اید نادیده بگیرد."
+ :settings.general/accent-color-logseq "Logseq classic color"
+ :settings.general/accent-color-none-desc "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."
  :settings.general/app-updated "برنامه شما به‌روز است 🎉"
  :settings.general/changelog "سیاهه تغییرات"
  :settings.general/check-for-updates "بررسی به‌روزرسانی‌ها"
@@ -1023,6 +1065,7 @@
  :settings.general/update-error "⚠️ اوه، مشکلی پیش آمد!\nلطفاً {1} را بررسی کنید."
 
  ;; Theme
+ :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "به طرح زمینه {1} بروید"
 
  ;; Plugin
@@ -1187,8 +1230,7 @@
  :sync/user-doesnt-exist-yet "کاربر هنوز وجود ندارد"
 
  ;; Encryption
- :encryption/cloud-password-rich (fn [] ["اگر گذرواژه خود را گم کنید، هیچ‌یک از داده‌های شما در ابر قابل رمزگشایی نخواهد بود. "
-                                 [:span "با این حال همچنان می‌توانید به نسخه محلی گراف خود دسترسی داشته باشید."]])
+ :encryption/cloud-password-rich (fn [] ["اگر گذرواژه خود را گم کنید، هیچ‌یک از داده‌های شما در ابر قابل رمزگشایی نخواهد بود. " [:span "با این حال همچنان می‌توانید به نسخه محلی گراف خود دسترسی داشته باشید."]])
  :encryption/current-password "رمز عبور فعلی"
  :encryption/enter-password "رمز عبور را وارد کنید"
  :encryption/enter-password-again "رمز عبور را دوباره وارد کنید"
@@ -1206,10 +1248,7 @@
  :encryption/init-key-pair-error "خطای جفت کلید آغازین: {1}"
  :encryption/password-not-matched "رمزهای عبور مطابقت ندارند"
  :encryption/password-updated-successfully "رمز عبور به‌روزرسانی شد"
- :encryption/remember-password-rich (fn [] [[:span "حتماً "]
-                                    "گذرواژه‌ای را که تعیین کرده‌اید به خاطر بسپارید، چون اگر آن را فراموش کنید ما نمی‌توانیم آن را بازنشانی یا بازیابی کنیم، "
-                                    [:span "و توصیه می‌کنیم "]
-                                    "یک نسخه پشتیبان امن از آن نگه دارید."])
+ :encryption/remember-password-rich (fn [] [[:span "حتماً "] "گذرواژه‌ای را که تعیین کرده‌اید به خاطر بسپارید، چون اگر آن را فراموش کنید ما نمی‌توانیم آن را بازنشانی یا بازیابی کنیم، " [:span "و توصیه می‌کنیم "] "یک نسخه پشتیبان امن از آن نگه دارید."])
  :encryption/reset-password "بازنشانی رمز عبور"
  :encryption/set-new-password "تنظیم رمز عبور جدید"
  :encryption/set-password-title "تنظیم رمز عبور"
@@ -1347,8 +1386,10 @@
  :sidebar.right/toggle "تغییر نوار کناری راست"
 
  ;; Context Menu
+ :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "ایجاد فلش‌کارت"
  :context-menu/set-icon "تنظیم آیکون"
+ :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "تغییر لیست شماره‌دار"
 
  ;; Window

@@ -367,11 +367,20 @@
 
  ;; Color
  :color/blue "Biru"
+ :color/crimson "Crimson"
+ :color/cyan "Cyan"
+ :color/grass "Grass"
  :color/gray "Abu-abu"
  :color/green "Hijau"
+ :color/indigo "Indigo"
+ :color/orange "Orange"
  :color/pink "Merah muda"
+ :color/plum "Plum"
  :color/purple "Ungu"
  :color/red "Merah"
+ :color/teal "Teal"
+ :color/tomato "Tomato"
+ :color/violet "Violet"
  :color/yellow "Kuning"
 
  ;; Graph
@@ -403,6 +412,9 @@
  ;; Graph delete server
  :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
 
+ ;; Graph diff
+ :graph.diff/title "Git diff"
+
  ;; Graph leave
  :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
@@ -430,6 +442,15 @@
  :graph.switch/select-prompt "Pilih grafik"
 
  ;; Graph validation
+ :graph.validation/config-arweave-gateway-warning "is no longer supported."
+ :graph.validation/config-block-hidden-properties-warning "is not used in DB graphs as hiding a property is done in its configuration"
+ :graph.validation/config-default-templates-warning "is replaced by #Template and the `Apply template to tags` property"
+ :graph.validation/config-editor-command-trigger-warning "is no longer supported. Please use '/' and report bugs on it."
+ :graph.validation/config-favorites-warning "is not stored in config for DB graphs"
+ :graph.validation/config-feature-enable-block-timestamps-warning "is not used in DB graphs as it is always enabled"
+ :graph.validation/config-preferred-format-warning "is not used in DB graphs as there is only markdown mode."
+ :graph.validation/config-property-pages-enabled-warning "is not used in DB graphs as all properties have pages"
+ :graph.validation/config-unused-in-db-graphs-warning "is not used in DB graphs"
  :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
  :graph.validation/valid "Your graph is valid! {1}"
 
@@ -437,9 +458,19 @@
  :file/config-duplicate-keys "File '{1}' memiliki kunci duplikat. Kunci '{2}' ditetapkan beberapa kali."
  :file/config-invalid "File konfigurasi tidak valid"
  :file/format-not-supported "Format .{1} tidak didukung."
+ :file/label "File"
  :file/last-modified-at "Terakhir diubah pada"
  :file/name "Nama berkas"
  :file/no-data "Tidak ada data"
+ :file/title "File {1}"
+
+ ;; Config file validation
+ :file.config/deprecation-title "The file {1} has the following deprecations:"
+ :file.config/error-title "The file {1} has the following errors:"
+ :file.config/invalid-desc "Make sure the config is wrapped in {}."
+ :file.config/invalid-title "The file {1} is not valid."
+ :file.config/read-failed-desc "Make sure your config is wrapped in {}. Also make sure that the characters '( { [' have their corresponding closing character ') } ]'."
+ :file.config/read-failed-title "Failed to read file {1}"
 
  ;; Page
  :page/add-to-favorites "Tambahkan ke Favorit"
@@ -479,6 +510,9 @@
  :page.convert/tag-to-page-confirm-desc "Mengubah tag menjadi halaman juga akan menghapus properti tag tersebut dan tag itu dari semua node yang menggunakannya. Lanjutkan?"
  :page.convert/tag-to-page-duplicate "Halaman dengan nama \"{1}\" sudah ada."
  :page.convert/tag-to-page-has-children "Tag memiliki anak dan tidak bisa diubah"
+
+ ;; Page creation
+ :page.create/title "Create a new page"
 
  ;; Page deletion
  :page.delete/confirm-title "Apakah Anda yakin ingin menghapus halaman ini?"
@@ -800,6 +834,12 @@
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
+ :query.builder/filter-full-text-search-label "Full text search"
+ :query.builder/filter-page-label "Page"
+ :query.builder/filter-page-reference-label "Page reference"
+ :query.builder/filter-sample-label "Sample"
+ :query.builder/operator-and-label "and"
+ :query.builder/operator-not-label "not"
 
  ;; Asset
  :asset/align "Perataan"
@@ -997,6 +1037,8 @@
  ;; General settings
  :settings.general/accent-color "Warna aksen"
  :settings.general/accent-color-alert "Peringatan warna"
+ :settings.general/accent-color-logseq "Logseq classic color"
+ :settings.general/accent-color-none-desc "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."
  :settings.general/app-updated "Aplikasi Anda sudah terbaru 🎉"
  :settings.general/changelog "Apa yang baru?"
  :settings.general/check-for-updates "Periksa pembaruan"
@@ -1023,6 +1065,7 @@
  :settings.general/update-error "⚠️ Ups, Ada Sesuatu yang Salah!\nSilakan cek {1}."
 
  ;; Theme
+ :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "Beralih ke tema {1}"
 
  ;; Plugin
@@ -1075,10 +1118,7 @@
  :plugin/report-security "Laporkan masalah keamanan"
  :plugin/restart "Restart Aplikasi"
  :plugin/search-plugin "Cari plugin"
- :plugin/security-warning "Plugin dapat mengakses grafik dan berkas lokal Anda, mengeluarkan permintaan jaringan.
-                          Mereka juga dapat menyebabkan kerusakan atau kehilangan data. Kami sedang mengerjakan aturan akses yang tepat untuk grafik Anda.
-                          Sementara itu, pastikan Anda memiliki cadangan rutin dari grafik Anda dan hanya menginstal plugin ketika Anda dapat membaca dan
-                          mengerti kode sumbernya."
+ :plugin/security-warning "Plugin dapat mengakses grafik dan berkas lokal Anda, mengeluarkan permintaan jaringan.\r\n                          Mereka juga dapat menyebabkan kerusakan atau kehilangan data. Kami sedang mengerjakan aturan akses yang tepat untuk grafik Anda.\r\n                          Sementara itu, pastikan Anda memiliki cadangan rutin dari grafik Anda dan hanya menginstal plugin ketika Anda dapat membaca dan\r\n                          mengerti kode sumbernya."
  :plugin/stars "Bintang"
  :plugin/supports-db "Dukungan DB"
  :plugin/title "Judul ({1})"
@@ -1190,8 +1230,7 @@
  :sync/user-doesnt-exist-yet "Pengguna belum ada"
 
  ;; Encryption
- :encryption/cloud-password-rich (fn [] ["Jika Anda kehilangan kata sandi, semua data Anda di cloud tidak dapat didekripsi. "
-                                 [:span "Anda masih dapat mengakses versi lokal grafik Anda."]])
+ :encryption/cloud-password-rich (fn [] ["Jika Anda kehilangan kata sandi, semua data Anda di cloud tidak dapat didekripsi. " [:span "Anda masih dapat mengakses versi lokal grafik Anda."]])
  :encryption/current-password "Kata sandi saat ini"
  :encryption/enter-password "Masukkan kata sandi"
  :encryption/enter-password-again "Masukkan kata sandi lagi"
@@ -1209,10 +1248,7 @@
  :encryption/init-key-pair-error "Kesalahan pasangan kunci init: {1}"
  :encryption/password-not-matched "Kata sandi tidak cocok"
  :encryption/password-updated-successfully "Kata sandi diperbarui"
- :encryption/remember-password-rich (fn [] [[:span "Pastikan Anda "]
-                                    "mengingat kata sandi yang Anda tetapkan, karena kami tidak dapat mengatur ulang atau memulihkannya jika Anda lupa, "
-                                    [:span "dan kami menyarankan Anda "]
-                                    "menyimpan cadangan kata sandi tersebut di tempat yang aman."])
+ :encryption/remember-password-rich (fn [] [[:span "Pastikan Anda "] "mengingat kata sandi yang Anda tetapkan, karena kami tidak dapat mengatur ulang atau memulihkannya jika Anda lupa, " [:span "dan kami menyarankan Anda "] "menyimpan cadangan kata sandi tersebut di tempat yang aman."])
  :encryption/reset-password "Reset kata sandi"
  :encryption/set-new-password "Atur kata sandi baru"
  :encryption/set-password-title "Atur kata sandi"
@@ -1350,8 +1386,10 @@
  :sidebar.right/toggle "Beralih ke bilah sisi kanan"
 
  ;; Context Menu
+ :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "Buat Kartu Belajar"
  :context-menu/set-icon "Atur ikon"
+ :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "Alihkan daftar nomor"
 
  ;; Window

@@ -367,11 +367,20 @@
 
  ;; Color
  :color/blue "أزرق"
+ :color/crimson "Crimson"
+ :color/cyan "Cyan"
+ :color/grass "Grass"
  :color/gray "رمادي"
  :color/green "أخضر"
+ :color/indigo "Indigo"
+ :color/orange "Orange"
  :color/pink "وردي"
+ :color/plum "Plum"
  :color/purple "بنفسجي"
  :color/red "أحمر"
+ :color/teal "Teal"
+ :color/tomato "Tomato"
+ :color/violet "Violet"
  :color/yellow "أصفر"
 
  ;; Graph
@@ -403,6 +412,9 @@
  ;; Graph delete server
  :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
 
+ ;; Graph diff
+ :graph.diff/title "Git diff"
+
  ;; Graph leave
  :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
@@ -430,6 +442,15 @@
  :graph.switch/select-prompt "اختر رسماً بيانياً"
 
  ;; Graph validation
+ :graph.validation/config-arweave-gateway-warning "is no longer supported."
+ :graph.validation/config-block-hidden-properties-warning "is not used in DB graphs as hiding a property is done in its configuration"
+ :graph.validation/config-default-templates-warning "is replaced by #Template and the `Apply template to tags` property"
+ :graph.validation/config-editor-command-trigger-warning "is no longer supported. Please use '/' and report bugs on it."
+ :graph.validation/config-favorites-warning "is not stored in config for DB graphs"
+ :graph.validation/config-feature-enable-block-timestamps-warning "is not used in DB graphs as it is always enabled"
+ :graph.validation/config-preferred-format-warning "is not used in DB graphs as there is only markdown mode."
+ :graph.validation/config-property-pages-enabled-warning "is not used in DB graphs as all properties have pages"
+ :graph.validation/config-unused-in-db-graphs-warning "is not used in DB graphs"
  :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
  :graph.validation/valid "Your graph is valid! {1}"
 
@@ -437,9 +458,19 @@
  :file/config-duplicate-keys "يحتوي الملف '{1}' على مفاتيح مكررة. تم تعيين المفتاح \"{2}\" عدة مرات."
  :file/config-invalid "ملف التكوين غير صالح"
  :file/format-not-supported "التنسيق .{1} ليس مدعوماً."
+ :file/label "File"
  :file/last-modified-at "آخر تعديل في"
  :file/name "اسم الملف"
  :file/no-data "لا توجد بيانات"
+ :file/title "File {1}"
+
+ ;; Config file validation
+ :file.config/deprecation-title "The file {1} has the following deprecations:"
+ :file.config/error-title "The file {1} has the following errors:"
+ :file.config/invalid-desc "Make sure the config is wrapped in {}."
+ :file.config/invalid-title "The file {1} is not valid."
+ :file.config/read-failed-desc "Make sure your config is wrapped in {}. Also make sure that the characters '( { [' have their corresponding closing character ') } ]'."
+ :file.config/read-failed-title "Failed to read file {1}"
 
  ;; Page
  :page/add-to-favorites "إضافة إلى المفضلة"
@@ -479,6 +510,9 @@
  :page.convert/tag-to-page-confirm-desc "سيؤدي تحويل الوسم إلى صفحة أيضًا إلى إزالة خصائص الوسم وإزالة الوسم من جميع العقد الموسومة به. هل أنت موافق على ذلك؟"
  :page.convert/tag-to-page-duplicate "توجد صفحة بالاسم \"{1}\" بالفعل."
  :page.convert/tag-to-page-has-children "الوسم له عناصر فرعية ولا يمكن تحويله"
+
+ ;; Page creation
+ :page.create/title "Create a new page"
 
  ;; Page deletion
  :page.delete/confirm-title "هل أنت متأكد أنك تريد حذف هذه الصفحة؟"
@@ -800,6 +834,12 @@
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
+ :query.builder/filter-full-text-search-label "Full text search"
+ :query.builder/filter-page-label "Page"
+ :query.builder/filter-page-reference-label "Page reference"
+ :query.builder/filter-sample-label "Sample"
+ :query.builder/operator-and-label "and"
+ :query.builder/operator-not-label "not"
 
  ;; Asset
  :asset/align "محاذاة"
@@ -997,6 +1037,8 @@
  ;; General settings
  :settings.general/accent-color "لون التمييز"
  :settings.general/accent-color-alert "قد يؤدي اختيار لون تمييز إلى تجاوز أي سمة اخترتها."
+ :settings.general/accent-color-logseq "Logseq classic color"
+ :settings.general/accent-color-none-desc "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."
  :settings.general/app-updated "تطبيقك محدَّث لآخر إصدار 🎉"
  :settings.general/changelog "سجل التغييرات"
  :settings.general/check-for-updates "التحقق من التحديثات"
@@ -1023,6 +1065,7 @@
  :settings.general/update-error "⚠️ عفواً، حدث خطأ ما!\nالرجاء التحقق من {1}."
 
  ;; Theme
+ :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "قم بالتبديل إلى السمة {1}"
 
  ;; Plugin
@@ -1187,8 +1230,7 @@
  :sync/user-doesnt-exist-yet "المستخدم غير موجود بعد"
 
  ;; Encryption
- :encryption/cloud-password-rich (fn [] ["إذا فقدت كلمة المرور، فلن يكون بالإمكان فك تشفير أي من بياناتك في السحابة. "
-                                 [:span "سيظل بإمكانك الوصول إلى النسخة المحلية من الرسم البياني الخاص بك."]])
+ :encryption/cloud-password-rich (fn [] ["إذا فقدت كلمة المرور، فلن يكون بالإمكان فك تشفير أي من بياناتك في السحابة. " [:span "سيظل بإمكانك الوصول إلى النسخة المحلية من الرسم البياني الخاص بك."]])
  :encryption/current-password "كلمة المرور الحالية"
  :encryption/enter-password "أدخل كلمة المرور"
  :encryption/enter-password-again "أدخل كلمة المرور مرة أخرى"
@@ -1206,10 +1248,7 @@
  :encryption/init-key-pair-error "خطأ زوج المفاتيح الأولية: {1}"
  :encryption/password-not-matched "كلمتا المرور غير متطابقتين"
  :encryption/password-updated-successfully "تم تحديث كلمة المرور"
- :encryption/remember-password-rich (fn [] [[:span "يرجى التأكد من أنك "]
-                                    "تتذكر كلمة المرور التي عينتها، لأننا لا نستطيع إعادة تعيينها أو استعادتها إذا نسيتها، "
-                                    [:span "ونوصي بأن "]
-                                    "تحتفظ بنسخة احتياطية آمنة منها."])
+ :encryption/remember-password-rich (fn [] [[:span "يرجى التأكد من أنك "] "تتذكر كلمة المرور التي عينتها، لأننا لا نستطيع إعادة تعيينها أو استعادتها إذا نسيتها، " [:span "ونوصي بأن "] "تحتفظ بنسخة احتياطية آمنة منها."])
  :encryption/reset-password "إعادة تعيين كلمة المرور"
  :encryption/set-new-password "تعيين كلمة مرور جديدة"
  :encryption/set-password-title "تعيين كلمة المرور"
@@ -1347,8 +1386,10 @@
  :sidebar.right/toggle "تبديل الشريط الجانبي الأيمن"
 
  ;; Context Menu
+ :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "إنشاء بطاقة تعليمية"
  :context-menu/set-icon "تعيين أيقونة"
+ :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "تبديل القائمة المرقمة"
 
  ;; Window

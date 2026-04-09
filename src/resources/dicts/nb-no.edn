@@ -367,11 +367,20 @@
 
  ;; Color
  :color/blue "Blå"
+ :color/crimson "Crimson"
+ :color/cyan "Cyan"
+ :color/grass "Grass"
  :color/gray "Grå"
  :color/green "Grønn"
+ :color/indigo "Indigo"
+ :color/orange "Orange"
  :color/pink "Rosa"
+ :color/plum "Plum"
  :color/purple "Lilla"
  :color/red "Rød"
+ :color/teal "Teal"
+ :color/tomato "Tomato"
+ :color/violet "Violet"
  :color/yellow "Gul"
 
  ;; Graph
@@ -403,6 +412,9 @@
  ;; Graph delete server
  :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
 
+ ;; Graph diff
+ :graph.diff/title "Git diff"
+
  ;; Graph leave
  :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
@@ -430,6 +442,15 @@
  :graph.switch/select-prompt "Velg en graf"
 
  ;; Graph validation
+ :graph.validation/config-arweave-gateway-warning "is no longer supported."
+ :graph.validation/config-block-hidden-properties-warning "is not used in DB graphs as hiding a property is done in its configuration"
+ :graph.validation/config-default-templates-warning "is replaced by #Template and the `Apply template to tags` property"
+ :graph.validation/config-editor-command-trigger-warning "is no longer supported. Please use '/' and report bugs on it."
+ :graph.validation/config-favorites-warning "is not stored in config for DB graphs"
+ :graph.validation/config-feature-enable-block-timestamps-warning "is not used in DB graphs as it is always enabled"
+ :graph.validation/config-preferred-format-warning "is not used in DB graphs as there is only markdown mode."
+ :graph.validation/config-property-pages-enabled-warning "is not used in DB graphs as all properties have pages"
+ :graph.validation/config-unused-in-db-graphs-warning "is not used in DB graphs"
  :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
  :graph.validation/valid "Your graph is valid! {1}"
 
@@ -437,9 +458,19 @@
  :file/config-duplicate-keys "Filen '{1}' har dupliserte nøkler. Nøkkelen '{2}' er tildelt flere ganger."
  :file/config-invalid "Konfigurasjonsfilen er ugyldig"
  :file/format-not-supported "Format .{1} er ikke støttet."
+ :file/label "File"
  :file/last-modified-at "Sist endret"
  :file/name "Filnavn"
  :file/no-data "Ingen data"
+ :file/title "File {1}"
+
+ ;; Config file validation
+ :file.config/deprecation-title "The file {1} has the following deprecations:"
+ :file.config/error-title "The file {1} has the following errors:"
+ :file.config/invalid-desc "Make sure the config is wrapped in {}."
+ :file.config/invalid-title "The file {1} is not valid."
+ :file.config/read-failed-desc "Make sure your config is wrapped in {}. Also make sure that the characters '( { [' have their corresponding closing character ') } ]'."
+ :file.config/read-failed-title "Failed to read file {1}"
 
  ;; Page
  :page/add-to-favorites "Legg til i Favoritter"
@@ -479,6 +510,9 @@
  :page.convert/tag-to-page-confirm-desc "Når du konverterer en tagg til en side, fjernes også taggegenskapene og taggen fra alle noder som er merket med den. Vil du fortsette?"
  :page.convert/tag-to-page-duplicate "En side med navnet \"{1}\" eksisterer allerede."
  :page.convert/tag-to-page-has-children "Tagg har underordnede elementer og kan ikke konverteres"
+
+ ;; Page creation
+ :page.create/title "Create a new page"
 
  ;; Page deletion
  :page.delete/confirm-title "Er du sikker på at du vil slette denne siden?"
@@ -800,6 +834,12 @@
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
+ :query.builder/filter-full-text-search-label "Full text search"
+ :query.builder/filter-page-label "Page"
+ :query.builder/filter-page-reference-label "Page reference"
+ :query.builder/filter-sample-label "Sample"
+ :query.builder/operator-and-label "and"
+ :query.builder/operator-not-label "not"
 
  ;; Asset
  :asset/align "Justering"
@@ -997,6 +1037,8 @@
  ;; General settings
  :settings.general/accent-color "Aksentfarge"
  :settings.general/accent-color-alert "Fargevarsel"
+ :settings.general/accent-color-logseq "Logseq classic color"
+ :settings.general/accent-color-none-desc "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."
  :settings.general/app-updated "Applikasjon oppdatert 🎉"
  :settings.general/changelog "Endringslogg"
  :settings.general/check-for-updates "Sjekk etter oppdateringer"
@@ -1023,6 +1065,7 @@
  :settings.general/update-error "⚠️ Oops, noe gikk galt!\nVennligst sjekk ut {1}."
 
  ;; Theme
+ :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "Bytt til {1}-tema"
 
  ;; Plugin
@@ -1187,8 +1230,7 @@
  :sync/user-doesnt-exist-yet "Bruker finnes ikke ennå"
 
  ;; Encryption
- :encryption/cloud-password-rich (fn [] ["Hvis du mister passordet ditt, kan ingen av dataene dine i skyen dekrypteres. "
-                                 [:span "Du vil fortsatt kunne få tilgang til den lokale versjonen av grafen din."]])
+ :encryption/cloud-password-rich (fn [] ["Hvis du mister passordet ditt, kan ingen av dataene dine i skyen dekrypteres. " [:span "Du vil fortsatt kunne få tilgang til den lokale versjonen av grafen din."]])
  :encryption/current-password "Gjeldende passord"
  :encryption/enter-password "Skriv inn passord"
  :encryption/enter-password-again "Skriv inn passord igjen"
@@ -1206,10 +1248,7 @@
  :encryption/init-key-pair-error "Init nøkkelpar feil: {1}"
  :encryption/password-not-matched "Passordene stemmer ikke overens"
  :encryption/password-updated-successfully "Passord oppdatert"
- :encryption/remember-password-rich (fn [] [[:span "Pass på at du "]
-                                    "husker passordet du har satt, siden vi ikke kan tilbakestille eller hente det frem hvis du glemmer det, "
-                                    [:span "og vi anbefaler at du "]
-                                    "oppbevarer en sikker sikkerhetskopi av passordet."])
+ :encryption/remember-password-rich (fn [] [[:span "Pass på at du "] "husker passordet du har satt, siden vi ikke kan tilbakestille eller hente det frem hvis du glemmer det, " [:span "og vi anbefaler at du "] "oppbevarer en sikker sikkerhetskopi av passordet."])
  :encryption/reset-password "Tilbakestill passord"
  :encryption/set-new-password "Sett nytt passord"
  :encryption/set-password-title "Sett passord"
@@ -1347,8 +1386,10 @@
  :sidebar.right/toggle "Slå av/på høyre sidepanel"
 
  ;; Context Menu
+ :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "Lag flashkort"
  :context-menu/set-icon "Sett ikon"
+ :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "Slå av/på nummerert liste"
 
  ;; Window

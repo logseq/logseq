@@ -367,11 +367,20 @@
 
  ;; Color
  :color/blue "파란색"
+ :color/crimson "Crimson"
+ :color/cyan "Cyan"
+ :color/grass "Grass"
  :color/gray "회색"
  :color/green "초록색"
+ :color/indigo "Indigo"
+ :color/orange "Orange"
  :color/pink "분홍색"
+ :color/plum "Plum"
  :color/purple "보라색"
  :color/red "빨간색"
+ :color/teal "Teal"
+ :color/tomato "Tomato"
+ :color/violet "Violet"
  :color/yellow "노란색"
 
  ;; Graph
@@ -403,6 +412,9 @@
  ;; Graph delete server
  :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
 
+ ;; Graph diff
+ :graph.diff/title "Git diff"
+
  ;; Graph leave
  :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
@@ -430,6 +442,15 @@
  :graph.switch/select-prompt "그래프를 선택하십시오."
 
  ;; Graph validation
+ :graph.validation/config-arweave-gateway-warning "is no longer supported."
+ :graph.validation/config-block-hidden-properties-warning "is not used in DB graphs as hiding a property is done in its configuration"
+ :graph.validation/config-default-templates-warning "is replaced by #Template and the `Apply template to tags` property"
+ :graph.validation/config-editor-command-trigger-warning "is no longer supported. Please use '/' and report bugs on it."
+ :graph.validation/config-favorites-warning "is not stored in config for DB graphs"
+ :graph.validation/config-feature-enable-block-timestamps-warning "is not used in DB graphs as it is always enabled"
+ :graph.validation/config-preferred-format-warning "is not used in DB graphs as there is only markdown mode."
+ :graph.validation/config-property-pages-enabled-warning "is not used in DB graphs as all properties have pages"
+ :graph.validation/config-unused-in-db-graphs-warning "is not used in DB graphs"
  :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
  :graph.validation/valid "Your graph is valid! {1}"
 
@@ -437,9 +458,19 @@
  :file/config-duplicate-keys "'{1}' 파일에 중복된 키가 있습니다. '{2}' 키가 여러 번 할당되었습니다."
  :file/config-invalid "설정 파일이 유효하지 않습니다"
  :file/format-not-supported "{1} 형식은 현재 지원되지 않습니다."
+ :file/label "File"
  :file/last-modified-at "마지막 편집 시간:"
  :file/name "파일 이름"
  :file/no-data "파일에 데이터가 없습니다"
+ :file/title "File {1}"
+
+ ;; Config file validation
+ :file.config/deprecation-title "The file {1} has the following deprecations:"
+ :file.config/error-title "The file {1} has the following errors:"
+ :file.config/invalid-desc "Make sure the config is wrapped in {}."
+ :file.config/invalid-title "The file {1} is not valid."
+ :file.config/read-failed-desc "Make sure your config is wrapped in {}. Also make sure that the characters '( { [' have their corresponding closing character ') } ]'."
+ :file.config/read-failed-title "Failed to read file {1}"
 
  ;; Page
  :page/add-to-favorites "즐겨찾기에 추가"
@@ -479,6 +510,9 @@
  :page.convert/tag-to-page-confirm-desc "태그를 페이지로 변환하면 해당 태그의 속성과 그 태그가 달린 모든 노드에서 그 태그도 함께 제거됩니다. 계속하시겠습니까?"
  :page.convert/tag-to-page-duplicate "이름이 \"{1}\"인 페이지가 이미 존재합니다."
  :page.convert/tag-to-page-has-children "자식 요소가 있는 태그는 변환할 수 없습니다"
+
+ ;; Page creation
+ :page.create/title "Create a new page"
 
  ;; Page deletion
  :page.delete/confirm-title "이 페이지를 삭제하시겠습니까?"
@@ -800,6 +834,12 @@
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
+ :query.builder/filter-full-text-search-label "Full text search"
+ :query.builder/filter-page-label "Page"
+ :query.builder/filter-page-reference-label "Page reference"
+ :query.builder/filter-sample-label "Sample"
+ :query.builder/operator-and-label "and"
+ :query.builder/operator-not-label "not"
 
  ;; Asset
  :asset/align "정렬"
@@ -997,6 +1037,8 @@
  ;; General settings
  :settings.general/accent-color "강조 색상"
  :settings.general/accent-color-alert "강조 색상이 변경되었습니다. 적용하려면 새로고침하세요."
+ :settings.general/accent-color-logseq "Logseq classic color"
+ :settings.general/accent-color-none-desc "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."
  :settings.general/app-updated "앱이 업데이트되었습니다 🎉"
  :settings.general/changelog "변경 기록"
  :settings.general/check-for-updates "업데이트 확인"
@@ -1023,6 +1065,7 @@
  :settings.general/update-error "⚠️ 이런, 문제가 발생했습니다!\n{1}을 확인해 주세요."
 
  ;; Theme
+ :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "{1} 테마로 전환"
 
  ;; Plugin
@@ -1187,8 +1230,7 @@
  :sync/user-doesnt-exist-yet "사용자가 아직 존재하지 않습니다"
 
  ;; Encryption
- :encryption/cloud-password-rich (fn [] ["비밀번호를 분실하면 클라우드에 있는 데이터는 복호화할 수 없습니다. "
-                                 [:span "그래도 그래프의 로컬 버전에는 계속 접근할 수 있습니다."]])
+ :encryption/cloud-password-rich (fn [] ["비밀번호를 분실하면 클라우드에 있는 데이터는 복호화할 수 없습니다. " [:span "그래도 그래프의 로컬 버전에는 계속 접근할 수 있습니다."]])
  :encryption/current-password "현재 비밀번호"
  :encryption/enter-password "비밀번호 입력"
  :encryption/enter-password-again "비밀번호 재입력"
@@ -1206,10 +1248,7 @@
  :encryption/init-key-pair-error "초기화 키 쌍 오류: {1}"
  :encryption/password-not-matched "비밀번호가 일치하지 않습니다"
  :encryption/password-updated-successfully "비밀번호가 업데이트되었습니다"
- :encryption/remember-password-rich (fn [] [[:span "설정한 비밀번호를 반드시 "]
-                                    "기억해 두세요. 잊어버리면 저희가 재설정하거나 복구해 드릴 수 없으며, "
-                                    [:span "안전한 백업을 "]
-                                    "보관해 두는 것을 권장합니다."])
+ :encryption/remember-password-rich (fn [] [[:span "설정한 비밀번호를 반드시 "] "기억해 두세요. 잊어버리면 저희가 재설정하거나 복구해 드릴 수 없으며, " [:span "안전한 백업을 "] "보관해 두는 것을 권장합니다."])
  :encryption/reset-password "비밀번호 재설정"
  :encryption/set-new-password "새 비밀번호 설정"
  :encryption/set-password-title "비밀번호 설정"
@@ -1347,8 +1386,10 @@
  :sidebar.right/toggle "오른쪽 사이드바 전환"
 
  ;; Context Menu
+ :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "플래시카드 만들기"
  :context-menu/set-icon "아이콘 설정"
+ :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "번호 목록 전환"
 
  ;; Window

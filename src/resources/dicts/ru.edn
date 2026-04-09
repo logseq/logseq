@@ -367,11 +367,20 @@
 
  ;; Color
  :color/blue "Синий"
+ :color/crimson "Crimson"
+ :color/cyan "Cyan"
+ :color/grass "Grass"
  :color/gray "Серый"
  :color/green "Зеленый"
+ :color/indigo "Indigo"
+ :color/orange "Orange"
  :color/pink "Розовый"
+ :color/plum "Plum"
  :color/purple "Фиолетовый"
  :color/red "Красный"
+ :color/teal "Teal"
+ :color/tomato "Tomato"
+ :color/violet "Violet"
  :color/yellow "Желтый"
 
  ;; Graph
@@ -403,6 +412,9 @@
  ;; Graph delete server
  :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
 
+ ;; Graph diff
+ :graph.diff/title "Git diff"
+
  ;; Graph leave
  :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
@@ -430,6 +442,15 @@
  :graph.switch/select-prompt "Выберите граф"
 
  ;; Graph validation
+ :graph.validation/config-arweave-gateway-warning "is no longer supported."
+ :graph.validation/config-block-hidden-properties-warning "is not used in DB graphs as hiding a property is done in its configuration"
+ :graph.validation/config-default-templates-warning "is replaced by #Template and the `Apply template to tags` property"
+ :graph.validation/config-editor-command-trigger-warning "is no longer supported. Please use '/' and report bugs on it."
+ :graph.validation/config-favorites-warning "is not stored in config for DB graphs"
+ :graph.validation/config-feature-enable-block-timestamps-warning "is not used in DB graphs as it is always enabled"
+ :graph.validation/config-preferred-format-warning "is not used in DB graphs as there is only markdown mode."
+ :graph.validation/config-property-pages-enabled-warning "is not used in DB graphs as all properties have pages"
+ :graph.validation/config-unused-in-db-graphs-warning "is not used in DB graphs"
  :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
  :graph.validation/valid "Your graph is valid! {1}"
 
@@ -437,9 +458,19 @@
  :file/config-duplicate-keys "Файл «{1}» содержит повторяющиеся ключи. Ключ «{2}» назначается несколько раз."
  :file/config-invalid "Файл конфигурации недействителен"
  :file/format-not-supported "Расширение .{1} не поддерживается."
+ :file/label "File"
  :file/last-modified-at "Последнее изменение"
  :file/name "Имя файла"
  :file/no-data "Нет данных"
+ :file/title "File {1}"
+
+ ;; Config file validation
+ :file.config/deprecation-title "The file {1} has the following deprecations:"
+ :file.config/error-title "The file {1} has the following errors:"
+ :file.config/invalid-desc "Make sure the config is wrapped in {}."
+ :file.config/invalid-title "The file {1} is not valid."
+ :file.config/read-failed-desc "Make sure your config is wrapped in {}. Also make sure that the characters '( { [' have their corresponding closing character ') } ]'."
+ :file.config/read-failed-title "Failed to read file {1}"
 
  ;; Page
  :page/add-to-favorites "Добавить в Избранное"
@@ -479,6 +510,9 @@
  :page.convert/tag-to-page-confirm-desc "Преобразование тега в страницу также удалит его свойства и сам тег из всех узлов, помеченных этим тегом. Продолжить?"
  :page.convert/tag-to-page-duplicate "Страница с названием «{1}» уже существует."
  :page.convert/tag-to-page-has-children "Тег имеет дочерние элементы и не может быть преобразован"
+
+ ;; Page creation
+ :page.create/title "Create a new page"
 
  ;; Page deletion
  :page.delete/confirm-title "Вы уверены, что хотите удалить эту страницу?"
@@ -800,6 +834,12 @@
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
+ :query.builder/filter-full-text-search-label "Full text search"
+ :query.builder/filter-page-label "Page"
+ :query.builder/filter-page-reference-label "Page reference"
+ :query.builder/filter-sample-label "Sample"
+ :query.builder/operator-and-label "and"
+ :query.builder/operator-not-label "not"
 
  ;; Asset
  :asset/align "Выравнивание"
@@ -997,6 +1037,8 @@
  ;; General settings
  :settings.general/accent-color "Акцентный цвет"
  :settings.general/accent-color-alert "Предупреждение о цвете"
+ :settings.general/accent-color-logseq "Logseq classic color"
+ :settings.general/accent-color-none-desc "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."
  :settings.general/app-updated "Приложение обновлено 🎉"
  :settings.general/changelog "Журнал изменений"
  :settings.general/check-for-updates "Проверить обновления"
@@ -1023,6 +1065,7 @@
  :settings.general/update-error "⚠️ Упс, что-то пошло не так!\nПожалуйста, проверьте {1}."
 
  ;; Theme
+ :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "Переключиться на тему {1}"
 
  ;; Plugin
@@ -1187,8 +1230,7 @@
  :sync/user-doesnt-exist-yet "Пользователь ещё не существует"
 
  ;; Encryption
- :encryption/cloud-password-rich (fn [] ["Если вы потеряете пароль, данные в облаке нельзя будет расшифровать. "
-                                 [:span "При этом у вас всё равно останется доступ к локальной версии графа."]])
+ :encryption/cloud-password-rich (fn [] ["Если вы потеряете пароль, данные в облаке нельзя будет расшифровать. " [:span "При этом у вас всё равно останется доступ к локальной версии графа."]])
  :encryption/current-password "Текущий пароль"
  :encryption/enter-password "Введите пароль"
  :encryption/enter-password-again "Введите пароль ещё раз"
@@ -1206,10 +1248,7 @@
  :encryption/init-key-pair-error "Ошибка пары ключей инициализации: {1}"
  :encryption/password-not-matched "Пароли не совпадают"
  :encryption/password-updated-successfully "Пароль обновлён"
- :encryption/remember-password-rich (fn [] [[:span "Обязательно "]
-                                    "запомните установленный пароль: если вы его забудете, мы не сможем его сбросить или восстановить, "
-                                    [:span "и рекомендуем "]
-                                    "хранить его безопасную резервную копию."])
+ :encryption/remember-password-rich (fn [] [[:span "Обязательно "] "запомните установленный пароль: если вы его забудете, мы не сможем его сбросить или восстановить, " [:span "и рекомендуем "] "хранить его безопасную резервную копию."])
  :encryption/reset-password "Сбросить пароль"
  :encryption/set-new-password "Установить новый пароль"
  :encryption/set-password-title "Установить пароль"
@@ -1347,8 +1386,10 @@
  :sidebar.right/toggle "Переключить правую панель"
 
  ;; Context Menu
+ :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "Создать карточку"
  :context-menu/set-icon "Установить значок"
+ :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "Переключить нумерованный список"
 
  ;; Window

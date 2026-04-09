@@ -208,6 +208,33 @@
   []
   (lang-lint/shortcut-command-keys (slurp shortcut-config-path)))
 
+(def ^:private config-deprecation-detailed-keys
+  [:editor/command-trigger
+   :arweave/gateway
+   :preferred-format
+   :property-pages/enabled?
+   :block-hidden-properties
+   :feature/enable-block-timestamps?
+   :favorites
+   :default-templates])
+
+(defn- config-key->deprecation-i18n-key
+  [config-key]
+  (let [ns-str (namespace config-key)
+        clean-name (string/replace (name config-key) #"\?$" "")
+        leaf (if ns-str
+               (str ns-str "-" clean-name)
+               clean-name)]
+    (keyword "graph.validation" (str "config-" leaf "-warning"))))
+
+(defn- grep-config-deprecation-translation-keys
+  "Derive `:graph.validation/*` deprecation keys from deprecated config keys."
+  []
+  (conj (->> config-deprecation-detailed-keys
+             (map config-key->deprecation-i18n-key)
+             set)
+        :graph.validation/config-unused-in-db-graphs-warning))
+
 (defn- delete-not-used-key-from-dict-file
   [invalid-keys]
   (let [paths (fs/list-dir "src/resources/dicts")]
@@ -231,6 +258,7 @@
                                           (grep-i18n-payload-keys)
                                           (grep-derived-translation-keys)
                                           built-in-defined-translation-keys
+                                          (grep-config-deprecation-translation-keys)
                                           (grep-shortcut-command-keys)]
                                          (apply concat)
                                          set)

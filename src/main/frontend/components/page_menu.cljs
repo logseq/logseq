@@ -73,7 +73,9 @@
                    (shui/tabler-icon "alert-triangle")]
                   (t :page.delete/confirm-title)]
           :content [:p.opacity-60 (str "- " (:block/title page))]
-          :outside-cancel? true})
+          :outside-cancel? true
+          :cancel-label (t :ui/cancel)
+          :ok-label (t :ui/confirm)})
         (p/then #(delete-page! page))
         (p/catch #()))))
 

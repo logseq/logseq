@@ -86,7 +86,9 @@
           {:on-click #(util/open-url (str "file://" root))}
           (shui/tabler-icon "folder-pin") [:span.pl-1 root]])
 
-       (let [manager? (user-handler/manager? url)]
+       (let [manager? (user-handler/manager? url)
+             config {:cancel-label (t :ui/cancel)
+                     :ok-label (t :ui/confirm)}]
          (shui/dropdown-menu
           (shui/dropdown-menu-trigger
            {:asChild true}
@@ -106,7 +108,8 @@
                              (-> (shui/dialog-confirm!
                                   [:p.font-medium.-my-4 prompt-str
                                    [:span.my-2.flex.font-normal.opacity-75
-                                    [:small (t :graph/delete-warning)]]])
+                                    [:small (t :graph/delete-warning)]]]
+                                  config)
                                  (p/then (fn []
                                            (repo-handler/remove-repo! repo))))))}
               (t :graph/delete-local-action)))
@@ -150,7 +153,8 @@
                              (-> (shui/dialog-confirm!
                                   [:p.font-medium.-my-4 prompt-str
                                    [:span.my-2.flex.font-normal.opacity-75
-                                    [:small (t :graph/delete-warning)]]])
+                                    [:small (t :graph/delete-warning)]]]
+                                  config)
                                  (p/then
                                   (fn []
                                     (state/set-state! :rtc/loading-graphs? true)
@@ -168,7 +172,8 @@
                :on-click (fn []
                            (let [prompt-str (t :graph.leave/confirm-desc)]
                              (-> (shui/dialog-confirm!
-                                  [:p.font-medium.-my-4 prompt-str])
+                                  [:p.font-medium.-my-4 prompt-str]
+                                  config)
                                  (p/then
                                   (fn []
                                     (state/set-state! :rtc/loading-graphs? true)

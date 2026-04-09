@@ -342,6 +342,25 @@
 (rum/defc accent-color-row < rum/reactive
   [_in-modal?]
   (let [color-accent (state/sub :ui/radix-color)
+        color-label (fn [color]
+                      (case color
+                        :none [:p {:style {:max-width "300px"}}
+                               (t :settings.general/accent-color-none-desc)]
+                        :logseq (t :settings.general/accent-color-logseq)
+                        :tomato (t :color/tomato)
+                        :red (t :color/red)
+                        :crimson (t :color/crimson)
+                        :pink (t :color/pink)
+                        :plum (t :color/plum)
+                        :purple (t :color/purple)
+                        :violet (t :color/violet)
+                        :indigo (t :color/indigo)
+                        :blue (t :color/blue)
+                        :cyan (t :color/cyan)
+                        :teal (t :color/teal)
+                        :green (t :color/green)
+                        :grass (t :color/grass)
+                        :orange (t :color/orange)))
         pick-theme [:div.cp__accent-colors-list-wrap
                     {:class (if _in-modal? "as-modal-picker" "")}
                     (for [color (concat [:none :logseq] colors/color-list)
@@ -365,11 +384,7 @@
                            :style {:background-color (if-not none? (str "var(--rx-" (name color) "-07)") "")
                                    :opacity (if (or none? active?) 1 0)}}])
 
-                        (case color
-                          :none [:p {:style {:max-width "300px"}}
-                                 "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."]
-                          :logseq "Logseq classical color"
-                          (str (name color) " color")))])]]
+                        (color-label color))])]]
 
     [:div
      (row-with-button-action

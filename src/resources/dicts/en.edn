@@ -394,11 +394,20 @@
 
  ;; Color
  :color/blue "Blue"
+ :color/crimson "Crimson"
+ :color/cyan "Cyan"
+ :color/grass "Grass"
  :color/gray "Gray"
  :color/green "Green"
+ :color/indigo "Indigo"
+ :color/orange "Orange"
  :color/pink "Pink"
+ :color/plum "Plum"
  :color/purple "Purple"
  :color/red "Red"
+ :color/teal "Teal"
+ :color/tomato "Tomato"
+ :color/violet "Violet"
  :color/yellow "Yellow"
 
  ;; Graph
@@ -454,6 +463,9 @@
  ;; Graph delete server
  :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
 
+ ;; Graph diff
+ :graph.diff/title "Git diff"
+
  ;; Graph leave
  :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
@@ -481,6 +493,15 @@
  :graph.switch/select-prompt "Select a graph"
 
  ;; Graph validation
+ :graph.validation/config-arweave-gateway-warning "is no longer supported."
+ :graph.validation/config-block-hidden-properties-warning "is not used in DB graphs as hiding a property is done in its configuration."
+ :graph.validation/config-default-templates-warning "is replaced by #Template and the `Apply template to tags` property."
+ :graph.validation/config-editor-command-trigger-warning "is no longer supported. Please use '/' and report bugs on it."
+ :graph.validation/config-favorites-warning "is not stored in config for DB graphs."
+ :graph.validation/config-feature-enable-block-timestamps-warning "is not used in DB graphs as it is always enabled."
+ :graph.validation/config-preferred-format-warning "is not used in DB graphs as there is only markdown mode."
+ :graph.validation/config-property-pages-enabled-warning "is not used in DB graphs as all properties have pages."
+ :graph.validation/config-unused-in-db-graphs-warning "is not used in DB graphs."
  :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
  :graph.validation/valid "Your graph is valid! {1}"
 
@@ -488,9 +509,19 @@
  :file/config-duplicate-keys "The file '{1}' has duplicate keys. The key '{2}' is assigned multiple times."
  :file/config-invalid "The file 'logseq/config.edn' is invalid. Please reload the app to in order to see the error and fix it."
  :file/format-not-supported "Format .{1} is not supported."
+ :file/label "File"
  :file/last-modified-at "Last modified at"
  :file/name "File name"
  :file/no-data "No data"
+ :file/title "File {1}"
+
+ ;; Config file validation
+ :file.config/deprecation-title "The file {1} has the following deprecations:"
+ :file.config/error-title "The file {1} has the following errors:"
+ :file.config/invalid-desc "Make sure the config is wrapped in {}."
+ :file.config/invalid-title "The file {1} is not valid."
+ :file.config/read-failed-desc "Make sure your config is wrapped in {}. Also make sure that the characters '( { [' have their corresponding closing character ') } ]'."
+ :file.config/read-failed-title "Failed to read file {1}"
 
  ;; Page
  :page/add-to-favorites "Add to Favorites"
@@ -549,6 +580,9 @@
  :page.convert/tag-to-page-confirm-desc "Converting a tag to page also removes its tag properties and its tag from all nodes tagged with it. Are you ok with that?"
  :page.convert/tag-to-page-duplicate "A page with the name \"{1}\" already exists."
  :page.convert/tag-to-page-has-children "This tag cannot be converted because it has tag children. All tag children must be removed or converted before converting this tag."
+
+ ;; Page creation
+ :page.create/title "Create a new page"
 
  ;; Page deletion
  :page.delete/confirm-title "Are you sure you want to delete this page?"
@@ -1096,6 +1130,12 @@
  :query.builder/between-start-label "Start date"
  :query.builder/created-label "Created"
  :query.builder/filter "Filter"
+ :query.builder/filter-full-text-search-label "Full text search"
+ :query.builder/filter-page-label "Page"
+ :query.builder/filter-page-reference-label "Page reference"
+ :query.builder/filter-sample-label "Sample"
+ :query.builder/operator-and-label "and"
+ :query.builder/operator-not-label "not"
  :query.builder/replace-with-label "Replace with:"
  :query.builder/search-label "Search: {1}"
  :query.builder/unwrap-operator "Unwrap"
@@ -1386,6 +1426,8 @@
  ;; General settings
  :settings.general/accent-color "Accent color"
  :settings.general/accent-color-alert "Choosing an accent color may override any theme you have selected."
+ :settings.general/accent-color-logseq "Logseq classic color"
+ :settings.general/accent-color-none-desc "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."
  :settings.general/app-updated "Your app is up-to-date 🎉"
  :settings.general/changelog "What's new?"
  :settings.general/check-for-updates "Check for updates"
@@ -1413,6 +1455,7 @@
  :settings.general/update-error "⚠️ Oops, Something Went Wrong!\nPlease check out the {1}."
 
  ;; Theme
+ :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "Switch to {1} theme"
 
  ;; Plugin
@@ -1651,8 +1694,7 @@
  :collaboration/remove-access "Remove access"
 
  ;; Encryption
- :encryption/cloud-password-rich (fn [] ["If you lose your password, all of your data in the cloud can't be decrypted. "
-                                 [:span "You will still be able to access the local version of your graph."]])
+ :encryption/cloud-password-rich (fn [] ["If you lose your password, all of your data in the cloud can't be decrypted. " [:span "You will still be able to access the local version of your graph."]])
  :encryption/current-password "Current password"
  :encryption/enter-password "Enter password"
  :encryption/enter-password-again "Enter password again"
@@ -1670,10 +1712,7 @@
  :encryption/init-key-pair-error "Init key-pair err: {1}"
  :encryption/password-not-matched "Password not matched"
  :encryption/password-updated-successfully "Password updated successfully!"
- :encryption/remember-password-rich (fn [] [[:span "Please make sure you "]
-                                    "remember the password you have set, as we are unable to reset or retrieve it if you forget it, "
-                                    [:span "and we recommend you "]
-                                    "keep a secure backup of the password."])
+ :encryption/remember-password-rich (fn [] [[:span "Please make sure you "] "remember the password you have set, as we are unable to reset or retrieve it if you forget it, " [:span "and we recommend you "] "keep a secure backup of the password."])
  :encryption/reset-password "Reset password"
  :encryption/set-new-password "Set new password"
  :encryption/set-password-title "Set password for remote graphs"
@@ -1837,8 +1876,10 @@
  :sidebar.right/toggle "Toggle right sidebar"
 
  ;; Context Menu
+ :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "Make a Flashcard"
  :context-menu/set-icon "Set icon"
+ :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "Toggle number list"
 
  ;; Window
