@@ -367,11 +367,20 @@
 
  ;; Color
  :color/blue "蓝色"
+ :color/crimson "深红色"
+ :color/cyan "青色"
+ :color/grass "草绿色"
  :color/gray "灰色"
  :color/green "绿色"
+ :color/indigo "靛蓝色"
+ :color/orange "橙色"
  :color/pink "粉色"
+ :color/plum "李子色"
  :color/purple "紫色"
  :color/red "红色"
+ :color/teal "蓝绿色"
+ :color/tomato "番茄色"
+ :color/violet "紫罗兰色"
  :color/yellow "黄色"
 
  ;; Graph
@@ -403,6 +412,9 @@
  ;; Graph delete server
  :graph.delete-server/confirm-desc "确定要从我们的服务器中永久删除图谱“{1}”吗？"
 
+ ;; Graph diff
+ :graph.diff/title "Git 差异"
+
  ;; Graph leave
  :graph.leave/confirm-desc "确定要离开这个图谱吗？"
 
@@ -430,6 +442,15 @@
  :graph.switch/select-prompt "请选择一份图谱"
 
  ;; Graph validation
+ :graph.validation/config-arweave-gateway-warning "已不再受支持。"
+ :graph.validation/config-block-hidden-properties-warning "在 DB 图谱中不会使用，因为隐藏属性需要在其配置中完成。"
+ :graph.validation/config-default-templates-warning "已被 #Template 和 `Apply template to tags` 属性取代。"
+ :graph.validation/config-editor-command-trigger-warning "已不再受支持。请改用 '/'，并在相关问题上报告 bug。"
+ :graph.validation/config-favorites-warning "不会存储在 DB 图谱的配置中。"
+ :graph.validation/config-feature-enable-block-timestamps-warning "在 DB 图谱中不会使用，因为它始终启用。"
+ :graph.validation/config-preferred-format-warning "在 DB 图谱中不会使用，因为 DB 图谱只有 Markdown 模式。"
+ :graph.validation/config-property-pages-enabled-warning "在 DB 图谱中不会使用，因为所有属性都有页面。"
+ :graph.validation/config-unused-in-db-graphs-warning "在 DB 图谱中不会使用。"
  :graph.validation/invalid-blocks-detected "验证发现 {1} 个无效块。这些块可能存在问题。正在尝试修复无效块。请再次运行验证以检查它们是否已被修复。"
  :graph.validation/valid "你的图谱有效！{1}"
 
@@ -437,9 +458,19 @@
  :file/config-duplicate-keys "文件 '{1}' 存在重复键。键 '{2}' 被赋值了多次。"
  :file/config-invalid "文件 'logseq/config.edn' 无效。请重新加载应用以查看错误并修复。"
  :file/format-not-supported "格式 .{1} 目前不支持。"
+ :file/label "文件"
  :file/last-modified-at "最后更改于"
  :file/name "文件名"
  :file/no-data "没有数据"
+ :file/title "文件 {1}"
+
+ ;; Config file validation
+ :file.config/deprecation-title "文件 {1} 有以下弃用项："
+ :file.config/error-title "文件 {1} 有以下错误："
+ :file.config/invalid-desc "请确保配置被 {} 包裹。"
+ :file.config/invalid-title "文件 {1} 无效。"
+ :file.config/read-failed-desc "请确保你的配置被 {} 包裹。同时请确保字符 '( { [' 都有对应的闭合字符 ') } ]'。"
+ :file.config/read-failed-title "读取文件 {1} 失败"
 
  ;; Page
  :page/add-to-favorites "添加收藏"
@@ -479,6 +510,9 @@
  :page.convert/tag-to-page-confirm-desc "将标签转换为页面也会移除它的标签属性，并把所有已使用该标签的节点中的该标签一并移除。你确定要继续吗？"
  :page.convert/tag-to-page-duplicate "页面“{1}”已存在。"
  :page.convert/tag-to-page-has-children "此标签无法转换，因为它仍有子标签。必须先移除或转换所有子标签，才能转换此标签。"
+
+ ;; Page creation
+ :page.create/title "创建新页面"
 
  ;; Page deletion
  :page.delete/confirm-title "确认要删除此页面吗？"
@@ -957,6 +991,12 @@
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "添加过滤器/运算符"
+ :query.builder/filter-full-text-search-label "全文搜索"
+ :query.builder/filter-page-label "页面"
+ :query.builder/filter-page-reference-label "页面引用"
+ :query.builder/filter-sample-label "采样"
+ :query.builder/operator-and-label "且"
+ :query.builder/operator-not-label "非"
 
  ;; Asset
  :asset/align "对齐"
@@ -986,8 +1026,7 @@
  :pdf/doc-metadata "查看文档元数据"
  :pdf/hl-block-colored "颜色标识高亮块"
  :pdf/linked-ref "转到注解"
- :pdf/load-highlights-file-error "错误：无法加载高亮文件：“{1}”。
-                                 {2}"
+ :pdf/load-highlights-file-error "错误：无法加载高亮文件：“{1}”。\r\n                                 {2}"
  :pdf/toggle-dashed "区域选取为虚线"
 
  ;; Flashcard empty
@@ -1159,6 +1198,8 @@
  ;; General settings
  :settings.general/accent-color "高亮色"
  :settings.general/accent-color-alert "选择高亮色可能会影响你选择的自定义主题。"
+ :settings.general/accent-color-logseq "Logseq 经典配色"
+ :settings.general/accent-color-none-desc "取消强调色。该功能目前仍处于测试阶段，主要用于兼容自定义主题。"
  :settings.general/app-updated "应用已是最新版本 🎉"
  :settings.general/changelog "更新内容"
  :settings.general/check-for-updates "检查更新"
@@ -1185,6 +1226,7 @@
  :settings.general/update-error "⚠️ 哎呀，出了点问题！\n请查看{1}。"
 
  ;; Theme
+ :theme/logseq-default "Logseq 默认主题"
  :theme/switch-to "切换到 {1} 主题"
 
  ;; Plugin
@@ -1207,8 +1249,7 @@
  :plugin/found-n-updates "发现 {1} 个插件待更新"
  :plugin/found-updates "有更新"
  :plugin/install "安装"
- :plugin/install-failed "安装失败：{1}
-                        {2}"
+ :plugin/install-failed "安装失败：{1}\r\n                        {2}"
  :plugin/installed "已安装"
  :plugin/installed-plugin "已安装插件：{1}"
  :plugin/installing "安装中"
@@ -1351,8 +1392,7 @@
  :sync/user-doesnt-exist-yet "该用户尚不存在。"
 
  ;; Encryption
- :encryption/cloud-password-rich (fn [] ["如果你丢失了密码，云端中的所有数据都将无法解密。"
-                                 [:span "你仍然可以访问图谱的本地版本。"]])
+ :encryption/cloud-password-rich (fn [] ["如果你丢失了密码，云端中的所有数据都将无法解密。" [:span "你仍然可以访问图谱的本地版本。"]])
  :encryption/current-password "当前密码"
  :encryption/enter-password "输入密码"
  :encryption/enter-password-again "再次输入密码"
@@ -1370,10 +1410,7 @@
  :encryption/init-key-pair-error "初始化密钥对错误：{1}"
  :encryption/password-not-matched "两次输入的密码不一致"
  :encryption/password-updated-successfully "密码更新成功！"
- :encryption/remember-password-rich (fn [] [[:span "请务必"]
-                                    "记住你设置的密码，因为一旦遗忘，我们无法为你重置或找回，"
-                                    [:span "并建议你"]
-                                    "妥善保存一份安全备份。"])
+ :encryption/remember-password-rich (fn [] [[:span "请务必"] "记住你设置的密码，因为一旦遗忘，我们无法为你重置或找回，" [:span "并建议你"] "妥善保存一份安全备份。"])
  :encryption/reset-password "重置密码"
  :encryption/set-new-password "设置新密码"
  :encryption/set-password-title "为远程图谱设置密码"
@@ -1511,8 +1548,10 @@
  :sidebar.right/toggle "切换右侧边栏"
 
  ;; Context Menu
+ :context-menu/developer-tools "开发者工具"
  :context-menu/make-a-flashcard "制作闪卡"
  :context-menu/set-icon "设置图标"
+ :context-menu/show-block-content-history "（开发）显示块内容历史"
  :context-menu/toggle-number-list "切换编号列表"
 
  ;; Window
@@ -1618,8 +1657,7 @@
  :shell/input-command-title "输入命令"
 
  ;; Youtube
- :youtube/embed-first-reminder-mobile "请先嵌入一个 YouTube 视频，然后再使用此图标。
-                                      请记住：在移动端，你可以将原始 YouTube URL 直接粘贴为嵌入视频。"
+ :youtube/embed-first-reminder-mobile "请先嵌入一个 YouTube 视频，然后再使用此图标。\r\n                                      请记住：在移动端，你可以将原始 YouTube URL 直接粘贴为嵌入视频。"
  :youtube/player-not-ready "YouTube 播放器尚未准备好。"
  :youtube/timestamps-not-available-mobile "移动端暂不支持 YouTube 时间戳。"
 }

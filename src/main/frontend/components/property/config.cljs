@@ -595,13 +595,17 @@
            [:p (t :property/delete-from-tag-confirm)]
            {:id :delete-property-from-class
             :data-reminder :ok
-            :data-reminder-label (t :ui/dont-remind-me-again)})
+            :data-reminder-label (t :ui/dont-remind-me-again)
+            :cancel-label (t :ui/cancel)
+            :ok-label (t :ui/confirm)})
           (p/then remove!))
       (-> (shui/dialog-confirm!
            (t :property/delete-from-node-confirm)
            {:id :delete-property-from-node
             :data-reminder :ok
-            :data-reminder-label (t :ui/dont-remind-me-again)})
+            :data-reminder-label (t :ui/dont-remind-me-again)
+            :cancel-label (t :ui/cancel)
+            :ok-label (t :ui/confirm)})
           (p/then remove!)))))
 
 (rum/defc property-type-sub-pane
@@ -730,7 +734,9 @@
                                       ;; Only show dialog for existing values as it can be reversed for unused properties
                                          (if (and (seq values) (not many?))
                                            (-> (shui/dialog-confirm!
-                                                (t :property/multiple-values-confirm))
+                                                (t :property/multiple-values-confirm)
+                                                {:cancel-label (t :ui/cancel)
+                                                 :ok-label (t :ui/confirm)})
                                                (p/then update-cardinality-fn))
                                            (update-cardinality-fn))))})))
 

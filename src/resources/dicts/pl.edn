@@ -367,11 +367,20 @@
 
  ;; Color
  :color/blue "Niebieski"
+ :color/crimson "Crimson"
+ :color/cyan "Cyan"
+ :color/grass "Grass"
  :color/gray "Szary"
  :color/green "Zielony"
+ :color/indigo "Indigo"
+ :color/orange "Orange"
  :color/pink "Różowy"
+ :color/plum "Plum"
  :color/purple "Fioletowy"
  :color/red "Czerwony"
+ :color/teal "Teal"
+ :color/tomato "Tomato"
+ :color/violet "Violet"
  :color/yellow "Żółty"
 
  ;; Graph
@@ -403,6 +412,9 @@
  ;; Graph delete server
  :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
 
+ ;; Graph diff
+ :graph.diff/title "Git diff"
+
  ;; Graph leave
  :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
@@ -430,6 +442,15 @@
  :graph.switch/select-prompt "Wybierz graf"
 
  ;; Graph validation
+ :graph.validation/config-arweave-gateway-warning "is no longer supported."
+ :graph.validation/config-block-hidden-properties-warning "is not used in DB graphs as hiding a property is done in its configuration"
+ :graph.validation/config-default-templates-warning "is replaced by #Template and the `Apply template to tags` property"
+ :graph.validation/config-editor-command-trigger-warning "is no longer supported. Please use '/' and report bugs on it."
+ :graph.validation/config-favorites-warning "is not stored in config for DB graphs"
+ :graph.validation/config-feature-enable-block-timestamps-warning "is not used in DB graphs as it is always enabled"
+ :graph.validation/config-preferred-format-warning "is not used in DB graphs as there is only markdown mode."
+ :graph.validation/config-property-pages-enabled-warning "is not used in DB graphs as all properties have pages"
+ :graph.validation/config-unused-in-db-graphs-warning "is not used in DB graphs"
  :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
  :graph.validation/valid "Your graph is valid! {1}"
 
@@ -437,9 +458,19 @@
  :file/config-duplicate-keys "Plik „{1}” zawiera zduplikowane klucze. Klucz „{2}” jest przypisywany wielokrotnie."
  :file/config-invalid "Plik konfiguracyjny jest nieprawidłowy"
  :file/format-not-supported "Format .{1} nie jest wspierany."
+ :file/label "File"
  :file/last-modified-at "Ostatnio zmodyfikowany"
  :file/name "Nazwa pliku"
  :file/no-data "Brak danych"
+ :file/title "File {1}"
+
+ ;; Config file validation
+ :file.config/deprecation-title "The file {1} has the following deprecations:"
+ :file.config/error-title "The file {1} has the following errors:"
+ :file.config/invalid-desc "Make sure the config is wrapped in {}."
+ :file.config/invalid-title "The file {1} is not valid."
+ :file.config/read-failed-desc "Make sure your config is wrapped in {}. Also make sure that the characters '( { [' have their corresponding closing character ') } ]'."
+ :file.config/read-failed-title "Failed to read file {1}"
 
  ;; Page
  :page/add-to-favorites "Dodaj do ulubionych"
@@ -479,6 +510,9 @@
  :page.convert/tag-to-page-confirm-desc "Konwersja tagu na stronę spowoduje także usunięcie jego właściwości oraz samego tagu ze wszystkich węzłów, które są nim oznaczone. Czy chcesz kontynuować?"
  :page.convert/tag-to-page-duplicate "Strona o nazwie „{1}” już istnieje."
  :page.convert/tag-to-page-has-children "Tag ma elementy podrzędne i nie może być przekonwertowany"
+
+ ;; Page creation
+ :page.create/title "Create a new page"
 
  ;; Page deletion
  :page.delete/confirm-title "Czy na pewno chcesz usunąć tę stronę?"
@@ -800,6 +834,12 @@
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
+ :query.builder/filter-full-text-search-label "Full text search"
+ :query.builder/filter-page-label "Page"
+ :query.builder/filter-page-reference-label "Page reference"
+ :query.builder/filter-sample-label "Sample"
+ :query.builder/operator-and-label "and"
+ :query.builder/operator-not-label "not"
 
  ;; Asset
  :asset/align "Wyrównanie"
@@ -997,6 +1037,8 @@
  ;; General settings
  :settings.general/accent-color "Kolor akcentu"
  :settings.general/accent-color-alert "Ostrzeżenie o kolorze"
+ :settings.general/accent-color-logseq "Logseq classic color"
+ :settings.general/accent-color-none-desc "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."
  :settings.general/app-updated "Aplikacja zaktualizowana 🎉"
  :settings.general/changelog "Dziennik zmian"
  :settings.general/check-for-updates "Sprawdź aktualizacje"
@@ -1023,6 +1065,7 @@
  :settings.general/update-error "⚠️ Oops, coś poszło nie tak!\nSprawdź proszę {1}."
 
  ;; Theme
+ :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "Przełącz na motyw {1}"
 
  ;; Plugin
@@ -1187,8 +1230,7 @@
  :sync/user-doesnt-exist-yet "Użytkownik jeszcze nie istnieje"
 
  ;; Encryption
- :encryption/cloud-password-rich (fn [] ["Jeśli zgubisz hasło, żadne dane w chmurze nie będą mogły zostać odszyfrowane. "
-                                 [:span "Nadal jednak będziesz mieć dostęp do lokalnej wersji swojego grafu."]])
+ :encryption/cloud-password-rich (fn [] ["Jeśli zgubisz hasło, żadne dane w chmurze nie będą mogły zostać odszyfrowane. " [:span "Nadal jednak będziesz mieć dostęp do lokalnej wersji swojego grafu."]])
  :encryption/current-password "Bieżące hasło"
  :encryption/enter-password "Wprowadź hasło"
  :encryption/enter-password-again "Wprowadź hasło ponownie"
@@ -1206,10 +1248,7 @@
  :encryption/init-key-pair-error "Błąd pary kluczy początkowych: {1}"
  :encryption/password-not-matched "Hasła nie pasują"
  :encryption/password-updated-successfully "Hasło zaktualizowane"
- :encryption/remember-password-rich (fn [] [[:span "Upewnij się, że "]
-                                    "pamiętasz ustawione hasło, bo jeśli je zapomnisz, nie będziemy mogli go zresetować ani odzyskać, "
-                                    [:span "i zalecamy "]
-                                    "przechowywanie jego bezpiecznej kopii zapasowej."])
+ :encryption/remember-password-rich (fn [] [[:span "Upewnij się, że "] "pamiętasz ustawione hasło, bo jeśli je zapomnisz, nie będziemy mogli go zresetować ani odzyskać, " [:span "i zalecamy "] "przechowywanie jego bezpiecznej kopii zapasowej."])
  :encryption/reset-password "Resetuj hasło"
  :encryption/set-new-password "Ustaw nowe hasło"
  :encryption/set-password-title "Ustaw hasło"
@@ -1347,8 +1386,10 @@
  :sidebar.right/toggle "Przełącz prawy panel"
 
  ;; Context Menu
+ :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "Utwórz fiszkę"
  :context-menu/set-icon "Ustaw ikonę"
+ :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "Przełącz listę numerowaną"
 
  ;; Window

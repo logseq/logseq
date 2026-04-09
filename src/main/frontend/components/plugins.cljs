@@ -263,7 +263,9 @@
       [:li {:on-click #(plugin-handler/open-report-modal! id name)} (t :plugin/report-security)]
       [:li {:on-click
             #(-> (shui/dialog-confirm!
-                  [:b (t :plugin/delete-alert name)])
+                  [:b (t :plugin/delete-alert name)]
+                  {:cancel-label (t :ui/cancel)
+                   :ok-label (t :ui/confirm)})
                  (p/then (fn []
                            (plugin-common-handler/unregister-plugin id)
 

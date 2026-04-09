@@ -176,7 +176,7 @@
 
          (shui/dropdown-menu-sub
           (shui/dropdown-menu-sub-trigger
-           "Add reaction")
+           (t :command.editor/add-reaction))
           (shui/dropdown-menu-sub-content
            [:div.p-1
             (icon-component/icon-search
@@ -308,7 +308,7 @@
             (shui/dropdown-menu-separator)
             (shui/dropdown-menu-sub
              (shui/dropdown-menu-sub-trigger
-              "Developer tools")
+              (t :context-menu/developer-tools))
 
              (shui/dropdown-menu-sub-content
               (shui/dropdown-menu-item
@@ -338,8 +338,7 @@
                                                {:created-at (tc/from-long (* (:created-at version) 1000))
                                                 :content (:value version)})
                                              versions))))))}
-
-               "(Dev) Show block content history")))])]))))
+               (t :context-menu/show-block-content-history))))])]))))
 
 (rum/defc block-ref-custom-context-menu-content
   [block block-ref-id]

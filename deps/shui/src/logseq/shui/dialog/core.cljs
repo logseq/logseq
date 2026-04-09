@@ -173,8 +173,8 @@
 
 (rum/defc alert-inner
   [config]
-  (let [{:keys [id title description content footer deferred open?]} config
-        props (dissoc config :id :title :description :content :footer :deferred :open? :alert?)]
+  (let [{:keys [id title description content footer deferred open? ok-label]} config
+        props (dissoc config :id :title :description :content :footer :deferred :open? :alert? :ok-label)]
 
     (hooks/use-effect!
      (fn []
@@ -199,17 +199,18 @@
 
                            (alert-dialog-footer
                             {:class "ui__alert-dialog-footer"}
-                            (if footer
-                              footer
-                              [:<>
+                           (if footer
+                             footer
+                             [:<>
                                (base/button
                                 {:key "ok"
                                  :on-click #(do (close!) (p/resolve! deferred true))
-                                 :size :sm} "OK")]))))))
+                                 :size :sm} (or ok-label "OK"))]))))))
 
 (rum/defc confirm-inner
   [config]
-  (let [{:keys [id deferred outside-cancel? data-reminder data-reminder-label]} config
+  (let [{:keys [id deferred outside-cancel? data-reminder data-reminder-label
+                cancel-label ok-label]} config
         reminder? (boolean (and id data-reminder))
         [ready?, set-ready!] (rum/use-state (not reminder?))
         *ok-ref (rum/use-ref nil)
@@ -255,7 +256,7 @@
                   :on-click #(do (close!) (p/reject! deferred false))
                   :variant :outline
                   :size :sm}
-                 "Cancel")
+                 (or cancel-label "Cancel"))
                 (base/button
                  {:key "ok"
                   :ref *ok-ref
@@ -265,7 +266,7 @@
                                   (js/localStorage.setItem (str id) (js/Date.now))))
                               (close!)
                               (p/resolve! deferred true))
-                  :size :sm} "OK")]])))))
+                  :size :sm} (or ok-label "OK"))]])))))
 
 (rum/defc install-modals
   < rum/static

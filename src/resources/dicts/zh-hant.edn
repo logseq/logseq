@@ -367,11 +367,20 @@
 
  ;; Color
  :color/blue "藍色"
+ :color/crimson "深紅色"
+ :color/cyan "青色"
+ :color/grass "草綠色"
  :color/gray "灰色"
  :color/green "綠色"
+ :color/indigo "靛藍色"
+ :color/orange "橙色"
  :color/pink "粉紅色"
+ :color/plum "李子色"
  :color/purple "紫色"
  :color/red "紅色"
+ :color/teal "藍綠色"
+ :color/tomato "番茄色"
+ :color/violet "紫羅蘭色"
  :color/yellow "黃色"
 
  ;; Graph
@@ -403,6 +412,9 @@
  ;; Graph delete server
  :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
 
+ ;; Graph diff
+ :graph.diff/title "Git 差異"
+
  ;; Graph leave
  :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
@@ -430,16 +442,33 @@
  :graph.switch/select-prompt "請選擇圖譜"
 
  ;; Graph validation
- :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
- :graph.validation/valid "Your graph is valid! {1}"
+ :graph.validation/config-arweave-gateway-warning "已不再支援。"
+ :graph.validation/config-block-hidden-properties-warning "在 DB 圖譜中不會使用，因為隱藏屬性需要在其設定中完成。"
+ :graph.validation/config-default-templates-warning "已被 #Template 和 `Apply template to tags` 屬性取代。"
+ :graph.validation/config-editor-command-trigger-warning "已不再支援。請改用 '/'，並回報相關 bug。"
+ :graph.validation/config-favorites-warning "不會儲存在 DB 圖譜的設定中。"
+ :graph.validation/config-feature-enable-block-timestamps-warning "在 DB 圖譜中不會使用，因為它始終啟用。"
+ :graph.validation/config-preferred-format-warning "在 DB 圖譜中不會使用，因為 DB 圖譜只有 Markdown 模式。"
+ :graph.validation/config-property-pages-enabled-warning "在 DB 圖譜中不會使用，因為所有屬性都有頁面。"
+ :graph.validation/config-unused-in-db-graphs-warning "在 DB 圖譜中不會使用。"
 
  ;; File
  :file/config-duplicate-keys "檔案 '{1}' 有重複鍵。鍵 '{2}' 被指定了多次。"
  :file/config-invalid "檔案 'logseq/config.edn' 無效。請重新載入應用程式以查看錯誤並修正。"
  :file/format-not-supported "目前不支援 .{1} 檔案格式"
+ :file/label "檔案"
  :file/last-modified-at "最後更新於"
  :file/name "檔案名稱"
  :file/no-data "沒有資料"
+ :file/title "檔案 {1}"
+
+ ;; Config file validation
+ :file.config/deprecation-title "檔案 {1} 有以下棄用項："
+ :file.config/error-title "檔案 {1} 有以下錯誤："
+ :file.config/invalid-desc "請確保設定被 {} 包裹。"
+ :file.config/invalid-title "檔案 {1} 無效。"
+ :file.config/read-failed-desc "請確保你的設定被 {} 包裹。同時請確保字元 '( { [' 都有對應的閉合字元 ') } ]'。"
+ :file.config/read-failed-title "讀取檔案 {1} 失敗"
 
  ;; Page
  :page/add-to-favorites "加入我的最愛"
@@ -479,6 +508,9 @@
  :page.convert/tag-to-page-confirm-desc "將標籤轉換為頁面也會移除它的標籤屬性，並把所有已使用該標籤的節點中的該標籤一併移除。你確定要繼續嗎？"
  :page.convert/tag-to-page-duplicate "頁面「{1}」已存在。"
  :page.convert/tag-to-page-has-children "此標籤無法轉換，因為它仍有子標籤。必須先移除或轉換所有子標籤，才能轉換此標籤。"
+
+ ;; Page creation
+ :page.create/title "建立新頁面"
 
  ;; Page deletion
  :page.delete/confirm-title "確認要刪除此頁面嗎？"
@@ -800,6 +832,12 @@
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
+ :query.builder/filter-full-text-search-label "全文搜尋"
+ :query.builder/filter-page-label "頁面"
+ :query.builder/filter-page-reference-label "頁面引用"
+ :query.builder/filter-sample-label "取樣"
+ :query.builder/operator-and-label "且"
+ :query.builder/operator-not-label "非"
 
  ;; Asset
  :asset/align "對齊"
@@ -1001,6 +1039,8 @@
  ;; General settings
  :settings.general/accent-color "強調色"
  :settings.general/accent-color-alert "選擇強調色可能會影響你選擇的自訂主題。"
+ :settings.general/accent-color-logseq "Logseq 經典配色"
+ :settings.general/accent-color-none-desc "取消強調色。此功能目前仍處於測試階段，主要用於相容自訂主題。"
  :settings.general/app-updated "應用已是最新版本 🎉"
  :settings.general/changelog "更新內容"
  :settings.general/check-for-updates "檢查更新"
@@ -1027,6 +1067,7 @@
  :settings.general/update-error "⚠️ 哎呀，出了點問題！\n請查看{1}。"
 
  ;; Theme
+ :theme/logseq-default "Logseq 預設主題"
  :theme/switch-to "切換到 {1} 主題"
 
  ;; Plugin
@@ -1191,8 +1232,7 @@
  :sync/user-doesnt-exist-yet "該使用者尚不存在。"
 
  ;; Encryption
- :encryption/cloud-password-rich (fn [] ["如果你遺失了密碼，雲端中的所有資料都將無法解密。"
-                                 [:span "你仍然可以存取圖譜的本機版本。"]])
+ :encryption/cloud-password-rich (fn [] ["如果你遺失了密碼，雲端中的所有資料都將無法解密。" [:span "你仍然可以存取圖譜的本機版本。"]])
  :encryption/current-password "目前密碼"
  :encryption/enter-password "輸入密碼"
  :encryption/enter-password-again "再次輸入密碼"
@@ -1210,10 +1250,7 @@
  :encryption/init-key-pair-error "初始化金鑰對錯誤：{1}"
  :encryption/password-not-matched "兩次輸入的密碼不一致"
  :encryption/password-updated-successfully "密碼更新成功！"
- :encryption/remember-password-rich (fn [] [[:span "請務必"]
-                                    "記住你設定的密碼，因為一旦遺失，我們無法替你重設或找回，"
-                                    [:span "並建議你"]
-                                    "妥善儲存一份安全備份。"])
+ :encryption/remember-password-rich (fn [] [[:span "請務必"] "記住你設定的密碼，因為一旦遺失，我們無法替你重設或找回，" [:span "並建議你"] "妥善儲存一份安全備份。"])
  :encryption/reset-password "重設密碼"
  :encryption/set-new-password "設定新密碼"
  :encryption/set-password-title "為遠端圖譜設定密碼"
@@ -1351,8 +1388,10 @@
  :sidebar.right/toggle "切換右側邊欄"
 
  ;; Context Menu
+ :context-menu/developer-tools "開發者工具"
  :context-menu/make-a-flashcard "製作閃卡"
  :context-menu/set-icon "設定圖示"
+ :context-menu/show-block-content-history "（開發）顯示區塊內容歷史"
  :context-menu/toggle-number-list "切換編號列表"
 
  ;; Window

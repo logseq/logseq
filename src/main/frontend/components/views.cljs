@@ -2167,7 +2167,7 @@
                                         readable-property-value #(cond (and (map? %) (or (:block/title %) (:logseq.property/value %)))
                                                                        (db-property/property-value-content %)
                                                                        (= (:db/ident %) :logseq.property/empty-placeholder)
-                                                                       "Empty"
+                                                                       (t :ui/empty)
                                                                        :else
                                                                        (str %))
                                         group-by-page? (= :block/page group-by-property-ident)

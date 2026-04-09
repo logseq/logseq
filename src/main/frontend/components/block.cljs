@@ -276,7 +276,9 @@
                                  :on-checked-change #(reset! *local-selected? %)})
                                (t :asset/physical-delete)])]
                            {:title (t :asset/confirm-delete-image)
-                            :outside-cancel? true})
+                            :outside-cancel? true
+                            :cancel-label (t :ui/cancel)
+                            :ok-label (t :ui/confirm)})
                           (p/then (fn []
                                     (shui/dialog-close!)
                                     (editor-handler/delete-asset-of-block!

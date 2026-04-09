@@ -367,11 +367,20 @@
 
  ;; Color
  :color/blue "青"
+ :color/crimson "Crimson"
+ :color/cyan "Cyan"
+ :color/grass "Grass"
  :color/gray "グレー"
  :color/green "緑"
+ :color/indigo "Indigo"
+ :color/orange "Orange"
  :color/pink "ピンク"
+ :color/plum "Plum"
  :color/purple "紫"
  :color/red "赤"
+ :color/teal "Teal"
+ :color/tomato "Tomato"
+ :color/violet "Violet"
  :color/yellow "黄"
 
  ;; Graph
@@ -403,6 +412,9 @@
  ;; Graph delete server
  :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
 
+ ;; Graph diff
+ :graph.diff/title "Git diff"
+
  ;; Graph leave
  :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
@@ -430,6 +442,15 @@
  :graph.switch/select-prompt "グラフを選んでください"
 
  ;; Graph validation
+ :graph.validation/config-arweave-gateway-warning "is no longer supported."
+ :graph.validation/config-block-hidden-properties-warning "is not used in DB graphs as hiding a property is done in its configuration"
+ :graph.validation/config-default-templates-warning "is replaced by #Template and the `Apply template to tags` property"
+ :graph.validation/config-editor-command-trigger-warning "is no longer supported. Please use '/' and report bugs on it."
+ :graph.validation/config-favorites-warning "is not stored in config for DB graphs"
+ :graph.validation/config-feature-enable-block-timestamps-warning "is not used in DB graphs as it is always enabled"
+ :graph.validation/config-preferred-format-warning "is not used in DB graphs as there is only markdown mode."
+ :graph.validation/config-property-pages-enabled-warning "is not used in DB graphs as all properties have pages"
+ :graph.validation/config-unused-in-db-graphs-warning "is not used in DB graphs"
  :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
  :graph.validation/valid "Your graph is valid! {1}"
 
@@ -437,9 +458,19 @@
  :file/config-duplicate-keys "ファイル '{1}' には重複したキーがあります。キー「{2}」が複数回割り当てられています。"
  :file/config-invalid "設定ファイルが無効です"
  :file/format-not-supported "現在のところ、{1}形式はサポートされていません。"
+ :file/label "File"
  :file/last-modified-at "最終更新日時 "
  :file/name "ファイル名"
  :file/no-data "ファイルにデータがありません"
+ :file/title "File {1}"
+
+ ;; Config file validation
+ :file.config/deprecation-title "The file {1} has the following deprecations:"
+ :file.config/error-title "The file {1} has the following errors:"
+ :file.config/invalid-desc "Make sure the config is wrapped in {}."
+ :file.config/invalid-title "The file {1} is not valid."
+ :file.config/read-failed-desc "Make sure your config is wrapped in {}. Also make sure that the characters '( { [' have their corresponding closing character ') } ]'."
+ :file.config/read-failed-title "Failed to read file {1}"
 
  ;; Page
  :page/add-to-favorites "お気に入りに追加"
@@ -479,6 +510,9 @@
  :page.convert/tag-to-page-confirm-desc "タグをページに変換すると、そのタグのプロパティと、そのタグが付いているすべてのノードからそのタグも削除されます。続行してもよろしいですか？"
  :page.convert/tag-to-page-duplicate "「{1}」という名前のページはすでに存在します。"
  :page.convert/tag-to-page-has-children "子要素を持つタグは変換できません"
+
+ ;; Page creation
+ :page.create/title "Create a new page"
 
  ;; Page deletion
  :page.delete/confirm-title "このページを削除してもよろしいですか?"
@@ -800,6 +834,12 @@
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
+ :query.builder/filter-full-text-search-label "Full text search"
+ :query.builder/filter-page-label "Page"
+ :query.builder/filter-page-reference-label "Page reference"
+ :query.builder/filter-sample-label "Sample"
+ :query.builder/operator-and-label "and"
+ :query.builder/operator-not-label "not"
 
  ;; Asset
  :asset/align "配置"
@@ -997,6 +1037,8 @@
  ;; General settings
  :settings.general/accent-color "ハイライトカラー"
  :settings.general/accent-color-alert "アクセントカラーを選択すると、選択したテーマが上書きされる場合があります。"
+ :settings.general/accent-color-logseq "Logseq classic color"
+ :settings.general/accent-color-none-desc "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."
  :settings.general/app-updated "アプリが更新されました 🎉"
  :settings.general/changelog "更新履歴"
  :settings.general/check-for-updates "更新を確認"
@@ -1023,6 +1065,7 @@
  :settings.general/update-error "⚠️ なにか問題が発生しました\n{1} をご確認ください。"
 
  ;; Theme
+ :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "{1} テーマに切り替える"
 
  ;; Plugin
@@ -1075,9 +1118,7 @@
  :plugin/report-security "セキュリティを報告"
  :plugin/restart "アプリを再起動"
  :plugin/search-plugin "プラグインを検索"
- :plugin/security-warning "プラグインはあなたのグラフとローカルファイルにアクセスでき、ネットワークへの接続を要求することもできます。
-                          また、プラグインによってデータの破損や損失が引き起こされるかもしれません。私たちはグラフに適切なアクセス制限ルールを設けられるよう開発を進めています。
-                          その間、定期的にグラフのバックアップを取り、自分が読んで理解できるプラグインだけをインストールするようお願いします。"
+ :plugin/security-warning "プラグインはあなたのグラフとローカルファイルにアクセスでき、ネットワークへの接続を要求することもできます。\r\n                          また、プラグインによってデータの破損や損失が引き起こされるかもしれません。私たちはグラフに適切なアクセス制限ルールを設けられるよう開発を進めています。\r\n                          その間、定期的にグラフのバックアップを取り、自分が読んで理解できるプラグインだけをインストールするようお願いします。"
  :plugin/stars "スター"
  :plugin/supports-db "DB対応"
  :plugin/title "タイトル ({1})"
@@ -1189,8 +1230,7 @@
  :sync/user-doesnt-exist-yet "ユーザーはまだ存在しません"
 
  ;; Encryption
- :encryption/cloud-password-rich (fn [] ["パスワードを失うと、クラウド上のデータは復号できなくなります。 "
-                                 [:span "それでもグラフのローカル版には引き続きアクセスできます。"]])
+ :encryption/cloud-password-rich (fn [] ["パスワードを失うと、クラウド上のデータは復号できなくなります。 " [:span "それでもグラフのローカル版には引き続きアクセスできます。"]])
  :encryption/current-password "現在のパスワード"
  :encryption/enter-password "パスワードを入力"
  :encryption/enter-password-again "パスワードを再入力"
@@ -1208,10 +1248,7 @@
  :encryption/init-key-pair-error "キーペアの初期化エラー: {1}"
  :encryption/password-not-matched "パスワードが一致しません"
  :encryption/password-updated-successfully "パスワードを更新しました"
- :encryption/remember-password-rich (fn [] [[:span "設定したパスワードは必ず "]
-                                    "覚えておいてください。忘れてもこちらでリセットや復旧はできません。 "
-                                    [:span "また、"]
-                                    "安全な場所にバックアップを保管しておくことをおすすめします。"])
+ :encryption/remember-password-rich (fn [] [[:span "設定したパスワードは必ず "] "覚えておいてください。忘れてもこちらでリセットや復旧はできません。 " [:span "また、"] "安全な場所にバックアップを保管しておくことをおすすめします。"])
  :encryption/reset-password "パスワードをリセット"
  :encryption/set-new-password "新しいパスワードを設定"
  :encryption/set-password-title "パスワードを設定"
@@ -1349,8 +1386,10 @@
  :sidebar.right/toggle "右サイドバーを開閉"
 
  ;; Context Menu
+ :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "フラッシュカードを作る"
  :context-menu/set-icon "アイコンを設定"
+ :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "番号付きリストの切替"
 
  ;; Window

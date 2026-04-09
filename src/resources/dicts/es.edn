@@ -367,11 +367,20 @@
 
  ;; Color
  :color/blue "Azul"
+ :color/crimson "Crimson"
+ :color/cyan "Cyan"
+ :color/grass "Grass"
  :color/gray "Gris"
  :color/green "Verde"
+ :color/indigo "Indigo"
+ :color/orange "Orange"
  :color/pink "Rosa"
+ :color/plum "Plum"
  :color/purple "Púrpura"
  :color/red "Rojo"
+ :color/teal "Teal"
+ :color/tomato "Tomato"
+ :color/violet "Violet"
  :color/yellow "Amarillo"
 
  ;; Graph
@@ -403,6 +412,9 @@
  ;; Graph delete server
  :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
 
+ ;; Graph diff
+ :graph.diff/title "Git diff"
+
  ;; Graph leave
  :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
@@ -430,6 +442,15 @@
  :graph.switch/select-prompt "Seleccione un grafo"
 
  ;; Graph validation
+ :graph.validation/config-arweave-gateway-warning "is no longer supported."
+ :graph.validation/config-block-hidden-properties-warning "is not used in DB graphs as hiding a property is done in its configuration"
+ :graph.validation/config-default-templates-warning "is replaced by #Template and the `Apply template to tags` property"
+ :graph.validation/config-editor-command-trigger-warning "is no longer supported. Please use '/' and report bugs on it."
+ :graph.validation/config-favorites-warning "is not stored in config for DB graphs"
+ :graph.validation/config-feature-enable-block-timestamps-warning "is not used in DB graphs as it is always enabled"
+ :graph.validation/config-preferred-format-warning "is not used in DB graphs as there is only markdown mode."
+ :graph.validation/config-property-pages-enabled-warning "is not used in DB graphs as all properties have pages"
+ :graph.validation/config-unused-in-db-graphs-warning "is not used in DB graphs"
  :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
  :graph.validation/valid "Your graph is valid! {1}"
 
@@ -437,9 +458,19 @@
  :file/config-duplicate-keys "El archivo '{1}' tiene claves duplicadas. La clave '{2}' se asigna varias veces."
  :file/config-invalid "El archivo de configuración es inválido"
  :file/format-not-supported "Formato .{1} no soportado."
+ :file/label "File"
  :file/last-modified-at "Fecha de modificación"
  :file/name "Nombre del archivo"
  :file/no-data "No hay datos"
+ :file/title "File {1}"
+
+ ;; Config file validation
+ :file.config/deprecation-title "The file {1} has the following deprecations:"
+ :file.config/error-title "The file {1} has the following errors:"
+ :file.config/invalid-desc "Make sure the config is wrapped in {}."
+ :file.config/invalid-title "The file {1} is not valid."
+ :file.config/read-failed-desc "Make sure your config is wrapped in {}. Also make sure that the characters '( { [' have their corresponding closing character ') } ]'."
+ :file.config/read-failed-title "Failed to read file {1}"
 
  ;; Page
  :page/add-to-favorites "Añadir a Favoritos"
@@ -479,6 +510,9 @@
  :page.convert/tag-to-page-confirm-desc "Convertir una etiqueta en página también elimina sus propiedades de etiqueta y la etiqueta de todos los nodos que la usan. ¿Desea continuar?"
  :page.convert/tag-to-page-duplicate "Ya existe una página con el nombre \"{1}\"."
  :page.convert/tag-to-page-has-children "La etiqueta tiene elementos hijos y no se puede convertir"
+
+ ;; Page creation
+ :page.create/title "Create a new page"
 
  ;; Page deletion
  :page.delete/confirm-title "¿Está seguro de que desea eliminar esta página?"
@@ -800,6 +834,12 @@
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
+ :query.builder/filter-full-text-search-label "Full text search"
+ :query.builder/filter-page-label "Page"
+ :query.builder/filter-page-reference-label "Page reference"
+ :query.builder/filter-sample-label "Sample"
+ :query.builder/operator-and-label "and"
+ :query.builder/operator-not-label "not"
 
  ;; Asset
  :asset/align "Alineación"
@@ -997,6 +1037,8 @@
  ;; General settings
  :settings.general/accent-color "Color de acento"
  :settings.general/accent-color-alert "Alerta de color de acento"
+ :settings.general/accent-color-logseq "Logseq classic color"
+ :settings.general/accent-color-none-desc "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."
  :settings.general/app-updated "Tu aplicación está actualizada 🎉"
  :settings.general/changelog "¿Qué hay de nuevo?"
  :settings.general/check-for-updates "Comprobar actualizaciones"
@@ -1023,6 +1065,7 @@
  :settings.general/update-error "⚠️ Ups, algo salió mal!\nPor favor comprueba el {1}."
 
  ;; Theme
+ :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "Cambiar al tema {1}"
 
  ;; Plugin
@@ -1187,8 +1230,7 @@
  :sync/user-doesnt-exist-yet "El usuario aún no existe"
 
  ;; Encryption
- :encryption/cloud-password-rich (fn [] ["Si pierdes tu contraseña, no se podrá descifrar ninguno de tus datos en la nube. "
-                                 [:span "Aun así, podrás seguir accediendo a la versión local de tu grafo."]])
+ :encryption/cloud-password-rich (fn [] ["Si pierdes tu contraseña, no se podrá descifrar ninguno de tus datos en la nube. " [:span "Aun así, podrás seguir accediendo a la versión local de tu grafo."]])
  :encryption/current-password "Contraseña actual"
  :encryption/enter-password "Ingresar contraseña"
  :encryption/enter-password-again "Ingresar contraseña de nuevo"
@@ -1206,10 +1248,7 @@
  :encryption/init-key-pair-error "Error de par de claves de inicio: {1}"
  :encryption/password-not-matched "Las contraseñas no coinciden"
  :encryption/password-updated-successfully "Contraseña actualizada"
- :encryption/remember-password-rich (fn [] [[:span "Asegúrate de "]
-                                    "recordar la contraseña que configuraste, porque no podremos restablecerla ni recuperarla si la olvidas, "
-                                    [:span "y te recomendamos "]
-                                    "guardar una copia de seguridad segura de ella."])
+ :encryption/remember-password-rich (fn [] [[:span "Asegúrate de "] "recordar la contraseña que configuraste, porque no podremos restablecerla ni recuperarla si la olvidas, " [:span "y te recomendamos "] "guardar una copia de seguridad segura de ella."])
  :encryption/reset-password "Restablecer contraseña"
  :encryption/set-new-password "Establecer nueva contraseña"
  :encryption/set-password-title "Establecer contraseña"
@@ -1347,8 +1386,10 @@
  :sidebar.right/toggle "Alternar barra lateral derecha"
 
  ;; Context Menu
+ :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "Crear una tarjeta de memorización"
  :context-menu/set-icon "Establecer icono"
+ :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "Alternar lista de números"
 
  ;; Window
