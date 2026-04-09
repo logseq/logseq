@@ -2,6 +2,7 @@
   "Undo redo new implementation"
   (:require [datascript.core :as d]
             [frontend.worker.state :as worker-state]
+            [frontend.worker.sync.client-op :as client-op]
             [lambdaisland.glogi :as log]
             [logseq.common.defkeywords :refer [defkeywords]]
             [malli.core :as m]
@@ -302,10 +303,7 @@
 (defn- pending-history-action-ops
   [repo tx-id]
   (when (uuid? tx-id)
-    (when-let [conn (get @worker-state/*client-ops-conns repo)]
-      (when-let [ent (d/entity @conn [:db-sync/tx-id tx-id])]
-        {:db-sync/forward-outliner-ops (some-> (:db-sync/forward-outliner-ops ent) seq vec)
-         :db-sync/inverse-outliner-ops (some-> (:db-sync/inverse-outliner-ops ent) seq vec)}))))
+    (client-op/history-action-ops-by-tx-id repo tx-id)))
 
 (defn gen-undo-ops!
   [repo {:keys [tx-data tx-meta db-after db-before]} tx-id

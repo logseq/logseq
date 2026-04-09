@@ -373,7 +373,7 @@
            (-> (export-client-ops-db test-repo)
                (p/then (fn [result]
                          (is (= ["PRAGMA wal_checkpoint(2)"] @sql-calls))
-                         (is (= ["client-ops-/db.sqlite"] @export-calls))
+                         (is (= ["client-ops/db.sqlite"] @export-calls))
                          (is (instance? js/Uint8Array result))
                          (is (= [1 2 3] (vec result)))
                          (done)))

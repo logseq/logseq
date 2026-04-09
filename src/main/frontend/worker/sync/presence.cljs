@@ -1,7 +1,6 @@
 (ns frontend.worker.sync.presence
   "Presence and rtc state helpers for db sync."
-  (:require [datascript.core :as d]
-            [logseq.common.util :as common-util]))
+  (:require [logseq.common.util :as common-util]))
 
 (defn current-client
   [db-sync-client repo]
@@ -15,7 +14,6 @@
 
 (defn sync-counts
   [{:keys [get-datascript-conn
-           get-client-ops-conn
            get-pending-local-tx-count
            get-unpushed-asset-ops-count
            get-local-tx
@@ -27,8 +25,7 @@
   (when (get-datascript-conn repo)
     (let [pending-local (if get-pending-local-tx-count
                           (get-pending-local-tx-count repo)
-                          (when-let [conn (client-ops-conn get-client-ops-conn repo)]
-                            (count (d/datoms @conn :avet :db-sync/pending? true))))
+                          0)
           pending-asset (get-unpushed-asset-ops-count repo)
           local-tx (get-local-tx repo)
           remote-tx (get latest-remote-tx repo)
