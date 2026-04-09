@@ -34,7 +34,6 @@
   and move it to its own namespace."
   {:block/uuid {:db/unique :db.unique/identity}
    :db-ident {:db/unique :db.unique/identity}
-   :db-ident-or-block-uuid {:db/unique :db.unique/identity}
    ;; local-tx is the latest remote-tx that local db persists
    :local-tx {:db/index true}
    :graph-uuid {:db/index true}
