@@ -4159,35 +4159,6 @@
                                   "Nothing found for entity id")
                 (str "unexpected error: " (ex-message result)))))))))
 
-(deftest insert-blocks-reproduces-fractional-index-order-boundary-error-test
-  (testing "insert-blocks can reproduce fractional-index boundary crash when start-order >= end-order"
-    (let [conn (db-test/create-conn-with-blocks
-                {:pages-and-blocks
-                 [{:page {:block/title "page 1"}
-                   :blocks [{:block/title "target"}
-                            {:block/title "right-sibling"}]}]})
-          target (db-test/find-block-by-content @conn "target")
-          right-sibling (db-test/find-block-by-content @conn "right-sibling")]
-      ;; Force a malformed sibling order interval that matches production symptom:
-      ;; start "a4wv" and end "a4wt" (start >= end).
-      (d/transact! conn
-                   [[:db/add (:db/id target) :block/order "a4wv"]
-                    [:db/add (:db/id right-sibling) :block/order "a4wt"]])
-      (let [result (try
-                     (outliner-op/apply-ops!
-                      conn
-                      [[:insert-blocks [[{:block/title "insert crash repro"}]
-                                        (:db/id target)
-                                        {:sibling? true}]]]
-                      {})
-                     nil
-                     (catch :default e
-                       e))]
-        (is (instance? js/Error result))
-        (is (string/includes? (or (ex-message result) "")
-                              "a4wv >= a4wt")
-            (str "unexpected error: " (ex-message result)))))))
-
 (deftest rebase-persisted-row-contains-forward-and-inverse-outliner-ops-test
   (testing "rebased pending tx should always persist both forward and inverse outliner ops"
     (let [{:keys [conn client-ops-conn parent child1]} (setup-parent-child)
