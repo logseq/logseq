@@ -207,7 +207,7 @@
                                                        [:a.hover:underline.flex.items-center
                                                         {:on-click (fn []
                                                                      (util/copy-to-clipboard! (str href "/mcp"))
-                                                                     (notification/show! (t :server.mcp/url-copied) :success))}
+                                                                     (notification/show! (t :server/mcp-url-copied) :success))}
                                                         (str href "/mcp")
                                                         (shui/tabler-icon "copy" {:size 12 :class "inline-block ml-1 mt-[1px]"})])])]]
                                                 (for [{:keys [hr? title options icon]} items]

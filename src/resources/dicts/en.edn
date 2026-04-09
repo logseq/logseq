@@ -424,8 +424,11 @@
  :graph/created-before "Created before"
  :graph/creating "Creating graph"
  :graph/delete-local-action "Delete local graph"
+ :graph/delete-local-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
  :graph/delete-server-action "Delete from server"
+ :graph/delete-server-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
  :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/diff "Git diff"
  :graph/downloading "downloading"
  :graph/encrypt-data-label "Encrypt graph data"
  :graph/excluded-pages "Excluded pages"
@@ -433,6 +436,7 @@
  :graph/gc-success "Graph gc successfully!"
  :graph/last-opened-at-label "Last opened at: {1}"
  :graph/leave-action "Leave this graph"
+ :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Failed to leave graph."
  :graph/left "Left graph."
  :graph/link-distance "Link Distance"
@@ -456,18 +460,6 @@
  :graph/updated-switching "Graph updated! Switching to graph ..."
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
-
- ;; Graph delete local
- :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
-
- ;; Graph delete server
- :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
-
- ;; Graph diff
- :graph.diff/title "Git diff"
-
- ;; Graph leave
- :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "Show Journals"
@@ -533,6 +525,7 @@
  :page/contents "Contents"
  :page/convert-to-tag "Convert to Tag"
  :page/copy-url "Copy page URL"
+ :page/create "Create a new page"
  :page/created-at "Created At"
  :page/current-graph-as-sqlite-db "current graph as SQLite db"
  :page/default-query-error "Failed default query:"
@@ -580,9 +573,6 @@
  :page.convert/tag-to-page-confirm-desc "Converting a tag to page also removes its tag properties and its tag from all nodes tagged with it. Are you ok with that?"
  :page.convert/tag-to-page-duplicate "A page with the name \"{1}\" already exists."
  :page.convert/tag-to-page-has-children "This tag cannot be converted because it has tag children. All tag children must be removed or converted before converting this tag."
-
- ;; Page creation
- :page.create/title "Create a new page"
 
  ;; Page deletion
  :page.delete/confirm-title "Are you sure you want to delete this page?"
@@ -634,17 +624,15 @@
  :block.macro/unsupported-name "Unsupported macro name: {1}"
 
  ;; Node
+ :node/built-in-cant-delete-error "Built-in nodes can't be deleted."
  :node/new "New node"
 
- ;; Node validation
- :node.validation/built-in-cant-delete "Built-in nodes can't be deleted."
+ ;; Journal
+ :journal/page-cant-convert-warning "This page can't be changed to a journal page."
 
  ;; Journal default queries
  :journal.default-query/doing "DOING"
  :journal.default-query/todo "TODO"
-
- ;; Journal validation
- :journal.validation/page-not-journal "This page can't be changed to a journal page."
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -763,14 +751,12 @@
  :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
+ :reference/blocks "Block references"
  :reference/copy "Copy this reference"
  :reference/delete "Delete this reference"
  :reference/page-filter "Page filter"
  :reference/replace-with-embed "Replace with embed"
  :reference/replace-with-text "Replace with text"
-
- ;; Block references
- :reference.block/title "Block references"
 
  ;; Reference filters
  :reference.filter/directions "Click to include and shift-click to exclude. Click again to remove."
@@ -794,6 +780,7 @@
  :property/choose-tags "Choose tags"
  :property/configure "Configure property"
  :property/convert-page-to-property "Convert \"{1}\" to property"
+ :property/create-error "Property failed to create. Please try a different property name."
  :property/default-value "Default value"
  :property/delete-from-node "Delete property from node"
  :property/delete-from-node-confirm "Are you sure you want to delete the property from this node?"
@@ -971,9 +958,6 @@
  :property.color/purple "purple"
  :property.color/red "red"
  :property.color/yellow "yellow"
-
- ;; Property creation
- :property.create/failed "Property failed to create. Please try a different property name."
 
  ;; Property priority
  :property.priority/high "High"
@@ -1393,9 +1377,6 @@
  :settings.ai/enable-mcp-server "MCP Server"
  :settings.ai/enable-mcp-server-desc "Enable MCP Server to allow commmunication with local AI applications. MCP Server depends on HTTP API server."
 
- ;; Collaboration settings
- :settings.collaboration/member-remove-failed "Failed to remove member."
-
  ;; Editor settings
  :settings.editor/auto-expand-block-refs "Expand block references automatically when zoom-in"
  :settings.editor/auto-expand-block-refs-tip "This option controls whether to expand the block references automatically when zoom-in."
@@ -1515,6 +1496,7 @@
  :plugin/restart "Restart App"
  :plugin/search-plugin "Search plugins"
  :plugin/security-warning "Plugins can access your graph and your local files, issue network requests.\nThey can also cause data corruption or loss. We're working on proper access rules for your graphs.\nMeanwhile, make sure you have regular backups of your graphs and only install the plugins when you can read and\nunderstand the source code."
+ :plugin/setting-not-handled "#Not Handled# {1}"
  :plugin/settings-schema-error "Settings schema Error!"
  :plugin/stars "Stars"
  :plugin/supports-db "Supports DB graphs"
@@ -1551,9 +1533,6 @@
  :plugin.proxy/test-url "Test URL"
  :plugin.proxy/testing "Testing"
 
- ;; Plugin settings
- :plugin.settings/not-handled "#Not Handled# {1}"
-
  ;; Plugin themes
  :plugin.themes/default-desc "Logseq default {1} theme."
  :plugin.themes/default-name "Default {1} Theme"
@@ -1574,16 +1553,13 @@
 
  ;; Zotero
  :zotero/attachments "Attachments"
+ :zotero/imported-file-warning "This is a Zotero imported file, set Zotero data directory to open the file in Logseq."
+ :zotero/linked-file-warning "This is a Zotero linked file, set Zotero linked attachment base directory to open the file in Logseq."
  :zotero/notes "Notes"
-
- ;; Zotero imported file
- :zotero.imported-file/warning "This is a Zotero imported file, set Zotero data directory to open the file in Logseq."
-
- ;; Zotero linked file
- :zotero.linked-file/warning "This is a Zotero linked file, set Zotero linked attachment base directory to open the file in Logseq."
 
  ;; Server
  :server/error-notification "[Server] {1}"
+ :server/mcp-url-copied "MCP URL copied to clipboard!"
  :server/start "Start server"
  :server/stop "Stop server"
  :server/title "HTTP API server"
@@ -1594,9 +1570,6 @@
  :server.config/reset "Reset"
  :server.config/save-and-apply "Save & Apply"
  :server.config/title "Server configurations"
-
- ;; Local server MCP
- :server.mcp/url-copied "MCP URL copied to clipboard!"
 
  ;; Local server status
  :server.status/closed "Closed"
@@ -1644,6 +1617,7 @@
  :account/free-plan-sync-limit "1 synced graph (up to 50MB, notes only)"
  :account/last-name "Last name"
  :account/manage-plan "Manage plan"
+ :account/month "month"
  :account/no-asset-syncing "No asset syncing"
  :account/open-invoices "Open invoices"
  :account/plan-free "Free"
@@ -1661,9 +1635,6 @@
  :account/upcoming-cloud-features "Upcoming cloud-based features, including Logseq Publish"
  :account/upgrade-plan "Upgrade plan"
  :account/username "Username"
-
- ;; Account billing
- :account.billing/month "month"
 
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
@@ -1692,6 +1663,7 @@
  :collaboration/invite "Invite"
  :collaboration/members "Members:"
  :collaboration/remove-access "Remove access"
+ :collaboration/remove-access-error "Failed to remove member."
 
  ;; Encryption
  :encryption/cloud-password-rich (fn [] ["If you lose your password, all of your data in the cloud can't be decrypted. " [:span "You will still be able to access the local version of your graph."]])
@@ -1734,13 +1706,16 @@
 
  ;; Help
  :help/about "About Logseq"
+ :help/about-title "About"
  :help/ask-community "Ask the community"
  :help/awesome-logseq "Awesome Logseq"
  :help/block-reference "Block reference"
  :help/blog "Logseq blog"
  :help/bug "Bug report"
  :help/changelog "Changelog"
+ :help/community-title "Community"
  :help/context-menu "Block context menu"
+ :help/development-title "Development"
  :help/docs "Documentation"
  :help/feature "Feature request"
  :help/forum-community "Forum community"
@@ -1757,15 +1732,8 @@
  :help/submit-feedback "Submit feedback"
  :help/support-forum "Support forum"
  :help/terms "Terms"
-
- ;; About help
- :help.about/title "About"
-
- ;; Community help
- :help.community/title "Community"
-
- ;; Development help
- :help.development/title "Development"
+ :help/terms-title "Terms"
+ :help/usage-title "Usage"
 
  ;; Handbook help
  :help.handbook/chat-on-discord "Chat on Discord"
@@ -1798,12 +1766,6 @@
  :help.shortcuts/shortcut-column "Shortcut"
  :help.shortcuts/title "Keyboard shortcuts"
  :help.shortcuts/triggers "Triggers"
-
- ;; Terms help
- :help.terms/title "Terms"
-
- ;; Usage help
- :help.usage/title "Usage"
 
  ;; Bug report clipboard diagnostics
  :bug-report.clipboard/action-desc "Inspect and collect clipboard data"

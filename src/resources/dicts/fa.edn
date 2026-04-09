@@ -389,11 +389,15 @@
  :graph/create-failed "ایجاد گراف ناموفق بود"
  :graph/creating "Creating graph"
  :graph/delete-local-action "Delete local graph"
+ :graph/delete-local-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
  :graph/delete-server-action "Delete from server"
+ :graph/delete-server-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
  :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/diff "Git diff"
  :graph/encrypt-data-label "Encrypt graph data"
  :graph/last-opened-at-label "Last opened at: {1}"
  :graph/leave-action "Leave this graph"
+ :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "ترک گراف ناموفق بود"
  :graph/left "ترک شد"
  :graph/local-graphs "گراف‌های محلی"
@@ -405,18 +409,6 @@
  :graph/updated-switching "گراف به‌روزرسانی شد. در حال تغییر..."
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
-
- ;; Graph delete local
- :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
-
- ;; Graph delete server
- :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
-
- ;; Graph diff
- :graph.diff/title "Git diff"
-
- ;; Graph leave
- :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "نمایش روزنامه‌ها"
@@ -480,6 +472,7 @@
  :page/contents "محتوا"
  :page/convert-to-tag "تبدیل به برچسب"
  :page/copy-url "کپی آدرس صفحه"
+ :page/create "Create a new page"
  :page/created-at "ایجاد شده در"
  :page/delete "حذف"
  :page/hide-properties "مخفی کردن ویژگی‌ها"
@@ -511,9 +504,6 @@
  :page.convert/tag-to-page-duplicate "صفحه ای با نام \"{1}\" از قبل وجود دارد."
  :page.convert/tag-to-page-has-children "برچسب دارای فرزندان است و نمی‌توان تبدیل کرد"
 
- ;; Page creation
- :page.create/title "Create a new page"
-
  ;; Page deletion
  :page.delete/confirm-title "آیا مطمئن هستید که می خواهید این صفحه را حذف کنید؟"
  :page.delete/success "صفحه «{1}» با موفقیت حذف شد!"
@@ -539,13 +529,11 @@
  :block.macro/unsupported-name "Unsupported macro name: {1}"
 
  ;; Node
+ :node/built-in-cant-delete-error "عناصر داخلی قابل حذف نیستند."
  :node/new "گره جدید"
 
- ;; Node validation
- :node.validation/built-in-cant-delete "عناصر داخلی قابل حذف نیستند."
-
- ;; Journal validation
- :journal.validation/page-not-journal "این صفحه یک روزنامه نیست."
+ ;; Journal
+ :journal/page-cant-convert-warning "این صفحه یک روزنامه نیست."
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -658,13 +646,11 @@
  :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
+ :reference/blocks "ارجاعات بلوک"
  :reference/copy "کپی مرجع"
  :reference/delete "حذف مرجع"
  :reference/replace-with-embed "جایگزینی با جاسازی"
  :reference/replace-with-text "جایگزینی با متن"
-
- ;; Block references
- :reference.block/title "ارجاعات بلوک"
 
  ;; Reference filters
  :reference.filter/directions "برای افزودن کلیک کنید و برای حذف Shift+کلیک کنید. برای برداشتن، دوباره کلیک کنید."
@@ -687,6 +673,7 @@
  :property/choose-tags "انتخاب برچسب‌ها"
  :property/configure "پیکربندی"
  :property/convert-page-to-property "Convert \"{1}\" to property"
+ :property/create-error "ایجاد ویژگی ناموفق بود."
  :property/default-value "مقدار پیش‌فرض"
  :property/delete-from-node "حذف از گره"
  :property/delete-from-node-confirm "این ویژگی از گره حذف شود؟"
@@ -740,9 +727,6 @@
  :property.choice/already-exists "گزینه از قبل وجود دارد."
  :property.choice/cant-delete-built-in "حذف گزینه داخلی ممکن نیست."
  :property.choice/invalid "انتخاب نامعتبر \"{1}\" برای این ویژگی: {2}"
-
- ;; Property creation
- :property.create/failed "ایجاد ویژگی ناموفق بود."
 
  ;; Property validation
  :property.validation/cant-convert-to-number "نمی توان \"{1}\" را به عدد تبدیل کرد."
@@ -1004,9 +988,6 @@
  :settings.ai/enable-mcp-server "فعال‌سازی سرور MCP"
  :settings.ai/enable-mcp-server-desc "فعال‌سازی سرور MCP برای ادغام هوش مصنوعی"
 
- ;; Collaboration settings
- :settings.collaboration/member-remove-failed "حذف عضو ناموفق بود"
-
  ;; Editor settings
  :settings.editor/auto-expand-block-refs "باز کردن خودکار مراجع بلوک"
  :settings.editor/auto-expand-block-refs-tip "برای باز کردن خودکار مراجع بلوک کلیک کنید"
@@ -1157,16 +1138,13 @@
 
  ;; Zotero
  :zotero/attachments "پیوست‌ها"
+ :zotero/imported-file-warning "این یک فایل واردشده از Zotero است، برای باز کردن فایل در Logseq، پوشه دادهٔ Zotero را تنظیم کنید."
+ :zotero/linked-file-warning "این یک فایل پیوندی Zotero است، برای باز کردن فایل در Logseq، پوشه پایهٔ پیوست‌های پیوندی Zotero را تنظیم کنید."
  :zotero/notes "یادداشت‌ها"
-
- ;; Zotero imported file
- :zotero.imported-file/warning "این یک فایل واردشده از Zotero است، برای باز کردن فایل در Logseq، پوشه دادهٔ Zotero را تنظیم کنید."
-
- ;; Zotero linked file
- :zotero.linked-file/warning "این یک فایل پیوندی Zotero است، برای باز کردن فایل در Logseq، پوشه پایهٔ پیوست‌های پیوندی Zotero را تنظیم کنید."
 
  ;; Server
  :server/error-notification "[سرور] {1}"
+ :server/mcp-url-copied "آدرس MCP کپی شد"
  :server/start "شروع"
  :server/stop "توقف"
  :server/title "سرور HTTP API"
@@ -1177,9 +1155,6 @@
  :server.config/reset "بازنشانی"
  :server.config/save-and-apply "ذخیره و اعمال"
  :server.config/title "پیکربندی سرور"
-
- ;; Local server MCP
- :server.mcp/url-copied "آدرس MCP کپی شد"
 
  ;; Local server status
  :server.status/closed "بسته"
@@ -1209,8 +1184,8 @@
  :storage.recycle/page-deleted-at "صفحه «{1}» حذف شد"
  :storage.recycle/restore "بازیابی"
 
- ;; Account billing
- :account.billing/month "ماه"
+ ;; Account
+ :account/month "ماه"
 
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
@@ -1228,6 +1203,9 @@
  :sync/storage-exceed-limit "فضای ذخیره‌سازی از حد مجاز فراتر رفت"
  :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "کاربر هنوز وجود ندارد"
+
+ ;; Collaboration
+ :collaboration/remove-access-error "حذف عضو ناموفق بود"
 
  ;; Encryption
  :encryption/cloud-password-rich (fn [] ["اگر گذرواژه خود را گم کنید، هیچ‌یک از داده‌های شما در ابر قابل رمزگشایی نخواهد بود. " [:span "با این حال همچنان می‌توانید به نسخه محلی گراف خود دسترسی داشته باشید."]])
@@ -1270,12 +1248,15 @@
 
  ;; Help
  :help/about "درباره لاگ‌سیک"
+ :help/about-title "درباره"
  :help/awesome-logseq "Awesome Logseq"
  :help/block-reference "ارجاع بلوک"
  :help/blog "وبلاگ"
  :help/bug "گزارش باگ در GitHub"
  :help/changelog "سیاهه تغییرات"
+ :help/community-title "جامعه"
  :help/context-menu "فهرست زمینه‌ای بلوک"
+ :help/development-title "توسعه"
  :help/docs "مستندات"
  :help/feature "درخواست ویژگی"
  :help/forum-community "جامعه انجمن"
@@ -1288,15 +1269,8 @@
  :help/slash-autocomplete "/اسلش برای تکمیل خودکار"
  :help/start "شروع"
  :help/terms "شرایط"
-
- ;; About help
- :help.about/title "درباره"
-
- ;; Community help
- :help.community/title "جامعه"
-
- ;; Development help
- :help.development/title "توسعه"
+ :help/terms-title "شرایط"
+ :help/usage-title "استفاده"
 
  ;; Handbook help
  :help.handbook/close "بستن"
@@ -1314,12 +1288,6 @@
  :help.shortcuts/shortcut-column "میان‌بر"
  :help.shortcuts/title "میان‌برهای صفحه‌کلید"
  :help.shortcuts/triggers "میان‌برها و محرک‌ها"
-
- ;; Terms help
- :help.terms/title "شرایط"
-
- ;; Usage help
- :help.usage/title "استفاده"
 
  ;; Bug report clipboard diagnostics
  :bug-report.clipboard/action-desc "بررسی کلیپ‌بورد"

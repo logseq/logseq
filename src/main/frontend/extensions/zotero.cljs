@@ -76,7 +76,7 @@
 (rum/defc zotero-imported-file
   [item-key filename]
   (if (string/blank? (setting :zotero-data-directory))
-    [:p.warning (t :zotero.imported-file/warning)]
+    [:p.warning (t :zotero/imported-file-warning)]
     (let [filename (read-string filename)
           full-path (zotero-full-path item-key filename)]
       (open-button full-path))))
@@ -84,7 +84,7 @@
 (rum/defc zotero-linked-file
   [path]
   (if (string/blank? (setting :zotero-linked-attachment-base-directory))
-    [:p.warning (t :zotero.linked-file/warning)]
+    [:p.warning (t :zotero/linked-file-warning)]
     (let [path (read-string path)
           full-path
           (str "file://"

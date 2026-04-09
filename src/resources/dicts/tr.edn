@@ -389,11 +389,15 @@
  :graph/create-failed "Grafik oluşturulamadı"
  :graph/creating "Creating graph"
  :graph/delete-local-action "Delete local graph"
+ :graph/delete-local-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
  :graph/delete-server-action "Delete from server"
+ :graph/delete-server-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
  :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/diff "Git diff"
  :graph/encrypt-data-label "Encrypt graph data"
  :graph/last-opened-at-label "Last opened at: {1}"
  :graph/leave-action "Leave this graph"
+ :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Grafikten ayrılınamadı"
  :graph/left "Grafikten ayrıldı"
  :graph/local-graphs "Yerel grafikler"
@@ -405,18 +409,6 @@
  :graph/updated-switching "Grafik güncellendi. Geçiş yapılıyor..."
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
-
- ;; Graph delete local
- :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
-
- ;; Graph delete server
- :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
-
- ;; Graph diff
- :graph.diff/title "Git diff"
-
- ;; Graph leave
- :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "Günlükleri Göster"
@@ -480,6 +472,7 @@
  :page/contents "İçindekiler"
  :page/convert-to-tag "Etikete dönüştür"
  :page/copy-url "Sayfa URL adresini kopyala"
+ :page/create "Create a new page"
  :page/created-at "Oluşturulma Zamanı"
  :page/delete "Sayfayı sil"
  :page/hide-properties "Özellikleri gizle"
@@ -511,9 +504,6 @@
  :page.convert/tag-to-page-duplicate "\"{1}\" adında bir sayfa zaten mevcut."
  :page.convert/tag-to-page-has-children "Etiketin alt öğeleri var ve dönüştürülemez"
 
- ;; Page creation
- :page.create/title "Create a new page"
-
  ;; Page deletion
  :page.delete/confirm-title "Bu sayfayı silmek istediğinizden emin misiniz?"
  :page.delete/success "Sayfa \"{1}\" başarıyla silindi!"
@@ -539,13 +529,11 @@
  :block.macro/unsupported-name "Unsupported macro name: {1}"
 
  ;; Node
+ :node/built-in-cant-delete-error "Yerleşik öğeler silinemez."
  :node/new "Yeni düğüm"
 
- ;; Node validation
- :node.validation/built-in-cant-delete "Yerleşik öğeler silinemez."
-
- ;; Journal validation
- :journal.validation/page-not-journal "Bu sayfa günlük sayfası değil."
+ ;; Journal
+ :journal/page-cant-convert-warning "Bu sayfa günlük sayfası değil."
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -658,13 +646,11 @@
  :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
+ :reference/blocks "Blok referansı"
  :reference/copy "Bu referansı kopyala"
  :reference/delete "Bu referansı sil"
  :reference/replace-with-embed "Gömme ile değiştir"
  :reference/replace-with-text "Metin ile değiştir"
-
- ;; Block references
- :reference.block/title "Blok referansı"
 
  ;; Reference filters
  :reference.filter/directions "Filtre yönleri"
@@ -687,6 +673,7 @@
  :property/choose-tags "Etiketleri seç"
  :property/configure "Yapılandır"
  :property/convert-page-to-property "Convert \"{1}\" to property"
+ :property/create-error "Özellik oluşturulamadı."
  :property/default-value "Varsayılan değer"
  :property/delete-from-node "Düğümden sil"
  :property/delete-from-node-confirm "Bu özellik düğümden silinsin mi?"
@@ -740,9 +727,6 @@
  :property.choice/already-exists "Seçenek zaten mevcut."
  :property.choice/cant-delete-built-in "Yerleşik seçenek silinemez."
  :property.choice/invalid "Bu özellik için geçersiz \"{1}\" seçimi: {2}"
-
- ;; Property creation
- :property.create/failed "Özellik oluşturulamadı."
 
  ;; Property validation
  :property.validation/cant-convert-to-number "\"{1}\" bir sayıya dönüştürülemiyor."
@@ -1004,9 +988,6 @@
  :settings.ai/enable-mcp-server "MCP sunucusunu etkinleştir"
  :settings.ai/enable-mcp-server-desc "AI entegrasyonu için MCP sunucusunu etkinleştir"
 
- ;; Collaboration settings
- :settings.collaboration/member-remove-failed "Üye kaldırılamadı"
-
  ;; Editor settings
  :settings.editor/auto-expand-block-refs "Blok referanslarını otomatik genişlet"
  :settings.editor/auto-expand-block-refs-tip "Tıklandığında blok referanslarını otomatik genişlet"
@@ -1157,16 +1138,13 @@
 
  ;; Zotero
  :zotero/attachments "Ekler"
+ :zotero/imported-file-warning "Bu, içe aktarılmış bir Zotero dosyasıdır, dosyayı Logseq'te açmak için Zotero veri dizini ayarlayın."
+ :zotero/linked-file-warning "Bu, bağlantılı bir Zotero dosyasıdır, dosyayı Logseq'te açmak için Zotero bağlantılı ek temel dizini ayarlayın."
  :zotero/notes "Notlar"
-
- ;; Zotero imported file
- :zotero.imported-file/warning "Bu, içe aktarılmış bir Zotero dosyasıdır, dosyayı Logseq'te açmak için Zotero veri dizini ayarlayın."
-
- ;; Zotero linked file
- :zotero.linked-file/warning "Bu, bağlantılı bir Zotero dosyasıdır, dosyayı Logseq'te açmak için Zotero bağlantılı ek temel dizini ayarlayın."
 
  ;; Server
  :server/error-notification "[Sunucu] {1}"
+ :server/mcp-url-copied "MCP URL'si kopyalandı"
  :server/start "Başlat"
  :server/stop "Durdur"
  :server/title "HTTP API sunucusu"
@@ -1177,9 +1155,6 @@
  :server.config/reset "Sıfırla"
  :server.config/save-and-apply "Kaydet ve uygula"
  :server.config/title "Sunucu yapılandırması"
-
- ;; Local server MCP
- :server.mcp/url-copied "MCP URL'si kopyalandı"
 
  ;; Local server status
  :server.status/closed "Kapalı"
@@ -1209,8 +1184,8 @@
  :storage.recycle/page-deleted-at "Sayfa silindi {1}"
  :storage.recycle/restore "Geri yükle"
 
- ;; Account billing
- :account.billing/month "ay"
+ ;; Account
+ :account/month "ay"
 
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
@@ -1228,6 +1203,9 @@
  :sync/storage-exceed-limit "Depolama sınırı aşıldı"
  :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "Kullanıcı henüz mevcut değil"
+
+ ;; Collaboration
+ :collaboration/remove-access-error "Üye kaldırılamadı"
 
  ;; Encryption
  :encryption/cloud-password-rich (fn [] ["Parolanızı kaybederseniz, buluttaki verilerinizin hiçbiri çözülemez. " [:span "Yine de grafiğinizin yerel sürümüne erişmeye devam edebilirsiniz."]])
@@ -1270,12 +1248,15 @@
 
  ;; Help
  :help/about "Logseq hakkında"
+ :help/about-title "Hakkında"
  :help/awesome-logseq "Awesome Logseq"
  :help/block-reference "Blok referansı"
  :help/blog "Blog"
  :help/bug "GitHub'da hata bildir"
  :help/changelog "Değişiklik günlüğü"
+ :help/community-title "Topluluk"
  :help/context-menu "Blok kısayol menüsü"
+ :help/development-title "Geliştirme"
  :help/docs "Belgeler"
  :help/feature "Özellik isteği"
  :help/forum-community "Forum topluluğu"
@@ -1288,15 +1269,8 @@
  :help/slash-autocomplete "Eğik çizgi otomatik tamamlama"
  :help/start "Başlarken"
  :help/terms "Koşullar"
-
- ;; About help
- :help.about/title "Hakkında"
-
- ;; Community help
- :help.community/title "Topluluk"
-
- ;; Development help
- :help.development/title "Geliştirme"
+ :help/terms-title "Koşullar"
+ :help/usage-title "Kullanım"
 
  ;; Handbook help
  :help.handbook/close "Kapat"
@@ -1314,12 +1288,6 @@
  :help.shortcuts/shortcut-column "Kısayol"
  :help.shortcuts/title "Klavye kısayolları"
  :help.shortcuts/triggers "Tetikleyiciler"
-
- ;; Terms help
- :help.terms/title "Koşullar"
-
- ;; Usage help
- :help.usage/title "Kullanım"
 
  ;; Bug report clipboard diagnostics
  :bug-report.clipboard/action-desc "Panoyu kontrol et"

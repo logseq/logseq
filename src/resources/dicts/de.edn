@@ -389,11 +389,15 @@
  :graph/create-failed "Graph-Erstellung fehlgeschlagen"
  :graph/creating "Creating graph"
  :graph/delete-local-action "Delete local graph"
+ :graph/delete-local-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
  :graph/delete-server-action "Delete from server"
+ :graph/delete-server-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
  :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/diff "Git diff"
  :graph/encrypt-data-label "Encrypt graph data"
  :graph/last-opened-at-label "Last opened at: {1}"
  :graph/leave-action "Leave this graph"
+ :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Graph verlassen fehlgeschlagen"
  :graph/left "Graph verlassen"
  :graph/local-graphs "Lokale Graphen:"
@@ -405,18 +409,6 @@
  :graph/updated-switching "Graph aktualisiert. Wechsel..."
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
-
- ;; Graph delete local
- :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
-
- ;; Graph delete server
- :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
-
- ;; Graph diff
- :graph.diff/title "Git diff"
-
- ;; Graph leave
- :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "Zeige Journale"
@@ -480,6 +472,7 @@
  :page/contents "Inhalt"
  :page/convert-to-tag "In Tag umwandeln"
  :page/copy-url "Seiten-URL kopieren"
+ :page/create "Create a new page"
  :page/created-at "Erstellt am"
  :page/delete "Seite löschen"
  :page/hide-properties "Eigenschaften ausblenden"
@@ -511,9 +504,6 @@
  :page.convert/tag-to-page-duplicate "Eine Seite mit dem Namen „{1}“ existiert bereits."
  :page.convert/tag-to-page-has-children "Tag mit Unterelementen kann nicht konvertiert werden"
 
- ;; Page creation
- :page.create/title "Create a new page"
-
  ;; Page deletion
  :page.delete/confirm-title "Diese Seite wirklich entfernen?"
  :page.delete/success "Seite „{1}“ wurde erfolgreich gelöscht!"
@@ -539,13 +529,11 @@
  :block.macro/unsupported-name "Unsupported macro name: {1}"
 
  ;; Node
+ :node/built-in-cant-delete-error "Eingebaute Elemente können nicht gelöscht werden."
  :node/new "Neuer Knoten"
 
- ;; Node validation
- :node.validation/built-in-cant-delete "Eingebaute Elemente können nicht gelöscht werden."
-
- ;; Journal validation
- :journal.validation/page-not-journal "Diese Seite ist keine Journalseite."
+ ;; Journal
+ :journal/page-cant-convert-warning "Diese Seite ist keine Journalseite."
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -658,13 +646,11 @@
  :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
+ :reference/blocks "Blockreferenz"
  :reference/copy "Diese Referenz kopieren"
  :reference/delete "Diese Referenz löschen"
  :reference/replace-with-embed "Mit Verankerung ersetzen"
  :reference/replace-with-text "Mit Text ersetzen"
-
- ;; Block references
- :reference.block/title "Blockreferenz"
 
  ;; Reference filters
  :reference.filter/directions "Filterrichtungen"
@@ -687,6 +673,7 @@
  :property/choose-tags "Tags auswählen"
  :property/configure "Konfigurieren"
  :property/convert-page-to-property "Convert \"{1}\" to property"
+ :property/create-error "Eigenschaftserstellung fehlgeschlagen."
  :property/default-value "Standardwert"
  :property/delete-from-node "Vom Knoten entfernen"
  :property/delete-from-node-confirm "Möchten Sie diese Eigenschaft vom Knoten entfernen?"
@@ -740,9 +727,6 @@
  :property.choice/already-exists "Auswahl existiert bereits."
  :property.choice/cant-delete-built-in "Eingebaute Auswahl kann nicht gelöscht werden."
  :property.choice/invalid "Ungültige Auswahl „{1}“ für diese Eigenschaft: {2}"
-
- ;; Property creation
- :property.create/failed "Eigenschaftserstellung fehlgeschlagen."
 
  ;; Property validation
  :property.validation/cant-convert-to-number "„{1}“ kann nicht in eine Zahl umgewandelt werden."
@@ -1004,9 +988,6 @@
  :settings.ai/enable-mcp-server "MCP-Server aktivieren"
  :settings.ai/enable-mcp-server-desc "MCP-Server für KI-Integration aktivieren"
 
- ;; Collaboration settings
- :settings.collaboration/member-remove-failed "Mitglied entfernen fehlgeschlagen"
-
  ;; Editor settings
  :settings.editor/auto-expand-block-refs "Automatisch beim Heranzoomen Blockreferenzen erweitern..."
  :settings.editor/auto-expand-block-refs-tip "Diese Option steuert, ob Blockreferenzen beim Heranzoomen automatisch ausgeklappt werden."
@@ -1157,16 +1138,13 @@
 
  ;; Zotero
  :zotero/attachments "Anhänge"
+ :zotero/imported-file-warning "Dies ist eine importierte Zotero-Datei, lege Zotero-Datenverzeichnis fest, um die Datei in Logseq zu öffnen."
+ :zotero/linked-file-warning "Dies ist eine verknüpfte Zotero-Datei, lege Basisverzeichnis für verknüpfte Zotero-Anhänge fest, um die Datei in Logseq zu öffnen."
  :zotero/notes "Notizen"
-
- ;; Zotero imported file
- :zotero.imported-file/warning "Dies ist eine importierte Zotero-Datei, lege Zotero-Datenverzeichnis fest, um die Datei in Logseq zu öffnen."
-
- ;; Zotero linked file
- :zotero.linked-file/warning "Dies ist eine verknüpfte Zotero-Datei, lege Basisverzeichnis für verknüpfte Zotero-Anhänge fest, um die Datei in Logseq zu öffnen."
 
  ;; Server
  :server/error-notification "[Server] {1}"
+ :server/mcp-url-copied "MCP-URL kopiert"
  :server/start "Starten"
  :server/stop "Stoppen"
  :server/title "HTTP-API-Server"
@@ -1177,9 +1155,6 @@
  :server.config/reset "Zurücksetzen"
  :server.config/save-and-apply "Speichern und anwenden"
  :server.config/title "Server-Konfigurationen"
-
- ;; Local server MCP
- :server.mcp/url-copied "MCP-URL kopiert"
 
  ;; Local server status
  :server.status/closed "Geschlossen"
@@ -1209,8 +1184,8 @@
  :storage.recycle/page-deleted-at "Seite gelöscht {1}"
  :storage.recycle/restore "Wiederherstellen"
 
- ;; Account billing
- :account.billing/month "Monat"
+ ;; Account
+ :account/month "Monat"
 
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
@@ -1228,6 +1203,9 @@
  :sync/storage-exceed-limit "Speicherplatz überschreitet das Limit"
  :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "Benutzer existiert noch nicht"
+
+ ;; Collaboration
+ :collaboration/remove-access-error "Mitglied entfernen fehlgeschlagen"
 
  ;; Encryption
  :encryption/cloud-password-rich (fn [] ["Wenn Sie Ihr Passwort verlieren, können Ihre Daten in der Cloud nicht entschlüsselt werden. " [:span "Sie können weiterhin auf die lokale Version Ihres Graphen zugreifen."]])
@@ -1270,12 +1248,15 @@
 
  ;; Help
  :help/about "Über Logseq"
+ :help/about-title "Über"
  :help/awesome-logseq "Awesome Logseq"
  :help/block-reference "Blockverweis"
  :help/blog "Logseq Blog"
  :help/bug "Fehlerbericht"
  :help/changelog "Änderungsprotokoll"
+ :help/community-title "Community"
  :help/context-menu "Kontextmenü"
+ :help/development-title "Entwicklung"
  :help/docs "Dokumentation"
  :help/feature "Feature-Anfrage"
  :help/forum-community "Forum"
@@ -1288,15 +1269,8 @@
  :help/slash-autocomplete "/-Autovervollständigung"
  :help/start "Einstieg"
  :help/terms "Nutzungsbedingungen"
-
- ;; About help
- :help.about/title "Über"
-
- ;; Community help
- :help.community/title "Community"
-
- ;; Development help
- :help.development/title "Entwicklung"
+ :help/terms-title "Rechtliches"
+ :help/usage-title "Bedienung"
 
  ;; Handbook help
  :help.handbook/close "Schließen"
@@ -1314,12 +1288,6 @@
  :help.shortcuts/shortcut-column "Tastaturkürzel"
  :help.shortcuts/title "Tastaturbefehl"
  :help.shortcuts/triggers "Auslöser"
-
- ;; Terms help
- :help.terms/title "Rechtliches"
-
- ;; Usage help
- :help.usage/title "Bedienung"
 
  ;; Bug report clipboard diagnostics
  :bug-report.clipboard/action-desc "Daten der Zwischenablage sammeln und einsehen"

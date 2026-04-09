@@ -389,11 +389,15 @@
  :graph/create-failed "Gagal membuat grafik"
  :graph/creating "Creating graph"
  :graph/delete-local-action "Delete local graph"
+ :graph/delete-local-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
  :graph/delete-server-action "Delete from server"
+ :graph/delete-server-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
  :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/diff "Git diff"
  :graph/encrypt-data-label "Encrypt graph data"
  :graph/last-opened-at-label "Last opened at: {1}"
  :graph/leave-action "Leave this graph"
+ :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Gagal meninggalkan grafik"
  :graph/left "Ditinggalkan"
  :graph/local-graphs "Grafik lokal:"
@@ -405,18 +409,6 @@
  :graph/updated-switching "Grafik diperbarui. Beralih..."
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
-
- ;; Graph delete local
- :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
-
- ;; Graph delete server
- :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
-
- ;; Graph diff
- :graph.diff/title "Git diff"
-
- ;; Graph leave
- :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "Tampilkan Jurnal"
@@ -480,6 +472,7 @@
  :page/contents "Konten"
  :page/convert-to-tag "Ubah menjadi tag"
  :page/copy-url "Salin URL halaman"
+ :page/create "Create a new page"
  :page/created-at "Dibuat pada"
  :page/delete "Hapus halaman"
  :page/hide-properties "Sembunyikan properti"
@@ -511,9 +504,6 @@
  :page.convert/tag-to-page-duplicate "Halaman dengan nama \"{1}\" sudah ada."
  :page.convert/tag-to-page-has-children "Tag memiliki anak dan tidak bisa diubah"
 
- ;; Page creation
- :page.create/title "Create a new page"
-
  ;; Page deletion
  :page.delete/confirm-title "Apakah Anda yakin ingin menghapus halaman ini?"
  :page.delete/success "Halaman \"{1}\" berhasil dihapus!"
@@ -539,13 +529,11 @@
  :block.macro/unsupported-name "Unsupported macro name: {1}"
 
  ;; Node
+ :node/built-in-cant-delete-error "Elemen bawaan tidak dapat dihapus."
  :node/new "Node baru"
 
- ;; Node validation
- :node.validation/built-in-cant-delete "Elemen bawaan tidak dapat dihapus."
-
- ;; Journal validation
- :journal.validation/page-not-journal "Halaman ini bukan jurnal."
+ ;; Journal
+ :journal/page-cant-convert-warning "Halaman ini bukan jurnal."
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -658,13 +646,11 @@
  :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
+ :reference/blocks "Referensi blok"
  :reference/copy "Salin referensi ini"
  :reference/delete "Hapus referensi ini"
  :reference/replace-with-embed "Ganti dengan penanaman"
  :reference/replace-with-text "Ganti dengan teks"
-
- ;; Block references
- :reference.block/title "Referensi blok"
 
  ;; Reference filters
  :reference.filter/directions "Arah filter"
@@ -687,6 +673,7 @@
  :property/choose-tags "Pilih tag"
  :property/configure "Konfigurasi"
  :property/convert-page-to-property "Convert \"{1}\" to property"
+ :property/create-error "Gagal membuat properti."
  :property/default-value "Nilai default"
  :property/delete-from-node "Hapus dari node"
  :property/delete-from-node-confirm "Hapus properti ini dari node?"
@@ -740,9 +727,6 @@
  :property.choice/already-exists "Pilihan sudah ada."
  :property.choice/cant-delete-built-in "Tidak dapat menghapus pilihan bawaan."
  :property.choice/invalid "Pilihan \"{1}\" tidak valid untuk properti ini: {2}"
-
- ;; Property creation
- :property.create/failed "Gagal membuat properti."
 
  ;; Property validation
  :property.validation/cant-convert-to-number "Tidak dapat mengonversi \"{1}\" menjadi angka."
@@ -1004,9 +988,6 @@
  :settings.ai/enable-mcp-server "Aktifkan server MCP"
  :settings.ai/enable-mcp-server-desc "Aktifkan server MCP untuk integrasi AI"
 
- ;; Collaboration settings
- :settings.collaboration/member-remove-failed "Gagal menghapus anggota"
-
  ;; Editor settings
  :settings.editor/auto-expand-block-refs "Perluas referensi blok secara otomatis saat zoom-in"
  :settings.editor/auto-expand-block-refs-tip "Opsi ini mengontrol apakah referensi blok akan diperluas secara otomatis saat zoom-in."
@@ -1157,16 +1138,13 @@
 
  ;; Zotero
  :zotero/attachments "Lampiran"
+ :zotero/imported-file-warning "Ini adalah file Zotero yang diimpor, atur direktori data Zotero untuk membuka file ini di Logseq."
+ :zotero/linked-file-warning "Ini adalah file Zotero yang ditautkan, atur direktori dasar lampiran tertaut Zotero untuk membuka file ini di Logseq."
  :zotero/notes "Catatan"
-
- ;; Zotero imported file
- :zotero.imported-file/warning "Ini adalah file Zotero yang diimpor, atur direktori data Zotero untuk membuka file ini di Logseq."
-
- ;; Zotero linked file
- :zotero.linked-file/warning "Ini adalah file Zotero yang ditautkan, atur direktori dasar lampiran tertaut Zotero untuk membuka file ini di Logseq."
 
  ;; Server
  :server/error-notification "[Server] {1}"
+ :server/mcp-url-copied "URL MCP disalin"
  :server/start "Mulai"
  :server/stop "Berhenti"
  :server/title "Server HTTP API"
@@ -1177,9 +1155,6 @@
  :server.config/reset "Reset"
  :server.config/save-and-apply "Simpan dan terapkan"
  :server.config/title "Konfigurasi server"
-
- ;; Local server MCP
- :server.mcp/url-copied "URL MCP disalin"
 
  ;; Local server status
  :server.status/closed "Tertutup"
@@ -1209,8 +1184,8 @@
  :storage.recycle/page-deleted-at "Halaman dihapus {1}"
  :storage.recycle/restore "Pulihkan"
 
- ;; Account billing
- :account.billing/month "bulan"
+ ;; Account
+ :account/month "bulan"
 
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
@@ -1228,6 +1203,9 @@
  :sync/storage-exceed-limit "Penyimpanan melebihi batas"
  :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "Pengguna belum ada"
+
+ ;; Collaboration
+ :collaboration/remove-access-error "Gagal menghapus anggota"
 
  ;; Encryption
  :encryption/cloud-password-rich (fn [] ["Jika Anda kehilangan kata sandi, semua data Anda di cloud tidak dapat didekripsi. " [:span "Anda masih dapat mengakses versi lokal grafik Anda."]])
@@ -1270,12 +1248,15 @@
 
  ;; Help
  :help/about "Tentang Logseq"
+ :help/about-title "Tentang"
  :help/awesome-logseq "Logseq yang mengagumkan"
  :help/block-reference "Blok referensi"
  :help/blog "Blog Logseq"
  :help/bug "Laporan bug"
  :help/changelog "Catatan perubahan"
+ :help/community-title "Komunitas"
  :help/context-menu "Blokir menu konteks"
+ :help/development-title "Pengembangan"
  :help/docs "Dokumentasi"
  :help/feature "Permintaan fitur"
  :help/forum-community "Komunitas forum"
@@ -1288,15 +1269,8 @@
  :help/slash-autocomplete "Pelengkapan otomatis garis miring"
  :help/start "Memulai"
  :help/terms "Ketentuan"
-
- ;; About help
- :help.about/title "Tentang"
-
- ;; Community help
- :help.community/title "Komunitas"
-
- ;; Development help
- :help.development/title "Pengembangan"
+ :help/terms-title "Ketentuan"
+ :help/usage-title "Penggunaan"
 
  ;; Handbook help
  :help.handbook/close "Tutup"
@@ -1314,12 +1288,6 @@
  :help.shortcuts/shortcut-column "Pintasan"
  :help.shortcuts/title "Pintasan Papan Ketik"
  :help.shortcuts/triggers "Pemicu"
-
- ;; Terms help
- :help.terms/title "Ketentuan"
-
- ;; Usage help
- :help.usage/title "Penggunaan"
 
  ;; Bug report clipboard diagnostics
  :bug-report.clipboard/action-desc "Memeriksa dan mengumpulkan data papan klip"

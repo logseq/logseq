@@ -389,11 +389,15 @@
  :graph/create-failed "Error al crear el grafo"
  :graph/creating "Creating graph"
  :graph/delete-local-action "Delete local graph"
+ :graph/delete-local-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
  :graph/delete-server-action "Delete from server"
+ :graph/delete-server-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
  :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/diff "Git diff"
  :graph/encrypt-data-label "Encrypt graph data"
  :graph/last-opened-at-label "Last opened at: {1}"
  :graph/leave-action "Leave this graph"
+ :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Error al abandonar el grafo"
  :graph/left "Grafo abandonado"
  :graph/local-graphs "Grafos locales:"
@@ -405,18 +409,6 @@
  :graph/updated-switching "Grafo actualizado. Cambiando..."
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
-
- ;; Graph delete local
- :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
-
- ;; Graph delete server
- :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
-
- ;; Graph diff
- :graph.diff/title "Git diff"
-
- ;; Graph leave
- :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "Mostrar Diarios"
@@ -480,6 +472,7 @@
  :page/contents "Contenido"
  :page/convert-to-tag "Convertir en etiqueta"
  :page/copy-url "Copiar URL de la página"
+ :page/create "Create a new page"
  :page/created-at "Creada el"
  :page/delete "Eliminar página"
  :page/hide-properties "Ocultar propiedades"
@@ -511,9 +504,6 @@
  :page.convert/tag-to-page-duplicate "Ya existe una página con el nombre \"{1}\"."
  :page.convert/tag-to-page-has-children "La etiqueta tiene elementos hijos y no se puede convertir"
 
- ;; Page creation
- :page.create/title "Create a new page"
-
  ;; Page deletion
  :page.delete/confirm-title "¿Está seguro de que desea eliminar esta página?"
  :page.delete/success "¡La página \"{1}\" se eliminó correctamente!"
@@ -539,13 +529,11 @@
  :block.macro/unsupported-name "Unsupported macro name: {1}"
 
  ;; Node
+ :node/built-in-cant-delete-error "Los elementos integrados no se pueden eliminar."
  :node/new "Nuevo nodo"
 
- ;; Node validation
- :node.validation/built-in-cant-delete "Los elementos integrados no se pueden eliminar."
-
- ;; Journal validation
- :journal.validation/page-not-journal "Esta página no es una página de diario."
+ ;; Journal
+ :journal/page-cant-convert-warning "Esta página no es una página de diario."
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -658,13 +646,11 @@
  :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
+ :reference/blocks "Referencia de bloque"
  :reference/copy "Copiar esta referencia"
  :reference/delete "Eliminar esta referencia"
  :reference/replace-with-embed "Reemplazar con incrustación"
  :reference/replace-with-text "Reemplazar con texto"
-
- ;; Block references
- :reference.block/title "Referencia de bloque"
 
  ;; Reference filters
  :reference.filter/directions "Haga clic para incluir y haga shift-clic para excluir. Haga clic nuevamente para eliminar."
@@ -687,6 +673,7 @@
  :property/choose-tags "Elegir etiquetas"
  :property/configure "Configurar"
  :property/convert-page-to-property "Convert \"{1}\" to property"
+ :property/create-error "Error al crear la propiedad."
  :property/default-value "Valor predeterminado"
  :property/delete-from-node "Eliminar del nodo"
  :property/delete-from-node-confirm "¿Desea eliminar esta propiedad del nodo?"
@@ -740,9 +727,6 @@
  :property.choice/already-exists "La opción ya existe."
  :property.choice/cant-delete-built-in "La opción integrada no se puede eliminar."
  :property.choice/invalid "Elección no válida \"{1}\" para esta propiedad: {2}"
-
- ;; Property creation
- :property.create/failed "Error al crear la propiedad."
 
  ;; Property validation
  :property.validation/cant-convert-to-number "No se puede convertir \"{1}\" en un número."
@@ -1004,9 +988,6 @@
  :settings.ai/enable-mcp-server "Habilitar servidor MCP"
  :settings.ai/enable-mcp-server-desc "Habilitar servidor MCP para integración con IA"
 
- ;; Collaboration settings
- :settings.collaboration/member-remove-failed "Error al eliminar el miembro"
-
  ;; Editor settings
  :settings.editor/auto-expand-block-refs "Expandir referencias de bloque automáticamente al hacer un acercamiento"
  :settings.editor/auto-expand-block-refs-tip "Esta opción controla si expandir el bloque de referencias automáticamente al hacer un acercamiento."
@@ -1157,16 +1138,13 @@
 
  ;; Zotero
  :zotero/attachments "Archivos adjuntos"
+ :zotero/imported-file-warning "Este es un archivo importado de Zotero, configure directorio de datos de Zotero para abrir el archivo en Logseq."
+ :zotero/linked-file-warning "Este es un archivo vinculado de Zotero, configure directorio base de archivos adjuntos vinculados de Zotero para abrir el archivo en Logseq."
  :zotero/notes "Notas"
-
- ;; Zotero imported file
- :zotero.imported-file/warning "Este es un archivo importado de Zotero, configure directorio de datos de Zotero para abrir el archivo en Logseq."
-
- ;; Zotero linked file
- :zotero.linked-file/warning "Este es un archivo vinculado de Zotero, configure directorio base de archivos adjuntos vinculados de Zotero para abrir el archivo en Logseq."
 
  ;; Server
  :server/error-notification "[Servidor] {1}"
+ :server/mcp-url-copied "URL MCP copiada"
  :server/start "Iniciar"
  :server/stop "Detener"
  :server/title "Servidor API HTTP"
@@ -1177,9 +1155,6 @@
  :server.config/reset "Restablecer"
  :server.config/save-and-apply "Guardar y aplicar"
  :server.config/title "Configuraciones del servidor"
-
- ;; Local server MCP
- :server.mcp/url-copied "URL MCP copiada"
 
  ;; Local server status
  :server.status/closed "Cerrado"
@@ -1209,8 +1184,8 @@
  :storage.recycle/page-deleted-at "Página eliminada {1}"
  :storage.recycle/restore "Restaurar"
 
- ;; Account billing
- :account.billing/month "mes"
+ ;; Account
+ :account/month "mes"
 
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
@@ -1228,6 +1203,9 @@
  :sync/storage-exceed-limit "El almacenamiento excede el límite"
  :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "El usuario aún no existe"
+
+ ;; Collaboration
+ :collaboration/remove-access-error "Error al eliminar el miembro"
 
  ;; Encryption
  :encryption/cloud-password-rich (fn [] ["Si pierdes tu contraseña, no se podrá descifrar ninguno de tus datos en la nube. " [:span "Aun así, podrás seguir accediendo a la versión local de tu grafo."]])
@@ -1270,12 +1248,15 @@
 
  ;; Help
  :help/about "Acerca de Logseq"
+ :help/about-title "Acerca de"
  :help/awesome-logseq "Increíble Logseq"
  :help/block-reference "Referencia de bloque"
  :help/blog "Blog de Logseq"
  :help/bug "Reportar un problema"
  :help/changelog "Registro de cambios"
+ :help/community-title "Comunidad"
  :help/context-menu "Menú contextual"
+ :help/development-title "Desarrollo"
  :help/docs "Documentación"
  :help/feature "Solicitar una función"
  :help/forum-community "Foro de la comunidad"
@@ -1288,15 +1269,8 @@
  :help/slash-autocomplete "Autocompletado de barra '/'"
  :help/start "Comenzando"
  :help/terms "Términos"
-
- ;; About help
- :help.about/title "Acerca de"
-
- ;; Community help
- :help.community/title "Comunidad"
-
- ;; Development help
- :help.development/title "Desarrollo"
+ :help/terms-title "Términos"
+ :help/usage-title "Uso"
 
  ;; Handbook help
  :help.handbook/close "Cerrar"
@@ -1314,12 +1288,6 @@
  :help.shortcuts/shortcut-column "Atajo"
  :help.shortcuts/title "Atajos de teclado"
  :help.shortcuts/triggers "Iniciadores"
-
- ;; Terms help
- :help.terms/title "Términos"
-
- ;; Usage help
- :help.usage/title "Uso"
 
  ;; Bug report clipboard diagnostics
  :bug-report.clipboard/action-desc "Inspeccionar y recolectar datos del portapapeles"

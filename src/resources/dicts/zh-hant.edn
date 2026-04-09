@@ -389,11 +389,15 @@
  :graph/create-failed "建立圖譜失敗。"
  :graph/creating "Creating graph"
  :graph/delete-local-action "Delete local graph"
+ :graph/delete-local-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
  :graph/delete-server-action "Delete from server"
+ :graph/delete-server-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
  :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/diff "Git 差異"
  :graph/encrypt-data-label "Encrypt graph data"
  :graph/last-opened-at-label "Last opened at: {1}"
  :graph/leave-action "Leave this graph"
+ :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "離開圖譜失敗。"
  :graph/left "已離開圖譜。"
  :graph/local-graphs "本地圖譜"
@@ -405,18 +409,6 @@
  :graph/updated-switching "圖譜已更新！正在切換到圖譜……"
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
-
- ;; Graph delete local
- :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
-
- ;; Graph delete server
- :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
-
- ;; Graph diff
- :graph.diff/title "Git 差異"
-
- ;; Graph leave
- :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "顯示日記頁面"
@@ -478,6 +470,7 @@
  :page/contents "內容"
  :page/convert-to-tag "轉換為標籤"
  :page/copy-url "複製頁面連結"
+ :page/create "建立新頁面"
  :page/created-at "建立於"
  :page/delete "刪除頁面"
  :page/hide-properties "收起屬性"
@@ -509,9 +502,6 @@
  :page.convert/tag-to-page-duplicate "頁面「{1}」已存在。"
  :page.convert/tag-to-page-has-children "此標籤無法轉換，因為它仍有子標籤。必須先移除或轉換所有子標籤，才能轉換此標籤。"
 
- ;; Page creation
- :page.create/title "建立新頁面"
-
  ;; Page deletion
  :page.delete/confirm-title "確認要刪除此頁面嗎？"
  :page.delete/success "頁面「{1}」已成功刪除！"
@@ -537,13 +527,11 @@
  :block.macro/unsupported-name "Unsupported macro name: {1}"
 
  ;; Node
+ :node/built-in-cant-delete-error "無法刪除內建項。"
  :node/new "新增節點"
 
- ;; Node validation
- :node.validation/built-in-cant-delete "無法刪除內建項。"
-
- ;; Journal validation
- :journal.validation/page-not-journal "此頁面不是日記頁面。"
+ ;; Journal
+ :journal/page-cant-convert-warning "此頁面不是日記頁面。"
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -656,13 +644,11 @@
  :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
+ :reference/blocks "區塊引用"
  :reference/copy "複製此引用"
  :reference/delete "刪除此引用"
  :reference/replace-with-embed "取代為嵌入"
  :reference/replace-with-text "取代為文字"
-
- ;; Block references
- :reference.block/title "區塊引用"
 
  ;; Reference filters
  :reference.filter/directions "點擊以包含，Shift+點擊以排除，再次點擊以移除。"
@@ -685,6 +671,7 @@
  :property/choose-tags "選擇標籤"
  :property/configure "設定屬性"
  :property/convert-page-to-property "Convert \"{1}\" to property"
+ :property/create-error "建立屬性失敗。"
  :property/default-value "預設值"
  :property/delete-from-node "從節點刪除屬性"
  :property/delete-from-node-confirm "確認要從此節點刪除此屬性嗎？"
@@ -738,9 +725,6 @@
  :property.choice/already-exists "選項已存在。"
  :property.choice/cant-delete-built-in "無法刪除內建選項。"
  :property.choice/invalid "此屬性的選擇「{1}」無效：{2}"
-
- ;; Property creation
- :property.create/failed "建立屬性失敗。"
 
  ;; Property validation
  :property.validation/cant-convert-to-number "無法將「{1}」轉換為數字。"
@@ -1006,9 +990,6 @@
  :settings.ai/enable-mcp-server "MCP 伺服器"
  :settings.ai/enable-mcp-server-desc "啟用 MCP 伺服器，允許與本地 AI 應用程式通訊"
 
- ;; Collaboration settings
- :settings.collaboration/member-remove-failed "移除成員失敗。"
-
  ;; Editor settings
  :settings.editor/auto-expand-block-refs "自動展開聚焦 block 的引用"
  :settings.editor/auto-expand-block-refs-tip "此選項控制是否在頁面載入時展開區塊引用"
@@ -1159,16 +1140,13 @@
 
  ;; Zotero
  :zotero/attachments "附件"
+ :zotero/imported-file-warning "這是一個從 Zotero 匯入的檔案，設定 Zotero 資料目錄 後即可在 Logseq 中開啟該檔案。"
+ :zotero/linked-file-warning "這是一個 Zotero 連結檔案，設定 Zotero 連結附件基底目錄 後即可在 Logseq 中開啟該檔案。"
  :zotero/notes "筆記"
-
- ;; Zotero imported file
- :zotero.imported-file/warning "這是一個從 Zotero 匯入的檔案，設定 Zotero 資料目錄 後即可在 Logseq 中開啟該檔案。"
-
- ;; Zotero linked file
- :zotero.linked-file/warning "這是一個 Zotero 連結檔案，設定 Zotero 連結附件基底目錄 後即可在 Logseq 中開啟該檔案。"
 
  ;; Server
  :server/error-notification "[伺服器] {1}"
+ :server/mcp-url-copied "MCP URL 已複製到剪貼簿！"
  :server/start "啟動伺服器"
  :server/stop "停止伺服器"
  :server/title "HTTP API 伺服器"
@@ -1179,9 +1157,6 @@
  :server.config/reset "重設"
  :server.config/save-and-apply "儲存並套用"
  :server.config/title "伺服器設定"
-
- ;; Local server MCP
- :server.mcp/url-copied "MCP URL 已複製到剪貼簿！"
 
  ;; Local server status
  :server.status/closed "已關閉"
@@ -1211,8 +1186,8 @@
  :storage.recycle/page-deleted-at "頁面已刪除 {1}"
  :storage.recycle/restore "還原"
 
- ;; Account billing
- :account.billing/month "月"
+ ;; Account
+ :account/month "月"
 
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
@@ -1230,6 +1205,9 @@
  :sync/storage-exceed-limit "同步儲存超出限制"
  :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "該使用者尚不存在。"
+
+ ;; Collaboration
+ :collaboration/remove-access-error "移除成員失敗。"
 
  ;; Encryption
  :encryption/cloud-password-rich (fn [] ["如果你遺失了密碼，雲端中的所有資料都將無法解密。" [:span "你仍然可以存取圖譜的本機版本。"]])
@@ -1272,12 +1250,15 @@
 
  ;; Help
  :help/about "關於 Logseq"
+ :help/about-title "關於"
  :help/awesome-logseq "很棒的 Logseq"
  :help/block-reference "區塊引用"
  :help/blog "Logseq 部落格"
  :help/bug "問題回報"
  :help/changelog "更新紀錄"
+ :help/community-title "社群"
  :help/context-menu "區塊內容選單"
+ :help/development-title "開發"
  :help/docs "說明文件"
  :help/feature "功能建議"
  :help/forum-community "論壇社群"
@@ -1290,15 +1271,8 @@
  :help/slash-autocomplete "Slash 自動"
  :help/start "入門"
  :help/terms "服務條款"
-
- ;; About help
- :help.about/title "關於"
-
- ;; Community help
- :help.community/title "社群"
-
- ;; Development help
- :help.development/title "開發"
+ :help/terms-title "條款"
+ :help/usage-title "使用說明"
 
  ;; Handbook help
  :help.handbook/close "關閉"
@@ -1316,12 +1290,6 @@
  :help.shortcuts/shortcut-column "快速鍵"
  :help.shortcuts/title "鍵盤快速鍵"
  :help.shortcuts/triggers "觸發"
-
- ;; Terms help
- :help.terms/title "條款"
-
- ;; Usage help
- :help.usage/title "使用說明"
 
  ;; Bug report clipboard diagnostics
  :bug-report.clipboard/action-desc "檢查和收集剪貼簿資料"

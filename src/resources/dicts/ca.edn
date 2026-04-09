@@ -389,11 +389,15 @@
  :graph/create-failed "Error en crear el graf"
  :graph/creating "Creating graph"
  :graph/delete-local-action "Delete local graph"
+ :graph/delete-local-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
  :graph/delete-server-action "Delete from server"
+ :graph/delete-server-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
  :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/diff "Git diff"
  :graph/encrypt-data-label "Encrypt graph data"
  :graph/last-opened-at-label "Last opened at: {1}"
  :graph/leave-action "Leave this graph"
+ :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Error en sortir del graf"
  :graph/left "Graf abandonat"
  :graph/local-graphs "Grafs locals"
@@ -405,18 +409,6 @@
  :graph/updated-switching "Graf actualitzat. Canviant..."
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
-
- ;; Graph delete local
- :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
-
- ;; Graph delete server
- :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
-
- ;; Graph diff
- :graph.diff/title "Git diff"
-
- ;; Graph leave
- :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "Mostrar Diaris"
@@ -480,6 +472,7 @@
  :page/contents "Contingut"
  :page/convert-to-tag "Convertir en etiqueta"
  :page/copy-url "Copiar URL de la pàgina"
+ :page/create "Create a new page"
  :page/created-at "Creada el"
  :page/delete "Eliminar pàgina"
  :page/hide-properties "Amagar propietats"
@@ -511,9 +504,6 @@
  :page.convert/tag-to-page-duplicate "Ja existeix una pàgina amb el nom \"{1}\"."
  :page.convert/tag-to-page-has-children "L'etiqueta té fills i no es pot convertir"
 
- ;; Page creation
- :page.create/title "Create a new page"
-
  ;; Page deletion
  :page.delete/confirm-title "Esteu segur que voleu suprimir aquesta pàgina?"
  :page.delete/success "La pàgina \"{1}\" s'ha suprimit correctament!"
@@ -539,13 +529,11 @@
  :block.macro/unsupported-name "Unsupported macro name: {1}"
 
  ;; Node
+ :node/built-in-cant-delete-error "Els elements integrats no es poden eliminar."
  :node/new "Nou node"
 
- ;; Node validation
- :node.validation/built-in-cant-delete "Els elements integrats no es poden eliminar."
-
- ;; Journal validation
- :journal.validation/page-not-journal "Aquesta pàgina no és una pàgina de diari."
+ ;; Journal
+ :journal/page-cant-convert-warning "Aquesta pàgina no és una pàgina de diari."
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -658,13 +646,11 @@
  :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
+ :reference/blocks "Referència de bloc"
  :reference/copy "Copiar aquesta referència"
  :reference/delete "Eliminar aquesta referència"
  :reference/replace-with-embed "Substituir per incrustació"
  :reference/replace-with-text "Substituir per text"
-
- ;; Block references
- :reference.block/title "Referència de bloc"
 
  ;; Reference filters
  :reference.filter/directions "Direccions del filtre"
@@ -687,6 +673,7 @@
  :property/choose-tags "Triar etiquetes"
  :property/configure "Configurar"
  :property/convert-page-to-property "Convert \"{1}\" to property"
+ :property/create-error "Error en crear la propietat."
  :property/default-value "Valor per defecte"
  :property/delete-from-node "Eliminar del node"
  :property/delete-from-node-confirm "Voleu eliminar aquesta propietat del node?"
@@ -740,9 +727,6 @@
  :property.choice/already-exists "L'opció ja existeix."
  :property.choice/cant-delete-built-in "L'opció integrada no es pot eliminar."
  :property.choice/invalid "Opció \"{1}\" no vàlida per a aquesta propietat: {2}"
-
- ;; Property creation
- :property.create/failed "Error en crear la propietat."
 
  ;; Property validation
  :property.validation/cant-convert-to-number "No es pot convertir \"{1}\" en un número."
@@ -1004,9 +988,6 @@
  :settings.ai/enable-mcp-server "Activar servidor MCP"
  :settings.ai/enable-mcp-server-desc "Activar servidor MCP per integració amb IA"
 
- ;; Collaboration settings
- :settings.collaboration/member-remove-failed "Error en eliminar el membre"
-
  ;; Editor settings
  :settings.editor/auto-expand-block-refs "Expandir referències de blocs automàticament"
  :settings.editor/auto-expand-block-refs-tip "Expandir referències de blocs automàticament en fer clic"
@@ -1157,16 +1138,13 @@
 
  ;; Zotero
  :zotero/attachments "Adjunts"
+ :zotero/imported-file-warning "Aquest és un fitxer importat de Zotero, configura directori de dades de Zotero per obrir el fitxer a Logseq."
+ :zotero/linked-file-warning "Aquest és un fitxer enllaçat de Zotero, configura directori base dels adjunts enllaçats de Zotero per obrir el fitxer a Logseq."
  :zotero/notes "Notes"
-
- ;; Zotero imported file
- :zotero.imported-file/warning "Aquest és un fitxer importat de Zotero, configura directori de dades de Zotero per obrir el fitxer a Logseq."
-
- ;; Zotero linked file
- :zotero.linked-file/warning "Aquest és un fitxer enllaçat de Zotero, configura directori base dels adjunts enllaçats de Zotero per obrir el fitxer a Logseq."
 
  ;; Server
  :server/error-notification "[Servidor] {1}"
+ :server/mcp-url-copied "URL MCP copiada"
  :server/start "Iniciar"
  :server/stop "Aturar"
  :server/title "Servidor d'API HTTP"
@@ -1177,9 +1155,6 @@
  :server.config/reset "Restablir"
  :server.config/save-and-apply "Desar i aplicar"
  :server.config/title "Configuracions del servidor"
-
- ;; Local server MCP
- :server.mcp/url-copied "URL MCP copiada"
 
  ;; Local server status
  :server.status/closed "Tancat"
@@ -1209,8 +1184,8 @@
  :storage.recycle/page-deleted-at "Pàgina suprimida {1}"
  :storage.recycle/restore "Restaurar"
 
- ;; Account billing
- :account.billing/month "mes"
+ ;; Account
+ :account/month "mes"
 
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
@@ -1228,6 +1203,9 @@
  :sync/storage-exceed-limit "L'emmagatzematge supera el límit"
  :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "L'usuari encara no existeix"
+
+ ;; Collaboration
+ :collaboration/remove-access-error "Error en eliminar el membre"
 
  ;; Encryption
  :encryption/cloud-password-rich (fn [] ["Si perdeu la contrasenya, no es podrà desxifrar cap de les dades que tingueu al núvol. " [:span "Tot i així, encara podreu accedir a la versió local del vostre gràfic."]])
@@ -1270,12 +1248,15 @@
 
  ;; Help
  :help/about "Sobre Logseq"
+ :help/about-title "Quant a"
  :help/awesome-logseq "Awesome Logseq"
  :help/block-reference "Referència de bloc"
  :help/blog "Blog de Logseq"
  :help/bug "Informar d'un error a GitHub"
  :help/changelog "Registre de canvis"
+ :help/community-title "Comunitat"
  :help/context-menu "Menú contextual"
+ :help/development-title "Desenvolupament"
  :help/docs "Documentació"
  :help/feature "Sol·licitud de funcionalitat"
  :help/forum-community "Comunitat del fòrum"
@@ -1288,15 +1269,8 @@
  :help/slash-autocomplete "Autocompletat de barra '/'"
  :help/start "Començar"
  :help/terms "Termes"
-
- ;; About help
- :help.about/title "Quant a"
-
- ;; Community help
- :help.community/title "Comunitat"
-
- ;; Development help
- :help.development/title "Desenvolupament"
+ :help/terms-title "Termes"
+ :help/usage-title "Ús"
 
  ;; Handbook help
  :help.handbook/close "Tanca"
@@ -1314,12 +1288,6 @@
  :help.shortcuts/shortcut-column "Drecera"
  :help.shortcuts/title "Dreceres de teclat"
  :help.shortcuts/triggers "Iniciadors"
-
- ;; Terms help
- :help.terms/title "Termes"
-
- ;; Usage help
- :help.usage/title "Ús"
 
  ;; Bug report clipboard diagnostics
  :bug-report.clipboard/action-desc "Inspeccionar porta-retalls"

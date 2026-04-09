@@ -389,11 +389,15 @@
  :graph/create-failed "Creazione del grafo fallita"
  :graph/creating "Creating graph"
  :graph/delete-local-action "Delete local graph"
+ :graph/delete-local-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
  :graph/delete-server-action "Delete from server"
+ :graph/delete-server-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
  :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/diff "Git diff"
  :graph/encrypt-data-label "Encrypt graph data"
  :graph/last-opened-at-label "Last opened at: {1}"
  :graph/leave-action "Leave this graph"
+ :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Uscita dal grafo fallita"
  :graph/left "Grafo lasciato"
  :graph/local-graphs "Grafi locali:"
@@ -405,18 +409,6 @@
  :graph/updated-switching "Grafo aggiornato. Cambio..."
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
-
- ;; Graph delete local
- :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
-
- ;; Graph delete server
- :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
-
- ;; Graph diff
- :graph.diff/title "Git diff"
-
- ;; Graph leave
- :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "Mostra diari"
@@ -480,6 +472,7 @@
  :page/contents "Contenuti"
  :page/convert-to-tag "Converti in tag"
  :page/copy-url "Copia URL pagina"
+ :page/create "Create a new page"
  :page/created-at "Creato alle"
  :page/delete "Elimina pagina"
  :page/hide-properties "Nascondi proprietà"
@@ -511,9 +504,6 @@
  :page.convert/tag-to-page-duplicate "Esiste già una pagina con il nome \"{1}\"."
  :page.convert/tag-to-page-has-children "Il tag ha elementi figli e non può essere convertito"
 
- ;; Page creation
- :page.create/title "Create a new page"
-
  ;; Page deletion
  :page.delete/confirm-title "Sei sicuro di voler eliminare questa pagina?"
  :page.delete/success "La pagina \"{1}\" è stata eliminata con successo!"
@@ -539,13 +529,11 @@
  :block.macro/unsupported-name "Unsupported macro name: {1}"
 
  ;; Node
+ :node/built-in-cant-delete-error "Gli elementi predefiniti non possono essere eliminati."
  :node/new "Nuovo nodo"
 
- ;; Node validation
- :node.validation/built-in-cant-delete "Gli elementi predefiniti non possono essere eliminati."
-
- ;; Journal validation
- :journal.validation/page-not-journal "Questa pagina non è una pagina di diario."
+ ;; Journal
+ :journal/page-cant-convert-warning "Questa pagina non è una pagina di diario."
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -658,13 +646,11 @@
  :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
+ :reference/blocks "Riferimento al blocco"
  :reference/copy "Copia riferimento"
  :reference/delete "Elimina riferimento"
  :reference/replace-with-embed "Sostituisci con un'integrazione"
  :reference/replace-with-text "Sostituisci con testo"
-
- ;; Block references
- :reference.block/title "Riferimento al blocco"
 
  ;; Reference filters
  :reference.filter/directions "Click per includere e Shift-Click per escludere. Clicca di nuovo per rimuovere."
@@ -687,6 +673,7 @@
  :property/choose-tags "Scegli tag"
  :property/configure "Configura"
  :property/convert-page-to-property "Convert \"{1}\" to property"
+ :property/create-error "Creazione proprietà fallita."
  :property/default-value "Valore predefinito"
  :property/delete-from-node "Elimina dal nodo"
  :property/delete-from-node-confirm "Vuoi eliminare questa proprietà dal nodo?"
@@ -740,9 +727,6 @@
  :property.choice/already-exists "L'opzione esiste già."
  :property.choice/cant-delete-built-in "L'opzione predefinita non può essere eliminata."
  :property.choice/invalid "Scelta non valida \"{1}\" per questa proprietà: {2}"
-
- ;; Property creation
- :property.create/failed "Creazione proprietà fallita."
 
  ;; Property validation
  :property.validation/cant-convert-to-number "Impossibile convertire \"{1}\" in un numero."
@@ -1004,9 +988,6 @@
  :settings.ai/enable-mcp-server "Abilita server MCP"
  :settings.ai/enable-mcp-server-desc "Abilita il server MCP per l'integrazione AI"
 
- ;; Collaboration settings
- :settings.collaboration/member-remove-failed "Rimozione membro fallita"
-
  ;; Editor settings
  :settings.editor/auto-expand-block-refs "Espandi riferimenti ai blocchi automaticamente quando si ingrandisce"
  :settings.editor/auto-expand-block-refs-tip "Questa opzione controlla se espandere i riferimenti ai blocchi automaticamente quando si ingrandisce."
@@ -1157,16 +1138,13 @@
 
  ;; Zotero
  :zotero/attachments "Allegati"
+ :zotero/imported-file-warning "Questo è un file Zotero importato, imposta directory dei dati di Zotero per aprire il file in Logseq."
+ :zotero/linked-file-warning "Questo è un file Zotero collegato, imposta directory di base degli allegati collegati di Zotero per aprire il file in Logseq."
  :zotero/notes "Note"
-
- ;; Zotero imported file
- :zotero.imported-file/warning "Questo è un file Zotero importato, imposta directory dei dati di Zotero per aprire il file in Logseq."
-
- ;; Zotero linked file
- :zotero.linked-file/warning "Questo è un file Zotero collegato, imposta directory di base degli allegati collegati di Zotero per aprire il file in Logseq."
 
  ;; Server
  :server/error-notification "[Server] {1}"
+ :server/mcp-url-copied "URL MCP copiato"
  :server/start "Avvia"
  :server/stop "Ferma"
  :server/title "Server API HTTP"
@@ -1177,9 +1155,6 @@
  :server.config/reset "Ripristina"
  :server.config/save-and-apply "Salva e applica"
  :server.config/title "Configurazioni del server"
-
- ;; Local server MCP
- :server.mcp/url-copied "URL MCP copiato"
 
  ;; Local server status
  :server.status/closed "Chiuso"
@@ -1209,8 +1184,8 @@
  :storage.recycle/page-deleted-at "Pagina eliminata {1}"
  :storage.recycle/restore "Ripristina"
 
- ;; Account billing
- :account.billing/month "mese"
+ ;; Account
+ :account/month "mese"
 
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
@@ -1228,6 +1203,9 @@
  :sync/storage-exceed-limit "Lo spazio di archiviazione supera il limite"
  :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "L'utente non esiste ancora"
+
+ ;; Collaboration
+ :collaboration/remove-access-error "Rimozione membro fallita"
 
  ;; Encryption
  :encryption/cloud-password-rich (fn [] ["Se perdi la password, nessuno dei tuoi dati nel cloud potrà essere decifrato. " [:span "Potrai comunque continuare ad accedere alla versione locale del tuo grafo."]])
@@ -1270,12 +1248,15 @@
 
  ;; Help
  :help/about "Informazioni su Logseq"
+ :help/about-title "Chi siamo"
  :help/awesome-logseq "Awesome Logseq"
  :help/block-reference "Riferimento di blocco"
  :help/blog "blog di Logseq"
  :help/bug "Segnala un problema"
  :help/changelog "Registro delle modifiche"
+ :help/community-title "Comunità"
  :help/context-menu "Menù contestuale del blocco"
+ :help/development-title "Sviluppo"
  :help/docs "Documentazione"
  :help/feature "Richiedi una funzionalità"
  :help/forum-community "Forum della comunità"
@@ -1288,15 +1269,8 @@
  :help/slash-autocomplete "Completamento automatico con barra (/)"
  :help/start "Per iniziare"
  :help/terms "Termini di Servizio"
-
- ;; About help
- :help.about/title "Chi siamo"
-
- ;; Community help
- :help.community/title "Comunità"
-
- ;; Development help
- :help.development/title "Sviluppo"
+ :help/terms-title "Termini"
+ :help/usage-title "Utilizzo"
 
  ;; Handbook help
  :help.handbook/close "Chiudi"
@@ -1314,12 +1288,6 @@
  :help.shortcuts/shortcut-column "Scorciatoia"
  :help.shortcuts/title "Scorciatoie da tastiera"
  :help.shortcuts/triggers "Attivazione delle scorciatoie"
-
- ;; Terms help
- :help.terms/title "Termini"
-
- ;; Usage help
- :help.usage/title "Utilizzo"
 
  ;; Bug report clipboard diagnostics
  :bug-report.clipboard/action-desc "Ispeziona e raccogli dati sugli appunti"

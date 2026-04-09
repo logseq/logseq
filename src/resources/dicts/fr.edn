@@ -389,11 +389,15 @@
  :graph/create-failed "Échec de la création du graphe"
  :graph/creating "Creating graph"
  :graph/delete-local-action "Delete local graph"
+ :graph/delete-local-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
  :graph/delete-server-action "Delete from server"
+ :graph/delete-server-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
  :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/diff "Git diff"
  :graph/encrypt-data-label "Encrypt graph data"
  :graph/last-opened-at-label "Last opened at: {1}"
  :graph/leave-action "Leave this graph"
+ :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Échec pour quitter le graphe"
  :graph/left "Graphe quitté"
  :graph/local-graphs "Graphes locaux :"
@@ -405,18 +409,6 @@
  :graph/updated-switching "Graphe mis à jour. Changement..."
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
-
- ;; Graph delete local
- :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
-
- ;; Graph delete server
- :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
-
- ;; Graph diff
- :graph.diff/title "Git diff"
-
- ;; Graph leave
- :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "Montrer les journaux"
@@ -480,6 +472,7 @@
  :page/contents "Contenus"
  :page/convert-to-tag "Convertir en tag"
  :page/copy-url "Copier l'URL de la page"
+ :page/create "Create a new page"
  :page/created-at "Créée le"
  :page/delete "Supprimer la page (supprime le fichier)"
  :page/hide-properties "Masquer les propriétés"
@@ -511,9 +504,6 @@
  :page.convert/tag-to-page-duplicate "Une page portant le nom « {1} » existe déjà."
  :page.convert/tag-to-page-has-children "Le tag a des éléments enfants et ne peut pas être converti"
 
- ;; Page creation
- :page.create/title "Create a new page"
-
  ;; Page deletion
  :page.delete/confirm-title "Etes-vous sûr de vouloir supprimer cette page ?"
  :page.delete/success "La page « {1} » a été supprimée avec succès !"
@@ -539,13 +529,11 @@
  :block.macro/unsupported-name "Unsupported macro name: {1}"
 
  ;; Node
+ :node/built-in-cant-delete-error "Les éléments intégrés ne peuvent pas être supprimés."
  :node/new "Nouveau nœud"
 
- ;; Node validation
- :node.validation/built-in-cant-delete "Les éléments intégrés ne peuvent pas être supprimés."
-
- ;; Journal validation
- :journal.validation/page-not-journal "Cette page n'est pas une page de journal."
+ ;; Journal
+ :journal/page-cant-convert-warning "Cette page n'est pas une page de journal."
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -658,13 +646,11 @@
  :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
+ :reference/blocks "Référence des blocs"
  :reference/copy "Copier cette référence"
  :reference/delete "Supprimer cette référence"
  :reference/replace-with-embed "Remplacer avec une intégration"
  :reference/replace-with-text "Remplacer avec du texte"
-
- ;; Block references
- :reference.block/title "Référence des blocs"
 
  ;; Reference filters
  :reference.filter/directions "Cliquer pour inclure et `Maj+clic` pour exclure. Cliquez à nouveau pour enlever."
@@ -687,6 +673,7 @@
  :property/choose-tags "Choisir des tags"
  :property/configure "Configurer"
  :property/convert-page-to-property "Convert \"{1}\" to property"
+ :property/create-error "Échec de la création de la propriété."
  :property/default-value "Valeur par défaut"
  :property/delete-from-node "Supprimer du nœud"
  :property/delete-from-node-confirm "Voulez-vous supprimer cette propriété du nœud ?"
@@ -740,9 +727,6 @@
  :property.choice/already-exists "Le choix existe déjà."
  :property.choice/cant-delete-built-in "Le choix intégré ne peut pas être supprimé."
  :property.choice/invalid "Choix \"{1}\" non valide pour cette propriété : {2}"
-
- ;; Property creation
- :property.create/failed "Échec de la création de la propriété."
 
  ;; Property validation
  :property.validation/cant-convert-to-number "Impossible de convertir \"{1}\" en nombre."
@@ -1004,9 +988,6 @@
  :settings.ai/enable-mcp-server "Activer le serveur MCP"
  :settings.ai/enable-mcp-server-desc "Activer le serveur MCP pour l'intégration IA"
 
- ;; Collaboration settings
- :settings.collaboration/member-remove-failed "Échec de la suppression du membre"
-
  ;; Editor settings
  :settings.editor/auto-expand-block-refs "Étendre automatiquement les références de bloc lors du zoom"
  :settings.editor/auto-expand-block-refs-tip "Cette option contrôle si les références de bloc sont développées automatiquement lors du zoom."
@@ -1157,16 +1138,13 @@
 
  ;; Zotero
  :zotero/attachments "Pièces jointes"
+ :zotero/imported-file-warning "Ceci est un fichier importé de Zotero, définissez répertoire de données Zotero pour ouvrir le fichier dans Logseq."
+ :zotero/linked-file-warning "Ceci est un fichier lié de Zotero, définissez répertoire de base des pièces jointes liées de Zotero pour ouvrir le fichier dans Logseq."
  :zotero/notes "Notes"
-
- ;; Zotero imported file
- :zotero.imported-file/warning "Ceci est un fichier importé de Zotero, définissez répertoire de données Zotero pour ouvrir le fichier dans Logseq."
-
- ;; Zotero linked file
- :zotero.linked-file/warning "Ceci est un fichier lié de Zotero, définissez répertoire de base des pièces jointes liées de Zotero pour ouvrir le fichier dans Logseq."
 
  ;; Server
  :server/error-notification "[Serveur] {1}"
+ :server/mcp-url-copied "URL MCP copiée"
  :server/start "Démarrer"
  :server/stop "Arrêter"
  :server/title "Serveur API HTTP"
@@ -1177,9 +1155,6 @@
  :server.config/reset "Réinitialiser"
  :server.config/save-and-apply "Enregistrer et appliquer"
  :server.config/title "Configurations du serveur"
-
- ;; Local server MCP
- :server.mcp/url-copied "URL MCP copiée"
 
  ;; Local server status
  :server.status/closed "Fermé"
@@ -1209,8 +1184,8 @@
  :storage.recycle/page-deleted-at "Page supprimée {1}"
  :storage.recycle/restore "Restaurer"
 
- ;; Account billing
- :account.billing/month "mois"
+ ;; Account
+ :account/month "mois"
 
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
@@ -1228,6 +1203,9 @@
  :sync/storage-exceed-limit "Le stockage dépasse la limite"
  :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "L'utilisateur n'existe pas encore"
+
+ ;; Collaboration
+ :collaboration/remove-access-error "Échec de la suppression du membre"
 
  ;; Encryption
  :encryption/cloud-password-rich (fn [] ["Si vous perdez votre mot de passe, aucune des données stockées dans le cloud ne pourra être déchiffrée. " [:span "Vous pourrez toutefois toujours accéder à la version locale de votre graphe."]])
@@ -1270,12 +1248,15 @@
 
  ;; Help
  :help/about "À propos de Logseq"
+ :help/about-title "À propos"
  :help/awesome-logseq "Merveilleux Logseq"
  :help/block-reference "Référence à un Bloc"
  :help/blog "Blog de Logseq"
  :help/bug "Signaler une anomalie"
  :help/changelog "Journal des modifications"
+ :help/community-title "Communauté"
  :help/context-menu "Menu contextuel"
+ :help/development-title "Développement"
  :help/docs "Documentation"
  :help/feature "Demander une fonctionnalité"
  :help/forum-community "Forum communautaire"
@@ -1288,15 +1269,8 @@
  :help/slash-autocomplete "Autocomplétion avec Slash"
  :help/start "Démarrage"
  :help/terms "Conditions d'utilisation"
-
- ;; About help
- :help.about/title "À propos"
-
- ;; Community help
- :help.community/title "Communauté"
-
- ;; Development help
- :help.development/title "Développement"
+ :help/terms-title "Termes"
+ :help/usage-title "Utilisation"
 
  ;; Handbook help
  :help.handbook/close "Fermer"
@@ -1314,12 +1288,6 @@
  :help.shortcuts/shortcut-column "Raccourcis"
  :help.shortcuts/title "Raccourcis clavier"
  :help.shortcuts/triggers "Actions déclenchées"
-
- ;; Terms help
- :help.terms/title "Termes"
-
- ;; Usage help
- :help.usage/title "Utilisation"
 
  ;; Bug report clipboard diagnostics
  :bug-report.clipboard/action-desc "Inspecter et récupérer les données du presse-papier"
