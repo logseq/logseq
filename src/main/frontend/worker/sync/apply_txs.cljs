@@ -1139,8 +1139,6 @@
         (when (= repo (:repo client))
           (enqueue-flush-pending! repo client))))))
 
-
-;; (defonce *persist-promise (atom nil))
 (defn enqueue-local-tx!
   [repo {:keys [tx-meta tx-data] :as tx-report}]
   (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -1148,12 +1146,7 @@
                   (and (:batch-tx? @conn) (not= :rebase (:outliner-op tx-meta)))
                   (:reverse? tx-meta))
       (when (seq tx-data)
-        (enqueue-local-tx-aux repo tx-report)
-        ;; (p/do!
-        ;;  (when-let [p @*persist-promise]
-        ;;    p)
-        ;;  (enqueue-local-tx-aux repo tx-report))
-        ))))
+        (enqueue-local-tx-aux repo tx-report)))))
 
 (defn handle-local-tx!
   [repo {:keys [tx-data tx-meta db-after] :as tx-report}]
