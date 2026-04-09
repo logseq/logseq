@@ -1488,7 +1488,7 @@
 
           (= prefix block-ref/left-parens)
           (notification/show!
-           "To reference a node, please use `[[]]`."
+           (t :editor/reference-node-use-page-ref)
            :warning)
 
           (= prefix block-ref/left-parens)
@@ -1544,11 +1544,11 @@
                                                                   :enable-snippet? false
                                                                   :page-only? page-only?})
           matched (remove (fn [b] (= (:block/uuid b) (:block/uuid block))) result)
+          extract-fn #(str (:block/title %) " " (:nlp-original-title %))
           result' (-> (concat matched
                               (when nlp-pages?
-                                (map (fn [title] {:block/title title :nlp-date? true :page? true})
-                                     date/nlp-pages)))
-                      (search/fuzzy-search q {:extract-fn :block/title :limit 50}))
+                                (date/nlp-pages-i18n :nlp-date? true :page? true)))
+                      (search/fuzzy-search q {:extract-fn extract-fn :limit 50}))
           result'' (let [ids (set (map :block/uuid result'))]
                      (concat result' (remove (fn [item] (ids (:block/uuid item))) matched)))]
     (sort-by (complement :page?) result'')))
@@ -2025,7 +2025,7 @@
 
                  (catch :default ^js/Error e
                    (notification/show!
-                    (util/format "Template insert error: %s" (.-message e))
+                    (t :editor/template-insert-error (.-message e))
                     :error)))))))))))
 
 (defn template-on-chosen-handler

@@ -7,7 +7,7 @@
             [electron.ipc :as ipc]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
+            [frontend.context.i18n :refer [interpolate-rich-text t]]
             [frontend.format :as format]
             [frontend.fs :as fs]
             [frontend.handler.common.plugin :as plugin-common-handler]
@@ -220,7 +220,7 @@
                        (case (keyword status)
                          :completed
                          (let [{:keys [id dst name title theme web-pkg]} payload
-                               name (or title name "Untitled")]
+                               name (or title name (t :ui/untitled))]
                            (if only-check
                              (state/consume-updates-from-coming-plugin! payload false)
                              (if (plugin-common-handler/installed? id)
@@ -248,7 +248,7 @@
                                                 (t :plugin/installed-plugin name) :success))))
                                    (p/catch (fn [^js e]
                                               (notification/show!
-                                               (str "Install failed: " name "\n" (.-message e))
+                                               (t :plugin/install-failed name (.-message e))
                                                :error)))))))
 
                          :error
@@ -260,6 +260,9 @@
                                             [(t :plugin/up-to-date ":)") :success]
 
                                             [error-code :error])
+                               msg (cond-> msg
+                                     (keyword? msg)
+                                     name)
                                pending? (seq (:plugin/updates-pending @state/state))]
 
                            (if (and only-check pending?)
@@ -273,9 +276,10 @@
                                ;; notify human tips
                                (notification/show!
                                 (str
-                                 (if (= :error type) "[Error]" "")
+                                 (if (= :error type) (t :plugin/update-status-error) "")
                                  "<" (:id payload) "> "
-                                 msg) type)))
+                                 msg)
+                                type)))
 
                            (when-not fake-error?
                              (js/console.error "Update Error:" (:error-code payload))))
@@ -533,12 +537,13 @@
        [:h1.opacity-90.font-bold.pb-1.flex.item-center.gap-1
         [:span.text-red-rx-10.flex.items-center (shui/tabler-icon "alert-triangle-filled" {:size 20})]
         [:span name "  " [:code "#" (str pid)]]])
-     [:p
-      "If any plugin is unavailable or you think it contains malicious code,
-        please email " [:a.hover:underline {:href (str "mailto://support@logseq.com?subject=Report plugin from Logseq Marketplace"
-                                                       (when pid (str " (#" pid ")")))} "support@logseq.com"]
-      " . Mention the name of the plugin and the URL of its GitHub repository.
-       The Logseq team usually responds within a business day."]])))
+     (into [:p]
+           (interpolate-rich-text
+            (t :plugin/report-modal-desc)
+            [[:a.hover:underline
+              {:href (str "mailto://support@logseq.com?subject=Report plugin from Logseq Marketplace"
+                          (when pid (str " (#" pid ")")))}
+              "support@logseq.com"]]))])))
 
 (defn parse-user-md-content
   [content {:keys [url]}]
@@ -829,7 +834,7 @@
 ;; components
 (rum/defc lsp-indicator < rum/reactive
   []
-  (let [text (or (state/sub :plugin/indicator-text) (when (not (util/electron?)) "LOADING"))]
+  (let [text (or (state/sub :plugin/indicator-text) (when (not (util/electron?)) (t :plugin/loading-indicator)))]
     (when-not (true? text)
       [:div.flex.align-items.justify-center.h-screen.w-full.preboot-loading
        [:span.flex.items-center.justify-center.flex-col
@@ -866,7 +871,7 @@
                   (.on "beforeload"
                        (fn [^js pl]
                          (let [text (when (util/electron?)
-                                      (util/format "Load plugin: %s..." (.-id pl)))]
+                                      (t :plugin/load-plugin-indicator (.-id pl)))]
                            (some->> text (state/set-state! :plugin/indicator-text)))))
 
                   (.on "reloaded"
@@ -968,7 +973,7 @@
       (p/catch
        (fn [^js e]
          (log/error :setup-plugin-system-error e)
-         (state/set-state! :plugin/indicator-text (str "Fatal: " e))))))
+         (state/set-state! :plugin/indicator-text (t :plugin/fatal-error (str e)))))))
 
 (defn setup!
   "setup plugin core handler"

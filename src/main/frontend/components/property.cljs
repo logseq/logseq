@@ -173,7 +173,7 @@
                  (map (fn [x]
                         (let [convert? (:convert-page-to-property? x)]
                           {:label (if convert?
-                                    (util/format "Convert \"%s\" to property" (:block/title x))
+                                    (t :property/convert-page-to-property (:block/title x))
                                     (let [ident (:db/ident x)
                                           ns' (some-> ident (namespace))
                                           plugin? (some-> ident (api-block/plugin-property-key?))
@@ -201,7 +201,7 @@
                          :new-case-sensitive? true
                          :show-new-when-not-exact-match? true
                          ;; :exact-match-exclude-items (fn [s] (contains? excluded-properties s))
-                         :input-default-placeholder "Add or change property"
+                         :input-default-placeholder (t :property/add-or-change)
                          :on-input set-q!}
                         select-opts))]])))
 
@@ -494,7 +494,7 @@
         [:div.flex.flex-row.items-center.shrink-0
          (ui/icon "plus" {:size 15 :class "opacity-50"})
          [:div.ml-1 {:style {:margin-top 1}}
-          "Add property"]]]])))
+          (t :property/add-new)]]]])))
 
 (defn- resolve-linked-block-if-exists
   "Properties will be updated for the linked page instead of the refed block.

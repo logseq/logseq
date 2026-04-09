@@ -276,20 +276,32 @@
 
  ;; Ui
  :ui/all-done "全部完成！"
+ :ui/apply "Apply"
  :ui/cancel "取消"
  :ui/close "關閉"
  :ui/confirm "確認"
+ :ui/copy-all "Copy all"
  :ui/delete "刪除"
+ :ui/deleted "Deleted"
+ :ui/empty "Empty"
+ :ui/fix "Fix it!"
+ :ui/from "From: "
  :ui/host "主機"
  :ui/loading "載入中..."
  :ui/login "登入"
  :ui/logout "登出"
+ :ui/off "OFF"
+ :ui/on "ON"
  :ui/open "開啟"
+ :ui/open-named "Open {1}"
  :ui/port "連接埠"
  :ui/relaunch-confirm "此變更需重新啟動應用程式，是否立即重新啟動？"
  :ui/remove-background "移除背景"
+ :ui/run "Run"
  :ui/save "儲存"
+ :ui/skip "Skip"
  :ui/submit "提交"
+ :ui/to "To: "
  :ui/toggle-theme "切換佈景主題"
  :ui/type "類型"
  :ui/untitled "無標題"
@@ -337,12 +349,14 @@
  :notification/unsupported-reaction-emoji "不支援該表情回應。"
 
  ;; Search
+ :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "未找到匹配項"
  :search/result-count "{1} 個結果"
 
  ;; Select
  :select/default-prompt "請選擇提示"
  :select/default-select-multiple "選擇一個或多個"
+ :select/new-option "+ New option: {1}"
 
  ;; Format
  :format/bold "粗體"
@@ -362,7 +376,15 @@
 
  ;; Graph
  :graph/all-graphs "所有圖譜"
+ :graph/create-db "Create db graph"
  :graph/create-failed "建立圖譜失敗。"
+ :graph/creating "Creating graph"
+ :graph/delete-local-action "Delete local graph"
+ :graph/delete-server-action "Delete from server"
+ :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/encrypt-data-label "Encrypt graph data"
+ :graph/last-opened-at-label "Last opened at: {1}"
+ :graph/leave-action "Leave this graph"
  :graph/leave-failed "離開圖譜失敗。"
  :graph/left "已離開圖譜。"
  :graph/local-graphs "本地圖譜"
@@ -372,16 +394,44 @@
  :graph/removed-from-sync "此圖譜已從 Logseq Sync 中移除。"
  :graph/shared-graphs "共用圖譜"
  :graph/updated-switching "圖譜已更新！正在切換到圖譜……"
+ :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
+ :graph/use-sync-label "Use Logseq Sync?"
+
+ ;; Graph delete local
+ :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
+
+ ;; Graph delete server
+ :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
+
+ ;; Graph leave
+ :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "顯示日記頁面"
  :graph.page/title "頁面圖譜"
+
+ ;; Graph reserved character
+ :graph.reserved-character/asterisk "asterisk"
+ :graph.reserved-character/backslash "backslash"
+ :graph.reserved-character/colon "colon"
+ :graph.reserved-character/double-quote "double quote"
+ :graph.reserved-character/forward-slash "forward slash"
+ :graph.reserved-character/greater-than "greater than"
+ :graph.reserved-character/hash "hash"
+ :graph.reserved-character/less-than "less than"
+ :graph.reserved-character/pipe "vertical bar or pipe"
+ :graph.reserved-character/plus "plus"
+ :graph.reserved-character/question-mark "question mark"
 
  ;; Graph switching
  :graph.switch/add-graph-action "是，新增圖譜"
  :graph.switch/empty-desc "沒有符合的圖譜，你要新增另一個嗎？"
  :graph.switch/prompt "切換到："
  :graph.switch/select-prompt "請選擇圖譜"
+
+ ;; Graph validation
+ :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
+ :graph.validation/valid "Your graph is valid! {1}"
 
  ;; File
  :file/config-duplicate-keys "檔案 '{1}' 有重複鍵。鍵 '{2}' 被指定了多次。"
@@ -419,6 +469,7 @@
  :page.convert/cant-be-block "頁「{1}」無法轉換為區塊。"
  :page.convert/cant-be-block-has-children "頁「{1}」無法轉換為區塊，因為它有子頁。"
  :page.convert/cant-be-block-move-first "頁面「{1}」無法轉換為區塊，請先將其移至其他頁面。"
+ :page.convert/page-to-tag-action "Convert \"{1}\" to tag"
  :page.convert/page-to-tag-built-in "內建頁面不能用作標籤"
  :page.convert/page-to-tag-duplicate "標籤「{1}」已存在。"
  :page.convert/page-to-tag-namespaced "命名空間頁面不能作為標籤"
@@ -447,6 +498,12 @@
  :block/copy-ref "複製區塊引用連結"
  :block/copy-url "複製區塊 URL"
 
+ ;; Block macro
+ :block.macro/embed-deprecated "{{embed}} is deprecated. Use '/Node embed' command instead."
+ :block.macro/namespace-deprecated "{{namespace}} is deprecated. Use the {1} feature instead."
+ :block.macro/query-deprecated "{{query}} is deprecated. Use '/Query' command instead."
+ :block.macro/unsupported-name "Unsupported macro name: {1}"
+
  ;; Node
  :node/new "新增節點"
 
@@ -456,10 +513,46 @@
  ;; Journal validation
  :journal.validation/page-not-journal "此頁面不是日記頁面。"
 
+ ;; Natural language dates
+ :date.nlp/last-friday "Last Friday"
+ :date.nlp/last-monday "Last Monday"
+ :date.nlp/last-month "Last month"
+ :date.nlp/last-saturday "Last Saturday"
+ :date.nlp/last-sunday "Last Sunday"
+ :date.nlp/last-thursday "Last Thursday"
+ :date.nlp/last-tuesday "Last Tuesday"
+ :date.nlp/last-wednesday "Last Wednesday"
+ :date.nlp/last-week "Last week"
+ :date.nlp/last-year "Last year"
+ :date.nlp/next-friday "Next Friday"
+ :date.nlp/next-monday "Next Monday"
+ :date.nlp/next-month "Next month"
+ :date.nlp/next-saturday "Next Saturday"
+ :date.nlp/next-sunday "Next Sunday"
+ :date.nlp/next-thursday "Next Thursday"
+ :date.nlp/next-tuesday "Next Tuesday"
+ :date.nlp/next-wednesday "Next Wednesday"
+ :date.nlp/next-week "Next week"
+ :date.nlp/next-year "Next year"
+ :date.nlp/this-friday "This Friday"
+ :date.nlp/this-monday "This Monday"
+ :date.nlp/this-month "This month"
+ :date.nlp/this-saturday "This Saturday"
+ :date.nlp/this-sunday "This Sunday"
+ :date.nlp/this-thursday "This Thursday"
+ :date.nlp/this-tuesday "This Tuesday"
+ :date.nlp/this-wednesday "This Wednesday"
+ :date.nlp/this-week "This week"
+ :date.nlp/this-year "This year"
+ :date.nlp/today "Today"
+ :date.nlp/tomorrow "Tomorrow"
+ :date.nlp/yesterday "Yesterday"
+
  ;; Editor
  :editor/auto-heading "自動標題"
  :editor/block-search "正在搜尋區塊"
  :editor/click-to-edit "點擊以編輯"
+ :editor/code-language-placeholder "Choose language"
  :editor/collapse-block-children "摺疊所有子塊"
  :editor/copy "複製"
  :editor/cut "剪下"
@@ -471,7 +564,64 @@
  :editor/new-page "新頁面"
  :editor/new-tag "新標籤"
  :editor/paste "貼上"
+ :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "移除標題"
+ :editor/template-insert-error "Template insert error: {1}"
+
+ ;; Editor slash commands
+ :editor.slash/advanced-query "Advanced Query"
+ :editor.slash/advanced-query-desc "Create an advanced query block"
+ :editor.slash/calculator "Calculator"
+ :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/code-block "Code block"
+ :editor.slash/code-block-desc "Insert code block"
+ :editor.slash/current-time "Current time"
+ :editor.slash/current-time-desc "Insert current time"
+ :editor.slash/date-picker "Date picker"
+ :editor.slash/date-picker-desc "Pick a date and insert here"
+ :editor.slash/embed-html "Embed HTML"
+ :editor.slash/embed-twitter-tweet "Embed Twitter tweet"
+ :editor.slash/embed-video-url "Embed Video URL"
+ :editor.slash/embed-youtube-timestamp "Embed YouTube timestamp"
+ :editor.slash/group-advanced "ADVANCED"
+ :editor.slash/group-basic "BASIC"
+ :editor.slash/group-format "FORMAT"
+ :editor.slash/group-heading "Heading"
+ :editor.slash/group-list-type "LIST TYPE"
+ :editor.slash/group-plugins "PLUGINS"
+ :editor.slash/group-priority "PRIORITY"
+ :editor.slash/group-task-date "TASK DATE"
+ :editor.slash/group-task-status "TASK STATUS"
+ :editor.slash/group-time-and-date "TIME & DATE"
+ :editor.slash/heading-label "Heading {1}"
+ :editor.slash/image-link "Image link"
+ :editor.slash/image-link-desc "Create a HTTP link to an image"
+ :editor.slash/link-desc "Create a HTTP link"
+ :editor.slash/math-block "Math block"
+ :editor.slash/math-block-desc "Create a LaTeX block"
+ :editor.slash/no-priority "No priority"
+ :editor.slash/node-embed "Node embed"
+ :editor.slash/node-embed-desc "Embed a node here"
+ :editor.slash/node-reference "Node reference"
+ :editor.slash/node-reference-desc "Create a backlink to a node (a page or a block)"
+ :editor.slash/normal-text "Normal text"
+ :editor.slash/normal-text-desc "Clear heading and set to normal text"
+ :editor.slash/number-children "Number children"
+ :editor.slash/number-list "Number list"
+ :editor.slash/priority-desc "Set priority to {1}"
+ :editor.slash/priority-label "Priority {1}"
+ :editor.slash/query-function "Query function"
+ :editor.slash/query-function-desc "Create a query function"
+ :editor.slash/quote-desc "Create a quote block"
+ :editor.slash/status-desc "Set status to {1}"
+ :editor.slash/template-desc "Insert a created template here"
+ :editor.slash/today-desc "Insert the date of today"
+ :editor.slash/tomorrow-desc "Insert the date of tomorrow"
+ :editor.slash/underline "Underline"
+ :editor.slash/underline-desc "Create an underline text decoration"
+ :editor.slash/upload-asset "Upload an asset"
+ :editor.slash/upload-asset-desc "Upload file types like image, PDF, DOCX, etc."
+ :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
  :reference/copy "複製此引用"
@@ -492,6 +642,9 @@
  ;; Property
  :property/add-choice "新增選項"
  :property/add-choices "新增選項"
+ :property/add-description "Add description"
+ :property/add-new "Add property"
+ :property/add-or-change "Add or change property"
  :property/available-choices "可用選項"
  :property/checkbox-state-mapping "核取方塊狀態對應"
  :property/children-count "子項 ({1})"
@@ -499,6 +652,7 @@
  :property/choose-tag "選擇標籤"
  :property/choose-tags "選擇標籤"
  :property/configure "設定屬性"
+ :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/default-value "預設值"
  :property/delete-from-node "從節點刪除屬性"
  :property/delete-from-node-confirm "確認要從此節點刪除此屬性嗎？"
@@ -523,6 +677,7 @@
  :property/private-built-in-not-usable "這是私有內建屬性，不能使用。"
  :property/select-choice "選擇一個選項"
  :property/set-default-choice "設為預設選項"
+ :property/set-default-value "Set default value"
  :property/set-icon "設定圖示"
  :property/set-value "設定值"
  :property/show-as-checkbox-on-node "在節點上顯示為核取方塊"
@@ -643,6 +798,9 @@
  :view.table/total-refs-count "總引用數"
  :view.table/unpin "取消釘選"
 
+ ;; Builder queries
+ :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
+
  ;; Asset
  :asset/align "對齊"
  :asset/align-center "置中對齊"
@@ -653,12 +811,16 @@
  :asset/confirm-delete-image "你確定要刪除這張圖片嗎？"
  :asset/copy "複製圖片"
  :asset/delete "刪除圖片"
+ :asset/downloading "Downloading"
  :asset/maximize "圖片最大化"
  :asset/open-in-browser "於瀏覽器開啟圖片"
  :asset/physical-delete "同時刪除原檔案（將無法還原）"
  :asset/ref-block "資源塊引用"
  :asset/show-in-folder "於資料夾顯示圖片"
  :asset/size-too-large "資源大小不能超過 100M"
+ :asset/syncing "Syncing"
+ :asset/transfer-placeholder "{1} asset..."
+ :asset/uploading "Uploading"
 
  ;; Pdf
  :pdf/auto-open-context-menu "為選中文字自動開啟內容選單"
@@ -667,6 +829,7 @@
  :pdf/doc-metadata "metadata 檔案"
  :pdf/hl-block-colored "使用有色標籤顯示螢光筆區塊"
  :pdf/linked-ref "已連結的引用"
+ :pdf/load-highlights-file-error "Error: failed to load the highlights file: \"{1}\". \n{2}"
  :pdf/toggle-dashed "使用線條顯示螢光筆區塊"
 
  ;; Flashcard empty
@@ -731,13 +894,26 @@
  :export/copy-to-clipboard "複製到剪貼簿"
  :export/db-backup-failed "資料庫備份失敗，請前往匯出並指定備份資料夾。"
  :export/db-edn "匯出 EDN 檔案"
+ :export/error-unexpected "An unexpected error occurred during export. See the javascript console for details."
+ :export/format-edn "EDN"
+ :export/format-html "HTML"
+ :export/format-opml "OPML"
+ :export/format-png "PNG"
+ :export/format-text "Text"
  :export/graph "匯出圖譜"
  :export/graph-ontology-data-copied "已複製圖譜本體資料！"
+ :export/level-lte "level <="
  :export/markdown "匯出為標準 Markdown（不含塊屬性）"
+ :export/newline-after-block "newline after block"
  :export/no-updates-since-last-export "自上次匯出後圖譜沒有更新。"
+ :export/open-blocks-only "open blocks only (skip collapsed children)"
  :export/page "匯出頁面"
  :export/page-data-copied "已複製頁面資料！"
+ :export/page-ref-text "[[text]] -> text"
  :export/public-pages "匯出公開頁面"
+ :export/remove-emphasis "remove emphasis"
+ :export/remove-properties "remove properties"
+ :export/remove-tags "remove #tags"
  :export/save-to-file "儲存到檔案"
  :export/sqlite-db "匯出 SQLite 資料庫"
  :export/title "匯出"
@@ -754,6 +930,7 @@
  :publish/invalid-page "發布失敗：頁面無效。"
  :publish/published-to "發佈到：{1}"
  :publish/publishing "發布中..."
+ :publish/unpublish "Unpublish"
  :publish/unpublish-failed "取消發布失敗。"
  :publish/unpublish-missing-page-id "取消發布失敗：缺少頁面 ID。"
  :publish/unpublished "已取消發布。"
@@ -856,6 +1033,7 @@
  :plugin/all "所有"
  :plugin/all-updated "全部已更新！"
  :plugin/auto-check-for-updates "是否自動檢查更新"
+ :plugin/auto-check-for-updates-status "Auto check for updates: {1}!"
  :plugin/check-all-updates "確認所有更新"
  :plugin/check-update "確認更新"
  :plugin/checking-for-updates "正在檢查外掛更新 ..."
@@ -867,9 +1045,11 @@
  :plugin/downloads "下載"
  :plugin/enabled "已啟用"
  :plugin/existed-package "外掛套件已存在（{1}）。"
+ :plugin/fatal-error "Fatal: {1}"
  :plugin/found-n-updates "發現 {1} 個外掛待更新"
  :plugin/found-updates "有更新"
  :plugin/install "下載"
+ :plugin/install-failed "Install failed: {1}\n{2}"
  :plugin/installed "已下載"
  :plugin/installed-plugin "已安裝外掛程式：{1}"
  :plugin/installing "下載中"
@@ -878,7 +1058,9 @@
  :plugin/invalid-plugins-edn "提供的 plugins.edn 無效。具體錯誤請查看 JavaScript 主控台"
  :plugin/list-of-updates "可用的外掛更新: "
  :plugin/load-from-web-url "透過URL載入外掛"
+ :plugin/load-plugin-indicator "Load plugin: {1}..."
  :plugin/load-unpacked "讀取未壓縮的外掛"
+ :plugin/loading-indicator "LOADING"
  :plugin/malformed-plugins-edn "提供的 plugins.edn 格式錯誤。請檢查檔案是否為正確的 EDN 語法。"
  :plugin/marketplace "市集"
  :plugin/new-registered "新外掛已註冊！"
@@ -893,6 +1075,7 @@
  :plugin/refresh-lists "重整列表"
  :plugin/reload "重新整理"
  :plugin/remote-error "遠端錯誤：{1}"
+ :plugin/report-modal-desc "If any plugin is unavailable or you think it contains malicious code, please email {1}. Mention the name of the plugin and the URL of its GitHub repository. The Logseq team usually responds within a business day."
  :plugin/report-security "檢舉外掛程式"
  :plugin/restart "重新啟動應用程式"
  :plugin/search-plugin "搜尋外掛"
@@ -916,6 +1099,22 @@
  :plugin.install-from-file/notice "以下的外掛將會取代你的其他外掛："
  :plugin.install-from-file/success "所有外掛均已安裝完成。"
  :plugin.install-from-file/title "從 plugins.edn 安裝外掛"
+
+ ;; Plugin install from web url
+ :plugin.install-from-web-url/supports-note "URLs support both GitHub repositories and local development servers. (For Examples: {1}, {2})"
+
+ ;; Plugin proxy
+ :plugin.proxy/http "HTTP"
+ :plugin.proxy/socks5 "SOCKS5"
+ :plugin.proxy/system "System"
+ :plugin.proxy/test-url "Test URL"
+ :plugin.proxy/testing "Testing"
+
+ ;; Plugin themes
+ :plugin.themes/default-desc "Logseq default {1} theme."
+ :plugin.themes/default-name "Default {1} theme"
+ :plugin.themes/group "{1} themes"
+ :plugin.themes/light-and-dark "light & dark themes"
 
  ;; Zotero
  :zotero/attachments "附件"
@@ -975,10 +1174,20 @@
  :account.billing/month "月"
 
  ;; Sync
+ :sync/assets-downloading-count "Downloading assets ({1})"
+ :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/downloading "Downloading..."
  :sync/graph-count-exceed-limit "同步圖譜數量超出限制"
  :sync/invitation-sent "邀請已發送！"
+ :sync/more-debug-info "More debug info"
+ :sync/offline "Offline"
+ :sync/online "Online"
+ :sync/pending-local-changes "pending local changes"
+ :sync/pending-server-changes "pending server changes"
  :sync/something-wrong "出了點問題，請再試一次。"
+ :sync/start-sync "Start sync"
  :sync/storage-exceed-limit "同步儲存超出限制"
+ :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "該使用者尚不存在。"
 
  ;; Encryption
@@ -1153,6 +1362,10 @@
  :window/minimize "最小化"
  :window/restore "還原"
 
+ ;; Mobile
+ :mobile/camera-access-denied "Camera access is denied. Enable it in Settings > Logseq."
+ :mobile/microphone-access-denied "Microphone access is denied. Enable it in Settings > Logseq."
+
  ;; Mobile header actions
  :mobile.header/actions "操作"
  :mobile.header/create-graph "建立新圖譜"
@@ -1225,4 +1438,27 @@
  :electron/version "版本 {1}"
  :electron/write-file-failed "寫入檔案 {1} 失敗，{2}。"
  :electron/write-file-failed-with-backup "寫入檔案 {1} 失敗，{2}。備份檔案已儲存到 {3}。"
+
+ ;; Icon
+ :icon/emojis-count "Emojis ({1})"
+ :icon/icons-count "Icons ({1})"
+ :icon/matched-count "Matched ({1})"
+ :icon/search-all "Search all"
+ :icon/search-emojis "Search emojis"
+ :icon/search-icons "Search icons"
+ :icon/tab-all "All"
+ :icon/tab-emojis "Emojis"
+ :icon/tab-icons "Icons"
+
+ ;; Library
+ :library/add-existing-pages "Add existing pages to Library"
+ :library/add-pages "Add pages"
+
+ ;; Shell
+ :shell/input-command-title "Input command"
+
+ ;; Youtube
+ :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
+ :youtube/player-not-ready "YouTube player isn't ready yet."
+ :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 }

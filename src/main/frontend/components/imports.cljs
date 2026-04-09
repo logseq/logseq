@@ -553,4 +553,4 @@
 
          (when (= "picker" (:from query-params))
            [:section.e
-            [:a.button {:on-click #(route-handler/redirect-to-home!)} "Skip"]])]))]))
+            [:a.button {:on-click #(route-handler/redirect-to-home!)} (t :ui/skip)]])]))]))

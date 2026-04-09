@@ -202,7 +202,7 @@
                                 :db/id (:db/id block)
                                 :block/uuid (:block/uuid block)
                                 :convert-page-to-tag? true
-                                :friendly-title (util/format "Convert \"%s\" to tag" q)} classes)
+                                :friendly-title (t :page.convert/page-to-tag-action q)} classes)
                          classes))
                      (editor-handler/<get-matched-blocks q {:nlp-pages? true
                                                             :page-only? false}))]
@@ -218,9 +218,7 @@
     (let [matched-pages' (if (string/blank? q)
                            (if db-tag?
                              (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
-                             (->> (map (fn [title] {:block/title title
-                                                    :nlp-date? true})
-                                       date/nlp-pages)
+                             (->> (date/nlp-pages-i18n :nlp-date? true)
                                   (take 10)))
                            ;; reorder, shortest and starts-with first.
                            (if (and (seq matched-pages)
@@ -471,7 +469,7 @@
                 placeholder
                 (assoc :placeholder placeholder))))
            (ui/button
-            "Submit"
+            (t :ui/submit)
             :on-click
             (fn [e]
               (util/stop e)

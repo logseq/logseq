@@ -276,20 +276,32 @@
 
  ;; Ui
  :ui/all-done "Fertig"
+ :ui/apply "Apply"
  :ui/cancel "Abbrechen"
  :ui/close "Schließen"
  :ui/confirm "Bestätigen"
+ :ui/copy-all "Copy all"
  :ui/delete "Löschen"
+ :ui/deleted "Deleted"
+ :ui/empty "Empty"
+ :ui/fix "Fix it!"
+ :ui/from "From: "
  :ui/host "Host"
  :ui/loading "Laden"
  :ui/login "Anmelden"
  :ui/logout "Abmelden"
+ :ui/off "OFF"
+ :ui/on "ON"
  :ui/open "Öffnen"
+ :ui/open-named "Open {1}"
  :ui/port "Port"
  :ui/relaunch-confirm "Diese Änderung erfordert einen Neustart der App. Jetzt neu starten?"
  :ui/remove-background "Hintergrund entfernen"
+ :ui/run "Run"
  :ui/save "Speichern"
+ :ui/skip "Skip"
  :ui/submit "Absenden"
+ :ui/to "To: "
  :ui/toggle-theme "Design wechseln"
  :ui/type "Typ"
  :ui/untitled "Unbenannt"
@@ -337,12 +349,14 @@
  :notification/unsupported-reaction-emoji "Nicht unterstütztes Reaktions-Emoji"
 
  ;; Search
+ :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "Keine übereinstimmenden Treffer"
  :search/result-count "{1} Ergebnisse"
 
  ;; Select
  :select/default-prompt "Wählen Sie einen"
  :select/default-select-multiple "Ein oder mehrere auswählen"
+ :select/new-option "+ New option: {1}"
 
  ;; Format
  :format/bold "Fett"
@@ -362,7 +376,15 @@
 
  ;; Graph
  :graph/all-graphs "Alle Graphen"
+ :graph/create-db "Create db graph"
  :graph/create-failed "Graph-Erstellung fehlgeschlagen"
+ :graph/creating "Creating graph"
+ :graph/delete-local-action "Delete local graph"
+ :graph/delete-server-action "Delete from server"
+ :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/encrypt-data-label "Encrypt graph data"
+ :graph/last-opened-at-label "Last opened at: {1}"
+ :graph/leave-action "Leave this graph"
  :graph/leave-failed "Graph verlassen fehlgeschlagen"
  :graph/left "Graph verlassen"
  :graph/local-graphs "Lokale Graphen:"
@@ -372,16 +394,44 @@
  :graph/removed-from-sync "Graph aus Synchronisierung entfernt"
  :graph/shared-graphs "Geteilte Graphen"
  :graph/updated-switching "Graph aktualisiert. Wechsel..."
+ :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
+ :graph/use-sync-label "Use Logseq Sync?"
+
+ ;; Graph delete local
+ :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
+
+ ;; Graph delete server
+ :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
+
+ ;; Graph leave
+ :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "Zeige Journale"
  :graph.page/title "Seiten-Graph"
+
+ ;; Graph reserved character
+ :graph.reserved-character/asterisk "asterisk"
+ :graph.reserved-character/backslash "backslash"
+ :graph.reserved-character/colon "colon"
+ :graph.reserved-character/double-quote "double quote"
+ :graph.reserved-character/forward-slash "forward slash"
+ :graph.reserved-character/greater-than "greater than"
+ :graph.reserved-character/hash "hash"
+ :graph.reserved-character/less-than "less than"
+ :graph.reserved-character/pipe "vertical bar or pipe"
+ :graph.reserved-character/plus "plus"
+ :graph.reserved-character/question-mark "question mark"
 
  ;; Graph switching
  :graph.switch/add-graph-action "Ja, weiteren Graphen hinzufügen"
  :graph.switch/empty-desc "Keine übereinstimmenden Graphen. Möchten Sie einen weiteren hinzufügen?"
  :graph.switch/prompt "Wechseln zu:"
  :graph.switch/select-prompt "Einen Graphen auswählen"
+
+ ;; Graph validation
+ :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
+ :graph.validation/valid "Your graph is valid! {1}"
 
  ;; File
  :file/config-duplicate-keys "Die Datei „{1}“ weist doppelte Schlüssel auf. Der Schlüssel '{2}' ist mehrfach vergeben."
@@ -419,6 +469,7 @@
  :page.convert/cant-be-block "Seite „{1}“ kann nicht in einen Block umgewandelt werden."
  :page.convert/cant-be-block-has-children "Seite „{1}“ kann nicht in einen Block konvertiert werden, da sie untergeordnete Seiten hat."
  :page.convert/cant-be-block-move-first "Seite „{1}“ kann nicht in einen Block umgewandelt werden, bitte verschieben Sie sie zuerst auf eine andere Seite."
+ :page.convert/page-to-tag-action "Convert \"{1}\" to tag"
  :page.convert/page-to-tag-built-in "Eingebaute Seiten können nicht als Tags verwendet werden"
  :page.convert/page-to-tag-duplicate "Ein Tag mit dem Namen „{1}“ existiert bereits."
  :page.convert/page-to-tag-namespaced "Namespace-Seiten können nicht als Tags verwendet werden"
@@ -447,6 +498,12 @@
  :block/copy-ref "Blockreferenz kopieren"
  :block/copy-url "Block-URL kopieren"
 
+ ;; Block macro
+ :block.macro/embed-deprecated "{{embed}} is deprecated. Use '/Node embed' command instead."
+ :block.macro/namespace-deprecated "{{namespace}} is deprecated. Use the {1} feature instead."
+ :block.macro/query-deprecated "{{query}} is deprecated. Use '/Query' command instead."
+ :block.macro/unsupported-name "Unsupported macro name: {1}"
+
  ;; Node
  :node/new "Neuer Knoten"
 
@@ -456,10 +513,46 @@
  ;; Journal validation
  :journal.validation/page-not-journal "Diese Seite ist keine Journalseite."
 
+ ;; Natural language dates
+ :date.nlp/last-friday "Last Friday"
+ :date.nlp/last-monday "Last Monday"
+ :date.nlp/last-month "Last month"
+ :date.nlp/last-saturday "Last Saturday"
+ :date.nlp/last-sunday "Last Sunday"
+ :date.nlp/last-thursday "Last Thursday"
+ :date.nlp/last-tuesday "Last Tuesday"
+ :date.nlp/last-wednesday "Last Wednesday"
+ :date.nlp/last-week "Last week"
+ :date.nlp/last-year "Last year"
+ :date.nlp/next-friday "Next Friday"
+ :date.nlp/next-monday "Next Monday"
+ :date.nlp/next-month "Next month"
+ :date.nlp/next-saturday "Next Saturday"
+ :date.nlp/next-sunday "Next Sunday"
+ :date.nlp/next-thursday "Next Thursday"
+ :date.nlp/next-tuesday "Next Tuesday"
+ :date.nlp/next-wednesday "Next Wednesday"
+ :date.nlp/next-week "Next week"
+ :date.nlp/next-year "Next year"
+ :date.nlp/this-friday "This Friday"
+ :date.nlp/this-monday "This Monday"
+ :date.nlp/this-month "This month"
+ :date.nlp/this-saturday "This Saturday"
+ :date.nlp/this-sunday "This Sunday"
+ :date.nlp/this-thursday "This Thursday"
+ :date.nlp/this-tuesday "This Tuesday"
+ :date.nlp/this-wednesday "This Wednesday"
+ :date.nlp/this-week "This week"
+ :date.nlp/this-year "This year"
+ :date.nlp/today "Today"
+ :date.nlp/tomorrow "Tomorrow"
+ :date.nlp/yesterday "Yesterday"
+
  ;; Editor
  :editor/auto-heading "Automatische Überschrift"
  :editor/block-search "Nach einem Block suchen"
  :editor/click-to-edit "Klicken zum bearbeiten"
+ :editor/code-language-placeholder "Choose language"
  :editor/collapse-block-children "Alles einklappen"
  :editor/copy "Kopieren"
  :editor/cut "Ausschneiden"
@@ -471,7 +564,64 @@
  :editor/new-page "Neue Seite"
  :editor/new-tag "Neuer Tag"
  :editor/paste "Einfügen"
+ :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "Überschrift entfernen"
+ :editor/template-insert-error "Template insert error: {1}"
+
+ ;; Editor slash commands
+ :editor.slash/advanced-query "Advanced Query"
+ :editor.slash/advanced-query-desc "Create an advanced query block"
+ :editor.slash/calculator "Calculator"
+ :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/code-block "Code block"
+ :editor.slash/code-block-desc "Insert code block"
+ :editor.slash/current-time "Current time"
+ :editor.slash/current-time-desc "Insert current time"
+ :editor.slash/date-picker "Date picker"
+ :editor.slash/date-picker-desc "Pick a date and insert here"
+ :editor.slash/embed-html "Embed HTML"
+ :editor.slash/embed-twitter-tweet "Embed Twitter tweet"
+ :editor.slash/embed-video-url "Embed Video URL"
+ :editor.slash/embed-youtube-timestamp "Embed YouTube timestamp"
+ :editor.slash/group-advanced "ADVANCED"
+ :editor.slash/group-basic "BASIC"
+ :editor.slash/group-format "FORMAT"
+ :editor.slash/group-heading "Heading"
+ :editor.slash/group-list-type "LIST TYPE"
+ :editor.slash/group-plugins "PLUGINS"
+ :editor.slash/group-priority "PRIORITY"
+ :editor.slash/group-task-date "TASK DATE"
+ :editor.slash/group-task-status "TASK STATUS"
+ :editor.slash/group-time-and-date "TIME & DATE"
+ :editor.slash/heading-label "Heading {1}"
+ :editor.slash/image-link "Image link"
+ :editor.slash/image-link-desc "Create a HTTP link to an image"
+ :editor.slash/link-desc "Create a HTTP link"
+ :editor.slash/math-block "Math block"
+ :editor.slash/math-block-desc "Create a LaTeX block"
+ :editor.slash/no-priority "No priority"
+ :editor.slash/node-embed "Node embed"
+ :editor.slash/node-embed-desc "Embed a node here"
+ :editor.slash/node-reference "Node reference"
+ :editor.slash/node-reference-desc "Create a backlink to a node (a page or a block)"
+ :editor.slash/normal-text "Normal text"
+ :editor.slash/normal-text-desc "Clear heading and set to normal text"
+ :editor.slash/number-children "Number children"
+ :editor.slash/number-list "Number list"
+ :editor.slash/priority-desc "Set priority to {1}"
+ :editor.slash/priority-label "Priority {1}"
+ :editor.slash/query-function "Query function"
+ :editor.slash/query-function-desc "Create a query function"
+ :editor.slash/quote-desc "Create a quote block"
+ :editor.slash/status-desc "Set status to {1}"
+ :editor.slash/template-desc "Insert a created template here"
+ :editor.slash/today-desc "Insert the date of today"
+ :editor.slash/tomorrow-desc "Insert the date of tomorrow"
+ :editor.slash/underline "Underline"
+ :editor.slash/underline-desc "Create an underline text decoration"
+ :editor.slash/upload-asset "Upload an asset"
+ :editor.slash/upload-asset-desc "Upload file types like image, PDF, DOCX, etc."
+ :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
  :reference/copy "Diese Referenz kopieren"
@@ -492,6 +642,9 @@
  ;; Property
  :property/add-choice "Auswahl hinzufügen"
  :property/add-choices "Auswahlen hinzufügen"
+ :property/add-description "Add description"
+ :property/add-new "Add property"
+ :property/add-or-change "Add or change property"
  :property/available-choices "Verfügbare Auswahlen"
  :property/checkbox-state-mapping "Checkbox-Status-Zuordnung"
  :property/children-count "Kinder ({1})"
@@ -499,6 +652,7 @@
  :property/choose-tag "Tag auswählen"
  :property/choose-tags "Tags auswählen"
  :property/configure "Konfigurieren"
+ :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/default-value "Standardwert"
  :property/delete-from-node "Vom Knoten entfernen"
  :property/delete-from-node-confirm "Möchten Sie diese Eigenschaft vom Knoten entfernen?"
@@ -523,6 +677,7 @@
  :property/private-built-in-not-usable "Private eingebaute Eigenschaft ist nicht verwendbar"
  :property/select-choice "Auswahl treffen"
  :property/set-default-choice "Standardauswahl festlegen"
+ :property/set-default-value "Set default value"
  :property/set-icon "Symbol setzen"
  :property/set-value "Wert setzen"
  :property/show-as-checkbox-on-node "Als Checkbox auf Knoten anzeigen"
@@ -643,6 +798,9 @@
  :view.table/total-refs-count "Gesamte Referenzen"
  :view.table/unpin "Loslösen"
 
+ ;; Builder queries
+ :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
+
  ;; Asset
  :asset/align "Ausrichtung"
  :asset/align-center "Zentriert"
@@ -653,12 +811,16 @@
  :asset/confirm-delete-image "Möchten Sie dieses Bild wirklich löschen?"
  :asset/copy "Bild kopieren"
  :asset/delete "Bild löschen"
+ :asset/downloading "Downloading"
  :asset/maximize "Bild maximieren"
  :asset/open-in-browser "Bild im Browser öffnen"
  :asset/physical-delete "Datei ebenfalls entfernen (Achtung: die Datei kann nicht wiederhergestellt werden)"
  :asset/ref-block "Anlagen-Verweis-Block"
  :asset/show-in-folder "Bild im Ordner anzeigen"
  :asset/size-too-large "Asset-Größe ist zu groß"
+ :asset/syncing "Syncing"
+ :asset/transfer-placeholder "{1} asset..."
+ :asset/uploading "Uploading"
 
  ;; Pdf
  :pdf/auto-open-context-menu "Kontextmenü automatisch bei Auswahl öffnen"
@@ -667,6 +829,7 @@
  :pdf/doc-metadata "Metadaten des Dokuments"
  :pdf/hl-block-colored "Farbige Beschriftung für Highlight-Block"
  :pdf/linked-ref "Verlinkte Referenzen"
+ :pdf/load-highlights-file-error "Error: failed to load the highlights file: \"{1}\". \n{2}"
  :pdf/toggle-dashed "Gestrichelter Stil für die Hervorhebung von Bereichen"
 
  ;; Flashcard empty
@@ -731,13 +894,26 @@
  :export/copy-to-clipboard "In Zwischenablage kopieren"
  :export/db-backup-failed "Datenbank-Backup fehlgeschlagen. Bitte geben Sie einen Backup-Ordner im Export an."
  :export/db-edn "Als EDN-Datei exportieren"
+ :export/error-unexpected "An unexpected error occurred during export. See the javascript console for details."
+ :export/format-edn "EDN"
+ :export/format-html "HTML"
+ :export/format-opml "OPML"
+ :export/format-png "PNG"
+ :export/format-text "Text"
  :export/graph "Graph exportieren"
  :export/graph-ontology-data-copied "Graph-Ontologie-Daten in Zwischenablage kopiert"
+ :export/level-lte "level <="
  :export/markdown "Als Standard-Markdown exportieren (ohne Block-Eigenschaften)"
+ :export/newline-after-block "newline after block"
  :export/no-updates-since-last-export "Keine Aktualisierungen seit dem letzten Export."
+ :export/open-blocks-only "open blocks only (skip collapsed children)"
  :export/page "Seite exportieren"
  :export/page-data-copied "Seitendaten in Zwischenablage kopiert"
+ :export/page-ref-text "[[text]] -> text"
  :export/public-pages "Öffentliche Seiten exportieren"
+ :export/remove-emphasis "remove emphasis"
+ :export/remove-properties "remove properties"
+ :export/remove-tags "remove #tags"
  :export/save-to-file "In Datei speichern"
  :export/sqlite-db "SQLite-Datenbank exportieren"
  :export/title "Exportieren"
@@ -750,6 +926,7 @@
  :publish/failed "Veröffentlichung fehlgeschlagen"
  :publish/invalid-page "Ungültige Seite"
  :publish/published-to "Veröffentlicht auf {1}"
+ :publish/unpublish "Unpublish"
  :publish/unpublish-failed "Veröffentlichung zurücknehmen fehlgeschlagen"
  :publish/unpublish-missing-page-id "Veröffentlichung zurücknehmen: Seiten-ID fehlt"
  :publish/unpublished "Veröffentlichung zurückgenommen"
@@ -852,6 +1029,7 @@
  :plugin/all "Alle"
  :plugin/all-updated "Alle aktualisiert!"
  :plugin/auto-check-for-updates "Automatisch Updates suchen"
+ :plugin/auto-check-for-updates-status "Auto check for updates: {1}!"
  :plugin/check-all-updates "Alle Updates überprüfen"
  :plugin/check-update "Update überprüfen"
  :plugin/checking-for-updates "Suche nach Aktualisierungen für Plugins ..."
@@ -863,9 +1041,11 @@
  :plugin/downloads "Downloads"
  :plugin/enabled "Aktiviert"
  :plugin/existed-package "Vorhandenes Plugin-Paket ({1})."
+ :plugin/fatal-error "Fatal: {1}"
  :plugin/found-n-updates "{1} Aktualisierungen gefunden"
  :plugin/found-updates "Aktualisierungen gefunden"
  :plugin/install "Installieren"
+ :plugin/install-failed "Install failed: {1}\n{2}"
  :plugin/installed "Installiert"
  :plugin/installed-plugin "Plugin installiert: {1}"
  :plugin/installing "Installiere"
@@ -874,7 +1054,9 @@
  :plugin/invalid-plugins-edn "Ungültige plugins.edn"
  :plugin/list-of-updates "Aktualisierungen für Plugins: "
  :plugin/load-from-web-url "Plugin per URL laden"
+ :plugin/load-plugin-indicator "Load plugin: {1}..."
  :plugin/load-unpacked "Entpacktes Plugin laden"
+ :plugin/loading-indicator "LOADING"
  :plugin/malformed-plugins-edn "Fehlerhafte plugins.edn"
  :plugin/marketplace "Marktplatz"
  :plugin/new-registered "Neues Plugin registriert"
@@ -889,6 +1071,7 @@
  :plugin/refresh-lists "Liste aktualisieren"
  :plugin/reload "Neu laden"
  :plugin/remote-error "Serverfehler: {1}"
+ :plugin/report-modal-desc "If any plugin is unavailable or you think it contains malicious code, please email {1}. Mention the name of the plugin and the URL of its GitHub repository. The Logseq team usually responds within a business day."
  :plugin/report-security "Sicherheitsproblem melden"
  :plugin/restart "App neu starten"
  :plugin/search-plugin "Plugins suchen"
@@ -912,6 +1095,22 @@
  :plugin.install-from-file/notice "Die folgenden Plugins werden Ihre Plugins ersetzen:"
  :plugin.install-from-file/success "Alle Plugins installiert!"
  :plugin.install-from-file/title "Plugins aus plugins.edn installieren"
+
+ ;; Plugin install from web url
+ :plugin.install-from-web-url/supports-note "URLs support both GitHub repositories and local development servers. (For Examples: {1}, {2})"
+
+ ;; Plugin proxy
+ :plugin.proxy/http "HTTP"
+ :plugin.proxy/socks5 "SOCKS5"
+ :plugin.proxy/system "System"
+ :plugin.proxy/test-url "Test URL"
+ :plugin.proxy/testing "Testing"
+
+ ;; Plugin themes
+ :plugin.themes/default-desc "Logseq default {1} theme."
+ :plugin.themes/default-name "Default {1} theme"
+ :plugin.themes/group "{1} themes"
+ :plugin.themes/light-and-dark "light & dark themes"
 
  ;; Zotero
  :zotero/attachments "Anhänge"
@@ -971,10 +1170,20 @@
  :account.billing/month "Monat"
 
  ;; Sync
+ :sync/assets-downloading-count "Downloading assets ({1})"
+ :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/downloading "Downloading..."
  :sync/graph-count-exceed-limit "Graph-Anzahl überschreitet das Limit"
  :sync/invitation-sent "Einladung gesendet"
+ :sync/more-debug-info "More debug info"
+ :sync/offline "Offline"
+ :sync/online "Online"
+ :sync/pending-local-changes "pending local changes"
+ :sync/pending-server-changes "pending server changes"
  :sync/something-wrong "Synchronisierungsfehler aufgetreten"
+ :sync/start-sync "Start sync"
  :sync/storage-exceed-limit "Speicherplatz überschreitet das Limit"
+ :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "Benutzer existiert noch nicht"
 
  ;; Encryption
@@ -1149,6 +1358,10 @@
  :window/minimize "Minimieren"
  :window/restore "Wiederherstellen"
 
+ ;; Mobile
+ :mobile/camera-access-denied "Camera access is denied. Enable it in Settings > Logseq."
+ :mobile/microphone-access-denied "Microphone access is denied. Enable it in Settings > Logseq."
+
  ;; Mobile header actions
  :mobile.header/actions "Aktionen"
  :mobile.header/create-graph "Graph erstellen"
@@ -1221,4 +1434,27 @@
  :electron/version "Version {1}"
  :electron/write-file-failed "Schreiben in die Datei {1} fehlgeschlagen, {2}."
  :electron/write-file-failed-with-backup "Schreiben in die Datei {1} fehlgeschlagen, {2}. Eine Sicherung wurde unter {3} gespeichert."
+
+ ;; Icon
+ :icon/emojis-count "Emojis ({1})"
+ :icon/icons-count "Icons ({1})"
+ :icon/matched-count "Matched ({1})"
+ :icon/search-all "Search all"
+ :icon/search-emojis "Search emojis"
+ :icon/search-icons "Search icons"
+ :icon/tab-all "All"
+ :icon/tab-emojis "Emojis"
+ :icon/tab-icons "Icons"
+
+ ;; Library
+ :library/add-existing-pages "Add existing pages to Library"
+ :library/add-pages "Add pages"
+
+ ;; Shell
+ :shell/input-command-title "Input command"
+
+ ;; Youtube
+ :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
+ :youtube/player-not-ready "YouTube player isn't ready yet."
+ :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 }

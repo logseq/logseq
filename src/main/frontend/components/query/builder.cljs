@@ -309,7 +309,7 @@
 
              :else
              (reset! *mode value)))
-         {:input-default-placeholder "Add filter/operator"})])]))
+         {:input-default-placeholder (t :query.builder/add-filter-or-operator-placeholder)})])]))
 
 (rum/defc add-filter
   [*tree loc clause]
@@ -324,7 +324,7 @@
                                     (picker *tree loc clause {:toggle-fn #(shui/popup-hide! id)}))
                                   {:align :start}))}
    (ui/icon "plus" {:size 14})
-   (when (= [0] loc) "Filter")))
+   (when (= [0] loc) (t :query.builder/filter))))
 
 (declare clauses-group)
 
@@ -342,7 +342,7 @@
       (str clause)
 
       (string? clause)
-      (str "Search: " clause)
+      (t :query.builder/search-label clause)
 
       (= (keyword f) :page-ref)
       (ref/->page-ref (uuid->page-title (second clause)))
@@ -386,9 +386,9 @@
                   (second end))]
         (str (cond
                (= k :block/created-at)
-               "Created"
+               (t :query.builder/created-label)
                (= k :block/updated-at)
-               "Updated"
+               (t :query.builder/updated-label)
                :else
                (or (:block/title (db/entity k)) (name k)))
              " " start
@@ -405,7 +405,7 @@
                         (symbol? (last clause)))
                   (name (last  clause))
                   (second (last clause)))]
-        (str "between: " (uuid->page-title start) " ~ " (uuid->page-title end)))
+        (t :query.builder/between-journal-label (uuid->page-title start) (uuid->page-title end)))
 
       (contains? #{:task :priority} (keyword f))
       (str (name f) ": "

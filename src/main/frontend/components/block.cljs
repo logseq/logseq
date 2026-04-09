@@ -589,9 +589,9 @@
                  [:i {:class "fa fa-clock-o"
                       :style {:margin-right 3.5}}]
                  "Start"
-                 "From: "
+                 (t :ui/from)
                  "Stop"
-                 "To: "
+                 (t :ui/to)
                  nil)
         class (when (= kind "Closed")
                 "line-through")]
@@ -679,7 +679,7 @@
                 recycled? (str " line-through opacity-70")
                 untitled? (str " opacity-50"))
        :data-ref page-name
-       :title (when recycled? "Deleted")
+       :title (when recycled? (t :ui/deleted))
        :draggable true
        :on-drag-start (fn [e]
                         (editor-handler/block->data-transfer! page-name e true))
@@ -1028,9 +1028,9 @@
         percent (when in-progress?
                   (int (* 100 (/ loaded total))))
         label (case direction
-                :upload "Uploading"
-                :download "Downloading"
-                "Syncing")
+                :upload (t :asset/uploading)
+                :download (t :asset/downloading)
+                (t :asset/syncing))
         progress-view (when in-progress?
                         [:div.asset-transfer-progress
                          [:div.asset-transfer-progress-label (str label " " percent "%")]
@@ -1066,7 +1066,7 @@
     (if progress-view
       [:div.asset-transfer-shell
        (or content
-           [:div.asset-transfer-placeholder (str label " asset...")])
+           [:div.asset-transfer-placeholder (t :asset/transfer-placeholder label)])
        progress-view]
       content)))
 
@@ -1201,7 +1201,7 @@
                 (mldoc/block-with-title? (ffirst ast)))
          (markup-elements-cp (assoc config :block/format format) ast)
          (inline-text config format macro-content)))
-     [:span.warning {:title (str "Unsupported macro name: " name)}
+    [:span.warning {:title (t :block.macro/unsupported-name name)}
       (macro->text name arguments)])])
 
 (rum/defc nested-link < rum/reactive
@@ -1535,13 +1535,13 @@
                     arguments)]
     (cond
       (= name "query")
-      [:div.warning "{{query}} is deprecated. Use '/Query' command instead."]
+      [:div.warning (t :block.macro/query-deprecated)]
 
       (= name "function")
       (macro-function-cp config arguments)
 
       (= name "namespace")
-      [:div.warning (str "{{namespace}} is deprecated. Use the " common-config/library-page-name " feature instead.")]
+      [:div.warning (t :block.macro/namespace-deprecated common-config/library-page-name)]
 
       (= name "youtube")
       (when-let [url (first arguments)]
@@ -1588,7 +1588,7 @@
               (ui/tweet-embed id)))))
 
       (= name "embed")
-      [:div.warning "{{embed}} is deprecated. Use '/Node embed' command instead."]
+      [:div.warning (t :block.macro/embed-deprecated)]
 
       (= name "renderer")
       (when config/lsp-enabled?
@@ -2641,7 +2641,7 @@
       (when (and (> (count content) (state/block-content-max-length (state/get-current-repo)))
                  (not (contains? #{:code} (:logseq.property.node/display-type block))))
         [:div.warning.text-sm
-         "Large block will not be editable or searchable to not slow down the app, please use another editor to edit this block."])
+         (t :block/large-block-warning)])
       [:div.flex.flex-row.justify-between.block-content-inner
        (when-not plugin-slotted?
          [:div.block-head-wrap
@@ -2695,10 +2695,9 @@
           {:on-click (fn []
                        (set-editing! true)
                        (editor-handler/edit-block! query :max {:container-id (:container-id config)}))}
-          "Click to fix query: "
-          (:block/title query)])
+          (t :block/click-to-fix-query (:block/title query))])
        [:div.flex.flex-1.flex-col.w-full.gap-2
-        (ui/block-error "Block Render Error:"
+        (ui/block-error (t :block/render-error)
                         {:content (or (:block/title query)
                                       (:block/title block))
                          :section-attrs
@@ -2772,7 +2771,7 @@
                         {:id editor-id
                          :class (util/classnames [{:opacity-50 (boolean (or (ldb/built-in? block) (ldb/journal? block)))}])}
                         (ui/catch-error
-                         (ui/block-error "Something wrong in the editor" {})
+                         (ui/block-error (t :sync/something-wrong) {})
                          (editor-box {:block block
                                       :block-id uuid
                                       :block-parent-id block-id
@@ -3654,7 +3653,7 @@
   (when-let [langs (map (fn [m] (.-name m)) js/window.CodeMirror.modeInfo)]
     (let [options (map (fn [lang] {:label lang :value lang}) langs)]
       (select/select {:items options
-                      :input-default-placeholder "Choose language"
+                      :input-default-placeholder (t :editor/code-language-placeholder)
                       :on-chosen
                       (fn [chosen _ _ e]
                         (let [lang (:value chosen)]
@@ -3712,7 +3711,7 @@
                                                                        (db-property-handler/set-block-property!
                                                                         (:db/id block) :logseq.property.code/lang lang))))
                                                  {:align :end})))}
-                (or language "Choose language")
+                (or language (t :editor/code-language-placeholder))
                 (ui/icon "chevron-down"))
                (shui/button
                 {:variant :text
@@ -3791,7 +3790,7 @@
       [:pre.pre-wrap-white-space
        (join-lines l)]
       ["Quote" _l]
-      [:div.warning "#+BEGIN_QUOTE is deprecated. Use '/Quote' command instead."]
+      [:div.warning (t :block/deprecated-quote)]
       ["Raw_Html" content]
       (when (not html-export?)
         [:div.raw_html {:dangerouslySetInnerHTML
@@ -3810,10 +3809,10 @@
       ["Export" "latex" _options content]
       (if html-export?
         (latex/html-export content true false)
-        [:div.warning "'#+BEGIN_EXPORT latex' is deprecated. Use '/Math block' command instead."])
+        [:div.warning (t :block/deprecated-latex-export)])
 
       ["Custom" "query" _options _result _content]
-      [:div.warning "#+BEGIN_QUERY is deprecated. Use '/Advanced Query' command instead."]
+      [:div.warning (t :block/deprecated-query-syntax)]
 
       ["Custom" "note" _options result _content]
       (ui/admonition "note" (markup-elements-cp config result))

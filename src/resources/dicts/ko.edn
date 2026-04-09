@@ -276,20 +276,32 @@
 
  ;; Ui
  :ui/all-done "완료"
+ :ui/apply "Apply"
  :ui/cancel "취소"
  :ui/close "닫기"
  :ui/confirm "확인"
+ :ui/copy-all "Copy all"
  :ui/delete "삭제"
+ :ui/deleted "Deleted"
+ :ui/empty "Empty"
+ :ui/fix "Fix it!"
+ :ui/from "From: "
  :ui/host "호스트"
  :ui/loading "로딩 중"
  :ui/login "로그인"
  :ui/logout "로그아웃"
+ :ui/off "OFF"
+ :ui/on "ON"
  :ui/open "열기"
+ :ui/open-named "Open {1}"
  :ui/port "포트"
  :ui/relaunch-confirm "이 변경 사항을 적용하려면 앱을 다시 시작해야 합니다. 지금 다시 시작하시겠습니까?"
  :ui/remove-background "배경 제거"
+ :ui/run "Run"
  :ui/save "저장"
+ :ui/skip "Skip"
  :ui/submit "제출"
+ :ui/to "To: "
  :ui/toggle-theme "테마 전환"
  :ui/type "유형"
  :ui/untitled "제목 없음"
@@ -337,12 +349,14 @@
  :notification/unsupported-reaction-emoji "지원되지 않는 리액션 이모지"
 
  ;; Search
+ :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "결과 없음"
  :search/result-count "{1}개 결과"
 
  ;; Select
  :select/default-prompt "하나를 선택하십시오"
  :select/default-select-multiple "복수 선택"
+ :select/new-option "+ New option: {1}"
 
  ;; Format
  :format/bold "굵게"
@@ -362,7 +376,15 @@
 
  ;; Graph
  :graph/all-graphs "모든 그래프"
+ :graph/create-db "Create db graph"
  :graph/create-failed "그래프 생성에 실패했습니다"
+ :graph/creating "Creating graph"
+ :graph/delete-local-action "Delete local graph"
+ :graph/delete-server-action "Delete from server"
+ :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/encrypt-data-label "Encrypt graph data"
+ :graph/last-opened-at-label "Last opened at: {1}"
+ :graph/leave-action "Leave this graph"
  :graph/leave-failed "그래프 나가기에 실패했습니다"
  :graph/left "그래프를 나갔습니다"
  :graph/local-graphs "로컬 그래프"
@@ -372,16 +394,44 @@
  :graph/removed-from-sync "동기화에서 그래프가 제거되었습니다"
  :graph/shared-graphs "공유 그래프"
  :graph/updated-switching "그래프가 업데이트되었습니다. 전환 중..."
+ :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
+ :graph/use-sync-label "Use Logseq Sync?"
+
+ ;; Graph delete local
+ :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
+
+ ;; Graph delete server
+ :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
+
+ ;; Graph leave
+ :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "저널 표시"
  :graph.page/title "페이지 그래프"
+
+ ;; Graph reserved character
+ :graph.reserved-character/asterisk "asterisk"
+ :graph.reserved-character/backslash "backslash"
+ :graph.reserved-character/colon "colon"
+ :graph.reserved-character/double-quote "double quote"
+ :graph.reserved-character/forward-slash "forward slash"
+ :graph.reserved-character/greater-than "greater than"
+ :graph.reserved-character/hash "hash"
+ :graph.reserved-character/less-than "less than"
+ :graph.reserved-character/pipe "vertical bar or pipe"
+ :graph.reserved-character/plus "plus"
+ :graph.reserved-character/question-mark "question mark"
 
  ;; Graph switching
  :graph.switch/add-graph-action "네, 새 그래프를 추가합니다"
  :graph.switch/empty-desc "일치하는 그래프가 없습니다. 새로 추가하시겠습니까?"
  :graph.switch/prompt "전환"
  :graph.switch/select-prompt "그래프를 선택하십시오."
+
+ ;; Graph validation
+ :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
+ :graph.validation/valid "Your graph is valid! {1}"
 
  ;; File
  :file/config-duplicate-keys "'{1}' 파일에 중복된 키가 있습니다. '{2}' 키가 여러 번 할당되었습니다."
@@ -419,6 +469,7 @@
  :page.convert/cant-be-block "페이지 \"{1}\"을(를) 블록으로 변환할 수 없습니다."
  :page.convert/cant-be-block-has-children "페이지 \"{1}\"에는 하위 페이지가 있으므로 블록으로 변환할 수 없습니다."
  :page.convert/cant-be-block-move-first "페이지 \"{1}\"은(는) 블록으로 변환할 수 없습니다. 먼저 다른 페이지로 이동하세요."
+ :page.convert/page-to-tag-action "Convert \"{1}\" to tag"
  :page.convert/page-to-tag-built-in "내장 페이지는 태그로 사용할 수 없습니다"
  :page.convert/page-to-tag-duplicate "이름이 \"{1}\"인 태그가 이미 존재합니다."
  :page.convert/page-to-tag-namespaced "네임스페이스 페이지는 태그로 사용할 수 없습니다"
@@ -447,6 +498,12 @@
  :block/copy-ref "블록 주소 복사"
  :block/copy-url "블록 URL 복사"
 
+ ;; Block macro
+ :block.macro/embed-deprecated "{{embed}} is deprecated. Use '/Node embed' command instead."
+ :block.macro/namespace-deprecated "{{namespace}} is deprecated. Use the {1} feature instead."
+ :block.macro/query-deprecated "{{query}} is deprecated. Use '/Query' command instead."
+ :block.macro/unsupported-name "Unsupported macro name: {1}"
+
  ;; Node
  :node/new "새 노드"
 
@@ -456,10 +513,46 @@
  ;; Journal validation
  :journal.validation/page-not-journal "이 페이지는 저널 페이지가 아닙니다."
 
+ ;; Natural language dates
+ :date.nlp/last-friday "Last Friday"
+ :date.nlp/last-monday "Last Monday"
+ :date.nlp/last-month "Last month"
+ :date.nlp/last-saturday "Last Saturday"
+ :date.nlp/last-sunday "Last Sunday"
+ :date.nlp/last-thursday "Last Thursday"
+ :date.nlp/last-tuesday "Last Tuesday"
+ :date.nlp/last-wednesday "Last Wednesday"
+ :date.nlp/last-week "Last week"
+ :date.nlp/last-year "Last year"
+ :date.nlp/next-friday "Next Friday"
+ :date.nlp/next-monday "Next Monday"
+ :date.nlp/next-month "Next month"
+ :date.nlp/next-saturday "Next Saturday"
+ :date.nlp/next-sunday "Next Sunday"
+ :date.nlp/next-thursday "Next Thursday"
+ :date.nlp/next-tuesday "Next Tuesday"
+ :date.nlp/next-wednesday "Next Wednesday"
+ :date.nlp/next-week "Next week"
+ :date.nlp/next-year "Next year"
+ :date.nlp/this-friday "This Friday"
+ :date.nlp/this-monday "This Monday"
+ :date.nlp/this-month "This month"
+ :date.nlp/this-saturday "This Saturday"
+ :date.nlp/this-sunday "This Sunday"
+ :date.nlp/this-thursday "This Thursday"
+ :date.nlp/this-tuesday "This Tuesday"
+ :date.nlp/this-wednesday "This Wednesday"
+ :date.nlp/this-week "This week"
+ :date.nlp/this-year "This year"
+ :date.nlp/today "Today"
+ :date.nlp/tomorrow "Tomorrow"
+ :date.nlp/yesterday "Yesterday"
+
  ;; Editor
  :editor/auto-heading "자동 제목"
  :editor/block-search "블록 검색"
  :editor/click-to-edit "클릭하여 수정"
+ :editor/code-language-placeholder "Choose language"
  :editor/collapse-block-children "접기"
  :editor/copy "복사"
  :editor/cut "잘라내기"
@@ -471,7 +564,64 @@
  :editor/new-page "새 페이지"
  :editor/new-tag "새 태그"
  :editor/paste "붙여넣기"
+ :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "제목 제거"
+ :editor/template-insert-error "Template insert error: {1}"
+
+ ;; Editor slash commands
+ :editor.slash/advanced-query "Advanced Query"
+ :editor.slash/advanced-query-desc "Create an advanced query block"
+ :editor.slash/calculator "Calculator"
+ :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/code-block "Code block"
+ :editor.slash/code-block-desc "Insert code block"
+ :editor.slash/current-time "Current time"
+ :editor.slash/current-time-desc "Insert current time"
+ :editor.slash/date-picker "Date picker"
+ :editor.slash/date-picker-desc "Pick a date and insert here"
+ :editor.slash/embed-html "Embed HTML"
+ :editor.slash/embed-twitter-tweet "Embed Twitter tweet"
+ :editor.slash/embed-video-url "Embed Video URL"
+ :editor.slash/embed-youtube-timestamp "Embed YouTube timestamp"
+ :editor.slash/group-advanced "ADVANCED"
+ :editor.slash/group-basic "BASIC"
+ :editor.slash/group-format "FORMAT"
+ :editor.slash/group-heading "Heading"
+ :editor.slash/group-list-type "LIST TYPE"
+ :editor.slash/group-plugins "PLUGINS"
+ :editor.slash/group-priority "PRIORITY"
+ :editor.slash/group-task-date "TASK DATE"
+ :editor.slash/group-task-status "TASK STATUS"
+ :editor.slash/group-time-and-date "TIME & DATE"
+ :editor.slash/heading-label "Heading {1}"
+ :editor.slash/image-link "Image link"
+ :editor.slash/image-link-desc "Create a HTTP link to an image"
+ :editor.slash/link-desc "Create a HTTP link"
+ :editor.slash/math-block "Math block"
+ :editor.slash/math-block-desc "Create a LaTeX block"
+ :editor.slash/no-priority "No priority"
+ :editor.slash/node-embed "Node embed"
+ :editor.slash/node-embed-desc "Embed a node here"
+ :editor.slash/node-reference "Node reference"
+ :editor.slash/node-reference-desc "Create a backlink to a node (a page or a block)"
+ :editor.slash/normal-text "Normal text"
+ :editor.slash/normal-text-desc "Clear heading and set to normal text"
+ :editor.slash/number-children "Number children"
+ :editor.slash/number-list "Number list"
+ :editor.slash/priority-desc "Set priority to {1}"
+ :editor.slash/priority-label "Priority {1}"
+ :editor.slash/query-function "Query function"
+ :editor.slash/query-function-desc "Create a query function"
+ :editor.slash/quote-desc "Create a quote block"
+ :editor.slash/status-desc "Set status to {1}"
+ :editor.slash/template-desc "Insert a created template here"
+ :editor.slash/today-desc "Insert the date of today"
+ :editor.slash/tomorrow-desc "Insert the date of tomorrow"
+ :editor.slash/underline "Underline"
+ :editor.slash/underline-desc "Create an underline text decoration"
+ :editor.slash/upload-asset "Upload an asset"
+ :editor.slash/upload-asset-desc "Upload file types like image, PDF, DOCX, etc."
+ :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
  :reference/copy "참조 복사"
@@ -492,6 +642,9 @@
  ;; Property
  :property/add-choice "선택지 추가"
  :property/add-choices "선택지 추가"
+ :property/add-description "Add description"
+ :property/add-new "Add property"
+ :property/add-or-change "Add or change property"
  :property/available-choices "사용 가능한 선택지"
  :property/checkbox-state-mapping "체크박스 상태 매핑"
  :property/children-count "어린이({1})"
@@ -499,6 +652,7 @@
  :property/choose-tag "태그 선택"
  :property/choose-tags "태그 선택"
  :property/configure "설정"
+ :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/default-value "기본값"
  :property/delete-from-node "노드에서 삭제"
  :property/delete-from-node-confirm "이 속성을 노드에서 삭제하시겠습니까?"
@@ -523,6 +677,7 @@
  :property/private-built-in-not-usable "프라이빗 내장 속성은 사용할 수 없습니다"
  :property/select-choice "선택지 선택"
  :property/set-default-choice "기본 선택지 설정"
+ :property/set-default-value "Set default value"
  :property/set-icon "아이콘 설정"
  :property/set-value "값 설정"
  :property/show-as-checkbox-on-node "노드에 체크박스로 표시"
@@ -643,6 +798,9 @@
  :view.table/total-refs-count "총 참조 수"
  :view.table/unpin "고정 해제"
 
+ ;; Builder queries
+ :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
+
  ;; Asset
  :asset/align "정렬"
  :asset/align-center "가운데 정렬"
@@ -653,12 +811,16 @@
  :asset/confirm-delete-image "이 이미지를 삭제하시겠습니까?"
  :asset/copy "에셋 복사"
  :asset/delete "이미지 삭제"
+ :asset/downloading "Downloading"
  :asset/maximize "최대화"
  :asset/open-in-browser "브라우저에서 열기"
  :asset/physical-delete "파일 또한 삭제 (복구 불가능)"
  :asset/ref-block "블록 참조"
  :asset/show-in-folder "이미지 폴더에서 열기"
  :asset/size-too-large "에셋 크기가 너무 큽니다"
+ :asset/syncing "Syncing"
+ :asset/transfer-placeholder "{1} asset..."
+ :asset/uploading "Uploading"
 
  ;; Pdf
  :pdf/auto-open-context-menu "자동으로 컨텍스트 메뉴를 엽니다"
@@ -667,6 +829,7 @@
  :pdf/doc-metadata "메타데이터"
  :pdf/hl-block-colored "색상으로 강조된 블록입니다"
  :pdf/linked-ref "링크된 참조"
+ :pdf/load-highlights-file-error "Error: failed to load the highlights file: \"{1}\". \n{2}"
  :pdf/toggle-dashed "영역 하이라이트를 위해 Dashed style 사용"
 
  ;; Flashcard empty
@@ -731,13 +894,26 @@
  :export/copy-to-clipboard "클립보드에 복사"
  :export/db-backup-failed "데이터베이스 백업에 실패했습니다. 내보내기에서 백업 폴더를 지정하세요."
  :export/db-edn "EDN 파일 내보내기"
+ :export/error-unexpected "An unexpected error occurred during export. See the javascript console for details."
+ :export/format-edn "EDN"
+ :export/format-html "HTML"
+ :export/format-opml "OPML"
+ :export/format-png "PNG"
+ :export/format-text "Text"
  :export/graph "그래프 내보내기"
  :export/graph-ontology-data-copied "그래프 온톨로지 데이터를 클립보드에 복사했습니다"
+ :export/level-lte "level <="
  :export/markdown "표준 Markdown으로 내보내기 (블록 속성 제외)"
+ :export/newline-after-block "newline after block"
  :export/no-updates-since-last-export "이전 내보내기 이후 그래프에 업데이트가 없습니다."
+ :export/open-blocks-only "open blocks only (skip collapsed children)"
  :export/page "페이지 내보내기"
  :export/page-data-copied "페이지 데이터를 클립보드에 복사했습니다"
+ :export/page-ref-text "[[text]] -> text"
  :export/public-pages "공개 페이지 내보내기"
+ :export/remove-emphasis "remove emphasis"
+ :export/remove-properties "remove properties"
+ :export/remove-tags "remove #tags"
  :export/save-to-file "파일로 저장"
  :export/sqlite-db "SQLite 데이터베이스 내보내기"
  :export/title "내보내기"
@@ -750,6 +926,7 @@
  :publish/failed "게시에 실패했습니다"
  :publish/invalid-page "유효하지 않은 페이지"
  :publish/published-to "{1}에 게시했습니다"
+ :publish/unpublish "Unpublish"
  :publish/unpublish-failed "게시 취소에 실패했습니다"
  :publish/unpublish-missing-page-id "게시 취소: 페이지 ID 없음"
  :publish/unpublished "게시가 취소되었습니다"
@@ -852,6 +1029,7 @@
  :plugin/all "전체"
  :plugin/all-updated "모든 플러그인이 최신입니다"
  :plugin/auto-check-for-updates "플러그인 업데이트 자동 확인"
+ :plugin/auto-check-for-updates-status "Auto check for updates: {1}!"
  :plugin/check-all-updates "모든 업데이트 확인"
  :plugin/check-update "업데이트 확인"
  :plugin/checking-for-updates "업데이트 확인 중"
@@ -863,9 +1041,11 @@
  :plugin/downloads "다운로드"
  :plugin/enabled "활성화됨"
  :plugin/existed-package "기존 플러그인 패키지({1})."
+ :plugin/fatal-error "Fatal: {1}"
  :plugin/found-n-updates "{1}개 업데이트를 찾았습니다"
  :plugin/found-updates "업데이트를 찾았습니다"
  :plugin/install "설치"
+ :plugin/install-failed "Install failed: {1}\n{2}"
  :plugin/installed "설치됨"
  :plugin/installed-plugin "설치된 플러그인: {1}"
  :plugin/installing "설치 중"
@@ -874,7 +1054,9 @@
  :plugin/invalid-plugins-edn "유효하지 않은 plugins.edn"
  :plugin/list-of-updates "업데이트 목록"
  :plugin/load-from-web-url "웹 URL에서 불러오기"
+ :plugin/load-plugin-indicator "Load plugin: {1}..."
  :plugin/load-unpacked "압축 해제된 플러그인 불러오기"
+ :plugin/loading-indicator "LOADING"
  :plugin/malformed-plugins-edn "잘못된 형식의 plugins.edn"
  :plugin/marketplace "마켓플레이스"
  :plugin/new-registered "새 플러그인이 등록되었습니다"
@@ -889,6 +1071,7 @@
  :plugin/refresh-lists "리스트 새로고침"
  :plugin/reload "다시 불러오기"
  :plugin/remote-error "원격 오류: {1}"
+ :plugin/report-modal-desc "If any plugin is unavailable or you think it contains malicious code, please email {1}. Mention the name of the plugin and the URL of its GitHub repository. The Logseq team usually responds within a business day."
  :plugin/report-security "보안 문제 보고"
  :plugin/restart "앱 다시 시작"
  :plugin/search-plugin "플러그인 검색"
@@ -912,6 +1095,22 @@
  :plugin.install-from-file/notice "다음의 플러그인들이 교체될 것입니다:"
  :plugin.install-from-file/success "플러그인 설치 성공!"
  :plugin.install-from-file/title "plugins.edn에서 설치"
+
+ ;; Plugin install from web url
+ :plugin.install-from-web-url/supports-note "URLs support both GitHub repositories and local development servers. (For Examples: {1}, {2})"
+
+ ;; Plugin proxy
+ :plugin.proxy/http "HTTP"
+ :plugin.proxy/socks5 "SOCKS5"
+ :plugin.proxy/system "System"
+ :plugin.proxy/test-url "Test URL"
+ :plugin.proxy/testing "Testing"
+
+ ;; Plugin themes
+ :plugin.themes/default-desc "Logseq default {1} theme."
+ :plugin.themes/default-name "Default {1} theme"
+ :plugin.themes/group "{1} themes"
+ :plugin.themes/light-and-dark "light & dark themes"
 
  ;; Zotero
  :zotero/attachments "첨부 파일"
@@ -971,10 +1170,20 @@
  :account.billing/month "월"
 
  ;; Sync
+ :sync/assets-downloading-count "Downloading assets ({1})"
+ :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/downloading "Downloading..."
  :sync/graph-count-exceed-limit "그래프 수가 제한을 초과했습니다"
  :sync/invitation-sent "초대장을 보냈습니다"
+ :sync/more-debug-info "More debug info"
+ :sync/offline "Offline"
+ :sync/online "Online"
+ :sync/pending-local-changes "pending local changes"
+ :sync/pending-server-changes "pending server changes"
  :sync/something-wrong "동기화 오류가 발생했습니다"
+ :sync/start-sync "Start sync"
  :sync/storage-exceed-limit "저장 용량이 제한을 초과했습니다"
+ :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "사용자가 아직 존재하지 않습니다"
 
  ;; Encryption
@@ -1149,6 +1358,10 @@
  :window/minimize "최소화"
  :window/restore "복원"
 
+ ;; Mobile
+ :mobile/camera-access-denied "Camera access is denied. Enable it in Settings > Logseq."
+ :mobile/microphone-access-denied "Microphone access is denied. Enable it in Settings > Logseq."
+
  ;; Mobile header actions
  :mobile.header/actions "작업"
  :mobile.header/create-graph "그래프 만들기"
@@ -1221,4 +1434,27 @@
  :electron/version "버전 {1}"
  :electron/write-file-failed "파일 {1}에 쓰지 못했습니다, {2}."
  :electron/write-file-failed-with-backup "파일 {1}에 쓰지 못했습니다, {2}. 백업 파일이 {3}에 저장되었습니다."
+
+ ;; Icon
+ :icon/emojis-count "Emojis ({1})"
+ :icon/icons-count "Icons ({1})"
+ :icon/matched-count "Matched ({1})"
+ :icon/search-all "Search all"
+ :icon/search-emojis "Search emojis"
+ :icon/search-icons "Search icons"
+ :icon/tab-all "All"
+ :icon/tab-emojis "Emojis"
+ :icon/tab-icons "Icons"
+
+ ;; Library
+ :library/add-existing-pages "Add existing pages to Library"
+ :library/add-pages "Add pages"
+
+ ;; Shell
+ :shell/input-command-title "Input command"
+
+ ;; Youtube
+ :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
+ :youtube/player-not-ready "YouTube player isn't ready yet."
+ :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 }

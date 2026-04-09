@@ -111,10 +111,10 @@
           (for [model-name (:available-model-names model-info)]
             (shui/select-item {:value model-name :disabled? (= graph-text-embedding-model-name model-name)} model-name))))))
      [:hr]
-     [:b "Search"]
+     [:b (t :ai/search-label)]
      [:input.form-input.my-2.py-1
       {:on-change (fn [e] (set-query-string (util/evalue e)))}]
-     [:b "Search Result:"]
+     [:b (t :ai/search-result-label)]
      [:pre.select-text
       (with-out-str
         (fipp/pprint result {:width 10}))]]))

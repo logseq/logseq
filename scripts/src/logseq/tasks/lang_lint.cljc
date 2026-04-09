@@ -46,6 +46,17 @@
 (def ^:private left-sidebar-navs-pattern
   #"(?s)\bnavs\s+\[(.*?)\]")
 
+;; Matches the `nlp-pages` vector body for derived date NLP translation keys.
+(def ^:private date-nlp-pages-pattern
+  #"(?s)\(def\s+nlp-pages\s+\[(.*?)\]\)")
+
+;; Matches built-in property/class definition forms for db-ident derived keys.
+(def ^:private built-in-properties-form-pattern
+  #"\(def\s+\^:large-vars/data-var\s+built-in-properties\b")
+
+(def ^:private built-in-classes-form-pattern
+  #"\(def\s+\^:large-vars/data-var\s+built-in-classes\b")
+
 ;; Matches `:tag/*` entries inside left sidebar nav definitions.
 (def ^:private tag-nav-key-pattern
   #":tag/([A-Za-z][A-Za-z0-9._-]*)")
@@ -252,6 +263,58 @@
          set)
     #{}))
 
+(defn date-nlp-translation-keys
+  "Return `:date.nlp/*` translation keys derived from `nlp-pages`."
+  [content]
+  (if-let [[_ nlp-pages-content] (re-find date-nlp-pages-pattern content)]
+    (->> (re-seq string-literal-pattern nlp-pages-content)
+         (map second)
+         (map #(keyword "date.nlp"
+                        (-> %
+                            string/lower-case
+                            (string/replace " " "-"))))
+         set)
+    #{}))
+
+(defn- built-in-db-ident->i18n-key
+  [db-ident]
+  (let [ns-str (namespace db-ident)
+        n (name db-ident)]
+    (cond
+      (= ns-str "logseq.class")
+      (keyword "class.built-in" (string/lower-case n))
+
+      (or (= ns-str "logseq.property")
+          (and (string? ns-str)
+               (string/starts-with? ns-str "logseq.property.")))
+      (let [sub-ns (when (not= ns-str "logseq.property")
+                     (subs ns-str (count "logseq.property.")))
+            dot-idx (string/index-of n ".")
+            clean-n (string/replace n #"\?$" "")]
+        (if dot-idx
+          (let [prop-part (subs clean-n 0 dot-idx)
+                choice-part (subs clean-n (inc dot-idx))
+                subdomain (if sub-ns (str sub-ns "-" prop-part) prop-part)]
+            (keyword (str "property." subdomain) choice-part))
+          (if sub-ns
+            (keyword "property.built-in" (str sub-ns "-" clean-n))
+            (keyword "property.built-in" clean-n))))
+
+      (= ns-str "block")
+      (keyword "property.built-in" (string/replace n #"\?$" ""))
+
+      :else nil)))
+
+(defn built-in-db-ident-translation-keys
+  "Return translation keys derived from built-in db-ident keyword literals."
+  [content]
+  (->> [(matched-list-forms built-in-properties-form-pattern "(def" content)
+        (matched-list-forms built-in-classes-form-pattern "(def" content)]
+       (apply concat)
+       (mapcat keyword-literals)
+       (keep built-in-db-ident->i18n-key)
+       set))
+
 (defn shortcut-command-keys
   "Return `:command.*` translation keys derived from built-in shortcut ids.
 
@@ -285,6 +348,7 @@
         (option-translation-keys content :title-key)
         (built-in-color-keys content)
         (left-sidebar-translation-keys content)
+        (date-nlp-translation-keys content)
         (shortcut-category-translation-keys content)]
        (apply concat)
        set))

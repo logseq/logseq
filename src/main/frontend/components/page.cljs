@@ -223,7 +223,7 @@
            (let [query' (assoc query :collapsed? true)]
              (rum/with-key
                (ui/catch-error
-                (ui/component-error "Failed default query:" {:content (pr-str query')})
+                (ui/component-error (t :page/default-query-error) {:content (pr-str query')})
                 (query/custom-query (component-block/wrap-query-components
                                      {:editor-box editor/box
                                       :page page-cp

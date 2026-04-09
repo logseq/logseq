@@ -139,7 +139,7 @@
                                   search-result')
                          search-result')
         new-option {:value @*input
-                    :label (str "+ New option: " @*input)}
+                    :label (t :select/new-option @*input)}
         search-result (if (and show-new-when-not-exact-match?
                                (not exact-match?)
                                (not (string/blank? @*input))
@@ -173,7 +173,7 @@
         results-container-f (fn []
                               (if loading?
                                 [:div.px-1.py-2
-                                 (ui/loading "Loading ...")]
+                                 (ui/loading (t :ui/loading))]
                                 [:div
                                  {:class (when (seq search-result) "py-1")}
                                  [:div.item-results-wrap
@@ -204,7 +204,7 @@
                                     :empty-placeholder (empty-placeholder t)})]
 
                                  (when (and multiple-choices? (fn? on-apply))
-                                   [:div.p-4 (ui/button "Apply"
+                                   [:div.p-4 (ui/button (t :ui/apply)
                                                         {:small? true
                                                          :on-pointer-down (fn [e]
                                                                             (util/stop e)
