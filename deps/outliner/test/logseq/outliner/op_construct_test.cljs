@@ -157,6 +157,40 @@
       (is (= [[:delete-blocks [[[:block/uuid child-uuid]] {}]]]
              forward-outliner-ops)))))
 
+(deftest derive-history-outliner-ops-move-blocks-resolves-target-id-from-tx-data-test
+  (testing "move-blocks should resolve stale numeric target id using tx-data block uuid"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page"}
+                   :blocks [{:block/title "child"}]}]})
+          child (db-test/find-block-by-content @conn "child")
+          stale-target-id 9999999
+          target-uuid (random-uuid)
+          tx-data [{:e stale-target-id :a :block/uuid :v target-uuid :added false}]
+          tx-meta {:outliner-op :move-blocks
+                   :outliner-ops [[:move-blocks [[(:db/id child)] stale-target-id {:sibling? true}]]]}
+          {:keys [forward-outliner-ops]}
+          (op-construct/derive-history-outliner-ops @conn @conn tx-data tx-meta)]
+      (is (= [:block/uuid target-uuid]
+             (get-in forward-outliner-ops [0 1 1]))))))
+
+(deftest derive-history-outliner-ops-delete-closed-value-resolves-value-id-from-tx-data-test
+  (testing "delete-closed-value should resolve stale numeric value block id using tx-data block uuid"
+    (let [conn (db-test/create-conn-with-blocks
+                {:properties {:status {:logseq.property/type :default}}
+                 :pages-and-blocks []})
+          property-page (d/entity @conn :user.property/status)
+          property-id (:db/id property-page)
+          stale-value-id 8888888
+          value-uuid (random-uuid)
+          tx-data [{:e stale-value-id :a :block/uuid :v value-uuid :added false}]
+          tx-meta {:outliner-op :delete-closed-value
+                   :outliner-ops [[:delete-closed-value [property-id stale-value-id]]]}
+          {:keys [forward-outliner-ops]}
+          (op-construct/derive-history-outliner-ops @conn @conn tx-data tx-meta)]
+      (is (= [:block/uuid value-uuid]
+             (get-in forward-outliner-ops [0 1 1]))))))
+
 (deftest derive-history-outliner-ops-builds-delete-page-inverse-for-class-property-and-today-page-test
   (testing "delete-page inverse restores hard-retracted class/property/today pages with stable db/ident"
     (let [today (date-time-util/ms->journal-day (js/Date.))

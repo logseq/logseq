@@ -8,7 +8,8 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]))
+            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db.common.entity-plus :as entity-plus]))
 
 (def ^:private semantic-outliner-ops
   #{:save-block
@@ -62,6 +63,8 @@
                            (when-let [id (:block/uuid x)]
                              (:db/id (d/entity db [:block/uuid id]))))]
                (stable-entity-ref db eid))
+    (uuid? x)
+    [:block/uuid x]
     (and (integer? x) (not (neg? x)))
     (if-let [ent (d/entity db x)]
       (cond
@@ -70,6 +73,19 @@
         :else x)
       x)
     :else x))
+
+(defn- stable-block-ref-with-tx-data
+  [db tx-data x]
+  (let [ref (stable-entity-ref db x)]
+    (if (and (integer? ref) (not (neg? ref)))
+      (or (some (fn [item]
+                  (when (and (= ref (:e item))
+                             (= :block/uuid (:a item))
+                             (uuid? (:v item)))
+                    [:block/uuid (:v item)]))
+                tx-data)
+          ref)
+      ref)))
 
 (defn- sanitize-ref-value
   [db v]
@@ -464,7 +480,7 @@
     :move-blocks
     (let [[ids target-id opts] args]
       [:move-blocks [(stable-id-coll db ids)
-                     (stable-entity-ref db target-id)
+                     (stable-block-ref-with-tx-data db tx-data target-id)
                      opts]])
 
     :delete-blocks
@@ -569,7 +585,7 @@
     :delete-closed-value
     (let [[property-id value-block-id] args]
       [:delete-closed-value [(stable-entity-ref db property-id)
-                             (stable-entity-ref db value-block-id)]])
+                             (stable-block-ref-with-tx-data db tx-data value-block-id)]])
 
     [op args]))
 
@@ -597,6 +613,9 @@
 
     (integer? block)
     (d/entity db block)
+
+    (uuid? block)
+    (d/entity db [:block/uuid block])
 
     (vector? block)
     (d/entity db block)
@@ -645,8 +664,8 @@
 
 (defn- block-property-value
   [db block-id property-id]
-  (when-let [value (some-> (d/entity db block-id)
-                           (get property-id))]
+  ;; `get` lookup may include derived defaults.
+  (when-let [value (entity-plus/lookup-entity (d/entity db block-id) property-id)]
     (property-ref-value db property-id value)))
 
 (defn- property-history-refs-from-tx-data
