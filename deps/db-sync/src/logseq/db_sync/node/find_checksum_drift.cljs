@@ -2,6 +2,7 @@
   (:require ["better-sqlite3" :as sqlite3]
             ["fs" :as fs]
             ["path" :as node-path]
+            [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db-sync.checksum :as sync-checksum]
             [logseq.db-sync.common :as common]
@@ -54,11 +55,11 @@
 
 (defn- normalize-sql
   [sql]
-  (-> sql clojure.string/trim clojure.string/lower-case))
+  (-> sql string/trim string/lower-case))
 
 (defn- select-sql?
   [sql]
-  (clojure.string/starts-with? (normalize-sql sql) "select"))
+  (string/starts-with? (normalize-sql sql) "select"))
 
 (defn- exec-with-args [^js stmt args]
   (.apply (.-run stmt) stmt (to-array args)))
@@ -90,12 +91,6 @@
 (defn- tx-rows
   [^js db]
   (.all (.prepare db "select t, tx, outliner_op from tx_log order by t asc")))
-
-(defn- sync-meta-value
-  [^js db key]
-  (some-> (.all (.prepare db "select value from sync_meta where key = ?") key)
-          first
-          (aget "value")))
 
 (defn- replay-find-first-mismatch
   [rows]
