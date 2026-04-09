@@ -189,18 +189,18 @@
 
 (defn- stable-block-uuid
   [db x]
-  (let [ref (stable-entity-ref db x)]
+  (let [entity-ref (stable-entity-ref db x)]
     (cond
-      (uuid? ref)
-      ref
+      (uuid? entity-ref)
+      entity-ref
 
-      (and (vector? ref)
-           (= :block/uuid (first ref))
-           (uuid? (second ref)))
-      (second ref)
+      (and (vector? entity-ref)
+           (= :block/uuid (first entity-ref))
+           (uuid? (second entity-ref)))
+      (second entity-ref)
 
       :else
-      ref)))
+      entity-ref)))
 
 (defn- resolve-target-and-sibling
   [block]
@@ -498,11 +498,11 @@
       [:recycle-delete-permanently [(stable-block-uuid db root-id)]])
 
     :set-block-property
-    (let [[block-eid property-id v] args]
-      (let [property-id' (stable-entity-ref db property-id)]
-        [:set-block-property [(stable-entity-ref db block-eid)
-                              property-id'
-                              (stable-property-value db property-id' v)]]))
+    (let [[block-eid property-id v] args
+          property-id' (stable-entity-ref db property-id)]
+      [:set-block-property [(stable-entity-ref db block-eid)
+                            property-id'
+                            (stable-property-value db property-id' v)]])
 
     :remove-block-property
     (let [[block-eid property-id] args]
@@ -510,12 +510,12 @@
                                (stable-entity-ref db property-id)]])
 
     :batch-set-property
-    (let [[block-ids property-id v opts] args]
-      (let [property-id' (stable-entity-ref db property-id)]
-        [:batch-set-property [(stable-id-coll db block-ids)
-                              property-id'
-                              (stable-property-value db property-id' v)
-                              opts]]))
+    (let [[block-ids property-id v opts] args
+          property-id' (stable-entity-ref db property-id)]
+      [:batch-set-property [(stable-id-coll db block-ids)
+                            property-id'
+                            (stable-property-value db property-id' v)
+                            opts]])
 
     :batch-remove-property
     (let [[block-ids property-id] args]
@@ -523,18 +523,18 @@
                                (stable-entity-ref db property-id)]])
 
     :delete-property-value
-    (let [[block-eid property-id property-value] args]
-      (let [property-id' (stable-entity-ref db property-id)]
-        [:delete-property-value [(stable-entity-ref db block-eid)
-                                 property-id'
-                                 (stable-property-value db property-id' property-value)]]))
+    (let [[block-eid property-id property-value] args
+          property-id' (stable-entity-ref db property-id)]
+      [:delete-property-value [(stable-entity-ref db block-eid)
+                               property-id'
+                               (stable-property-value db property-id' property-value)]])
 
     :batch-delete-property-value
-    (let [[block-eids property-id property-value] args]
-      (let [property-id' (stable-entity-ref db property-id)]
-        [:batch-delete-property-value [(stable-id-coll db block-eids)
-                                       property-id'
-                                       (stable-property-value db property-id' property-value)]]))
+    (let [[block-eids property-id property-value] args
+          property-id' (stable-entity-ref db property-id)]
+      [:batch-delete-property-value [(stable-id-coll db block-eids)
+                                     property-id'
+                                     (stable-property-value db property-id' property-value)]])
 
     :create-property-text-block
     (let [[block-id property-id value opts] args]
@@ -1305,10 +1305,6 @@
         (unresolved-numeric-entity-id? root-id))
 
       false)))
-
-(defn- stale-numeric-id-in-op-stream?
-  [db ops]
-  (some #(stale-numeric-id-in-op? db %) ops))
 
 (defn- assert-no-stale-numeric-ids!
   [db ops stage]

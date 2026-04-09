@@ -71,16 +71,6 @@
                    (:block/uuid ent)))))
        vec))
 
-(defn- page-uuid
-  [db]
-  (some (fn [{:keys [e]}]
-          (let [ent (d/entity db e)]
-            (when (and (uuid? (:block/uuid ent))
-                       (not (ldb/built-in? ent))
-                       (string? (:block/name ent)))
-              (:block/uuid ent))))
-        (d/datoms db :avet :block/uuid)))
-
 (defn- block-state
   [db]
   (->> (d/datoms db :avet :block/uuid)

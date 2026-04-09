@@ -197,7 +197,7 @@
   {:tx (protocol/tx->transit [])
    :outliner-op :rebase})
 
-(defn- tx-entry-appliable?
+(defn- tx-entry-applicable?
   [db {:keys [tx]}]
   (try
     (d/with db (protocol/transit->tx tx))
@@ -205,9 +205,9 @@
     (catch :default _
       false)))
 
-(defn- tx-entries-appliable?
+(defn- tx-entries-applicable?
   [db entries]
-  (every? (partial tx-entry-appliable? db) entries))
+  (every? (partial tx-entry-applicable? db) entries))
 
 (defn- make-insert-command
   [rng db step]
@@ -1001,7 +1001,7 @@
                 ;; undo
                 (= op 1)
                 (if-let [{:keys [forward inverse]} (peek undo-stack)]
-                  (let [entries (if (tx-entries-appliable? db inverse)
+                  (let [entries (if (tx-entries-applicable? db inverse)
                                   inverse
                                   [(no-op-rebase-entry)])
                         response (apply-batch-with-t! self t-before entries)
@@ -1022,7 +1022,7 @@
                 ;; redo
                 (= op 2)
                 (if-let [{:keys [forward inverse]} (peek redo-stack)]
-                  (let [entries (if (tx-entries-appliable? db forward)
+                  (let [entries (if (tx-entries-applicable? db forward)
                                   forward
                                   [(no-op-rebase-entry)])
                         response (apply-batch-with-t! self t-before entries)
@@ -1053,7 +1053,7 @@
                                 10 (make-random-indent-command rng db step)
                                 {:forward [(no-op-rebase-entry)]
                                  :undoable? false})
-                      entries (if (tx-entries-appliable? db (:forward command))
+                      entries (if (tx-entries-applicable? db (:forward command))
                                 (:forward command)
                                 [(no-op-rebase-entry)])
                       response (apply-batch-with-t! self t-before entries)
