@@ -3155,6 +3155,68 @@
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest test-execute-upsert-page-restores-recycled-page
+  ;; A recycled page with the same name must be treated as "not existing" so
+  ;; the create-page outliner op runs. The outliner's `create` already has a
+  ;; (ldb/recycled? existing-page) branch that restores the page in place,
+  ;; preventing duplicate :block/name entries.
+  (async done
+         (let [batches* (atom [])
+               recycled-uuid (uuid "00000000-0000-0000-0000-0000000000ec")
+               action {:type :upsert-page :repo "demo" :page "Home"
+                       :update-properties {:logseq.property/publishing-public? true}}]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               add-command/resolve-tags (fn [_ _ _] (p/resolved nil))
+                               add-command/resolve-properties (fn [_ _ properties & _] (p/resolved properties))
+                               add-command/resolve-property-identifiers (fn [_ _ properties & _] (p/resolved properties))
+                               transport/invoke (fn [_ method _ args]
+                                                  (case method
+                                                    :thread-api/pull (let [[_ _ lookup] args]
+                                                                       (cond
+                                                                         (= lookup [:block/name "home"])
+                                                                         {:db/id 50
+                                                                          :block/uuid recycled-uuid
+                                                                          :logseq.property/deleted-at 1712000000000}
+                                                                         (= lookup [:block/uuid recycled-uuid])
+                                                                         {:db/id 50 :block/uuid recycled-uuid}
+                                                                         (and (vector? lookup) (= :db/ident (first lookup)))
+                                                                         {:db/id 999}
+                                                                         :else {}))
+                                                    :thread-api/apply-outliner-ops (let [[_ ops _] args]
+                                                                                     (swap! batches* conj ops)
+                                                                                     ["Home" recycled-uuid])
+                                                    (throw (ex-info "unexpected invoke" {:method method :args args}))))]
+                 (p/let [result (commands/execute action {})]
+                   (is (= :ok (:status result)))
+                   (is (some (fn [batch]
+                               (some #(= [:create-page ["Home" {}]] %) batch))
+                             @batches*)
+                       "create-page op is invoked, which restores the recycled page in the outliner")))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-upsert-page-by-id-rejects-recycled-page
+  (async done
+         (let [action {:type :upsert-page :mode :update :repo "demo" :id 50}]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               transport/invoke (fn [_ method _ _]
+                                                  (case method
+                                                    :thread-api/pull {:db/id 50
+                                                                      :block/name "home"
+                                                                      :block/title "Home"
+                                                                      :block/uuid (uuid "00000000-0000-0000-0000-0000000000ed")
+                                                                      :logseq.property/deleted-at 1712000000000}
+                                                    :thread-api/apply-outliner-ops
+                                                    (throw (ex-info "should not apply ops on recycled page" {:method method}))
+                                                    (throw (ex-info "unexpected invoke" {:method method}))))]
+                 (p/let [result (commands/execute action {})]
+                   (is (= :error (:status result)))
+                   (is (= :upsert-id-not-found (get-in result [:error :code])))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
 (deftest test-execute-show-page-skips-recycled-page
   ;; `execute-show` throws `ex-info` with `:code :page-not-found` rather than
   ;; returning `:status :error`; the top-level CLI catches it. The test
