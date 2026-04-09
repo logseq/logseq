@@ -114,7 +114,7 @@
       nil)))
 
 (def repo-path "/db.sqlite")
-(def client-ops-repo-path (str "client-ops-" repo-path))
+(def client-ops-repo-path (str "client-ops" repo-path))
 
 (defn- ->uint8array
   [data]
