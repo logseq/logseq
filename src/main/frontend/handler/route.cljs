@@ -121,7 +121,7 @@
     :file
     (t :file/title (:path path-params))
     :new-page
-    (t :page.create/title)
+    (t :page/create)
     :page
     (let [name (:name path-params)
           page (db/get-page name)
@@ -146,7 +146,7 @@
     :tag
     (str "#"  (:name path-params))
     :diff
-    (t :graph.diff/title)
+    (t :graph/diff)
     :settings
     (t :nav/settings)
     :import

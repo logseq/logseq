@@ -104,7 +104,7 @@
               {:key "delete-locally"
                :class "delete-local-graph-menu-item"
                :on-click (fn []
-                           (let [prompt-str (t :graph.delete-local/confirm-desc graph-name)]
+                           (let [prompt-str (t :graph/delete-local-confirm-desc graph-name)]
                              (-> (shui/dialog-confirm!
                                   [:p.font-medium.-my-4 prompt-str
                                    [:span.my-2.flex.font-normal.opacity-75
@@ -149,7 +149,7 @@
               {:key "delete-remotely"
                :class "delete-remote-graph-menu-item"
                :on-click (fn []
-                           (let [prompt-str (t :graph.delete-server/confirm-desc graph-name)]
+                           (let [prompt-str (t :graph/delete-server-confirm-desc graph-name)]
                              (-> (shui/dialog-confirm!
                                   [:p.font-medium.-my-4 prompt-str
                                    [:span.my-2.flex.font-normal.opacity-75
@@ -170,7 +170,7 @@
               {:key "leave-shared-graph"
                :class "leave-shared-graph-menu-item"
                :on-click (fn []
-                           (let [prompt-str (t :graph.leave/confirm-desc)]
+                           (let [prompt-str (t :graph/leave-confirm-desc)]
                              (-> (shui/dialog-confirm!
                                   [:p.font-medium.-my-4 prompt-str]
                                   config)

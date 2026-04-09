@@ -389,11 +389,15 @@
  :graph/create-failed "Grafiek aanmaken mislukt"
  :graph/creating "Creating graph"
  :graph/delete-local-action "Delete local graph"
+ :graph/delete-local-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
  :graph/delete-server-action "Delete from server"
+ :graph/delete-server-confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
  :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/diff "Git diff"
  :graph/encrypt-data-label "Encrypt graph data"
  :graph/last-opened-at-label "Last opened at: {1}"
  :graph/leave-action "Leave this graph"
+ :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Grafiek verlaten mislukt"
  :graph/left "Grafiek verlaten"
  :graph/local-graphs "Plaaslike grafieke"
@@ -405,18 +409,6 @@
  :graph/updated-switching "Grafiek bijgewerkt. Schakelen..."
  :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
  :graph/use-sync-label "Use Logseq Sync?"
-
- ;; Graph delete local
- :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
-
- ;; Graph delete server
- :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
-
- ;; Graph diff
- :graph.diff/title "Git diff"
-
- ;; Graph leave
- :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "Wys joernale"
@@ -480,6 +472,7 @@
  :page/contents "Inhoud"
  :page/convert-to-tag "Skakel om na etiket"
  :page/copy-url "Kopieer bladsy-URL"
+ :page/create "Create a new page"
  :page/created-at "Geskep op"
  :page/delete "Verwyder"
  :page/hide-properties "Versteek eienskappe"
@@ -511,9 +504,6 @@
  :page.convert/tag-to-page-duplicate "'n Bladsy met die naam \"{1}\" bestaan reeds."
  :page.convert/tag-to-page-has-children "Tag heeft onderliggende elementen en kan nie worden geconverteerd"
 
- ;; Page creation
- :page.create/title "Create a new page"
-
  ;; Page deletion
  :page.delete/confirm-title "Is jy seker jy wil hierdie bladsy uitvee?"
  :page.delete/success "Bladsy \"{1}\" is suksesvol uitgevee!"
@@ -539,13 +529,11 @@
  :block.macro/unsupported-name "Unsupported macro name: {1}"
 
  ;; Node
+ :node/built-in-cant-delete-error "Ingebouwde elementen kunnen nie worden verwijderd."
  :node/new "Nuwe node"
 
- ;; Node validation
- :node.validation/built-in-cant-delete "Ingebouwde elementen kunnen nie worden verwijderd."
-
- ;; Journal validation
- :journal.validation/page-not-journal "Deze bladsy is geen dagboekbladsy."
+ ;; Journal
+ :journal/page-cant-convert-warning "Deze bladsy is geen dagboekbladsy."
 
  ;; Natural language dates
  :date.nlp/last-friday "Last Friday"
@@ -658,13 +646,11 @@
  :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
+ :reference/blocks "Blok verwysing"
  :reference/copy "Kopieer verwysing"
  :reference/delete "Verwyder verwysing"
  :reference/replace-with-embed "Vervang met inbedding"
  :reference/replace-with-text "Vervang met teks"
-
- ;; Block references
- :reference.block/title "Blok verwysing"
 
  ;; Reference filters
  :reference.filter/directions "Filterrichtingen"
@@ -687,6 +673,7 @@
  :property/choose-tags "Kies etikette"
  :property/configure "Konfigureer"
  :property/convert-page-to-property "Convert \"{1}\" to property"
+ :property/create-error "Eienskap aanmaken mislukt."
  :property/default-value "Verstekwaarde"
  :property/delete-from-node "Van knooppunt verwyder"
  :property/delete-from-node-confirm "Deze eienskap van die knooppunt verwyder?"
@@ -740,9 +727,6 @@
  :property.choice/already-exists "Keuze bestaat al."
  :property.choice/cant-delete-built-in "Ingebouwde keuze kan nie worden verwijderd."
  :property.choice/invalid "Ongeldige keuse \"{1}\" vir hierdie eiendom: {2}"
-
- ;; Property creation
- :property.create/failed "Eienskap aanmaken mislukt."
 
  ;; Property validation
  :property.validation/cant-convert-to-number "Kan nie \"{1}\" na 'n getal omskakel nie."
@@ -1004,9 +988,6 @@
  :settings.ai/enable-mcp-server "Aktiveer MCP-bediener"
  :settings.ai/enable-mcp-server-desc "MCP-server aktiveer vir AI-integratie"
 
- ;; Collaboration settings
- :settings.collaboration/member-remove-failed "Lid verwyder mislukt"
-
  ;; Editor settings
  :settings.editor/auto-expand-block-refs "Blokreferenties outomaties uitklappen"
  :settings.editor/auto-expand-block-refs-tip "Klik om blokreferenties outomaties uit te klappen"
@@ -1157,16 +1138,13 @@
 
  ;; Zotero
  :zotero/attachments "Aanhangsels"
+ :zotero/imported-file-warning "Hierdie is 'n ingevoerde Zotero-lêer, stel Zotero-datagids om die lêer in Logseq oop te maak."
+ :zotero/linked-file-warning "Hierdie is 'n gekoppelde Zotero-lêer, stel basisgids vir Zotero-gekoppelde aanhangsels om die lêer in Logseq oop te maak."
  :zotero/notes "Aantekeninge"
-
- ;; Zotero imported file
- :zotero.imported-file/warning "Hierdie is 'n ingevoerde Zotero-lêer, stel Zotero-datagids om die lêer in Logseq oop te maak."
-
- ;; Zotero linked file
- :zotero.linked-file/warning "Hierdie is 'n gekoppelde Zotero-lêer, stel basisgids vir Zotero-gekoppelde aanhangsels om die lêer in Logseq oop te maak."
 
  ;; Server
  :server/error-notification "[Bediener] {1}"
+ :server/mcp-url-copied "MCP-URL gekopieerd"
  :server/start "Begin"
  :server/stop "Stop"
  :server/title "HTTP API-server"
@@ -1177,9 +1155,6 @@
  :server.config/reset "Herstel"
  :server.config/save-and-apply "Stoor en pas toe"
  :server.config/title "Serverconfiguratie"
-
- ;; Local server MCP
- :server.mcp/url-copied "MCP-URL gekopieerd"
 
  ;; Local server status
  :server.status/closed "Gesloten"
@@ -1209,8 +1184,8 @@
  :storage.recycle/page-deleted-at "Bladsy uitgevee {1}"
  :storage.recycle/restore "Herstel"
 
- ;; Account billing
- :account.billing/month "maand"
+ ;; Account
+ :account/month "maand"
 
  ;; Sync
  :sync/assets-downloading-count "Downloading assets ({1})"
@@ -1228,6 +1203,9 @@
  :sync/storage-exceed-limit "Opslaglimiet overschreden"
  :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "Gebruiker bestaat nog niet"
+
+ ;; Collaboration
+ :collaboration/remove-access-error "Lid verwyder mislukt"
 
  ;; Encryption
  :encryption/cloud-password-rich (fn [] ["As jy jou wagwoord verloor, kan geen data in die wolk ontsyfer word nie. " [:span "Jy sal steeds toegang hê tot die plaaslike weergawe van jou grafiek."]])
@@ -1270,12 +1248,15 @@
 
  ;; Help
  :help/about "Oor Logseq"
+ :help/about-title "Oor"
  :help/awesome-logseq "Awesome Logseq"
  :help/block-reference "Blok verwysing"
  :help/blog "Blog"
  :help/bug "Rapporteer fout op GitHub"
  :help/changelog "Veranderingslog"
+ :help/community-title "Gemeenskap"
  :help/context-menu "Konteks kaart"
+ :help/development-title "Ontwikkeling"
  :help/docs "Dokumentasie"
  :help/feature "Kenmerkversoek"
  :help/forum-community "Forumgemeenskap"
@@ -1288,15 +1269,8 @@
  :help/slash-autocomplete "Slash outovoltooi"
  :help/start "Aan die gang"
  :help/terms "Voorwaardes"
-
- ;; About help
- :help.about/title "Oor"
-
- ;; Community help
- :help.community/title "Gemeenskap"
-
- ;; Development help
- :help.development/title "Ontwikkeling"
+ :help/terms-title "Voorwaardes"
+ :help/usage-title "Gebruik"
 
  ;; Handbook help
  :help.handbook/close "Sluit"
@@ -1314,12 +1288,6 @@
  :help.shortcuts/shortcut-column "Kortpad"
  :help.shortcuts/title "Snelsleutels"
  :help.shortcuts/triggers "Snelsleutels en snellers"
-
- ;; Terms help
- :help.terms/title "Voorwaardes"
-
- ;; Usage help
- :help.usage/title "Gebruik"
 
  ;; Bug report clipboard diagnostics
  :bug-report.clipboard/action-desc "Klembord controleren"

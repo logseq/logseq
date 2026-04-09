@@ -133,7 +133,7 @@
     (throw (ex-info "Page can't be renamed to a journal"
                     {:type :notification
                      :payload {:message "This page can't be changed to a journal page"
-                               :i18n-key :journal.validation/page-not-journal
+                               :i18n-key :journal/page-cant-convert-warning
                                :type :warning}}))))
 
 (defn validate-block-title

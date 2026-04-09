@@ -879,7 +879,7 @@
             [:div.absolute.top-0.left-4.bg-blue-700.uppercase.px-2.py-1.rounded-b-lg.font-bold.text-xs (t :account/plan-pro)]
             [:div
              [:strong.text-white.text-xl.font-normal "$10"]
-             [:span.text-xs.font-base {:class "ml-0.5"} " / " (t :account.billing/month)]]
+             [:span.text-xs.font-base {:class "ml-0.5"} " / " (t :account/month)]]
             [:div.text-white.font-bold {:class "h-[2.5rem]"} (t :account/plan-pro-summary)]
             [:ul.text-xs.list-none.m-0.flex.flex-col.gap-0.5
              [:li (t :account/unlimited-unsynced-graphs)]
@@ -1011,7 +1011,7 @@
                                        (p/then (fn []
                                                  (rtc-handler/<rtc-get-users-info)))
                                        (p/catch (fn [e]
-                                                  (notification/show! (t :settings.collaboration/member-remove-failed) :error)
+                                                  (notification/show! (t :collaboration/remove-access-error) :error)
                                                   (log/error :db-sync/remove-member-failed {:error e
                                                                                             :graph-uuid graph-uuid
                                                                                             :member-id member-id})))))))}

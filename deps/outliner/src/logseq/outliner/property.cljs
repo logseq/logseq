@@ -609,7 +609,7 @@
                             (throw (ex-info (str e)
                                             {:type :notification
                                              :payload {:message "Property failed to create. Please try a different property name."
-                                                       :i18n-key :property.create/failed
+                                                       :i18n-key :property/create-error
                                                        :type :error}})))))]
     (assert (qualified-keyword? db-ident))
     (when (and (contains? #{:checkbox} (:logseq.property/type  schema))
