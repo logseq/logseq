@@ -32,7 +32,7 @@ For ways to help with coding, read the next section.
 ### <a name="code-contributions"></a> Code Contributions
 
 For contributors who want to help with coding, we have a list of [good first
-issues](https://github.com/logseq/logseq/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)
+issues](https://github.com/logseq/og/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22)
 to help you get started. These are issues that are beginner-friendly and do not
 require advanced knowledge of the codebase. We encourage new contributors to
 start with these issues and gradually work their way up to more challenging
@@ -113,11 +113,11 @@ When submitting a Pull Request (PR) or expecting a subsequent review, please fol
 
 1. The PR is ready for review. If you have work you know how to do, then please keep your changes local until they are ready. If you need help with your PR, feel free to submit with questions.
 
-2. The PR checks which include tests and [lint checks](https://github.com/logseq/logseq/blob/master/docs/dev-practices.md#linting) are passing.
+2. The PR checks which include tests and [lint checks](https://github.com/logseq/og/blob/master/docs/dev-practices.md#linting) are passing.
 
 3. The PR has no merge conflicts.
 
-4. The PR has [test(s)](https://github.com/logseq/logseq/blob/master/docs/dev-practices.md#testing) for features or enhancements. Tests for bug fixes are also appreciated as they help prevent regressions.
+4. The PR has [test(s)](https://github.com/logseq/og/blob/master/docs/dev-practices.md#testing) for features or enhancements. Tests for bug fixes are also appreciated as they help prevent regressions.
 
 5. The PR has a descriptive title that a user can understand. We use these titles to generate changelogs for the user. Most titles use one of these prefixes to categorize the PR e.g. `PREFIX: DESCRIPTION ...`:
    * `chore` - Misc changes that aren't dev, feat or fix
@@ -137,9 +137,9 @@ When submitting a Pull Request (PR) or expecting a subsequent review, please fol
 
 ### PR Additional Links
 
-* To run Logseq locally, see [this doc](https://github.com/logseq/logseq/blob/master/docs/develop-logseq.md) or [this doc for Windows](https://github.com/logseq/logseq/blob/master/docs/develop-logseq-on-windows.md).
+* To run Logseq locally, see [this doc](https://github.com/logseq/og/blob/master/docs/develop-logseq.md) or [this doc for Windows](https://github.com/logseq/og/blob/master/docs/develop-logseq-on-windows.md).
 * To contribute to translations, please read our [translation contribution guidelines][translations].
-* See [our development practices doc](https://github.com/logseq/logseq/blob/master/docs/dev-practices.md) to learn how we develop.
+* See [our development practices doc](https://github.com/logseq/og/blob/master/docs/dev-practices.md) to learn how we develop.
 * See [the overview doc](CODEBASE_OVERVIEW.md) to get an overview of the codebase.
 
 ### <a name="cla"></a> Sign the CLA
@@ -163,13 +163,13 @@ The following documents can help you sort out issues with GitHub accounts and mu
 
 Your contributions to open source, large or small, make great projects like this possible. Thank you for taking the time to contribute.
 
-[coc]: https://github.com/logseq/logseq/blob/master/CODE_OF_CONDUCT.md "Logseq Code Of Conduct"
-[translations]: https://github.com/logseq/logseq/blob/master/docs/contributing-to-translations.md "contributing to translations"
-[github]: https://github.com/logseq/logseq "Logseq Repo"
+[coc]: https://github.com/logseq/og/blob/master/CODE_OF_CONDUCT.md "Logseq OG Code Of Conduct"
+[translations]: https://github.com/logseq/og/blob/master/docs/contributing-to-translations.md "contributing to translations"
+[github]: https://github.com/logseq/og  "Logseq OG Repo"
 [discord]: https://discord.gg/KpN4eHY "Logseq Discord Server"
 [individual-cla]: https://cla-assistant.io/logseq/logseq "Individual CLA"
 [feature-request]: https://discuss.logseq.com/c/feedback/feature-requests/ "Submit Feature Request"
 [forum]: https://discuss.logseq.com "Logseq Forum"
-[search-pr]: https://github.com/logseq/logseq/pulls "Search open PRs"
-[new-issue]: https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=bug_report.yaml "Submit a New issue"
-[issue-tracker]: https://github.com/logseq/logseq/issues "Logseq Issue Tracker"
+[search-pr]: https://github.com/logseq/og/pulls "Search open PRs"
+[new-issue]: https://github.com/logseq/og/issues/new?assignees=&labels=&template=bug_report.yaml "Submit a New issue"
+[issue-tracker]: https://github.com/logseq/og/issues "Logseq OG Issue Tracker"

@@ -80,7 +80,7 @@
           the folder logseq/bak/."]
           [:p "If these troubleshooting steps have not solved your problem, please "
            [:a.underline
-            {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"}
+            {:href "https://github.com/logseq/og/issues/new?labels=from:in-app&template=bug_report.yaml"}
             "open an issue."]]]]]]]]]
    (ui/notification)])
 

@@ -1,5 +1,5 @@
 ## Merhaba, Logseq'e hoş geldiniz!
-- Logseq, _bilgi_ yönetimi ve işbirliği için _gizlilik öncelikli_, [açık kaynaklı](https://github.com/logseq/logseq) bir platformdur.
+- Logseq, _bilgi_ yönetimi ve işbirliği için _gizlilik öncelikli_, [açık kaynaklı](https://github.com/logseq/og) bir platformdur.
 - Bu, Logseq'in nasıl kullanılacağına dair 3 dakikalık bir eğitimdir. Başlayalım!
 - İşte yararlı olabilecek bazı ipuçları.
 #+BEGIN_TIP
@@ -23,4 +23,4 @@ Tüm komutları göstermek için `/` tuşuna basın.
     - DONE Bir sayfa yarat
     - CANCELED [#C] 1000'den fazla blok içeren bir sayfa yazın
 - Bu kadar! Şimdi bazı notları içe aktarmak için daha fazla madde işareti oluşturabilir veya yerel bir dizin açabilirsiniz!
-- Masaüstü uygulamamızı https://github.com/logseq/logseq/releases adresinden indirebilirsiniz.
+- Masaüstü uygulamamızı https://github.com/logseq/og/releases adresinden indirebilirsiniz.

@@ -424,7 +424,7 @@ export interface IAppProxy {
   /**
    * Get state from app store
    * valid state is here
-   * https://github.com/logseq/logseq/blob/master/src/main/frontend/state.cljs#L27
+   * https://github.com/logseq/og/blob/master/src/main/frontend/state.cljs#L27
    *
    * @example
    * ```ts

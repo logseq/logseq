@@ -62,7 +62,7 @@
                (ui/button
                 (t :settings-page/check-for-updates)
                 :class "text-sm mr-1"
-                :href "https://github.com/logseq/logseq/releases")
+                :href "https://github.com/logseq/og/releases")
 
                (mobile-util/native-ios?)
                (ui/button
@@ -118,7 +118,7 @@
            [:a.link
             {:on-click
              (fn [e]
-               (js/window.apis.openExternal "https://github.com/logseq/logseq/releases")
+               (js/window.apis.openExternal "https://github.com/logseq/og/releases")
                (util/stop e))}
             svg/external-link " release channel"]])])]))
 

@@ -23,4 +23,4 @@ Digite `/` para mostrar todos os comandos.
     - CONCLUÍDO Criar uma página
     - CANCELADO [#C] Escrever uma página com mais de 1000 blocos
 - É isso! Você pode criar mais marcadores ou abrir um diretório local para importar algumas anotações agora!
-- Você também pode baixar nosso aplicativo para desktop em https://github.com/logseq/logseq/releases
+- Você também pode baixar nosso aplicativo para desktop em https://github.com/logseq/og/releases

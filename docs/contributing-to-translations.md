@@ -14,7 +14,7 @@ In order to run the commands in this doc, you will need to install
 ## Where to Contribute
 
 Language translations are under,
-[src/resources/dicts/](https://github.com/logseq/logseq/blob/master/src/resources/dicts/) with each language having its own file. For example, the es locale is in `es.edn`.
+[src/resources/dicts/](https://github.com/logseq/og/blob/master/src/resources/dicts/) with each language having its own file. For example, the es locale is in `es.edn`.
 
 ## Language Overview
 
@@ -78,7 +78,7 @@ $ bb lang:missing es --copy
 ...
 ```
 
-Almost all translations are small. The only exceptions to this are the keys `:tutorial/text` and `:tutorial/dummy-notes`. These translations are files that are part of the onboarding tutorial and can be found under [src/resources/tutorials/](https://github.com/logseq/logseq/blob/master/src/resources/tutorials/).
+Almost all translations are small. The only exceptions to this are the keys `:tutorial/text` and `:tutorial/dummy-notes`. These translations are files that are part of the onboarding tutorial and can be found under [src/resources/tutorials/](https://github.com/logseq/og/blob/master/src/resources/tutorials/).
 
 ### Editing Tips
 
@@ -99,7 +99,7 @@ you'll need to ensure it doesn't fail. Mistakes that it catches:
 * Adding English entries for translations that don't exist in the UI.
 * Adding translation entries that are just duplicates of the English entry.
     * This catches contributors copying entries from English and then forgetting to translate. Sometimes you do want to have the translation be the same. For this case, add an entry to `allowed-duplicates` in
-[lang.clj](https://github.com/logseq/logseq/blob/master/scripts/src/logseq/tasks/lang.clj) for your language
+[lang.clj](https://github.com/logseq/og/blob/master/scripts/src/logseq/tasks/lang.clj) for your language
 with a list of duplicated entries e.g. `:nb-NO #{:port ...}`.
 
 ## Add a Language

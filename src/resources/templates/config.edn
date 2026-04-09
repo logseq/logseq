@@ -160,7 +160,7 @@
  ;; 4. Use false to disable a specific shortcut.
  ;; 5. You can define multiple bindings for a single action, e.g., ["ctrl+j" "down"].
  ;; The full list of configurable shortcuts is available at:
- ;; https://github.com/logseq/logseq/blob/master/src/main/frontend/modules/shortcut/config.cljs
+ ;; https://github.com/logseq/og/blob/master/src/main/frontend/modules/shortcut/config.cljs
  ;; Example:
  ;; :shortcuts
  ;; {:editor/new-block       "enter"

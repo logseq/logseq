@@ -1,5 +1,5 @@
 ## Cześć! Witamy w  Logseq!
-- Logseq to _skupiona na prywatności_, [otwarto źródłowa](https://github.com/logseq/logseq) platforma do zarządzania _wiedzą_ i współpracą.
+- Logseq to _skupiona na prywatności_, [otwarto źródłowa](https://github.com/logseq/og) platforma do zarządzania _wiedzą_ i współpracą.
 - To jest 3 minutowy samouczek jak używać Logseq. Rozpoczynajmy!
 - Masz tutaj kilka podpowiedzi, które mogą być przydatne podczas pracy z programem.
 #+BEGIN_TIP
@@ -24,4 +24,4 @@ w prawym panelu. Zmiany powinny być widoczne w wybranych blokach w centralnej c
     - DONE Stworzyć nową stronę
     - CANCELED [#C] Stworzyć stronę z przynajmniej tysiącem innych bloków
 - To by było na tyle! Możesz dodać więcej treści do tego grafu lub otworzyć lokalny katalog, aby zaimportować swoje notatki!
-- Możesz także ściągnąć naszą aplikację desktopową na [Github](https://github.com/logseq/logseq/releases)
+- Możesz także ściągnąć naszą aplikację desktopową na [Github](https://github.com/logseq/og/releases)

@@ -6,7 +6,7 @@
   "author": "Logseq",
   "license": "AGPL-3.0",
   "description": "A privacy-first, open-source platform for knowledge management and collaboration.",
-  "repository": "https://github.com/logseq/logseq",
+  "repository": "https://github.com/logseq/og",
   "scripts": {
     "electron:dev": "electron-forge start",
     "electron:debug": "electron-forge start --inspect-electron",

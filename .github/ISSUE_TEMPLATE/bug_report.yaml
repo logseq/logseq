@@ -15,7 +15,7 @@ body:
     id: confirm-search
     attributes:
       label: Search first
-      description: Please search [existing issues](https://github.com/logseq/logseq/issues) and the [Logseq Forum](https://discuss.logseq.com/) before reporting.
+      description: Please search [existing issues](https://github.com/logseq/og/issues) and the [Logseq Forum](https://discuss.logseq.com/) before reporting.
       options:
         - label: I searched and no similar issues were found
           required: true
@@ -84,7 +84,7 @@ body:
       label: Are you willing to submit a PR? If you know how to fix the bug.
       description: |
         If you are not familiar with programming, you can skip this step.
-        If you are a developer and know how to fix the bug, you can [submit a PR to fix it](https://github.com/logseq/logseq/blob/master/CONTRIBUTING.md#submit-pr).
+        If you are a developer and know how to fix the bug, you can [submit a PR to fix it](https://github.com/logseq/og/blob/master/CONTRIBUTING.md#submit-pr).
         Your contributions are greatly appreciated and play a vital role in helping to improve the project!
       options:
         - label: I'm willing to submit a PR (Thank you!)

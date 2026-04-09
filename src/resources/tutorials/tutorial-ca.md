@@ -1,5 +1,5 @@
 ## Hola, ¡Benvingut a Logseq!
-- Logseq es una plataforma _privacitat-primer_, [open-source](https://github.com/logseq/logseq) per la gestió del _coneixement_ i col·laboració.
+- Logseq es una plataforma _privacitat-primer_, [open-source](https://github.com/logseq/og) per la gestió del _coneixement_ i col·laboració.
 - Aquest es un tutorial de 3 minuts sobre com utilitzar Logseq. ¡Comencem!
 - Aquests són alguns consells que poden ser útils.
 #+BEGIN_TIP
@@ -23,4 +23,4 @@ Escriure `/` per mostrar totes les ordres.
     - DONE Crear una pàgina
     - CANCELED [#C] Escriure una pàgina amb mes de 1000 blocs
 - ¡Això es tot! ¡Ara ja pot crear mes punts o obrir un directori local per importar algunes notes!
-- Pot descarregar la nostra aplicació d'escriptori des de https://github.com/logseq/logseq/releases
+- Pot descarregar la nostra aplicació d'escriptori des de https://github.com/logseq/og/releases

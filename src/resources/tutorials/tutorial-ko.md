@@ -1,5 +1,5 @@
 ## 안녕하세요, Logseq에 오신 것을 환영합니다!
-- Logseq은 _개인 정보 보호를 최우선에 둔_, _지식_ 관리와 협업을 위한 [오픈소스](https://github.com/logseq/logseq) 플랫폼입니다.
+- Logseq은 _개인 정보 보호를 최우선에 둔_, _지식_ 관리와 협업을 위한 [오픈소스](https://github.com/logseq/og) 플랫폼입니다.
 - 이 글은 Logseq을 사용하는 법에 대한 3분 튜토리얼입니다. 시작해볼까요!
 - 다음은 유용할만한 팁입니다.
 #+BEGIN_TIP
@@ -23,4 +23,4 @@
     - DONE 페이지 만들기
     - CANCELED [#C] 1000 블록 이상의 페이지 만들기
 - 끝입니다! 더 많은 글머리를 만들거나 로컬 디렉토리를 열어서 새 노트를 불러오세요!
-- 또한 https://github.com/logseq/logseq/releases 에서 데스크톱 앱을 다운 받을 수 있습니다.
+- 또한 https://github.com/logseq/og/releases 에서 데스크톱 앱을 다운 받을 수 있습니다.

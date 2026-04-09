@@ -33,7 +33,7 @@
   (js/console.log
    "
     Welcome to Logseq!
-    If you encounter any problem, feel free to file an issue on GitHub (https://github.com/logseq/logseq)
+    If you encounter any problem, feel free to file an issue on GitHub (https://github.com/logseq/og)
     or join our forum (https://discuss.logseq.com).
     .____
     |    |    ____   ____  ______ ____  ______

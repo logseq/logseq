@@ -1,6 +1,6 @@
 ## Hi, Willkommen bei Logseq !
 
-Logseq ist eine privacy-first, [Open-Source](https://github.com/logseq/logseq)-Plattform für Wissen und Zusammenarbeit.
+Logseq ist eine privacy-first, [Open-Source](https://github.com/logseq/og)-Plattform für Wissen und Zusammenarbeit.
 Das hier ist ein 3-Minuten-Tutorial über die Verwendung von Logseq. Los geht's!
 - ---
 - Das Wichtigste:

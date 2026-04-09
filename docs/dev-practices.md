@@ -115,7 +115,7 @@ We have unit, performance and end to end tests.
 ### End to End Tests
 
 Even though we have a nightly release channel, it's hard for testing users (thanks to the brave users!) to notice all issues in a limited time, as Logseq is covering so many features.
-The only solution is automatic end-to-end tests - adding tests for GUI software is always painful but necessary. See https://github.com/logseq/logseq/pulls?q=E2E for e2e test examples.
+The only solution is automatic end-to-end tests - adding tests for GUI software is always painful but necessary. See https://github.com/logseq/og/pulls?q=E2E for e2e test examples.
 
 To run end to end tests
 
@@ -195,7 +195,7 @@ the `:ns-regexp` option e.g. `clojure -M:test watch test --config-merge
 
 Most unit tests e.g. ones that are browser compatible and don't require node libraries, can be run from the REPL. To do so:
 
-* Start a REPL for your editor. See [here for an example](https://github.com/logseq/logseq/blob/master/docs/develop-logseq.md#repl-setup).
+* Start a REPL for your editor. See [here for an example](https://github.com/logseq/og/blob/master/docs/develop-logseq.md#repl-setup).
 * Load a test namespace.
 * Run `(cljs.test/run-tests)` to run tests for the current test namespace.
 

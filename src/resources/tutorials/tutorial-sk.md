@@ -1,5 +1,5 @@
 ## Ahoj, vitaj v Logseq!
-- Logseq je [open-source](https://github.com/logseq/logseq) platforma určená na zdieľanie _znalostí_ a spoluprácu s dôrazom na _ochranu súkromia_.
+- Logseq je [open-source](https://github.com/logseq/og) platforma určená na zdieľanie _znalostí_ a spoluprácu s dôrazom na _ochranu súkromia_.
 - Toto je trojminútový návod ako používať Logseq. Poďme na to!
 - Tu je niekoľko tipov, ktoré môžu byť užitočné.
   #+BEGIN_TIP
@@ -23,4 +23,4 @@
     - DONE Vytvoriť stránku
     - CANCELED [#C] Napísať stránku s viac ako tisíc blokmi
 - A to je všetko! Teraz môžete vytvoriť viac odrážok alebo otvoriť lokálny adresár a importovať nejaké poznámky!
-- Môžete si tiež stiahnúť našu desktopovú aplikáciu z https://github.com/logseq/logseq/releases
+- Môžete si tiež stiahnúť našu desktopovú aplikáciu z https://github.com/logseq/og/releases

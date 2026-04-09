@@ -1,5 +1,5 @@
 ## Ciao, benvenuto su Logseq
-- Logseq è una piattaforma con la _privacy come priorità_, [open-source](https://github.com/logseq/logseq) per la gestione della _conoscenza_ e la collaborazione.
+- Logseq è una piattaforma con la _privacy come priorità_, [open-source](https://github.com/logseq/og) per la gestione della _conoscenza_ e la collaborazione.
 - Questo è un tutorial di 3 minuti su come utilizzare Logseq. Iniziamo!
 - Ecco alcuni suggerimenti che potrebbero essere utili.
 #+BEGIN_TIP
@@ -24,4 +24,4 @@ alcune modifiche sulla barra laterale destra, verranno modificati anche quei blo
     - DONE Crea una pagina
     - CANCELED [#C] Scrivi una pagina con più di 1000 blocchi
 - Questo è tutto! Puoi creare più blocchi o aprire una directory locale per importare alcune note adesso!
-- Puoi anche scaricare la nostra app desktop su <https://github.com/logseq/logseq/releases>
+- Puoi anche scaricare la nostra app desktop su <https://github.com/logseq/og/releases>

@@ -4,7 +4,7 @@
     <img src="https://user-images.githubusercontent.com/25513724/220608753-f33db466-af72-4611-b603-411440c15ed0.png?sanatize=true" height="173"/></a>
 </p>
 
-<h1 align="center"> Logseq </h1>
+<h1 align="center"> Logseq OG </h1>
 
 <h4 align="center">
     A privacy-first, open-source platform for knowledge management and collaboration
@@ -19,7 +19,7 @@
 <br></br>
 
 <p align="center">
-    <a href="https://github.com/logseq/logseq/releases/latest/">
+    <a href="https://github.com/logseq/og/releases/latest/">
         <img src="https://img.shields.io/badge/Download_Logseq-100000?style=for-the-badge&logo=flatpak&logoColor=white&labelColor=002b36&color=85c8c8"
             alt="Download Logseq"/></a>
 </p>
@@ -39,15 +39,15 @@
 
 <!-- dev badges -->
 <p align="center">
-    <a href="https://github.com/logseq/logseq/graphs/contributors" alt="Contributors">
+    <a href="https://github.com/logseq/og/graphs/contributors" alt="Contributors">
         <img src="https://img.shields.io/github/contributors/logseq/logseq?color=%2385c8c8&style=for-the-badge"/></a>
     <a href="#-backers" alt="Backers on Open Collective">
         <img src="https://img.shields.io/opencollective/backers/logseq?color=%2385c8c8&style=for-the-badge"/></a>
     <a href="#-sponsors" alt="Sponsors on Open Collective">
         <img src="https://img.shields.io/opencollective/sponsors/logseq?color=%2385c8c8&style=for-the-badge"/></a>
-    <a href="https://github.com/logseq/logseq/blob/master/LICENSE.md" alt="Activity">
+    <a href="https://github.com/logseq/og/blob/master/LICENSE.md" alt="Activity">
         <img src="https://img.shields.io/github/license/logseq/logseq?color=%2385c8c8&style=for-the-badge"/></a>
-    <a href="https://github.com/logseq/logseq/releases">
+    <a href="https://github.com/logseq/og/releases">
         <img src="https://img.shields.io/github/v/release/logseq/logseq?color=%2385c8c8&style=for-the-badge"
             alt="latest release version"></a>
 </p>
@@ -75,7 +75,7 @@ In addition to its core features, Logseq has a growing ecosystem of **plugins** 
 
 ![logseq-demo](https://user-images.githubusercontent.com/25513724/221387376-4dc419c2-0d0a-460c-a920-2d211e78b456.gif)
 
-<a href="https://github.com/logseq/logseq/releases/latest/">
+<a href="https://github.com/logseq/og/releases/latest/">
         <img src="https://img.shields.io/badge/Download_Logseq-100000?style=for-the-badge&logo=flatpak&logoColor=white&labelColor=002b36&color=85c8c8"
             align="right"
             alt="Download Logseq"/></a>
@@ -84,7 +84,7 @@ In addition to its core features, Logseq has a growing ecosystem of **plugins** 
 
 To start using Logseq, follow these simple steps:
 
-1. [Download](https://github.com/logseq/logseq/releases/latest) the latest version of Logseq
+1. [Download](https://github.com/logseq/og/releases/latest) the latest version of Logseq
 2. Install Logseq on your device and launch the application
 3. Start writing ✍️
 
@@ -129,7 +129,7 @@ Thank you for using Logseq, and we look forward to seeing what you create with o
 ## 🌟 Contributing to Logseq
 
 To start contributing to Logseq, please read [CONTRIBUTING.md](CONTRIBUTING.md).
-There are ways to contribute [with code](https://github.com/logseq/logseq/blob/master/CONTRIBUTING.md#code-contributions) and [without code](https://github.com/logseq/logseq/blob/master/CONTRIBUTING.md#-how-can-i-help). We welcome all
+There are ways to contribute [with code](https://github.com/logseq/og/blob/master/CONTRIBUTING.md#code-contributions) and [without code](https://github.com/logseq/og/blob/master/CONTRIBUTING.md#-how-can-i-help). We welcome all
 contributions, big or small, and we appreciate your time and effort in helping
 us improve Logseq. We look forward to your contributions 🚀
 
@@ -173,7 +173,7 @@ We want to express our sincere gratitude to our [Open Collective](https://openco
 ## 🌟 Contributors
 
 <p align="center">
-    <a href="https://github.com/logseq/logseq/graphs/contributors">
+    <a href="https://github.com/logseq/og/graphs/contributors">
         <img src="https://contrib.rocks/image?repo=logseq/logseq&max=300&columns=14" width="600"/></a>
 </p>
 

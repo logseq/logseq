@@ -3,9 +3,9 @@
 My Logseq dev machine is on Ubuntu 18.x and my production machine is running Windows 10, I needed a way to compile the Logseq desktop APP for Windows.
 I tried & failed to make the "build" run on my windows machine but I did, however, succeed in letting my Ubuntu machine make Windows x64 files
 ## Pre-requisites
-These are the steps I took to make it work on my Ubuntu machine, sharing them hoping it helps someone else. I assume you have all the basic pre-requisites for Logseq, if not you can find them at https://github.com/logseq/logseq#1-requirements
+These are the steps I took to make it work on my Ubuntu machine, sharing them hoping it helps someone else. I assume you have all the basic pre-requisites for Logseq, if not you can find them at https://github.com/logseq/og#1-requirements
 1. clone Logseq repo if you haven't already
-`git clone https://github.com/logseq/logseq/`
+`git clone https://github.com/logseq/og/`
 1. Install wine
 ```shell
 sudo dpkg --add-architecture i386

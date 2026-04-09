@@ -72,7 +72,7 @@
                       "Plugins: " (string/join ", " (map (fn [[k v]]
                                                            (str (name k) " (" (:version v) ")"))
                                                          (:plugin/installed-plugins @state/state))))]
-    (str "https://github.com/logseq/logseq/issues/new?"
+    (str "https://github.com/logseq/og/issues/new?"
          "title=&"
          "template=bug_report.yaml&"
          "labels=from:in-app&"

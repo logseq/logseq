@@ -1,6 +1,6 @@
 # Logseq Codebase Overview
 
-This document helps you understand more about how Logseq works. To contribute, read the [README](https://github.com/logseq/logseq) first.
+This document helps you understand more about how Logseq works. To contribute, read the [README](https://github.com/logseq/og) first.
 
 ## Tech Stack
 
@@ -32,7 +32,7 @@ For other tasks like bundling static resources and building the desktop app, whi
 
 ## Important Folders and Files
 
-After cloning the [Logseq repository](https://github.com/logseq/logseq), there are some folders and files that deserve extra attention.
+After cloning the [Logseq repository](https://github.com/logseq/og), there are some folders and files that deserve extra attention.
 
 - Config files are located at the root directory. `package.json` contains the JavaScript dependencies while `deps.edn` contains their Clojure counterparts. `shadow-cljs.edn` and `gulpfile.js` contain all the build scripts.
 

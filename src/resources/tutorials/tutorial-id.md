@@ -1,5 +1,5 @@
 ## Hai, selamat datang di Logseq!
-- Logseq adalah platform yang _mengedepankan privasi_, [sumber-terbuka](https://github.com/logseq/logseq) untuk manajemen pengetahuan dan kolaborasi.
+- Logseq adalah platform yang _mengedepankan privasi_, [sumber-terbuka](https://github.com/logseq/og) untuk manajemen pengetahuan dan kolaborasi.
 - Ini adalah tutorial 3 menit tentang cara menggunakan Logseq. Mari kita mulai!
 - Berikut beberapa tips yang mungkin berguna:
 #+BEGIN_TIP
@@ -22,4 +22,4 @@ Ketik `/` untuk menampilkan semua perintah.
     - SELESAI Membuat halaman
     - DIBATALKAN [#C] Menulis halaman dengan lebih dari 1000 blok
 - Itu dia! Anda dapat membuat lebih banyak poin atau membuka direktori lokal untuk mengimpor beberapa catatan sekarang!
-- Anda juga dapat mengunduh aplikasi desktop kami [di sini](https://github.com/logseq/logseq/releases).
+- Anda juga dapat mengunduh aplikasi desktop kami [di sini](https://github.com/logseq/og/releases).

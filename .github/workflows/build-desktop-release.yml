@@ -387,15 +387,15 @@ jobs:
 
       - name: Save Artifact
         run: |
-          mv static\out\make\squirrel.windows\x64\*.nupkg  builds\Logseq-win-x64-${{ steps.ref.outputs.version }}-full.nupkg
-          mv static\out\make\zip\win32\x64\*.zip           builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.zip
-          mv static\out\make\wix\x64\Logseq.msi            builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.msi
+          mv static\out\make\squirrel.windows\x64\*.nupkg  builds\Logseq-og-win-x64-${{ steps.ref.outputs.version }}-full.nupkg
+          mv static\out\make\zip\win32\x64\*.zip           builds\Logseq-og-win-x64-${{ steps.ref.outputs.version }}.zip
+          mv static\out\make\wix\x64\Logseq*.msi           builds\Logseq-og-win-x64-${{ steps.ref.outputs.version }}.msi
           mv static\out\make\squirrel.windows\x64\RELEASES builds\RELEASES
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: logseq-win64-builds
+          name: logseq-og-win64-builds
           path: builds
 
   build-macos-x64:
@@ -471,7 +471,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: logseq-darwin-x64-builds
+          name: logseq-og-darwin-x64-builds
           path: builds
 
   build-macos-arm64:
@@ -548,7 +548,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: logseq-darwin-arm64-builds
+          name: logseq-og-darwin-arm64-builds
           path: builds
 
   # reuse workflow via workflow_call
@@ -584,25 +584,25 @@ jobs:
       - name: Download The Linux x64 Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: logseq-linux-x64-builds
+          name: logseq-og-linux-x64-builds
           path: ./
 
       - name: Download The Linux arm64 Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: logseq-linux-arm64-builds
+          name: logseq-og-linux-arm64-builds
           path: ./
 
       - name: Download The Windows Artifact
         uses: actions/download-artifact@v4
         with:
-          name: logseq-win64-builds
+          name: logseq-og-win64-builds
           path: ./
 
       - name: Download Android Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: logseq-android-builds
+          name: logseq-og-android-builds
           path: ./
 
       - name: Generate SHA256 checksums
@@ -639,45 +639,44 @@ jobs:
 
   release:
     # NOTE: For now, we only have beta channel to be released on Github
-    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
     needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, build-android, e2e-test ]
     runs-on: ubuntu-22.04
     steps:
       - name: Download MacOS x64 Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: logseq-darwin-x64-builds
+          name: logseq-og-darwin-x64-builds
           path: ./
 
       - name: Download MacOS arm64 Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: logseq-darwin-arm64-builds
+          name: logseq-og-darwin-arm64-builds
           path: ./
 
       - name: Download The Linux x64 Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: logseq-linux-x64-builds
+          name: logseq-og-linux-x64-builds
           path: ./
 
       - name: Download The Linux arm64 Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: logseq-linux-arm64-builds
+          name: logseq-og-linux-arm64-builds
           path: ./
 
       - name: Download The Windows Artifact
         uses: actions/download-artifact@v4
         with:
-          name: logseq-win64-builds
+          name: logseq-og-win64-builds
           path: ./
 
       - name: Download Android Artifacts
         uses: actions/download-artifact@v4
         if: ${{ github.event_name == 'schedule' || github.event.inputs.build-android == 'true' }}
         with:
-          name: logseq-android-builds
+          name: logseq-og-android-builds
           path: ./
 
       - name: List files
@@ -691,7 +690,7 @@ jobs:
 
       - name: Fix .nupkg name in RELEASES file
         run: |
-          sed -i "s/Logseq-.*.nupkg/Logseq-og-win-x64-${{ steps.ref.outputs.version }}-full.nupkg/g" RELEASES
+          sed -i "s/Logseq.*.nupkg/Logseq-og-win-x64-${{ steps.ref.outputs.version }}-full.nupkg/g" RELEASES
 
       - name: Generate SHA256 checksums
         run: |

@@ -1,5 +1,5 @@
 ## Hei, og velkommen til Logseq!
-- Logseq er en _personvern-først_, [åpen kildekode](https://github.com/logseq/logseq) platform for _kunnskapsforvaltning_ og samarbeid.
+- Logseq er en _personvern-først_, [åpen kildekode](https://github.com/logseq/og) platform for _kunnskapsforvaltning_ og samarbeid.
 - Dette er en 3 minutters innføring i hvordan du bruker Logseq. La oss komme i gang!
 - Her er noen tips som kan være nyttige.
 #+BEGIN_TIP
@@ -24,4 +24,4 @@ noen endringer i høyre sidestolpe, og de refererte blokken vil også endre seg!
     - DONE Lag en side
     - CANCELED [#C] Skriv en side med mer enn 1000 blokker
 - Det var det hele! Du kan lage flere kulepunkter eller åpne en lokal mappe for å importere noen notater nå!
-- Du kan også laste ned vår desktop app på https://github.com/logseq/logseq/releases
+- Du kan også laste ned vår desktop app på https://github.com/logseq/og/releases
