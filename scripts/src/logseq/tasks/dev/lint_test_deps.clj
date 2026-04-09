@@ -2,20 +2,29 @@
   "Runs lint/test tasks for selected deps with readable progress output."
   (:require [babashka.process :refer [shell]]))
 
+(def ^:private kondo-src-test-step
+  {:runner :cmd :name "clj-kondo (src test)" :cmd "clojure -M:clj-kondo --lint src test --cache false"})
+
+(def ^:private kondo-src-step
+  {:runner :cmd :name "clj-kondo (src)" :cmd "clojure -M:clj-kondo --lint src --cache false"})
+
 (def ^:private dep-plan
   [{:dep "deps/common"
-    :steps [{:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
+    :steps [kondo-src-test-step
+            {:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
             {:runner :bb :name "lint:carve" :cmd "lint:carve"}
             {:runner :bb :name "lint:ns-docstrings" :cmd "lint:ns-docstrings"}
             {:runner :cmd :name "yarn test (-e long)" :cmd "yarn test -e long"}]}
    {:dep "deps/db"
-    :steps [{:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
+    :steps [kondo-src-test-step
+            {:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
             {:runner :bb :name "lint:carve" :cmd "lint:carve"}
             {:runner :bb :name "lint:ns-docstrings" :cmd "lint:ns-docstrings"}
             {:runner :bb :name "lint:rules" :cmd "lint:rules"}
             {:runner :cmd :name "yarn test (-e long)" :cmd "yarn test -e long"}]}
    {:dep "deps/db-sync"
-    :steps [{:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
+    :steps [kondo-src-test-step
+            {:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
             {:runner :bb :name "lint:carve" :cmd "lint:carve"}
             ;; {:runner :bb :name "lint:ns-docstrings" :cmd "lint:ns-docstrings"}
             ;; {:runner :bb :name "lint:minimize-public-vars" :cmd "lint:minimize-public-vars"}
@@ -23,30 +32,35 @@
    {:dep "."
     :steps [{:runner :bb :name "dev:db-sync-test" :cmd "dev:db-sync-test"}]}
    {:dep "deps/outliner"
-    :steps [{:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
+    :steps [kondo-src-test-step
+            {:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
             {:runner :bb :name "lint:carve" :cmd "lint:carve"}
             {:runner :bb :name "lint:ns-docstrings" :cmd "lint:ns-docstrings"}
             {:runner :bb :name "lint:minimize-public-vars" :cmd "lint:minimize-public-vars"}
             {:runner :cmd :name "yarn test (-e long)" :cmd "yarn test -e long"}]}
    {:dep "deps/graph-parser"
-    :steps [{:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
+    :steps [kondo-src-test-step
+            {:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
             {:runner :bb :name "lint:carve" :cmd "lint:carve"}
             {:runner :bb :name "lint:ns-docstrings" :cmd "lint:ns-docstrings"}
             ;; {:runner :bb :name "lint:minimize-public-vars" :cmd "lint:minimize-public-vars"}
             {:runner :cmd :name "yarn test (-e long)" :cmd "yarn test -e long"}]}
    {:dep "deps/cli"
-    :steps [{:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
+    :steps [kondo-src-test-step
+            {:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
             {:runner :bb :name "lint:carve" :cmd "lint:carve"}
             {:runner :bb :name "lint:ns-docstrings" :cmd "lint:ns-docstrings"}
             {:runner :bb :name "lint:minimize-public-vars" :cmd "lint:minimize-public-vars"}
             {:runner :cmd :name "yarn test (-e long)" :cmd "yarn test -e long"}]}
    {:dep "deps/publish"
-    :steps [{:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
+    :steps [kondo-src-step
+            {:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
             {:runner :bb :name "lint:carve" :cmd "lint:carve"}
             {:runner :bb :name "lint:ns-docstrings" :cmd "lint:ns-docstrings"}
             {:runner :skip :name "tests" :reason "no test script in deps/publish/package.json"}]}
    {:dep "deps/publishing"
-    :steps [{:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
+    :steps [kondo-src-test-step
+            {:runner :bb :name "lint:large-vars" :cmd "lint:large-vars"}
             {:runner :bb :name "lint:carve" :cmd "lint:carve"}
             {:runner :bb :name "lint:ns-docstrings" :cmd "lint:ns-docstrings"}
             {:runner :bb :name "lint:minimize-public-vars" :cmd "lint:minimize-public-vars"}]}])
