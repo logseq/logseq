@@ -149,6 +149,9 @@
       "db.cardinality/many" "many"
       v)))
 
+(def ^:private available-status-idents
+  (mapv :db-ident (db-property/built-in-closed-values :logseq.property/status)))
+
 (def ^:private available-priority-values
   ["low" "medium" "high" "urgent"])
 
@@ -412,7 +415,15 @@
                            (seq (:target-page options))
                            (assoc :target-page-name (:target-page options))
                            true
-                           (dissoc :target-page))
+                           (dissoc :target-page
+                                   :status
+                                   :priority
+                                   :scheduled
+                                   :deadline
+                                   :no-status
+                                   :no-priority
+                                   :no-scheduled
+                                   :no-deadline))
           create-result (when (= mode :create)
                           (add-command/build-add-block-action create-options [] repo))
           invalid-message (invalid-options? :upsert-task options)]
@@ -425,7 +436,8 @@
         (and status-provided? (not (seq status-text)))
         {:ok? false
          :error {:code :invalid-options
-                 :message (str "invalid status: " (:status options))}}
+                 :message (task-status-command/invalid-status-message (:status options)
+                                                                      available-status-idents)}}
 
         (and priority-provided? (not priority))
         {:ok? false

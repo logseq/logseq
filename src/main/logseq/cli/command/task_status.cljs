@@ -70,5 +70,5 @@
                          (string/join ", " values)
                          "(none)")]
     (str "Invalid value for option :status: " status-input
-         ". Available values (from current graph): "
+         ". Available values: "
          available-text)))

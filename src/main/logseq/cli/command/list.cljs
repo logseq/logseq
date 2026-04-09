@@ -28,11 +28,26 @@
 
 (def ^:private default-sort-field "updated-at")
 
+(def ^:private available-task-priority-values
+  ["low" "medium" "high" "urgent"])
+
+(def ^:private available-task-priority-values-set
+  (set available-task-priority-values))
+
 (def ^:private task-priority-aliases
   {"low" :logseq.property/priority.low
    "medium" :logseq.property/priority.medium
    "high" :logseq.property/priority.high
    "urgent" :logseq.property/priority.urgent})
+
+(defn- invalid-task-priority-message
+  [priority-input]
+  (let [value (if (map? priority-input)
+                (:value priority-input)
+                priority-input)]
+    (str "Invalid value for option :priority: " value
+         ". Available values: "
+         (string/join ", " available-task-priority-values))))
 
 (defn- effective-sort-field
   [options]
@@ -131,8 +146,8 @@
              :values (mapv (comp string/lower-case :value)
                            (db-property/built-in-closed-values :logseq.property/status))}
     :priority {:desc "Filter by task priority"
-               :validate (set (map (comp string/lower-case :value)
-                                   (db-property/built-in-closed-values :logseq.property/priority)))}
+               :validate {:pred available-task-priority-values-set
+                          :ex-msg invalid-task-priority-message}}
     :content {:desc "Filter by task title content"
               :alias :c}
     :sort {:validate (set (keys list-task-field-map))}
