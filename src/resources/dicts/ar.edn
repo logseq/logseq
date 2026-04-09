@@ -6,13 +6,6 @@
  :command.auto-complete/prev "السابق"
  :command.auto-complete/shift-complete "إكمال مع Shift"
 
- ;; Cards commands
- :command.cards/again "مرة أخرى"
- :command.cards/easy "سهل"
- :command.cards/good "جيد"
- :command.cards/hard "صعب"
- :command.cards/toggle-answers "تبديل الإجابات"
-
  ;; Command Palette commands
  :command.command-palette/toggle "لوحة الأوامر"
 

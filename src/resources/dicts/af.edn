@@ -6,13 +6,6 @@
  :command.auto-complete/prev "Vorige"
  :command.auto-complete/shift-complete "Shift-voltooi"
 
- ;; Cards commands
- :command.cards/again "Opnieuw"
- :command.cards/easy "Makkelijk"
- :command.cards/good "Goed"
- :command.cards/hard "Moeilijk"
- :command.cards/toggle-answers "Wissel antwoorde"
-
  ;; Command Palette commands
  :command.command-palette/toggle "Opdragpalet"
 

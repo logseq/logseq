@@ -6,13 +6,6 @@
  :command.auto-complete/prev "Pelengkapan otomatis: Pilih item sebelumnya"
  :command.auto-complete/shift-complete "APelengkapan otomatis: Buka item yang dipilih di sidebar"
 
- ;; Cards commands
- :command.cards/again "Lagi"
- :command.cards/easy "Mudah"
- :command.cards/good "Baik"
- :command.cards/hard "Sulit"
- :command.cards/toggle-answers "Kartu: tampilkan / sembunyikan jawaban/clozes"
-
  ;; Command Palette commands
  :command.command-palette/toggle "Palet perintah"
 

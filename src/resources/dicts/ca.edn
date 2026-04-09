@@ -6,13 +6,6 @@
  :command.auto-complete/prev "Auto-completar: Seleccionar element anterior"
  :command.auto-complete/shift-complete "Auto-completar: Obrir element seleccionat al panell lateral"
 
- ;; Cards commands
- :command.cards/again "Una altra vegada"
- :command.cards/easy "Fàcil"
- :command.cards/good "Bé"
- :command.cards/hard "Difícil"
- :command.cards/toggle-answers "Targetes: mostrar/ocultar respostes/prova de completar frases "
-
  ;; Command Palette commands
  :command.command-palette/toggle "Alternar paleta d'ordres"
 

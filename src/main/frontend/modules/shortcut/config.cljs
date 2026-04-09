@@ -516,7 +516,9 @@
                    :fn :frontend.handler.common.developer/rtc-start}})
 
 (let [keyboard-commands
-      {::commands (set (keys all-built-in-keyboard-shortcuts))
+      {::commands (->> (keys all-built-in-keyboard-shortcuts)
+                       (remove #(= (namespace %) "cards"))
+                       set)
        ::dicts/commands dicts/abbreviated-commands}]
   (assert (= (::commands keyboard-commands) (::dicts/commands keyboard-commands))
           (str "Keyboard commands must have an english label"
