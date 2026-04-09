@@ -1,7 +1,6 @@
 (ns frontend.worker.sync.handle-message
   "WebSocket message handlers for db sync."
-  (:require [datascript.core :as d]
-            [frontend.worker.shared-service :as shared-service]
+  (:require [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.sync.apply-txs :as sync-apply]
             [frontend.worker.sync.assets :as sync-assets]
@@ -20,10 +19,6 @@
   [tag data]
   (log/error tag data)
   (throw (ex-info (name tag) data)))
-
-(defn- client-ops-conn
-  [repo]
-  (sync-presence/client-ops-conn worker-state/get-client-ops-conn repo))
 
 (defn- sync-counts
   [repo]
@@ -137,12 +132,7 @@
 
 (defn- pending-local-tx?
   [repo]
-  (when-let [conn (client-ops-conn repo)]
-    (boolean
-     (some (fn [datom]
-             (let [ent (d/entity @conn (:e datom))]
-               (not= false (:db-sync/pending? ent))))
-           (d/datoms @conn :avet :db-sync/created-at)))))
+  (pos? (or (client-op/get-pending-local-tx-count repo) 0)))
 
 (defn- checksum-compare-ready?
   [repo client local-t remote-t]

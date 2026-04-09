@@ -244,36 +244,33 @@
 (declare apply-history-action!)
 (defn- persist-local-tx!
   [repo {:keys [db-before db-after tx-data tx-meta] :as tx-report} normalized-tx-data reversed-datoms]
-  (when-let [conn (client-ops-conn repo)]
+  (when (client-ops-conn repo)
     (let [tx-id (or (:db-sync/tx-id tx-meta) (random-uuid))
-          existing-ent (d/entity @conn [:db-sync/tx-id tx-id])
-          should-inc-pending? (not= true (:db-sync/pending? existing-ent))
           now (.now js/Date)
-          created-at (or (:db-sync/created-at existing-ent) now)
           {:keys [forward-outliner-ops inverse-outliner-ops]}
           (derive-history-outliner-ops db-before db-after tx-data tx-meta)
-          inferred-outliner-ops?' (inferred-outliner-ops? tx-meta)]
+          inferred-outliner-ops?' (inferred-outliner-ops? tx-meta)
+          {:keys [should-inc-pending?]}
+          (client-op/upsert-local-tx-entry!
+           repo
+           {:tx-id tx-id
+            :created-at now
+            :pending? true
+            :failed? false
+            :outliner-op (:outliner-op tx-meta)
+            :undo-redo (cond
+                         (:undo? tx-meta) :undo
+                         (:redo? tx-meta) :redo
+                         :else :none)
+            :forward-outliner-ops forward-outliner-ops
+            :inverse-outliner-ops inverse-outliner-ops
+            :inferred-outliner-ops? inferred-outliner-ops?'
+            :normalized-tx-data normalized-tx-data
+            :reversed-tx-data reversed-datoms})]
       ;; (prn :debug :forward-outliner-ops)
       ;; (cljs.pprint/pprint forward-outliner-ops)
       ;; (prn :debug :inverse-outliner-ops)
       ;; (cljs.pprint/pprint inverse-outliner-ops)
-      (ldb/transact! conn [{:db-sync/tx-id tx-id
-                            :db-sync/normalized-tx-data normalized-tx-data
-                            :db-sync/reversed-tx-data reversed-datoms
-                            :db-sync/pending? true
-                            :db-sync/failed? false
-                            :db-sync/outliner-op (:outliner-op tx-meta)
-                            :db-sync/undo-redo? (cond
-                                                  (:undo? tx-meta)
-                                                  :undo
-                                                  (:redo? tx-meta)
-                                                  :redo
-                                                  :else
-                                                  :none)
-                            :db-sync/forward-outliner-ops forward-outliner-ops
-                            :db-sync/inverse-outliner-ops inverse-outliner-ops
-                            :db-sync/inferred-outliner-ops? inferred-outliner-ops?'
-                            :db-sync/created-at created-at}])
       (worker-undo-redo/gen-undo-ops! repo tx-report tx-id
                                       {:apply-history-action! apply-history-action!})
       (when should-inc-pending?
@@ -298,79 +295,29 @@
 
 (defn pending-txs
   [repo & {:keys [limit]}]
-  (when-let [conn (client-ops-conn repo)]
-    (let [db @conn
-          datoms (d/datoms db :avet :db-sync/created-at)
-          take-limit (fn [c]
-                       (if limit (take limit c) c))]
-      (->> datoms
-           (map (fn [datom]
-                  (d/entity db (:e datom))))
-           (filter (fn [e] (:db-sync/pending? e)))
-           take-limit
-           (keep (fn [ent]
-                   (let [tx-id (:db-sync/tx-id ent)
-                         tx' (:db-sync/normalized-tx-data ent)
-                         reversed-tx' (:db-sync/reversed-tx-data ent)]
-                     {:tx-id tx-id
-                      :outliner-op (:db-sync/outliner-op ent)
-                      :forward-outliner-ops (:db-sync/forward-outliner-ops ent)
-                      :inverse-outliner-ops (:db-sync/inverse-outliner-ops ent)
-                      :inferred-outliner-ops? (:db-sync/inferred-outliner-ops? ent)
-                      :db-sync/undo-redo (:db-sync/undo-redo? ent)
-                      :tx tx'
-                      :reversed-tx reversed-tx'})))
-           vec))))
+  (client-op/get-pending-local-txs repo :limit limit))
 
 (defn- pending-tx-by-id
   [repo tx-id]
-  (when-let [conn (client-ops-conn repo)]
-    (when-let [ent (d/entity @conn [:db-sync/tx-id tx-id])]
-      {:tx-id (:db-sync/tx-id ent)
-       :outliner-op (:db-sync/outliner-op ent)
-       :forward-outliner-ops (:db-sync/forward-outliner-ops ent)
-       :inverse-outliner-ops (:db-sync/inverse-outliner-ops ent)
-       :db-sync/undo-redo (:db-sync/undo-redo? ent)
-       :tx (:db-sync/normalized-tx-data ent)
-       :reversed-tx (:db-sync/reversed-tx-data ent)})))
+  (client-op/get-local-tx-entry repo tx-id))
 
 (defn mark-pending-txs-false!
   [repo tx-ids]
   (when (seq tx-ids)
-    (when-let [conn (client-ops-conn repo)]
-      (let [pending-to-remove (->> tx-ids
-                                   (keep (fn [tx-id]
-                                           (when (true? (:db-sync/pending? (d/entity @conn [:db-sync/tx-id tx-id])))
-                                             tx-id)))
-                                   count)]
-        (ldb/transact! conn
-                       (mapv (fn [tx-id]
-                               [:db/add [:db-sync/tx-id tx-id] :db-sync/pending? false])
-                             tx-ids))
-        (when (pos? pending-to-remove)
-          (client-op/adjust-pending-local-tx-count! repo (- pending-to-remove)))
-        (when-let [client (current-client repo)]
-          (broadcast-rtc-state! client))))))
+    (when-let [pending-to-remove (client-op/mark-pending-txs-false! repo tx-ids)]
+      (when (pos? pending-to-remove)
+        (client-op/adjust-pending-local-tx-count! repo (- pending-to-remove)))
+      (when-let [client (current-client repo)]
+        (broadcast-rtc-state! client)))))
 
 (defn mark-failed-txs!
   [repo tx-ids]
   (when (seq tx-ids)
-    (when-let [conn (client-ops-conn repo)]
-      (let [pending-to-remove (->> tx-ids
-                                   (keep (fn [tx-id]
-                                           (when (true? (:db-sync/pending? (d/entity @conn [:db-sync/tx-id tx-id])))
-                                             tx-id)))
-                                   count)]
-        (ldb/transact! conn
-                       (mapv (fn [tx-id]
-                               {:db-sync/tx-id tx-id
-                                :db-sync/pending? false
-                                :db-sync/failed? true})
-                             tx-ids))
-        (when (pos? pending-to-remove)
-          (client-op/adjust-pending-local-tx-count! repo (- pending-to-remove)))
-        (when-let [client (current-client repo)]
-          (broadcast-rtc-state! client))))))
+    (when-let [pending-to-remove (client-op/mark-failed-txs! repo tx-ids)]
+      (when (pos? pending-to-remove)
+        (client-op/adjust-pending-local-tx-count! repo (- pending-to-remove)))
+      (when-let [client (current-client repo)]
+        (broadcast-rtc-state! client)))))
 
 (defn clear-pending-txs!
   [repo]

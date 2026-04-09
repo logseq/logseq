@@ -1347,8 +1347,7 @@
                 (notification/show! [:div "Asset size shouldn't be larger than 100M"]
                                     :warning
                                     false)
-                (throw (ex-info "Asset size shouldn't be larger than 100M" {:file-name file-name})))
-            asset (db/entity :logseq.class/Asset)]
+                (throw (ex-info "Asset size shouldn't be larger than 100M" {:file-name file-name})))]
         (p/do!
          (when file
            (let [file-path (str block-id "." ext)]
@@ -1359,7 +1358,9 @@
           :logseq.property.asset/external-url external-url
           :logseq.property.asset/size size
           :logseq.property.asset/checksum checksum
-          :block/tags #{(:db/id asset)}})))))
+          ;; Use stable class ident in tx payload to avoid leaking numeric eids
+          ;; into outliner history ops shared with the worker sync pipeline.
+          :block/tags #{:logseq.class/Asset}})))))
 
 (defn db-based-save-assets!
   "Save incoming(pasted) assets to assets directory.

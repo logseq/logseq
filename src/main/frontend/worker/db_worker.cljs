@@ -343,9 +343,7 @@
   [repo {:keys [config datoms sync-download-graph?] :as opts}]
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
-            storage (new-sqlite-storage db)
-            client-ops-storage (when-not @*publishing?
-                                 (new-sqlite-storage client-ops-db))]
+            storage (new-sqlite-storage db)]
       (swap! *sqlite-conns assoc repo {:db db
                                        :search search-db
                                        :client-ops client-ops-db})
@@ -378,16 +376,13 @@
                                              (partition-all batch-size))]
                   (doseq [batch non-ident-batches]
                     (d/transact! conn batch {:initial-db? true}))))
-            client-ops-conn (when-not @*publishing? (common-sqlite/get-storage-conn
-                                                     client-ops-storage
-                                                     client-op/schema-in-db))
             initial-data-exists? (when (nil? datoms)
                                    (and (d/entity @conn :logseq.class/Root)
                                         (= "db" (:kv/value (d/entity @conn :logseq.kv/db-type)))))]
         (swap! *datascript-conns assoc repo conn)
-        (swap! *client-ops-conns assoc repo client-ops-conn)
-        (when (and (not @*publishing?) (not= client-op/schema-in-db (d/schema @client-ops-conn)))
-          (d/reset-schema! client-ops-conn client-op/schema-in-db))
+        (swap! *client-ops-conns assoc repo client-ops-db)
+        (when-not @*publishing?
+          (client-op/ensure-sqlite-schema! client-ops-db))
         (ensure-client-ops-cleanup-timer! repo)
         (let [initial-tx-report (when-not (or initial-data-exists?
                                               (seq datoms)
