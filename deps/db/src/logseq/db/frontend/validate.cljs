@@ -49,7 +49,7 @@
 (defn validate-tx-report
   "Validates the datascript tx-report for entities that have changed. Returns
   boolean indicating if db is valid"
-  [{:keys [db-before db-after tx-data tx-meta] :as tx-report} {:keys [closed-schema?]}]
+  [{:keys [db-after tx-data tx-meta] :as tx-report} {:keys [closed-schema?]}]
   (binding [db-malli-schema/*skip-strict-url-validate?* true]
     (let [changed-ids (->> tx-data (keep :e) distinct)
           datoms (d/datoms db-after :eavt)
