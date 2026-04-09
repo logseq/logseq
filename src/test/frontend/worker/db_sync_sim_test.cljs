@@ -1102,6 +1102,73 @@
                (:block/uuid (d/entity db id))))
        set))
 
+(defn- block-tree-preorder
+  [root]
+  (letfn [(walk [node]
+            (cons node
+                  (mapcat walk (ldb/sort-by-order (:block/_parent node)))))]
+    (walk root)))
+
+(defn- random-copied-block-tree
+  [rng source]
+  (let [nodes (vec (block-tree-preorder source))
+        max-size (max 1 (min 12 (count nodes)))
+        size (+ 1 (rand-int! rng max-size))
+        nodes' (subvec nodes 0 size)
+        uuid-map (into {}
+                       (map (fn [node]
+                              [(:block/uuid node) (rng-uuid rng)])
+                            nodes'))
+        copied (mapv (fn [node]
+                       (let [old-uuid (:block/uuid node)
+                             new-uuid (get uuid-map old-uuid)
+                             parent-uuid (some-> node :block/parent :block/uuid)]
+                         (cond-> {:block/uuid new-uuid
+                                  :block/title (or (:block/title node) "")}
+                           (contains? uuid-map parent-uuid)
+                           (assoc :block/parent [:block/uuid (get uuid-map parent-uuid)]))))
+                     nodes')]
+    copied))
+
+(defn- op-copy-paste-block-tree-into-empty-target!
+  [rng conn state _base-uuid]
+  (let [db @conn
+        sources (->> (existing-blocks db (:blocks @state))
+                     (filter (fn [block]
+                               (seq (ldb/sort-by-order (:block/_parent block))))))
+        source (rand-nth! rng (vec sources))]
+    (when source
+      (let [source-uuid (:block/uuid source)
+            source-page-uuid (:block/uuid (:block/page source))
+            source-descendants (block-and-descendant-uuids db source)
+            targets (->> (existing-blocks db (:blocks @state))
+                         (remove (fn [target]
+                                   (contains? source-descendants (:block/uuid target))))
+                         (filter (fn [target]
+                                   (and (= source-page-uuid
+                                           (:block/uuid (:block/page target)))
+                                        (string/blank? (or (:block/title target) ""))
+                                        (empty? (:block/_parent target))))))
+            target (rand-nth! rng (vec targets))]
+        (when target
+          (let [target-uuid (:block/uuid target)
+                copied-tree (random-copied-block-tree rng source)]
+            (when (seq copied-tree)
+              ;; Simulate "copy + paste tree into empty target block" using
+              ;; replace-empty-target paste semantics.
+              (outliner-op/apply-ops!
+               conn
+               [[:insert-blocks [copied-tree
+                                 (:db/id target)
+                                 {:sibling? true
+                                  :outliner-op :paste
+                                  :replace-empty-target? true}]]]
+               {})
+              {:op :copy-paste-block-tree-into-empty-target
+               :uuid source-uuid
+               :target target-uuid
+               :copied-size (count copied-tree)})))))))
+
 (defn- op-cut-paste-block-with-child! [rng conn state _base-uuid]
   (let [db @conn
         sources (->> (existing-blocks db (:blocks @state))
@@ -1180,9 +1247,15 @@
    {:name :redo :weight 10 :f op-redo!}
    {:name :create-block :weight 10 :f op-create-block!}
    {:name :move-block :weight 6 :f op-move-block!}
+   {:name :copy-paste-block-tree-into-empty-target :weight 4 :f op-copy-paste-block-tree-into-empty-target!}
    {:name :cut-paste-block-with-child :weight 4 :f op-cut-paste-block-with-child!}
    {:name :delete-block :weight 4 :f op-delete-block!}
    {:name :update-title :weight 8 :f op-update-title!}])
+
+(deftest copy-paste-tree-op-registered-in-sim-op-table-test
+  (testing "sim op-table includes copy-paste tree op for random sync stress"
+    (is (contains? (set (map :name op-table))
+                   :copy-paste-block-tree-into-empty-target))))
 
 (deftest cut-paste-op-registered-in-sim-op-table-test
   (testing "sim op-table includes cut-paste op for random sync stress"
@@ -1450,6 +1523,7 @@
                    :create-block (f rng conn state base-uuid {:gen-uuid gen-uuid})
                    :update-title (f rng conn state base-uuid)
                    :move-block (f rng conn state base-uuid)
+                   :copy-paste-block-tree-into-empty-target (f rng conn state base-uuid)
                    :cut-paste-block-with-child (f rng conn state base-uuid)
                    :delete-block (f rng conn state)
                    (f rng conn))]
@@ -2673,6 +2747,158 @@
                 (assert-no-invalid-tx! seed history repro))
               (finally
                 (restore)))))))))
+
+(deftest ^:long ^:large-vars/cleanup-todo two-clients-a-wins-b-overlap-rebase-3-tries-test
+  (testing "three deterministic tries: B rebases pending deletes while applying overlapping remote slices"
+    (doseq [seed [301 302 303]]
+      (let [rng (make-rng seed)
+            gen-uuid #(rng-uuid rng)
+            scenario-runs 90
+            base-uuid (gen-uuid)
+            conn-a (db-test/create-conn)
+            conn-b (db-test/create-conn)
+            ops-a (d/create-conn client-op/schema-in-db)
+            ops-b (d/create-conn client-op/schema-in-db)
+            client-a (make-client repo-a)
+            client-b (make-client repo-b)
+            server (make-server)
+            history (atom [])
+            state-a (atom {:pages #{base-uuid} :blocks #{}})
+            state-b (atom {:pages #{base-uuid} :blocks #{}})
+            a-ops #{:create-block
+                    :delete-block
+                    :move-block
+                    :indent-outdent-blocks
+                    :copy-paste-block-tree-into-empty-target
+                    :undo
+                    :redo}
+            a-op-weights {:create-block 18
+                          :delete-block 10
+                          :move-block 10
+                          :indent-outdent-blocks 10
+                          :copy-paste-block-tree-into-empty-target 8
+                          :undo 8
+                          :redo 8}
+            b-ops #{:delete-block :delete-blocks}
+            b-op-weights {:delete-block 14
+                          :delete-blocks 14}
+            a-op-table (build-weighted-op-table a-ops a-op-weights :a-overlap-rebase)
+            b-op-table (build-weighted-op-table b-ops b-op-weights :b-overlap-rebase)
+            overlap-apply-count (atom 0)
+            b-rebase-with-pending (atom 0)]
+        (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}
+                          repo-b {:conn conn-b :ops-conn ops-b}}
+          (fn []
+            (let [{:keys [repro restore]} (install-invalid-tx-repro! seed history)
+                  refresh-state! (fn [state conn]
+                                   (let [db @conn
+                                         block-uuids (->> (active-block-uuids db)
+                                                          (remove (fn [uuid]
+                                                                    (some-> (d/entity db [:block/uuid uuid])
+                                                                            ldb/page?)))
+                                                          set)]
+                                     (swap! state assoc :pages #{base-uuid}
+                                            :blocks block-uuids)))
+                  sync-a-then-overlap-b!
+                  (fn [iter-idx]
+                    (sync-client! server {:repo repo-a
+                                          :conn conn-a
+                                          :client client-a
+                                          :online? true
+                                          :gen-uuid gen-uuid})
+                    (let [local-tx-b (or (client-op/get-local-tx repo-b) 0)
+                          server-t (:t @server)]
+                      (when (< local-tx-b server-t)
+                        (let [pending-before (boolean (seq (#'sync-apply/pending-txs repo-b)))
+                              remote-txs (mapv (fn [tx-data] {:tx-data tx-data})
+                                               (server-pull server local-tx-b))
+                              slices (if (<= (count remote-txs) 1)
+                                       [remote-txs]
+                                       (let [split (+ 1 (rand-int! rng (dec (count remote-txs))))
+                                             left (subvec remote-txs 0 split)
+                                             ;; Intentional overlap to mimic duplicated/out-of-order pulls.
+                                             right (subvec remote-txs (max 0 (dec split)))]
+                                         [left right]))]
+                          (when pending-before
+                            (swap! b-rebase-with-pending inc))
+                          (doseq [slice slices]
+                            (when (seq slice)
+                              (try
+                                (#'sync-apply/apply-remote-txs! repo-b client-b slice)
+                                (catch :default e
+                                  (report-history! seed history
+                                                   {:type :b-overlap-apply-remote-failed
+                                                    :iter iter-idx
+                                                    :slice-size (count slice)
+                                                    :local-tx local-tx-b
+                                                    :server-t server-t
+                                                    :pending-before pending-before
+                                                    :error (ex-data e)})
+                                  (throw e)))))
+                          (when (> (count slices) 1)
+                            (swap! overlap-apply-count inc))
+                          (client-op/update-local-tx repo-b server-t))))
+                    (refresh-state! state-a conn-a)
+                    (refresh-state! state-b conn-b))]
+              (try
+                (reset! db-sync/*repo->latest-remote-tx {})
+                (record-meta! history {:seed seed
+                                       :base-uuid base-uuid
+                                       :phase :a-wins-b-overlap-rebase
+                                       :scenario-runs scenario-runs})
+                (doseq [conn [conn-a conn-b]]
+                  (ensure-base-page! conn base-uuid))
+                (doseq [repo [repo-a repo-b]]
+                  (client-op/update-local-tx repo 0))
+
+                (let [base-a (d/entity @conn-a [:block/uuid base-uuid])]
+                  (dotimes [i 10]
+                    (let [seed-block-uuid (gen-uuid)]
+                      (create-block! conn-a base-a (str "seed-overlap-" i) seed-block-uuid)
+                      (swap! state-a update :blocks conj seed-block-uuid))))
+
+                (sync-a-then-overlap-b! -1)
+
+                (dotimes [i scenario-runs]
+                  (run-ops! rng {:repo repo-a
+                                 :conn conn-a
+                                 :base-uuid base-uuid
+                                 :state state-a
+                                 :gen-uuid gen-uuid}
+                            1
+                            history
+                            {:op-table-override a-op-table
+                             :context {:phase :a-overlap-op :iter i}})
+                  (run-ops! rng {:repo repo-b
+                                 :conn conn-b
+                                 :base-uuid base-uuid
+                                 :state state-b
+                                 :gen-uuid gen-uuid}
+                            1
+                            history
+                            {:op-table-override b-op-table
+                             :context {:phase :b-delete-op :iter i}})
+                  (sync-a-then-overlap-b! i))
+
+                (sync-a-then-overlap-b! scenario-runs)
+
+                (let [issues-a (db-issues @conn-a)
+                      issues-b (db-issues @conn-b)
+                      checksum-a (sync-checksum/recompute-checksum @conn-a)
+                      checksum-server (sync-checksum/recompute-checksum @(get @server :conn))]
+                  (is (empty? issues-a) (str "db A issues seed=" seed " " (pr-str issues-a)))
+                  (is (empty? issues-b) (str "db B issues seed=" seed " " (pr-str issues-b)))
+                  (is (= checksum-a checksum-server)
+                      (str "winner/server checksum mismatch seed=" seed
+                           " a=" checksum-a
+                           " server=" checksum-server))
+                  (is (pos? @b-rebase-with-pending)
+                      (str "expected rebases with pending deletes seed=" seed))
+                  (is (pos? @overlap-apply-count)
+                      (str "expected overlapping apply-remote slices seed=" seed))
+                  (assert-no-invalid-tx! seed history repro))
+                (finally
+                  (restore))))))))))
 
 (deftest ^:long ^:large-vars/cleanup-todo three-clients-single-repo-sim-test
   (testing "db-sync convergence with three clients sharing one repo"

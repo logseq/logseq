@@ -347,6 +347,64 @@
       (is (= tx-id payload-tx-id))
       (is (string? payload-tx-id)))))
 
+(deftest coerce-ws-server-message-accepts-legacy-tx-reject-shape-test
+  (testing "legacy tx/reject with error-detail and UUID-object ids should coerce"
+    (let [failed-tx-id (random-uuid)
+          success-tx-id (random-uuid)
+          coerced (sync-transport/coerce-ws-server-message
+                   {:type "tx/reject"
+                    :reason "db transact failed"
+                    :t 1392
+                    :error-detail "legacy server detail"
+                    :failed-tx-id {:uuid (str failed-tx-id)}
+                    :success-tx-ids [{:uuid (str success-tx-id)}]})]
+      (is (= "tx/reject" (:type coerced)))
+      (is (= "legacy server detail" (:error-detail coerced)))
+      (is (= failed-tx-id (:failed-tx-id coerced)))
+      (is (= [success-tx-id] (:success-tx-ids coerced))))))
+
+(deftest flush-pending-honors-stop-upload-debug-flag-test
+  (testing "when stop-upload debug flag is enabled, flush-pending should skip preparing/sending tx batches"
+    (let [{:keys [conn client-ops-conn child1]} (setup-parent-child)
+          tx-id (random-uuid)
+          prepare-calls (atom 0)
+          send-calls (atom 0)
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [])
+                  :ws (doto (js-obj)
+                        (aset "readyState" 1)
+                        (aset "send" (fn [_raw] (swap! send-calls inc))))}]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (reset! sync-apply/*repo->latest-remote-tx {test-repo 0})
+          (client-op/update-local-tx test-repo 0)
+          (ldb/transact! client-ops-conn
+                         [{:db-sync/tx-id tx-id
+                           :db-sync/pending? true
+                           :db-sync/created-at 1
+                           :db-sync/outliner-op :save-block
+                           :db-sync/normalized-tx-data
+                           [[:db/add [:block/uuid (:block/uuid child1)]
+                             :block/title
+                             "pending upload debug gate test"]]}])
+          (with-redefs [worker-state/online? (constantly true)
+                        sync-apply/prepare-upload-tx-entries
+                        (fn [_conn _pending]
+                          (swap! prepare-calls inc)
+                          {:tx-entries []
+                           :drop-tx-ids []})]
+            (#'sync-apply/set-upload-stopped! test-repo true)
+            (#'sync-apply/flush-pending! test-repo client)
+            (is (= 0 @prepare-calls))
+            (is (= 0 @send-calls))
+
+            (#'sync-apply/set-upload-stopped! test-repo false)
+            (#'sync-apply/flush-pending! test-repo client)
+            (is (= 1 @prepare-calls))
+            (is (= 0 @send-calls)))
+          (#'sync-apply/set-upload-stopped! test-repo false))))))
+
 (deftest sync-counts-counts-only-true-pending-local-ops-test
   (testing "pending-local should count only rows with :db-sync/pending? true"
     (let [{:keys [conn client-ops-conn]} (setup-parent-child)]
@@ -571,35 +629,117 @@
 
 (deftest tx-reject-stale-keeps-inflight-op-pending-test
   (testing "stale tx/reject should keep inflight ops pending for retry"
-    (let [{:keys [conn client-ops-conn]} (setup-parent-child)
-          tx-id (random-uuid)
-          *sent (atom [])
-          raw-message (js/JSON.stringify
-                       (clj->js {:type "tx/reject"
-                                 :reason "stale"
-                                 :t 3}))
+    (async done
+           (let [{:keys [conn client-ops-conn]} (setup-parent-child)
+                 tx-id (random-uuid)
+                 *sent (atom [])
+                 ws (doto (js-obj)
+                      (aset "readyState" 1)
+                      (aset "send" (fn [raw]
+                                     (swap! *sent conj (js->clj (js/JSON.parse raw) :keywordize-keys true)))))
+                 raw-message (js/JSON.stringify
+                              (clj->js {:type "tx/reject"
+                                        :reason "stale"
+                                        :t 3}))
+                 client {:repo test-repo
+                         :graph-id "graph-1"
+                         :ws ws
+                         :send-queue (atom (p/resolved nil))
+                         :inflight (atom [tx-id])
+                         :online-users (atom [])
+                         :ws-state (atom :open)}]
+             (with-datascript-conns conn client-ops-conn
+               (fn []
+                 (ldb/transact! client-ops-conn
+                                [{:db-sync/tx-id tx-id
+                                  :db-sync/created-at 1
+                                  :db-sync/pending? true}])
+                 (with-redefs [client-op/get-local-tx (constantly 0)]
+                   (sync-handle-message/handle-message! test-repo client raw-message)
+                   (-> @(:send-queue client)
+                       (p/then (fn [_]
+                                 (let [ent (d/entity @client-ops-conn [:db-sync/tx-id tx-id])]
+                                   (is (= [{:type "pull" :since 0}] @*sent))
+                                   (is (= [tx-id] @(:inflight client)))
+                                   (is (= true (:db-sync/pending? ent)))
+                                   (is (not= true (:db-sync/failed? ent))))))
+                       (p/finally (fn [] (done)))))))))))
+
+(deftest tx-reject-stale-dedupes-pull-request-test
+  (testing "repeated stale tx/reject should not send duplicated pull requests"
+    (async done
+           (let [*sent (atom [])
+                 ws (doto (js-obj)
+                      (aset "readyState" 1)
+                      (aset "send" (fn [raw]
+                                     (swap! *sent conj (js->clj (js/JSON.parse raw) :keywordize-keys true)))))
+                 raw-message (js/JSON.stringify
+                              (clj->js {:type "tx/reject"
+                                        :reason "stale"
+                                        :t 3}))
+                 client {:repo test-repo
+                         :graph-id "graph-1"
+                         :ws ws
+                         :send-queue (atom (p/resolved nil))
+                         :pending-pull-since (atom nil)
+                         :inflight (atom [])
+                         :online-users (atom [])
+                         :ws-state (atom :open)}]
+             (with-redefs [client-op/get-local-tx (constantly 0)]
+               (sync-handle-message/handle-message! test-repo client raw-message)
+               (sync-handle-message/handle-message! test-repo client raw-message)
+               (-> @(:send-queue client)
+                   (p/then (fn [_]
+                             (is (= [{:type "pull" :since 0}] @*sent))
+                             (is (= 0 @(:pending-pull-since client)))))
+                   (p/finally (fn [] (done)))))))))
+
+(deftest changed-message-dedupes-pull-request-test
+  (testing "repeated changed should not send duplicated pull requests"
+    (async done
+           (let [*sent (atom [])
+                 ws (doto (js-obj)
+                      (aset "readyState" 1)
+                      (aset "send" (fn [raw]
+                                     (swap! *sent conj (js->clj (js/JSON.parse raw) :keywordize-keys true)))))
+                 raw-message (js/JSON.stringify
+                              (clj->js {:type "changed"
+                                        :t 10}))
+                 client {:repo test-repo
+                         :graph-id "graph-1"
+                         :ws ws
+                         :send-queue (atom (p/resolved nil))
+                         :pending-pull-since (atom nil)
+                         :inflight (atom [])
+                         :online-users (atom [])
+                         :ws-state (atom :open)}]
+             (with-redefs [client-op/get-local-tx (constantly 3)]
+               (sync-handle-message/handle-message! test-repo client raw-message)
+               (sync-handle-message/handle-message! test-repo client raw-message)
+               (-> @(:send-queue client)
+                   (p/then (fn [_]
+                             (is (= [{:type "pull" :since 3}] @*sent))
+                             (is (= 3 @(:pending-pull-since client)))))
+                   (p/finally (fn [] (done)))))))))
+
+(deftest pull-ok-clears-pending-pull-request-marker-test
+  (testing "pull/ok clears pending pull marker so future changed can request next pull"
+    (let [raw-message (js/JSON.stringify
+                       (clj->js {:type "pull/ok"
+                                 :t 4
+                                 :txs []}))
           client {:repo test-repo
                   :graph-id "graph-1"
                   :ws #js {}
-                  :inflight (atom [tx-id])
+                  :pending-pull-since (atom 3)
+                  :inflight (atom [])
                   :online-users (atom [])
                   :ws-state (atom :open)}]
-      (with-datascript-conns conn client-ops-conn
-        (fn []
-          (ldb/transact! client-ops-conn
-                         [{:db-sync/tx-id tx-id
-                           :db-sync/created-at 1
-                           :db-sync/pending? true}])
-          (with-redefs [client-op/get-local-tx (constantly 0)
-                        sync-transport/ws-open? (constantly true)
-                        sync-transport/send! (fn [_coerce-f _ws message]
-                                               (swap! *sent conj message))]
-            (sync-handle-message/handle-message! test-repo client raw-message)
-            (let [ent (d/entity @client-ops-conn [:db-sync/tx-id tx-id])]
-              (is (= [{:type "pull" :since 0}] @*sent))
-              (is (= [tx-id] @(:inflight client)))
-              (is (= true (:db-sync/pending? ent)))
-              (is (not= true (:db-sync/failed? ent))))))))))
+      (with-redefs [client-op/get-local-tx (constantly 3)
+                    client-op/update-local-tx (fn [_repo _t] nil)
+                    sync-apply/flush-pending! (fn [& _] nil)]
+        (sync-handle-message/handle-message! test-repo client raw-message)
+        (is (nil? @(:pending-pull-since client)))))))
 
 (deftest hello-checksum-mismatch-logs-warning-test
   (testing "hello with matching t but mismatched checksum logs warning without throwing"
@@ -3766,6 +3906,130 @@
                 (str "target missing with no pending txs for uuid=" target-uuid))
             (when target'
               (is (= "remote-restored" (:block/title target'))))))))))
+
+(deftest apply-remote-txs-local-delete-parent-remote-move-then-delete-parent-repro-test
+  (testing "reproduces transact-remote failure when remote moves blocks under a locally deleted parent and then retracts that parent"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "parent"}
+                            {:block/title "mover-1"}
+                            {:block/title "mover-2"}]}]})
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          parent (db-test/find-block-by-content @conn "parent")
+          mover-1 (db-test/find-block-by-content @conn "mover-1")
+          mover-2 (db-test/find-block-by-content @conn "mover-2")
+          parent-uuid (:block/uuid parent)
+          page-uuid (:block/uuid (:block/page parent))
+          mover-1-uuid (:block/uuid mover-1)
+          mover-2-uuid (:block/uuid mover-2)
+          mover-1-order (:block/order mover-1)
+          mover-2-order (:block/order mover-2)
+          remote-txs [{:tx-data [[:db/retract [:block/uuid mover-1-uuid] :block/parent [:block/uuid page-uuid]]
+                                 [:db/add [:block/uuid mover-1-uuid] :block/parent [:block/uuid parent-uuid]]
+                                 [:db/retract [:block/uuid mover-1-uuid] :block/order mover-1-order]
+                                 [:db/add [:block/uuid mover-1-uuid] :block/order "ZxV"]]}
+                     {:tx-data [[:db/retract [:block/uuid mover-2-uuid] :block/parent [:block/uuid page-uuid]]
+                                 [:db/add [:block/uuid mover-2-uuid] :block/parent [:block/uuid parent-uuid]]
+                                 [:db/retract [:block/uuid mover-2-uuid] :block/order mover-2-order]
+                                 [:db/add [:block/uuid mover-2-uuid] :block/order "ZxG"]]}
+                     {:tx-data [[:db/retractEntity [:block/uuid parent-uuid]]]}]
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          ;; Local delete creates pending tx requiring reverse before remote apply.
+          (outliner-core/delete-blocks! conn [parent] {})
+          (is (seq (#'sync-apply/pending-txs test-repo)))
+          (let [result (try
+                         (#'sync-apply/apply-remote-txs! test-repo client remote-txs)
+                         nil
+                         (catch :default e
+                           e))]
+            (is (instance? js/Error result))
+            (is (string/includes? (or (ex-message result) "")
+                                  "DB write failed with invalid data")
+                (str "unexpected error: " (ex-message result)))))))))
+
+(deftest apply-remote-txs-overlap-out-of-order-parent-delete-then-move-repro-test
+  (testing "reproduces missing-parent transact-remote failure when overlapping remote slices arrive out of order"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "parent"}
+                            {:block/title "mover"}
+                            {:block/title "local-pending-delete"}]}]})
+          client-ops-conn (d/create-conn client-op/schema-in-db)
+          parent (db-test/find-block-by-content @conn "parent")
+          mover (db-test/find-block-by-content @conn "mover")
+          local-delete (db-test/find-block-by-content @conn "local-pending-delete")
+          page-uuid (:block/uuid (:block/page parent))
+          parent-uuid (:block/uuid parent)
+          mover-uuid (:block/uuid mover)
+          mover-order (:block/order mover)
+          tx-delete-parent {:tx-data [[:db/retractEntity [:block/uuid parent-uuid]]]}
+          tx-move-under-parent
+          {:tx-data [[:db/retract [:block/uuid mover-uuid] :block/parent [:block/uuid page-uuid]]
+                     [:db/add [:block/uuid mover-uuid] :block/parent [:block/uuid parent-uuid]]
+                     [:db/retract [:block/uuid mover-uuid] :block/order mover-order]
+                     [:db/add [:block/uuid mover-uuid] :block/order "ZxV"]]}
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          ;; Keep one unrelated local pending tx so apply-remote uses reverse+rebase path.
+          (outliner-core/delete-blocks! conn [local-delete] {})
+          (is (= 1 (count (#'sync-apply/pending-txs test-repo))))
+
+          ;; Simulate overlapped/out-of-order pull slices:
+          ;; 1) later tx deletes parent
+          ;; 2) earlier tx moves a block under that parent
+          (#'sync-apply/apply-remote-txs! test-repo client [tx-delete-parent])
+          (let [result (try
+                         (#'sync-apply/apply-remote-txs! test-repo client [tx-move-under-parent])
+                         nil
+                         (catch :default e
+                           e))]
+            (is (instance? js/Error result))
+            (is (string/includes? (or (ex-message result) "")
+                                  "Nothing found for entity id")
+                (str "unexpected error: " (ex-message result)))))))))
+
+(deftest insert-blocks-reproduces-fractional-index-order-boundary-error-test
+  (testing "insert-blocks can reproduce fractional-index boundary crash when start-order >= end-order"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page 1"}
+                   :blocks [{:block/title "target"}
+                            {:block/title "right-sibling"}]}]})
+          target (db-test/find-block-by-content @conn "target")
+          right-sibling (db-test/find-block-by-content @conn "right-sibling")]
+      ;; Force a malformed sibling order interval that matches production symptom:
+      ;; start "a4wv" and end "a4wt" (start >= end).
+      (d/transact! conn
+                   [[:db/add (:db/id target) :block/order "a4wv"]
+                    [:db/add (:db/id right-sibling) :block/order "a4wt"]])
+      (let [result (try
+                     (outliner-op/apply-ops!
+                      conn
+                      [[:insert-blocks [[{:block/title "insert crash repro"}]
+                                        (:db/id target)
+                                        {:sibling? true
+                                         :right-sibling-id (:db/id right-sibling)}]]]
+                      {})
+                     nil
+                     (catch :default e
+                       e))]
+        (is (instance? js/Error result))
+        (is (string/includes? (or (ex-message result) "")
+                              "a4wv >= a4wt")
+            (str "unexpected error: " (ex-message result)))))))
 
 (deftest rebase-persisted-row-contains-forward-and-inverse-outliner-ops-test
   (testing "rebased pending tx should always persist both forward and inverse outliner ops"
