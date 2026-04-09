@@ -367,11 +367,20 @@
 
  ;; Color
  :color/blue "Blauw"
+ :color/crimson "Crimson"
+ :color/cyan "Cyan"
+ :color/grass "Grass"
  :color/gray "Grijs"
  :color/green "Groen"
+ :color/indigo "Indigo"
+ :color/orange "Orange"
  :color/pink "Roze"
+ :color/plum "Plum"
  :color/purple "Paars"
  :color/red "Rood"
+ :color/teal "Teal"
+ :color/tomato "Tomato"
+ :color/violet "Violet"
  :color/yellow "Geel"
 
  ;; Graph
@@ -403,6 +412,9 @@
  ;; Graph delete server
  :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
 
+ ;; Graph diff
+ :graph.diff/title "Git diff"
+
  ;; Graph leave
  :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
@@ -430,6 +442,15 @@
  :graph.switch/select-prompt "Selecteer een grafiek"
 
  ;; Graph validation
+ :graph.validation/config-arweave-gateway-warning "is no longer supported."
+ :graph.validation/config-block-hidden-properties-warning "is not used in DB graphs as hiding a property is done in its configuration"
+ :graph.validation/config-default-templates-warning "is replaced by #Template and the `Apply template to tags` property"
+ :graph.validation/config-editor-command-trigger-warning "is no longer supported. Please use '/' and report bugs on it."
+ :graph.validation/config-favorites-warning "is not stored in config for DB graphs"
+ :graph.validation/config-feature-enable-block-timestamps-warning "is not used in DB graphs as it is always enabled"
+ :graph.validation/config-preferred-format-warning "is not used in DB graphs as there is only markdown mode."
+ :graph.validation/config-property-pages-enabled-warning "is not used in DB graphs as all properties have pages"
+ :graph.validation/config-unused-in-db-graphs-warning "is not used in DB graphs"
  :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
  :graph.validation/valid "Your graph is valid! {1}"
 
@@ -437,9 +458,19 @@
  :file/config-duplicate-keys "Het bestand '{1}' heeft dubbele sleutels. De sleutel '{2}' wordt meerdere keren toegewezen."
  :file/config-invalid "Configuratiebestand is ongeldig"
  :file/format-not-supported "Formaat .{1} wordt niet ondersteund."
+ :file/label "File"
  :file/last-modified-at "Laatst aangepast op"
  :file/name "Bestandsnaam"
  :file/no-data "Geen gegevens"
+ :file/title "File {1}"
+
+ ;; Config file validation
+ :file.config/deprecation-title "The file {1} has the following deprecations:"
+ :file.config/error-title "The file {1} has the following errors:"
+ :file.config/invalid-desc "Make sure the config is wrapped in {}."
+ :file.config/invalid-title "The file {1} is not valid."
+ :file.config/read-failed-desc "Make sure your config is wrapped in {}. Also make sure that the characters '( { [' have their corresponding closing character ') } ]'."
+ :file.config/read-failed-title "Failed to read file {1}"
 
  ;; Page
  :page/add-to-favorites "Voeg aan favorieten toe"
@@ -479,6 +510,9 @@
  :page.convert/tag-to-page-confirm-desc "Als u een tag omzet naar een pagina, worden ook de tageigenschappen en de tag van alle knooppunten verwijderd die deze tag gebruiken. Wilt u doorgaan?"
  :page.convert/tag-to-page-duplicate "Er bestaat al een pagina met de naam \"{1}\"."
  :page.convert/tag-to-page-has-children "Tag heeft onderliggende elementen en kan niet worden geconverteerd"
+
+ ;; Page creation
+ :page.create/title "Create a new page"
 
  ;; Page deletion
  :page.delete/confirm-title "Weet u zeker dat u deze pagina wilt verwijderen?"
@@ -800,6 +834,12 @@
 
  ;; Builder queries
  :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
+ :query.builder/filter-full-text-search-label "Full text search"
+ :query.builder/filter-page-label "Page"
+ :query.builder/filter-page-reference-label "Page reference"
+ :query.builder/filter-sample-label "Sample"
+ :query.builder/operator-and-label "and"
+ :query.builder/operator-not-label "not"
 
  ;; Asset
  :asset/align "Uitlijning"
@@ -997,6 +1037,8 @@
  ;; General settings
  :settings.general/accent-color "Accentkleur"
  :settings.general/accent-color-alert "Kleurwaarschuwing"
+ :settings.general/accent-color-logseq "Logseq classic color"
+ :settings.general/accent-color-none-desc "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."
  :settings.general/app-updated "Applicatie bijgewerkt 🎉"
  :settings.general/changelog "Wijzigingslogboek"
  :settings.general/check-for-updates "Op updates controleren"
@@ -1023,6 +1065,7 @@
  :settings.general/update-error "⚠️ Oeps, er is iets misgegaan!\nBekijk het {1}."
 
  ;; Theme
+ :theme/logseq-default "Logseq Default theme"
  :theme/switch-to "Schakel over naar het thema {1}"
 
  ;; Plugin
@@ -1187,8 +1230,7 @@
  :sync/user-doesnt-exist-yet "Gebruiker bestaat nog niet"
 
  ;; Encryption
- :encryption/cloud-password-rich (fn [] ["Als je je wachtwoord kwijtraakt, kan geen van je gegevens in de cloud worden ontsleuteld. "
-                                 [:span "Je kunt nog steeds bij de lokale versie van je grafiek."]])
+ :encryption/cloud-password-rich (fn [] ["Als je je wachtwoord kwijtraakt, kan geen van je gegevens in de cloud worden ontsleuteld. " [:span "Je kunt nog steeds bij de lokale versie van je grafiek."]])
  :encryption/current-password "Huidig wachtwoord"
  :encryption/enter-password "Wachtwoord invoeren"
  :encryption/enter-password-again "Wachtwoord opnieuw invoeren"
@@ -1206,10 +1248,7 @@
  :encryption/init-key-pair-error "Fout bij init-sleutelpaar: {1}"
  :encryption/password-not-matched "Wachtwoorden komen niet overeen"
  :encryption/password-updated-successfully "Wachtwoord bijgewerkt"
- :encryption/remember-password-rich (fn [] [[:span "Zorg ervoor dat je "]
-                                    "het ingestelde wachtwoord onthoudt, want we kunnen het niet resetten of terughalen als je het vergeet, "
-                                    [:span "en we raden aan om "]
-                                    "er een veilige back-up van te bewaren."])
+ :encryption/remember-password-rich (fn [] [[:span "Zorg ervoor dat je "] "het ingestelde wachtwoord onthoudt, want we kunnen het niet resetten of terughalen als je het vergeet, " [:span "en we raden aan om "] "er een veilige back-up van te bewaren."])
  :encryption/reset-password "Wachtwoord resetten"
  :encryption/set-new-password "Nieuw wachtwoord instellen"
  :encryption/set-password-title "Wachtwoord instellen"
@@ -1347,8 +1386,10 @@
  :sidebar.right/toggle "Rechter zijbalk in-/uitschakelen"
 
  ;; Context Menu
+ :context-menu/developer-tools "Developer tools"
  :context-menu/make-a-flashcard "Flashcard maken"
  :context-menu/set-icon "Pictogram instellen"
+ :context-menu/show-block-content-history "(Dev) Show block content history"
  :context-menu/toggle-number-list "Genummerde lijst in-/uitschakelen"
 
  ;; Window

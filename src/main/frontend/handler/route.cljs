@@ -109,7 +109,7 @@
     :home
     "Logseq"
     :graphs
-    "Graphs"
+    (t :mobile.tab/graphs)
     :graph
     (t :nav/graph)
     :all-files
@@ -119,9 +119,9 @@
     :all-journals
     (t :nav/all-journals)
     :file
-    (str "File " (:path path-params))
+    (t :file/title (:path path-params))
     :new-page
-    "Create a new page"
+    (t :page.create/title)
     :page
     (let [name (:name path-params)
           page (db/get-page name)
@@ -146,11 +146,11 @@
     :tag
     (str "#"  (:name path-params))
     :diff
-    "Git diff"
+    (t :graph.diff/title)
     :settings
-    "Settings"
+    (t :nav/settings)
     :import
-    "Import data into Logseq"
+    (t :import/title)
     "Logseq"))
 
 (defn update-page-title!

@@ -43,6 +43,23 @@
   (swap! *tree #(query-builder/append-element % loc x))
   (when toggle? (toggle-fn)))
 
+(defn- filter-label
+  [value]
+  (case value
+    "tags" (t :property.built-in/tags)
+    "page reference" (t :query.builder/filter-page-reference-label)
+    "property" (t :class.built-in/property)
+    "task" (t :class.built-in/task)
+    "priority" (t :property.built-in/priority)
+    "page" (t :query.builder/filter-page-label)
+    "full text search" (t :query.builder/filter-full-text-search-label)
+    "between" (t :view.filter/operator-between)
+    "sample" (t :query.builder/filter-sample-label)
+    "and" (t :query.builder/operator-and-label)
+    "or" (t :view.filter/or)
+    "not" (t :query.builder/operator-not-label)
+    value))
+
 (rum/defcs search < (rum/local nil ::input-value)
   (mixins/event-mixin
    (fn [state]
@@ -294,14 +311,18 @@
   (let [*mode (::mode state)
         filters query-builder/db-based-block-filters
         filters-and-ops (concat filters query-builder/operators)
-        operator? #(contains? query-builder/operators-set (keyword %))]
+        operator? #(contains? query-builder/operators-set (keyword %))
+        select-items (mapv (fn [value]
+                             {:value value
+                              :label (filter-label value)})
+                           (map name filters-and-ops))]
     [:div.query-builder-picker
      (if @*mode
        (when-not (operator? @*mode)
          (db-based-query-filter-picker state *tree loc clause opts))
        [:div
         (select
-         (map name filters-and-ops)
+         select-items
          (fn [{:keys [value]}]
            (cond
              (operator? value)
@@ -309,7 +330,11 @@
 
              :else
              (reset! *mode value)))
-         {:input-default-placeholder (t :query.builder/add-filter-or-operator-placeholder)})])]))
+         {:extract-fn (fn [{:keys [label value]}]
+                        (if label
+                          (str label " " value)
+                          value))
+          :input-default-placeholder (t :query.builder/add-filter-or-operator-placeholder)})])]))
 
 (rum/defc add-filter
   [*tree loc clause]

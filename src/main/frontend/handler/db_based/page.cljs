@@ -90,7 +90,9 @@
                    (t :page.convert/tag-to-page-confirm-desc)
                    {:id :convert-tag-to-page
                     :data-reminder :ok
-                    :data-reminder-label (t :ui/dont-remind-me-again)})
+                    :data-reminder-label (t :ui/dont-remind-me-again)
+                    :cancel-label (t :ui/cancel)
+                    :ok-label (t :ui/confirm)})
                   (p/then convert-fn)))))))
 
 (defn <create-class!

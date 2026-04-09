@@ -396,7 +396,7 @@
         themes (if (string/blank? @!input)
                  themes
                  (search/fuzzy-search themes @!input :limit 100 :extract-fn :name))
-        themes (cons {:name "Logseq Default theme"
+        themes (cons {:name (t :theme/logseq-default)
                       :pid "logseq-classic-theme"
                       :mode (state/sub :ui/theme)
                       :url nil} themes)
