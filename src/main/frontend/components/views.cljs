@@ -1763,6 +1763,15 @@
                    :else [v])]
       (->> values (filter ldb/asset?) (sort-by :db/id) first))))
 
+(defn- gallery-dimension-key
+  "Returns the short dimension key (e.g. \"square\") for a view entity's
+   :logseq.property.view/gallery-card-dimensions value, defaulting to
+   \"square\"."
+  [view-entity]
+  (let [ident (:db/ident (:logseq.property.view/gallery-card-dimensions view-entity))]
+    (or (some-> ident name (string/split #"\.") last)
+        "square")))
+
 (rum/defc gallery-card-item
   [view-entity block config table]
   (let [columns (:columns table)
@@ -1771,10 +1780,12 @@
                    (first (gallery-image-candidate-properties table columns)))
         image-prop-ident (or (:db/ident image-prop-entity) (:db/ident fallback))
         asset-block (gallery-card-image-block block image-prop-ident)
-        asset-cp (state/get-component :block/asset-cp)]
+        asset-cp (state/get-component :block/asset-cp)
+        image-layout? (and asset-block asset-cp)]
     [:div.ls-card-item.content
-     {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))}
-     (if (and asset-block asset-cp)
+     {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))
+      :class (if image-layout? "ls-card-image-layout" "ls-card-fallback-layout")}
+     (if image-layout?
        [:<>
         [:div.ls-card-image
          (asset-cp (assoc config
@@ -1794,8 +1805,10 @@
 
 (rum/defcs gallery-view < rum/static mixins/container-id
   [state {:keys [config]} table view-entity blocks *scroller-ref]
-  (let [config' (assoc config :container-id (:container-id state))]
+  (let [config' (assoc config :container-id (:container-id state))
+        dimension-key (gallery-dimension-key view-entity)]
     [:div.ls-cards
+     {:class (str "ls-cards-" dimension-key)}
      (when (seq blocks)
        (ui/virtualized-grid
         {:ref #(reset! *scroller-ref %)
@@ -1887,27 +1900,36 @@
       (ui/icon "trash" {:size 15})
       [:span.ml-1 (t :view.table/delete-sort)])]))
 
+(def ^:private gallery-dimension-idents
+  [:logseq.property.view/gallery-card-dimensions.square
+   :logseq.property.view/gallery-card-dimensions.header
+   :logseq.property.view/gallery-card-dimensions.capsule
+   :logseq.property.view/gallery-card-dimensions.hero
+   :logseq.property.view/gallery-card-dimensions.logo])
+
 (rum/defc gallery-settings-config
   [view-entity table columns]
   (let [candidates (gallery-image-candidate-properties table columns)
-        current-id (:db/id (:logseq.property.view/gallery-image-property view-entity))
-        default-id (or (and (some #(= current-id (:db/id %)) candidates) current-id)
-                       (:db/id (first candidates)))]
-    [:div.ls-gallery-settings.flex.flex-col.gap-2.p-2.text-sm
+        current-image-id (:db/id (:logseq.property.view/gallery-image-property view-entity))
+        default-image-id (or (and (some #(= current-image-id (:db/id %)) candidates) current-image-id)
+                             (:db/id (first candidates)))
+        dimension-ents (keep db/entity gallery-dimension-idents)
+        current-dimension-id (or (:db/id (:logseq.property.view/gallery-card-dimensions view-entity))
+                                 (:db/id (db/entity :logseq.property.view/gallery-card-dimensions.square)))]
+    [:div.ls-gallery-settings.flex.flex-col.gap-3.p-2.text-sm
      {:style {:min-width 260}}
      (if (seq candidates)
        [:div.flex.flex-row.items-center.justify-between.gap-2
         [:div.text-muted-foreground "Gallery value"]
         (shui/select
-         {:default-value (str default-id)
+         {:default-value (str default-image-id)
           :on-value-change
           (fn [v]
             (when-let [new-id (parse-long v)]
               (db-property-handler/set-block-property!
                (:db/id view-entity)
                :logseq.property.view/gallery-image-property
-               new-id)
-              (shui/popup-hide!)))}
+               new-id)))}
          (shui/select-trigger
           {:class "!px-2 !py-0 !h-8 w-[160px]"}
           (shui/select-value {:placeholder "Select property"}))
@@ -1919,7 +1941,30 @@
                :value (str (:db/id p))}
               (or (:block/title p) (name (:db/ident p))))))))]
        [:div.text-muted-foreground.px-2.py-1
-        "No node properties in this view point to assets."])]))
+        "No node properties in this view point to assets."])
+
+     (when (seq dimension-ents)
+       [:div.flex.flex-row.items-center.justify-between.gap-2
+        [:div.text-muted-foreground "Dimensions"]
+        (shui/select
+         {:default-value (str current-dimension-id)
+          :on-value-change
+          (fn [v]
+            (when-let [new-id (parse-long v)]
+              (db-property-handler/set-block-property!
+               (:db/id view-entity)
+               :logseq.property.view/gallery-card-dimensions
+               new-id)))}
+         (shui/select-trigger
+          {:class "!px-2 !py-0 !h-8 w-[160px]"}
+          (shui/select-value {:placeholder "Select dimensions"}))
+         (shui/select-content
+          (shui/select-group
+           (for [ent dimension-ents]
+             (shui/select-item
+              {:key (str (:db/id ent))
+               :value (str (:db/id ent))}
+              (or (:block/title ent) (name (:db/ident ent))))))))])]))
 
 (rum/defc gallery-settings
   [view-entity table columns]

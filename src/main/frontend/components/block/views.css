@@ -1,6 +1,14 @@
 .ls-cards {
   .ls-card-item {
-    @apply dark:shadow-gray-700 shadow-md rounded-md h-[15rem] w-full overflow-hidden flex flex-col;
+    @apply dark:shadow-gray-700 shadow-md rounded-md w-full;
+  }
+
+  .ls-card-item.ls-card-image-layout {
+    @apply overflow-hidden flex flex-col;
+  }
+
+  .ls-card-item.ls-card-fallback-layout {
+    @apply overflow-auto p-4;
   }
 
   .ls-card-image {
@@ -30,6 +38,36 @@
   }
 
   .virtuoso-grid-item {
-    @apply flex w-[290px];
+    @apply flex;
+  }
+
+  /* Square: current layout, 290x15rem card (image area 290x~11rem) */
+  &.ls-cards-square {
+    .ls-card-item { @apply h-[15rem]; }
+    .virtuoso-grid-item { @apply w-[290px]; }
+  }
+
+  /* Header: Steam store header aspect ratio (460:215 ≈ 2.14:1) */
+  &.ls-cards-header {
+    .ls-card-item { @apply h-[14rem]; }
+    .virtuoso-grid-item { @apply w-[344px]; }
+  }
+
+  /* Capsule: Steam library capsule portrait (2:3) */
+  &.ls-cards-capsule {
+    .ls-card-item { @apply h-[23rem]; }
+    .virtuoso-grid-item { @apply w-[200px]; }
+  }
+
+  /* Hero: Steam library hero ultra-wide banner (1920:620 ≈ 3.1:1) */
+  &.ls-cards-hero {
+    .ls-card-item { @apply h-[12rem]; }
+    .virtuoso-grid-item { @apply w-[400px]; }
+  }
+
+  /* Logo: 16:9 landscape */
+  &.ls-cards-logo {
+    .ls-card-item { @apply h-[15rem]; }
+    .virtuoso-grid-item { @apply w-[313px]; }
   }
 }
