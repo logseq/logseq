@@ -179,6 +179,7 @@
 
            :property/closed-values
            (some->> (lookup-entity e :block/_closed-value-property default-value)
+                    (remove entity-util/recycled?)
                     (sort-by :block/order))
 
            (lookup-kv-with-default-value db e k default-value))))
