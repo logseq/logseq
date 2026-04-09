@@ -1186,125 +1186,147 @@
                     (numeric-id-in-ref-value? v)))
              block)))
 
+(defn- stale-numeric-id-in-page-ops?
+  [db op args]
+  (case op
+    :save-block
+    (let [[block _opts] args]
+      (numeric-id-in-block-ref-attrs? db block))
+
+    :insert-blocks
+    (let [[blocks target-id _opts] args]
+      (or (some #(numeric-id-in-block-ref-attrs? db %) blocks)
+          (unresolved-numeric-entity-id? target-id)))
+
+    :create-page
+    (let [[_title opts] args]
+      (unresolved-numeric-entity-id? (:uuid opts)))
+
+    :rename-page
+    (let [[page-uuid _new-title] args]
+      (unresolved-numeric-entity-id? page-uuid))
+
+    :delete-page
+    (let [[page-uuid _opts] args]
+      (unresolved-numeric-entity-id? page-uuid))
+
+    :restore-recycled
+    (let [[root-id] args]
+      (unresolved-numeric-entity-id? root-id))
+
+    :apply-template
+    (let [[template-id target-id _opts] args]
+      (or (unresolved-numeric-entity-id? template-id)
+          (unresolved-numeric-entity-id? target-id)))
+
+    :recycle-delete-permanently
+    (let [[root-id] args]
+      (unresolved-numeric-entity-id? root-id))
+
+    nil))
+
+(defn- stale-numeric-id-in-structure-ops?
+  [op args]
+  (case op
+    :move-blocks
+    (let [[ids target-id _opts] args]
+      (or (unresolved-numeric-entity-id-coll? ids)
+          (unresolved-numeric-entity-id? target-id)))
+
+    :move-blocks-up-down
+    (let [[ids _up?] args]
+      (unresolved-numeric-entity-id-coll? ids))
+
+    :indent-outdent-blocks
+    (let [[ids _indent? _opts] args]
+      (unresolved-numeric-entity-id-coll? ids))
+
+    :delete-blocks
+    (let [[ids _opts] args]
+      (unresolved-numeric-entity-id-coll? ids))
+
+    nil))
+
+(defn- stale-numeric-id-in-property-ops?
+  [op args]
+  (case op
+    :set-block-property
+    (let [[block-id property-id _v] args]
+      (or (unresolved-numeric-entity-id? block-id)
+          (unresolved-numeric-entity-id? property-id)))
+
+    :remove-block-property
+    (let [[block-id property-id] args]
+      (or (unresolved-numeric-entity-id? block-id)
+          (unresolved-numeric-entity-id? property-id)))
+
+    :batch-set-property
+    (let [[block-ids property-id _v _opts] args]
+      (or (unresolved-numeric-entity-id-coll? block-ids)
+          (unresolved-numeric-entity-id? property-id)))
+
+    :batch-remove-property
+    (let [[block-ids property-id] args]
+      (or (unresolved-numeric-entity-id-coll? block-ids)
+          (unresolved-numeric-entity-id? property-id)))
+
+    :delete-property-value
+    (let [[block-id property-id _property-value] args]
+      (or (unresolved-numeric-entity-id? block-id)
+          (unresolved-numeric-entity-id? property-id)))
+
+    :batch-delete-property-value
+    (let [[block-ids property-id _property-value] args]
+      (or (unresolved-numeric-entity-id-coll? block-ids)
+          (unresolved-numeric-entity-id? property-id)))
+
+    :create-property-text-block
+    (let [[block-id property-id _value _opts] args]
+      (or (unresolved-numeric-entity-id? block-id)
+          (unresolved-numeric-entity-id? property-id)))
+
+    :class-add-property
+    (let [[class-id property-id] args]
+      (or (unresolved-numeric-entity-id? class-id)
+          (unresolved-numeric-entity-id? property-id)))
+
+    :class-remove-property
+    (let [[class-id property-id] args]
+      (or (unresolved-numeric-entity-id? class-id)
+          (unresolved-numeric-entity-id? property-id)))
+
+    :delete-closed-value
+    (let [[property-id value-block-id] args]
+      (or (unresolved-numeric-entity-id? property-id)
+          (unresolved-numeric-entity-id? value-block-id)))
+
+    nil))
+
+(defn- stale-numeric-id-in-schema-ops?
+  [op args]
+  (case op
+    :upsert-property
+    (let [[property-id _schema _opts] args]
+      (unresolved-numeric-entity-id? property-id))
+
+    :upsert-closed-value
+    (let [[property-id _opts] args]
+      (unresolved-numeric-entity-id? property-id))
+
+    :add-existing-values-to-closed-values
+    (let [[property-id _values] args]
+      (unresolved-numeric-entity-id? property-id))
+
+    nil))
+
 (defn- stale-numeric-id-in-op?
   [db [op args]]
-  (if (= :transact op)
-    false
-    (case op
-      :save-block
-      (let [[block _opts] args]
-        (numeric-id-in-block-ref-attrs? db block))
-
-      :insert-blocks
-      (let [[blocks target-id _opts] args]
-        (or (some #(numeric-id-in-block-ref-attrs? db %) blocks)
-            (unresolved-numeric-entity-id? target-id)))
-
-      :create-page
-      (let [[_title opts] args]
-        (unresolved-numeric-entity-id? (:uuid opts)))
-
-      :rename-page
-      (let [[page-uuid _new-title] args]
-        (unresolved-numeric-entity-id? page-uuid))
-
-      :delete-page
-      (let [[page-uuid _opts] args]
-        (unresolved-numeric-entity-id? page-uuid))
-
-      :restore-recycled
-      (let [[root-id] args]
-        (unresolved-numeric-entity-id? root-id))
-
-      :apply-template
-      (let [[template-id target-id _opts] args]
-        (or (unresolved-numeric-entity-id? template-id)
-            (unresolved-numeric-entity-id? target-id)))
-
-      :move-blocks
-      (let [[ids target-id _opts] args]
-        (or (unresolved-numeric-entity-id-coll? ids)
-            (unresolved-numeric-entity-id? target-id)))
-
-      :move-blocks-up-down
-      (let [[ids _up?] args]
-        (unresolved-numeric-entity-id-coll? ids))
-
-      :indent-outdent-blocks
-      (let [[ids _indent? _opts] args]
-        (unresolved-numeric-entity-id-coll? ids))
-
-      :delete-blocks
-      (let [[ids _opts] args]
-        (unresolved-numeric-entity-id-coll? ids))
-
-      :set-block-property
-      (let [[block-id property-id _v] args]
-        (or (unresolved-numeric-entity-id? block-id)
-            (unresolved-numeric-entity-id? property-id)))
-
-      :remove-block-property
-      (let [[block-id property-id] args]
-        (or (unresolved-numeric-entity-id? block-id)
-            (unresolved-numeric-entity-id? property-id)))
-
-      :batch-set-property
-      (let [[block-ids property-id _v _opts] args]
-        (or (unresolved-numeric-entity-id-coll? block-ids)
-            (unresolved-numeric-entity-id? property-id)))
-
-      :batch-remove-property
-      (let [[block-ids property-id] args]
-        (or (unresolved-numeric-entity-id-coll? block-ids)
-            (unresolved-numeric-entity-id? property-id)))
-
-      :delete-property-value
-      (let [[block-id property-id _property-value] args]
-        (or (unresolved-numeric-entity-id? block-id)
-            (unresolved-numeric-entity-id? property-id)))
-
-      :batch-delete-property-value
-      (let [[block-ids property-id _property-value] args]
-        (or (unresolved-numeric-entity-id-coll? block-ids)
-            (unresolved-numeric-entity-id? property-id)))
-
-      :create-property-text-block
-      (let [[block-id property-id _value _opts] args]
-        (or (unresolved-numeric-entity-id? block-id)
-            (unresolved-numeric-entity-id? property-id)))
-
-      :class-add-property
-      (let [[class-id property-id] args]
-        (or (unresolved-numeric-entity-id? class-id)
-            (unresolved-numeric-entity-id? property-id)))
-
-      :class-remove-property
-      (let [[class-id property-id] args]
-        (or (unresolved-numeric-entity-id? class-id)
-            (unresolved-numeric-entity-id? property-id)))
-
-      :upsert-property
-      (let [[property-id _schema _opts] args]
-        (unresolved-numeric-entity-id? property-id))
-
-      :upsert-closed-value
-      (let [[property-id _opts] args]
-        (unresolved-numeric-entity-id? property-id))
-
-      :add-existing-values-to-closed-values
-      (let [[property-id _values] args]
-        (unresolved-numeric-entity-id? property-id))
-
-      :delete-closed-value
-      (let [[property-id value-block-id] args]
-        (or (unresolved-numeric-entity-id? property-id)
-            (unresolved-numeric-entity-id? value-block-id)))
-
-      :recycle-delete-permanently
-      (let [[root-id] args]
-        (unresolved-numeric-entity-id? root-id))
-
-      false)))
+  (and (not= :transact op)
+       (boolean
+        (or (stale-numeric-id-in-page-ops? db op args)
+            (stale-numeric-id-in-structure-ops? op args)
+            (stale-numeric-id-in-property-ops? op args)
+            (stale-numeric-id-in-schema-ops? op args)))))
 
 (defn- assert-no-stale-numeric-ids!
   [db ops stage]
