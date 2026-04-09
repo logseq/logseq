@@ -375,6 +375,30 @@
         (is (map? redo-result))
         (is (= "local-1" (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))
 
+(deftest undo-cycle-todo-removes-task-class-test
+  (testing "undoing first status set should remove task class and status"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          block-uuid (:block/uuid (db-test/find-block-by-content @conn "task"))]
+      (outliner-op/apply-ops! conn
+                              [[:set-block-property [[:block/uuid block-uuid]
+                                                     :logseq.property/status
+                                                     :logseq.property/status.todo]]]
+                              (local-tx-meta {:client-id "test-client"}))
+
+      (let [block-after-set (d/entity @conn [:block/uuid block-uuid])]
+        (is (= :logseq.property/status.todo
+               (some-> (:logseq.property/status block-after-set) :db/ident)))
+        (is (contains? (set (map :db/ident (:block/tags block-after-set)))
+                       :logseq.class/Task)))
+
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (let [block-after-undo (d/entity @conn [:block/uuid block-uuid])]
+        (is (not (contains? (d/pull @conn [:logseq.property/status] [:block/uuid block-uuid])
+                            :logseq.property/status)))
+        (is (not (contains? (set (map :db/ident (:block/tags block-after-undo)))
+                            :logseq.class/Task)))))))
+
 (deftest undo-delete-page-restores-page-out-of-recycle-test
   (testing "undoing delete-page should restore page and clear recycle marker"
     (worker-undo-redo/clear-history! test-repo)
