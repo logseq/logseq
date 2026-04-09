@@ -14,6 +14,24 @@
 
 (def ^:private test-repo "test-worker-undo-redo")
 
+(defn- new-client-ops-db
+  []
+  (let [Database (js/require "better-sqlite3")
+        db (new Database ":memory:")]
+    (client-op/ensure-sqlite-schema! db)
+    db))
+
+(defn- delete-client-op-tx-row!
+  [^js db tx-id]
+  (let [^js stmt (.prepare db "delete from client_ops where kind = 'tx' and tx_id = ?")]
+    (.run stmt (str tx-id))))
+
+(defn- client-op-tx-row-exists?
+  [^js db tx-id]
+  (let [^js stmt (.prepare db "select 1 as ok from client_ops where kind = 'tx' and tx_id = ? limit 1")
+        row (.get stmt (str tx-id))]
+    (some? row)))
+
 (defn- local-tx-meta
   [m]
   (assoc m
@@ -31,7 +49,7 @@
                  :blocks [{:block/title "task"}
                           {:block/title "parent"
                            :build/children [{:block/title "child"}]}]}]})
-        client-ops-conn (d/create-conn client-op/schema-in-db)]
+        client-ops-conn (new-client-ops-db)]
     (reset! worker-state/*datascript-conns {test-repo conn})
     (reset! worker-state/*client-ops-conns {test-repo client-ops-conn})
     (reset! worker-undo-redo/*apply-history-action! sync-apply/apply-history-action!)
@@ -44,6 +62,7 @@
       (finally
         (d/unlisten! conn ::gen-undo-ops)
         (worker-undo-redo/clear-history! test-repo)
+        (.close client-ops-conn)
         (reset! worker-undo-redo/*apply-history-action! apply-history-action-prev)
         (reset! worker-state/*datascript-conns datascript-prev)
         (reset! worker-state/*client-ops-conns client-ops-prev)))))
@@ -168,8 +187,7 @@
                                            :tx-data [(d/datom 1 :block/title "poisoned" 1 true)])]
                                    item))
                                op)))))
-      (when-let [tx-ent (d/entity @client-ops-conn [:db-sync/tx-id tx-id-2])]
-        (ldb/transact! client-ops-conn [[:db/retractEntity (:db/id tx-ent)]]))
+      (delete-client-op-tx-row! client-ops-conn tx-id-2)
       (let [undo-result (worker-undo-redo/undo test-repo)]
         (is (not= ::worker-undo-redo/empty-undo-stack undo-result))
         (is (= "v1" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
@@ -246,8 +264,7 @@
                                     (assoc (second item) :tx-data [(d/datom 1 :block/title "poisoned" 1 true)])]
                                    item))
                                op)))))
-      (when-let [tx-ent (d/entity @client-ops-conn [:db-sync/tx-id tx-id])]
-        (ldb/transact! client-ops-conn [[:db/retractEntity (:db/id tx-ent)]]))
+      (delete-client-op-tx-row! client-ops-conn tx-id)
       (is (not= ::worker-undo-redo/empty-undo-stack
                 (worker-undo-redo/undo test-repo)))
       (is (seq (get @worker-undo-redo/*redo-ops test-repo))))))
@@ -271,7 +288,7 @@
           (let [undo-tx-id (:db-sync/tx-id (latest-undo-history-data))]
             (is (uuid? undo-tx-id))
             (is (not= source-tx-id undo-tx-id))
-            (is (some? (d/entity @client-ops-conn [:db-sync/tx-id undo-tx-id])))))))))
+            (is (client-op-tx-row-exists? client-ops-conn undo-tx-id))))))))
 
 (deftest undo-records-only-local-txs-test
   (testing "undo history records only local txs"

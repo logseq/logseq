@@ -26,6 +26,13 @@
 (def ^:private base-page-title "Home")
 (def ^:private default-seed 1337)
 
+(defn- new-client-ops-db
+  []
+  (let [Database (js/require "better-sqlite3")
+        db (new Database ":memory:")]
+    (client-op/ensure-sqlite-schema! db)
+    db))
+
 (defn- env-seed []
   (try
     (when (exists? js/process)
@@ -159,6 +166,9 @@
       (finally
         (doseq [[conn key] @listeners]
           (d/unlisten! conn key))
+        (doseq [[_ {:keys [ops-conn]}] repo->conns]
+          (when (fn? (some-> ops-conn .-close))
+            (.close ops-conn)))
         (reset! worker-state/*datascript-conns worker-db-prev)
         (reset! worker-state/*client-ops-conns ops-prev)
         (reset! db-conn-state/conns db-prev)
@@ -463,8 +473,8 @@
           base-uuid (gen-uuid)
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)]
@@ -509,7 +519,7 @@
     (let [base-uuid (random-uuid)
           block-uuid (random-uuid)
           conn (db-test/create-conn)
-          ops-conn (d/create-conn client-op/schema-in-db)
+          ops-conn (new-client-ops-db)
           client (make-client repo-a)
           server (make-server)]
       (with-test-repos {repo-a {:conn conn :ops-conn ops-conn}}
@@ -1540,7 +1550,7 @@
           gen-uuid #(rng-uuid rng)
           base-uuid (gen-uuid)
           conn-a (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
           client-a (make-client repo-a)
           server (make-server)
           history (atom [])
@@ -1603,8 +1613,8 @@
           base-uuid (gen-uuid)
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)
@@ -1748,8 +1758,8 @@
           block-uuid (uuid "22222222-2222-2222-2222-222222222222")
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)]
@@ -1803,7 +1813,7 @@
                   {:pages-and-blocks [{:page {:block/title base-page-title
                                               :block/uuid base-uuid}
                                        :blocks []}]})
-          ops-a (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
           history (atom [])]
       (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}}
         (fn []
@@ -1877,8 +1887,8 @@
           child-uuid (uuid "34444444-4444-4444-4444-444444444444")
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)
@@ -1952,8 +1962,8 @@
           local-grandchild-uuid (uuid "46666666-6666-6666-6666-666666666666")
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)
@@ -2045,8 +2055,8 @@
           block-uuid (uuid "52222222-2222-2222-2222-222222222222")
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)]
@@ -2115,8 +2125,8 @@
           base-uuid (gen-uuid)
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)]
@@ -2186,8 +2196,8 @@
           child-b-uuid (uuid "84444444-4444-4444-4444-444444444444")
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)]
@@ -2265,7 +2275,7 @@
           cycle-op-table (build-weighted-op-table cycle-ops local-undo-redo-cycle-op-weights :cycle)
           base-uuid (gen-uuid)
           conn (db-test/create-conn)
-          ops-conn (d/create-conn client-op/schema-in-db)
+          ops-conn (new-client-ops-db)
           history (atom [])
           state (atom {:pages #{base-uuid} :blocks #{}})
           client-context {:repo repo-a
@@ -2440,8 +2450,8 @@
           base-uuid (gen-uuid)
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)
@@ -2493,8 +2503,8 @@
           base-uuid (gen-uuid)
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)
@@ -2560,8 +2570,8 @@
           base-uuid (gen-uuid)
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)
@@ -2650,8 +2660,8 @@
           base-uuid (gen-uuid)
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           server (make-server)
@@ -2757,8 +2767,8 @@
             base-uuid (gen-uuid)
             conn-a (db-test/create-conn)
             conn-b (db-test/create-conn)
-            ops-a (d/create-conn client-op/schema-in-db)
-            ops-b (d/create-conn client-op/schema-in-db)
+            ops-a (new-client-ops-db)
+            ops-b (new-client-ops-db)
             client-a (make-client repo-a)
             client-b (make-client repo-b)
             server (make-server)
@@ -2909,9 +2919,9 @@
           conn-a (db-test/create-conn)
           conn-b (db-test/create-conn)
           conn-c (db-test/create-conn)
-          ops-a (d/create-conn client-op/schema-in-db)
-          ops-b (d/create-conn client-op/schema-in-db)
-          ops-c (d/create-conn client-op/schema-in-db)
+          ops-a (new-client-ops-db)
+          ops-b (new-client-ops-db)
+          ops-c (new-client-ops-db)
           client-a (make-client repo-a)
           client-b (make-client repo-b)
           client-c (make-client repo-c)
