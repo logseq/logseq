@@ -107,6 +107,15 @@
         (is (false? (:ok? result)))
         (is (= :invalid-options (get-in result [:error :code]))))))
 
+  (testing "upsert task create defers unknown status to runtime validation"
+    (let [result (upsert-command/build-task-action {:content "Task from CLI"
+                                                    :status "wat"}
+                                                   "logseq_db_demo")]
+      (is (true? (:ok? result)))
+      (is (= :upsert-task (get-in result [:action :type])))
+      (is (= :create (get-in result [:action :mode])))
+      (is (= "wat" (get-in result [:action :status-input])))))
+
   (testing "upsert task rejects invalid priority with available values"
     (let [result (upsert-command/build-task-action {:content "Task from CLI"
                                                     :priority "wat"}
@@ -116,6 +125,37 @@
       (is (= :invalid-options (get-in result [:error :code])))
       (is (string/includes? message "Invalid value for option :priority: wat"))
       (is (string/includes? message "Available values: low, medium, high, urgent")))))
+
+(deftest test-execute-upsert-task-create-invalid-status-includes-available-values
+  (async done
+    (let [calls* (atom [])
+          action {:type :upsert-task
+                  :mode :create
+                  :repo "demo-repo"
+                  :graph "demo-graph"
+                  :status-input "invalid-status"}]
+      (-> (p/with-redefs [cli-server/ensure-server! (fn [config _repo]
+                                                      (p/resolved (assoc config :base-url "http://example")))
+                          transport/invoke (fn [_ method _ _]
+                                             (swap! calls* conj method)
+                                             (case method
+                                               :thread-api/q
+                                               (p/resolved [:logseq.property/status.todo
+                                                            :logseq.property/status.doing
+                                                            :logseq.property/status.done])
+
+                                               (throw (ex-info "unexpected invoke"
+                                                               {:method method}))))]
+            (p/let [result (upsert-command/execute-upsert-task action {})
+                    message (or (get-in result [:error :message]) "")]
+              (is (= :error (:status result)))
+              (is (= :invalid-options (get-in result [:error :code])))
+              (is (string/includes? message "Invalid value for option :status: invalid-status"))
+              (is (string/includes? message "Available values:"))
+              (is (= [:thread-api/q] @calls*))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))
 
 (deftest test-execute-upsert-task-page-applies-task-ops
   (async done

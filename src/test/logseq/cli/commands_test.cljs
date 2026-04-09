@@ -1223,9 +1223,12 @@
       (is (= :invalid-options (get-in result [:error :code])))))
 
   (testing "list task rejects invalid priority"
-    (let [result (commands/parse-args ["list" "task" "--priority" "wat"])]
+    (let [result (commands/parse-args ["list" "task" "--priority" "wat"])
+          message (or (some-> (get-in result [:error :message]) strip-ansi) "")]
       (is (false? (:ok? result)))
-      (is (= :invalid-options (get-in result [:error :code])))))
+      (is (= :invalid-options (get-in result [:error :code])))
+      (is (string/includes? message "Invalid value for option :priority: wat"))
+      (is (string/includes? message "Available values: low, medium, high, urgent"))))
 
   (testing "list task defers unknown --status to runtime validation"
     (let [result (commands/parse-args ["list" "task" "--status" "custom-review"])]
@@ -1384,13 +1387,15 @@
                    (is (= :error (:status list-result)))
                    (is (= :invalid-options (get-in list-result [:error :code])))
                    (is (string/includes? list-message "Invalid value for option :status: invalid-status"))
-                   (is (string/includes? list-message "Available values (from current graph): doing, done, todo"))
+                   (is (string/includes? list-message "Available values: doing, done, todo"))
+                   (is (not (string/includes? list-message "from current graph")))
                    (is (= [:thread-api/q] @list-calls*))
 
                    (is (= :error (:status upsert-result)))
                    (is (= :invalid-options (get-in upsert-result [:error :code])))
                    (is (string/includes? upsert-message "Invalid value for option :status: invalid-status"))
-                   (is (string/includes? upsert-message "Available values (from current graph): doing, done, todo"))
+                   (is (string/includes? upsert-message "Available values: doing, done, todo"))
+                   (is (not (string/includes? upsert-message "from current graph")))
                    (is (= [:thread-api/q] @upsert-calls*))))
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
@@ -1789,6 +1794,18 @@
                                        "--target-page" "Elsewhere"])]
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
+
+  (testing "upsert task rejects blank status with available values"
+    (let [parsed {:ok? true
+                  :command :upsert-task
+                  :options {:id 42 :status "   "}}
+          result (commands/build-action parsed {:graph "demo"})
+          message (or (some-> (get-in result [:error :message]) strip-ansi) "")]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))
+      (is (string/includes? message "Invalid value for option :status:"))
+      (is (string/includes? message "Available values:"))
+      (is (not (string/includes? message "from current graph")))))
 
   (testing "upsert task rejects invalid priority"
     (let [result (commands/parse-args ["upsert" "task"
