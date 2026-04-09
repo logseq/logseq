@@ -1,6 +1,24 @@
 .ls-cards {
   .ls-card-item {
-    @apply dark:shadow-gray-700 shadow-md rounded-md p-4 h-[15rem] w-full overflow-auto;
+    @apply dark:shadow-gray-700 shadow-md rounded-md h-[15rem] w-full overflow-hidden flex flex-col;
+  }
+
+  .ls-card-image {
+    @apply flex-1 min-h-0 flex items-center justify-center overflow-hidden bg-gray-02 dark:bg-gray-03;
+  }
+
+  .ls-card-image img,
+  .ls-card-image .asset-container,
+  .ls-card-image .asset-container > img {
+    @apply w-full h-full object-cover;
+  }
+
+  .ls-card-title {
+    @apply h-16 px-3 py-2 border-t flex items-center text-sm cursor-pointer overflow-hidden;
+  }
+
+  .ls-card-title:hover {
+    @apply bg-gray-01 dark:bg-gray-04;
   }
 
   > div[data-virtuoso-scroller] {

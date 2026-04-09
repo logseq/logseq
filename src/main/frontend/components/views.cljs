@@ -1716,16 +1716,81 @@
             (lazy-item-render rows idx)
             (str "partition-" idx)))))))
 
+(defn- gallery-image-candidate-properties
+  "Returns a seq of property entities of :node type whose values across
+   the current query's rows include at least one Asset block.
+   Preserves column order."
+  [table columns]
+  (let [rows (:rows table)
+        row->entity (fn [row]
+                      (let [id (cond (map? row) (:db/id row)
+                                     (number? row) row
+                                     :else nil)]
+                        (when id (db/entity id))))
+        node-columns (->> columns
+                          (filter (fn [column]
+                                    (when-let [p (and (:id column) (db/entity (:id column)))]
+                                      (= :node (:logseq.property/type p))))))]
+    (->> node-columns
+         (keep (fn [column]
+                 (let [prop-ident (:id column)
+                       has-asset? (reduce
+                                   (fn [_ row]
+                                     (let [block (row->entity row)
+                                           v (get block prop-ident)
+                                           values (cond
+                                                    (nil? v) nil
+                                                    (set? v) v
+                                                    (sequential? v) v
+                                                    :else [v])]
+                                       (if (some ldb/asset? values)
+                                         (reduced true)
+                                         false)))
+                                   false
+                                   rows)]
+                   (when has-asset? (db/entity prop-ident))))))))
+
+(defn- gallery-card-image-block
+  "Given a block and the chosen gallery image property ident, returns the
+   first asset entity in that value (deterministic by :db/id), or nil."
+  [block image-property-ident]
+  (when (and block image-property-ident)
+    (let [v (get block image-property-ident)
+          values (cond
+                   (nil? v) nil
+                   (set? v) v
+                   (sequential? v) v
+                   :else [v])]
+      (->> values (filter ldb/asset?) (sort-by :db/id) first))))
+
 (rum/defc gallery-card-item
-  [view-entity block config]
-  [:div.ls-card-item.content
-   {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))}
-   [:div.-ml-4
-    (block-container (assoc config
-                            :id (str (:block/uuid block))
-                            :gallery-view? true
-                            :view? true)
-                     block)]])
+  [view-entity block config table]
+  (let [columns (:columns table)
+        image-prop-entity (:logseq.property.view/gallery-image-property view-entity)
+        fallback (when-not image-prop-entity
+                   (first (gallery-image-candidate-properties table columns)))
+        image-prop-ident (or (:db/ident image-prop-entity) (:db/ident fallback))
+        asset-block (gallery-card-image-block block image-prop-ident)
+        asset-cp (state/get-component :block/asset-cp)]
+    [:div.ls-card-item.content
+     {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))}
+     (if (and asset-block asset-cp)
+       [:<>
+        [:div.ls-card-image
+         (asset-cp (assoc config
+                          :disable-resize? true
+                          :gallery-view? true)
+                   asset-block)]
+        [:div.ls-card-title
+         {:on-click (fn [_]
+                      (route-handler/redirect-to-page! (str (:block/uuid block))))}
+         (or (:block/title block) "")]]
+       [:div.-ml-4
+        (block-container (assoc config
+                                :id (str (:block/uuid block))
+                                :gallery-view? true
+                                :view? true)
+                         block)])]))
 
 (rum/defcs gallery-view < rum/static mixins/container-id
   [state {:keys [config]} table view-entity blocks *scroller-ref]
@@ -1742,7 +1807,7 @@
          :item-content (fn [idx]
                          (lazy-item (:data table) idx {}
                                     (fn [block]
-                                      (gallery-card-item view-entity block config'))))}))]))
+                                      (gallery-card-item view-entity block config' table))))}))]))
 
 (defn- run-effects!
   [option {:keys [data]} *scroller-ref gallery? set-ready?]
@@ -1821,6 +1886,55 @@
                      (shui/popup-hide!)))}
       (ui/icon "trash" {:size 15})
       [:span.ml-1 (t :view.table/delete-sort)])]))
+
+(rum/defc gallery-settings-config
+  [view-entity table columns]
+  (let [candidates (gallery-image-candidate-properties table columns)
+        current-id (:db/id (:logseq.property.view/gallery-image-property view-entity))
+        default-id (or (and (some #(= current-id (:db/id %)) candidates) current-id)
+                       (:db/id (first candidates)))]
+    [:div.ls-gallery-settings.flex.flex-col.gap-2.p-2.text-sm
+     {:style {:min-width 260}}
+     (if (seq candidates)
+       [:div.flex.flex-row.items-center.justify-between.gap-2
+        [:div.text-muted-foreground "Gallery value"]
+        (shui/select
+         {:default-value (str default-id)
+          :on-value-change
+          (fn [v]
+            (when-let [new-id (parse-long v)]
+              (db-property-handler/set-block-property!
+               (:db/id view-entity)
+               :logseq.property.view/gallery-image-property
+               new-id)
+              (shui/popup-hide!)))}
+         (shui/select-trigger
+          {:class "!px-2 !py-0 !h-8 w-[160px]"}
+          (shui/select-value {:placeholder "Select property"}))
+         (shui/select-content
+          (shui/select-group
+           (for [p candidates]
+             (shui/select-item
+              {:key (str (:db/id p))
+               :value (str (:db/id p))}
+              (or (:block/title p) (name (:db/ident p))))))))]
+       [:div.text-muted-foreground.px-2.py-1
+        "No node properties in this view point to assets."])]))
+
+(rum/defc gallery-settings
+  [view-entity table columns]
+  (shui/button
+   {:variant "ghost"
+    :class "text-muted-foreground !px-1"
+    :size :sm
+    :title "Gallery view settings"
+    :on-click (fn [e]
+                (shui/popup-show!
+                 (.-target e)
+                 (fn [] (gallery-settings-config view-entity table columns))
+                 {:align :end
+                  :dropdown-menu? true}))}
+   (ui/icon "photo")))
 
 (rum/defc view-sorting
   [table columns sorting]
@@ -1998,6 +2112,8 @@
     :as option}]
   (let [[hover? set-hover?] (hooks/use-state nil)
         references? (contains? #{:linked-references :unlinked-references} view-feature-type)
+        gallery? (= :logseq.property.view/type.gallery
+                    (:db/ident (:logseq.property.view/type view-entity)))
         opacity (cond
                   (and references? (not hover?)) "opacity-0"
                   hover? "opacity-100"
@@ -2024,6 +2140,9 @@
                (if (fn? action)
                  (action option)
                  action))])
+
+      (when gallery?
+        (gallery-settings view-entity table columns))
 
       (when (seq sorting)
         (view-sorting table columns sorting))

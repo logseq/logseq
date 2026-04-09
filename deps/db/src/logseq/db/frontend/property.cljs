@@ -446,6 +446,14 @@
                                                :hide? true}
                                               :queryable? true}
 
+     :logseq.property.view/gallery-image-property
+     {:title "Gallery image property"
+      :schema
+      {:type :property
+       :public? false
+       :hide? true}
+      :queryable? true}
+
      :logseq.property.view/sort-groups-by-property {:title "View sort groups by"
                                                     :schema
                                                     {:type :property
