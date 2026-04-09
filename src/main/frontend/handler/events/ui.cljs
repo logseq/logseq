@@ -254,7 +254,7 @@
        (fn [{:keys [id]}]
          (icon-component/icon-search
           {:on-chosen (fn [_e icon _keep-popup?] (on-pick id icon))
-           :tabs [[:emoji "Emojis"]]
+           :tabs [[:emoji (t :icon/tab-emojis)]]
            :default-tab :emoji
            :show-used? true
            :icon-value nil}))
@@ -322,7 +322,7 @@
   (shui/dialog-open!
    (assets/edit-external-url-content asset-block pdf-current)
    {:id :edit-external-asset-source-dialog
-    :title (str (if asset-block "Edit" "Create") " asset")
+    :title (if asset-block (t :asset/edit-title) (t :asset/create-title))
     :center? true}))
 
 (defn ensure-user-rsa-keys-if-possible!

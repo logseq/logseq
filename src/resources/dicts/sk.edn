@@ -276,20 +276,32 @@
 
  ;; Ui
  :ui/all-done "Všetko hotovo"
+ :ui/apply "Apply"
  :ui/cancel "Zrušiť"
  :ui/close "Zavrieť"
  :ui/confirm "Potvrdiť"
+ :ui/copy-all "Copy all"
  :ui/delete "Vymazať"
+ :ui/deleted "Deleted"
+ :ui/empty "Empty"
+ :ui/fix "Fix it!"
+ :ui/from "From: "
  :ui/host "Hostitel"
  :ui/loading "Načítavanie"
  :ui/login "Prihlásiť sa"
  :ui/logout "Odhlásiť sa"
+ :ui/off "OFF"
+ :ui/on "ON"
  :ui/open "Otvoriť"
+ :ui/open-named "Open {1}"
  :ui/port "Port"
  :ui/relaunch-confirm "Na použitie tejto zmeny je potrebné reštartovať aplikáciu. Reštartovať teraz?"
  :ui/remove-background "Odstrániť pozadie"
+ :ui/run "Run"
  :ui/save "Uložiť"
+ :ui/skip "Skip"
  :ui/submit "Odoslať"
+ :ui/to "To: "
  :ui/toggle-theme "Prepnúť motív"
  :ui/type "Typ"
  :ui/untitled "Bez názvu"
@@ -337,12 +349,14 @@
  :notification/unsupported-reaction-emoji "Nepodporovaný emoji reakce"
 
  ;; Search
+ :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "Žiadne výsledky"
  :search/result-count "{1} výsledkov"
 
  ;; Select
  :select/default-prompt "Vybrať jeden"
  :select/default-select-multiple "Vybrať jeden alebo viacero"
+ :select/new-option "+ New option: {1}"
 
  ;; Format
  :format/bold "Tučné"
@@ -362,7 +376,15 @@
 
  ;; Graph
  :graph/all-graphs "Všetky grafy"
+ :graph/create-db "Create db graph"
  :graph/create-failed "Nepodarilo sa vytvořit graf"
+ :graph/creating "Creating graph"
+ :graph/delete-local-action "Delete local graph"
+ :graph/delete-server-action "Delete from server"
+ :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/encrypt-data-label "Encrypt graph data"
+ :graph/last-opened-at-label "Last opened at: {1}"
+ :graph/leave-action "Leave this graph"
  :graph/leave-failed "Nepodarilo sa opustit graf"
  :graph/left "Graf opuštěn"
  :graph/local-graphs "Lokálne grafy"
@@ -372,16 +394,44 @@
  :graph/removed-from-sync "Graf odstraněn ze synchronizace"
  :graph/shared-graphs "Zdieľané grafy"
  :graph/updated-switching "Graf aktualizován. Přepínání..."
+ :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
+ :graph/use-sync-label "Use Logseq Sync?"
+
+ ;; Graph delete local
+ :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
+
+ ;; Graph delete server
+ :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
+
+ ;; Graph leave
+ :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "Zobraziť denníky"
  :graph.page/title "Graf stránok"
+
+ ;; Graph reserved character
+ :graph.reserved-character/asterisk "asterisk"
+ :graph.reserved-character/backslash "backslash"
+ :graph.reserved-character/colon "colon"
+ :graph.reserved-character/double-quote "double quote"
+ :graph.reserved-character/forward-slash "forward slash"
+ :graph.reserved-character/greater-than "greater than"
+ :graph.reserved-character/hash "hash"
+ :graph.reserved-character/less-than "less than"
+ :graph.reserved-character/pipe "vertical bar or pipe"
+ :graph.reserved-character/plus "plus"
+ :graph.reserved-character/question-mark "question mark"
 
  ;; Graph switching
  :graph.switch/add-graph-action "Áno, pridať ďalší graf"
  :graph.switch/empty-desc "Žiadne zodpovedajúce grafy. Chcete pridať ďalší?"
  :graph.switch/prompt "Prepnúť"
  :graph.switch/select-prompt "Vybrať graf"
+
+ ;; Graph validation
+ :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
+ :graph.validation/valid "Your graph is valid! {1}"
 
  ;; File
  :file/config-duplicate-keys "Súbor '{1}' má duplicitné kľúče. Kľúč '{2}' je priradený viackrát."
@@ -419,6 +469,7 @@
  :page.convert/cant-be-block "Stránku „{1}“ nemožno skonvertovať na blok."
  :page.convert/cant-be-block-has-children "Stránku „{1}“ nie je možné skonvertovať na blok, pretože má potomkov stránky."
  :page.convert/cant-be-block-move-first "Stránku „{1}“ nemožno skonvertovať na blok, najskôr ju presuňte na inú stránku."
+ :page.convert/page-to-tag-action "Convert \"{1}\" to tag"
  :page.convert/page-to-tag-built-in "Vstavaný stránky nemôžu být štítky"
  :page.convert/page-to-tag-duplicate "Značka s názvom \"{1}\" už existuje."
  :page.convert/page-to-tag-namespaced "Stránky s jmenným prostorem nemôžu být štítky"
@@ -447,6 +498,12 @@
  :block/copy-ref "Kopírovať referenciu bloku"
  :block/copy-url "Kopírovať adresu bloku"
 
+ ;; Block macro
+ :block.macro/embed-deprecated "{{embed}} is deprecated. Use '/Node embed' command instead."
+ :block.macro/namespace-deprecated "{{namespace}} is deprecated. Use the {1} feature instead."
+ :block.macro/query-deprecated "{{query}} is deprecated. Use '/Query' command instead."
+ :block.macro/unsupported-name "Unsupported macro name: {1}"
+
  ;; Node
  :node/new "Nový uzel"
 
@@ -456,10 +513,46 @@
  ;; Journal validation
  :journal.validation/page-not-journal "Táto stránka není stránkou denníka."
 
+ ;; Natural language dates
+ :date.nlp/last-friday "Last Friday"
+ :date.nlp/last-monday "Last Monday"
+ :date.nlp/last-month "Last month"
+ :date.nlp/last-saturday "Last Saturday"
+ :date.nlp/last-sunday "Last Sunday"
+ :date.nlp/last-thursday "Last Thursday"
+ :date.nlp/last-tuesday "Last Tuesday"
+ :date.nlp/last-wednesday "Last Wednesday"
+ :date.nlp/last-week "Last week"
+ :date.nlp/last-year "Last year"
+ :date.nlp/next-friday "Next Friday"
+ :date.nlp/next-monday "Next Monday"
+ :date.nlp/next-month "Next month"
+ :date.nlp/next-saturday "Next Saturday"
+ :date.nlp/next-sunday "Next Sunday"
+ :date.nlp/next-thursday "Next Thursday"
+ :date.nlp/next-tuesday "Next Tuesday"
+ :date.nlp/next-wednesday "Next Wednesday"
+ :date.nlp/next-week "Next week"
+ :date.nlp/next-year "Next year"
+ :date.nlp/this-friday "This Friday"
+ :date.nlp/this-monday "This Monday"
+ :date.nlp/this-month "This month"
+ :date.nlp/this-saturday "This Saturday"
+ :date.nlp/this-sunday "This Sunday"
+ :date.nlp/this-thursday "This Thursday"
+ :date.nlp/this-tuesday "This Tuesday"
+ :date.nlp/this-wednesday "This Wednesday"
+ :date.nlp/this-week "This week"
+ :date.nlp/this-year "This year"
+ :date.nlp/today "Today"
+ :date.nlp/tomorrow "Tomorrow"
+ :date.nlp/yesterday "Yesterday"
+
  ;; Editor
  :editor/auto-heading "Automatický nadpis"
  :editor/block-search "Vyhľadať blok"
  :editor/click-to-edit "Kliknutím upraviť"
+ :editor/code-language-placeholder "Choose language"
  :editor/collapse-block-children "Zbaliť podriadené bloky"
  :editor/copy "Kopírovať"
  :editor/cut "Vystrihnúť"
@@ -471,7 +564,64 @@
  :editor/new-page "Nová stránka"
  :editor/new-tag "Nový štítok"
  :editor/paste "Vložiť"
+ :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "Odstrániť nadpis"
+ :editor/template-insert-error "Template insert error: {1}"
+
+ ;; Editor slash commands
+ :editor.slash/advanced-query "Advanced Query"
+ :editor.slash/advanced-query-desc "Create an advanced query block"
+ :editor.slash/calculator "Calculator"
+ :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/code-block "Code block"
+ :editor.slash/code-block-desc "Insert code block"
+ :editor.slash/current-time "Current time"
+ :editor.slash/current-time-desc "Insert current time"
+ :editor.slash/date-picker "Date picker"
+ :editor.slash/date-picker-desc "Pick a date and insert here"
+ :editor.slash/embed-html "Embed HTML"
+ :editor.slash/embed-twitter-tweet "Embed Twitter tweet"
+ :editor.slash/embed-video-url "Embed Video URL"
+ :editor.slash/embed-youtube-timestamp "Embed YouTube timestamp"
+ :editor.slash/group-advanced "ADVANCED"
+ :editor.slash/group-basic "BASIC"
+ :editor.slash/group-format "FORMAT"
+ :editor.slash/group-heading "Heading"
+ :editor.slash/group-list-type "LIST TYPE"
+ :editor.slash/group-plugins "PLUGINS"
+ :editor.slash/group-priority "PRIORITY"
+ :editor.slash/group-task-date "TASK DATE"
+ :editor.slash/group-task-status "TASK STATUS"
+ :editor.slash/group-time-and-date "TIME & DATE"
+ :editor.slash/heading-label "Heading {1}"
+ :editor.slash/image-link "Image link"
+ :editor.slash/image-link-desc "Create a HTTP link to an image"
+ :editor.slash/link-desc "Create a HTTP link"
+ :editor.slash/math-block "Math block"
+ :editor.slash/math-block-desc "Create a LaTeX block"
+ :editor.slash/no-priority "No priority"
+ :editor.slash/node-embed "Node embed"
+ :editor.slash/node-embed-desc "Embed a node here"
+ :editor.slash/node-reference "Node reference"
+ :editor.slash/node-reference-desc "Create a backlink to a node (a page or a block)"
+ :editor.slash/normal-text "Normal text"
+ :editor.slash/normal-text-desc "Clear heading and set to normal text"
+ :editor.slash/number-children "Number children"
+ :editor.slash/number-list "Number list"
+ :editor.slash/priority-desc "Set priority to {1}"
+ :editor.slash/priority-label "Priority {1}"
+ :editor.slash/query-function "Query function"
+ :editor.slash/query-function-desc "Create a query function"
+ :editor.slash/quote-desc "Create a quote block"
+ :editor.slash/status-desc "Set status to {1}"
+ :editor.slash/template-desc "Insert a created template here"
+ :editor.slash/today-desc "Insert the date of today"
+ :editor.slash/tomorrow-desc "Insert the date of tomorrow"
+ :editor.slash/underline "Underline"
+ :editor.slash/underline-desc "Create an underline text decoration"
+ :editor.slash/upload-asset "Upload an asset"
+ :editor.slash/upload-asset-desc "Upload file types like image, PDF, DOCX, etc."
+ :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
  :reference/copy "Kopírovať túto referenciu"
@@ -492,6 +642,9 @@
  ;; Property
  :property/add-choice "Pridať volbu"
  :property/add-choices "Pridať volby"
+ :property/add-description "Add description"
+ :property/add-new "Add property"
+ :property/add-or-change "Add or change property"
  :property/available-choices "Dostupné volby"
  :property/checkbox-state-mapping "Mapování stavů zaškrtávacího pole"
  :property/children-count "Deti ({1})"
@@ -499,6 +652,7 @@
  :property/choose-tag "Vybrať štítok"
  :property/choose-tags "Vybrať štítky"
  :property/configure "Konfigurovat"
+ :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/default-value "Predvolený hodnota"
  :property/delete-from-node "Odstrániť z uzlu"
  :property/delete-from-node-confirm "Odstrániť túto vlastnosť z uzlu?"
@@ -523,6 +677,7 @@
  :property/private-built-in-not-usable "Soukromá vstavaná vlastnosť nedostupná"
  :property/select-choice "Vybrať volbu"
  :property/set-default-choice "Nastaviť predvolený volbu"
+ :property/set-default-value "Set default value"
  :property/set-icon "Nastaviť ikonu"
  :property/set-value "Nastaviť hodnotu"
  :property/show-as-checkbox-on-node "Zobraziť jako zaškrtávací pole na uzlu"
@@ -643,6 +798,9 @@
  :view.table/total-refs-count "Celkem odkazů"
  :view.table/unpin "Odepnout"
 
+ ;; Builder queries
+ :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
+
  ;; Asset
  :asset/align "Zarovnání"
  :asset/align-center "Na střed"
@@ -653,12 +811,16 @@
  :asset/confirm-delete-image "Naozaj chcete odstrániť tento obrázok?"
  :asset/copy "Kopírovať obrázok"
  :asset/delete "Odstrániť obrázok"
+ :asset/downloading "Downloading"
  :asset/maximize "Maximalizovať obrázok"
  :asset/open-in-browser "Zobraziť obrázok v prehliadači"
  :asset/physical-delete "Odstrániť aj súbor (už nebude možné ho obnoviť)"
  :asset/ref-block "Referenční blok"
  :asset/show-in-folder "Zobraziť obrázok v adresári"
  :asset/size-too-large "Soubor je příliš velký"
+ :asset/syncing "Syncing"
+ :asset/transfer-placeholder "{1} asset..."
+ :asset/uploading "Uploading"
 
  ;; Pdf
  :pdf/auto-open-context-menu "Automaticky otevírat kontextové menu"
@@ -667,6 +829,7 @@
  :pdf/doc-metadata "Metadáta dokumentu"
  :pdf/hl-block-colored "Farebný štítok pre zvýraznený blok"
  :pdf/linked-ref "Prepojené referencie"
+ :pdf/load-highlights-file-error "Error: failed to load the highlights file: \"{1}\". \n{2}"
  :pdf/toggle-dashed "Prepnúť prerušovaný štýl pre zvýraznenie oblasti"
 
  ;; Flashcard empty
@@ -731,13 +894,26 @@
  :export/copy-to-clipboard "Kopírovať do schránky"
  :export/db-backup-failed "Nepodarilo sa vytvořit zálohu DB."
  :export/db-edn "Exportovať jako súbor EDN"
+ :export/error-unexpected "An unexpected error occurred during export. See the javascript console for details."
+ :export/format-edn "EDN"
+ :export/format-html "HTML"
+ :export/format-opml "OPML"
+ :export/format-png "PNG"
+ :export/format-text "Text"
  :export/graph "Exportovať graf"
  :export/graph-ontology-data-copied "Data ontologie grafu zkopírována do schránky"
+ :export/level-lte "level <="
  :export/markdown "Exportovať jako Markdown (bez vlastnosťí bloků)"
+ :export/newline-after-block "newline after block"
  :export/no-updates-since-last-export "Žiadne aktualizácie od posledního exportu."
+ :export/open-blocks-only "open blocks only (skip collapsed children)"
  :export/page "Exportovať stránku"
  :export/page-data-copied "Data stránky zkopírována do schránky"
+ :export/page-ref-text "[[text]] -> text"
  :export/public-pages "Exportovať veřejné stránky"
+ :export/remove-emphasis "remove emphasis"
+ :export/remove-properties "remove properties"
+ :export/remove-tags "remove #tags"
  :export/save-to-file "Uložiť do súboru"
  :export/sqlite-db "Exportovať databázi SQLite"
  :export/title "Export"
@@ -750,6 +926,7 @@
  :publish/failed "Chyba publikace"
  :publish/invalid-page "Neplatná stránka"
  :publish/published-to "Publikováno na {1}"
+ :publish/unpublish "Unpublish"
  :publish/unpublish-failed "Zrušení publikace zlyhalo"
  :publish/unpublish-missing-page-id "Zrušiť publikaci: chybí ID stránky"
  :publish/unpublished "Publikace zrušena"
@@ -852,6 +1029,7 @@
  :plugin/all "Všetky"
  :plugin/all-updated "Všetky pluginy aktualizovány"
  :plugin/auto-check-for-updates "Automaticky kontrolovat aktualizácie"
+ :plugin/auto-check-for-updates-status "Auto check for updates: {1}!"
  :plugin/check-all-updates "Skontrolovať všetky aktualizácie"
  :plugin/check-update "Skontrolovať aktualizácie"
  :plugin/checking-for-updates "Kontrola aktualizácií"
@@ -863,9 +1041,11 @@
  :plugin/downloads "Stažení"
  :plugin/enabled "Povolené"
  :plugin/existed-package "Existujúci balík doplnkov ({1})."
+ :plugin/fatal-error "Fatal: {1}"
  :plugin/found-n-updates "{1} aktualizácií nájdených"
  :plugin/found-updates "Nalezeny aktualizácie"
  :plugin/install "Inštalovať"
+ :plugin/install-failed "Install failed: {1}\n{2}"
  :plugin/installed "Nainštalované"
  :plugin/installed-plugin "Nainštalovaný doplnok: {1}"
  :plugin/installing "Inštaluje sa"
@@ -874,7 +1054,9 @@
  :plugin/invalid-plugins-edn "Neplatný plugins.edn"
  :plugin/list-of-updates "Seznam aktualizácií"
  :plugin/load-from-web-url "Načítať z URL"
+ :plugin/load-plugin-indicator "Load plugin: {1}..."
  :plugin/load-unpacked "Načítať rozbalený doplnok"
+ :plugin/loading-indicator "LOADING"
  :plugin/malformed-plugins-edn "Chybný plugins.edn"
  :plugin/marketplace "Obchod s pluginmi"
  :plugin/new-registered "Nový plugin zaregistrován"
@@ -889,6 +1071,7 @@
  :plugin/refresh-lists "Obnoviť zoznamy"
  :plugin/reload "Znova načítať"
  :plugin/remote-error "Vzdálená chyba: {1}"
+ :plugin/report-modal-desc "If any plugin is unavailable or you think it contains malicious code, please email {1}. Mention the name of the plugin and the URL of its GitHub repository. The Logseq team usually responds within a business day."
  :plugin/report-security "Nahlásit problém bezpečnosti"
  :plugin/restart "Reštartovať aplikáciu"
  :plugin/search-plugin "Hľadať plugin"
@@ -912,6 +1095,22 @@
  :plugin.install-from-file/notice "Nasledujúce doplnky nahradia vaše aktuálne doplnky:"
  :plugin.install-from-file/success "Všetky doplnky boli úspešne nainštalované!"
  :plugin.install-from-file/title "Inštalovať doplnky z plugins.edn"
+
+ ;; Plugin install from web url
+ :plugin.install-from-web-url/supports-note "URLs support both GitHub repositories and local development servers. (For Examples: {1}, {2})"
+
+ ;; Plugin proxy
+ :plugin.proxy/http "HTTP"
+ :plugin.proxy/socks5 "SOCKS5"
+ :plugin.proxy/system "System"
+ :plugin.proxy/test-url "Test URL"
+ :plugin.proxy/testing "Testing"
+
+ ;; Plugin themes
+ :plugin.themes/default-desc "Logseq default {1} theme."
+ :plugin.themes/default-name "Default {1} theme"
+ :plugin.themes/group "{1} themes"
+ :plugin.themes/light-and-dark "light & dark themes"
 
  ;; Zotero
  :zotero/attachments "Prílohy"
@@ -971,10 +1170,20 @@
  :account.billing/month "mesiac"
 
  ;; Sync
+ :sync/assets-downloading-count "Downloading assets ({1})"
+ :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/downloading "Downloading..."
  :sync/graph-count-exceed-limit "Překročen limit počtu grafů"
  :sync/invitation-sent "Pozvánka odeslána"
+ :sync/more-debug-info "More debug info"
+ :sync/offline "Offline"
+ :sync/online "Online"
+ :sync/pending-local-changes "pending local changes"
+ :sync/pending-server-changes "pending server changes"
  :sync/something-wrong "Chyba synchronizace"
+ :sync/start-sync "Start sync"
  :sync/storage-exceed-limit "Překročen limit úložiště"
+ :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "Uživatel ešte neexistuje"
 
  ;; Encryption
@@ -1149,6 +1358,10 @@
  :window/minimize "Minimalizovať"
  :window/restore "Obnoviť"
 
+ ;; Mobile
+ :mobile/camera-access-denied "Camera access is denied. Enable it in Settings > Logseq."
+ :mobile/microphone-access-denied "Microphone access is denied. Enable it in Settings > Logseq."
+
  ;; Mobile header actions
  :mobile.header/actions "Akce"
  :mobile.header/create-graph "Vytvoriť graf"
@@ -1221,4 +1434,27 @@
  :electron/version "Verzia {1}"
  :electron/write-file-failed "Zápis do súboru {1} zlyhal, {2}."
  :electron/write-file-failed-with-backup "Zápis do súboru {1} zlyhal, {2}. Záložný súbor bol uložený do {3}."
+
+ ;; Icon
+ :icon/emojis-count "Emojis ({1})"
+ :icon/icons-count "Icons ({1})"
+ :icon/matched-count "Matched ({1})"
+ :icon/search-all "Search all"
+ :icon/search-emojis "Search emojis"
+ :icon/search-icons "Search icons"
+ :icon/tab-all "All"
+ :icon/tab-emojis "Emojis"
+ :icon/tab-icons "Icons"
+
+ ;; Library
+ :library/add-existing-pages "Add existing pages to Library"
+ :library/add-pages "Add pages"
+
+ ;; Shell
+ :shell/input-command-title "Input command"
+
+ ;; Youtube
+ :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
+ :youtube/player-not-ready "YouTube player isn't ready yet."
+ :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 }

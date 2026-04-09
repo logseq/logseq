@@ -251,26 +251,26 @@
      {:class "-m-5"}
      [:div.p-6
       [:div.flex.pb-3
-       (ui/button "Text"
+       (ui/button (t :export/format-text)
                   :class "mr-4 w-20"
                   :on-click #(do (reset! *export-block-type :text)
                                  (reset! *content (export-helper top-level-uuids))))
-       (ui/button "OPML"
+       (ui/button (t :export/format-opml)
                   :class "mr-4 w-20"
                   :on-click #(do (reset! *export-block-type :opml)
                                  (reset! *content (export-helper top-level-uuids))))
-       (ui/button "HTML"
+       (ui/button (t :export/format-html)
                   :class "mr-4 w-20"
                   :on-click #(do (reset! *export-block-type :html)
                                  (reset! *content (export-helper top-level-uuids))))
        ;; TODO: Remove if this is no longer used after whiteboard removal
        (when-not (seq? top-level-uuids)
-         (ui/button "PNG"
+         (ui/button (t :export/format-png)
                     :class "mr-4 w-20"
                     :on-click #(do (reset! *export-block-type :png)
                                    (reset! *content nil)
                                    (get-image-blob top-level-uuids (merge options {:transparent-bg? false}) (fn [blob] (reset! *content blob))))))
-       (ui/button "EDN"
+       (ui/button (t :export/format-edn)
                   :class "w-20"
                   :on-click #(do (reset! *export-block-type :edn)
                                  (p/let [result (<export-edn-helper top-level-uuids export-type)
@@ -324,7 +324,7 @@
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
                                        (reset! *content (export-helper top-level-uuids)))})
             [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
-             "[[text]] -> text"]
+             (t :export/page-ref-text)]
 
             (ui/checkbox {:class "mr-2 ml-4"
                           :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
@@ -335,7 +335,7 @@
                                        (reset! *content (export-helper top-level-uuids)))})
 
             [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
-             "remove emphasis"]
+             (t :export/remove-emphasis)]
 
             (ui/checkbox {:class "mr-2 ml-4"
                           :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
@@ -346,7 +346,7 @@
                                        (reset! *content (export-helper top-level-uuids)))})
 
             [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
-             "remove #tags"]]
+             (t :export/remove-tags)]]
 
            [:div.flex.items-center
             (ui/checkbox {:class "mr-2"
@@ -358,7 +358,7 @@
                                        (reset! *text-other-options (state/get-export-block-text-other-options))
                                        (reset! *content (export-helper top-level-uuids)))})
             [:div {:style {:visibility (if (#{:text} tp) "visible" "hidden")}}
-             "newline after block"]
+             (t :export/newline-after-block)]
 
             (ui/checkbox {:class "mr-2 ml-4"
                           :style {:visibility (if (#{:text} tp) "visible" "hidden")}
@@ -368,7 +368,7 @@
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
                                        (reset! *content (export-helper top-level-uuids)))})
             [:div {:style {:visibility (if (#{:text} tp) "visible" "hidden")}}
-             "remove properties"]]
+             (t :export/remove-properties)]]
 
            [:div.flex.items-center
             (ui/checkbox {:class "mr-2"
@@ -380,11 +380,11 @@
                                        (reset! *text-other-options (state/get-export-block-text-other-options))
                                        (reset! *content (export-helper top-level-uuids)))})
             [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
-             "open blocks only (skip collapsed children)"]]
+             (t :export/open-blocks-only)]]
 
            [:div.flex.items-center
             [:label.mr-2 {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
-             "level <="]
+             (t :export/level-lte)]
             [:select.block.my-2.text-lg.rounded.border.px-2.py-0
              {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
               :value (or (:keep-only-level<=N @*text-other-options) :all)

@@ -105,7 +105,7 @@
 
 (rum/defc render-item-not-handled
   [s]
-  [:p.text-red-500 (str "#Not Handled# " s)])
+  [:p.text-red-500 (t :plugin.settings/not-handled s)])
 
 (rum/defc settings-container
   [schema ^js pl]

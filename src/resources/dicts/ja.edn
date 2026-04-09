@@ -276,20 +276,32 @@
 
  ;; Ui
  :ui/all-done "全て完了しました"
+ :ui/apply "Apply"
  :ui/cancel "キャンセル"
  :ui/close "閉じる"
  :ui/confirm "確認"
+ :ui/copy-all "Copy all"
  :ui/delete "削除"
+ :ui/deleted "Deleted"
+ :ui/empty "Empty"
+ :ui/fix "Fix it!"
+ :ui/from "From: "
  :ui/host "ホスト"
  :ui/loading "読み込み中"
  :ui/login "ログイン"
  :ui/logout "ログアウト"
+ :ui/off "OFF"
+ :ui/on "ON"
  :ui/open "開く"
+ :ui/open-named "Open {1}"
  :ui/port "ポート"
  :ui/relaunch-confirm "この変更を適用するにはアプリの再起動が必要です。今すぐ再起動しますか？"
  :ui/remove-background "背景を削除"
+ :ui/run "Run"
  :ui/save "保存"
+ :ui/skip "Skip"
  :ui/submit "送信"
+ :ui/to "To: "
  :ui/toggle-theme "テーマを切替"
  :ui/type "タイプ"
  :ui/untitled "無題"
@@ -337,12 +349,14 @@
  :notification/unsupported-reaction-emoji "サポートされていないリアクション絵文字"
 
  ;; Search
+ :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "結果なし"
  :search/result-count "{1} 件の結果"
 
  ;; Select
  :select/default-prompt "選択してください"
  :select/default-select-multiple "一つもしくは複数選択してください"
+ :select/new-option "+ New option: {1}"
 
  ;; Format
  :format/bold "太字"
@@ -362,7 +376,15 @@
 
  ;; Graph
  :graph/all-graphs "すべてのグラフ"
+ :graph/create-db "Create db graph"
  :graph/create-failed "グラフの作成に失敗しました"
+ :graph/creating "Creating graph"
+ :graph/delete-local-action "Delete local graph"
+ :graph/delete-server-action "Delete from server"
+ :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/encrypt-data-label "Encrypt graph data"
+ :graph/last-opened-at-label "Last opened at: {1}"
+ :graph/leave-action "Leave this graph"
  :graph/leave-failed "グラフの退出に失敗しました"
  :graph/left "グラフを退出しました"
  :graph/local-graphs "ローカルグラフ"
@@ -372,16 +394,44 @@
  :graph/removed-from-sync "同期からグラフを削除しました"
  :graph/shared-graphs "共有グラフ"
  :graph/updated-switching "グラフが更新されました。切り替え中..."
+ :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
+ :graph/use-sync-label "Use Logseq Sync?"
+
+ ;; Graph delete local
+ :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
+
+ ;; Graph delete server
+ :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
+
+ ;; Graph leave
+ :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "日誌を表示"
  :graph.page/title "ページグラフ"
+
+ ;; Graph reserved character
+ :graph.reserved-character/asterisk "asterisk"
+ :graph.reserved-character/backslash "backslash"
+ :graph.reserved-character/colon "colon"
+ :graph.reserved-character/double-quote "double quote"
+ :graph.reserved-character/forward-slash "forward slash"
+ :graph.reserved-character/greater-than "greater than"
+ :graph.reserved-character/hash "hash"
+ :graph.reserved-character/less-than "less than"
+ :graph.reserved-character/pipe "vertical bar or pipe"
+ :graph.reserved-character/plus "plus"
+ :graph.reserved-character/question-mark "question mark"
 
  ;; Graph switching
  :graph.switch/add-graph-action "はい、新規グラフを追加します。"
  :graph.switch/empty-desc "マッチするグラフがありません。新しいグラフを追加しますか？"
  :graph.switch/prompt "切替"
  :graph.switch/select-prompt "グラフを選んでください"
+
+ ;; Graph validation
+ :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
+ :graph.validation/valid "Your graph is valid! {1}"
 
  ;; File
  :file/config-duplicate-keys "ファイル '{1}' には重複したキーがあります。キー「{2}」が複数回割り当てられています。"
@@ -419,6 +469,7 @@
  :page.convert/cant-be-block "ページ「{1}」はブロックに変換できません。"
  :page.convert/cant-be-block-has-children "ページ「{1}」にはページの子があるため、ブロックに変換できません。"
  :page.convert/cant-be-block-move-first "ページ「{1}」はブロックに変換できません。まず別のページに移動してください。"
+ :page.convert/page-to-tag-action "Convert \"{1}\" to tag"
  :page.convert/page-to-tag-built-in "組み込みページはタグにできません"
  :page.convert/page-to-tag-duplicate "「{1}」という名前のタグはすでに存在します。"
  :page.convert/page-to-tag-namespaced "名前空間ページはタグにできません"
@@ -447,6 +498,12 @@
  :block/copy-ref "ブロック参照をコピー"
  :block/copy-url "ブロックのURLをコピー"
 
+ ;; Block macro
+ :block.macro/embed-deprecated "{{embed}} is deprecated. Use '/Node embed' command instead."
+ :block.macro/namespace-deprecated "{{namespace}} is deprecated. Use the {1} feature instead."
+ :block.macro/query-deprecated "{{query}} is deprecated. Use '/Query' command instead."
+ :block.macro/unsupported-name "Unsupported macro name: {1}"
+
  ;; Node
  :node/new "新しいノード"
 
@@ -456,10 +513,46 @@
  ;; Journal validation
  :journal.validation/page-not-journal "このページはジャーナルページではありません。"
 
+ ;; Natural language dates
+ :date.nlp/last-friday "Last Friday"
+ :date.nlp/last-monday "Last Monday"
+ :date.nlp/last-month "Last month"
+ :date.nlp/last-saturday "Last Saturday"
+ :date.nlp/last-sunday "Last Sunday"
+ :date.nlp/last-thursday "Last Thursday"
+ :date.nlp/last-tuesday "Last Tuesday"
+ :date.nlp/last-wednesday "Last Wednesday"
+ :date.nlp/last-week "Last week"
+ :date.nlp/last-year "Last year"
+ :date.nlp/next-friday "Next Friday"
+ :date.nlp/next-monday "Next Monday"
+ :date.nlp/next-month "Next month"
+ :date.nlp/next-saturday "Next Saturday"
+ :date.nlp/next-sunday "Next Sunday"
+ :date.nlp/next-thursday "Next Thursday"
+ :date.nlp/next-tuesday "Next Tuesday"
+ :date.nlp/next-wednesday "Next Wednesday"
+ :date.nlp/next-week "Next week"
+ :date.nlp/next-year "Next year"
+ :date.nlp/this-friday "This Friday"
+ :date.nlp/this-monday "This Monday"
+ :date.nlp/this-month "This month"
+ :date.nlp/this-saturday "This Saturday"
+ :date.nlp/this-sunday "This Sunday"
+ :date.nlp/this-thursday "This Thursday"
+ :date.nlp/this-tuesday "This Tuesday"
+ :date.nlp/this-wednesday "This Wednesday"
+ :date.nlp/this-week "This week"
+ :date.nlp/this-year "This year"
+ :date.nlp/today "Today"
+ :date.nlp/tomorrow "Tomorrow"
+ :date.nlp/yesterday "Yesterday"
+
  ;; Editor
  :editor/auto-heading "自動見出し"
  :editor/block-search "ブロックを検索"
  :editor/click-to-edit "クリックで編集"
+ :editor/code-language-placeholder "Choose language"
  :editor/collapse-block-children "折りたたむ"
  :editor/copy "コピー"
  :editor/cut "カット"
@@ -471,7 +564,64 @@
  :editor/new-page "新しいページ"
  :editor/new-tag "新しいタグ"
  :editor/paste "貼り付け"
+ :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "見出しを削除"
+ :editor/template-insert-error "Template insert error: {1}"
+
+ ;; Editor slash commands
+ :editor.slash/advanced-query "Advanced Query"
+ :editor.slash/advanced-query-desc "Create an advanced query block"
+ :editor.slash/calculator "Calculator"
+ :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/code-block "Code block"
+ :editor.slash/code-block-desc "Insert code block"
+ :editor.slash/current-time "Current time"
+ :editor.slash/current-time-desc "Insert current time"
+ :editor.slash/date-picker "Date picker"
+ :editor.slash/date-picker-desc "Pick a date and insert here"
+ :editor.slash/embed-html "Embed HTML"
+ :editor.slash/embed-twitter-tweet "Embed Twitter tweet"
+ :editor.slash/embed-video-url "Embed Video URL"
+ :editor.slash/embed-youtube-timestamp "Embed YouTube timestamp"
+ :editor.slash/group-advanced "ADVANCED"
+ :editor.slash/group-basic "BASIC"
+ :editor.slash/group-format "FORMAT"
+ :editor.slash/group-heading "Heading"
+ :editor.slash/group-list-type "LIST TYPE"
+ :editor.slash/group-plugins "PLUGINS"
+ :editor.slash/group-priority "PRIORITY"
+ :editor.slash/group-task-date "TASK DATE"
+ :editor.slash/group-task-status "TASK STATUS"
+ :editor.slash/group-time-and-date "TIME & DATE"
+ :editor.slash/heading-label "Heading {1}"
+ :editor.slash/image-link "Image link"
+ :editor.slash/image-link-desc "Create a HTTP link to an image"
+ :editor.slash/link-desc "Create a HTTP link"
+ :editor.slash/math-block "Math block"
+ :editor.slash/math-block-desc "Create a LaTeX block"
+ :editor.slash/no-priority "No priority"
+ :editor.slash/node-embed "Node embed"
+ :editor.slash/node-embed-desc "Embed a node here"
+ :editor.slash/node-reference "Node reference"
+ :editor.slash/node-reference-desc "Create a backlink to a node (a page or a block)"
+ :editor.slash/normal-text "Normal text"
+ :editor.slash/normal-text-desc "Clear heading and set to normal text"
+ :editor.slash/number-children "Number children"
+ :editor.slash/number-list "Number list"
+ :editor.slash/priority-desc "Set priority to {1}"
+ :editor.slash/priority-label "Priority {1}"
+ :editor.slash/query-function "Query function"
+ :editor.slash/query-function-desc "Create a query function"
+ :editor.slash/quote-desc "Create a quote block"
+ :editor.slash/status-desc "Set status to {1}"
+ :editor.slash/template-desc "Insert a created template here"
+ :editor.slash/today-desc "Insert the date of today"
+ :editor.slash/tomorrow-desc "Insert the date of tomorrow"
+ :editor.slash/underline "Underline"
+ :editor.slash/underline-desc "Create an underline text decoration"
+ :editor.slash/upload-asset "Upload an asset"
+ :editor.slash/upload-asset-desc "Upload file types like image, PDF, DOCX, etc."
+ :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
  :reference/copy "この参照をコピー"
@@ -492,6 +642,9 @@
  ;; Property
  :property/add-choice "選択肢を追加"
  :property/add-choices "選択肢を追加"
+ :property/add-description "Add description"
+ :property/add-new "Add property"
+ :property/add-or-change "Add or change property"
  :property/available-choices "利用可能な選択肢"
  :property/checkbox-state-mapping "チェックボックスの状態マッピング"
  :property/children-count "の子供たち ({1})"
@@ -499,6 +652,7 @@
  :property/choose-tag "タグを選択"
  :property/choose-tags "タグを選択"
  :property/configure "設定"
+ :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/default-value "デフォルト値"
  :property/delete-from-node "ノードから削除"
  :property/delete-from-node-confirm "このプロパティをノードから削除してもよろしいですか？"
@@ -523,6 +677,7 @@
  :property/private-built-in-not-usable "プライベートな組み込みプロパティは使用できません"
  :property/select-choice "選択肢を選択"
  :property/set-default-choice "デフォルトの選択肢を設定"
+ :property/set-default-value "Set default value"
  :property/set-icon "アイコンを設定"
  :property/set-value "値を設定"
  :property/show-as-checkbox-on-node "ノードにチェックボックスとして表示"
@@ -643,6 +798,9 @@
  :view.table/total-refs-count "参照数合計"
  :view.table/unpin "固定解除"
 
+ ;; Builder queries
+ :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
+
  ;; Asset
  :asset/align "配置"
  :asset/align-center "中央揃え"
@@ -653,12 +811,16 @@
  :asset/confirm-delete-image "この画像を削除してもよろしいですか？"
  :asset/copy "アセットをコピー"
  :asset/delete "画像を削除"
+ :asset/downloading "Downloading"
  :asset/maximize "最大化"
  :asset/open-in-browser "ブラウザで開く"
  :asset/physical-delete "ファイルも削除します（元に戻せないことにご注意ください）"
  :asset/ref-block "画像ブロック引用"
  :asset/show-in-folder "画像のフォルダを開く"
  :asset/size-too-large "アセットのサイズが大きすぎます"
+ :asset/syncing "Syncing"
+ :asset/transfer-placeholder "{1} asset..."
+ :asset/uploading "Uploading"
 
  ;; Pdf
  :pdf/auto-open-context-menu "自動でコンテキストメニューを開く"
@@ -667,6 +829,7 @@
  :pdf/doc-metadata "ドキュメントのメタデータ"
  :pdf/hl-block-colored "ブロックをハイライトするための色付きラベル"
  :pdf/linked-ref "リンクありの参照元"
+ :pdf/load-highlights-file-error "Error: failed to load the highlights file: \"{1}\". \n{2}"
  :pdf/toggle-dashed "領域のハイライトに破線を使う"
 
  ;; Flashcard empty
@@ -731,13 +894,26 @@
  :export/copy-to-clipboard "クリップボードにコピー"
  :export/db-backup-failed "データベースのバックアップに失敗しました。エクスポートからバックアップフォルダを指定してください。"
  :export/db-edn "EDNファイルをエクスポート"
+ :export/error-unexpected "An unexpected error occurred during export. See the javascript console for details."
+ :export/format-edn "EDN"
+ :export/format-html "HTML"
+ :export/format-opml "OPML"
+ :export/format-png "PNG"
+ :export/format-text "Text"
  :export/graph "グラフをエクスポート"
  :export/graph-ontology-data-copied "グラフオントロジーデータをクリップボードにコピーしました"
+ :export/level-lte "level <="
  :export/markdown "標準Markdownとしてエクスポート（ブロックプロパティなし）"
+ :export/newline-after-block "newline after block"
  :export/no-updates-since-last-export "前回のエクスポート以降、グラフに更新はありません。"
+ :export/open-blocks-only "open blocks only (skip collapsed children)"
  :export/page "ページをエクスポート"
  :export/page-data-copied "ページデータをクリップボードにコピーしました"
+ :export/page-ref-text "[[text]] -> text"
  :export/public-pages "公開ページをエクスポート"
+ :export/remove-emphasis "remove emphasis"
+ :export/remove-properties "remove properties"
+ :export/remove-tags "remove #tags"
  :export/save-to-file "ファイルに保存"
  :export/sqlite-db "SQLiteデータベースをエクスポート"
  :export/title "エクスポート"
@@ -750,6 +926,7 @@
  :publish/failed "公開に失敗しました"
  :publish/invalid-page "無効なページ"
  :publish/published-to "{1}に公開しました"
+ :publish/unpublish "Unpublish"
  :publish/unpublish-failed "公開取り消しに失敗しました"
  :publish/unpublish-missing-page-id "公開取り消し：ページIDが不足"
  :publish/unpublished "公開を取り消しました"
@@ -852,6 +1029,7 @@
  :plugin/all "全て"
  :plugin/all-updated "全ての更新が完了しました！"
  :plugin/auto-check-for-updates "プラグインの更新を自動チェック"
+ :plugin/auto-check-for-updates-status "Auto check for updates: {1}!"
  :plugin/check-all-updates "全ての更新を確認"
  :plugin/check-update "更新を確認"
  :plugin/checking-for-updates "更新を確認中"
@@ -863,9 +1041,11 @@
  :plugin/downloads "ダウンロード"
  :plugin/enabled "有効化"
  :plugin/existed-package "既存のプラグイン パッケージ ({1})。"
+ :plugin/fatal-error "Fatal: {1}"
  :plugin/found-n-updates "{1}個の更新が見つかりました"
  :plugin/found-updates "更新が見つかりました"
  :plugin/install "インストール"
+ :plugin/install-failed "Install failed: {1}\n{2}"
  :plugin/installed "インストール済"
  :plugin/installed-plugin "インストールされたプラグイン：{1}"
  :plugin/installing "インストール中"
@@ -874,7 +1054,9 @@
  :plugin/invalid-plugins-edn "無効なplugins.edn"
  :plugin/list-of-updates "更新リスト"
  :plugin/load-from-web-url "WebURLから読み込み"
+ :plugin/load-plugin-indicator "Load plugin: {1}..."
  :plugin/load-unpacked "展開されたプラグインをロード"
+ :plugin/loading-indicator "LOADING"
  :plugin/malformed-plugins-edn "不正なplugins.edn"
  :plugin/marketplace "マーケットプレース"
  :plugin/new-registered "新しいプラグインが登録されました"
@@ -889,6 +1071,7 @@
  :plugin/refresh-lists "リスト更新"
  :plugin/reload "リロード"
  :plugin/remote-error "リモートエラー: {1}"
+ :plugin/report-modal-desc "If any plugin is unavailable or you think it contains malicious code, please email {1}. Mention the name of the plugin and the URL of its GitHub repository. The Logseq team usually responds within a business day."
  :plugin/report-security "セキュリティを報告"
  :plugin/restart "アプリを再起動"
  :plugin/search-plugin "プラグインを検索"
@@ -914,6 +1097,22 @@
  :plugin.install-from-file/notice "以下のプラグインはあなたのプラグインTheを置き換えます："
  :plugin.install-from-file/success "全てのプラグインのインストールを完了しました。"
  :plugin.install-from-file/title "plugins.ednからプラグインをインストール"
+
+ ;; Plugin install from web url
+ :plugin.install-from-web-url/supports-note "URLs support both GitHub repositories and local development servers. (For Examples: {1}, {2})"
+
+ ;; Plugin proxy
+ :plugin.proxy/http "HTTP"
+ :plugin.proxy/socks5 "SOCKS5"
+ :plugin.proxy/system "System"
+ :plugin.proxy/test-url "Test URL"
+ :plugin.proxy/testing "Testing"
+
+ ;; Plugin themes
+ :plugin.themes/default-desc "Logseq default {1} theme."
+ :plugin.themes/default-name "Default {1} theme"
+ :plugin.themes/group "{1} themes"
+ :plugin.themes/light-and-dark "light & dark themes"
 
  ;; Zotero
  :zotero/attachments "添付ファイル"
@@ -973,10 +1172,20 @@
  :account.billing/month "月"
 
  ;; Sync
+ :sync/assets-downloading-count "Downloading assets ({1})"
+ :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/downloading "Downloading..."
  :sync/graph-count-exceed-limit "グラフ数が上限を超えています"
  :sync/invitation-sent "招待を送信しました"
+ :sync/more-debug-info "More debug info"
+ :sync/offline "Offline"
+ :sync/online "Online"
+ :sync/pending-local-changes "pending local changes"
+ :sync/pending-server-changes "pending server changes"
  :sync/something-wrong "同期エラーが発生しました"
+ :sync/start-sync "Start sync"
  :sync/storage-exceed-limit "ストレージ容量の上限を超えています"
+ :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "ユーザーはまだ存在しません"
 
  ;; Encryption
@@ -1151,6 +1360,10 @@
  :window/minimize "最小化"
  :window/restore "復元"
 
+ ;; Mobile
+ :mobile/camera-access-denied "Camera access is denied. Enable it in Settings > Logseq."
+ :mobile/microphone-access-denied "Microphone access is denied. Enable it in Settings > Logseq."
+
  ;; Mobile header actions
  :mobile.header/actions "アクション"
  :mobile.header/create-graph "グラフを作成"
@@ -1223,4 +1436,27 @@
  :electron/version "バージョン {1}"
  :electron/write-file-failed "ファイル {1} への書き込みに失敗しました。{2}。"
  :electron/write-file-failed-with-backup "ファイル {1} への書き込みに失敗しました。{2}。バックアップファイルを {3} に保存しました。"
+
+ ;; Icon
+ :icon/emojis-count "Emojis ({1})"
+ :icon/icons-count "Icons ({1})"
+ :icon/matched-count "Matched ({1})"
+ :icon/search-all "Search all"
+ :icon/search-emojis "Search emojis"
+ :icon/search-icons "Search icons"
+ :icon/tab-all "All"
+ :icon/tab-emojis "Emojis"
+ :icon/tab-icons "Icons"
+
+ ;; Library
+ :library/add-existing-pages "Add existing pages to Library"
+ :library/add-pages "Add pages"
+
+ ;; Shell
+ :shell/input-command-title "Input command"
+
+ ;; Youtube
+ :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
+ :youtube/player-not-ready "YouTube player isn't ready yet."
+ :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 }

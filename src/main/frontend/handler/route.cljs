@@ -138,7 +138,7 @@
           block-name (:block/title page)
           block-name' (when block-name
                         (if (common-util/uuid-string? block-name)
-                          "Untitled"
+                          (t :ui/untitled)
                           block-name))]
       (or block-name'
           block-title

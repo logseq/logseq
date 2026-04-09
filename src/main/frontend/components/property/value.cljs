@@ -55,16 +55,11 @@
 
 (rum/defc property-empty-btn-value
   [property & opts]
-  (let [text (cond
-               (= (:db/ident property) :logseq.property/description)
-               "Add description"
-               :else
-               "Empty")]
-    (if (= text "Empty")
-      (shui/button (merge {:class "empty-btn" :variant :text} opts)
-                   text)
-      (shui/button (merge {:class "empty-btn" :variant :text} opts)
-                   text))))
+  (let [text (if (= (:db/ident property) :logseq.property/description)
+               (t :property/add-description)
+               (t :ui/empty))]
+    (shui/button (merge {:class "empty-btn" :variant :text} opts)
+                 text)))
 
 (rum/defc property-empty-text-value
   [property {:keys [property-position table-view?]}]
@@ -75,7 +70,7 @@
        (if-let [icon (:logseq.property/icon property)]
          (icon-component/icon icon {:color? true})
          (ui/icon "line-dashed"))
-       "Empty"))])
+       (t :ui/empty)))])
 
 (defn- get-selected-blocks
   []
@@ -413,9 +408,9 @@
         tomorrow   (js/Date. (+ (.getTime today) ms-in-day))
         yesterday  (js/Date. (- (.getTime today) ms-in-day))]
     (cond
-      (= (.getTime given-date) (.getTime yesterday)) "Yesterday"
-      (= (.getTime given-date) (.getTime today))     "Today"
-      (= (.getTime given-date) (.getTime tomorrow))  "Tomorrow"
+      (= (.getTime given-date) (.getTime yesterday)) (t :date.nlp/yesterday)
+      (= (.getTime given-date) (.getTime today))     (t :date.nlp/today)
+      (= (.getTime given-date) (.getTime tomorrow))  (t :date.nlp/tomorrow)
       :else nil)))
 
 (rum/defc datetime-value
@@ -1057,7 +1052,7 @@
           :style {:min-height 20 :margin-left 3}
           :on-click #(<create-new-block! block property "")}
          (when (:class-schema? opts)
-           "Add description")]))))
+           (t :property/add-description))]))))
 
 (rum/defc property-block-value
   [value block property page-cp opts]
@@ -1165,7 +1160,7 @@
         [:span.inline-flex.w-full
          (let [value' (str value')
                value' (if (string/blank? value')
-                        "Empty"
+                        (t :ui/empty)
                         value')]
            (inline-text {} :markdown value'))]))))
 
@@ -1203,12 +1198,12 @@
                                             (shui/dropdown-menu-item
                                              {:key "open"
                                               :on-click #(route-handler/redirect-to-page! (:block/uuid value))}
-                                             (str "Open " (:block/title value)))
+                                             (t :ui/open-named (:block/title value)))
 
                                             (shui/dropdown-menu-item
                                              {:key "open sidebar"
                                               :on-click #(state/sidebar-add-block! (state/get-current-repo) (:db/id value) :page)}
-                                             "Open in sidebar")])
+                                             (t :sidebar.right/open))])
                                          {:as-dropdown? true
                                           :content-props {:on-click (fn [] (shui/popup-hide!))}
                                           :align "start"}))}]
@@ -1300,7 +1295,7 @@
        (and (= :logseq.property/default-value (:db/ident property)) (nil? (:block/title value)))
        [:div.jtrigger.cursor-pointer.text-sm.px-2
         {:on-click #(<create-new-block! block property "")}
-        "Set default value"]
+        (t :property/set-default-value)]
 
        (= (:db/ident property) :logseq.property.publish/published-url)
        [:div.flex.items-center.gap-2.w-full
@@ -1316,7 +1311,7 @@
             :on-click (fn [e]
                         (util/stop e)
                         (publish-handler/unpublish-page! block))}
-           "Unpublish"))]
+           (t :publish/unpublish)))]
 
        text-ref-type?
        (property-block-value value block property page-cp opts)
@@ -1571,7 +1566,7 @@
   [state block property {:keys [show-tooltip? p-block p-property editing?]
                          :as opts}]
   (ui/catch-error
-   (ui/block-error "Something wrong" {})
+  (ui/block-error (t :sync/something-wrong) {})
    (let [block-cp (state/get-component :block/blocks-container)
          opts (merge opts
                      {:page-cp (state/get-component :block/page-cp)
@@ -1609,7 +1604,7 @@
               (not= :logseq.class/Tag
                     (:db/ident (db/entity (:db/id block)))))
        [:div.flex.flex-row.items-center.gap-1
-                  [:div.warning (t :property/self-reference)]
+        [:div.warning (t :property/self-reference)]
         (shui/button {:variant :outline
                       :size :sm
                       :class "h-5"
@@ -1617,7 +1612,7 @@
                                   (db-property-handler/remove-block-property!
                                    (:db/id block)
                                    (:db/ident property)))}
-                     "Fix it!")]
+                     (t :ui/fix))]
        (let [empty-value? (when (coll? v) (= :logseq.property/empty-placeholder (:db/ident (first v))))
              closed-values? (seq (:property/closed-values property))
              value-cp [:div.property-value-inner

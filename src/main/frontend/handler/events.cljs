@@ -367,7 +367,7 @@
        nil
        (fn []
          [:div.flex.flex-col.items-center.justify-center.mt-8.gap-4
-          [:div (str "Downloading " graph-name " ...")]
+          [:div (t :sync/downloading-graph graph-name)]
           (indicator/downloading-logs)])
        {:id :download-rtc-graph}))
     (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-e2ee?)

@@ -132,9 +132,13 @@
 
 ;; Matches files containing dynamic translation-call `if`/`or` forms, `i18n-key`
 ;; `if` forms, literal `:prompt-key`/`:title-key` options, `built-in-colors`,
-;; `navs` vectors, or `:shortcut.category/*` keys for later exact extraction.
+;; `navs` vectors, date NLP labels, built-in property/class definitions, or
+;; `:shortcut.category/*` keys for later exact extraction.
 (def ^:private derived-ui-key-candidate-rg-pattern
-  "(?:[(](?:[[:alnum:]._-]+/)?tt?[[:space:]]+[(](?:if|or)\\b|:?i18n-key[[:space:]]+[(]if\\b|:prompt-key[[:space:]]+:|:title-key[[:space:]]+:|[(]def[[:space:]]+built-in-colors\\b|\\bnavs[[:space:]]+\\[|:shortcut\\.category/)")
+  "(?:[(](?:[[:alnum:]._-]+/)?tt?[[:space:]]+[(](?:if|or)\\b|:?i18n-key[[:space:]]+[(]if\\b|:prompt-key[[:space:]]+:|:title-key[[:space:]]+:|[(]def[[:space:]]+built-in-colors\\b|\\bnavs[[:space:]]+\\[|[(]def[[:space:]]+nlp-pages\\b|[(]def[[:space:]]+\\^:large-vars/data-var[[:space:]]+built-in-(?:properties|classes)\\b|:shortcut\\.category/)")
+
+(def ^:private built-in-db-ident-candidate-rg-pattern
+  "[(]def[[:space:]]+\\^:large-vars/data-var[[:space:]]+built-in-(?:properties|classes)\\b")
 
 (defn- extract-keyword-match
   [value]
@@ -190,6 +194,14 @@
        (mapcat #(lang-lint/derived-translation-keys (slurp %)))
        set))
 
+(defn- grep-built-in-db-ident-translation-keys
+  "Derive built-in property/class translation keys from built-in db-ident
+  definition forms."
+  []
+  (->> (rg-matching-files translated-code-source-paths built-in-db-ident-candidate-rg-pattern)
+       (mapcat #(lang-lint/built-in-db-ident-translation-keys (slurp %)))
+       set))
+
 (defn- grep-shortcut-command-keys
   "Derive `:command.*` translation keys from shortcut ids declared in the
   built-in shortcut config."
@@ -213,9 +225,12 @@
   :en dictionary, and that unused keys in :en can be detected."
   [{:keys [fix?]}]
   (let [defined-translation-keys (set (keys (:en (get-dicts))))
+        built-in-defined-translation-keys (->> (grep-built-in-db-ident-translation-keys)
+                                               (set/intersection defined-translation-keys))
         referenced-translation-keys (->> [(grep-direct-translation-keys)
                                           (grep-i18n-payload-keys)
                                           (grep-derived-translation-keys)
+                                          built-in-defined-translation-keys
                                           (grep-shortcut-command-keys)]
                                          (apply concat)
                                          set)

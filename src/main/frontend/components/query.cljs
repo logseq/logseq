@@ -12,13 +12,24 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
+            [logseq.shui.ui :as shui]
             [rum.core :as rum]))
 
 (defn- built-in-custom-query?
-  [title]
+  [{:keys [title-key]}]
   (let [queries (get-in (state/sub-config) [:default-queries :journals])]
     (when (seq queries)
-      (boolean (some #(= % title) (map :title queries))))))
+      (boolean
+       (some (fn [built-in-query]
+               (and title-key
+                    (= (:title-key built-in-query) title-key)))
+             queries)))))
+
+(defn- resolve-built-in-query?
+  [built-in-query? q]
+  (boolean
+   (or built-in-query?
+       (built-in-custom-query? q))))
 
 (defn- grouped-by-page-result?
   [result group-by-page?]
@@ -104,15 +115,27 @@
          [:div.text-sm.mt-2.opacity-90 (t :search/no-result)])])))
 
 (rum/defc query-title
-  [config title {:keys [result-count]}]
+  [config {:keys [title title-key title-icon]} {:keys [result-count]}]
   (let [inline-text (:inline-text config)]
     [:div.custom-query-title.flex.justify-between.w-full
-     [:span.title-text (cond
-                         (vector? title) title
-                         (string? title) (inline-text config
-                                                      (get-in config [:block :block/format] :markdown)
-                                                      title)
-                         :else title)]
+     [:span.title-text
+      (cond
+        title-key
+        [:span
+         (when title-icon
+           (shui/tabler-icon title-icon {:class "align-middle pr-1"}))
+         [:span.align-middle (t title-key)]]
+
+        (vector? title)
+        title
+
+        (string? title)
+        (inline-text config
+                     (get-in config [:block :block/format] :markdown)
+                     title)
+
+        :else
+        title)]
      (when result-count
        [:span.opacity-60.text-sm.ml-2.results-count
         (t :search/result-count result-count)])]))
@@ -174,7 +197,7 @@
          (if built-in-query?
            [:div {:style {:margin-left 2}}
             (ui/foldable
-             (query-title config (:title q) {:result-count (count result)})
+             (query-title config q {:result-count (count result)})
              (fn []
                (custom-query-inner config q opts))
              {:default-collapsed? collapsed?
@@ -190,7 +213,7 @@
   [state {:keys [built-in-query?] :as config}
    {:keys [collapsed?] :as q}]
   (ui/catch-error
-   (ui/block-error "Query Error:" {:content (:query q)})
+   (ui/block-error (t :query/error) {:content (:query q)})
    (let [*query-error (:query-error state)
          current-block-uuid (or (:block/uuid (:block config))
                                 (:block/uuid config))
@@ -204,7 +227,7 @@
                         :current-block current-block
                         :current-block-uuid current-block-uuid
                         :collapsed? collapsed?'
-                        :built-in-query? (built-in-custom-query? (:title q))
+                        :built-in-query? (resolve-built-in-query? built-in-query? q)
                         :*query-error *query-error)]
      (when (or built-in-collapsed? (not collapsed?'))
        (custom-query* config' q)))))

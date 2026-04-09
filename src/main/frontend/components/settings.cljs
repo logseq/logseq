@@ -1256,11 +1256,11 @@
                  (case status
                    ("progress" "download" "initiate")
                    (t :ai/model-download-progress
-                      file
-                      (when progress
-                        (util/format "%d/%dm"
-                                     (int (/ loaded 1024 1024))
-                                     (int (/ total 1024 1024)))))
+                      (if progress
+                        (str file (util/format " %d/%dm"
+                                               (int (/ loaded 1024 1024))
+                                               (int (/ total 1024 1024))))
+                        file))
                    "done"
                    (t :ai/model-downloaded file)
                    "ready"

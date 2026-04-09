@@ -276,20 +276,32 @@
 
  ;; Ui
  :ui/all-done "همه‌چیز انجام شد"
+ :ui/apply "Apply"
  :ui/cancel "لغو"
  :ui/close "بستن"
  :ui/confirm "تأیید"
+ :ui/copy-all "Copy all"
  :ui/delete "حذف"
+ :ui/deleted "Deleted"
+ :ui/empty "Empty"
+ :ui/fix "Fix it!"
+ :ui/from "From: "
  :ui/host "میزبان"
  :ui/loading "در حال بارگذاری"
  :ui/login "ورود"
  :ui/logout "خروج"
+ :ui/off "OFF"
+ :ui/on "ON"
  :ui/open "باز کردن"
+ :ui/open-named "Open {1}"
  :ui/port "پورت"
  :ui/relaunch-confirm "برای اعمال این تغییر باید برنامه دوباره راه‌اندازی شود. اکنون دوباره راه‌اندازی شود؟"
  :ui/remove-background "حذف پس‌زمینه"
+ :ui/run "Run"
  :ui/save "ذخیره"
+ :ui/skip "Skip"
  :ui/submit "ارسال"
+ :ui/to "To: "
  :ui/toggle-theme "تغییر پوسته"
  :ui/type "نوع"
  :ui/untitled "بدون عنوان"
@@ -337,12 +349,14 @@
  :notification/unsupported-reaction-emoji "ایموجی واکنش پشتیبانی نمی‌شود"
 
  ;; Search
+ :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "نتیجه‌ای یافت نشد"
  :search/result-count "{1} نتیجه"
 
  ;; Select
  :select/default-prompt "یکی را انتخاب کنید"
  :select/default-select-multiple "یک یا چند مورد را انتخاب کنید"
+ :select/new-option "+ New option: {1}"
 
  ;; Format
  :format/bold "درشت"
@@ -362,7 +376,15 @@
 
  ;; Graph
  :graph/all-graphs "همه گراف‌ها"
+ :graph/create-db "Create db graph"
  :graph/create-failed "ایجاد گراف ناموفق بود"
+ :graph/creating "Creating graph"
+ :graph/delete-local-action "Delete local graph"
+ :graph/delete-server-action "Delete from server"
+ :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/encrypt-data-label "Encrypt graph data"
+ :graph/last-opened-at-label "Last opened at: {1}"
+ :graph/leave-action "Leave this graph"
  :graph/leave-failed "ترک گراف ناموفق بود"
  :graph/left "ترک شد"
  :graph/local-graphs "گراف‌های محلی"
@@ -372,16 +394,44 @@
  :graph/removed-from-sync "گراف از همگام‌سازی حذف شد"
  :graph/shared-graphs "گراف‌های اشتراکی"
  :graph/updated-switching "گراف به‌روزرسانی شد. در حال تغییر..."
+ :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
+ :graph/use-sync-label "Use Logseq Sync?"
+
+ ;; Graph delete local
+ :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
+
+ ;; Graph delete server
+ :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
+
+ ;; Graph leave
+ :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "نمایش روزنامه‌ها"
  :graph.page/title "گراف صفحه"
+
+ ;; Graph reserved character
+ :graph.reserved-character/asterisk "asterisk"
+ :graph.reserved-character/backslash "backslash"
+ :graph.reserved-character/colon "colon"
+ :graph.reserved-character/double-quote "double quote"
+ :graph.reserved-character/forward-slash "forward slash"
+ :graph.reserved-character/greater-than "greater than"
+ :graph.reserved-character/hash "hash"
+ :graph.reserved-character/less-than "less than"
+ :graph.reserved-character/pipe "vertical bar or pipe"
+ :graph.reserved-character/plus "plus"
+ :graph.reserved-character/question-mark "question mark"
 
  ;; Graph switching
  :graph.switch/add-graph-action "افزودن گراف"
  :graph.switch/empty-desc "موردی در دسترس نیست"
  :graph.switch/prompt "تغییر"
  :graph.switch/select-prompt "یک گراف انتخاب کنید"
+
+ ;; Graph validation
+ :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
+ :graph.validation/valid "Your graph is valid! {1}"
 
  ;; File
  :file/config-duplicate-keys "فایل \"{1}\" دارای کلیدهای تکراری است. کلید \"{2}\" چندین بار اختصاص داده شده است."
@@ -419,6 +469,7 @@
  :page.convert/cant-be-block "صفحه \"{1}\" را نمی توان به بلوک تبدیل کرد."
  :page.convert/cant-be-block-has-children "صفحه \"{1}\" را نمی توان به بلوک تبدیل کرد زیرا دارای فرزند صفحه است."
  :page.convert/cant-be-block-move-first "صفحه \"{1}\" را نمی توان به بلوک تبدیل کرد، لطفاً ابتدا آن را به صفحه دیگری منتقل کنید."
+ :page.convert/page-to-tag-action "Convert \"{1}\" to tag"
  :page.convert/page-to-tag-built-in "صفحات داخلی نمی‌توانند برچسب باشند"
  :page.convert/page-to-tag-duplicate "یک برچسب با نام \"{1}\" از قبل وجود دارد."
  :page.convert/page-to-tag-namespaced "صفحات فضای نام نمی‌توانند برچسب باشند"
@@ -447,6 +498,12 @@
  :block/copy-ref "رونوشت ارجاع بلوک"
  :block/copy-url "کپی آدرس بلوک"
 
+ ;; Block macro
+ :block.macro/embed-deprecated "{{embed}} is deprecated. Use '/Node embed' command instead."
+ :block.macro/namespace-deprecated "{{namespace}} is deprecated. Use the {1} feature instead."
+ :block.macro/query-deprecated "{{query}} is deprecated. Use '/Query' command instead."
+ :block.macro/unsupported-name "Unsupported macro name: {1}"
+
  ;; Node
  :node/new "گره جدید"
 
@@ -456,10 +513,46 @@
  ;; Journal validation
  :journal.validation/page-not-journal "این صفحه یک روزنامه نیست."
 
+ ;; Natural language dates
+ :date.nlp/last-friday "Last Friday"
+ :date.nlp/last-monday "Last Monday"
+ :date.nlp/last-month "Last month"
+ :date.nlp/last-saturday "Last Saturday"
+ :date.nlp/last-sunday "Last Sunday"
+ :date.nlp/last-thursday "Last Thursday"
+ :date.nlp/last-tuesday "Last Tuesday"
+ :date.nlp/last-wednesday "Last Wednesday"
+ :date.nlp/last-week "Last week"
+ :date.nlp/last-year "Last year"
+ :date.nlp/next-friday "Next Friday"
+ :date.nlp/next-monday "Next Monday"
+ :date.nlp/next-month "Next month"
+ :date.nlp/next-saturday "Next Saturday"
+ :date.nlp/next-sunday "Next Sunday"
+ :date.nlp/next-thursday "Next Thursday"
+ :date.nlp/next-tuesday "Next Tuesday"
+ :date.nlp/next-wednesday "Next Wednesday"
+ :date.nlp/next-week "Next week"
+ :date.nlp/next-year "Next year"
+ :date.nlp/this-friday "This Friday"
+ :date.nlp/this-monday "This Monday"
+ :date.nlp/this-month "This month"
+ :date.nlp/this-saturday "This Saturday"
+ :date.nlp/this-sunday "This Sunday"
+ :date.nlp/this-thursday "This Thursday"
+ :date.nlp/this-tuesday "This Tuesday"
+ :date.nlp/this-wednesday "This Wednesday"
+ :date.nlp/this-week "This week"
+ :date.nlp/this-year "This year"
+ :date.nlp/today "Today"
+ :date.nlp/tomorrow "Tomorrow"
+ :date.nlp/yesterday "Yesterday"
+
  ;; Editor
  :editor/auto-heading "عنوان خودکار"
  :editor/block-search "جستجو برای بلوک"
  :editor/click-to-edit "برای ویرایش، کلیک کنید"
+ :editor/code-language-placeholder "Choose language"
  :editor/collapse-block-children "جمع کردن فرزندان بلوک"
  :editor/copy "رونوشت"
  :editor/cut "برش"
@@ -471,7 +564,64 @@
  :editor/new-page "صفحه جدید"
  :editor/new-tag "برچسب جدید"
  :editor/paste "چسباندن"
+ :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "حذف عنوان"
+ :editor/template-insert-error "Template insert error: {1}"
+
+ ;; Editor slash commands
+ :editor.slash/advanced-query "Advanced Query"
+ :editor.slash/advanced-query-desc "Create an advanced query block"
+ :editor.slash/calculator "Calculator"
+ :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/code-block "Code block"
+ :editor.slash/code-block-desc "Insert code block"
+ :editor.slash/current-time "Current time"
+ :editor.slash/current-time-desc "Insert current time"
+ :editor.slash/date-picker "Date picker"
+ :editor.slash/date-picker-desc "Pick a date and insert here"
+ :editor.slash/embed-html "Embed HTML"
+ :editor.slash/embed-twitter-tweet "Embed Twitter tweet"
+ :editor.slash/embed-video-url "Embed Video URL"
+ :editor.slash/embed-youtube-timestamp "Embed YouTube timestamp"
+ :editor.slash/group-advanced "ADVANCED"
+ :editor.slash/group-basic "BASIC"
+ :editor.slash/group-format "FORMAT"
+ :editor.slash/group-heading "Heading"
+ :editor.slash/group-list-type "LIST TYPE"
+ :editor.slash/group-plugins "PLUGINS"
+ :editor.slash/group-priority "PRIORITY"
+ :editor.slash/group-task-date "TASK DATE"
+ :editor.slash/group-task-status "TASK STATUS"
+ :editor.slash/group-time-and-date "TIME & DATE"
+ :editor.slash/heading-label "Heading {1}"
+ :editor.slash/image-link "Image link"
+ :editor.slash/image-link-desc "Create a HTTP link to an image"
+ :editor.slash/link-desc "Create a HTTP link"
+ :editor.slash/math-block "Math block"
+ :editor.slash/math-block-desc "Create a LaTeX block"
+ :editor.slash/no-priority "No priority"
+ :editor.slash/node-embed "Node embed"
+ :editor.slash/node-embed-desc "Embed a node here"
+ :editor.slash/node-reference "Node reference"
+ :editor.slash/node-reference-desc "Create a backlink to a node (a page or a block)"
+ :editor.slash/normal-text "Normal text"
+ :editor.slash/normal-text-desc "Clear heading and set to normal text"
+ :editor.slash/number-children "Number children"
+ :editor.slash/number-list "Number list"
+ :editor.slash/priority-desc "Set priority to {1}"
+ :editor.slash/priority-label "Priority {1}"
+ :editor.slash/query-function "Query function"
+ :editor.slash/query-function-desc "Create a query function"
+ :editor.slash/quote-desc "Create a quote block"
+ :editor.slash/status-desc "Set status to {1}"
+ :editor.slash/template-desc "Insert a created template here"
+ :editor.slash/today-desc "Insert the date of today"
+ :editor.slash/tomorrow-desc "Insert the date of tomorrow"
+ :editor.slash/underline "Underline"
+ :editor.slash/underline-desc "Create an underline text decoration"
+ :editor.slash/upload-asset "Upload an asset"
+ :editor.slash/upload-asset-desc "Upload file types like image, PDF, DOCX, etc."
+ :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
  :reference/copy "کپی مرجع"
@@ -492,6 +642,9 @@
  ;; Property
  :property/add-choice "افزودن گزینه"
  :property/add-choices "افزودن گزینه‌ها"
+ :property/add-description "Add description"
+ :property/add-new "Add property"
+ :property/add-or-change "Add or change property"
  :property/available-choices "گزینه‌های موجود"
  :property/checkbox-state-mapping "نگاشت وضعیت چک‌باکس"
  :property/children-count "کودکان ({1})"
@@ -499,6 +652,7 @@
  :property/choose-tag "انتخاب برچسب"
  :property/choose-tags "انتخاب برچسب‌ها"
  :property/configure "پیکربندی"
+ :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/default-value "مقدار پیش‌فرض"
  :property/delete-from-node "حذف از گره"
  :property/delete-from-node-confirm "این ویژگی از گره حذف شود؟"
@@ -523,6 +677,7 @@
  :property/private-built-in-not-usable "ویژگی داخلی خصوصی قابل استفاده نیست"
  :property/select-choice "انتخاب گزینه"
  :property/set-default-choice "تنظیم گزینه پیش‌فرض"
+ :property/set-default-value "Set default value"
  :property/set-icon "تنظیم آیکون"
  :property/set-value "تنظیم مقدار"
  :property/show-as-checkbox-on-node "نمایش به عنوان چک‌باکس روی گره"
@@ -643,6 +798,9 @@
  :view.table/total-refs-count "مجموع مراجع"
  :view.table/unpin "برداشتن سنجاق"
 
+ ;; Builder queries
+ :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
+
  ;; Asset
  :asset/align "تراز"
  :asset/align-center "وسط"
@@ -653,12 +811,16 @@
  :asset/confirm-delete-image "آیا مطمئن هستید که می‌خواهید این تصویر را حذف کنید؟"
  :asset/copy "کپی"
  :asset/delete "حذف"
+ :asset/downloading "Downloading"
  :asset/maximize "بیشینه"
  :asset/open-in-browser "باز کردن در مرورگر"
  :asset/physical-delete "حذف فیزیکی فایل"
  :asset/ref-block "بلوک مرجع"
  :asset/show-in-folder "نمایش در پوشه"
  :asset/size-too-large "فایل خیلی بزرگ است"
+ :asset/syncing "Syncing"
+ :asset/transfer-placeholder "{1} asset..."
+ :asset/uploading "Uploading"
 
  ;; Pdf
  :pdf/auto-open-context-menu "باز کردن خودکار منوی زمینه"
@@ -667,6 +829,7 @@
  :pdf/doc-metadata "فراداده سند"
  :pdf/hl-block-colored "برجسته‌سازی رنگی"
  :pdf/linked-ref "مرجع پیوندشده"
+ :pdf/load-highlights-file-error "Error: failed to load the highlights file: \"{1}\". \n{2}"
  :pdf/toggle-dashed "تغییر خط‌چین"
 
  ;; Flashcard empty
@@ -731,13 +894,26 @@
  :export/copy-to-clipboard "کپی در کلیپ‌بورد"
  :export/db-backup-failed "پشتیبان‌گیری پایگاه داده ناموفق بود."
  :export/db-edn "صادر کردن به عنوان فایل EDN"
+ :export/error-unexpected "An unexpected error occurred during export. See the javascript console for details."
+ :export/format-edn "EDN"
+ :export/format-html "HTML"
+ :export/format-opml "OPML"
+ :export/format-png "PNG"
+ :export/format-text "Text"
  :export/graph "صادر کردن گراف"
  :export/graph-ontology-data-copied "داده‌های آنتولوژی گراف در کلیپ‌بورد کپی شد"
+ :export/level-lte "level <="
  :export/markdown "صادر کردن به عنوان Markdown (بدون ویژگی‌های بلوک)"
+ :export/newline-after-block "newline after block"
  :export/no-updates-since-last-export "تغییری از آخرین صادرات وجود ندارد."
+ :export/open-blocks-only "open blocks only (skip collapsed children)"
  :export/page "صادر کردن صفحه"
  :export/page-data-copied "داده‌های صفحه در کلیپ‌بورد کپی شد"
+ :export/page-ref-text "[[text]] -> text"
  :export/public-pages "صادر کردن صفحات عمومی"
+ :export/remove-emphasis "remove emphasis"
+ :export/remove-properties "remove properties"
+ :export/remove-tags "remove #tags"
  :export/save-to-file "ذخیره در فایل"
  :export/sqlite-db "صادر کردن پایگاه داده SQLite"
  :export/title "صادر کردن"
@@ -750,6 +926,7 @@
  :publish/failed "انتشار ناموفق بود"
  :publish/invalid-page "صفحه نامعتبر"
  :publish/published-to "منتشر شد در {1}"
+ :publish/unpublish "Unpublish"
  :publish/unpublish-failed "لغو انتشار ناموفق بود"
  :publish/unpublish-missing-page-id "لغو انتشار: شناسه صفحه مفقود"
  :publish/unpublished "لغو انتشار شد"
@@ -852,6 +1029,7 @@
  :plugin/all "همه"
  :plugin/all-updated "همه افزونه‌ها به‌روز شد"
  :plugin/auto-check-for-updates "بررسی خودکار به‌روزرسانی‌ها"
+ :plugin/auto-check-for-updates-status "Auto check for updates: {1}!"
  :plugin/check-all-updates "بررسی همه به‌روزرسانی‌ها"
  :plugin/check-update "بررسی به‌روزرسانی"
  :plugin/checking-for-updates "در حال بررسی به‌روزرسانی‌ها"
@@ -863,9 +1041,11 @@
  :plugin/downloads "دانلودها"
  :plugin/enabled "فعال"
  :plugin/existed-package "بسته افزونه موجود ({1})."
+ :plugin/fatal-error "Fatal: {1}"
  :plugin/found-n-updates "{1} به‌روزرسانی موجود"
  :plugin/found-updates "به‌روزرسانی یافت شد"
  :plugin/install "نصب"
+ :plugin/install-failed "Install failed: {1}\n{2}"
  :plugin/installed "نصب‌شده"
  :plugin/installed-plugin "پلاگین نصب شده: {1}"
  :plugin/installing "در حال نصب"
@@ -874,7 +1054,9 @@
  :plugin/invalid-plugins-edn "فایل plugins.edn نامعتبر"
  :plugin/list-of-updates "فهرست به‌روزرسانی‌ها"
  :plugin/load-from-web-url "بارگذاری از آدرس وب"
+ :plugin/load-plugin-indicator "Load plugin: {1}..."
  :plugin/load-unpacked "بارگذاری افزونه بسته‌بندی‌نشده"
+ :plugin/loading-indicator "LOADING"
  :plugin/malformed-plugins-edn "خطا در فایل plugins.edn"
  :plugin/marketplace "فروشگاه افزونه‌ها"
  :plugin/new-registered "افزونه جدید ثبت شد"
@@ -889,6 +1071,7 @@
  :plugin/refresh-lists "بازآوری فهرست‌ها"
  :plugin/reload "بارگذاری مجدد"
  :plugin/remote-error "خطای راه‌دور: {1}"
+ :plugin/report-modal-desc "If any plugin is unavailable or you think it contains malicious code, please email {1}. Mention the name of the plugin and the URL of its GitHub repository. The Logseq team usually responds within a business day."
  :plugin/report-security "گزارش مشکل امنیتی"
  :plugin/restart "راه‌اندازی مجدد"
  :plugin/search-plugin "جستجوی افزونه"
@@ -912,6 +1095,22 @@
  :plugin.install-from-file/notice "یک فایل افزونه برای نصب انتخاب کنید"
  :plugin.install-from-file/success "افزونه نصب شد"
  :plugin.install-from-file/title "نصب افزونه از فایل"
+
+ ;; Plugin install from web url
+ :plugin.install-from-web-url/supports-note "URLs support both GitHub repositories and local development servers. (For Examples: {1}, {2})"
+
+ ;; Plugin proxy
+ :plugin.proxy/http "HTTP"
+ :plugin.proxy/socks5 "SOCKS5"
+ :plugin.proxy/system "System"
+ :plugin.proxy/test-url "Test URL"
+ :plugin.proxy/testing "Testing"
+
+ ;; Plugin themes
+ :plugin.themes/default-desc "Logseq default {1} theme."
+ :plugin.themes/default-name "Default {1} theme"
+ :plugin.themes/group "{1} themes"
+ :plugin.themes/light-and-dark "light & dark themes"
 
  ;; Zotero
  :zotero/attachments "پیوست‌ها"
@@ -971,10 +1170,20 @@
  :account.billing/month "ماه"
 
  ;; Sync
+ :sync/assets-downloading-count "Downloading assets ({1})"
+ :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/downloading "Downloading..."
  :sync/graph-count-exceed-limit "تعداد گراف‌ها از حد مجاز فراتر رفت"
  :sync/invitation-sent "دعوت‌نامه ارسال شد"
+ :sync/more-debug-info "More debug info"
+ :sync/offline "Offline"
+ :sync/online "Online"
+ :sync/pending-local-changes "pending local changes"
+ :sync/pending-server-changes "pending server changes"
  :sync/something-wrong "خطا در همگام‌سازی"
+ :sync/start-sync "Start sync"
  :sync/storage-exceed-limit "فضای ذخیره‌سازی از حد مجاز فراتر رفت"
+ :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "کاربر هنوز وجود ندارد"
 
  ;; Encryption
@@ -1149,6 +1358,10 @@
  :window/minimize "کمینه"
  :window/restore "بازیابی"
 
+ ;; Mobile
+ :mobile/camera-access-denied "Camera access is denied. Enable it in Settings > Logseq."
+ :mobile/microphone-access-denied "Microphone access is denied. Enable it in Settings > Logseq."
+
  ;; Mobile header actions
  :mobile.header/actions "عملیات"
  :mobile.header/create-graph "ایجاد گراف"
@@ -1221,4 +1434,27 @@
  :electron/version "نسخه {1}"
  :electron/write-file-failed "نوشتن در فایل {1} ناموفق بود، {2}."
  :electron/write-file-failed-with-backup "نوشتن در فایل {1} ناموفق بود، {2}. یک فایل پشتیبان در {3} ذخیره شد."
+
+ ;; Icon
+ :icon/emojis-count "Emojis ({1})"
+ :icon/icons-count "Icons ({1})"
+ :icon/matched-count "Matched ({1})"
+ :icon/search-all "Search all"
+ :icon/search-emojis "Search emojis"
+ :icon/search-icons "Search icons"
+ :icon/tab-all "All"
+ :icon/tab-emojis "Emojis"
+ :icon/tab-icons "Icons"
+
+ ;; Library
+ :library/add-existing-pages "Add existing pages to Library"
+ :library/add-pages "Add pages"
+
+ ;; Shell
+ :shell/input-command-title "Input command"
+
+ ;; Youtube
+ :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
+ :youtube/player-not-ready "YouTube player isn't ready yet."
+ :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 }

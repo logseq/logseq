@@ -243,12 +243,14 @@
                                                     {:msg "Validation errors"
                                                      :errors errors}])
         (shared-service/broadcast-to-clients! :notification
-                                              [(str "Validation detected " (count errors) " invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed.")
-                                               :warning false]))
+                                              [nil :warning false nil nil
+                                               {:i18n-key :graph.validation/invalid-blocks-detected
+                                                :i18n-args [(count errors)]}]))
 
       (shared-service/broadcast-to-clients! :notification
-                                            [(str "Your graph is valid! " (assoc (db-validate/graph-counts db entities) :datoms datom-count))
-                                             :success false]))
+                                            [nil :success false nil nil
+                                             {:i18n-key :graph.validation/valid
+                                              :i18n-args [(assoc (db-validate/graph-counts db entities) :datoms datom-count)]}]))
     {:errors errors
      :datom-count datom-count
      :invalid-entity-ids invalid-entity-ids}))

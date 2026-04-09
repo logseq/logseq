@@ -276,20 +276,32 @@
 
  ;; Ui
  :ui/all-done "全部完成！"
+ :ui/apply "应用"
  :ui/cancel "取消"
  :ui/close "关闭"
  :ui/confirm "确认"
+ :ui/copy-all "全部复制"
  :ui/delete "删除"
+ :ui/deleted "已删除"
+ :ui/empty "空"
+ :ui/fix "修复"
+ :ui/from "从："
  :ui/host "主机"
  :ui/loading "加载中..."
  :ui/login "登录"
  :ui/logout "退出登录"
+ :ui/off "关闭"
+ :ui/on "开启"
  :ui/open "打开"
+ :ui/open-named "打开 {1}"
  :ui/port "端口"
  :ui/relaunch-confirm "此更改需重启应用，是否立即重启？"
  :ui/remove-background "移除背景"
+ :ui/run "运行"
  :ui/save "保存"
+ :ui/skip "跳过"
  :ui/submit "提交"
+ :ui/to "到："
  :ui/toggle-theme "切换主题"
  :ui/type "类型"
  :ui/untitled "无标题"
@@ -337,12 +349,14 @@
  :notification/unsupported-reaction-emoji "不支持该表情回应。"
 
  ;; Search
+ :search/indices-rebuilt-success "搜索索引已成功重建！"
  :search/no-result "未找到匹配项"
  :search/result-count "{1} 个结果"
 
  ;; Select
  :select/default-prompt "请选择"
  :select/default-select-multiple "选择一个或多个"
+ :select/new-option "+ 新建选项：{1}"
 
  ;; Format
  :format/bold "粗体"
@@ -362,7 +376,15 @@
 
  ;; Graph
  :graph/all-graphs "所有图谱"
+ :graph/create-db "创建 DB 图谱"
  :graph/create-failed "创建图谱失败。"
+ :graph/creating "正在创建图谱"
+ :graph/delete-local-action "删除本地图谱"
+ :graph/delete-server-action "从服务器删除"
+ :graph/delete-warning "⚠️ 请注意，删除后我们无法恢复此图谱。删除前请确认你已做好备份。"
+ :graph/encrypt-data-label "加密图谱数据"
+ :graph/last-opened-at-label "上次打开于：{1}"
+ :graph/leave-action "离开此图谱"
  :graph/leave-failed "离开图谱失败。"
  :graph/left "已离开图谱。"
  :graph/local-graphs "本地图谱"
@@ -372,16 +394,44 @@
  :graph/removed-from-sync "此图谱已从 Logseq Sync 中移除。"
  :graph/shared-graphs "共享图谱"
  :graph/updated-switching "图谱已更新！正在切换到图谱……"
+ :graph/use-sync-beta "使用 Logseq Sync（Beta 测试）"
+ :graph/use-sync-label "使用 Logseq Sync？"
+
+ ;; Graph delete local
+ :graph.delete-local/confirm-desc "确定要从 Logseq 中永久删除图谱“{1}”吗？"
+
+ ;; Graph delete server
+ :graph.delete-server/confirm-desc "确定要从我们的服务器中永久删除图谱“{1}”吗？"
+
+ ;; Graph leave
+ :graph.leave/confirm-desc "确定要离开这个图谱吗？"
 
  ;; Graph page views
  :graph.page/show-journals "显示日记"
  :graph.page/title "页面图谱"
+
+ ;; Graph reserved character
+ :graph.reserved-character/asterisk "星号"
+ :graph.reserved-character/backslash "反斜杠"
+ :graph.reserved-character/colon "冒号"
+ :graph.reserved-character/double-quote "双引号"
+ :graph.reserved-character/forward-slash "正斜杠"
+ :graph.reserved-character/greater-than "大于号"
+ :graph.reserved-character/hash "井号"
+ :graph.reserved-character/less-than "小于号"
+ :graph.reserved-character/pipe "竖线或管道符"
+ :graph.reserved-character/plus "加号"
+ :graph.reserved-character/question-mark "问号"
 
  ;; Graph switching
  :graph.switch/add-graph-action "再添加一份图谱"
  :graph.switch/empty-desc "没有匹配的图谱。你想再添加一份图谱吗？"
  :graph.switch/prompt "切换到："
  :graph.switch/select-prompt "请选择一份图谱"
+
+ ;; Graph validation
+ :graph.validation/invalid-blocks-detected "验证发现 {1} 个无效块。这些块可能存在问题。正在尝试修复无效块。请再次运行验证以检查它们是否已被修复。"
+ :graph.validation/valid "你的图谱有效！{1}"
 
  ;; File
  :file/config-duplicate-keys "文件 '{1}' 存在重复键。键 '{2}' 被赋值了多次。"
@@ -419,6 +469,7 @@
  :page.convert/cant-be-block "页“{1}”无法转换为块。"
  :page.convert/cant-be-block-has-children "页“{1}”无法转换为块，因为它具有子页。"
  :page.convert/cant-be-block-move-first "页面“{1}”无法转换为块，请先将其移动到其他页面。"
+ :page.convert/page-to-tag-action "将“{1}”转换为标签"
  :page.convert/page-to-tag-built-in "内置页面不能用作标签"
  :page.convert/page-to-tag-duplicate "标签“{1}”已存在。"
  :page.convert/page-to-tag-namespaced "命名空间页面不能作为标签"
@@ -447,6 +498,12 @@
  :block/copy-ref "复制块引用"
  :block/copy-url "复制块 URL"
 
+ ;; Block macro
+ :block.macro/embed-deprecated "{{embed}} 已弃用。请改用“/节点嵌入”命令。"
+ :block.macro/namespace-deprecated "{{namespace}} 已弃用。请改用 {1} 功能。"
+ :block.macro/query-deprecated "{{query}} 已弃用。请改用“/查询”命令。"
+ :block.macro/unsupported-name "不支持的宏名称：{1}"
+
  ;; Node
  :node/new "新建节点"
 
@@ -456,10 +513,46 @@
  ;; Journal validation
  :journal.validation/page-not-journal "此页面不是日记页面。"
 
+ ;; Natural language dates
+ :date.nlp/last-friday "上周五"
+ :date.nlp/last-monday "上周一"
+ :date.nlp/last-month "上个月"
+ :date.nlp/last-saturday "上周六"
+ :date.nlp/last-sunday "上周日"
+ :date.nlp/last-thursday "上周四"
+ :date.nlp/last-tuesday "上周二"
+ :date.nlp/last-wednesday "上周三"
+ :date.nlp/last-week "上周"
+ :date.nlp/last-year "去年"
+ :date.nlp/next-friday "下周五"
+ :date.nlp/next-monday "下周一"
+ :date.nlp/next-month "下个月"
+ :date.nlp/next-saturday "下周六"
+ :date.nlp/next-sunday "下周日"
+ :date.nlp/next-thursday "下周四"
+ :date.nlp/next-tuesday "下周二"
+ :date.nlp/next-wednesday "下周三"
+ :date.nlp/next-week "下周"
+ :date.nlp/next-year "明年"
+ :date.nlp/this-friday "本周五"
+ :date.nlp/this-monday "本周一"
+ :date.nlp/this-month "本月"
+ :date.nlp/this-saturday "本周六"
+ :date.nlp/this-sunday "本周日"
+ :date.nlp/this-thursday "本周四"
+ :date.nlp/this-tuesday "本周二"
+ :date.nlp/this-wednesday "本周三"
+ :date.nlp/this-week "本周"
+ :date.nlp/this-year "今年"
+ :date.nlp/today "今天"
+ :date.nlp/tomorrow "明天"
+ :date.nlp/yesterday "昨天"
+
  ;; Editor
  :editor/auto-heading "自动标题"
  :editor/block-search "搜索块"
  :editor/click-to-edit "点击以编辑"
+ :editor/code-language-placeholder "选择语言"
  :editor/collapse-block-children "折叠所有子块"
  :editor/copy "复制"
  :editor/cut "剪切"
@@ -471,7 +564,64 @@
  :editor/new-page "新页面"
  :editor/new-tag "新标签"
  :editor/paste "粘贴"
+ :editor/reference-node-use-page-ref "要引用一个节点，请使用 `[[]]`。"
  :editor/remove-heading "移除标题"
+ :editor/template-insert-error "模板插入错误：{1}"
+
+ ;; Editor slash commands
+ :editor.slash/advanced-query "高级查询"
+ :editor.slash/advanced-query-desc "创建一个高级查询块"
+ :editor.slash/calculator "计算器"
+ :editor.slash/calculator-desc "插入一个计算器"
+ :editor.slash/code-block "代码块"
+ :editor.slash/code-block-desc "插入代码块"
+ :editor.slash/current-time "当前时间"
+ :editor.slash/current-time-desc "插入当前时间"
+ :editor.slash/date-picker "日期选择器"
+ :editor.slash/date-picker-desc "选择一个日期并插入到这里"
+ :editor.slash/embed-html "嵌入 HTML"
+ :editor.slash/embed-twitter-tweet "嵌入 Twitter 推文"
+ :editor.slash/embed-video-url "嵌入视频 URL"
+ :editor.slash/embed-youtube-timestamp "嵌入 YouTube 时间戳"
+ :editor.slash/group-advanced "高级"
+ :editor.slash/group-basic "基础"
+ :editor.slash/group-format "格式"
+ :editor.slash/group-heading "标题"
+ :editor.slash/group-list-type "列表类型"
+ :editor.slash/group-plugins "插件"
+ :editor.slash/group-priority "优先级"
+ :editor.slash/group-task-date "任务日期"
+ :editor.slash/group-task-status "任务状态"
+ :editor.slash/group-time-and-date "时间与日期"
+ :editor.slash/heading-label "标题 {1}"
+ :editor.slash/image-link "图片链接"
+ :editor.slash/image-link-desc "创建一个指向图片的 HTTP 链接"
+ :editor.slash/link-desc "创建一个 HTTP 链接"
+ :editor.slash/math-block "数学块"
+ :editor.slash/math-block-desc "创建一个 LaTeX 块"
+ :editor.slash/no-priority "无优先级"
+ :editor.slash/node-embed "节点嵌入"
+ :editor.slash/node-embed-desc "在此处嵌入一个节点"
+ :editor.slash/node-reference "节点引用"
+ :editor.slash/node-reference-desc "创建一个指向节点（页面或块）的引用"
+ :editor.slash/normal-text "正常文本"
+ :editor.slash/normal-text-desc "清除标题并设为正常文本"
+ :editor.slash/number-children "为子节点编号"
+ :editor.slash/number-list "编号列表"
+ :editor.slash/priority-desc "将优先级设为 {1}"
+ :editor.slash/priority-label "优先级 {1}"
+ :editor.slash/query-function "查询函数"
+ :editor.slash/query-function-desc "创建一个查询函数"
+ :editor.slash/quote-desc "创建一个引用块"
+ :editor.slash/status-desc "将状态设为 {1}"
+ :editor.slash/template-desc "在此处插入一个已创建的模板"
+ :editor.slash/today-desc "插入今天的日期"
+ :editor.slash/tomorrow-desc "插入明天的日期"
+ :editor.slash/underline "下划线"
+ :editor.slash/underline-desc "创建带下划线的文本样式"
+ :editor.slash/upload-asset "上传资源"
+ :editor.slash/upload-asset-desc "上传图片、PDF、DOCX 等类型的文件"
+ :editor.slash/yesterday-desc "插入昨天的日期"
 
  ;; Reference
  :reference/copy "复制此引用"
@@ -492,6 +642,9 @@
  ;; Property
  :property/add-choice "添加选项"
  :property/add-choices "添加选项"
+ :property/add-description "添加描述"
+ :property/add-new "添加属性"
+ :property/add-or-change "添加或更改属性"
  :property/available-choices "可用选项"
  :property/change-tooltip "修改“{1}”"
  :property/checkbox-state-mapping "复选框状态映射"
@@ -500,6 +653,7 @@
  :property/choose-tag "选择标签"
  :property/choose-tags "选择标签"
  :property/configure "配置属性"
+ :property/convert-page-to-property "将“{1}”转换为属性"
  :property/default-value "默认值"
  :property/delete-from-node "从节点删除属性"
  :property/delete-from-node-confirm "确认要从此节点删除此属性吗？"
@@ -525,6 +679,7 @@
  :property/private-built-in-not-usable "这是一个私有内置属性，不能使用。"
  :property/select-choice "选择一个选项"
  :property/set-default-choice "设为默认选项"
+ :property/set-default-value "设置默认值"
  :property/set-icon "设置图标"
  :property/set-placeholder "设置“{1}”"
  :property/set-value "设置值"
@@ -800,6 +955,9 @@
  :view.table/total-refs-count "总引用数"
  :view.table/unpin "取消固定"
 
+ ;; Builder queries
+ :query.builder/add-filter-or-operator-placeholder "添加过滤器/运算符"
+
  ;; Asset
  :asset/align "对齐"
  :asset/align-center "居中对齐"
@@ -810,12 +968,16 @@
  :asset/confirm-delete-image "确定要删除这张图片吗？"
  :asset/copy "复制图片"
  :asset/delete "删除图片"
+ :asset/downloading "下载中"
  :asset/maximize "最大化显示图片"
  :asset/open-in-browser "在浏览器打开"
  :asset/physical-delete "同时删除本地文件（目前不可撤销）"
  :asset/ref-block "资源块引用"
  :asset/show-in-folder "在文件夹中显示图片"
  :asset/size-too-large "资源大小不能超过 100M"
+ :asset/syncing "同步中"
+ :asset/transfer-placeholder "{1}资源..."
+ :asset/uploading "上传中"
 
  ;; Pdf
  :pdf/auto-open-context-menu "为选中文本自动打开上下文菜单"
@@ -824,6 +986,8 @@
  :pdf/doc-metadata "查看文档元数据"
  :pdf/hl-block-colored "颜色标识高亮块"
  :pdf/linked-ref "转到注解"
+ :pdf/load-highlights-file-error "错误：无法加载高亮文件：“{1}”。
+                                 {2}"
  :pdf/toggle-dashed "区域选取为虚线"
 
  ;; Flashcard empty
@@ -888,13 +1052,26 @@
  :export/copy-to-clipboard "复制到剪贴板"
  :export/db-backup-failed "数据库备份失败，请前往导出并指定备份文件夹。"
  :export/db-edn "导出 EDN 文件"
+ :export/error-unexpected "导出期间发生意外错误。详情请查看 JavaScript 控制台。"
+ :export/format-edn "EDN"
+ :export/format-html "HTML"
+ :export/format-opml "OPML"
+ :export/format-png "PNG"
+ :export/format-text "文本"
  :export/graph "导出图谱"
  :export/graph-ontology-data-copied "已复制图谱本体数据！"
+ :export/level-lte "层级 <="
  :export/markdown "导出为标准 Markdown（不含块属性）"
+ :export/newline-after-block "块后换行"
  :export/no-updates-since-last-export "自上次导出以来图谱无更新。"
+ :export/open-blocks-only "仅导出展开的块（跳过折叠的子块）"
  :export/page "导出页面"
  :export/page-data-copied "已复制页面数据！"
+ :export/page-ref-text "[[文本]] -> 文本"
  :export/public-pages "导出公开页面"
+ :export/remove-emphasis "移除强调标记"
+ :export/remove-properties "移除属性"
+ :export/remove-tags "移除 #标签"
  :export/save-to-file "保存到文件"
  :export/sqlite-db "导出 SQLite 数据库"
  :export/title "导出"
@@ -911,6 +1088,7 @@
  :publish/invalid-page "发布失败：页面无效。"
  :publish/published-to "发布到：{1}"
  :publish/publishing "发布中..."
+ :publish/unpublish "取消发布"
  :publish/unpublish-failed "取消发布失败。"
  :publish/unpublish-missing-page-id "取消发布失败：缺少页面 ID。"
  :publish/unpublished "已取消发布。"
@@ -1013,6 +1191,7 @@
  :plugin/all "全部"
  :plugin/all-updated "全部已更新！"
  :plugin/auto-check-for-updates "是否自动检查更新"
+ :plugin/auto-check-for-updates-status "自动检查更新：{1}！"
  :plugin/check-all-updates "一键检查更新"
  :plugin/check-update "检查更新"
  :plugin/checking-for-updates "正在检查插件更新 ..."
@@ -1024,9 +1203,12 @@
  :plugin/downloads "下载量"
  :plugin/enabled "已开启"
  :plugin/existed-package "插件包已存在（{1}）。"
+ :plugin/fatal-error "致命错误：{1}"
  :plugin/found-n-updates "发现 {1} 个插件待更新"
  :plugin/found-updates "有更新"
  :plugin/install "安装"
+ :plugin/install-failed "安装失败：{1}
+                        {2}"
  :plugin/installed "已安装"
  :plugin/installed-plugin "已安装插件：{1}"
  :plugin/installing "安装中"
@@ -1035,7 +1217,9 @@
  :plugin/invalid-plugins-edn "提供的 plugins.edn 无效。具体错误请查看 JavaScript 控制台"
  :plugin/list-of-updates "可用的插件更新: "
  :plugin/load-from-web-url "通过URL载入插件"
+ :plugin/load-plugin-indicator "加载插件：{1}..."
  :plugin/load-unpacked "手动载入插件"
+ :plugin/loading-indicator "加载中"
  :plugin/malformed-plugins-edn "提供的 plugins.edn 格式错误。请检查文件是否为正确的 EDN 语法。"
  :plugin/marketplace "插件市场"
  :plugin/new-registered "新插件已注册！"
@@ -1050,6 +1234,7 @@
  :plugin/refresh-lists "刷新插件列表"
  :plugin/reload "重载"
  :plugin/remote-error "远端错误：{1}"
+ :plugin/report-modal-desc "如果某个插件不可用，或者你认为它包含恶意代码，请发送邮件到 {1}。请说明插件名称以及其 GitHub 仓库 URL。Logseq 团队通常会在一个工作日内回复。"
  :plugin/report-security "举报插件"
  :plugin/restart "重启应用"
  :plugin/search-plugin "搜索插件"
@@ -1065,6 +1250,7 @@
  :plugin/update-all-selected "更新已选插件"
  :plugin/update-available "待更新"
  :plugin/update-plugin "更新插件：{1} - {2}"
+ :plugin/update-status-error "错误"
  :plugin/updates-downloading "正在下载更新"
  :plugin/updating "更新中"
 
@@ -1073,6 +1259,22 @@
  :plugin.install-from-file/notice "以下插件会替换已安装的插件:"
  :plugin.install-from-file/success "插件全部安装完毕!"
  :plugin.install-from-file/title "从 plugins.edn 配置中安装插件"
+
+ ;; Plugin install from web url
+ :plugin.install-from-web-url/supports-note "URL 同时支持 GitHub 仓库和本地开发服务器。（例如：{1}、{2}）"
+
+ ;; Plugin proxy
+ :plugin.proxy/http "HTTP"
+ :plugin.proxy/socks5 "SOCKS5"
+ :plugin.proxy/system "系统"
+ :plugin.proxy/test-url "测试 URL"
+ :plugin.proxy/testing "测试中"
+
+ ;; Plugin themes
+ :plugin.themes/default-desc "Logseq 默认主题（{1}）。"
+ :plugin.themes/default-name "默认主题（{1}）"
+ :plugin.themes/group "{1}"
+ :plugin.themes/light-and-dark "浅色与深色主题"
 
  ;; Zotero
  :zotero/attachments "附件"
@@ -1132,10 +1334,20 @@
  :account.billing/month "月"
 
  ;; Sync
+ :sync/assets-downloading-count "正在下载资源（{1}）"
+ :sync/assets-uploading-count "正在上传资源（{1}）"
+ :sync/downloading "下载中..."
  :sync/graph-count-exceed-limit "同步图谱数量超出限制"
  :sync/invitation-sent "邀请已发送！"
+ :sync/more-debug-info "更多调试信息"
+ :sync/offline "离线"
+ :sync/online "在线"
+ :sync/pending-local-changes "待同步的本地更改"
+ :sync/pending-server-changes "待同步的服务器更改"
  :sync/something-wrong "出了点问题，请重试。"
+ :sync/start-sync "开始同步"
  :sync/storage-exceed-limit "同步存储超出限制"
+ :sync/uploading "上传中..."
  :sync/user-doesnt-exist-yet "该用户尚不存在。"
 
  ;; Encryption
@@ -1310,6 +1522,10 @@
  :window/minimize "最小化"
  :window/restore "还原"
 
+ ;; Mobile
+ :mobile/camera-access-denied "相机访问被拒绝。请在“设置 > Logseq”中启用。"
+ :mobile/microphone-access-denied "麦克风访问被拒绝。请在“设置 > Logseq”中启用。"
+
  ;; Mobile header actions
  :mobile.header/actions "操作"
  :mobile.header/create-graph "新建图谱"
@@ -1382,4 +1598,28 @@
  :electron/version "版本 {1}"
  :electron/write-file-failed "写入文件 {1} 失败，{2}。"
  :electron/write-file-failed-with-backup "写入文件 {1} 失败，{2}。备份文件已保存到 {3}。"
+
+ ;; Icon
+ :icon/emojis-count "表情符号（{1}）"
+ :icon/icons-count "图标（{1}）"
+ :icon/matched-count "匹配结果（{1}）"
+ :icon/search-all "搜索全部"
+ :icon/search-emojis "搜索表情符号"
+ :icon/search-icons "搜索图标"
+ :icon/tab-all "全部"
+ :icon/tab-emojis "表情符号"
+ :icon/tab-icons "图标"
+
+ ;; Library
+ :library/add-existing-pages "将现有页面添加到 Library"
+ :library/add-pages "添加页面"
+
+ ;; Shell
+ :shell/input-command-title "输入命令"
+
+ ;; Youtube
+ :youtube/embed-first-reminder-mobile "请先嵌入一个 YouTube 视频，然后再使用此图标。
+                                      请记住：在移动端，你可以将原始 YouTube URL 直接粘贴为嵌入视频。"
+ :youtube/player-not-ready "YouTube 播放器尚未准备好。"
+ :youtube/timestamps-not-available-mobile "移动端暂不支持 YouTube 时间戳。"
 }

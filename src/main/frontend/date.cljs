@@ -5,6 +5,7 @@
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
             [cljs-time.local :as tl]
+            [clojure.string :as string]
             [frontend.context.i18n :as i18n]
             [frontend.state :as state]
             [goog.object :as gobj]
@@ -153,6 +154,32 @@
    "Next Friday"
    "Next Saturday"
    "Next Sunday"])
+
+(defn- nlp-page->i18n-key
+  "Derives a :date.nlp/* i18n key from an English NLP page string.
+  Example: \"Last Monday\" -> :date.nlp/last-monday"
+  [s]
+  (keyword "date.nlp" (-> s string/lower-case (string/replace " " "-"))))
+
+(defn- with-i18n-titles
+  "Wraps a collection of English display strings, returning a seq of maps with
+  {:block/title <translated-label> :nlp-original-title <english-string>
+   ...extra}.
+  key-fn derives an i18n keyword from each English string.
+  t-fn is the translation function (frontend.context.i18n/t)."
+  [items key-fn t-fn extra]
+  (map (fn [en]
+         (merge extra
+                {:block/title (t-fn (key-fn en))
+                 :nlp-original-title en}))
+       items))
+
+(defn nlp-pages-i18n
+  "Returns nlp-pages as a seq of maps with translated :block/title labels.
+  :nlp-original-title preserves the English string for chrono-node NLP parsing.
+  Accepts optional keyword args merged into every output map."
+  [& {:as extra}]
+  (with-i18n-titles nlp-pages nlp-page->i18n-key i18n/t extra))
 
 (comment
   (def default-formatter (tf/formatter "MMM do, yyyy"))

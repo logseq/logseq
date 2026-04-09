@@ -131,7 +131,7 @@
     [:div.flex.flex-row.items-center.gap-2
      (shui/button
       {:variant :outline
-       :title (str "Shortcut: " shortcut)
+       :title (t :flashcard/shortcut-tooltip shortcut)
        :auto-focus false
        :size :sm
        :id id

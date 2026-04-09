@@ -691,7 +691,7 @@
        (log/error :exception error)
        (notification/show!
         [:div.flex.flex-col.gap-2
-         [:div (str "Error caught by UI!\n " error)]
+         [:div (t :ui/error-boundary-message error)]
          (str (.-stack error))] `:error)
        (assoc state ::error error))}
   [{error ::error, c :rum/react-component} error-view view]

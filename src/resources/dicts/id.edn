@@ -276,20 +276,32 @@
 
  ;; Ui
  :ui/all-done "Semua Selesai!"
+ :ui/apply "Apply"
  :ui/cancel "Batal"
  :ui/close "Tutup"
  :ui/confirm "Konfirmasi"
+ :ui/copy-all "Copy all"
  :ui/delete "Hapus"
+ :ui/deleted "Deleted"
+ :ui/empty "Empty"
+ :ui/fix "Fix it!"
+ :ui/from "From: "
  :ui/host "Host"
  :ui/loading "Memuat"
  :ui/login "Masuk"
  :ui/logout "Keluar"
+ :ui/off "OFF"
+ :ui/on "ON"
  :ui/open "Buka"
+ :ui/open-named "Open {1}"
  :ui/port "Port"
  :ui/relaunch-confirm "Perubahan ini memerlukan aplikasi dimulai ulang. Mulai ulang sekarang?"
  :ui/remove-background "Hapus latar belakang"
+ :ui/run "Run"
  :ui/save "Simpan"
+ :ui/skip "Skip"
  :ui/submit "Kirim"
+ :ui/to "To: "
  :ui/toggle-theme "Ganti tema"
  :ui/type "Tipe"
  :ui/untitled "Tanpa judul"
@@ -337,12 +349,14 @@
  :notification/unsupported-reaction-emoji "Emoji reaksi tidak didukung"
 
  ;; Search
+ :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "Tidak ada hasil yang cocok"
  :search/result-count "{1} hasil"
 
  ;; Select
  :select/default-prompt "Pilih salah satu"
  :select/default-select-multiple "Pilih satu atau beberapa"
+ :select/new-option "+ New option: {1}"
 
  ;; Format
  :format/bold "Tebal"
@@ -362,7 +376,15 @@
 
  ;; Graph
  :graph/all-graphs "Semua grafik"
+ :graph/create-db "Create db graph"
  :graph/create-failed "Gagal membuat grafik"
+ :graph/creating "Creating graph"
+ :graph/delete-local-action "Delete local graph"
+ :graph/delete-server-action "Delete from server"
+ :graph/delete-warning "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."
+ :graph/encrypt-data-label "Encrypt graph data"
+ :graph/last-opened-at-label "Last opened at: {1}"
+ :graph/leave-action "Leave this graph"
  :graph/leave-failed "Gagal meninggalkan grafik"
  :graph/left "Ditinggalkan"
  :graph/local-graphs "Grafik lokal:"
@@ -372,16 +394,44 @@
  :graph/removed-from-sync "Grafik dihapus dari sinkronisasi"
  :graph/shared-graphs "Grafik bersama"
  :graph/updated-switching "Grafik diperbarui. Beralih..."
+ :graph/use-sync-beta "Use Logseq Sync (Beta testing)"
+ :graph/use-sync-label "Use Logseq Sync?"
+
+ ;; Graph delete local
+ :graph.delete-local/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from Logseq?"
+
+ ;; Graph delete server
+ :graph.delete-server/confirm-desc "Are you sure you want to permanently delete the graph \"{1}\" from our server?"
+
+ ;; Graph leave
+ :graph.leave/confirm-desc "Are you sure you want to leave this graph?"
 
  ;; Graph page views
  :graph.page/show-journals "Tampilkan Jurnal"
  :graph.page/title "Grafik halaman"
+
+ ;; Graph reserved character
+ :graph.reserved-character/asterisk "asterisk"
+ :graph.reserved-character/backslash "backslash"
+ :graph.reserved-character/colon "colon"
+ :graph.reserved-character/double-quote "double quote"
+ :graph.reserved-character/forward-slash "forward slash"
+ :graph.reserved-character/greater-than "greater than"
+ :graph.reserved-character/hash "hash"
+ :graph.reserved-character/less-than "less than"
+ :graph.reserved-character/pipe "vertical bar or pipe"
+ :graph.reserved-character/plus "plus"
+ :graph.reserved-character/question-mark "question mark"
 
  ;; Graph switching
  :graph.switch/add-graph-action "Ya, tambahkan grafik lain"
  :graph.switch/empty-desc "Tidak ada grafik yang cocok. Apakah Anda ingin menambahkan yang lain?"
  :graph.switch/prompt "Beralih ke:"
  :graph.switch/select-prompt "Pilih grafik"
+
+ ;; Graph validation
+ :graph.validation/invalid-blocks-detected "Validation detected {1} invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed."
+ :graph.validation/valid "Your graph is valid! {1}"
 
  ;; File
  :file/config-duplicate-keys "File '{1}' memiliki kunci duplikat. Kunci '{2}' ditetapkan beberapa kali."
@@ -419,6 +469,7 @@
  :page.convert/cant-be-block "Halaman \"{1}\" tidak dapat dikonversi menjadi blok."
  :page.convert/cant-be-block-has-children "Halaman \"{1}\" tidak dapat diubah menjadi blok karena memiliki turunan halaman."
  :page.convert/cant-be-block-move-first "Halaman \"{1}\" tidak dapat diubah menjadi blok, harap dipindahkan ke halaman lain terlebih dahulu."
+ :page.convert/page-to-tag-action "Convert \"{1}\" to tag"
  :page.convert/page-to-tag-built-in "Halaman bawaan tidak bisa menjadi tag"
  :page.convert/page-to-tag-duplicate "Tag dengan nama \"{1}\" sudah ada."
  :page.convert/page-to-tag-namespaced "Halaman namespace tidak bisa menjadi tag"
@@ -447,6 +498,12 @@
  :block/copy-ref "Salin referensi blok"
  :block/copy-url "Salin URL blok"
 
+ ;; Block macro
+ :block.macro/embed-deprecated "{{embed}} is deprecated. Use '/Node embed' command instead."
+ :block.macro/namespace-deprecated "{{namespace}} is deprecated. Use the {1} feature instead."
+ :block.macro/query-deprecated "{{query}} is deprecated. Use '/Query' command instead."
+ :block.macro/unsupported-name "Unsupported macro name: {1}"
+
  ;; Node
  :node/new "Node baru"
 
@@ -456,10 +513,46 @@
  ;; Journal validation
  :journal.validation/page-not-journal "Halaman ini bukan jurnal."
 
+ ;; Natural language dates
+ :date.nlp/last-friday "Last Friday"
+ :date.nlp/last-monday "Last Monday"
+ :date.nlp/last-month "Last month"
+ :date.nlp/last-saturday "Last Saturday"
+ :date.nlp/last-sunday "Last Sunday"
+ :date.nlp/last-thursday "Last Thursday"
+ :date.nlp/last-tuesday "Last Tuesday"
+ :date.nlp/last-wednesday "Last Wednesday"
+ :date.nlp/last-week "Last week"
+ :date.nlp/last-year "Last year"
+ :date.nlp/next-friday "Next Friday"
+ :date.nlp/next-monday "Next Monday"
+ :date.nlp/next-month "Next month"
+ :date.nlp/next-saturday "Next Saturday"
+ :date.nlp/next-sunday "Next Sunday"
+ :date.nlp/next-thursday "Next Thursday"
+ :date.nlp/next-tuesday "Next Tuesday"
+ :date.nlp/next-wednesday "Next Wednesday"
+ :date.nlp/next-week "Next week"
+ :date.nlp/next-year "Next year"
+ :date.nlp/this-friday "This Friday"
+ :date.nlp/this-monday "This Monday"
+ :date.nlp/this-month "This month"
+ :date.nlp/this-saturday "This Saturday"
+ :date.nlp/this-sunday "This Sunday"
+ :date.nlp/this-thursday "This Thursday"
+ :date.nlp/this-tuesday "This Tuesday"
+ :date.nlp/this-wednesday "This Wednesday"
+ :date.nlp/this-week "This week"
+ :date.nlp/this-year "This year"
+ :date.nlp/today "Today"
+ :date.nlp/tomorrow "Tomorrow"
+ :date.nlp/yesterday "Yesterday"
+
  ;; Editor
  :editor/auto-heading "Judul otomatis"
  :editor/block-search "Cari blok"
  :editor/click-to-edit "Klik untuk menyunting"
+ :editor/code-language-placeholder "Choose language"
  :editor/collapse-block-children "Tutup semua"
  :editor/copy "Salin"
  :editor/cut "Potong"
@@ -471,7 +564,64 @@
  :editor/new-page "Halaman baru"
  :editor/new-tag "Tag baru"
  :editor/paste "Tempel"
+ :editor/reference-node-use-page-ref "To reference a node, please use `[[]]`."
  :editor/remove-heading "Hapus judul"
+ :editor/template-insert-error "Template insert error: {1}"
+
+ ;; Editor slash commands
+ :editor.slash/advanced-query "Advanced Query"
+ :editor.slash/advanced-query-desc "Create an advanced query block"
+ :editor.slash/calculator "Calculator"
+ :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/code-block "Code block"
+ :editor.slash/code-block-desc "Insert code block"
+ :editor.slash/current-time "Current time"
+ :editor.slash/current-time-desc "Insert current time"
+ :editor.slash/date-picker "Date picker"
+ :editor.slash/date-picker-desc "Pick a date and insert here"
+ :editor.slash/embed-html "Embed HTML"
+ :editor.slash/embed-twitter-tweet "Embed Twitter tweet"
+ :editor.slash/embed-video-url "Embed Video URL"
+ :editor.slash/embed-youtube-timestamp "Embed YouTube timestamp"
+ :editor.slash/group-advanced "ADVANCED"
+ :editor.slash/group-basic "BASIC"
+ :editor.slash/group-format "FORMAT"
+ :editor.slash/group-heading "Heading"
+ :editor.slash/group-list-type "LIST TYPE"
+ :editor.slash/group-plugins "PLUGINS"
+ :editor.slash/group-priority "PRIORITY"
+ :editor.slash/group-task-date "TASK DATE"
+ :editor.slash/group-task-status "TASK STATUS"
+ :editor.slash/group-time-and-date "TIME & DATE"
+ :editor.slash/heading-label "Heading {1}"
+ :editor.slash/image-link "Image link"
+ :editor.slash/image-link-desc "Create a HTTP link to an image"
+ :editor.slash/link-desc "Create a HTTP link"
+ :editor.slash/math-block "Math block"
+ :editor.slash/math-block-desc "Create a LaTeX block"
+ :editor.slash/no-priority "No priority"
+ :editor.slash/node-embed "Node embed"
+ :editor.slash/node-embed-desc "Embed a node here"
+ :editor.slash/node-reference "Node reference"
+ :editor.slash/node-reference-desc "Create a backlink to a node (a page or a block)"
+ :editor.slash/normal-text "Normal text"
+ :editor.slash/normal-text-desc "Clear heading and set to normal text"
+ :editor.slash/number-children "Number children"
+ :editor.slash/number-list "Number list"
+ :editor.slash/priority-desc "Set priority to {1}"
+ :editor.slash/priority-label "Priority {1}"
+ :editor.slash/query-function "Query function"
+ :editor.slash/query-function-desc "Create a query function"
+ :editor.slash/quote-desc "Create a quote block"
+ :editor.slash/status-desc "Set status to {1}"
+ :editor.slash/template-desc "Insert a created template here"
+ :editor.slash/today-desc "Insert the date of today"
+ :editor.slash/tomorrow-desc "Insert the date of tomorrow"
+ :editor.slash/underline "Underline"
+ :editor.slash/underline-desc "Create an underline text decoration"
+ :editor.slash/upload-asset "Upload an asset"
+ :editor.slash/upload-asset-desc "Upload file types like image, PDF, DOCX, etc."
+ :editor.slash/yesterday-desc "Insert the date of yesterday"
 
  ;; Reference
  :reference/copy "Salin referensi ini"
@@ -492,6 +642,9 @@
  ;; Property
  :property/add-choice "Tambah pilihan"
  :property/add-choices "Tambah pilihan"
+ :property/add-description "Add description"
+ :property/add-new "Add property"
+ :property/add-or-change "Add or change property"
  :property/available-choices "Pilihan tersedia"
  :property/checkbox-state-mapping "Pemetaan status checkbox"
  :property/children-count "Anak-anak ({1})"
@@ -499,6 +652,7 @@
  :property/choose-tag "Pilih tag"
  :property/choose-tags "Pilih tag"
  :property/configure "Konfigurasi"
+ :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/default-value "Nilai default"
  :property/delete-from-node "Hapus dari node"
  :property/delete-from-node-confirm "Hapus properti ini dari node?"
@@ -523,6 +677,7 @@
  :property/private-built-in-not-usable "Properti bawaan privat tidak dapat digunakan"
  :property/select-choice "Pilih pilihan"
  :property/set-default-choice "Atur pilihan default"
+ :property/set-default-value "Set default value"
  :property/set-icon "Atur ikon"
  :property/set-value "Atur nilai"
  :property/show-as-checkbox-on-node "Tampilkan sebagai checkbox di node"
@@ -643,6 +798,9 @@
  :view.table/total-refs-count "Total referensi"
  :view.table/unpin "Lepas sematan"
 
+ ;; Builder queries
+ :query.builder/add-filter-or-operator-placeholder "Add filter/operator"
+
  ;; Asset
  :asset/align "Perataan"
  :asset/align-center "Tengah"
@@ -653,12 +811,16 @@
  :asset/confirm-delete-image "Apakah Anda yakin ingin menghapus gambar ini?"
  :asset/copy "Salin gambar"
  :asset/delete "Hapus gambar"
+ :asset/downloading "Downloading"
  :asset/maximize "Perbesar gambar"
  :asset/open-in-browser "Buka gambar di peramban"
  :asset/physical-delete "Hapus juga berkasnya (perhatikan bahwa ini tidak dapat dikembalikan)"
  :asset/ref-block "Blok referensi"
  :asset/show-in-folder "Tampilkan gambar di folder"
  :asset/size-too-large "Berkas terlalu besar"
+ :asset/syncing "Syncing"
+ :asset/transfer-placeholder "{1} asset..."
+ :asset/uploading "Uploading"
 
  ;; Pdf
  :pdf/auto-open-context-menu "Buka menu konteks otomatis"
@@ -667,6 +829,7 @@
  :pdf/doc-metadata "Metadata Dokumen"
  :pdf/hl-block-colored "Label berwarna untuk blok sorotan"
  :pdf/linked-ref "Referensi terkait"
+ :pdf/load-highlights-file-error "Error: failed to load the highlights file: \"{1}\". \n{2}"
  :pdf/toggle-dashed "Gaya putus-putus untuk sorotan area"
 
  ;; Flashcard empty
@@ -731,13 +894,26 @@
  :export/copy-to-clipboard "Salin ke papan klip"
  :export/db-backup-failed "Pencadangan database gagal."
  :export/db-edn "Ekspor sebagai file EDN"
+ :export/error-unexpected "An unexpected error occurred during export. See the javascript console for details."
+ :export/format-edn "EDN"
+ :export/format-html "HTML"
+ :export/format-opml "OPML"
+ :export/format-png "PNG"
+ :export/format-text "Text"
  :export/graph "Ekspor grafik"
  :export/graph-ontology-data-copied "Data ontologi grafik disalin ke papan klip"
+ :export/level-lte "level <="
  :export/markdown "Ekspor sebagai Markdown (tanpa properti blok)"
+ :export/newline-after-block "newline after block"
  :export/no-updates-since-last-export "Tidak ada perubahan sejak ekspor terakhir."
+ :export/open-blocks-only "open blocks only (skip collapsed children)"
  :export/page "Ekspor halaman"
  :export/page-data-copied "Data halaman disalin ke papan klip"
+ :export/page-ref-text "[[text]] -> text"
  :export/public-pages "Ekspor halaman publik"
+ :export/remove-emphasis "remove emphasis"
+ :export/remove-properties "remove properties"
+ :export/remove-tags "remove #tags"
  :export/save-to-file "Simpan ke file"
  :export/sqlite-db "Ekspor database SQLite"
  :export/title "Ekspor"
@@ -750,6 +926,7 @@
  :publish/failed "Publikasi gagal"
  :publish/invalid-page "Halaman tidak valid"
  :publish/published-to "Dipublikasikan ke {1}"
+ :publish/unpublish "Unpublish"
  :publish/unpublish-failed "Pembatalan publikasi gagal"
  :publish/unpublish-missing-page-id "Pembatalan publikasi: ID halaman tidak ditemukan"
  :publish/unpublished "Publikasi dibatalkan"
@@ -852,6 +1029,7 @@
  :plugin/all "Semua"
  :plugin/all-updated "Semua Telah Diperbarui!"
  :plugin/auto-check-for-updates "Periksa otomatis pembaruan"
+ :plugin/auto-check-for-updates-status "Auto check for updates: {1}!"
  :plugin/check-all-updates "Periksa Semua Pembaruan"
  :plugin/check-update "Periksa Pembaruan"
  :plugin/checking-for-updates "Memeriksa pembaruan plugin ..."
@@ -863,9 +1041,11 @@
  :plugin/downloads "Unduhan"
  :plugin/enabled "Aktif"
  :plugin/existed-package "Paket plugin yang ada ({1})."
+ :plugin/fatal-error "Fatal: {1}"
  :plugin/found-n-updates "Ditemukan {1} Pembaruan"
  :plugin/found-updates "Pembaruan Baru"
  :plugin/install "Instal"
+ :plugin/install-failed "Install failed: {1}\n{2}"
  :plugin/installed "Terpasang"
  :plugin/installed-plugin "Plugin Terpasang: {1}"
  :plugin/installing "Sedang Menginstal"
@@ -874,7 +1054,9 @@
  :plugin/invalid-plugins-edn "File plugins.edn tidak valid"
  :plugin/list-of-updates "Pembaruan Plugin: "
  :plugin/load-from-web-url "Muat dari URL web"
+ :plugin/load-plugin-indicator "Load plugin: {1}..."
  :plugin/load-unpacked "Muatkan plugin yang diekstrak"
+ :plugin/loading-indicator "LOADING"
  :plugin/malformed-plugins-edn "Kesalahan pada file plugins.edn"
  :plugin/marketplace "Pasar"
  :plugin/new-registered "Plugin baru terdaftar"
@@ -889,6 +1071,7 @@
  :plugin/refresh-lists "Segarkan Daftar"
  :plugin/reload "Muat Ulang"
  :plugin/remote-error "Kesalahan jarak jauh: {1}"
+ :plugin/report-modal-desc "If any plugin is unavailable or you think it contains malicious code, please email {1}. Mention the name of the plugin and the URL of its GitHub repository. The Logseq team usually responds within a business day."
  :plugin/report-security "Laporkan masalah keamanan"
  :plugin/restart "Restart Aplikasi"
  :plugin/search-plugin "Cari plugin"
@@ -915,6 +1098,22 @@
  :plugin.install-from-file/notice "Plugin berikut akan menggantikan plugin Anda:"
  :plugin.install-from-file/success "Semua plugin terinstal!"
  :plugin.install-from-file/title "Instal plugin dari plugins.edn"
+
+ ;; Plugin install from web url
+ :plugin.install-from-web-url/supports-note "URLs support both GitHub repositories and local development servers. (For Examples: {1}, {2})"
+
+ ;; Plugin proxy
+ :plugin.proxy/http "HTTP"
+ :plugin.proxy/socks5 "SOCKS5"
+ :plugin.proxy/system "System"
+ :plugin.proxy/test-url "Test URL"
+ :plugin.proxy/testing "Testing"
+
+ ;; Plugin themes
+ :plugin.themes/default-desc "Logseq default {1} theme."
+ :plugin.themes/default-name "Default {1} theme"
+ :plugin.themes/group "{1} themes"
+ :plugin.themes/light-and-dark "light & dark themes"
 
  ;; Zotero
  :zotero/attachments "Lampiran"
@@ -974,10 +1173,20 @@
  :account.billing/month "bulan"
 
  ;; Sync
+ :sync/assets-downloading-count "Downloading assets ({1})"
+ :sync/assets-uploading-count "Uploading assets ({1})"
+ :sync/downloading "Downloading..."
  :sync/graph-count-exceed-limit "Jumlah grafik melebihi batas"
  :sync/invitation-sent "Undangan terkirim"
+ :sync/more-debug-info "More debug info"
+ :sync/offline "Offline"
+ :sync/online "Online"
+ :sync/pending-local-changes "pending local changes"
+ :sync/pending-server-changes "pending server changes"
  :sync/something-wrong "Kesalahan sinkronisasi"
+ :sync/start-sync "Start sync"
  :sync/storage-exceed-limit "Penyimpanan melebihi batas"
+ :sync/uploading "Uploading..."
  :sync/user-doesnt-exist-yet "Pengguna belum ada"
 
  ;; Encryption
@@ -1152,6 +1361,10 @@
  :window/minimize "Minimalkan"
  :window/restore "Pulihkan"
 
+ ;; Mobile
+ :mobile/camera-access-denied "Camera access is denied. Enable it in Settings > Logseq."
+ :mobile/microphone-access-denied "Microphone access is denied. Enable it in Settings > Logseq."
+
  ;; Mobile header actions
  :mobile.header/actions "Tindakan"
  :mobile.header/create-graph "Buat grafik"
@@ -1224,4 +1437,27 @@
  :electron/version "Versi {1}"
  :electron/write-file-failed "Penulisan ke berkas {1} gagal, {2}."
  :electron/write-file-failed-with-backup "Penulisan ke berkas {1} gagal, {2}. Berkas cadangan disimpan di {3}."
+
+ ;; Icon
+ :icon/emojis-count "Emojis ({1})"
+ :icon/icons-count "Icons ({1})"
+ :icon/matched-count "Matched ({1})"
+ :icon/search-all "Search all"
+ :icon/search-emojis "Search emojis"
+ :icon/search-icons "Search icons"
+ :icon/tab-all "All"
+ :icon/tab-emojis "Emojis"
+ :icon/tab-icons "Icons"
+
+ ;; Library
+ :library/add-existing-pages "Add existing pages to Library"
+ :library/add-pages "Add pages"
+
+ ;; Shell
+ :shell/input-command-title "Input command"
+
+ ;; Youtube
+ :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
+ :youtube/player-not-ready "YouTube player isn't ready yet."
+ :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 }

@@ -27,7 +27,7 @@
   `frontend.modules.shortcut.*`."
   (set (map (fn [k]
               (keyword (subs (namespace k) 8) (name k)))
-             (filter #(some-> % namespace (.startsWith "command."))
+            (filter #(some-> % namespace (.startsWith "command."))
                     (keys en-dicts)))))
 
 (def dicts
