@@ -1414,6 +1414,17 @@
       (is (= :remove-page (:command result)))
       (is (= "Home" (get-in result [:options :page])))))
 
+  (testing "remove page parses with id"
+    (let [result (commands/parse-args ["remove" "page" "--id" "42"])]
+      (is (true? (:ok? result)))
+      (is (= :remove-page (:command result)))
+      (is (= 42 (get-in result [:options :id])))))
+
+  (testing "remove page rejects --id and --page together"
+    (let [result (commands/parse-args ["remove" "page" "--id" "42" "--page" "Home"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))))
+
   (testing "remove page rejects legacy --name"
     (let [result (commands/parse-args ["remove" "page" "--name" "Home"])]
       (is (false? (:ok? result)))
@@ -2491,6 +2502,13 @@
       (is (= :remove-page (get-in result [:action :type])))
       (is (= "Home" (get-in result [:action :page])))))
 
+  (testing "remove page accepts --id in action build"
+    (let [parsed {:ok? true :command :remove-page :options {:id 42}}
+          result (commands/build-action parsed {:graph "demo"})]
+      (is (true? (:ok? result)))
+      (is (= :remove-page (get-in result [:action :type])))
+      (is (= 42 (get-in result [:action :id])))))
+
   (testing "remove tag parses by id"
     (let [parsed {:ok? true :command :remove-tag :options {:id 42}}
           result (commands/build-action parsed {:graph "demo"})]
@@ -3271,6 +3289,33 @@
                                                                                      nil)
                                                     (throw (ex-info "unexpected invoke" {:method method :args args}))))]
                  (p/let [result (commands/execute {:type :remove-page :repo "demo" :page "Home"} {})]
+                   (is (= :ok (:status result)))
+                   (is (= true (get-in result [:data :result])))
+                   (is (= [[:delete-page [page-uuid {}]]]
+                          @ops*))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-remove-page-by-id
+  (async done
+         (let [ops* (atom nil)
+               page-uuid (uuid "00000000-0000-0000-0000-00000000abce")]
+           (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                               cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                               transport/invoke (fn [_ method _ args]
+                                                  (case method
+                                                    :thread-api/pull (let [[_ _ lookup] args]
+                                                                       (if (= lookup 10)
+                                                                         {:db/id 10
+                                                                          :block/title "Home"
+                                                                          :block/name "home"
+                                                                          :block/uuid page-uuid}
+                                                                         {}))
+                                                    :thread-api/apply-outliner-ops (let [[_ ops _] args]
+                                                                                     (reset! ops* ops)
+                                                                                     nil)
+                                                    (throw (ex-info "unexpected invoke" {:method method :args args}))))]
+                 (p/let [result (commands/execute {:type :remove-page :repo "demo" :id 10} {})]
                    (is (= :ok (:status result)))
                    (is (= true (get-in result [:data :result])))
                    (is (= [[:delete-page [page-uuid {}]]]
