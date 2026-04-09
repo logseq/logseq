@@ -3257,10 +3257,10 @@
                              cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
                              transport/invoke (fn [_ method _ _]
                                                 (case method
-                                                  :thread-api/pull {:db/id 11
-                                                                    :block/title "Recycled"
-                                                                    :block/uuid (uuid "00000000-0000-0000-0000-00000000bee5")
-                                                                    :logseq.property/deleted-at 1712000000000}
+                                                  :thread-api/q [{:db/id 11
+                                                                  :block/title "Recycled"
+                                                                  :block/uuid (uuid "00000000-0000-0000-0000-00000000bee5")
+                                                                  :logseq.property/deleted-at 1712000000000}]
                                                   :thread-api/apply-outliner-ops
                                                   (throw (ex-info "should not delete a recycled page" {:method method}))
                                                   (throw (ex-info "unexpected invoke" {:method method}))))]
@@ -3278,12 +3278,13 @@
                                cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
                                transport/invoke (fn [_ method _ args]
                                                   (case method
-                                                    :thread-api/pull (let [[_ _ lookup] args]
-                                                                       (if (= lookup [:block/name "home"])
-                                                                         {:db/id 10
-                                                                          :block/title "Home"
-                                                                          :block/uuid page-uuid}
-                                                                         {}))
+                                                    :thread-api/q (let [[_ [_query input]] args]
+                                                                    (if (= input "home")
+                                                                      [{:db/id 10
+                                                                        :block/title "Home"
+                                                                        :block/name "home"
+                                                                        :block/uuid page-uuid}]
+                                                                      []))
                                                     :thread-api/apply-outliner-ops (let [[_ ops _] args]
                                                                                      (reset! ops* ops)
                                                                                      nil)
@@ -3295,6 +3296,35 @@
                           @ops*))))
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
+
+(deftest test-execute-remove-page-errors-on-ambiguous-name
+  ;; `:block/name` is not unique — two distinct pages can have the same
+  ;; sanity-lc'd name. The CLI should refuse to randomly pick one and
+  ;; instead point the user at --id with the candidate ids.
+  (async done
+         (-> (p/with-redefs [cli-server/list-graphs (fn [_] ["demo"])
+                             cli-server/ensure-server! (fn [_ _] {:base-url "http://example"})
+                             transport/invoke (fn [_ method _ _]
+                                                (case method
+                                                  :thread-api/q [{:db/id 21
+                                                                  :block/name "c1"
+                                                                  :block/title "c1"
+                                                                  :block/uuid (uuid "00000000-0000-0000-0000-0000000000c1")}
+                                                                 {:db/id 22
+                                                                  :block/name "c1"
+                                                                  :block/title "c1"
+                                                                  :block/uuid (uuid "00000000-0000-0000-0000-0000000000c2")}]
+                                                  :thread-api/apply-outliner-ops
+                                                  (throw (ex-info "should not delete on ambiguous match" {:method method}))
+                                                  (throw (ex-info "unexpected invoke" {:method method}))))]
+               (p/let [result (commands/execute {:type :remove-page :repo "demo" :page "c1"} {})]
+                 (is (= :error (:status result)))
+                 (is (= :ambiguous-page-name (get-in result [:error :code])))
+                 (is (= #{21 22}
+                        (set (map :id (get-in result [:error :candidates])))))
+                 (is (string/includes? (get-in result [:error :message]) "rerun with --id"))))
+             (p/catch (fn [e] (is false (str "unexpected error: " e))))
+             (p/finally done))))
 
 (deftest test-execute-remove-page-by-id
   (async done

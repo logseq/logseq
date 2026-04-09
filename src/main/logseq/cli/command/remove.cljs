@@ -174,12 +174,22 @@
 
 (defn- resolve-page-by-name
   [config repo name]
-  (p/let [entity (transport/invoke config :thread-api/pull false
-                                   [repo page-id-selector [:block/name (common-util/page-name-sanity-lc name)]])]
-    ;; Treat recycled pages as not found so re-running `remove page` reports
-    ;; "page not found" instead of silently re-recycling.
-    (when-not (ldb/recycled? entity)
-      entity)))
+  ;; `:block/name` is not unique — multiple pages can share the same
+  ;; sanity-lc'd name. Query for ALL matches via :thread-api/q rather than
+  ;; using :thread-api/pull (which only returns the first hit via
+  ;; `get-first-page-by-name`), filter out recycled entries, and let the
+  ;; caller error out on ambiguity instead of randomly removing one of them.
+  (p/let [results (transport/invoke config :thread-api/q false
+                                    [repo
+                                     [{:find [[(list 'pull '?e page-id-selector) '...]]
+                                       :in '[$ ?name]
+                                       :where '[[?e :block/name ?name]]}
+                                      (common-util/page-name-sanity-lc name)]])
+          live (vec (remove ldb/recycled? (or results [])))]
+    (cond
+      (empty? live) nil
+      (> (count live) 1) {:ambiguous? true :matches live}
+      :else (first live))))
 
 (defn- resolve-page-by-id
   [config repo id]
@@ -449,10 +459,17 @@
               entity (if (:id action)
                        (resolve-page-by-id cfg (:repo action) (:id action))
                        (resolve-page-by-name cfg (:repo action) (:page action)))]
-        (if-let [page-uuid (:block/uuid entity)]
-          (p/let [result (delete-page-by-uuid cfg (:repo action) page-uuid)]
+        (cond
+          (:ambiguous? entity)
+          {:status :error
+           :error (ambiguous-error :ambiguous-page-name "page" (:page action) (:matches entity))}
+
+          (:block/uuid entity)
+          (p/let [result (delete-page-by-uuid cfg (:repo action) (:block/uuid entity))]
             {:status :ok
              :data {:result result}})
+
+          :else
           {:status :error
            :error {:code :page-not-found
                    :message "page not found"}}))))
