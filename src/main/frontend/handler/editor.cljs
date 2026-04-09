@@ -320,7 +320,6 @@
      {:outliner-op :insert-blocks}
      (save-current-block! {:current-block current-block})
      (outliner-op/insert-blocks! [new-block'] current-block {:sibling? sibling?
-                                                             :right-sibling-id (:db/id (:right-sibling config))
                                                              :keep-uuid? keep-uuid?
                                                              :ordered-list? ordered-list?
                                                              :replace-empty-target? replace-empty-target?
