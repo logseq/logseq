@@ -128,3 +128,31 @@
     (is (= 3 (.getMonth goog-date)))
     (is (= 5 (.getDate goog-date)))
     (is (= passthrough (date/js-date->goog-date passthrough)))))
+
+(deftest nlp-pages-i18n-test
+  ;; All nlp-pages entries must appear in the result
+  (set-language! :en)
+  (let [result (date/nlp-pages-i18n)]
+    (is (= (count date/nlp-pages) (count result)))
+    (is (every? :block/title result))
+    (is (every? :nlp-original-title result))
+    ;; :nlp-original-title always stays English regardless of locale
+    (is (= (set date/nlp-pages) (set (map :nlp-original-title result))))
+    ;; English labels equal the original English strings
+    (is (= "Today" (:block/title (first result))))
+    (is (= "Yesterday" (:block/title (nth result 2)))))
+
+  ;; zh-CN labels differ from English
+  (set-language! :zh-CN)
+  (let [result (date/nlp-pages-i18n)]
+    (is (= "今天" (:block/title (first result))))
+    (is (= "明天" (:block/title (second result))))
+    (is (= "昨天" (:block/title (nth result 2))))
+    ;; :nlp-original-title is still English
+    (is (= "Today" (:nlp-original-title (first result)))))
+
+  ;; extra-opts are merged into every entry
+  (set-language! :en)
+  (let [result (date/nlp-pages-i18n :nlp-date? true :page? true)]
+    (is (every? :nlp-date? result))
+    (is (every? :page? result))))

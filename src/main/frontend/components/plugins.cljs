@@ -5,7 +5,7 @@
             [frontend.components.plugins-settings :as plugins-settings]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [interpolate-rich-text-node t]]
+            [frontend.context.i18n :refer [interpolate-rich-text interpolate-rich-text-node t]]
             [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
@@ -55,10 +55,13 @@
   (rum/local 0 ::cursor)
   (rum/local 0 ::total)
   {:did-mount (fn [state]
-                (let [*themes        (::themes state)
+                 (let [*themes        (::themes state)
                       *cursor        (::cursor state)
                       *total         (::total state)
                       mode           (state/sub :ui/theme)
+                      mode-title     (t (case mode
+                                          "dark" :settings.general/theme-dark
+                                          :settings.general/theme-light))
                       all-themes     (state/sub :plugin/installed-themes)
                       themes         (->> all-themes
                                           (filter #(= (:mode %) mode))
@@ -66,19 +69,19 @@
                       no-mode-themes (->> all-themes
                                           (filter #(= (:mode %) nil))
                                           (sort-by #(:name %))
-                                          (map-indexed (fn [idx opt] (assoc opt :group-first (zero? idx) :group-desc (if (zero? idx) "light & dark themes" nil)))))
+                                          (map-indexed (fn [idx opt] (assoc opt :group-first (zero? idx) :group-desc (if (zero? idx) (t :plugin.themes/light-and-dark) nil)))))
                       selected       (state/sub :plugin/selected-theme)
                       themes         (map-indexed (fn [idx opt]
                                                     (let [selected? (= (:url opt) selected)]
                                                       (when selected? (reset! *cursor (+ idx 1)))
                                                       (assoc opt :mode mode :selected selected?))) (concat themes no-mode-themes))
-                      themes         (cons {:name        (string/join " " ["Default" (string/capitalize mode) "Theme"])
+                      themes         (cons {:name        (t :plugin.themes/default-name (string/capitalize mode-title))
                                             :url         nil
-                                            :description (string/join " " ["Logseq default" mode "theme."])
+                                            :description (t :plugin.themes/default-desc mode-title)
                                             :mode        mode
                                             :selected    (nil? selected)
                                             :group-first true
-                                            :group-desc  (str mode " themes")} themes)]
+                                            :group-desc  (t :plugin.themes/group mode-title)} themes)]
                   (reset! *themes themes)
                   (reset! *total (count themes))
                   state))}
@@ -315,7 +318,7 @@
    disabled? market? *search-key has-other-pending?
    installing-or-updating? installed? stat coming-update]
 
-  (let [name (or title name "Untitled")
+  (let [name (or title name (t :ui/untitled))
         web? (not (nil? webPkg))
         unpacked? (and (not web?) (not iir))
         new-version (state/coming-update-new-version? coming-update)]
@@ -471,7 +474,7 @@
          [:option "https://s3.amazonaws.com"]
          [:option "https://clients3.google.com/generate_204"]]]
 
-       (ui/button (if testing? (ui/loading "Testing") "Test URL")
+       (ui/button (if testing? (ui/loading (t :plugin.proxy/testing)) (t :plugin.proxy/test-url))
                   :intent "logseq"
                   :on-click #(let [val (util/trim-safe (.-value (rum/deref *test-input)))]
                                (when (and (not testing?) (not (string/blank? val)))
@@ -512,13 +515,13 @@
                    :auto-focus true})
       [:span.text-gray-10
        (shui/tabler-icon "info-circle" {:size 13})
-       [:span "URLs support both GitHub repositories and local development servers.
-      (For examples: https://github.com/xyhp915/logseq-journals-calendar,
-      http://localhost:8080/<plugin-dir-root>)"]]]
+       [:span (t :plugin.install-from-web-url/supports-note
+                 "https://github.com/xyhp915/logseq-journals-calendar"
+                 "http://localhost:8080/<plugin-dir-root>")]]]
      [:div.flex.justify-end
       (shui/button {:disabled (or pending? (string/blank? url))
                     :on-click handle-submit!}
-                   (if pending? (ui/loading) "Install"))]]))
+                   (if pending? (ui/loading) (t :plugin/install)))]]))
 
 (rum/defc install-from-github-release-container
   []
@@ -561,7 +564,7 @@
                                 (p/finally #(set-pending! false))))
                           (notification/show! (t :plugin/invalid-github-repo-url) :error)))))
         :disabled pending}
-       (if pending (ui/loading "Installing") "Install"))]]))
+        (if pending (ui/loading (t :plugin/installing)) (t :plugin/install)))]]))
 
 (rum/defc auto-check-for-updates-control
   []
@@ -570,12 +573,15 @@
 
     [:div.flex.items-center.justify-between.px-3.py-2
      {:on-click (fn []
-                  (let [t (not enabled)]
-                    (set-enabled! t)
-                    (plugin-handler/set-enabled-auto-check-for-updates t)
+                  (let [next-enabled (not enabled)]
+                    (set-enabled! next-enabled)
+                    (plugin-handler/set-enabled-auto-check-for-updates next-enabled)
                     (notification/show!
-                     [:span text [:strong.pl-1 (if t "ON" "OFF")] "!"]
-                     (if t :success :info))))}
+                     (into [:span]
+                           (interpolate-rich-text
+                            (t :plugin/auto-check-for-updates-status)
+                            [[:strong.pl-1 (t (if next-enabled :ui/on :ui/off))]]))
+                     (if next-enabled :success :info))))}
      [:span.pr-3.opacity-80 text]
      (ui/toggle enabled #() true)]))
 

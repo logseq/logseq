@@ -218,8 +218,9 @@
                                 {:chosen chosen-result})))
             chosen (:block/title chosen-result)
             chosen' (string/replace-first chosen (str (t :editor/new-page) " ") "")
+            nlp-title (or (:nlp-original-title chosen-result) chosen')
             [chosen' chosen-result] (or (when (and (:nlp-date? chosen-result) (not (de/entity? chosen-result)))
-                                          (when-let [result (date/nld-parse chosen')]
+                                          (when-let [result (date/nld-parse nlp-title)]
                                             (let [d (doto (goog.date.DateTime.) (.setTime (.getTime result)))
                                                   gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
                                                   page (date/js-date->journal-title gd)]

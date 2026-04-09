@@ -340,7 +340,7 @@
     [:rtc/log {:type :rtc.log/download
                :sub-type :download-progress
                :graph-uuid graph-uuid
-               :message "Preparing graph snapshot download"}])
+               :message (t :sync/preparing-snapshot-download)}])
    (let [graph-e2ee? (normalize-graph-e2ee? graph-e2ee?)
          base (http-base)]
      (-> (if (and graph-uuid base)
@@ -363,7 +363,7 @@
                           [:rtc/log {:type :rtc.log/download
                                      :sub-type :download-progress
                                      :graph-uuid graph-uuid
-                                     :message "Start downloading graph snapshot"}])]
+                                     :message (t :sync/start-downloading-snapshot)}])]
                  (when-not (.-ok resp)
                    (throw (ex-info "snapshot download failed"
                                    {:graph graph-name
@@ -387,7 +387,7 @@
                               [:rtc/log {:type :rtc.log/download
                                          :sub-type :download-completed
                                          :graph-uuid graph-uuid
-                                         :message "Graph snapshot downloaded"}])
+                                         :message (t :sync/snapshot-downloaded)}])
                            _ (when-let [import-id @import-id*]
                                (state/<invoke-db-worker :thread-api/db-sync-import-finalize
                                                         graph graph-uuid remote-tx import-id))]

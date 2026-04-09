@@ -168,6 +168,31 @@
              :nav/assets}
            (lang-lint/left-sidebar-translation-keys content)))))
 
+(deftest date-nlp-translation-keys-detect-derived-date-labels
+  (let [content "(def nlp-pages [\"Today\" \"Last Monday\" \"Next Week\"])"]
+    (is (= #{:date.nlp/today
+             :date.nlp/last-monday
+             :date.nlp/next-week}
+           (lang-lint/date-nlp-translation-keys content)))))
+
+(deftest built-in-db-ident-translation-keys-detect-built-in-property-and-class-labels
+  (let [content "(def ^:large-vars/data-var built-in-classes
+                  {:logseq.class/Task {:title \"Task\"}})
+                 (def ^:large-vars/data-var built-in-properties
+                  {:block/alias {:title \"Alias\"}
+                   :logseq.property/status {:title \"Status\"}
+                   :logseq.property.repeat/recur-unit {:closed-values [[:logseq.property.repeat/recur-unit.day \"Day\"]]}
+                   :logseq.property/view/type {:closed-values [[:logseq.property.view/type.table \"Table View\"]]}
+                   :logseq.property/status.backlog {:title \"Backlog\"}})"]
+    (is (= #{:class.built-in/task
+             :property.built-in/alias
+             :property.built-in/repeat-recur-unit
+             :property.built-in/status
+             :property.status/backlog
+             :property.repeat-recur-unit/day
+             :property.view-type/table}
+           (lang-lint/built-in-db-ident-translation-keys content)))))
+
 (deftest shortcut-command-keys-detect-command-translations-from-shortcut-ids
   (let [content ":window/close {:binding \"mod+w\"}\n:editor/copy {:binding \"mod+c\"}\n"]
     (is (= #{:command.window/close
@@ -187,12 +212,14 @@
 (deftest derived-translation-keys-merge-supported-dynamic-patterns
   (let [content "(defonce categories (vector :shortcut.category/basics))
                  (def built-in-colors [\"yellow\"])
+                 (def nlp-pages [\"Today\"])
                  (let [navs [:flashcards :tag/tasks]
                  i18n-key (if delete? :outliner/cant-remove-tag-built-in :outliner/cant-set-tag-built-in)]\n
                  [(t (or title-key :views.table/default-title) props)
                   {:prompt-key :graph.switch/select-prompt
                    :title-key :page/table-title}])"]
     (is (= #{:color/yellow
+             :date.nlp/today
              :shortcut.category/basics
              :nav/tasks
              :outliner/cant-remove-tag-built-in

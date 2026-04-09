@@ -122,7 +122,7 @@
       [:p {:key k} [:strong k] "  " [:i (pr-str v)]])]
 
    [:div.flex.items-center.justify-center.pt-2.pb--2
-    (ui/button "Copy all"
+    (ui/button (t :ui/copy-all)
                :on-click
                (fn []
                  (let [text (.-innerText (js/document.querySelector "#pdf-docinfo > .inner-text"))

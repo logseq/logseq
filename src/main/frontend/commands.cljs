@@ -18,6 +18,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.property :as gp-property]
             [promesa.core :as p]))
 
@@ -93,8 +94,7 @@
 
 (defn db-based-statuses
   []
-  (map (fn [e] (:block/title e))
-       (db-pu/get-closed-property-values :logseq.property/status)))
+  (db-pu/get-closed-property-values :logseq.property/status))
 
 (defn db-based-embed-block
   []
@@ -143,38 +143,41 @@
 
 (defn get-statuses
   []
-  (let [result (->>
+  (let [group-label (t :editor.slash/group-task-status)
+        result (->>
                 (db-based-statuses)
-                (mapv (fn [command]
-                        (let [icon (case command
+                (mapv (fn [status]
+                        (let [command (:block/title status)
+                              label (db-property/built-in-display-title status t)
+                              icon (case command
                                      "Canceled" "Cancelled"
                                      "Doing" "InProgress50"
                                      command)]
-                          [command (->marker command) (str "Set status to " command) icon]))))]
+                          [label (->marker command) (t :editor.slash/status-desc label) icon]))))]
     (when (seq result)
-      (map (fn [v] (conj v "TASK STATUS")) result))))
+      (map (fn [v] (conj v group-label)) result))))
 
 (defn db-based-priorities
   []
-  (map (fn [e] (str "Priority " (:block/title e)))
-       (db-pu/get-closed-property-values :logseq.property/priority)))
+  (db-pu/get-closed-property-values :logseq.property/priority))
 
 (defn get-priorities
   []
-  (let [with-no-priority #(cons ["No priority" (->priority nil) "" :icon/priorityLvlNone] %)
+  (let [group-label (t :editor.slash/group-priority)
+        with-no-priority #(cons [(t :editor.slash/no-priority) (->priority nil) "" :icon/priorityLvlNone] %)
         result (->>
                 (db-based-priorities)
-                (mapv (fn [item]
-                        (let [command item
-                              item (string/replace item #"^Priority " "")]
-                          [command
-                           (->priority item)
-                           (str "Set priority to " item)
-                           (str "priorityLvl" item)])))
+                (mapv (fn [priority]
+                        (let [value (:block/title priority)
+                              label (db-property/built-in-display-title priority t)]
+                          [(t :editor.slash/priority-label label)
+                           (->priority value)
+                           (t :editor.slash/priority-desc label)
+                           (str "priorityLvl" value)])))
                 (with-no-priority)
                 (vec))]
     (when (seq result)
-      (map (fn [v] (into v ["PRIORITY"])) result))))
+      (map (fn [v] (into v [group-label])) result))))
 
 ;; Credits to roamresearch.com
 
@@ -186,10 +189,15 @@
 
 (defn- headings
   []
-  (into [["Normal text" (->heading nil) "Clear heading and set to normal text" :icon/text "Heading"]]
+  (into [[(t :editor.slash/normal-text)
+          (->heading nil)
+          (t :editor.slash/normal-text-desc)
+          :icon/text
+          (t :editor.slash/group-heading)]]
         (mapv (fn [level]
-                (let [heading (str "Heading " level)]
-                  [heading (->heading level) heading (str "h-" level) "Heading"])) (range 1 7))))
+                (let [heading (t :editor.slash/heading-label level)]
+                  [heading (->heading level) heading (str "h-" level) (t :editor.slash/group-heading)]))
+              (range 1 7))))
 
 (defonce *latest-matched-command (atom ""))
 (defonce *matched-commands (atom nil))
@@ -201,36 +209,36 @@
     (->>
      (concat
         ;; basic
-      [["Node reference"
+      [[(t :editor.slash/node-reference)
         [[:editor/input page-ref/left-and-right-brackets {:backward-pos 2}]
          [:editor/search-page]]
-        "Create a backlink to a node (a page or a block)"
+        (t :editor.slash/node-reference-desc)
         :icon/pageRef
-        "BASIC"]
-       ["Node embed"
+        (t :editor.slash/group-basic)]
+       [(t :editor.slash/node-embed)
         (embed-block)
-        "Embed a node here"
+        (t :editor.slash/node-embed-desc)
         :icon/blockEmbed]]
 
         ;; format
-      [["Link" (link-steps) "Create a HTTP link" :icon/link "FORMAT"]
-       ["Image link" (image-link-steps) "Create a HTTP link to a image" :icon/photoLink]
+      [[(t :ui/link) (link-steps) (t :editor.slash/link-desc) :icon/link (t :editor.slash/group-format)]
+       [(t :editor.slash/image-link) (image-link-steps) (t :editor.slash/image-link-desc) :icon/photoLink]
        (when (state/markdown?)
-         ["Underline" [[:editor/input "<ins></ins>"
-                        {:last-pattern command-trigger
-                         :backward-pos 6}]] "Create a underline text decoration"
+         [(t :editor.slash/underline) [[:editor/input "<ins></ins>"
+                                        {:last-pattern command-trigger
+                                         :backward-pos 6}]] (t :editor.slash/underline-desc)
           :icon/underline])
-       ["Code block"
+       [(t :editor.slash/code-block)
         (code-block-steps)
-        "Insert code block"
+        (t :editor.slash/code-block-desc)
         :icon/code]
-       ["Quote"
+       [(t :class.built-in/quote-block)
         (quote-block-steps)
-        "Create a quote block"
+        (t :editor.slash/quote-desc)
         :icon/quote]
-       ["Math block"
+       [(t :editor.slash/math-block)
         (math-block-steps)
-        "Create a latex block"
+        (t :editor.slash/math-block-desc)
         :icon/math]]
 
       (headings)
@@ -239,76 +247,76 @@
       (get-statuses)
 
       ;; task date
-      [["Deadline"
+      [[(t :property.built-in/deadline)
         [[:editor/clear-current-slash]
          [:editor/set-deadline]]
         ""
         :icon/calendar-stats
-        "TASK DATE"]
-       ["Scheduled"
+        (t :editor.slash/group-task-date)]
+       [(t :property.built-in/scheduled)
         [[:editor/clear-current-slash]
          [:editor/set-scheduled]]
         ""
         :icon/calendar-month
-        "TASK DATE"]]
+        (t :editor.slash/group-task-date)]]
 
       ;; priority
       (get-priorities)
 
       ;; time & date
-      [["Tomorrow"
+      [[(t :date.nlp/tomorrow)
         #(get-page-ref-text (date/tomorrow))
-        "Insert the date of tomorrow"
+        (t :editor.slash/tomorrow-desc)
         :icon/tomorrow
-        "TIME & DATE"]
-       ["Yesterday" #(get-page-ref-text (date/yesterday)) "Insert the date of yesterday" :icon/yesterday]
-       ["Today" #(get-page-ref-text (date/today)) "Insert the date of today" :icon/calendar]
-       ["Current time" #(date/get-current-time) "Insert current time" :icon/clock]
-       ["Date picker" [[:editor/show-date-picker]] "Pick a date and insert here" :icon/calendar-dots]]
+        (t :editor.slash/group-time-and-date)]
+       [(t :date.nlp/yesterday) #(get-page-ref-text (date/yesterday)) (t :editor.slash/yesterday-desc) :icon/yesterday]
+       [(t :date.nlp/today) #(get-page-ref-text (date/today)) (t :editor.slash/today-desc) :icon/calendar]
+       [(t :editor.slash/current-time) #(date/get-current-time) (t :editor.slash/current-time-desc) :icon/clock]
+       [(t :editor.slash/date-picker) [[:editor/show-date-picker]] (t :editor.slash/date-picker-desc) :icon/calendar-dots]]
 
       ;; order list
-      [["Number list"
+      [[(t :editor.slash/number-list)
         [[:editor/clear-current-slash]
          [:editor/toggle-own-number-list]]
-        "Number list"
+        (t :editor.slash/number-list)
         :icon/numberedParents
-        "LIST TYPE"]
-       ["Number children" [[:editor/clear-current-slash]
-                           [:editor/toggle-children-number-list]]
-        "Number children"
+        (t :editor.slash/group-list-type)]
+       [(t :editor.slash/number-children) [[:editor/clear-current-slash]
+                                           [:editor/toggle-children-number-list]]
+        (t :editor.slash/number-children)
         :icon/numberedChildren]]
 
       ;; advanced
-      [["Query" (query-steps) query-doc :icon/query "ADVANCED"]
-       ["Advanced Query" (advanced-query-steps) "Create an advanced query block" :icon/query]
-       ["Query function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query function" :icon/queryCode]
-       ["Calculator"
+      [[(t :property.built-in/query) (query-steps) query-doc :icon/query (t :editor.slash/group-advanced)]
+       [(t :editor.slash/advanced-query) (advanced-query-steps) (t :editor.slash/advanced-query-desc) :icon/query]
+       [(t :editor.slash/query-function) [[:editor/input "{{function }}" {:backward-pos 2}]] (t :editor.slash/query-function-desc) :icon/queryCode]
+       [(t :editor.slash/calculator)
         (calc-steps)
-        "Insert a calculator" :icon/calculator]
+        (t :editor.slash/calculator-desc) :icon/calculator]
 
-       ["Upload an asset"
+       [(t :editor.slash/upload-asset)
         [[:editor/click-hidden-file-input :id]]
-        "Upload file types like image, pdf, docx, etc.)"
+        (t :editor.slash/upload-asset-desc)
         :icon/upload]
 
-       ["Template" [[:editor/input command-trigger nil]
-                    [:editor/search-template]] "Insert a created template here"
+       [(t :class.built-in/template) [[:editor/input command-trigger nil]
+                                      [:editor/search-template]] (t :editor.slash/template-desc)
         :icon/template]
 
-       ["Embed HTML " (->inline "html") "" :icon/htmlEmbed]
+       [(t :editor.slash/embed-html) (->inline "html") "" :icon/htmlEmbed]
 
-       ["Embed Video URL" [[:editor/input "{{video }}" {:last-pattern command-trigger
-                                                        :backward-pos 2}]] ""
+       [(t :editor.slash/embed-video-url) [[:editor/input "{{video }}" {:last-pattern command-trigger
+                                                                        :backward-pos 2}]] ""
         :icon/videoEmbed]
 
-       ["Embed Youtube timestamp" [[:youtube/insert-timestamp]] "" :icon/videoEmbed]
+       [(t :editor.slash/embed-youtube-timestamp) [[:youtube/insert-timestamp]] "" :icon/videoEmbed]
 
-       ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern command-trigger
-                                                            :backward-pos 2}]] ""
+       [(t :editor.slash/embed-twitter-tweet) [[:editor/input "{{tweet }}" {:last-pattern command-trigger
+                                                                            :backward-pos 2}]] ""
         :icon/xEmbed]
 
-       ["Add new property" [[:editor/clear-current-slash]
-                            [:editor/new-property]] ""
+       [(t :command.editor/add-property) [[:editor/clear-current-slash]
+                                          [:editor/new-property]] ""
         :icon/cube-plus]]
 
       (let [commands (->> @*extend-slash-commands
@@ -321,7 +329,7 @@
       (state/get-commands)
       (when-let [plugin-commands (seq (some->> (state/get-plugins-slash-commands)
                                                (mapv #(vec (concat % [nil :icon/puzzle])))))]
-        (-> plugin-commands (vec) (update 0 (fn [v] (conj v "PLUGINS"))))))
+        (-> plugin-commands (vec) (update 0 (fn [v] (conj v (t :editor.slash/group-plugins)))))))
      (remove nil?)
      (util/distinct-by-last-wins first))))
 

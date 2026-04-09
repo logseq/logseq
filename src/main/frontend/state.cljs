@@ -365,7 +365,8 @@
          ;; The "TODO" query returns tasks with "Todo" status for upcoming future days
          {:default-queries
           {:journals
-           [{:title [:span (shui/tabler-icon "InProgress50" {:class "align-middle pr-1"}) [:span.align-middle "DOING"]]
+           [{:title-key :journal.default-query/doing
+             :title-icon "InProgress50"
              :query '[:find (pull ?b [*])
                       :in $ ?start ?today
                       :where
@@ -376,7 +377,8 @@
                       [(<= ?d ?today)]]
              :inputs [:14d :today]
              :collapsed? true}
-            {:title [:span (shui/tabler-icon "Todo" {:class "align-middle pr-1"}) [:span.align-middle "TODO"]]
+            {:title-key :journal.default-query/todo
+             :title-icon "Todo"
              :query '[:find (pull ?b [*])
                       :in $ ?start ?next
                       :where

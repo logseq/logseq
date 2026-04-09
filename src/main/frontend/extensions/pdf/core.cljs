@@ -890,7 +890,7 @@
 
       [:div.mt-5.sm:mt-4.flex
        (ui/button
-        "Submit"
+        (t :ui/submit)
         {:on-click (fn []
                      (let [password @password]
                        (confirm-fn password)))})]]]))
@@ -941,9 +941,9 @@
            (p/catch
             (fn [^js e]
               (js/console.error "[load hls error]" e)
-              (let [msg (str (util/format "Error: failed to load the highlights file: \"%s\". \n"
-                                          (:hls-file pdf-current))
-                             e)]
+              (let [msg (t :pdf/load-highlights-file-error
+                           (:hls-file pdf-current)
+                           (str e))]
                 (notification/show! msg :error)
                 (set-hls-state! {:loaded true :error e})))))
        #())
@@ -980,7 +980,7 @@
            "MissingPDFException"
            (do
              (notification/show!
-              (str "Error: " (.-message error) "\n Is this the correct path?")
+              (t :pdf/missing-file-error (.-message error))
               :error
               false)
              (state/set-state! :pdf/current nil))
@@ -988,9 +988,7 @@
            "InvalidPDFException"
            (do
              (notification/show!
-              (str "Error: " (.-message error) "\n"
-                   "Is this .pdf file corrupted?\n"
-                   "Please confirm with external pdf viewer.")
+              (t :pdf/corrupted-file-error (.-message error))
               :error
               false)
              (state/set-state! :pdf/current nil))
@@ -1008,8 +1006,7 @@
 
            (do
              (notification/show!
-              (str "Error: " (.-name error) "\n" (.-message error) "\n"
-                   "Please confirm with pdf file resource.")
+              (t :pdf/generic-error (.-name error) (.-message error))
               :error
               false)
              (state/set-state! :pdf/current nil)))))

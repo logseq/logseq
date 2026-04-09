@@ -168,7 +168,7 @@
    (let [full-graph-name (str config/db-version-prefix graph)]
      (if (graph-already-exists? graph)
        (state/pub-event! [:notification/show
-                          {:content (str "The graph '" graph "' already exists. Please try again with another name.")
+                          {:content (t :graph/already-exists-error graph)
                            :status :error}])
        (create-db full-graph-name opts)))))
 
@@ -177,5 +177,5 @@
   (p/do!
    (state/<invoke-db-worker :thread-api/gc-graph graph)
    (state/pub-event! [:notification/show
-                      {:content "Graph gc successfully!"
+                      {:content (t :graph/gc-success)
                        :status :success}])))

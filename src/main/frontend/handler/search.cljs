@@ -6,6 +6,7 @@
             [frontend.common.missionary :as c.m]
             [frontend.common.search-fuzzy :as fuzzy]
             [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.search :as search]
@@ -129,7 +130,7 @@
       (rebuild-embeddings! repo)
       (when notice?
         (notification/show!
-         "Search indices rebuilt successfully!"
+         (t :search/indices-rebuilt-success)
          :success))))))
 
 (defn highlight-exact-query
