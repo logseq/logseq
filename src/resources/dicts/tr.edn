@@ -6,13 +6,6 @@
  :command.auto-complete/prev "Otomatik tamamlama: Önceki öğeyi seç"
  :command.auto-complete/shift-complete "Otomatik tamamlama: Seçili öğeyi kenar çubuğunda aç"
 
- ;; Cards commands
- :command.cards/again "Tekrar"
- :command.cards/easy "Kolay"
- :command.cards/good "İyi"
- :command.cards/hard "Zor"
- :command.cards/toggle-answers "Kartlar: cevapları ve cümle tamamlamayı göster/gizle"
-
  ;; Command Palette commands
  :command.command-palette/toggle "Komut paleti"
 

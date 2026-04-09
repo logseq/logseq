@@ -6,13 +6,6 @@
  :command.auto-complete/prev "Автодополнение: Выбрать предыдущий"
  :command.auto-complete/shift-complete "Автодополнение: Открыть выбранный элемент на боковой панели"
 
- ;; Cards commands
- :command.cards/again "Снова"
- :command.cards/easy "Легко"
- :command.cards/good "Хорошо"
- :command.cards/hard "Трудно"
- :command.cards/toggle-answers "Карточки: показать/скрыть ответы/clozes"
-
  ;; Command Palette commands
  :command.command-palette/toggle "Палитра команд"
 

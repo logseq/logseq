@@ -6,13 +6,6 @@
  :command.auto-complete/prev "Автозаповнення: попередній елемент"
  :command.auto-complete/shift-complete "Автозаповнення: відкрити вибраний елемент на бічній панелі"
 
- ;; Cards commands
- :command.cards/again "Снова"
- :command.cards/easy "Легко"
- :command.cards/good "Хорошо"
- :command.cards/hard "Трудно"
- :command.cards/toggle-answers "Вкладки: Показати/Сховати відповіді"
-
  ;; Command Palette commands
  :command.command-palette/toggle "Палітра команд"
 

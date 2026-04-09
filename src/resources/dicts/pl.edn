@@ -6,13 +6,6 @@
  :command.auto-complete/prev "Auto uzupełnianie: Wybierz poprzednią opcję"
  :command.auto-complete/shift-complete "Auto uzupełnianie: Otwórz wybraną opcję w panelu bocznym"
 
- ;; Cards commands
- :command.cards/again "Ponownie"
- :command.cards/easy "Łatwe"
- :command.cards/good "Dobre"
- :command.cards/hard "Trudne"
- :command.cards/toggle-answers "Karty: pokaż/ukryj odpowiedzi/luki w tekście"
-
  ;; Command Palette commands
  :command.command-palette/toggle "Paleta poleceń"
 

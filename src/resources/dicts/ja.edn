@@ -6,13 +6,6 @@
  :command.auto-complete/prev "自動補完：前の項目を選択"
  :command.auto-complete/shift-complete "自動補完：選択した項目をサイドバーで開く"
 
- ;; Cards commands
- :command.cards/again "もう一度"
- :command.cards/easy "簡単"
- :command.cards/good "良い"
- :command.cards/hard "難しい"
- :command.cards/toggle-answers "カード：答え/穴埋めの表示/非表示"
-
  ;; Command Palette commands
  :command.command-palette/toggle "検索コマンド"
 

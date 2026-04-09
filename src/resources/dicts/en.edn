@@ -6,13 +6,6 @@
  :command.auto-complete/prev "Auto-complete: Select previous item"
  :command.auto-complete/shift-complete "Auto-complete: Open selected item in sidebar"
 
- ;; Cards commands
- :command.cards/again "Cards: again"
- :command.cards/easy "Cards: easy"
- :command.cards/good "Cards: good"
- :command.cards/hard "Cards: hard"
- :command.cards/toggle-answers "Cards: show/hide answers/clozes"
-
  ;; Command Palette commands
  :command.command-palette/toggle "Search commands"
 
