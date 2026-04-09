@@ -76,16 +76,16 @@
 
 (defn- stable-block-ref-with-tx-data
   [db tx-data x]
-  (let [ref (stable-entity-ref db x)]
-    (if (and (integer? ref) (not (neg? ref)))
+  (let [entity-ref (stable-entity-ref db x)]
+    (if (and (integer? entity-ref) (not (neg? entity-ref)))
       (or (some (fn [item]
-                  (when (and (= ref (:e item))
+                  (when (and (= entity-ref (:e item))
                              (= :block/uuid (:a item))
                              (uuid? (:v item)))
                     [:block/uuid (:v item)]))
                 tx-data)
-          ref)
-      ref)))
+          entity-ref)
+      entity-ref)))
 
 (defn- sanitize-ref-value
   [db v]
