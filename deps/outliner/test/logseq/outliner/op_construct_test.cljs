@@ -123,6 +123,40 @@
           (is (not= [:block/uuid child-uuid]
                     (get-in insert-op [1 1]))))))))
 
+(deftest derive-history-outliner-ops-delete-blocks-with-stale-id-throws-test
+  (testing "delete-blocks derive-history throws when semantic ids include numeric db/id"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page"}
+                   :blocks [{:block/title "parent"
+                             :build/children [{:block/title "child"}]}]}]})
+          child (db-test/find-block-by-content @conn "child")
+          stale-id 99999999
+          tx-meta {:outliner-op :delete-blocks
+                   :outliner-ops [[:delete-blocks [[(:db/id child) stale-id] {}]]]}]
+      (is (thrown? js/Error
+                   (op-construct/derive-history-outliner-ops @conn @conn [] tx-meta))))))
+
+(deftest derive-history-outliner-ops-delete-blocks-prefers-retracted-tx-data-ids-test
+  (testing "delete-blocks derive-history should prefer tx-data retractEntity ids over stale selection ids"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "page"}
+                   :blocks [{:block/title "parent"
+                             :build/children [{:block/title "child"}]}]}]})
+          child (db-test/find-block-by-content @conn "child")
+          child-id (:db/id child)
+          child-uuid (:block/uuid child)
+          stale-id 99999999
+          tx-report (d/with @conn [[:db/retractEntity child-id]] {})
+          tx-meta {:outliner-op :delete-blocks
+                   :outliner-ops [[:delete-blocks [[child-id stale-id] {}]]]}
+          {:keys [forward-outliner-ops]}
+          (op-construct/derive-history-outliner-ops
+           @conn (:db-after tx-report) (:tx-data tx-report) tx-meta)]
+      (is (= [[:delete-blocks [[[:block/uuid child-uuid]] {}]]]
+             forward-outliner-ops)))))
+
 (deftest derive-history-outliner-ops-builds-delete-page-inverse-for-class-property-and-today-page-test
   (testing "delete-page inverse restores hard-retracted class/property/today pages with stable db/ident"
     (let [today (date-time-util/ms->journal-day (js/Date.))
