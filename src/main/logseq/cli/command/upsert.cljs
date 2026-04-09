@@ -9,6 +9,7 @@
             [logseq.cli.transport :as transport]
             [logseq.common.graph :as common-graph]
             [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
             [logseq.db.frontend.property.type :as db-property-type]
             [promesa.core :as p]
             [logseq.db.frontend.property :as db-property]))
@@ -596,9 +597,14 @@
 
 (defn- ensure-page-entity!
   [config repo page-name]
-  (p/let [existing (pull-page-by-name config repo page-name [:db/id :block/uuid])]
-    (if (:db/id existing)
+  (p/let [existing (pull-page-by-name config repo page-name
+                                      [:db/id :block/uuid :logseq.property/deleted-at])]
+    (if (and (:db/id existing) (not (ldb/recycled? existing)))
       existing
+      ;; Either no page exists, or only a recycled one does. Calling
+      ;; :create-page in both cases is correct: outliner-page/create has a
+      ;; (ldb/recycled? existing-page) branch that restores the recycled page
+      ;; instead of creating a duplicate.
       (p/let [result (transport/invoke config :thread-api/apply-outliner-ops false
                                        [repo [[:create-page [page-name {}]]] {}])
               ;; create-page returns [title' page-uuid]; use uuid to find
@@ -620,7 +626,7 @@
   :upsert-id-type-mismatch)
 
 (def ^:private page-selector
-  [:db/id :block/uuid :block/name :block/title])
+  [:db/id :block/uuid :block/name :block/title :logseq.property/deleted-at])
 
 (def ^:private tag-selector
   [:db/id :block/uuid :block/name :block/title
@@ -665,7 +671,7 @@
   [config repo id]
   (p/let [entity (pull-entity-by-id config repo page-selector id)]
     (cond
-      (not (:db/id entity))
+      (or (not (:db/id entity)) (ldb/recycled? entity))
       (throw-upsert-id-not-found! "page" id)
 
       (not (page-entity? entity))
