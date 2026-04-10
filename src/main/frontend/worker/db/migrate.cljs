@@ -101,7 +101,9 @@
                                  :logseq.property.embedding/hnsw-label-updated-at]}]
    ["65.26" {:properties [:logseq.property.repeat/repeat-type]}]
    ["65.27" {:properties [:logseq.property.view/gallery-image-property
-                          :logseq.property.view/gallery-card-dimensions]}]])
+                          :logseq.property.view/gallery-card-dimensions]}]
+   ["65.28" {:properties [:logseq.property.view/gallery-card-custom-width
+                          :logseq.property.view/gallery-card-custom-height]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

@@ -472,6 +472,22 @@
       :properties {:logseq.property/default-value :logseq.property.view/gallery-card-dimensions.square}
       :queryable? true}
 
+     :logseq.property.view/gallery-card-custom-width
+     {:title "Gallery card custom width"
+      :schema
+      {:type :number
+       :public? false
+       :hide? true}
+      :queryable? true}
+
+     :logseq.property.view/gallery-card-custom-height
+     {:title "Gallery card custom height"
+      :schema
+      {:type :number
+       :public? false
+       :hide? true}
+      :queryable? true}
+
      :logseq.property.view/sort-groups-by-property {:title "View sort groups by"
                                                     :schema
                                                     {:type :property
