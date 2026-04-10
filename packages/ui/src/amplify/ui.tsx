@@ -9,6 +9,7 @@ import { AuthFormRootContext, t, useAuthFormState } from './core'
 import * as Auth from 'aws-amplify/auth'
 import { Skeleton } from '@/components/ui/skeleton'
 import * as React from 'react'
+import { getAuthErrorMessageKey } from './errors'
 
 function ErrorTip({ error, removeError }: {
   error: string | { variant?: 'warning' | 'destructive', title?: string, message: string | any },
@@ -106,6 +107,10 @@ function validatePasswordPolicy(password: string) {
   ) {
     throw new Error(t('PW_POLICY_TIP'))
   }
+}
+
+function getAuthErrorMessage(error: unknown) {
+  return t(getAuthErrorMessageKey(error))
 }
 
 function useCountDown() {
@@ -238,7 +243,7 @@ export function LoginForm() {
             throw new Error(`${t('Unsupported sign-in step:')} ${nextStep}`)
         }
       } catch (e) {
-        setErrors({ password: { message: (e as Error).message, title: t('Bad Response.') } })
+        setErrors({ password: { message: getAuthErrorMessage(e), title: t('Bad Response.') } })
         console.error(e)
       } finally {
         setLoading(false)
@@ -349,7 +354,7 @@ export function SignupForm() {
           }
         } catch (e: any) {
           console.error(e)
-          const error = { title: t('Bad Response.'), message: (e as Error).message }
+          const error = { title: t('Bad Response.'), message: getAuthErrorMessage(e) }
           let k = 'confirm_password'
           if (e.name === 'UsernameExistsException') {
             k = 'username'
@@ -434,21 +439,25 @@ export function ResetPasswordForm() {
             setIsSentCode(true)
           } catch (error) {
             console.error('Error sending reset code:', error)
-            setErrors({ email: { message: (error as Error).message, title: t('Bad Response.') } })
+            setErrors({ email: { message: getAuthErrorMessage(error), title: t('Bad Response.') } })
           } finally {
             setLoading(false)
           }
         } else {
           // confirm reset password
-          if ((data.password as string)?.length < 8) {
+          try {
+            validatePasswordPolicy(data.password as string)
+          } catch (error) {
             setErrors({
               password: {
-                message: t('Password must be at least 8 characters.'),
+                message: (error as Error).message,
                 title: t('Invalid Password')
               }
             })
             return
-          } else if (data.password !== data.confirm_password) {
+          }
+
+          if (data.password !== data.confirm_password) {
             setErrors({
               confirm_password: {
                 message: t('Passwords do not match.'),
@@ -469,7 +478,7 @@ export function ResetPasswordForm() {
               setCurrentTab('login')
             } catch (error) {
               console.error('Error confirming reset password:', error)
-              setErrors({ 'confirm_password': { message: (error as Error).message, title: t('Bad Response.') } })
+              setErrors({ 'confirm_password': { message: getAuthErrorMessage(error), title: t('Bad Response.') } })
             } finally {
               setLoading(false)
             }
@@ -490,7 +499,7 @@ export function ResetPasswordForm() {
                 console.debug('[Auth] reset pw code re-sent: ', ret)
               } catch (error) {
                 console.error('Error resending reset code:', error)
-                setErrors({ email: { message: (error as Error).message, title: t('Bad Response.') } })
+                setErrors({ email: { message: getAuthErrorMessage(error), title: t('Bad Response.') } })
               } finally {}
             }} className={'text-sm opacity-70 hover:opacity-90 underline absolute top-3 right-0 select-none'}>
               {t('Resend code')}
@@ -600,7 +609,7 @@ export function ConfirmWithCodeForm(
             console.debug('confirmSignIn: ', ret)
           }
         } catch (e) {
-          setErrors({ code: { message: (e as Error).message, title: t('Bad Response.') } })
+          setErrors({ code: { message: getAuthErrorMessage(e), title: t('Bad Response.') } })
           console.error(e)
         } finally {
           setLoading(false)
@@ -643,7 +652,7 @@ export function ConfirmWithCodeForm(
                 // await Auth.resendSignInCode(props.user)
               }
             } catch (e) {
-              setErrors({ code: { message: (e as Error).message, title: t('Bad Response.') } })
+              setErrors({ code: { message: getAuthErrorMessage(e), title: t('Bad Response.') } })
               setCountDownNum(0)
               console.error(e)
             } finally {}

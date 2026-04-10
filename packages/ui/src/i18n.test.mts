@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { setLocale, setNSDicts, setTranslate, translate } from './i18n'
+import { getAuthErrorMessageKey } from './amplify/errors'
 
 test('translate uses the selected locale when the namespace dict contains it', () => {
   setTranslate((locale, dicts, key, ...args) => dicts[locale]?.[key] ?? args[0] ?? key)
@@ -33,4 +34,15 @@ test('translate falls back to English when the current locale dict has no corres
   setLocale('zh-CN')
 
   assert.equal(translate('fallback', 'greeting'), 'Hello')
+})
+
+test('getAuthErrorMessageKey maps common Cognito errors to localized keys', () => {
+  assert.equal(getAuthErrorMessageKey({ name: 'NotAuthorizedException' }), 'AUTH_ERROR_INVALID_CREDENTIALS')
+  assert.equal(getAuthErrorMessageKey({ name: 'CodeMismatchException' }), 'AUTH_ERROR_CODE_MISMATCH')
+  assert.equal(getAuthErrorMessageKey({ name: 'InvalidPasswordException' }), 'PW_POLICY_TIP')
+})
+
+test('getAuthErrorMessageKey falls back to a generic localized key for unknown errors', () => {
+  assert.equal(getAuthErrorMessageKey({ name: 'SomethingUnexpected' }), 'AUTH_ERROR_GENERIC')
+  assert.equal(getAuthErrorMessageKey(new Error('plain error')), 'AUTH_ERROR_GENERIC')
 })
