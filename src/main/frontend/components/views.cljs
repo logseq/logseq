@@ -1841,13 +1841,15 @@
 
 (defn- gallery-custom-width
   [view-entity]
-  (let [w (:logseq.property.view/gallery-card-custom-width view-entity)]
-    (when (and (number? w) (pos? w)) w)))
+  (let [v (:logseq.property.view/gallery-card-custom-width view-entity)
+        n (db-property/property-value-content v)]
+    (when (and (number? n) (pos? n)) n)))
 
 (defn- gallery-custom-height
   [view-entity]
-  (let [h (:logseq.property.view/gallery-card-custom-height view-entity)]
-    (when (and (number? h) (pos? h)) h)))
+  (let [v (:logseq.property.view/gallery-card-custom-height view-entity)
+        n (db-property/property-value-content v)]
+    (when (and (number? n) (pos? n)) n)))
 
 (defn- gallery-custom?
   "A view is in Custom dimensions mode iff it has positive numeric
@@ -1930,6 +1932,19 @@
                                 :hide-children? true)
                          block)])]))
 
+(defn- apply-gallery-custom-vars!
+  "Callback-ref helper: sets or clears the CSS custom properties that
+   drive `.ls-cards-custom` on the given DOM element."
+  [custom-w custom-h ^js el]
+  (when el
+    (if (and custom-w custom-h)
+      (do
+        (.setProperty (.-style el) "--ls-card-custom-width" (str custom-w "px"))
+        (.setProperty (.-style el) "--ls-card-custom-height" (str custom-h "px")))
+      (do
+        (.removeProperty (.-style el) "--ls-card-custom-width")
+        (.removeProperty (.-style el) "--ls-card-custom-height")))))
+
 (rum/defcs gallery-view < rum/static mixins/container-id
   [state {:keys [config]} table view-entity blocks *scroller-ref]
   (let [config' (assoc config :container-id (:container-id state))
@@ -1940,25 +1955,12 @@
         ;; image property invalidates the virtuoso item key below and
         ;; forces card items to re-render with the new ident.
         image-prop-ident (or (:db/ident (:logseq.property.view/gallery-image-property view-entity))
-                             :block/title)
-        *cards-ref (hooks/use-ref nil)]
-    ;; CSS custom properties drive the `.ls-cards-custom` rules. Set
-    ;; them on the actual DOM element rather than via a React inline
-    ;; style map so the keys don't get mangled by sablono.
-    (hooks/use-effect!
-     (fn []
-       (when-let [el (rum/deref *cards-ref)]
-         (if (and custom-w custom-h)
-           (do
-             (.setProperty (.-style el) "--ls-card-custom-width" (str custom-w "px"))
-             (.setProperty (.-style el) "--ls-card-custom-height" (str custom-h "px")))
-           (do
-             (.removeProperty (.-style el) "--ls-card-custom-width")
-             (.removeProperty (.-style el) "--ls-card-custom-height")))))
-     [custom-w custom-h])
+                             :block/title)]
     [:div.ls-cards
      {:class (str "ls-cards-" dimension-key)
-      :ref *cards-ref}
+      ;; Callback ref runs whenever React attaches the div; no hooks
+      ;; involved so it is safe inside this class-based component.
+      :ref (fn [el] (apply-gallery-custom-vars! custom-w custom-h el))}
      (when (seq blocks)
        (ui/virtualized-grid
         {:ref #(reset! *scroller-ref %)
@@ -2072,25 +2074,23 @@
     (when (and (number? n) (pos? n)) n)))
 
 (rum/defc gallery-custom-dimension-inputs
-  "Two number inputs for the custom Width × Height, with a : between
-   them. Committed values are persisted back to the view entity on
-   blur or Enter. Invalid or empty input reverts to the last committed
-   value without touching the view entity."
+  "Two text inputs for the custom Width and Height, separated by `:`.
+   Each keystroke commits back to the view entity as soon as the raw
+   value parses as a positive integer, so the card resizes live and
+   values persist without relying on blur (which the popup may eat
+   when the user clicks outside it)."
   [view-entity]
   (let [initial-w (or (gallery-custom-width view-entity) gallery-custom-dimension-default)
         initial-h (or (gallery-custom-height view-entity) gallery-custom-dimension-default)
-        [committed-w set-committed-w!] (hooks/use-state initial-w)
-        [committed-h set-committed-h!] (hooks/use-state initial-h)
         [w-input set-w-input!] (hooks/use-state (str initial-w))
         [h-input set-h-input!] (hooks/use-state (str initial-h))
-        commit! (fn [k raw committed set-committed! set-input!]
-                  (if-let [v (parse-dimension-input raw)]
-                    (do
-                      (set-committed! v)
-                      (set-input! (str v))
-                      (db-property-handler/set-block-property!
-                       (:db/id view-entity) k v))
-                    (set-input! (str committed))))
+        on-change! (fn [k set-input!]
+                     (fn [e]
+                       (let [raw (.. e -target -value)]
+                         (set-input! raw)
+                         (when-let [v (parse-dimension-input raw)]
+                           (db-property-handler/set-block-property!
+                            (:db/id view-entity) k v)))))
         input-cls "!px-2 !py-0 !h-8 w-[72px] text-sm border rounded bg-transparent text-right tabular-nums"]
     [:div.flex.flex-row.items-center.gap-2.self-end
      [:input
@@ -2099,11 +2099,7 @@
        :value w-input
        :class input-cls
        :aria-label "Custom card width in pixels"
-       :on-change #(set-w-input! (.. % -target -value))
-       :on-blur #(commit! :logseq.property.view/gallery-card-custom-width
-                          w-input committed-w set-committed-w! set-w-input!)
-       :on-key-down #(when (= (util/ekey %) "Enter")
-                       (.blur (.-target %)))}]
+       :on-change (on-change! :logseq.property.view/gallery-card-custom-width set-w-input!)}]
      [:div.text-muted-foreground ":"]
      [:input
       {:type "text"
@@ -2111,11 +2107,7 @@
        :value h-input
        :class input-cls
        :aria-label "Custom card height in pixels"
-       :on-change #(set-h-input! (.. % -target -value))
-       :on-blur #(commit! :logseq.property.view/gallery-card-custom-height
-                          h-input committed-h set-committed-h! set-h-input!)
-       :on-key-down #(when (= (util/ekey %) "Enter")
-                       (.blur (.-target %)))}]]))
+       :on-change (on-change! :logseq.property.view/gallery-card-custom-height set-h-input!)}]]))
 
 (rum/defc gallery-settings-config
   [view-entity table columns]
