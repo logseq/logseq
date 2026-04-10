@@ -183,7 +183,9 @@
 ;; search
 (defn ^:export search
   [q' & [opts]]
-  (-> (search-handler/search (state/get-current-repo) q' (if opts (js->clj opts :keywordize-keys true) {}))
+  (-> (search-handler/search
+       (state/get-current-repo) q'
+       (if opts (js->clj opts :keywordize-keys true) {}))
       (p/then #(bean/->js (sdk-utils/normalize-keyword-for-json %)))))
 
 ;; helpers

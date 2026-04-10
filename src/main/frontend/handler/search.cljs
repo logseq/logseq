@@ -13,7 +13,7 @@
             [promesa.core :as p]))
 
 (defn search
-  "The aggretation of search results"
+  "The aggregation of search results"
   ([q]
    (search (state/get-current-repo) q))
   ([repo q]

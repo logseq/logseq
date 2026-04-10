@@ -673,7 +673,7 @@
   (let [repo (:repo item)]
     (if (nil? repo)
       ;; local
-      (-> (p/let [content (invoke-exported-api "load_plugin_readme" url)
+      (-> (p/let [content (invoke-exported-api :load_plugin_readme url)
                   content (parse-user-md-content content item)]
             (and (string/blank? (string/trim content)) (throw (js/Error. "blank readme content")))
             (state/set-state! :plugin/active-readme [content item])
@@ -962,8 +962,8 @@
               clear-commands! (fn [pid]
                                 ;; commands
                                 (unregister-plugin-slash-command pid)
-                                (invoke-exported-api "unregister_plugin_simple_command" pid)
-                                (invoke-exported-api "uninstall_plugin_hook" pid)
+                                (invoke-exported-api :unregister_plugin_simple_command pid)
+                                (invoke-exported-api :uninstall_plugin_hook pid)
                                 (unregister-plugin-ui-items pid)
                                 (unregister-plugin-resources pid)
                                 (unregister-plugin-search-services pid))
