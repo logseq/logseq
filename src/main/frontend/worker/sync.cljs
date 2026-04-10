@@ -143,6 +143,21 @@
   [ws message]
   (sync-transport/send! sync-transport/coerce-ws-client-message ws message))
 
+(defn- enqueue-receive-message!
+  [client task]
+  (if-let [queue (:receive-queue client)]
+    (swap! queue
+           (fn [prev]
+             (-> (or prev (p/resolved nil))
+                 ;; Keep queue alive even if one message handler fails.
+                 (p/catch (fn [_] nil))
+                 (p/then (fn [_] (task)))
+                 (p/catch (fn [error]
+                            (log/error :db-sync/ws-handle-message-failed
+                                       {:repo (:repo client)
+                                        :error error}))))))
+    (task)))
+
 (defn update-presence!
   [editing-block-uuid]
   (when-let [client @worker-state/*db-sync-client]
@@ -161,7 +176,9 @@
   [repo]
   {:repo repo
    :send-queue (atom (p/resolved nil))
+   :receive-queue (atom (p/resolved nil))
    :asset-queue (atom (p/resolved nil))
+   :pending-pull-since (atom nil)
    :inflight (atom [])
    :reconnect (atom {:attempt 0 :timer nil})
    :stale-kill-timer (atom nil)
@@ -199,7 +216,9 @@
   (set! (.-onmessage ws)
         (fn [event]
           (touch-last-ws-message! client)
-          (sync-handle-message/handle-message! repo client (.-data event))))
+          (enqueue-receive-message! client
+                                    (fn []
+                                      (sync-handle-message/handle-message! repo client (.-data event))))))
   (set! (.-onerror ws) (fn [error] (log/error :db-sync/ws-error error)))
   (set! (.-onclose ws)
         (fn [_]
@@ -347,3 +366,15 @@
 (defn upload-graph!
   [repo]
   (sync-upload/upload-graph! repo))
+
+(defn stop-upload!
+  [repo]
+  (sync-apply/set-upload-stopped! repo true))
+
+(defn resume-upload!
+  [repo]
+  (sync-apply/set-upload-stopped! repo false))
+
+(defn upload-stopped?
+  [repo]
+  (sync-apply/upload-stopped? repo))

@@ -1,5 +1,12 @@
 (ns logseq.db-sync.protocol
-  (:require [logseq.db-sync.common :as common]))
+  (:require [clojure.walk :as walk]
+            [logseq.db-sync.common :as common]))
+
+(defn- stringify-uuid
+  [value]
+  (if (uuid? value)
+    (str value)
+    value))
 
 (defn parse-message [raw]
   (try
@@ -10,7 +17,8 @@
       nil)))
 
 (defn encode-message [m]
-  (js/JSON.stringify (clj->js m)))
+  (js/JSON.stringify
+   (clj->js (walk/postwalk stringify-uuid m))))
 
 (defn transit->tx [value]
   (common/read-transit value))

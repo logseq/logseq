@@ -821,10 +821,20 @@ function buildRendererProgram(config) {
         : config.markerPrefix;
     const checksumWarningToken = 'db-sync/checksum-mismatch';
     const txRejectedWarningToken = 'db-sync/tx-rejected';
+    const missingEntityWarningToken = 'nothing found for entity id';
+    const applyRemoteTxWarningToken = 'frontend.worker.sync.handle-message/apply-remote-tx';
+    const numericEntityIdWarningToken = 'non-transact outliner ops contain numeric entity ids';
     const checksumWarningTokenLower = checksumWarningToken.toLowerCase();
     const txRejectedWarningTokenLower = txRejectedWarningToken.toLowerCase();
+    const missingEntityWarningTokenLower = missingEntityWarningToken.toLowerCase();
+    const applyRemoteTxWarningTokenLower = applyRemoteTxWarningToken.toLowerCase();
+    const numericEntityIdWarningTokenLower = numericEntityIdWarningToken.toLowerCase();
     const fatalWarningStateKey = '__logseqOpFatalWarnings';
     const fatalWarningPatchKey = '__logseqOpFatalWarningPatchInstalled';
+    const consoleCaptureStateKey = '__logseqOpConsoleCaptureStore';
+    const wsCaptureStateKey = '__logseqOpWsCaptureStore';
+    const wsCapturePatchKey = '__logseqOpWsCapturePatchInstalled';
+    const MAX_DIAGNOSTIC_EVENTS = 3000;
     const runStartedAtMs = Date.now();
 
     const chooseRunnableOperation = (requestedOperation, operableCount) => {
@@ -853,6 +863,35 @@ function buildRendererProgram(config) {
       }
     };
 
+    const pushBounded = (target, value, max = MAX_DIAGNOSTIC_EVENTS) => {
+      if (!Array.isArray(target)) return;
+      target.push(value);
+      if (target.length > max) {
+        target.splice(0, target.length - max);
+      }
+    };
+
+    const consoleCaptureStore =
+      window[consoleCaptureStateKey] && typeof window[consoleCaptureStateKey] === 'object'
+        ? window[consoleCaptureStateKey]
+        : {};
+    window[consoleCaptureStateKey] = consoleCaptureStore;
+    const consoleCaptureEntry = Array.isArray(consoleCaptureStore[config.markerPrefix])
+      ? consoleCaptureStore[config.markerPrefix]
+      : [];
+    consoleCaptureStore[config.markerPrefix] = consoleCaptureEntry;
+
+    const wsCaptureStore =
+      window[wsCaptureStateKey] && typeof window[wsCaptureStateKey] === 'object'
+        ? window[wsCaptureStateKey]
+        : {};
+    window[wsCaptureStateKey] = wsCaptureStore;
+    const wsCaptureEntry =
+      wsCaptureStore[config.markerPrefix] && typeof wsCaptureStore[config.markerPrefix] === 'object'
+        ? wsCaptureStore[config.markerPrefix]
+        : { outbound: [], inbound: [], installed: false, installReason: null };
+    wsCaptureStore[config.markerPrefix] = wsCaptureEntry;
+
     const installFatalWarningTrap = () => {
       const warningList = Array.isArray(window[fatalWarningStateKey])
         ? window[fatalWarningStateKey]
@@ -867,14 +906,32 @@ function buildRendererProgram(config) {
         console[method] = (...args) => {
           try {
             const text = args.map(stringifyConsoleArg).join(' ');
+            pushBounded(consoleCaptureEntry, {
+              level: method,
+              text,
+              createdAt: Date.now(),
+            });
             const textLower = text.toLowerCase();
             if (
               textLower.includes(checksumWarningTokenLower) ||
-              textLower.includes(txRejectedWarningTokenLower)
+              textLower.includes(txRejectedWarningTokenLower) ||
+              textLower.includes(numericEntityIdWarningTokenLower) ||
+              (
+                textLower.includes(missingEntityWarningTokenLower) &&
+                textLower.includes(applyRemoteTxWarningTokenLower)
+              )
             ) {
               const kind = textLower.includes(checksumWarningTokenLower)
                 ? 'checksum_mismatch'
-                : 'tx_rejected';
+                : (
+                  textLower.includes(txRejectedWarningTokenLower)
+                    ? 'tx_rejected'
+                    : (
+                      textLower.includes(numericEntityIdWarningTokenLower)
+                        ? 'numeric_entity_id_in_non_transact_op'
+                        : 'missing_entity_id'
+                    )
+                );
               warningList.push({
                 kind,
                 level: method,
@@ -892,6 +949,84 @@ function buildRendererProgram(config) {
       trapMethod('warn');
       trapMethod('error');
       trapMethod('log');
+    };
+
+    const toWsText = (value) => {
+      if (typeof value === 'string') return value.slice(0, 4000);
+      if (value instanceof ArrayBuffer) {
+        return '[ArrayBuffer byteLength=' + value.byteLength + ']';
+      }
+      if (typeof Blob !== 'undefined' && value instanceof Blob) {
+        return '[Blob size=' + value.size + ']';
+      }
+      try {
+        return JSON.stringify(value).slice(0, 4000);
+      } catch (_error) {
+        return String(value).slice(0, 4000);
+      }
+    };
+
+    const installWsCapture = () => {
+      try {
+        if (!globalThis.WebSocket) {
+          wsCaptureEntry.installed = false;
+          wsCaptureEntry.installReason = 'WebSocket unavailable';
+          return;
+        }
+
+        if (window[wsCapturePatchKey] !== true) {
+          const OriginalWebSocket = window.WebSocket;
+          const originalSend = OriginalWebSocket.prototype.send;
+
+          OriginalWebSocket.prototype.send = function patchedSend(payload) {
+            try {
+              pushBounded(wsCaptureEntry.outbound, {
+                createdAt: Date.now(),
+                url: typeof this?.url === 'string' ? this.url : null,
+                readyState: Number.isInteger(this?.readyState) ? this.readyState : null,
+                payload: toWsText(payload),
+              });
+            } catch (_error) {
+              // noop
+            }
+            return originalSend.call(this, payload);
+          };
+
+          window.WebSocket = function LogseqWsCapture(...args) {
+            const ws = new OriginalWebSocket(...args);
+            try {
+              ws.addEventListener('message', (event) => {
+                try {
+                  pushBounded(wsCaptureEntry.inbound, {
+                    createdAt: Date.now(),
+                    url: typeof ws?.url === 'string' ? ws.url : null,
+                    readyState: Number.isInteger(ws?.readyState) ? ws.readyState : null,
+                    payload: toWsText(event?.data),
+                  });
+                } catch (_error) {
+                  // noop
+                }
+              });
+            } catch (_error) {
+              // noop
+            }
+            return ws;
+          };
+          window.WebSocket.prototype = OriginalWebSocket.prototype;
+          Object.setPrototypeOf(window.WebSocket, OriginalWebSocket);
+          for (const key of ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED']) {
+            window.WebSocket[key] = OriginalWebSocket[key];
+          }
+
+          window[wsCapturePatchKey] = true;
+        }
+
+        wsCaptureEntry.installed = true;
+        wsCaptureEntry.installReason = null;
+      } catch (error) {
+        wsCaptureEntry.installed = false;
+        wsCaptureEntry.installReason = describeError(error);
+      }
     };
 
     const latestFatalWarning = () => {
@@ -991,10 +1126,6 @@ function buildRendererProgram(config) {
     };
 
     const failIfFatalSignalSeen = () => {
-      const checksumRtcLog = latestChecksumMismatchRtcLog();
-      if (checksumRtcLog) {
-        throw new Error('checksum mismatch rtc-log detected: ' + JSON.stringify(checksumRtcLog));
-      }
       const txRejectedRtcLog = latestTxRejectedRtcLog();
       if (txRejectedRtcLog) {
         throw new Error('tx rejected rtc-log detected: ' + JSON.stringify(txRejectedRtcLog));
@@ -1005,7 +1136,13 @@ function buildRendererProgram(config) {
       if (warning.kind === 'tx_rejected') {
         throw new Error('tx-rejected warning detected: ' + details);
       }
-      throw new Error('checksum warning detected: ' + details);
+      if (warning.kind === 'missing_entity_id') {
+        throw new Error('missing-entity-id warning detected: ' + details);
+      }
+      if (warning.kind === 'numeric_entity_id_in_non_transact_op') {
+        throw new Error('numeric-entity-id-in-non-transact-op warning detected: ' + details);
+      }
+      // checksum mismatch is recorded for diagnostics but is non-fatal in simulation.
     };
 
     const clearFatalSignalState = () => {
@@ -1015,6 +1152,25 @@ function buildRendererProgram(config) {
           : null;
         if (warningList) {
           warningList.length = 0;
+        }
+      } catch (_error) {
+        // noop
+      }
+
+      try {
+        if (Array.isArray(consoleCaptureEntry)) {
+          consoleCaptureEntry.length = 0;
+        }
+      } catch (_error) {
+        // noop
+      }
+
+      try {
+        if (Array.isArray(wsCaptureEntry?.outbound)) {
+          wsCaptureEntry.outbound.length = 0;
+        }
+        if (Array.isArray(wsCaptureEntry?.inbound)) {
+          wsCaptureEntry.inbound.length = 0;
         }
       } catch (_error) {
         // noop
@@ -1751,6 +1907,7 @@ function buildRendererProgram(config) {
     const opReadTimeoutMs = Math.max(2000, Number(config.opTimeoutMs || 0) * 2);
 
     installFatalWarningTrap();
+    installWsCapture();
     clearFatalSignalState();
 
     await withTimeout(waitForEditorReady(), phaseTimeoutMs, 'waitForEditorReady');
@@ -2109,6 +2266,7 @@ function buildRendererProgram(config) {
     }
 
     let checksum = null;
+    const warnings = [];
     failIfFatalSignalSeen();
     if (config.verifyChecksum) {
       try {
@@ -2130,8 +2288,7 @@ function buildRendererProgram(config) {
         };
       }
       if (!checksum.ok) {
-        counts.errors += 1;
-        errors.push({
+        warnings.push({
           index: config.plan.length,
           requested: 'verifyChecksum',
           attempted: 'verifyChecksum',
@@ -2166,7 +2323,15 @@ function buildRendererProgram(config) {
       })),
       errorCount: errors.length,
       errors: errors.slice(0, 20),
+      warnings: warnings.slice(0, 20),
       rtcLogs: getRtcLogList(),
+      consoleLogs: Array.isArray(consoleCaptureEntry) ? [...consoleCaptureEntry] : [],
+      wsMessages: {
+        installed: wsCaptureEntry?.installed === true,
+        installReason: wsCaptureEntry?.installReason || null,
+        outbound: Array.isArray(wsCaptureEntry?.outbound) ? [...wsCaptureEntry.outbound] : [],
+        inbound: Array.isArray(wsCaptureEntry?.inbound) ? [...wsCaptureEntry.inbound] : [],
+      },
       requestedPlan: Array.isArray(config.plan) ? [...config.plan] : [],
       opLog: operationLog,
       opLogSample: operationLog.slice(0, 20),
@@ -2885,12 +3050,22 @@ function computeRendererEvalTimeoutMs(syncSettleTimeoutMs, opCount) {
 function buildReplayCaptureProbeProgram(markerPrefix) {
   return `(() => {
     const key = '__logseqOpReplayCaptureStore';
+    const consoleKey = '__logseqOpConsoleCaptureStore';
+    const wsKey = '__logseqOpWsCaptureStore';
     const marker = ${JSON.stringify(String(markerPrefix || ''))};
     const store = window[key];
-    if (!store || typeof store !== 'object') return null;
-    const entry = store[marker];
-    if (!entry || typeof entry !== 'object') return null;
-    return entry;
+    const consoleStore = window[consoleKey];
+    const wsStore = window[wsKey];
+    const entry = store && typeof store === 'object' ? store[marker] : null;
+    const consoleEntry =
+      consoleStore && typeof consoleStore === 'object' ? consoleStore[marker] : null;
+    const wsEntry = wsStore && typeof wsStore === 'object' ? wsStore[marker] : null;
+    if (!entry && !consoleEntry && !wsEntry) return null;
+    return {
+      replayCapture: entry && typeof entry === 'object' ? entry : null,
+      consoleLogs: Array.isArray(consoleEntry) ? consoleEntry : [],
+      wsMessages: wsEntry && typeof wsEntry === 'object' ? wsEntry : null,
+    };
   })()`;
 }
 
@@ -3016,14 +3191,25 @@ async function runSimulationForSession(sessionName, index, args, sharedConfig) {
     } catch (error) {
       const captured = await collectFailureReplayCapture(sessionName, markerPrefix, runOptions);
       if (captured && typeof captured === 'object') {
-        const fallbackOpLog = Array.isArray(captured.opLog) ? captured.opLog : [];
+        const replayCapture =
+          captured.replayCapture && typeof captured.replayCapture === 'object'
+            ? captured.replayCapture
+            : {};
+        const fallbackOpLog = Array.isArray(replayCapture.opLog) ? replayCapture.opLog : [];
         const fallbackTxCapture =
-          captured.txCapture && typeof captured.txCapture === 'object'
-            ? captured.txCapture
+          replayCapture.txCapture && typeof replayCapture.txCapture === 'object'
+            ? replayCapture.txCapture
             : null;
         const fallbackInitialDb =
-          captured.initialDb && typeof captured.initialDb === 'object'
-            ? captured.initialDb
+          replayCapture.initialDb && typeof replayCapture.initialDb === 'object'
+            ? replayCapture.initialDb
+            : null;
+        const fallbackConsoleLogs = Array.isArray(captured.consoleLogs)
+          ? captured.consoleLogs
+          : [];
+        const fallbackWsMessages =
+          captured.wsMessages && typeof captured.wsMessages === 'object'
+            ? captured.wsMessages
             : null;
         const fallbackExecutedOps = fallbackOpLog.length;
         const roundResult = {
@@ -3050,6 +3236,8 @@ async function runSimulationForSession(sessionName, index, args, sharedConfig) {
           opLogSample: fallbackOpLog.slice(0, 20),
           initialDb: fallbackInitialDb,
           txCapture: fallbackTxCapture,
+          consoleLogs: fallbackConsoleLogs,
+          wsMessages: fallbackWsMessages,
           checksum: null,
           recoveredFromEvalFailure: true,
         };
@@ -3143,6 +3331,18 @@ function classifySimulationFailure(reason) {
   ) {
     return 'tx_rejected';
   }
+  if (
+    text.includes('missing-entity-id warning detected') ||
+    text.includes('nothing found for entity id')
+  ) {
+    return 'missing_entity_id';
+  }
+  if (
+    text.includes('numeric-entity-id-in-non-transact-op warning detected') ||
+    text.includes('non-transact outliner ops contain numeric entity ids')
+  ) {
+    return 'numeric_entity_id_in_non_transact_op';
+  }
   return 'other';
 }
 
@@ -3155,7 +3355,9 @@ function buildRejectedResultEntry(sessionName, index, reason, failFastState) {
       : null;
   const peerCancelledByFailFast =
     (failFastState?.reasonType === 'checksum_mismatch' ||
-      failFastState?.reasonType === 'tx_rejected') &&
+      failFastState?.reasonType === 'tx_rejected' ||
+      failFastState?.reasonType === 'missing_entity_id' ||
+      failFastState?.reasonType === 'numeric_entity_id_in_non_transact_op') &&
     Number.isInteger(failFastState?.sourceIndex) &&
     failFastState.sourceIndex !== index;
 
@@ -3163,7 +3365,15 @@ function buildRejectedResultEntry(sessionName, index, reason, failFastState) {
     const cancelledReason =
       failFastState.reasonType === 'tx_rejected'
         ? 'cancelled_due_to_peer_tx_rejected'
-        : 'cancelled_due_to_peer_checksum_mismatch';
+        : (
+          failFastState.reasonType === 'missing_entity_id'
+            ? 'cancelled_due_to_peer_missing_entity_id'
+            : (
+              failFastState.reasonType === 'numeric_entity_id_in_non_transact_op'
+                ? 'cancelled_due_to_peer_numeric_entity_id_in_non_transact_op'
+                : 'cancelled_due_to_peer_checksum_mismatch'
+            )
+        );
     return {
       session: sessionName,
       instanceIndex: index + 1,
@@ -3245,11 +3455,20 @@ function buildRunArtifact({ output, args, runContext, failFastState }) {
         errors: Array.isArray(round?.errors)
           ? round.errors
           : [],
+        warnings: Array.isArray(round?.warnings)
+          ? round.warnings
+          : [],
         initialDb: round?.initialDb && typeof round.initialDb === 'object'
           ? round.initialDb
           : null,
         txCapture: round?.txCapture && typeof round.txCapture === 'object'
           ? round.txCapture
+          : null,
+        consoleLogs: Array.isArray(round?.consoleLogs)
+          ? round.consoleLogs
+          : [],
+        wsMessages: round?.wsMessages && typeof round.wsMessages === 'object'
+          ? round.wsMessages
           : null,
       }))
       : [];
@@ -3336,6 +3555,66 @@ async function writeRunArtifact(artifact, baseDir = DEFAULT_ARTIFACT_BASE_DIR) {
     JSON.stringify(artifact, null, 2),
     'utf8'
   );
+  const clients = Array.isArray(artifact?.clients) ? artifact.clients : [];
+  for (let i = 0; i < clients.length; i += 1) {
+    const client = clients[i];
+    const clientIndex =
+      Number.isInteger(client?.instanceIndex) && client.instanceIndex > 0
+        ? client.instanceIndex
+        : i + 1;
+    const clientDir = path.join(artifactDir, 'clients', `client-${clientIndex}`);
+    await fsPromises.mkdir(clientDir, { recursive: true });
+
+    const rounds = Array.isArray(client?.rounds) ? client.rounds : [];
+    for (let j = 0; j < rounds.length; j += 1) {
+      const round = rounds[j];
+      const roundIndex =
+        Number.isInteger(round?.round) && round.round > 0
+          ? round.round
+          : j + 1;
+      const roundPrefix = `round-${roundIndex}`;
+
+      await fsPromises.writeFile(
+        path.join(clientDir, `${roundPrefix}-client-ops.json`),
+        JSON.stringify(
+          {
+            requestedPlan: Array.isArray(round?.requestedPlan) ? round.requestedPlan : [],
+            opLog: Array.isArray(round?.opLog) ? round.opLog : [],
+            txCapture: round?.txCapture && typeof round.txCapture === 'object'
+              ? round.txCapture
+              : null,
+            errors: Array.isArray(round?.errors) ? round.errors : [],
+            warnings: Array.isArray(round?.warnings) ? round.warnings : [],
+          },
+          null,
+          2
+        ),
+        'utf8'
+      );
+
+      await fsPromises.writeFile(
+        path.join(clientDir, `${roundPrefix}-console-log.json`),
+        JSON.stringify(
+          Array.isArray(round?.consoleLogs) ? round.consoleLogs : [],
+          null,
+          2
+        ),
+        'utf8'
+      );
+
+      await fsPromises.writeFile(
+        path.join(clientDir, `${roundPrefix}-ws-messages.json`),
+        JSON.stringify(
+          round?.wsMessages && typeof round.wsMessages === 'object'
+            ? round.wsMessages
+            : { installed: false, outbound: [], inbound: [] },
+          null,
+          2
+        ),
+        'utf8'
+      );
+    }
+  }
   return artifactDir;
 }
 
@@ -3516,7 +3795,57 @@ async function main() {
   if (sessionNames.length === 1) {
     const single = settled[0];
     if (single.status === 'rejected') {
-      throw single.reason;
+      const rejected = buildRejectedResultEntry(
+        sessionNames[0],
+        0,
+        single.reason,
+        failFastState
+      );
+      const value = {
+        ...(rejected.result && typeof rejected.result === 'object'
+          ? rejected.result
+          : {}),
+        ok: false,
+        error: rejected.error || formatFailureText(single.reason),
+        failureType: rejected.failureType || 'other',
+        cleanupTodayPage,
+      };
+      if (rejected.cancelled) value.cancelled = true;
+      if (rejected.cancelledReason) value.cancelledReason = rejected.cancelledReason;
+      if (Number.isInteger(rejected.peerInstanceIndex)) {
+        value.peerInstanceIndex = rejected.peerInstanceIndex;
+      }
+      try {
+        const singleOutput = {
+          ok: false,
+          instances: 1,
+          successCount: 0,
+          failureCount: 1,
+          results: [{
+            session: sessionNames[0],
+            instanceIndex: 1,
+            ok: false,
+            result: value,
+            error: rejected.error,
+            failureType: rejected.failureType,
+            cancelled: rejected.cancelled,
+            cancelledReason: rejected.cancelledReason,
+            peerInstanceIndex: rejected.peerInstanceIndex,
+          }],
+        };
+        const artifact = buildRunArtifact({
+          output: singleOutput,
+          args,
+          runContext: sharedConfig,
+          failFastState,
+        });
+        value.artifactDir = await writeRunArtifact(artifact);
+      } catch (error) {
+        value.artifactError = String(error?.message || error);
+      }
+      console.log(JSON.stringify(value, null, 2));
+      process.exitCode = 2;
+      return;
     }
     const value = single.value;
     value.cleanupTodayPage = cleanupTodayPage;

@@ -44,7 +44,7 @@
 
 (assert (empty? (last (data/diff immutable-db-ident-entities nil-db-ident-entities))))
 
-(def ^:private lookup-entity @#'entity/lookup-entity)
+(def lookup-entity @#'entity/lookup-entity)
 
 (def ^:private *seen-immutable-entities (volatile! {}))
 

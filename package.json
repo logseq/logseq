@@ -64,6 +64,7 @@
         "sync-ios-release": "yarn clean && yarn release-mobile && rm -rf ./static/mobile/**/*.map && npx cap sync ios",
         "clean": "gulp clean",
         "test": "run-s cljs:test cljs:run-test",
+        "test:node-adapter": "yarn --cwd deps/db-sync test:node-adapter",
         "report": "run-s cljs:report",
         "style:lint": "stylelint \"src/**/*.css\"",
         "gulp:watch": "gulp watch",

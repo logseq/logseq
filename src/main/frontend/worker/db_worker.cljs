@@ -548,6 +548,18 @@
   [repo]
   (db-sync/upload-graph! repo))
 
+(def-thread-api :thread-api/db-sync-stop-upload
+  [repo]
+  (db-sync/stop-upload! repo))
+
+(def-thread-api :thread-api/db-sync-resume-upload
+  [repo]
+  (db-sync/resume-upload! repo))
+
+(def-thread-api :thread-api/db-sync-upload-stopped?
+  [repo]
+  (db-sync/upload-stopped? repo))
+
 (def-thread-api :thread-api/db-sync-download-graph
   [repo graph-id graph-e2ee?]
   (sync-download/download-graph-by-id! repo graph-id graph-e2ee?))

@@ -311,10 +311,10 @@
                                       outliner-op (assoc :outliner-op outliner-op)))
         true
         (catch :default e
-          ;; Rebase txs are inferred from local history and can become stale when
-          ;; concurrent remote edits remove referenced entities before upload.
-          ;; Treat stale :entity-id/missing rebases as no-op so sync can continue.
-          (if (and (= outliner-op :rebase)
+          ;; Rebase/fix txs are inferred from local history and can become stale
+          ;; when concurrent remote edits remove referenced entities before upload.
+          ;; Treat stale :entity-id/missing rebases/fixes as no-op so sync can continue.
+          (if (and (contains? #{:rebase :fix} outliner-op)
                    (= :entity-id/missing (:error (ex-data e))))
             (do
               (log/warn :db-sync/drop-stale-rebase-tx

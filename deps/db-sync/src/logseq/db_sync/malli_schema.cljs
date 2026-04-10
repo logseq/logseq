@@ -52,6 +52,7 @@
    [:t {:optional true} :int]
    [:success-tx-ids {:optional true} [:sequential :uuid]]
    [:failed-tx-id {:optional true} :uuid]
+   [:error-detail {:optional true} :string]
    [:data {:optional true} :string]])
 
 (def user-presence-schema

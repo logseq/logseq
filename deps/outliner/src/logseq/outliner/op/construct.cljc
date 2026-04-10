@@ -8,7 +8,8 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]))
+            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db.common.entity-plus :as entity-plus]))
 
 (def ^:private semantic-outliner-ops
   #{:save-block
@@ -62,6 +63,8 @@
                            (when-let [id (:block/uuid x)]
                              (:db/id (d/entity db [:block/uuid id]))))]
                (stable-entity-ref db eid))
+    (uuid? x)
+    [:block/uuid x]
     (and (integer? x) (not (neg? x)))
     (if-let [ent (d/entity db x)]
       (cond
@@ -70,6 +73,19 @@
         :else x)
       x)
     :else x))
+
+(defn- stable-block-ref-with-tx-data
+  [db tx-data x]
+  (let [entity-ref (stable-entity-ref db x)]
+    (if (and (integer? entity-ref) (not (neg? entity-ref)))
+      (or (some (fn [item]
+                  (when (and (= entity-ref (:e item))
+                             (= :block/uuid (:a item))
+                             (uuid? (:v item)))
+                    [:block/uuid (:v item)]))
+                tx-data)
+          entity-ref)
+      entity-ref)))
 
 (defn- sanitize-ref-value
   [db v]
@@ -187,6 +203,21 @@
   [db ids]
   (mapv #(stable-entity-ref db %) ids))
 
+(defn- stable-block-uuid
+  [db x]
+  (let [entity-ref (stable-entity-ref db x)]
+    (cond
+      (uuid? entity-ref)
+      entity-ref
+
+      (and (vector? entity-ref)
+           (= :block/uuid (first entity-ref))
+           (uuid? (second entity-ref)))
+      (second entity-ref)
+
+      :else
+      entity-ref)))
+
 (defn- resolve-target-and-sibling
   [block]
   (if-let [left-sibling (ldb/get-left-sibling block)]
@@ -301,7 +332,36 @@
 
 (defn- maybe-rewrite-delete-block-ids
   [db tx-data ids]
-  (let [ids' (stable-id-coll db ids)
+  (let [deleted-ids-from-tx-data (->> tx-data
+                                      (keep (fn [item]
+                                              (cond
+                                                (and (vector? item)
+                                                     (= :db/retractEntity (first item))
+                                                     (>= (count item) 2))
+                                                (second item)
+
+                                                ;; d/with-style datom maps after retractEntity
+                                                ;; can be used to recover deleted entity ids.
+                                                (and (map? item)
+                                                     (false? (:added item))
+                                                     (= :block/uuid (:a item)))
+                                                (:e item)
+
+                                                ;; datascript Datom records from d/with
+                                                (and (some? (:a item))
+                                                     (false? (:added item))
+                                                     (= :block/uuid (:a item)))
+                                                (:e item)
+
+                                                :else
+                                                nil)))
+                                      distinct
+                                      vec)
+        ids-from-tx-data' (some->> deleted-ids-from-tx-data
+                                   (stable-id-coll db)
+                                   seq
+                                   vec)
+        ids' (stable-id-coll db ids)
         created-uuids (created-block-uuids-from-tx-data tx-data)
         unresolved-created-lookups? (and (seq created-uuids)
                                          (= (count ids') (count created-uuids))
@@ -310,8 +370,15 @@
                                                         (= :block/uuid (first id))
                                                         (nil? (d/entity db id))))
                                                  ids'))]
-    (if unresolved-created-lookups?
+    (cond
+      ;; Prefer the delete ids directly observed in tx-data to avoid carrying stale
+      ;; UI selection ids that weren't actually retracted in this transaction.
+      (seq ids-from-tx-data')
+      ids-from-tx-data'
+
+      unresolved-created-lookups?
       (mapv (fn [block-uuid] [:block/uuid block-uuid]) created-uuids)
+      :else
       ids')))
 
 (defn- moved-block-ids-from-tx-data
@@ -413,7 +480,7 @@
     :move-blocks
     (let [[ids target-id opts] args]
       [:move-blocks [(stable-id-coll db ids)
-                     (stable-entity-ref db target-id)
+                     (stable-block-ref-with-tx-data db tx-data target-id)
                      opts]])
 
     :delete-blocks
@@ -430,54 +497,60 @@
 
     :rename-page
     (let [[page-uuid new-title] args]
-      [:save-block [{:block/uuid page-uuid
+      [:save-block [{:block/uuid (stable-block-uuid db page-uuid)
                      :block/title new-title}
                     {}]])
 
     :delete-page
     (let [[page-uuid opts] args]
-      [:delete-page [page-uuid opts]])
+      [:delete-page [(stable-block-uuid db page-uuid) opts]])
 
     :restore-recycled
     (let [[root-id] args]
-      [:restore-recycled [root-id]])
+      [:restore-recycled [(stable-block-uuid db root-id)]])
 
     :recycle-delete-permanently
     (let [[root-id] args]
-      [:recycle-delete-permanently [(stable-entity-ref db root-id)]])
+      [:recycle-delete-permanently [(stable-block-uuid db root-id)]])
 
     :set-block-property
-    (let [[block-eid property-id v] args]
+    (let [[block-eid property-id v] args
+          property-id' (stable-entity-ref db property-id)]
       [:set-block-property [(stable-entity-ref db block-eid)
-                            property-id
-                            (stable-property-value db property-id v)]])
+                            property-id'
+                            (stable-property-value db property-id' v)]])
 
     :remove-block-property
     (let [[block-eid property-id] args]
-      [:remove-block-property [(stable-entity-ref db block-eid) property-id]])
+      [:remove-block-property [(stable-entity-ref db block-eid)
+                               (stable-entity-ref db property-id)]])
 
     :batch-set-property
-    (let [[block-ids property-id v opts] args]
+    (let [[block-ids property-id v opts] args
+          property-id' (stable-entity-ref db property-id)]
       [:batch-set-property [(stable-id-coll db block-ids)
-                            property-id
-                            (stable-property-value db property-id v)
+                            property-id'
+                            (stable-property-value db property-id' v)
                             opts]])
 
     :batch-remove-property
     (let [[block-ids property-id] args]
-      [:batch-remove-property [(stable-id-coll db block-ids) property-id]])
+      [:batch-remove-property [(stable-id-coll db block-ids)
+                               (stable-entity-ref db property-id)]])
 
     :delete-property-value
-    (let [[block-eid property-id property-value] args]
+    (let [[block-eid property-id property-value] args
+          property-id' (stable-entity-ref db property-id)]
       [:delete-property-value [(stable-entity-ref db block-eid)
-                               property-id
-                               (stable-property-value db property-id property-value)]])
+                               property-id'
+                               (stable-property-value db property-id' property-value)]])
 
     :batch-delete-property-value
-    (let [[block-eids property-id property-value] args]
+    (let [[block-eids property-id property-value] args
+          property-id' (stable-entity-ref db property-id)]
       [:batch-delete-property-value [(stable-id-coll db block-eids)
-                                     property-id
-                                     (stable-property-value db property-id property-value)]])
+                                     property-id'
+                                     (stable-property-value db property-id' property-value)]])
 
     :create-property-text-block
     (let [[block-id property-id value opts] args]
@@ -503,15 +576,16 @@
 
     :upsert-closed-value
     (let [[property-id opts] args]
-      [:upsert-closed-value [property-id opts]])
+      [:upsert-closed-value [(stable-entity-ref db property-id) opts]])
 
     :add-existing-values-to-closed-values
     (let [[property-id values] args]
-      [:add-existing-values-to-closed-values [property-id values]])
+      [:add-existing-values-to-closed-values [(stable-entity-ref db property-id) values]])
 
     :delete-closed-value
     (let [[property-id value-block-id] args]
-      [:delete-closed-value [property-id (stable-entity-ref db value-block-id)]])
+      [:delete-closed-value [(stable-entity-ref db property-id)
+                             (stable-block-ref-with-tx-data db tx-data value-block-id)]])
 
     [op args]))
 
@@ -539,6 +613,9 @@
 
     (integer? block)
     (d/entity db block)
+
+    (uuid? block)
+    (d/entity db [:block/uuid block])
 
     (vector? block)
     (d/entity db block)
@@ -587,8 +664,8 @@
 
 (defn- block-property-value
   [db block-id property-id]
-  (when-let [value (some-> (d/entity db block-id)
-                           (get property-id))]
+  ;; `get` lookup may include derived defaults.
+  (when-let [value (entity-plus/lookup-entity (d/entity db block-id) property-id)]
     (property-ref-value db property-id value)))
 
 (defn- property-history-refs-from-tx-data
@@ -726,14 +803,14 @@
 
 (defn- selected-block-roots
   [db-before ids]
-  (let [entities (reduce (fn [acc id]
-                           (if-let [ent (d/entity db-before id)]
-                             (if (some #(= (:db/id %) (:db/id ent)) acc)
-                               acc
-                               (conj acc ent))
-                             acc))
+  (let [resolved-entities (mapv #(d/entity db-before %) ids)
+        unresolved-id? (some nil? resolved-entities)
+        entities (reduce (fn [acc ent]
+                           (if (some #(= (:db/id %) (:db/id ent)) acc)
+                             acc
+                             (conj acc ent)))
                          []
-                         ids)
+                         (remove nil? resolved-entities))
         selected-ids (set (map :db/id entities))
         has-selected-ancestor? (fn [ent]
                                  (loop [parent (:block/parent ent)]
@@ -742,9 +819,10 @@
                                        true
                                        (recur (:block/parent parent)))
                                      false)))]
-    (->> entities
-         (remove has-selected-ancestor?)
-         vec)))
+    {:roots (->> entities
+                 (remove has-selected-ancestor?)
+                 vec)
+     :incomplete? (boolean unresolved-id?)}))
 
 (defn- block-restore-target
   [ent]
@@ -783,9 +861,10 @@
 
 (defn- build-inverse-delete-blocks
   [db-before ids]
-  (let [roots (selected-block-roots db-before ids)
+  (let [{:keys [roots incomplete?]} (selected-block-roots db-before ids)
         plans (mapv #(delete-root->restore-plan db-before %) roots)]
-    (when (and (seq roots)
+    (when (and (not incomplete?)
+               (seq roots)
                (every? some? plans))
       (->> plans
            (mapv #(to-insert-op db-before %))
@@ -804,9 +883,10 @@
 
 (defn- build-inverse-move-blocks
   [db-before ids]
-  (let [roots (selected-block-roots db-before ids)
+  (let [{:keys [roots incomplete?]} (selected-block-roots db-before ids)
         restore-ops (mapv #(move-root->restore-op db-before %) roots)]
-    (when (and (seq roots)
+    (when (and (not incomplete?)
+               (seq roots)
                (every? some? restore-ops))
       (seq restore-ops))))
 
@@ -1029,20 +1109,15 @@
     nil
 
     (seq ops)
-    (do
-      (when-not (every? (fn [[op]]
-                          (contains? semantic-outliner-ops op))
-                        ops)
-        (throw (ex-info "Not every op is semantic" {:ops ops})))
-      (->> ops
-           (mapcat (fn [op]
-                     (let [canonicalized-op (canonicalize-semantic-outliner-op db tx-data op)]
-                       (if (and (sequential? canonicalized-op)
-                                (sequential? (first canonicalized-op))
-                                (keyword? (ffirst canonicalized-op)))
-                         canonicalized-op
-                         [canonicalized-op]))))
-           vec))
+    (->> ops
+         (mapcat (fn [op]
+                   (let [canonicalized-op (canonicalize-semantic-outliner-op db tx-data op)]
+                     (if (and (sequential? canonicalized-op)
+                              (sequential? (first canonicalized-op))
+                              (keyword? (ffirst canonicalized-op)))
+                       canonicalized-op
+                       [canonicalized-op]))))
+         vec)
 
     :else
     nil))
@@ -1098,12 +1173,204 @@
       (contains? #{:transact :batch-import-edn} (:outliner-op tx-meta))
       canonical-transact-op)))
 
+(defn- unresolved-numeric-entity-id?
+  [x]
+  (and (integer? x)
+       (not (neg? x))))
+
+(defn- unresolved-numeric-entity-id-coll?
+  [xs]
+  (some unresolved-numeric-entity-id? xs))
+
+(defn- numeric-id-in-ref-value?
+  [v]
+  (cond
+    (unresolved-numeric-entity-id? v)
+    true
+
+    (set? v)
+    (some numeric-id-in-ref-value? v)
+
+    (sequential? v)
+    (some numeric-id-in-ref-value? v)
+
+    :else
+    false))
+
+(defn- numeric-id-in-block-ref-attrs?
+  [db block]
+  (and (map? block)
+       (some (fn [[k v]]
+               (and (ref-attr? db k)
+                    (numeric-id-in-ref-value? v)))
+             block)))
+
+(defn- stale-numeric-id-in-page-ops?
+  [db op args]
+  (case op
+    :save-block
+    (let [[block _opts] args]
+      (numeric-id-in-block-ref-attrs? db block))
+
+    :insert-blocks
+    (let [[blocks target-id _opts] args]
+      (or (some #(numeric-id-in-block-ref-attrs? db %) blocks)
+          (unresolved-numeric-entity-id? target-id)))
+
+    :create-page
+    (let [[_title opts] args]
+      (unresolved-numeric-entity-id? (:uuid opts)))
+
+    :rename-page
+    (let [[page-uuid _new-title] args]
+      (unresolved-numeric-entity-id? page-uuid))
+
+    :delete-page
+    (let [[page-uuid _opts] args]
+      (unresolved-numeric-entity-id? page-uuid))
+
+    :restore-recycled
+    (let [[root-id] args]
+      (unresolved-numeric-entity-id? root-id))
+
+    :apply-template
+    (let [[template-id target-id _opts] args]
+      (or (unresolved-numeric-entity-id? template-id)
+          (unresolved-numeric-entity-id? target-id)))
+
+    :recycle-delete-permanently
+    (let [[root-id] args]
+      (unresolved-numeric-entity-id? root-id))
+
+    nil))
+
+(defn- stale-numeric-id-in-structure-ops?
+  [op args]
+  (case op
+    :move-blocks
+    (let [[ids target-id _opts] args]
+      (or (unresolved-numeric-entity-id-coll? ids)
+          (unresolved-numeric-entity-id? target-id)))
+
+    :move-blocks-up-down
+    (let [[ids _up?] args]
+      (unresolved-numeric-entity-id-coll? ids))
+
+    :indent-outdent-blocks
+    (let [[ids _indent? _opts] args]
+      (unresolved-numeric-entity-id-coll? ids))
+
+    :delete-blocks
+    (let [[ids _opts] args]
+      (unresolved-numeric-entity-id-coll? ids))
+
+    nil))
+
+(defn- stale-numeric-id-in-property-ops?
+  [op args]
+  (case op
+    :set-block-property
+    (let [[block-id property-id _v] args]
+      (or (unresolved-numeric-entity-id? block-id)
+          (unresolved-numeric-entity-id? property-id)))
+
+    :remove-block-property
+    (let [[block-id property-id] args]
+      (or (unresolved-numeric-entity-id? block-id)
+          (unresolved-numeric-entity-id? property-id)))
+
+    :batch-set-property
+    (let [[block-ids property-id _v _opts] args]
+      (or (unresolved-numeric-entity-id-coll? block-ids)
+          (unresolved-numeric-entity-id? property-id)))
+
+    :batch-remove-property
+    (let [[block-ids property-id] args]
+      (or (unresolved-numeric-entity-id-coll? block-ids)
+          (unresolved-numeric-entity-id? property-id)))
+
+    :delete-property-value
+    (let [[block-id property-id _property-value] args]
+      (or (unresolved-numeric-entity-id? block-id)
+          (unresolved-numeric-entity-id? property-id)))
+
+    :batch-delete-property-value
+    (let [[block-ids property-id _property-value] args]
+      (or (unresolved-numeric-entity-id-coll? block-ids)
+          (unresolved-numeric-entity-id? property-id)))
+
+    :create-property-text-block
+    (let [[block-id property-id _value _opts] args]
+      (or (unresolved-numeric-entity-id? block-id)
+          (unresolved-numeric-entity-id? property-id)))
+
+    :class-add-property
+    (let [[class-id property-id] args]
+      (or (unresolved-numeric-entity-id? class-id)
+          (unresolved-numeric-entity-id? property-id)))
+
+    :class-remove-property
+    (let [[class-id property-id] args]
+      (or (unresolved-numeric-entity-id? class-id)
+          (unresolved-numeric-entity-id? property-id)))
+
+    :delete-closed-value
+    (let [[property-id value-block-id] args]
+      (or (unresolved-numeric-entity-id? property-id)
+          (unresolved-numeric-entity-id? value-block-id)))
+
+    nil))
+
+(defn- stale-numeric-id-in-schema-ops?
+  [op args]
+  (case op
+    :upsert-property
+    (let [[property-id _schema _opts] args]
+      (unresolved-numeric-entity-id? property-id))
+
+    :upsert-closed-value
+    (let [[property-id _opts] args]
+      (unresolved-numeric-entity-id? property-id))
+
+    :add-existing-values-to-closed-values
+    (let [[property-id _values] args]
+      (unresolved-numeric-entity-id? property-id))
+
+    nil))
+
+(defn- stale-numeric-id-in-op?
+  [db [op args]]
+  (and (not= :transact op)
+       (boolean
+        (or (stale-numeric-id-in-page-ops? db op args)
+            (stale-numeric-id-in-structure-ops? op args)
+            (stale-numeric-id-in-property-ops? op args)
+            (stale-numeric-id-in-schema-ops? op args)))))
+
+(defn- assert-no-stale-numeric-ids!
+  [db ops stage]
+  (when-let [[idx op-entry] (some (fn [[idx op-entry]]
+                                    (when (stale-numeric-id-in-op? db op-entry)
+                                      [idx op-entry]))
+                                  (map-indexed vector ops))]
+    (throw (ex-info "Non-transact outliner ops contain numeric entity ids"
+                    {:stage stage
+                     :index idx
+                     :op op-entry
+                     :ops ops}))))
+
+(defn ^:api assert-no-numeric-entity-ids!
+  [db ops stage]
+  (assert-no-stale-numeric-ids! db (some-> ops seq vec) stage))
+
 (defn derive-history-outliner-ops
   [db-before db-after tx-data tx-meta]
-  (let [forward-outliner-ops (patch-forward-delete-block-op-ids
-                              db-before
-                              (canonicalize-outliner-ops db-after tx-meta tx-data))
-        forward-outliner-ops (some-> forward-outliner-ops seq vec)
+  (let [canonical-forward-outliner-ops (patch-forward-delete-block-op-ids
+                                        db-before
+                                        (canonicalize-outliner-ops db-after tx-meta tx-data))
+        canonical-forward-outliner-ops (some-> canonical-forward-outliner-ops seq vec)
+        _ (assert-no-stale-numeric-ids! db-after canonical-forward-outliner-ops :forward-outliner-ops)
+        forward-outliner-ops canonical-forward-outliner-ops
         forward-outliner-ops (when (seq forward-outliner-ops)
                                (if (and (> (count forward-outliner-ops) 1)
                                         (some (fn [[op]] (= :transact op)) forward-outliner-ops))
@@ -1112,10 +1379,12 @@
         built-inverse-outliner-ops (some-> (build-strict-inverse-outliner-ops db-before db-after tx-data forward-outliner-ops)
                                            seq
                                            vec)
+        _ (assert-no-stale-numeric-ids! db-before built-inverse-outliner-ops :built-inverse-outliner-ops)
         explicit-inverse-outliner-ops (some-> (canonicalize-explicit-outliner-ops db-after tx-data (:db-sync/inverse-outliner-ops tx-meta))
                                               (patch-inverse-delete-block-ops forward-outliner-ops)
                                               seq
                                               vec)
+        _ (assert-no-stale-numeric-ids! db-after explicit-inverse-outliner-ops :explicit-inverse-outliner-ops)
         inverse-outliner-ops (cond
                                (and (= :apply-template (:outliner-op tx-meta))
                                     (:undo? tx-meta)
@@ -1138,6 +1407,7 @@
 
                                :else
                                explicit-inverse-outliner-ops)
-        inverse-outliner-ops (some-> inverse-outliner-ops seq vec)]
+        inverse-outliner-ops (some-> inverse-outliner-ops seq vec)
+        _ (assert-no-stale-numeric-ids! db-before inverse-outliner-ops :inverse-outliner-ops)]
     {:forward-outliner-ops forward-outliner-ops
      :inverse-outliner-ops inverse-outliner-ops}))

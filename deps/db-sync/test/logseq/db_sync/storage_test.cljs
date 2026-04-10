@@ -113,30 +113,26 @@
             (is (= stale-checksum
                    (storage/get-checksum sql)))))))))
 
-(deftest listener-failure-can-leave-kvs-ahead-of-tx-log-test
-  (testing "if listener append fails after store, kvs can persist while tx_log/t stay unchanged"
+(deftest stale-checksum-transact-keeps-kvs-and-tx-log-consistent-test
+  (testing "stale checksum should not fail transact; kvs and tx_log/t should advance together"
     (with-memory-sql
       (fn [sql]
         (storage/init-schema! sql)
         (let [conn (storage/open-conn sql)
               stale-checksum "ffffffffffffffff"
               page-uuid (random-uuid)]
-          ;; Force append-tx-for-tx-report to throw on next non-empty tx.
+          ;; Use a stale checksum and ensure append path remains consistent.
           (storage/set-checksum! sql stale-checksum)
-          (let [error (try
-                        (d/transact! conn [{:block/uuid page-uuid
-                                            :block/name "repro-kvs-ahead-page"}])
-                        nil
-                        (catch :default e
-                          e))]
-            (is (some? error))
-            (is (string/includes? (or (ex-message error) (.-message error) "")
-                                  "server checksum doesn't match"))
-            ;; Listener failed before append-tx!/next-t!, so tx_log/t/checksum metadata stay stale.
-            (is (= 0 (storage/get-t sql)))
-            (is (= [] (storage/fetch-tx-since sql 0)))
-            (is (= stale-checksum (storage/get-checksum sql)))
-            ;; But kvs store can already be persisted; restoring a new conn sees the entity.
+          (let [result (try
+                         (d/transact! conn [{:block/uuid page-uuid
+                                             :block/name "repro-kvs-ahead-page"}])
+                         :ok
+                         (catch :default e
+                           e))]
+            (is (= :ok result))
+            (is (= 1 (storage/get-t sql)))
+            (is (= 1 (count (storage/fetch-tx-since sql 0))))
+            (is (not= stale-checksum (storage/get-checksum sql)))
             (let [restored-conn (storage/open-conn sql)]
               (is (= page-uuid
                      (:block/uuid (d/entity @restored-conn [:block/uuid page-uuid])))))))))))

@@ -32,10 +32,22 @@
 (defonce *repo->latest-remote-tx (atom {}))
 (defonce *repo->latest-remote-checksum (atom {}))
 (defonce *upload-temp-opfs-pool (atom nil))
+;; Debug-only gate to reproduce one-way sync:
+;; still pull/rebase remote txs, but skip local tx batch uploads.
+(defonce *repo->upload-stopped? (atom {}))
 
 (defn fail-fast [tag data]
   (log/error tag data)
   (throw (ex-info (name tag) data)))
+
+(defn set-upload-stopped!
+  [repo stopped?]
+  (swap! *repo->upload-stopped? assoc repo (boolean stopped?))
+  (boolean stopped?))
+
+(defn upload-stopped?
+  [repo]
+  (true? (get @*repo->upload-stopped? repo)))
 
 (declare enqueue-asset-task!)
 
@@ -189,14 +201,32 @@
                                (seq (:inverse-outliner-ops tx-meta)))}
     (op-construct/derive-history-outliner-ops db-before db-after tx-data tx-meta)))
 
+(defn- title-only-raw-tx?
+  [tx-data]
+  (let [tx-items (seq tx-data)]
+    (and tx-items
+         (every?
+          (fn [entry]
+            (and (vector? entry)
+                 (>= (count entry) 4)
+                 (= :db/add (first entry))
+                 (= :block/title (nth entry 2))
+                 (string? (nth entry 3))))
+          tx-items))))
+
 (defn- rebase-history-ops
   [local-tx]
   (let [forward-outliner-ops (seq (:forward-outliner-ops local-tx))
         inverse-outliner-ops (seq (:inverse-outliner-ops local-tx))
-        ;; Fall back to raw tx replay for legacy rebase rows that explicitly
-        ;; persisted raw transact placeholders.
+        ;; Fall back to raw tx replay for legacy rebase rows that persisted without
+        ;; semantic history ops, and for direct title-only transact rows whose
+        ;; metadata doesn't carry semantic ops. Keep other non-rebase rows as-is
+        ;; to avoid replaying arbitrary local raw txs during remote rebase.
         fallback-forward-ops (when (and (nil? forward-outliner-ops)
-                                        (= :rebase (:outliner-op local-tx)))
+                                        (or (= :rebase (:outliner-op local-tx))
+                                            (and (nil? (:outliner-op local-tx))
+                                                 (title-only-raw-tx? (:tx local-tx))))
+                                        (seq (:tx local-tx)))
                                canonical-transact-op)
         forward-ops (or forward-outliner-ops fallback-forward-ops)
         inverse-ops (or inverse-outliner-ops
@@ -219,6 +249,7 @@
           existing-ent (d/entity @conn [:db-sync/tx-id tx-id])
           should-inc-pending? (not= true (:db-sync/pending? existing-ent))
           now (.now js/Date)
+          created-at (or (:db-sync/created-at existing-ent) now)
           {:keys [forward-outliner-ops inverse-outliner-ops]}
           (derive-history-outliner-ops db-before db-after tx-data tx-meta)
           inferred-outliner-ops?' (inferred-outliner-ops? tx-meta)]
@@ -242,7 +273,7 @@
                             :db-sync/forward-outliner-ops forward-outliner-ops
                             :db-sync/inverse-outliner-ops inverse-outliner-ops
                             :db-sync/inferred-outliner-ops? inferred-outliner-ops?'
-                            :db-sync/created-at now}])
+                            :db-sync/created-at created-at}])
       (worker-undo-redo/gen-undo-ops! repo tx-report tx-id
                                       {:apply-history-action! apply-history-action!})
       (when should-inc-pending?
@@ -487,62 +518,67 @@
           (when (and (ws-open? ws) (worker-state/online?))
             (let [batch (pending-txs repo {:limit 50})]
               (when (seq batch)
-                (let [{:keys [tx-entries drop-tx-ids]} (prepare-upload-tx-entries conn batch)]
-                  (when (seq drop-tx-ids)
-                    (mark-pending-txs-false! repo drop-tx-ids))
-                  (when (seq tx-entries)
-                    (-> (p/let [aes-key (when (sync-crypt/graph-e2ee? repo)
-                                          (sync-crypt/<ensure-graph-aes-key repo (:graph-id client)))
-                                _ (when (and (sync-crypt/graph-e2ee? repo) (nil? aes-key))
-                                    (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
-                                tx-entries* (p/all
-                                             (mapv (fn [{:keys [tx-data] :as tx-entry}]
-                                                     (p/let [tx-data* (offload-large-titles
-                                                                       tx-data
-                                                                       {:repo repo
-                                                                        :graph-id (:graph-id client)
-                                                                        :aes-key aes-key})
-                                                             tx-data** (if aes-key
-                                                                         (sync-crypt/<encrypt-tx-data aes-key tx-data*)
-                                                                         tx-data*)]
-                                                       (assoc tx-entry :tx-data tx-data**)))
-                                                   tx-entries))
-                                payload (mapv (fn [{:keys [tx-id tx-data outliner-op]}]
-                                                (cond-> {:tx (sqlite-util/write-transit-str tx-data)}
-                                                  tx-id
-                                                  (assoc :tx-id (str tx-id))
-                                                  outliner-op
-                                                  (assoc :outliner-op outliner-op)))
-                                              tx-entries*)
-                                tx-ids (mapv :tx-id tx-entries)]
-                          (reset! (:inflight client) tx-ids)
-                          (send! ws {:type "tx/batch"
-                                     :t-before local-tx
-                                     :txs payload}))
-                        (p/catch (fn [error]
-                                   (js/console.error error))))))))))))))
+                (when-not (upload-stopped? repo)
+                  (let [{:keys [tx-entries drop-tx-ids]} (prepare-upload-tx-entries conn batch)]
+                    (when (seq drop-tx-ids)
+                      (mark-pending-txs-false! repo drop-tx-ids))
+                    (when (seq tx-entries)
+                      (-> (p/let [aes-key (when (sync-crypt/graph-e2ee? repo)
+                                            (sync-crypt/<ensure-graph-aes-key repo (:graph-id client)))
+                                  _ (when (and (sync-crypt/graph-e2ee? repo) (nil? aes-key))
+                                      (fail-fast :db-sync/missing-field {:repo repo :field :aes-key}))
+                                  tx-entries* (p/all
+                                               (mapv (fn [{:keys [tx-data] :as tx-entry}]
+                                                       (p/let [tx-data* (offload-large-titles
+                                                                         tx-data
+                                                                         {:repo repo
+                                                                          :graph-id (:graph-id client)
+                                                                          :aes-key aes-key})
+                                                               tx-data** (if aes-key
+                                                                           (sync-crypt/<encrypt-tx-data aes-key tx-data*)
+                                                                           tx-data*)]
+                                                         (assoc tx-entry :tx-data tx-data**)))
+                                                     tx-entries))
+                                  payload (mapv (fn [{:keys [tx-id tx-data outliner-op]}]
+                                                  (cond-> {:tx (sqlite-util/write-transit-str tx-data)}
+                                                    tx-id
+                                                    (assoc :tx-id (str tx-id))
+                                                    outliner-op
+                                                    (assoc :outliner-op outliner-op)))
+                                                tx-entries*)
+                                  tx-ids (mapv :tx-id tx-entries)]
+                            (reset! (:inflight client) tx-ids)
+                            (send! ws {:type "tx/batch"
+                                       :t-before local-tx
+                                       :txs payload}))
+                          (p/catch (fn [error]
+                                     (js/console.error error)))))))))))))))
 
-(defn- missing-order-add-op?
-  [db item]
-  (and (vector? item)
-       (>= (count item) 4)
-       (= :db/add (first item))
-       (= :block/order (nth item 2 nil))
-       (nil? (d/entity db (second item)))))
+(defn enqueue-flush-pending!
+  [repo client]
+  (if-let [send-queue (:send-queue client)]
+    (swap! send-queue
+           (fn [prev]
+             (-> (or prev (p/resolved nil))
+                 (p/catch (fn [_] nil))
+                 (p/then (fn [_]
+                           (flush-pending! repo client)))
+                 (p/catch (fn [error]
+                            (log/error :db-sync/flush-pending-queue-failed
+                                       {:repo repo
+                                        :error error}))))))
+    (flush-pending! repo client)))
 
 (defn- reverse-history-action!
   [conn local-tx]
-  (let [db @conn]
-    (if-let [tx-data (->> (:reversed-tx local-tx)
-                          (remove (fn [item] (missing-order-add-op? db item)))
-                          seq)]
-      (ldb/transact! conn tx-data
-                     {:outliner-op (:outliner-op local-tx)
-                      :reverse? true})
-      (invalid-rebase-op! :reverse-history-action
-                          {:reason :missing-reversed-tx-data
-                           :tx-id (:tx-id local-tx)
-                           :outliner-op (:outliner-op local-tx)}))))
+  (if-let [tx-data (seq (:reversed-tx local-tx))]
+    (ldb/transact! conn tx-data
+                   {:outliner-op (:outliner-op local-tx)
+                    :reverse? true})
+    (invalid-rebase-op! :reverse-history-action
+                        {:reason :missing-reversed-tx-data
+                         :tx-id (:tx-id local-tx)
+                         :outliner-op (:outliner-op local-tx)})))
 
 (defn- replace-uuid-str-with-eid
   [db v]
@@ -572,14 +608,8 @@
         (let [tx-data (->> (:tx-data remote-tx)
                            (map (partial resolve-temp-id db))
                            seq)
-              report (try
-                       (ldb/transact! conn tx-data {:transact-remote? true})
-                       (catch :default e
-                         (js/console.error e)
-                         (log/error ::transact-remote-txs! {:remote-tx remote-tx
-                                                            :index (inc index)
-                                                            :total (count remote-txs)})
-                         (throw e)))
+              report (ldb/transact! conn tx-data {:transact-remote? true
+                                                  :t (:t remote-tx)})
               results' (cond-> results
                          tx-data
                          (conj {:tx-data tx-data
@@ -942,7 +972,20 @@
                    (doseq [op forward-ops]
                      (replay-canonical-outliner-op! conn op rebase-db-before)))))]
           {:tx-id (:tx-id local-tx)
-           :status (if rebase-tx-report :rebased :no-op)})
+           :status (cond
+                     rebase-tx-report
+                     :rebased
+
+                     ;; Title-only raw tx replay can become empty after remote applies
+                     ;; the same title; keep it pending instead of dropping as stale.
+                     (and (= canonical-transact-op forward-ops)
+                          (nil? (:forward-outliner-ops local-tx))
+                          (nil? (:outliner-op local-tx))
+                          (title-only-raw-tx? (:tx local-tx)))
+                     :skipped
+
+                     :else
+                     :no-op)})
         (catch :default error
           (let [drop-log {:tx-id (:tx-id local-tx)
                           :outliner-ops forward-ops
@@ -950,8 +993,27 @@
             (log/warn :db-sync/drop-op-driven-pending-tx drop-log)
             {:tx-id (:tx-id local-tx)
              :status :failed})))
-      {:tx-id (:tx-id local-tx)
-       :status :skipped})))
+      (let [tx-data (some-> (:tx local-tx) seq vec)
+            dry-run-tx-data (some->> tx-data
+                                     (mapv (fn [item]
+                                             (if (and (vector? item) (= 5 (count item)))
+                                               (let [[op e a v _t] item]
+                                                 [op e a v])
+                                               item))))]
+        (if (seq dry-run-tx-data)
+          (try
+            (d/with @conn dry-run-tx-data)
+            {:tx-id (:tx-id local-tx)
+             :status :skipped}
+            (catch :default error
+              (log/warn :db-sync/drop-skipped-pending-tx
+                        {:tx-id (:tx-id local-tx)
+                         :outliner-op (:outliner-op local-tx)
+                         :error error})
+              {:tx-id (:tx-id local-tx)
+               :status :failed}))
+          {:tx-id (:tx-id local-tx)
+           :status :skipped})))))
 
 (defn- rebase-local-txs!
   [repo conn local-txs rebase-db-before]
@@ -1075,16 +1137,7 @@
       (persist-local-tx! repo tx-report normalized reversed-datoms)
       (when-let [client @worker-state/*db-sync-client]
         (when (= repo (:repo client))
-          (let [send-queue (:send-queue client)]
-            (swap! send-queue
-                   (fn [prev]
-                     (p/then prev
-                             (fn [_]
-                               (when-let [current @worker-state/*db-sync-client]
-                                 (when (= repo (:repo current))
-                                   (when-let [ws (:ws current)]
-                                     (when (ws-open? ws)
-                                       (flush-pending! repo current)))))))))))))))
+          (enqueue-flush-pending! repo client))))))
 
 
 ;; (defonce *persist-promise (atom nil))

@@ -197,7 +197,7 @@
   {:tx (protocol/tx->transit [])
    :outliner-op :rebase})
 
-(defn- tx-entry-appliable?
+(defn- tx-entry-applicable?
   [db {:keys [tx]}]
   (try
     (d/with db (protocol/transit->tx tx))
@@ -205,9 +205,9 @@
     (catch :default _
       false)))
 
-(defn- tx-entries-appliable?
+(defn- tx-entries-applicable?
   [db entries]
-  (every? (partial tx-entry-appliable? db) entries))
+  (every? (partial tx-entry-applicable? db) entries))
 
 (defn- make-insert-command
   [rng db step]
@@ -760,6 +760,54 @@
       (is (empty? (storage/fetch-tx-since sql t-before)))
       (is (empty? @changed-messages)))))
 
+(deftest tx-batch-ignores-stale-fix-with-missing-lookup-entity-test
+  (testing "stale fix lookup refs to missing entities are treated as no-op"
+    (let [sql (test-sql/make-sql)
+          conn (storage/open-conn sql)
+          self #js {:sql sql
+                    :conn conn
+                    :schema-ready true}
+          page-uuid (random-uuid)
+          sibling-uuid (random-uuid)
+          missing-block-uuid (random-uuid)
+          _ (d/transact! conn [{:block/uuid page-uuid
+                                :block/name "fix-stale-page"
+                                :block/title "fix-stale-page"}
+                               {:block/uuid sibling-uuid
+                                :block/title "existing-sibling"
+                                :block/order "a5Uzl"
+                                :block/parent [:block/uuid page-uuid]
+                                :block/page [:block/uuid page-uuid]}])
+          t-before (storage/get-t sql)
+          checksum-before (storage/get-checksum sql)
+          tx-entry {:tx (protocol/tx->transit
+                         [[:db/retract [:block/uuid missing-block-uuid]
+                           :block/order
+                           "a5Uzl"
+                           536871101]
+                          [:db/add [:block/uuid missing-block-uuid]
+                           :block/order
+                           "a5c"
+                           536871101]
+                          [:db/retract [:block/uuid sibling-uuid]
+                           :block/order
+                           "a5Uzl"
+                           536871101]
+                          [:db/add [:block/uuid sibling-uuid]
+                           :block/order
+                           "a5k"
+                           536871101]])
+                    :outliner-op :fix}
+          changed-messages (atom [])
+          response (with-redefs [ws/broadcast! (fn [_self _sender payload]
+                                                 (swap! changed-messages conj payload))]
+                     (sync-handler/handle-tx-batch! self nil [tx-entry] t-before))]
+      (is (= "tx/batch/ok" (:type response)))
+      (is (= t-before (:t response)))
+      (is (= checksum-before (storage/get-checksum sql)))
+      (is (empty? (storage/fetch-tx-since sql t-before)))
+      (is (empty? @changed-messages)))))
+
 (deftest server-incremental-checksum-matches-full-recompute-fuzz-test
   (testing "server stored checksum stays equal to full recompute across randomized tx/rebase/no-op sequences"
     (doseq [seed (range 1 11)]
@@ -953,7 +1001,7 @@
                 ;; undo
                 (= op 1)
                 (if-let [{:keys [forward inverse]} (peek undo-stack)]
-                  (let [entries (if (tx-entries-appliable? db inverse)
+                  (let [entries (if (tx-entries-applicable? db inverse)
                                   inverse
                                   [(no-op-rebase-entry)])
                         response (apply-batch-with-t! self t-before entries)
@@ -974,7 +1022,7 @@
                 ;; redo
                 (= op 2)
                 (if-let [{:keys [forward inverse]} (peek redo-stack)]
-                  (let [entries (if (tx-entries-appliable? db forward)
+                  (let [entries (if (tx-entries-applicable? db forward)
                                   forward
                                   [(no-op-rebase-entry)])
                         response (apply-batch-with-t! self t-before entries)
@@ -1005,7 +1053,7 @@
                                 10 (make-random-indent-command rng db step)
                                 {:forward [(no-op-rebase-entry)]
                                  :undoable? false})
-                      entries (if (tx-entries-appliable? db (:forward command))
+                      entries (if (tx-entries-applicable? db (:forward command))
                                 (:forward command)
                                 [(no-op-rebase-entry)])
                       response (apply-batch-with-t! self t-before entries)

@@ -73,6 +73,20 @@
            (fn [prev]
              (p/then prev (fn [_] (task)))))))
 
+(defn- enqueue-send-task!
+  [client task]
+  (if-let [queue (:send-queue client)]
+    (swap! queue
+           (fn [prev]
+             (-> (or prev (p/resolved nil))
+                 (p/catch (fn [_] nil))
+                 (p/then (fn [_] (task)))
+                 (p/catch (fn [error]
+                            (log/error :db-sync/send-queue-task-failed
+                                       {:repo (:repo client)
+                                        :error error}))))))
+    (task)))
+
 (defn- current-client
   [repo]
   (sync-presence/current-client worker-state/*db-sync-client repo))
@@ -101,6 +115,25 @@
 (defn- parse-transit
   [value context]
   (sync-transport/parse-transit fail-fast value context))
+
+(defn- request-pull!
+  [client since]
+  (when (and (:ws client) (ws-open? (:ws client)))
+    (enqueue-send-task!
+     client
+     (fn []
+       (when (and (:ws client) (ws-open? (:ws client)))
+         (if-let [*pending (:pending-pull-since client)]
+           (let [pending @*pending]
+             (when (or (nil? pending) (< since pending))
+               (reset! *pending since)
+               (send! (:ws client) {:type "pull" :since since})))
+           (send! (:ws client) {:type "pull" :since since})))))))
+
+(defn- clear-pending-pull!
+  [client]
+  (when-let [*pending (:pending-pull-since client)]
+    (reset! *pending nil)))
 
 (defn- pending-local-tx?
   [repo]
@@ -164,8 +197,7 @@
       (require-uuid failed-tx-id {:repo repo :type "tx/reject" :field :failed-tx-id}))
     (case reason
       "stale"
-      (when (and (:ws client) (ws-open? (:ws client)))
-        (send! (:ws client) {:type "pull" :since local-tx}))
+      (request-pull! client local-tx)
 
       (let [inflight @(:inflight client)
             inflight-set (set inflight)
@@ -208,14 +240,14 @@
   (verify-sync-checksum! repo client local-tx remote-tx remote-checksum {:type "hello"})
   (broadcast-rtc-state! client)
   (when (> remote-tx local-tx)
-    (send! (:ws client) {:type "pull" :since local-tx}))
+    (request-pull! client local-tx))
   (sync-assets/enqueue-asset-sync!
    repo client
    {:enqueue-asset-task-f enqueue-asset-task!
     :current-client-f current-client
     :broadcast-rtc-state!-f broadcast-rtc-state!
     :fail-fast-f fail-fast})
-  (sync-apply/flush-pending! repo client))
+  (sync-apply/enqueue-flush-pending! repo client))
 
 (defn- handle-online-users!
   [repo client message]
@@ -241,7 +273,7 @@
     (sync-apply/mark-pending-txs-false! repo @(:inflight client))
     (reset! (:inflight client) [])
     (verify-sync-checksum! repo client next-local-tx remote-tx remote-checksum {:type "tx/batch/ok"})
-    (sync-apply/flush-pending! repo client)))
+    (sync-apply/enqueue-flush-pending! repo client)))
 
 (defn- update-latest-remote-state!
   [repo message]
@@ -290,6 +322,7 @@
 
 (defn- handle-pull-ok!
   [repo client local-tx remote-tx remote-checksum message]
+  (clear-pending-pull! client)
   (when (> remote-tx local-tx)
     (let [txs (:txs message)]
       (require-non-negative remote-tx {:repo repo :type "pull/ok"})
@@ -319,11 +352,11 @@
             (client-op/update-local-tx repo remote-tx)
             (broadcast-rtc-state! client)
             (verify-sync-checksum! repo client remote-tx remote-tx remote-checksum {:type "pull/ok"})
-            (sync-apply/flush-pending! repo client)))))))
+            (sync-apply/enqueue-flush-pending! repo client)))))))
 
 (defn- handle-changed!
   [repo client local-tx remote-tx]
   (require-non-negative remote-tx {:repo repo :type "changed"})
   (broadcast-rtc-state! client)
   (when (< local-tx remote-tx)
-    (send! (:ws client) {:type "pull" :since local-tx})))
+    (request-pull! client local-tx)))
