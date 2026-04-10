@@ -27,96 +27,64 @@
 
 ;; Parsing helpers and summaries are in logseq.cli.command.core.
 
+(defn- missing-result
+  [summary code message]
+  {:ok? false
+   :error {:code code
+           :message message}
+   :summary summary})
+
 (defn- missing-graph-result
   [summary]
-  {:ok? false
-   :error {:code :missing-graph
-           :message "graph name is required"}
-   :summary summary})
+  (missing-result summary :missing-graph "graph name is required"))
 
 (defn- missing-content-result
   [summary]
-  {:ok? false
-   :error {:code :missing-content
-           :message "content is required"}
-   :summary summary})
+  (missing-result summary :missing-content "content is required"))
 
 (defn- missing-target-result
   [summary]
-  {:ok? false
-   :error {:code :missing-target
-           :message "block or page is required"}
-   :summary summary})
+  (missing-result summary :missing-target "block or page is required"))
 
 (defn- missing-page-name-result
   [summary]
-  {:ok? false
-   :error {:code :missing-page-name
-           :message "page name is required"}
-   :summary summary})
+  (missing-result summary :missing-page-name "page name is required"))
 
 (defn- missing-tag-name-result
   [summary]
-  {:ok? false
-   :error {:code :missing-tag-name
-           :message "tag name is required"}
-   :summary summary})
+  (missing-result summary :missing-tag-name "tag name is required"))
 
 (defn- missing-property-name-result
   [summary]
-  {:ok? false
-   :error {:code :missing-property-name
-           :message "property name is required"}
-   :summary summary})
+  (missing-result summary :missing-property-name "property name is required"))
 
 (defn- missing-type-result
   [summary]
-  {:ok? false
-   :error {:code :missing-type
-           :message "type is required"}
-   :summary summary})
+  (missing-result summary :missing-type "type is required"))
 
 (defn- missing-input-result
   [summary]
-  {:ok? false
-   :error {:code :missing-input
-           :message "input is required"}
-   :summary summary})
+  (missing-result summary :missing-input "input is required"))
 
 (defn- missing-file-result
   [summary]
-  {:ok? false
-   :error {:code :missing-file
-           :message "file is required"}
-   :summary summary})
+  (missing-result summary :missing-file "file is required"))
 
 (defn- missing-src-result
   [summary]
-  {:ok? false
-   :error {:code :missing-src
-           :message "src is required"}
-   :summary summary})
+  (missing-result summary :missing-src "src is required"))
 
 (defn- missing-dst-result
   [summary]
-  {:ok? false
-   :error {:code :missing-dst
-           :message "dst is required"}
-   :summary summary})
+  (missing-result summary :missing-dst "dst is required"))
 
 (defn- missing-query-result
   [summary]
-  {:ok? false
-   :error {:code :missing-query
-           :message "query is required"}
-   :summary summary})
+  (missing-result summary :missing-query "query is required"))
 
 (defn- missing-query-text-result
   [summary]
-  {:ok? false
-   :error {:code :missing-query-text
-           :message "query text is required"}
-   :summary summary})
+  (missing-result summary :missing-query-text "query text is required"))
 
 ;; Error helpers are in logseq.cli.command.core.
 
@@ -213,7 +181,233 @@
          scope
          " --content <query>")))
 
-(defn- ^:large-vars/cleanup-todo finalize-command
+(def ^:private graph-write-commands
+  #{:graph-create :graph-switch :graph-remove :graph-import})
+
+(def ^:private upsert-validation-commands
+  #{:upsert-block :upsert-page :upsert-task :upsert-tag :upsert-property})
+
+(def ^:private search-validation-commands
+  #{:search-block :search-page :search-property :search-tag})
+
+(def ^:private list-validation-commands
+  #{:list-page :list-tag :list-property :list-task :list-node})
+
+(def ^:private remove-validation-commands
+  #{:remove-block :remove-page :remove-tag :remove-property})
+
+(def ^:private server-graph-required-commands
+  #{:server-status :server-start :server-stop :server-restart})
+
+(def ^:private supported-completion-shells
+  #{"zsh" "bash"})
+
+(defn- completion-shell-error-message
+  [shell]
+  (when-not (supported-completion-shells shell)
+    (if (seq shell)
+      (str "unsupported shell: " shell "; expected zsh or bash")
+      "missing shell argument; usage: logseq completion <zsh|bash>")))
+
+(defn- validate-write-and-upsert
+  [summary {:keys [command opts graph has-content? upsert-update-mode?
+                   upsert-invalid-options-message]}]
+  (cond
+    ;; Require graphs when writing to graph
+    (and (graph-write-commands command)
+         (not (seq graph)))
+    (missing-graph-result summary)
+
+    (and (= command :upsert-block) (not upsert-update-mode?) (not has-content?))
+    (missing-content-result summary)
+
+    (and (= command :upsert-block) upsert-invalid-options-message)
+    (command-core/invalid-options-result summary upsert-invalid-options-message)
+
+    (and (= command :upsert-page) upsert-invalid-options-message)
+    (command-core/invalid-options-result summary upsert-invalid-options-message)
+
+    (and (= command :upsert-page)
+         (not (some? (:id opts)))
+         (not (seq (:page opts))))
+    (missing-page-name-result summary)
+
+    (and (= command :upsert-task) upsert-invalid-options-message)
+    (command-core/invalid-options-result summary upsert-invalid-options-message)
+
+    (and (= command :upsert-task)
+         (not (some? (:id opts)))
+         (not (seq (some-> (:uuid opts) string/trim)))
+         (not (seq (some-> (:page opts) string/trim)))
+         (not (seq (some-> (:content opts) string/trim))))
+    (missing-target-result summary)
+
+    (and (= command :upsert-tag) upsert-invalid-options-message)
+    (command-core/invalid-options-result summary upsert-invalid-options-message)
+
+    (and (= command :upsert-tag)
+         (not (some? (:id opts)))
+         (not (seq (some-> (:name opts) string/trim))))
+    (missing-tag-name-result summary)
+
+    (and (= command :upsert-property) upsert-invalid-options-message)
+    (command-core/invalid-options-result summary upsert-invalid-options-message)
+
+    (and (= command :upsert-property)
+         (not (some? (:id opts)))
+         (not (seq (some-> (:name opts) string/trim))))
+    (missing-property-name-result summary)
+
+    :else
+    nil))
+
+(defn- validate-target-query-and-search
+  [summary {:keys [command opts args cmds show-targets]}]
+  (cond
+    (and (= command :remove-block) (empty? (filter some? [(:id opts) (some-> (:uuid opts) string/trim)])))
+    (missing-target-result summary)
+
+    (and (= command :remove-page)
+         (not (some? (:id opts)))
+         (not (seq (some-> (:page opts) string/trim))))
+    (missing-page-name-result summary)
+
+    (and (#{:remove-tag :remove-property} command)
+         (empty? (filter some? [(:id opts) (some-> (:name opts) string/trim)])))
+    (missing-target-result summary)
+
+    (and (= command :show) (empty? show-targets))
+    (missing-target-result summary)
+
+    (and (= command :show) (> (count show-targets) 1))
+    (command-core/invalid-options-result summary "only one of --id, --uuid, or --page is allowed")
+
+    (and (= command :query)
+         (not (seq (some-> (:query opts) string/trim)))
+         (not (seq (some-> (:name opts) string/trim))))
+    (missing-query-result summary)
+
+    (and (search-validation-commands command)
+         (seq args))
+    (command-core/invalid-options-result summary (legacy-search-query-guidance cmds))
+
+    (and (search-validation-commands command)
+         (not (seq (some-> (:content opts) str string/trim))))
+    (assoc (missing-query-text-result summary) :command command)
+
+    :else
+    nil))
+
+(defn- validate-option-contracts
+  [summary {:keys [command list-invalid-options-message remove-invalid-options-message
+                   show-invalid-options-message debug-invalid-options-message]}]
+  (cond
+    (and (list-validation-commands command)
+         list-invalid-options-message)
+    (command-core/invalid-options-result summary list-invalid-options-message)
+
+    (and (remove-validation-commands command)
+         remove-invalid-options-message)
+    (command-core/invalid-options-result summary remove-invalid-options-message)
+
+    (and (= command :show) show-invalid-options-message)
+    (command-core/invalid-options-result summary show-invalid-options-message)
+
+    (and (= command :debug-pull) debug-invalid-options-message)
+    (command-core/invalid-options-result summary debug-invalid-options-message)
+
+    :else
+    nil))
+
+(defn- validate-graph-sync-and-completion
+  [summary {:keys [command opts import-export-type completion-shell-error]}]
+  (cond
+    (and (= command :graph-export) (not (seq import-export-type)))
+    (missing-type-result summary)
+
+    (and (= command :graph-export) (not (seq (:file opts))))
+    (missing-file-result summary)
+
+    (and (= command :graph-import) (not (seq import-export-type)))
+    (missing-type-result summary)
+
+    (and (= command :graph-import) (not (seq (:input opts))))
+    (missing-input-result summary)
+
+    (and (= command :graph-backup-restore)
+         (not (seq (some-> (:src opts) string/trim))))
+    (missing-src-result summary)
+
+    (and (= command :graph-backup-restore)
+         (not (seq (some-> (:dst opts) string/trim))))
+    (missing-dst-result summary)
+
+    (and (= command :graph-backup-remove)
+         (not (seq (some-> (:src opts) string/trim))))
+    (missing-src-result summary)
+
+    (and (server-graph-required-commands command)
+         (not (seq (:graph opts))))
+    (missing-graph-result summary)
+
+    (and (= command :sync-download)
+         (not (seq (:graph opts))))
+    (missing-graph-result summary)
+
+    (and (= command :completion)
+         completion-shell-error)
+    (command-core/invalid-options-result summary completion-shell-error)
+
+    :else
+    nil))
+
+(defn- finalize-command-validation-result
+  [summary validation-context]
+  (or (validate-write-and-upsert summary validation-context)
+      (validate-target-query-and-search summary validation-context)
+      (validate-option-contracts summary validation-context)
+      (validate-graph-sync-and-completion summary validation-context)))
+
+(defn- command-has-content?
+  [args opts]
+  (or (seq (:content opts))
+      (seq (:blocks opts))
+      (seq (:blocks-file opts))
+      (seq args)))
+
+(defn- build-validation-context
+  [command opts args cmds]
+  (let [show-targets (filter some? [(:id opts) (:uuid opts) (:page opts)])
+        completion-shell (when (= command :completion)
+                           (or (:shell opts) (first args)))]
+    {:command command
+     :opts opts
+     :args args
+     :cmds cmds
+     :graph (:graph opts)
+     :has-content? (command-has-content? args opts)
+     :show-targets show-targets
+     :upsert-update-mode? (upsert-command/update-mode? opts)
+     :upsert-invalid-options-message (when (upsert-validation-commands command)
+                                       (upsert-command/invalid-options? command opts))
+     :list-invalid-options-message (when (list-validation-commands command)
+                                     (list-command/invalid-options? command opts))
+     :remove-invalid-options-message (when (remove-validation-commands command)
+                                       (remove-command/invalid-options? command opts))
+     :show-invalid-options-message (when (= command :show)
+                                     (show-command/invalid-options? opts))
+     :debug-invalid-options-message (when (= command :debug-pull)
+                                      (debug-command/invalid-options? opts))
+     :import-export-type (graph-command/normalize-import-export-type (:type opts))
+     :completion-shell-error (when (= command :completion)
+                               (completion-shell-error-message completion-shell))}))
+
+(defn- finalize-ok-result
+  [summary command opts args cmds]
+  (cond-> (command-core/ok-result command opts args summary)
+    (= command :example) (assoc :cmds cmds)))
+
+(defn- finalize-command
   [summary {:keys [command opts args cmds spec long-desc examples]}]
   (let [opts (-> opts
                  command-core/normalize-opts
@@ -224,153 +418,14 @@
                                                    :long-desc long-desc
                                                    :examples (when (= command :example)
                                                                examples)})
-        graph (:graph opts)
-        has-args? (seq args)
-        has-content? (or (seq (:content opts))
-                         (seq (:blocks opts))
-                         (seq (:blocks-file opts))
-                         has-args?)
-        show-targets (filter some? [(:id opts) (:uuid opts) (:page opts)])
-        upsert-update-mode? (upsert-command/update-mode? opts)]
+        validation-context (build-validation-context command opts args cmds)]
     (cond
       (:help opts)
       (command-core/help-result cmd-summary)
 
-      ;; Require graphs when writing to graph
-      (and (#{:graph-create :graph-switch :graph-remove :graph-import} command)
-           (not (seq graph)))
-      (missing-graph-result summary)
-
-      (and (= command :upsert-block) (not upsert-update-mode?) (not has-content?))
-      (missing-content-result summary)
-
-      (and (= command :upsert-block) (upsert-command/invalid-options? command opts))
-      (command-core/invalid-options-result summary (upsert-command/invalid-options? command opts))
-
-      (and (= command :upsert-page) (upsert-command/invalid-options? command opts))
-      (command-core/invalid-options-result summary (upsert-command/invalid-options? command opts))
-
-      (and (= command :upsert-page)
-           (not (some? (:id opts)))
-           (not (seq (:page opts))))
-      (missing-page-name-result summary)
-
-      (and (= command :upsert-task) (upsert-command/invalid-options? command opts))
-      (command-core/invalid-options-result summary (upsert-command/invalid-options? command opts))
-
-      (and (= command :upsert-task)
-           (not (some? (:id opts)))
-           (not (seq (some-> (:uuid opts) string/trim)))
-           (not (seq (some-> (:page opts) string/trim)))
-           (not (seq (some-> (:content opts) string/trim))))
-      (missing-target-result summary)
-
-      (and (= command :upsert-tag) (upsert-command/invalid-options? command opts))
-      (command-core/invalid-options-result summary (upsert-command/invalid-options? command opts))
-
-      (and (= command :upsert-tag)
-           (not (some? (:id opts)))
-           (not (seq (some-> (:name opts) string/trim))))
-      (missing-tag-name-result summary)
-
-      (and (= command :upsert-property) (upsert-command/invalid-options? command opts))
-      (command-core/invalid-options-result summary (upsert-command/invalid-options? command opts))
-
-      (and (= command :upsert-property)
-           (not (some? (:id opts)))
-           (not (seq (some-> (:name opts) string/trim))))
-      (missing-property-name-result summary)
-
-      (and (= command :remove-block) (empty? (filter some? [(:id opts) (some-> (:uuid opts) string/trim)])))
-      (missing-target-result summary)
-
-      (and (= command :remove-page)
-           (not (some? (:id opts)))
-           (not (seq (some-> (:page opts) string/trim))))
-      (missing-page-name-result summary)
-
-      (and (#{:remove-tag :remove-property} command)
-           (empty? (filter some? [(:id opts) (some-> (:name opts) string/trim)])))
-      (missing-target-result summary)
-
-      (and (= command :show) (empty? show-targets))
-      (missing-target-result summary)
-
-      (and (= command :show) (> (count show-targets) 1))
-      (command-core/invalid-options-result summary "only one of --id, --uuid, or --page is allowed")
-
-      (and (= command :query)
-           (not (seq (some-> (:query opts) string/trim)))
-           (not (seq (some-> (:name opts) string/trim))))
-      (missing-query-result summary)
-
-      (and (#{:search-block :search-page :search-property :search-tag} command)
-           (seq args))
-      (command-core/invalid-options-result summary (legacy-search-query-guidance cmds))
-
-      (and (#{:search-block :search-page :search-property :search-tag} command)
-           (not (seq (some-> (:content opts) str string/trim))))
-      (assoc (missing-query-text-result summary) :command command)
-
-      (and (#{:list-page :list-tag :list-property :list-task :list-node} command)
-           (list-command/invalid-options? command opts))
-      (command-core/invalid-options-result summary (list-command/invalid-options? command opts))
-
-      (and (#{:remove-block :remove-page :remove-tag :remove-property} command)
-           (remove-command/invalid-options? command opts))
-      (command-core/invalid-options-result summary (remove-command/invalid-options? command opts))
-
-      (and (= command :show) (show-command/invalid-options? opts))
-      (command-core/invalid-options-result summary (show-command/invalid-options? opts))
-
-      (and (= command :debug-pull) (debug-command/invalid-options? opts))
-      (command-core/invalid-options-result summary (debug-command/invalid-options? opts))
-
-      (and (= command :graph-export) (not (seq (graph-command/normalize-import-export-type (:type opts)))))
-      (missing-type-result summary)
-
-      (and (= command :graph-export) (not (seq (:file opts))))
-      (missing-file-result summary)
-
-      (and (= command :graph-import) (not (seq (graph-command/normalize-import-export-type (:type opts)))))
-      (missing-type-result summary)
-
-      (and (= command :graph-import) (not (seq (:input opts))))
-      (missing-input-result summary)
-
-      (and (= command :graph-backup-restore)
-           (not (seq (some-> (:src opts) string/trim))))
-      (missing-src-result summary)
-
-      (and (= command :graph-backup-restore)
-           (not (seq (some-> (:dst opts) string/trim))))
-      (missing-dst-result summary)
-
-      (and (= command :graph-backup-remove)
-           (not (seq (some-> (:src opts) string/trim))))
-      (missing-src-result summary)
-
-      (and (#{:server-status :server-start :server-stop :server-restart} command)
-           (not (seq (:graph opts))))
-      (missing-graph-result summary)
-
-      (and (= command :sync-download)
-           (not (seq (:graph opts))))
-      (missing-graph-result summary)
-
-      (and (= command :completion)
-           (let [shell (or (:shell opts) (first args))]
-             (not (#{"zsh" "bash"} shell))))
-      (command-core/invalid-options-result
-       summary
-       (let [shell (or (:shell opts) (first args))]
-         (if (seq shell)
-           (str "unsupported shell: " shell "; expected zsh or bash")
-           "missing shell argument; usage: logseq completion <zsh|bash>")))
-
       :else
-      (cond-> (command-core/ok-result command opts args summary)
-        (= command :example) (assoc :cmds cmds)))))
+      (or (finalize-command-validation-result summary validation-context)
+          (finalize-ok-result summary command opts args cmds)))))
 
 ;; CLI error handling is in logseq.cli.command.core.
 
