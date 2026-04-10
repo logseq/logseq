@@ -98,12 +98,13 @@
 (declare replay-canonical-outliner-op!
          invalid-rebase-op!)
 
-(defn reverse-tx-data [_db-before db-after tx-data]
+(defn reverse-tx-data [db-before db-after tx-data]
   (->> tx-data
        reverse
        (keep (fn [[e a v t added]]
-               (when (and (some? a) (some? v) (some? t) (boolean? added))
-                 [(if added :db/retract :db/add) e a v t])))
+               (let [reversed-datom (d/datom e a v t (not added))]
+                 ;; trick: reverse the order of `db-before` and `db-after`
+                (db-normalize/normalize-datom db-before db-after reversed-datom))))
        (db-normalize/replace-attr-retract-with-retract-entity-v2 db-after)))
 
 (defn normalize-rebased-pending-tx
@@ -1075,6 +1076,7 @@
   [repo {:keys [tx-data db-after db-before] :as tx-report}]
   (let [normalized (normalize-tx-data db-after db-before tx-data)
         reversed-datoms (reverse-tx-data db-before db-after tx-data)]
+    ;; (prn :debug :reversed-datoms reversed-datoms)
     ;; (prn :debug :enqueue-local-tx :tx-data)
     ;; (cljs.pprint/pprint tx-data)
     ;; (prn :debug :enqueue-local-tx :normalized)
