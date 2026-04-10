@@ -6,7 +6,6 @@
             [frontend.components.block :as component-block]
             [frontend.components.macro :as component-macro]
             [frontend.context.i18n :refer [t]]
-            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
@@ -120,7 +119,7 @@
   []
   (let [cards-tag-id (:db/id (db/entity :logseq.class/Cards))]
     (editor-handler/api-insert-new-block! ""
-                                          {:page (date/today)
+                                          {:page (db-model/get-today-journal-title)
                                            :properties {:block/tags #{cards-tag-id}}
                                            :sibling? false
                                            :end? true})))

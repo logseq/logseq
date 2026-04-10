@@ -423,9 +423,7 @@
         recycle-page? (and (ldb/page? page)
                            (= title common-config/recycle-page-name))
         fmt-journal? (boolean (date/journal-title->int title))
-        today? (and
-                journal?
-                (= title (date/journal-name)))
+        today? (model/today-journal-page? page)
         home? (= :home (state/get-current-route))
         recycled? (ldb/recycled? page)
         page-display-title (when (ldb/page? page)
@@ -972,7 +970,7 @@
   (let [current-page (or
                       (and (= :page (state/sub [:route-match :data :name]))
                            (state/sub [:route-match :path-params :name]))
-                      (date/today))
+                      (model/get-today-journal-title))
         theme (:ui/theme @state/state)
         show-journals-in-page-graph (rum/react *show-journals-in-page-graph?)
         page-entity (db/get-page current-page)]

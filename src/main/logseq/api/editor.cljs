@@ -3,7 +3,6 @@
   (:require [cljs-bean.core :as bean]
             [cljs.reader]
             [frontend.commands :as commands]
-            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
@@ -104,8 +103,7 @@
 
 (defn get_today_page
   []
-  (p/let [today-name (date/today)
-          page (<get-block today-name {:children? false})]
+  (p/let [page (<get-block (db-model/get-today-journal-title) {:children? false})]
     (some-> page (sdk-utils/result->js))))
 
 (defn get_all_pages
@@ -361,7 +359,7 @@
   (p/let [uuid-or-page-name (or
                              uuid-or-page-name
                              (state/get-current-page)
-                             (date/today))
+                             (db-model/get-today-journal-title))
           block           (<get-block uuid-or-page-name)
           new-page        (when (and (not block) (not (util/uuid-string? uuid-or-page-name))) ; page not exists
                             (page-handler/<create! uuid-or-page-name
@@ -376,7 +374,7 @@
   []
   (or
    (state/get-current-page)
-   (date/today)))
+   (db-model/get-today-journal-title)))
 
 (defn append_block_in_page
   ([content]
@@ -389,7 +387,7 @@
    (let [uuid-or-page-name (or
                             uuid-or-page-name
                             (state/get-current-page)
-                            (date/today))]
+                            (db-model/get-today-journal-title))]
      (p/let [_ (<ensure-page-loaded uuid-or-page-name)
              page? (not (util/uuid-string? uuid-or-page-name))
              page (db-model/get-page uuid-or-page-name)

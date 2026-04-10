@@ -271,12 +271,12 @@
 
       ;; time & date
       [[(t :date.nlp/tomorrow)
-        #(get-page-ref-text (date/tomorrow))
+        #(get-page-ref-text (db/get-journal-page-title (date/tomorrow)))
         (t :editor.slash/tomorrow-desc)
         :icon/tomorrow
         (t :editor.slash/group-time-and-date)]
-       [(t :date.nlp/yesterday) #(get-page-ref-text (date/yesterday)) (t :editor.slash/yesterday-desc) :icon/yesterday]
-       [(t :date.nlp/today) #(get-page-ref-text (date/today)) (t :editor.slash/today-desc) :icon/calendar]
+       [(t :date.nlp/yesterday) #(get-page-ref-text (db/get-journal-page-title (date/yesterday))) (t :editor.slash/yesterday-desc) :icon/yesterday]
+       [(t :date.nlp/today) #(get-page-ref-text (db/get-today-journal-title)) (t :editor.slash/today-desc) :icon/calendar]
        [(t :editor.slash/current-time) #(date/get-current-time) (t :editor.slash/current-time-desc) :icon/clock]
        [(t :editor.slash/date-picker) [[:editor/show-date-picker]] (t :editor.slash/date-picker-desc) :icon/calendar-dots]]
 

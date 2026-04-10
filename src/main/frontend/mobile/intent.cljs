@@ -122,7 +122,7 @@
 
 (defn- handle-received-media [result]
   (p/let [{:keys [url]} result
-          page (or (state/get-current-page) (string/lower-case (date/journal-name)))
+          page (or (state/get-current-page) (string/lower-case (db/get-today-journal-title)))
           format (db/get-page-format page)]
     (-> (embed-asset-file url format)
         (p/catch (fn [error]
@@ -131,7 +131,7 @@
 
 (defn- handle-received-application [result]
   (p/let [{:keys [url type]} result
-          page (or (state/get-current-page) (string/lower-case (date/journal-name)))
+          page (or (state/get-current-page) (string/lower-case (db/get-today-journal-title)))
           format (db/get-page-format page)
           application-type (last (string/split type "/"))
           content (cond
@@ -218,7 +218,7 @@
   "Mobile share intent handler v2, use complex payload to support more types of content."
   [payload]
   ;; use :text template, use {url} as rich text placeholder
-  (p/let [page (or (state/get-current-page) (string/lower-case (date/journal-name)))
+  (p/let [page (or (state/get-current-page) (string/lower-case (db/get-today-journal-title)))
           format (db/get-page-format page)
 
           template (get-in (state/get-config)
@@ -239,7 +239,7 @@
                                   (keyword (:ext resource))))
                      resources)))
       (let [time (date/get-current-time)
-            date-ref-name (date/today)
+            date-ref-name (db/get-today-journal-title)
             content (-> template
                         (string/replace "{time}" time)
                         (string/replace "{date}" date-ref-name)
