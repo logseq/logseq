@@ -5,6 +5,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.components.editor :as editor]
             [frontend.date :as date]
+            [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -15,7 +16,7 @@
   [page-name]
   (and (date/valid-journal-title? (string/capitalize page-name))
        (not (true? (state/scheduled-deadlines-disabled?)))
-       (= (string/lower-case page-name) (string/lower-case (date/journal-name)))))
+       (db/today-journal-page? page-name)))
 
 (rum/defcs scheduled-and-deadlines < rum/reactive
   {:init (fn [state]

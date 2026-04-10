@@ -11,7 +11,6 @@
             [frontend.components.vector-search.sidebar :as vector-search]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
@@ -315,7 +314,7 @@
                :file
                (get-in match [:path-params :path])
 
-               (date/journal-name))]
+               (db/get-today-journal-title))]
     (when page
       (string/lower-case page))))
 

@@ -62,6 +62,10 @@
   []
   (journal-name))
 
+(defn today-journal-day
+  []
+  (date-time-util/date->int (js/Date.)))
+
 (defn today-name
   []
   (tf/unparse mmm-do-yyyy-formatter (t/today)))

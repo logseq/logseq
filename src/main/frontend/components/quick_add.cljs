@@ -2,7 +2,6 @@
   "Quick add"
   (:require [frontend.components.page :as page]
             [frontend.context.i18n :refer [t]]
-            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor-handler]
@@ -38,7 +37,7 @@
                   (editor-handler/quick-add-open-last-block!))
                 state)}
   []
-  (when (model/get-journal-page (date/today))
+  (when (model/get-today-journal-page)
     (when-let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
       (let [mobile? (util/mobile?)
             add-button [:div
