@@ -110,6 +110,7 @@
      (if (nil? rtc-lock)
        (shui/button
         {:variant :outline
+         :size :sm
          :class "text-green-rx-09 border-green-rx-10 hover:text-green-rx-10"
          :on-click (fn [] (state/<invoke-db-worker :thread-api/rtc-start false))}
         (shui/tabler-icon "player-play") "start")
@@ -158,7 +159,7 @@
                            (when (instance? ExceptionInfo r)
                              (log/error :init-user-rsa-key-pair r)))))}
           (shui/tabler-icon "upload") "init upload user rsa-key-pair")]
-        [:div.pb-4
+        [:div.pb-1
          [:pre.select-text
           (-> keys-state
               (fipp/pprint {:width 20})
