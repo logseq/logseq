@@ -691,6 +691,16 @@
                          _ (execute-with-runtime-auth {:type :sync-download
                                                        :repo "logseq_db_demo"
                                                        :graph "demo"
+                                                       :progress-explicit? false}
+                                                      {:base-url "http://example"
+                                                       :data-dir "/tmp"
+                                                       :output-format :edn})
+                         _ (is (= [] @subscribe-calls))
+                         _ (is (= [] @printed-lines))
+                         _ (is (= 0 @close-calls))
+                         _ (execute-with-runtime-auth {:type :sync-download
+                                                       :repo "logseq_db_demo"
+                                                       :graph "demo"
                                                        :progress true
                                                        :progress-explicit? true}
                                                       {:base-url "http://example"

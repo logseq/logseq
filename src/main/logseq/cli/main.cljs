@@ -2,11 +2,13 @@
   "CLI entrypoint for invoking db-worker-node."
   (:refer-clojure :exclude [run!])
   (:require [lambdaisland.glogi :as log]
+            [logseq.cli.command.core :as command-core]
             [logseq.cli.commands :as commands]
             [logseq.cli.config :as config]
             [logseq.cli.data-dir :as data-dir]
             [logseq.cli.format :as format]
             [logseq.cli.log :as cli-log]
+            [logseq.cli.output-mode :as output-mode]
             [logseq.cli.profile :as profile]
             [logseq.cli.version :as version]
             [promesa.core :as p]))
@@ -43,6 +45,30 @@
                             {:command (profile-command parsed)
                              :status (if (zero? (:exit-code result)) :ok :error)})))
     result))
+
+(defn- parse-argv-output-format
+  [args]
+  (let [{:keys [opts]} (command-core/parse-leading-global-opts args)]
+    (or (output-mode/parse (:output-format opts))
+        (output-mode/parse (:output opts)))))
+
+(defn- parsed-output-format
+  [parsed]
+  (or (output-mode/parse (get-in parsed [:options :output-format]))
+      (output-mode/parse (get-in parsed [:options :output]))))
+
+(defn- resolve-output-format
+  [args parsed cfg result]
+  (or (output-mode/parse (:output-format result))
+      (output-mode/parse (:output-format cfg))
+      (parsed-output-format parsed)
+      (parse-argv-output-format args)))
+
+(defn- format-opts
+  [args parsed cfg result]
+  (if-let [mode (resolve-output-format args parsed cfg result)]
+    {:output-format mode}
+    {}))
 
 (defn- handle-unexpected-error
   "Provide clean, consistent error handling for unexpected errors in run!"
@@ -86,9 +112,18 @@
      (cond
        (:help? parsed)
        (p/resolved
-        (attach-profile-lines profile-session parsed
-                              {:exit-code 0
-                               :output (:summary parsed)}))
+        (let [mode (resolve-output-format args parsed nil nil)]
+          (attach-profile-lines
+           profile-session
+           parsed
+           {:exit-code 0
+            :output (if (output-mode/structured? mode)
+                      (profile/time! profile-session "cli.format-result"
+                                     (fn []
+                                       (format/format-result {:status :ok
+                                                              :data {:message (:summary parsed)}}
+                                                             {:output-format mode})))
+                      (:summary parsed))})))
 
        (not (:ok? parsed))
        (p/resolved
@@ -101,7 +136,7 @@
                                    (format/format-result {:status :error
                                                           :error (:error parsed)
                                                           :command (:command parsed)}
-                                                         {})))}))
+                                                         (format-opts args parsed nil nil))))}))
 
        (= :version (:command parsed))
        (p/resolved
@@ -154,9 +189,7 @@
                                   (fn []
                                     (commands/execute (:action action-result) cfg)))
                    (p/then (fn [result]
-                             (let [opts (cond-> cfg
-                                          (:output-format result)
-                                          (assoc :output-format (:output-format result)))]
+                             (let [opts (merge cfg (format-opts args parsed cfg result))]
                                (attach-profile-lines
                                 profile-session
                                 parsed

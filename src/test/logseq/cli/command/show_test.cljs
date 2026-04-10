@@ -202,6 +202,14 @@
 
       (p/resolved nil))))
 
+(defn- contains-block-uuid?
+  [value]
+  (cond
+    (map? value) (or (contains? value :block/uuid)
+                     (some contains-block-uuid? (vals value)))
+    (sequential? value) (some contains-block-uuid? value)
+    :else false))
+
 (deftest test-render-referenced-entities-footer
   (let [render-footer (fn [ordered-uuids uuid->entity]
                         (call-private 'render-referenced-entities-footer ordered-uuids uuid->entity))
@@ -325,7 +333,7 @@
                                                  :block/title "Root"
                                                  :block/page {:db/id 201}}}
                              :children-by-page-id {201 [{:db/id 12
-                                                         :block/title (str "Child [[" uuid-a "]]")
+                                                         :block/title (str "Child [[" uuid-a "]]" )
                                                          :block/order 0
                                                          :block/parent {:db/id 1}}]}
                              :uuid-entities {(string/lower-case uuid-a)
@@ -343,5 +351,68 @@
                          plain (-> result :data :message style/strip-ansi)]
                    (is (= :ok (:status result)))
                    (is (not (string/includes? plain "Referenced Entities (")))))
+               (p/catch (fn [e] (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest test-execute-show-structured-output-single-and-multi-id
+  (async done
+         (let [invoke-mock (make-show-invoke-mock
+                            {:entities-by-id {1 {:db/id 1
+                                                 :block/uuid (uuid "11111111-1111-1111-1111-111111111111")
+                                                 :block/title "Root A"
+                                                 :block/page {:db/id 101}}
+                                              2 {:db/id 2
+                                                 :block/uuid (uuid "22222222-2222-2222-2222-222222222222")
+                                                 :block/title "Root B"
+                                                 :block/page {:db/id 102}}}
+                             :children-by-page-id {101 [{:db/id 11
+                                                         :block/uuid (uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+                                                         :block/title "Child A"
+                                                         :block/order 0
+                                                         :block/parent {:db/id 1}}]
+                                                   102 [{:db/id 22
+                                                         :block/uuid (uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+                                                         :block/title "Child B"
+                                                         :block/order 0
+                                                         :block/parent {:db/id 2}}]}})]
+           (-> (p/with-redefs [cli-server/ensure-server! (fn [config _] config)
+                               transport/invoke invoke-mock]
+                 (p/let [single-json (show-command/execute-show {:type :show
+                                                                :repo "demo"
+                                                                :id 1
+                                                                :linked-references? false}
+                                                               {:output-format :json})
+                         single-edn (show-command/execute-show {:type :show
+                                                               :repo "demo"
+                                                               :id 1
+                                                               :linked-references? false}
+                                                              {:output-format :edn})
+                         multi-json (show-command/execute-show {:type :show
+                                                               :repo "demo"
+                                                               :ids [1 2]
+                                                               :multi-id? true
+                                                               :linked-references? false}
+                                                              {:output-format :json})
+                         multi-edn (show-command/execute-show {:type :show
+                                                              :repo "demo"
+                                                              :ids [1 2]
+                                                              :multi-id? true
+                                                              :linked-references? false}
+                                                             {:output-format :edn})]
+                   (doseq [result [single-json single-edn multi-json multi-edn]]
+                     (is (= :ok (:status result)))
+                     (is (not (contains-block-uuid? (:data result)))))
+
+                   (is (= :json (:output-format single-json)))
+                   (is (= :edn (:output-format single-edn)))
+                   (is (= 1 (get-in single-json [:data :root :db/id])))
+                   (is (= 1 (get-in single-edn [:data :root :db/id])))
+
+                   (is (= :json (:output-format multi-json)))
+                   (is (= :edn (:output-format multi-edn)))
+                   (is (= [1 2]
+                          (mapv #(get-in % [:root :db/id]) (:data multi-json))))
+                   (is (= [1 2]
+                          (mapv #(get-in % [:root :db/id]) (:data multi-edn))))))
                (p/catch (fn [e] (is false (str "unexpected error: " e))))
                (p/finally done)))))
