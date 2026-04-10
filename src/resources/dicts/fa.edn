@@ -217,6 +217,7 @@
  :keymap/used-by-action "در حال استفاده توسط {1}"
 
  ;; Command palette actions
+ :cmdk.action/apply-theme "اعمال پوسته"
  :cmdk.action/copy-ref "کپی مرجع"
  :cmdk.action/create "ایجاد"
  :cmdk.action/filter "فیلتر"

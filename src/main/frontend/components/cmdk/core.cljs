@@ -199,22 +199,29 @@
          (count (get-in results [group-key :items])))
        (mapv #(assoc % :group group-key :item-index (vswap! index inc)) group-items)])))
 
-(defn state->highlighted-item [state]
-  (or (some-> state ::highlighted-item deref)
-      (first @(::all-items-cache state))))
+(defn state->highlighted-item
+  ([state]
+   (state->highlighted-item state nil))
+  ([state fallback-item]
+   (or (some-> state ::highlighted-item deref)
+       fallback-item
+       (first @(::all-items-cache state)))))
 
-(defn state->action [state]
-  (let [highlighted-item (state->highlighted-item state)
+(defn state->action
+  ([state]
+   (state->action state nil))
+  ([state fallback-item]
+   (let [highlighted-item (state->highlighted-item state fallback-item)
         action (get-action)]
-    (cond (and (:source-block highlighted-item) (= action :move-blocks)) :trigger
-          (:source-block highlighted-item) :open
-          (:file-path highlighted-item) :open
-          (:source-search highlighted-item) :search
-          (:source-command highlighted-item) :trigger
-          (:source-create highlighted-item) :create
-          (:filter highlighted-item) :filter
-          (:source-theme highlighted-item) :theme
-          :else nil)))
+     (cond (and (:source-block highlighted-item) (= action :move-blocks)) :trigger
+           (:source-block highlighted-item) :open
+           (:file-path highlighted-item) :open
+           (:source-search highlighted-item) :search
+           (:source-command highlighted-item) :trigger
+           (:source-create highlighted-item) :create
+           (:filter highlighted-item) :filter
+           (:source-theme highlighted-item) :theme
+           :else nil))))
 
 ;; Each result group has it's own load-results function
 (defmulti load-results (fn [group _state] group))
@@ -1147,44 +1154,48 @@
                                  :aria-hidden? true})))]))
 
 (rum/defc hints
-  [state]
-  (let [action (state->action state)
+  [state fallback-item]
+  (let [action (state->action state fallback-item)
         button-fn (fn [text shortcut & {:as opts}]
                     (hint-button text shortcut
                                  {:on-click #(handle-action action (assoc state :opts opts) %)
                                   :muted    true}))]
-    (when action
-      [:div.hints
-       [:div.text-sm.leading-6
-        [:div.flex.flex-row.gap-1.items-center]
-        [:div.font-medium.text-gray-12 (t :cmdk.tip/label)
-         (tip state)]]
+    [:div.hints
+     [:div.text-sm.leading-6
+      [:div.flex.flex-row.gap-1.items-center]
+      [:div.font-medium.text-gray-12 (t :cmdk.tip/label)
+       (tip state)]]
 
-       [:div.gap-2.hidden.md:flex {:style {:margin-right -6}}
-        (case action
-          :open
-          [:<>
-           (button-fn (t :cmdk.action/open) ["return"])
-           (button-fn (t :cmdk.action/open-in-sidebar) ["shift" "return"] {:open-sidebar? true})
-           (when (:source-block @(::highlighted-item state)) (button-fn (t :cmdk.action/copy-ref) ["cmd" "c"]))]
+     [:div.gap-2.hidden.md:flex {:style {:margin-right -6}}
+      (case action
+        :open
+        [:<>
+         (button-fn (t :cmdk.action/open) ["return"])
+         (button-fn (t :cmdk.action/open-in-sidebar) ["shift" "return"] {:open-sidebar? true})
+         (when (:source-block (state->highlighted-item state fallback-item))
+           (button-fn (t :cmdk.action/copy-ref) ["cmd" "c"]))]
 
-          :search
-          [:<>
-           (button-fn (t :cmdk.action/search) ["return"])]
+        :search
+        [:<>
+         (button-fn (t :cmdk.action/search) ["return"])]
 
-          :trigger
-          [:<>
-           (button-fn (t :cmdk.action/trigger) ["return"])]
+        :trigger
+        [:<>
+         (button-fn (t :cmdk.action/trigger) ["return"])]
 
-          :create
-          [:<>
-           (button-fn (t :cmdk.action/create) ["return"])]
+        :create
+        [:<>
+         (button-fn (t :cmdk.action/create) ["return"])]
 
-          :filter
-          [:<>
-           (button-fn (t :cmdk.action/filter) ["return"])]
+        :filter
+        [:<>
+         (button-fn (t :cmdk.action/filter) ["return"])]
 
-          nil)]])))
+        :theme
+        [:<>
+         (button-fn (t :cmdk.action/apply-theme) ["return"])]
+
+        nil)]]))
 
 (rum/defc search-only
   [state group-name]
@@ -1299,7 +1310,7 @@
           [:div.flex.flex-col.p-4.opacity-50
            (when-not (string/blank? @*input)
              (t :search/no-result))]))]
-     (when-not sidebar? (hints state))]))
+     (when-not sidebar? (hints state first-item))]))
 
 (rum/defc cmdk-modal [props]
   [:div {:class "cp__cmdk__modal rounded-lg w-[90dvw] max-w-4xl relative"

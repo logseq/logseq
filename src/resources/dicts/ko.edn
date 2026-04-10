@@ -217,6 +217,7 @@
  :keymap/used-by-action "다음 명령에서 사용 중 {1}"
 
  ;; Command palette actions
+ :cmdk.action/apply-theme "테마 적용"
  :cmdk.action/copy-ref "참조 복사"
  :cmdk.action/create "만들기"
  :cmdk.action/filter "필터"

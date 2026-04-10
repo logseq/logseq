@@ -217,6 +217,7 @@
  :keymap/used-by-action "以下のコマンドが使用中：{1}"
 
  ;; Command palette actions
+ :cmdk.action/apply-theme "テーマを適用"
  :cmdk.action/copy-ref "参照をコピー"
  :cmdk.action/create "作成"
  :cmdk.action/filter "フィルター"

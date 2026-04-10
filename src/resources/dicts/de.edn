@@ -217,6 +217,7 @@
  :keymap/used-by-action "Verwendet von {1}"
 
  ;; Command palette actions
+ :cmdk.action/apply-theme "Thema anwenden"
  :cmdk.action/copy-ref "Referenz kopieren"
  :cmdk.action/create "Erstellen"
  :cmdk.action/filter "Filter"
