@@ -93,7 +93,10 @@ If behavior must change, call it out explicitly and add tests.
    - Especially for error cases and output format.
 5. **Run relevant CLI tests and linters**
    - Confirm no regressions.
-6. **Document extension points**
+6. **Run relevant cmds in logseq-cli**
+   - Use logseq-cli skill
+   - Confirm no regressions.
+7. **Document extension points**
    - Show where future subcommands/options should be added.
 
 ---

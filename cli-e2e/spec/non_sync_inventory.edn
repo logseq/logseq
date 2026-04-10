@@ -140,7 +140,7 @@
 
   :server
   {:commands ["server list"
-              "server status"
+              "server cleanup"
               "server start"
               "server stop"
               "server restart"]

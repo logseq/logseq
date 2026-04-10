@@ -586,11 +586,43 @@
                    ["KV:" "  (empty)"])]
     (string/join "\n" (into summary-lines kv-lines))))
 
-(defn- format-server-status
-  [{:keys [repo status host port]}]
-  (string/join "\n"
-               (cond-> [(str "Server " (name (or status :unknown)) ": " repo)]
-                 (and host port) (conj (str "Host: " host "  Port: " port)))))
+(defn- format-server-cleanup-target
+  [{:keys [repo pid owner-source revision]}]
+  (str "  - " (normalize-cell repo)
+       " (pid: " (normalize-cell pid)
+       ", owner: " (normalize-cell owner-source)
+       ", revision: " (normalize-cell revision)
+       ")"))
+
+(defn- format-server-cleanup-failed-target
+  [{:keys [repo pid owner-source revision error]}]
+  (str "  - " (normalize-cell repo)
+       " (pid: " (normalize-cell pid)
+       ", owner: " (normalize-cell owner-source)
+       ", revision: " (normalize-cell revision)
+       ", error: " (normalize-cell (or (:code error) :unknown))
+       " - " (normalize-cell (:message error))
+       ")"))
+
+(defn- format-server-cleanup
+  [{:keys [cli-revision checked mismatched eligible skipped-owner skipped-owner-targets killed failed]}]
+  (let [failed (vec (or failed []))
+        skipped-owner-targets (vec (or skipped-owner-targets []))
+        header-lines [(str "Server cleanup summary")
+                      (str "CLI revision: " (normalize-cell cli-revision))
+                      (str "Checked: " (or checked 0))
+                      (str "Mismatched: " (or mismatched 0))
+                      (str "Eligible (:cli owner): " (or eligible 0))
+                      (str "Skipped owner mismatch: " (or skipped-owner 0))
+                      (str "Killed: " (count (or killed [])))
+                      (str "Failed: " (count failed))]
+        skipped-lines (when (seq skipped-owner-targets)
+                        (into ["" "Skipped owner targets:"]
+                              (mapv format-server-cleanup-target skipped-owner-targets)))
+        failed-lines (when (seq failed)
+                       (into ["" "Failed targets:"]
+                             (mapv format-server-cleanup-failed-target failed)))]
+    (string/join "\n" (concat header-lines skipped-lines failed-lines))))
 
 (defn- format-server-action
   [command {:keys [repo status host port]}]
@@ -880,7 +912,7 @@
         (format-graph-action command context)
         :server-list (format-server-list (:servers data)
                                          (get-in human [:server-list :revision-mismatch]))
-        :server-status (format-server-status data)
+        :server-cleanup (format-server-cleanup data)
         (:server-start :server-stop :server-restart)
         (format-server-action command data)
         :sync-status (format-sync-status data)

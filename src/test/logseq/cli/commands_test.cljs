@@ -5,6 +5,7 @@
             [logseq.cli.command.graph :as graph-command]
             [logseq.cli.command.list :as list-command]
             [logseq.cli.command.query :as query-command]
+            [logseq.cli.command.server :as server-command]
             [logseq.db.frontend.rules :as rules]
             [logseq.cli.command.show :as show-command]
             [logseq.cli.command.sync :as sync-command]
@@ -2071,17 +2072,20 @@
       (is (false? (:ok? result)))
       (is (= :invalid-options (get-in result [:error :code])))))
 
-  (testing "server status accepts prefix-like repo option values"
-    (let [result (commands/parse-args ["server" "status"
-                                       "--graph" "logseq_db_logseq_db_demo"])]
-      (is (true? (:ok? result)))
-      (is (= :server-status (:command result)))
-      (is (= "logseq_db_logseq_db_demo" (get-in result [:options :graph])))))
+  (testing "server status is removed and parses as unknown command"
+    (let [result (commands/parse-args ["server" "status" "--graph" "demo"])]
+      (is (false? (:ok? result)))
+      (is (= :unknown-command (get-in result [:error :code])))))
 
-  (testing "server status accepts global -g alias"
-    (let [result (commands/parse-args ["server" "status" "-g" "demo"])]
+  (testing "server cleanup parses without --graph"
+    (let [result (commands/parse-args ["server" "cleanup"])]
       (is (true? (:ok? result)))
-      (is (= :server-status (:command result)))
+      (is (= :server-cleanup (:command result)))))
+
+  (testing "server cleanup accepts global -g alias but does not require graph"
+    (let [result (commands/parse-args ["server" "cleanup" "-g" "demo"])]
+      (is (true? (:ok? result)))
+      (is (= :server-cleanup (:command result)))
       (is (= "demo" (get-in result [:options :graph]))))))
 
 (deftest test-verb-subcommand-parse-graph-backup
@@ -2314,12 +2318,11 @@
       (is (true? (:ok? result)))
       (is (= :server-stop (get-in result [:action :type])))))
 
-  (testing "server status canonicalizes multi-prefixed repo option"
-    (let [parsed {:ok? true :command :server-status :options {:graph "logseq_db_logseq_db_demo"}}
+  (testing "server cleanup builds action without requiring repo"
+    (let [parsed {:ok? true :command :server-cleanup :options {}}
           result (commands/build-action parsed {})]
       (is (true? (:ok? result)))
-      (is (= :server-status (get-in result [:action :type])))
-      (is (= "logseq_db_demo" (get-in result [:action :repo]))))))
+      (is (= :server-cleanup (get-in result [:action :type]))))))
 
 (deftest test-build-action-doctor
   (testing "doctor builds action"
@@ -3592,6 +3595,21 @@
                (p/catch (fn [e]
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
+
+(deftest test-execute-server-cleanup-dispatch
+  (async done
+         (-> (p/with-redefs [server-command/execute-cleanup (fn [action config]
+                                                              (is (= :server-cleanup (:type action)))
+                                                              (is (= {:data-dir "/tmp/demo"} config))
+                                                              (p/resolved {:status :ok
+                                                                           :data {:checked 3}}))]
+               (p/let [result (commands/execute {:type :server-cleanup} {:data-dir "/tmp/demo"})]
+                 (is (= :ok (:status result)))
+                 (is (= :server-cleanup (:command result)))
+                 (is (= 3 (get-in result [:data :checked])))))
+             (p/catch (fn [e]
+                        (is false (str "unexpected error: " e))))
+             (p/finally done))))
 
 (deftest test-execute-requires-existing-graph
   (async done

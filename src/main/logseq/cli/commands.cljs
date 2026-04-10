@@ -197,7 +197,7 @@
   #{:remove-block :remove-page :remove-tag :remove-property})
 
 (def ^:private server-graph-required-commands
-  #{:server-status :server-start :server-stop :server-restart})
+  #{:server-start :server-stop :server-restart})
 
 (def ^:private supported-completion-shells
   #{"zsh" "bash"})
@@ -593,7 +593,7 @@
               import-type (graph-command/normalize-import-export-type (:type options))]
           (graph-command/build-import-action import-repo import-type (:input options)))
 
-        (:server-list :server-status :server-start :server-stop :server-restart)
+        (:server-list :server-cleanup :server-start :server-stop :server-restart)
         (server-command/build-action command server-repo)
 
         (:list-page :list-tag :list-property :list-task :list-node)
@@ -718,7 +718,7 @@
                          :skill-install (skill-command/execute-skill-install action config)
                          :example (example-command/execute-example action config)
                          :server-list (server-command/execute-list action config)
-                         :server-status (server-command/execute-status action config)
+                         :server-cleanup (server-command/execute-cleanup action config)
                          :server-start (server-command/execute-start action config)
                          :server-stop (server-command/execute-stop action config)
                          :server-restart (server-command/execute-restart action config)
