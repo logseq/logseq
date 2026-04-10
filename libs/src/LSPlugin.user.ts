@@ -755,7 +755,7 @@ export class LSPluginUser
 
         return function (this: any, ...args: any) {
           if (origMethod) {
-            if (args?.length !== 0) args.concat(nstag)
+            if (args?.length !== 0) args.push(nstag)
             const ret = origMethod.apply(that, args)
             if (ret !== PROXY_CONTINUE) return ret
           }
