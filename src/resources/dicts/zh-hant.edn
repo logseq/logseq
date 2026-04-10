@@ -217,6 +217,7 @@
  :keymap/used-by-action "被以下命令佔用：{1}"
 
  ;; Command palette actions
+ :cmdk.action/apply-theme "套用主題"
  :cmdk.action/copy-ref "複製引用"
  :cmdk.action/create "建立"
  :cmdk.action/filter "篩選"

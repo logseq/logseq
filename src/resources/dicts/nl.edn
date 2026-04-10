@@ -217,6 +217,7 @@
  :keymap/used-by-action "Gebruikt door {1}"
 
  ;; Command palette actions
+ :cmdk.action/apply-theme "Thema toepassen"
  :cmdk.action/copy-ref "Referentie kopiëren"
  :cmdk.action/create "Aanmaken"
  :cmdk.action/filter "Filter"

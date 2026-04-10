@@ -217,6 +217,7 @@
  :keymap/used-by-action "Používáno {1}"
 
  ;; Command palette actions
+ :cmdk.action/apply-theme "Použít motiv"
  :cmdk.action/copy-ref "Kopírovat odkaz"
  :cmdk.action/create "Vytvořit"
  :cmdk.action/filter "Filtr"
