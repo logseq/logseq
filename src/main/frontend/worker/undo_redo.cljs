@@ -46,8 +46,10 @@
        [:added-ids [:set :int]]
        [:retracted-ids [:set :int]]
        [:db-sync/tx-id {:optional true} :uuid]
-       [:db-sync/forward-outliner-ops {:optional true} [:sequential :any]]
-       [:db-sync/inverse-outliner-ops {:optional true} [:sequential :any]]]]]
+       [:db-sync/forward-outliner-ops {:optional true}
+        [:maybe [:sequential :any]]]
+       [:db-sync/inverse-outliner-ops {:optional true}
+        [:maybe [:sequential :any]]]]]]
 
     [::record-editor-info
      [:cat :keyword
@@ -207,7 +209,7 @@
   [repo undo?]
   (undo-redo-aux repo undo?))
 
-(defn- run-worker-path
+(defn- apply-history-action
   [repo conn undo? op tx-meta' tx-id]
   (if-let [apply-action @*apply-history-action!]
     (try
@@ -254,14 +256,10 @@
                            (second %))
                         op)]
     (let [tx-id (:db-sync/tx-id data)
-          forward-outliner-ops (:db-sync/forward-outliner-ops data)
-          inverse-outliner-ops (:db-sync/inverse-outliner-ops data)
-          tx-meta' (-> (undo-redo-action-meta data undo?)
-                       (assoc :forward-outliner-ops forward-outliner-ops
-                              :inverse-outliner-ops inverse-outliner-ops
-                              :db-sync/forward-outliner-ops forward-outliner-ops
-                              :db-sync/inverse-outliner-ops inverse-outliner-ops))]
-      (run-worker-path repo conn undo? op tx-meta' tx-id))))
+          tx-meta' (merge (undo-redo-action-meta data undo?)
+                          (select-keys data [:db-sync/forward-outliner-ops
+                                             :db-sync/inverse-outliner-ops]))]
+      (apply-history-action repo conn undo? op tx-meta' tx-id))))
 
 (defn- undo-redo-aux
   [repo undo?]
@@ -316,9 +314,7 @@
            (true? local-tx?)
            outliner-op
            (not (false? (:gen-undo-ops? tx-meta)))
-           (not (:create-today-journal? tx-meta))
-           (seq forward-outliner-ops)
-           (seq inverse-outliner-ops))
+           (not (:create-today-journal? tx-meta)))
       (let [all-ids (distinct (map :e tx-data))
             retracted-ids (set
                            (filter

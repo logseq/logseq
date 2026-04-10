@@ -18,7 +18,6 @@
    [logseq.db :as ldb]
    [logseq.db-sync.order :as sync-order]
    [logseq.db.common.normalize :as db-normalize]
-   [logseq.db.frontend.property.type :as db-property-type]
    [logseq.db.sqlite.util :as sqlite-util]
    [logseq.outliner.core :as outliner-core]
    [logseq.outliner.op :as outliner-op]
@@ -198,42 +197,37 @@
   ;; Keep them as raw-tx placeholders instead of forcing semantic canonicalization.
   (if (explicit-transact-forward-op? tx-meta)
     {:forward-outliner-ops canonical-transact-op
-     :inverse-outliner-ops (or (seq (:db-sync/inverse-outliner-ops tx-meta))
-                               (seq (:inverse-outliner-ops tx-meta)))}
+     :inverse-outliner-ops (or (some-> (:db-sync/inverse-outliner-ops tx-meta) seq vec)
+                               (some-> (:inverse-outliner-ops tx-meta) seq vec))}
     (op-construct/derive-history-outliner-ops db-before db-after tx-data tx-meta)))
-
-(defn- title-only-raw-tx?
-  [tx-data]
-  (let [tx-items (seq tx-data)]
-    (and tx-items
-         (every?
-          (fn [entry]
-            (and (vector? entry)
-                 (>= (count entry) 4)
-                 (= :db/add (first entry))
-                 (= :block/title (nth entry 2))
-                 (string? (nth entry 3))))
-          tx-items))))
 
 (defn- rebase-history-ops
   [local-tx]
   (let [forward-outliner-ops (seq (:forward-outliner-ops local-tx))
         inverse-outliner-ops (seq (:inverse-outliner-ops local-tx))
-        ;; Fall back to raw tx replay for legacy rebase rows that persisted without
-        ;; semantic history ops, and for direct title-only transact rows whose
-        ;; metadata doesn't carry semantic ops. Keep other non-rebase rows as-is
-        ;; to avoid replaying arbitrary local raw txs during remote rebase.
-        fallback-forward-ops (when (and (nil? forward-outliner-ops)
-                                        (or (= :rebase (:outliner-op local-tx))
-                                            (and (nil? (:outliner-op local-tx))
-                                                 (title-only-raw-tx? (:tx local-tx))))
-                                        (seq (:tx local-tx)))
-                               canonical-transact-op)
-        forward-ops (or forward-outliner-ops fallback-forward-ops)
+        forward-ops (or forward-outliner-ops
+                        (when (seq (:tx local-tx))
+                          canonical-transact-op))
         inverse-ops (or inverse-outliner-ops
+                        (when (seq (:reversed-tx local-tx))
+                          canonical-transact-op)
                         (when forward-ops canonical-transact-op))]
     {:forward-ops forward-ops
      :inverse-ops inverse-ops}))
+
+(defn- semantic-op-entry?
+  [op-entry]
+  (and (sequential? op-entry)
+       (contains? op-construct/semantic-outliner-ops (first op-entry))))
+
+(defn- normalize-tx-data-for-rebase
+  [tx-data]
+  (some->> tx-data
+           (mapv (fn [item]
+                   (if (and (vector? item) (= 5 (count item)))
+                     (let [[op e a v _t] item]
+                       [op e a v])
+                     item)))))
 
 (defn- inferred-outliner-ops?
   [tx-meta]
@@ -324,24 +318,8 @@
   [repo]
   (mark-pending-txs-false! repo (mapv :tx-id (pending-txs repo))))
 
-(defn- usable-history-ops
-  [ops]
-  (let [ops' (some-> ops seq vec)]
-    (when (and (seq ops')
-               (not= canonical-transact-op ops'))
-      ops')))
-
-(defn- semantic-op-stream?
-  [ops]
-  (boolean (seq (usable-history-ops ops))))
-
-(defn- history-action-ops
-  [{:keys [forward-outliner-ops inverse-outliner-ops]} undo?]
-  (if undo?
-    (usable-history-ops inverse-outliner-ops)
-    (usable-history-ops forward-outliner-ops)))
-
-(declare replay-canonical-outliner-op!)
+(declare replay-canonical-outliner-op!
+         history-action-error-reason)
 
 (defn- inline-history-action
   [tx-meta]
@@ -356,103 +334,67 @@
 
 (defn ^:large-vars/cleanup-todo apply-history-action!
   [repo tx-id undo? tx-meta]
-  (let [debug-data {:tx-id tx-id
-                    :undo? undo?
-                    :tx-meta tx-meta}]
-    (if-let [conn (worker-state/get-datascript-conn repo)]
-      (if-let [action (or (pending-tx-by-id repo tx-id)
-                          (inline-history-action tx-meta))]
-        (let [semantic-forward? (semantic-op-stream? (:forward-outliner-ops action))
-              ops (history-action-ops action undo?)
-              history-tx-id (let [provided-history-tx-id (:db-sync/tx-id tx-meta)]
-                              (if (and (uuid? provided-history-tx-id)
-                                       (not= provided-history-tx-id tx-id))
-                                provided-history-tx-id
-                                (random-uuid)))
-              tx-meta' (cond-> {:local-tx? true
-                                :gen-undo-ops? false
-                                :persist-op? true
-                                :undo? undo?
-                                :redo? (:redo? tx-meta)
-                                :db-sync/tx-id history-tx-id
-                                :db-sync/source-tx-id (or (:db-sync/source-tx-id tx-meta)
-                                                          tx-id)}
-
-                         (:outliner-op action)
-                         (assoc :outliner-op (:outliner-op action))
-
-                         (seq (if undo? (:inverse-outliner-ops action)
-                                  (:forward-outliner-ops action)))
-                         (assoc :db-sync/forward-outliner-ops
-                                (vec (if undo? (:inverse-outliner-ops action)
-                                         (:forward-outliner-ops action))))
-
-                         (seq (if undo? (:forward-outliner-ops action)
-                                  (:inverse-outliner-ops action)))
-                         (assoc :db-sync/inverse-outliner-ops
-                                (vec (if undo? (:forward-outliner-ops action)
-                                         (:inverse-outliner-ops action)))))]
-          ;; (prn :debug :outliner-ops)
-          ;; (pprint/pprint (select-keys action [:tx-id :outliner-op :forward-outliner-ops :inverse-outliner-ops]))
+  (if-let [conn (worker-state/get-datascript-conn repo)]
+    (if-let [action (or (pending-tx-by-id repo tx-id)
+                        (inline-history-action tx-meta))]
+      (let [{:keys [tx reversed-tx forward-outliner-ops inverse-outliner-ops]} action
+            ops (->> (if undo? inverse-outliner-ops forward-outliner-ops)
+                     (filter (fn [op-entry]
+                               (and (sequential? op-entry)
+                                    (contains? op-construct/semantic-outliner-ops
+                                               (first op-entry)))))
+                     seq)
+            tx-data (if undo? reversed-tx tx)
+            ops' (if (seq ops)
+                   ops
+                   [[:transact [tx-data nil]]])
+            history-tx-id (let [provided-history-tx-id (:db-sync/tx-id tx-meta)]
+                            (if (and (uuid? provided-history-tx-id)
+                                     (not= provided-history-tx-id tx-id))
+                              provided-history-tx-id
+                              (random-uuid)))
+            tx-meta' (cond-> {:outliner-op (:outliner-op action)
+                              :local-tx? true
+                              :gen-undo-ops? false
+                              :persist-op? true
+                              :undo? undo?
+                              :redo? (:redo? tx-meta)
+                              :db-sync/tx-id history-tx-id
+                              :db-sync/source-tx-id (or (:db-sync/source-tx-id tx-meta)
+                                                        tx-id)
+                              :db-sync/forward-outliner-ops (if undo?
+                                                              (:inverse-outliner-ops action)
+                                                              (:forward-outliner-ops action))
+                              :db-sync/inverse-outliner-ops (if undo?
+                                                              (:forward-outliner-ops action)
+                                                              (:inverse-outliner-ops action))})]
+          ;; (prn :debug :undo? undo? :ops)
+          ;; (cljs.pprint/pprint ops')
+          ;; (cljs.pprint/pprint (select-keys action [:tx-id :outliner-op :forward-outliner-ops :inverse-outliner-ops]))
           ;; (prn :debug :tx-meta)
-          ;; (pprint/pprint tx-meta)
-          (cond
-            (and semantic-forward?
-                 (not (seq ops)))
-            (fail-fast :db-sync/missing-history-action-semantic-ops
-                       {:repo repo
-                        :tx-id tx-id
-                        :undo? undo?
-                        :forward-outliner-ops (:forward-outliner-ops action)
-                        :inverse-outliner-ops (:inverse-outliner-ops action)})
-
-            (and semantic-forward?
-                 (contains-transact-op? (if undo? (:inverse-outliner-ops action)
-                                            (:forward-outliner-ops action))))
-            (fail-fast :db-sync/invalid-history-action-semantic-ops
-                       {:reason :contains-transact-op
-                        :repo repo
-                        :tx-id tx-id
-                        :undo? undo?
-                        :ops (if undo? (:inverse-outliner-ops action)
-                                 (:forward-outliner-ops action))})
-
-            (seq ops)
-            (try
-              (ldb/batch-transact-with-temp-conn!
-               conn
-               tx-meta'
-               (fn [row-conn]
-                 (doseq [op ops]
-                   (replay-canonical-outliner-op! row-conn op nil))))
-              {:applied? true
-               :source :semantic-ops
-               :history-tx-id history-tx-id}
-              (catch :default error
-                (if semantic-forward?
-                  (if undo?
-                    {:applied? false
-                     :reason :invalid-history-action-ops
-                     :error error}
-                    (throw (ex-info (name :db-sync/invalid-history-action-semantic-ops)
-                                    {:reason :invalid-history-action-ops
-                                     :repo repo
-                                     :tx-id tx-id
-                                     :undo? undo?
-                                     :ops ops
-                                     :error error
-                                     :action action})))
-                  {:applied? false
-                   :reason :invalid-history-action-ops
-                   :error error})))
-
-            :else
-            {:applied? false :reason :unsupported-history-action
-             :debug-data (assoc debug-data :action action)}))
-        {:applied? false :reason :missing-history-action
-         :debug-data debug-data})
-      (fail-fast :db-sync/missing-db {:repo repo :op :apply-history-action
-                                      :debug-data debug-data}))))
+          ;; (cljs.pprint/pprint tx-meta)
+        (if (seq ops')
+          (try
+            (ldb/batch-transact-with-temp-conn!
+             conn
+             tx-meta'
+             (fn [conn]
+               (doseq [op ops']
+                 (replay-canonical-outliner-op! conn op nil))))
+            {:applied? true
+             :history-tx-id history-tx-id}
+            (catch :default e
+              (log/error ::undo-redo-failed e)
+              {:applied? false
+               :reason (history-action-error-reason e)
+               :action action}))
+          {:applied? false :reason :unsupported-history-action
+           :action action}))
+      {:applied? false
+       :reason :missing-history-action
+       :tx-id tx-id})
+    (fail-fast :db-sync/missing-db {:repo repo
+                                    :op :apply-history-action})))
 
 (defn flush-pending!
   [repo client]
@@ -587,6 +529,12 @@
   [op data]
   (throw (ex-info "invalid rebase op" (assoc data :op op))))
 
+(defn- history-action-error-reason
+  [error]
+  (if (= "invalid rebase op" (ex-message error))
+    :invalid-history-action-ops
+    :error))
+
 (defn- replay-entity-id-value
   [db v]
   (cond
@@ -601,38 +549,6 @@
 
     :else
     v))
-
-(defn- stable-entity-ref-like?
-  [v]
-  (or (qualified-keyword? v)
-      (and (vector? v)
-           (or (= :block/uuid (first v))
-               (= :db/ident (first v))))))
-
-(defn- replay-property-value
-  [db property-id v]
-  (let [property-type (some-> (d/entity db property-id) :logseq.property/type)]
-    (if (contains? db-property-type/all-ref-property-types property-type)
-      (cond
-        (stable-entity-ref-like? v)
-        (replay-entity-id-value db v)
-
-        (set? v)
-        (->> v
-             (map #(if (stable-entity-ref-like? %)
-                     (replay-entity-id-value db %)
-                     %))
-             set)
-
-        (sequential? v)
-        (mapv #(if (stable-entity-ref-like? %)
-                 (replay-entity-id-value db %)
-                 %)
-              v)
-
-        :else
-        v)
-      v)))
 
 (defn- replay-entity-id-coll
   [db ids]
@@ -757,6 +673,9 @@
     (let [[page-uuid opts] args]
       (outliner-page/delete! conn page-uuid opts))
 
+    :upsert-property
+    (apply outliner-property/upsert-property! conn args)
+
     :restore-recycled
     (let [[root-id] args
           root-ref (cond
@@ -799,169 +718,47 @@
         (ldb/transact! conn tx-data
                        {:outliner-op :recycle-delete-permanently})))
 
-    :set-block-property
-    (let [[block-eid property-id v] args
-          block-eid' (or (replay-entity-id-value @conn block-eid)
-                         block-eid)
-          block (d/entity @conn block-eid')
-          property (d/entity @conn property-id)
-          _ (when-not (and block property)
-              (invalid-rebase-op! op {:args args
-                                      :reason :missing-block-or-property}))
-          v' (replay-property-value @conn property-id v)]
-      (when (and (stable-entity-ref-like? v) (nil? v'))
-        (invalid-rebase-op! op {:args args}))
-      (outliner-property/set-block-property! conn block-eid' property-id v'))
-
-    :remove-block-property
-    (apply outliner-property/remove-block-property! conn args)
-
-    :batch-set-property
-    (let [[block-ids property-id v opts] args
-          block-ids' (replay-entity-id-coll @conn block-ids)
-          property (d/entity @conn property-id)
-          _ (when-not (and property
-                           (seq block-ids')
-                           (every? #(some? (d/entity @conn %)) block-ids'))
-              (invalid-rebase-op! op {:args args
-                                      :reason :missing-block-or-property}))
-          v' (replay-property-value @conn property-id v)]
-      (when (and (stable-entity-ref-like? v) (nil? v'))
-        (invalid-rebase-op! op {:args args}))
-      (outliner-property/batch-set-property! conn block-ids' property-id v' opts))
-
-    :batch-remove-property
-    (let [[block-ids property-id] args
-          block-ids' (replay-entity-id-coll @conn block-ids)]
-      (outliner-property/batch-remove-property! conn block-ids' property-id))
-
-    :delete-property-value
-    (let [[block-eid property-id property-value] args
-          block (d/entity @conn block-eid)
-          property (d/entity @conn property-id)
-          _ (when-not (and block property)
-              (invalid-rebase-op! op {:args args
-                                      :reason :missing-block-or-property}))
-          property-value' (replay-property-value @conn property-id property-value)]
-      (when (and (stable-entity-ref-like? property-value) (nil? property-value'))
-        (invalid-rebase-op! op {:args args}))
-      (outliner-property/delete-property-value! conn block-eid property-id property-value'))
-
-    :batch-delete-property-value
-    (let [[block-eids property-id property-value] args
-          block-eids' (replay-entity-id-coll @conn block-eids)
-          property (d/entity @conn property-id)
-          _ (when-not (and property
-                           (seq block-eids')
-                           (every? #(some? (d/entity @conn %)) block-eids'))
-              (invalid-rebase-op! op {:args args
-                                      :reason :missing-block-or-property}))
-          property-value' (replay-property-value @conn property-id property-value)]
-      (when (and (stable-entity-ref-like? property-value) (nil? property-value'))
-        (invalid-rebase-op! op {:args args}))
-      (outliner-property/batch-delete-property-value! conn block-eids' property-id property-value'))
-
-    :create-property-text-block
-    (apply outliner-property/create-property-text-block! conn args)
-
-    :upsert-property
-    (apply outliner-property/upsert-property! conn args)
-
-    :class-add-property
-    (apply outliner-property/class-add-property! conn args)
-
-    :class-remove-property
-    (apply outliner-property/class-remove-property! conn args)
-
-    :upsert-closed-value
-    (apply outliner-property/upsert-closed-value! conn args)
-
-    :add-existing-values-to-closed-values
-    (apply outliner-property/add-existing-values-to-closed-values! conn args)
-
-    :delete-closed-value
-    (apply outliner-property/delete-closed-value! conn args)
-
-    (let [tx-data (:tx args)]
-      (log/warn ::default-case {:op op
-                                :args args
-                                :tx-data tx-data})
+    (let [[tx-data tx-meta] args]
       (when-let [tx-data (seq tx-data)]
-        (ldb/transact! conn tx-data {:outliner-op :transact})))))
+        (ldb/transact! conn tx-data tx-meta)))))
 
 (declare handle-local-tx!)
 
 (defn- rebase-local-op!
   [_repo conn local-tx rebase-db-before]
-  (let [{:keys [forward-ops inverse-ops]} (rebase-history-ops local-tx)]
-    (if (seq forward-ops)
-      (try
-        (let [rebase-tx-report
-              (ldb/batch-transact-with-temp-conn!
-               conn
-               (cond-> {:outliner-op :rebase
-                        :original-outliner-op (:outliner-op local-tx)
-                        ;; Keep stable tx-id across rebases so one logical pending op
-                        ;; doesn't fan out into duplicated pending rows.
-                        :db-sync/tx-id (:tx-id local-tx)}
-                 (seq forward-ops)
-                 (assoc :db-sync/forward-outliner-ops forward-ops)
-
-                 (seq inverse-ops)
-                 (assoc :db-sync/inverse-outliner-ops inverse-ops))
-               (fn [conn]
-                 (if (= canonical-transact-op forward-ops)
-                   (when-let [tx-data (seq (:tx local-tx))]
-                     (ldb/transact! conn tx-data
-                                    {:outliner-op :transact
-                                     ;; Rebase raw replay can hit missing refs that are handled
-                                     ;; by caller as stale-drop; avoid noisy expected error logs.
-                                     :db-sync/suppress-stale-rebase-transact-failed-log? true}))
-                   (doseq [op forward-ops]
-                     (replay-canonical-outliner-op! conn op rebase-db-before)))))]
+  (let [{:keys [forward-ops inverse-ops]} (rebase-history-ops local-tx)
+        tx-meta {:outliner-op :rebase
+                 :original-outliner-op (:outliner-op local-tx)
+                 ;; Keep stable tx-id across rebases so one logical pending op
+                 ;; doesn't fan out into duplicated pending rows.
+                 :db-sync/tx-id (:tx-id local-tx)
+                 :db-sync/forward-outliner-ops forward-ops
+                 :db-sync/inverse-outliner-ops inverse-ops}
+        semantic-forward-ops? (and (seq forward-ops)
+                                   (every? semantic-op-entry? forward-ops))
+        forward-ops' (if semantic-forward-ops? forward-ops
+                         (let [tx-data (-> (:tx local-tx) normalize-tx-data-for-rebase)]
+                           [[:transact [tx-data]]]))]
+    (try
+      (let [rebase-tx-report
+            (ldb/batch-transact-with-temp-conn!
+             conn
+             tx-meta
+             (fn [conn]
+               (doseq [op forward-ops']
+                 (replay-canonical-outliner-op! conn op rebase-db-before))))
+            status (if rebase-tx-report :rebased :no-op)]
+        {:tx-id (:tx-id local-tx)
+         :status status})
+      (catch :default error
+        (let [drop-log {:tx-id (:tx-id local-tx)
+                        :outliner-op (:outliner-op local-tx)
+                        :undo? (:undo? local-tx)
+                        :redo? (:redo? local-tx)
+                        :error error}]
+          (log/warn :db-sync/drop-op-driven-pending-tx drop-log)
           {:tx-id (:tx-id local-tx)
-           :status (cond
-                     rebase-tx-report
-                     :rebased
-
-                     ;; Title-only raw tx replay can become empty after remote applies
-                     ;; the same title; keep it pending instead of dropping as stale.
-                     (and (= canonical-transact-op forward-ops)
-                          (nil? (:forward-outliner-ops local-tx))
-                          (nil? (:outliner-op local-tx))
-                          (title-only-raw-tx? (:tx local-tx)))
-                     :skipped
-
-                     :else
-                     :no-op)})
-        (catch :default error
-          (let [drop-log {:tx-id (:tx-id local-tx)
-                          :outliner-ops forward-ops
-                          :error error}]
-            (log/warn :db-sync/drop-op-driven-pending-tx drop-log)
-            {:tx-id (:tx-id local-tx)
-             :status :failed})))
-      (let [tx-data (some-> (:tx local-tx) seq vec)
-            dry-run-tx-data (some->> tx-data
-                                     (mapv (fn [item]
-                                             (if (and (vector? item) (= 5 (count item)))
-                                               (let [[op e a v _t] item]
-                                                 [op e a v])
-                                               item))))]
-        (if (seq dry-run-tx-data)
-          (try
-            (d/with @conn dry-run-tx-data)
-            {:tx-id (:tx-id local-tx)
-             :status :skipped}
-            (catch :default error
-              (log/warn :db-sync/drop-skipped-pending-tx
-                        {:tx-id (:tx-id local-tx)
-                         :outliner-op (:outliner-op local-tx)
-                         :error error})
-              {:tx-id (:tx-id local-tx)
-               :status :failed}))
-          {:tx-id (:tx-id local-tx)
-           :status :skipped})))))
+           :status :failed})))))
 
 (defn- rebase-local-txs!
   [repo conn local-txs rebase-db-before]
