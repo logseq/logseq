@@ -279,18 +279,18 @@
                (not config/publishing?))
       (when-let [title (date/today)]
         (state/set-today! title)
-        (p/let [today-page (util/page-name-sanity-lc title)
-                page (ldb/get-journal-page (db/get-db) (date/today-name))]
+        (p/let [today-page-lc-title (util/page-name-sanity-lc title)
+                page (db/get-today-journal-page)]
           (when-not page
             (p/let [result (<create! title {:redirect? false
                                             :split-namespace? false
                                             :today-journal? true})]
-              (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})
+              (plugin-handler/hook-plugin-app :today-journal-created {:title today-page-lc-title})
               result)))))))
 
 (defn open-today-in-sidebar
   []
-  (when-let [page (db/get-page (date/today))]
+  (when-let [page (db/get-today-journal-page)]
     (state/sidebar-add-block!
      (state/get-current-repo)
      (:db/id page)

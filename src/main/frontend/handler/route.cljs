@@ -3,7 +3,6 @@
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
-            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.extensions.pdf.utils :as pdf-utils]
@@ -218,10 +217,11 @@
 
 (defn sidebar-journals!
   []
-  (state/sidebar-add-block!
-   (state/get-current-repo)
-   (:db/id (db/get-page (date/today)))
-   :page))
+  (when-let [page (db/get-today-journal-page)]
+    (state/sidebar-add-block!
+     (state/get-current-repo)
+     (:db/id page)
+     :page)))
 
 (defn go-to-journals!
   []

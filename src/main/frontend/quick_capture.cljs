@@ -5,6 +5,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
+            [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
@@ -20,7 +21,7 @@
         (re-matches #"^https://x\.com/.*?/status/.*?$" url))))
 
 (defn quick-capture [args]
-  (if-let [today (date/today)]
+  (if-let [today-page-title (db/get-today-journal-title)]
     (let [{:keys [url title content page append]} (bean/->clj args)
           title (or title "")
           url (or url "")
@@ -30,7 +31,7 @@
           redirect-page? (get-in (state/get-config)
                                  [:quick-capture-options :redirect-page?]
                                  false)
-          today-page (string/lower-case today)
+          today-page (string/lower-case today-page-title)
           current-page (state/get-current-page) ;; empty when in journals page
           default-page (get-in (state/get-config)
                                [:quick-capture-options :default-page])
@@ -73,7 +74,7 @@
           template (get-in (state/get-config)
                            [:quick-capture-templates :text]
                            "**{time}** [[quick capture]]: {text} {url}")
-          date-ref-name (date/today)
+          date-ref-name today-page-title
           content (-> template
                       (string/replace "{time}" time)
                       (string/replace "{date}" date-ref-name)
