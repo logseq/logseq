@@ -76,7 +76,7 @@
                                                                                      (.-stack error))))}}
                                                        cfg)))}))))
 
-(defn ^:large-vars/cleanup-todo run!
+(defn run!
   ([args] (run! args {}))
   ([args _opts]
    (let [profile-session (profile/create-session (profile-enabled-argv? args))
