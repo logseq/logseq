@@ -37,69 +37,79 @@
       [:div#left-container
        [:div#main-container.cp__sidebar-main-layout.flex-1.flex
         [:div#main-content-container.scrollbar-spacing.w-full.flex.justify-center
-         [:div.cp__sidebar-main-content
-          [:div.ls-center
-           [:div.icon-box.p-1.rounded.mb-3 (ui/icon "bug" {:style {:font-size ui/icon-size}})]
-           [:div.text-xl.font-bold
-            (t :page/something-went-wrong)]
-           [:div.mt-2.mb-2 (t :page/logseq-is-having-a-problem)]
-           [:div
-          ;; TODO: Enable once multi-window case doesn't result in possible data loss
-            #_[:div.flex.flex-row.justify-between.align-items.mb-2
-              [:div.flex.flex-col.items-start
-               [:div.text-2xs.uppercase (t :page/step "1")]
-               [:div [:span.font-bold (t :plugin/reload)] (str " " (t :page/the-app))]]
-               [:div (ui/icon "command") (ui/icon "letter-r")]]
-            [:div.flex.flex-row.justify-between.align-items.mb-2.items-center.py-4
-             [:div.flex.flex-col.items-start
-              [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "1")]
-              [:div [:span.highlighted.font-bold (t :page/rebuild)] [:span.toned-down (str " " (t :page/search-index))]]]
-             [:div
-              (ui/button (t :page/try)
-                         :small? true
-                         :on-click (fn []
-                                     (search-handler/rebuild-indices! true)))]]
-            [:div.flex.flex-row.justify-between.align-items.mb-2.items-center.separator-top.py-4
-             [:div.flex.flex-col.items-start
-              [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "2")]
-              [:div [:span.highlighted.font-bold (t :page/relaunch)] [:span.toned-down (str " " (t :page/the-app))]]]
-              [:div.text-xs.toned-down (t :page/relaunch-desc)]]
-             [:div (shui/shortcut ["cmd" (if (util/electron?) "q" "r")])]]
-            [:div.flex.flex-row.justify-between.align-items.mb-4.items-center.separator-top.py-4
-             [:div.flex.flex-col.items-start.mr-2
-              [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "3")]
-              [:div [:span.highlighted.font-bold (t :ui/export)] [:span.toned-down (str " " (t :page/current-graph-as-sqlite-db))]]
-              [:div.text-xs.toned-down (t :page/send-db-for-debugging)]
-              [:a#download-as-sqlite-db.hidden]]
-             [:div
-              (ui/button (t :export/graph)
-                         :small? true
-                         :on-click #(export/export-repo-as-sqlite-db! current-repo))]]
-
-            [:div.flex.flex-row.justify-between.align-items.mb-4.items-center.separator-top.py-4
-             [:div.flex.flex-col.items-start
-              [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "4")]
-              [:div [:span.highlighted.font-bold (t :page/clear)] [:span.toned-down (str " " (t :page/local-storage))]]
-              [:div.text-xs.toned-down (t :page/clear-local-storage-desc)]]
-             [:div
-              (ui/button (t :page/try)
-                         :small? true
-                         :on-click (fn []
-                                     (.clear js/localStorage)
-                                     (notification/show! (t :page/cleared) :success)))]]]
-           [:div
-            [:p
-             (interpolate-sentence
-              (t :page/open-all-graphs-desc)
-              :links
-              [{:on-click (fn []
-                            (set! (.-href js/window.location) (rfe/href :graphs))
-                            (.reload js/window.location))}])]
-            [:p
-             (interpolate-sentence
-              (t :page/open-issue-desc)
-              :links
-              [{:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"}])]]]]]]]
+          [:div.cp__sidebar-main-content
+           [:div.flex.justify-center.px-4.py-10.sm:px-6.sm:py-14
+            [:div.w-full.max-w-3xl.flex.flex-col.gap-10.sm:gap-14
+             [:div.w-full.max-w-2xl.mx-auto
+              [:div.flex.flex-col.items-start.gap-3.mb-6
+               [:div.icon-box.p-1.rounded (ui/icon "bug" {:style {:font-size ui/icon-size}})]
+               [:div.text-2xl.font-bold (t :page/something-went-wrong)]
+               [:div.text-lg.leading-8 (t :page/logseq-is-having-a-problem)]]
+              [:div
+               ;; TODO: Enable once multi-window case doesn't result in possible data loss
+               #_[:div.flex.flex-row.justify-between.align-items.mb-2
+                  [:div.flex.flex-col.items-start
+                   [:div.text-2xs.uppercase (t :page/step "1")]
+                   [:div [:span.font-bold (t :plugin/reload)] (str " " (t :page/the-app))]]
+                  [:div (ui/icon "command") (ui/icon "letter-r")]]
+               [:div.flex.flex-col.gap-4.sm:flex-row.sm:items-center.sm:justify-between.py-4
+                [:div.flex.flex-col.items-start.pr-4
+                 [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "1")]
+                 [:div.leading-8
+                  [:span.highlighted.font-bold (t :page/rebuild)]
+                  [:span.toned-down (str " " (t :page/search-index))]]]
+                [:div.sm:self-start
+                 (ui/button (t :page/try)
+                            :small? true
+                            :on-click (fn []
+                                        (search-handler/rebuild-indices! true)))]]
+               [:div.flex.flex-col.gap-4.sm:flex-row.sm:items-center.sm:justify-between.separator-top.py-4
+                [:div.flex.flex-col.items-start.pr-4
+                 [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "2")]
+                 [:div.leading-8
+                  [:span.highlighted.font-bold (t :page/relaunch)]
+                  [:span.toned-down (str " " (t :page/the-app))]]
+                 [:div.text-xs.leading-6.toned-down (t :page/relaunch-desc)]]
+                [:div.sm:self-start
+                 (shui/shortcut ["cmd" (if (util/electron?) "q" "r")])]]
+               [:div.flex.flex-col.gap-4.sm:flex-row.sm:items-center.sm:justify-between.separator-top.py-4
+                [:div.flex.flex-col.items-start.pr-4
+                 [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "3")]
+                 [:div.leading-8
+                  [:span.highlighted.font-bold (t :ui/export)]
+                  [:span.toned-down (str " " (t :page/current-graph-as-sqlite-db))]]
+                 [:div.text-xs.leading-6.toned-down (t :page/send-db-for-debugging)]
+                 [:a#download-as-sqlite-db.hidden]]
+                [:div.sm:self-start
+                 (ui/button (t :export/graph)
+                            :small? true
+                            :on-click #(export/export-repo-as-sqlite-db! current-repo))]]
+               [:div.flex.flex-col.gap-4.sm:flex-row.sm:items-center.sm:justify-between.separator-top.py-4
+                [:div.flex.flex-col.items-start.pr-4
+                 [:div.text-2xs.font-bold.uppercase.toned-down (t :page/step "4")]
+                 [:div.leading-8
+                  [:span.highlighted.font-bold (t :page/clear)]
+                  [:span.toned-down (str " " (t :page/local-storage))]]
+                 [:div.text-xs.leading-6.toned-down (t :page/clear-local-storage-desc)]]
+                [:div.sm:self-start
+                 (ui/button (t :page/try)
+                            :small? true
+                            :on-click (fn []
+                                        (.clear js/localStorage)
+                                        (notification/show! (t :page/cleared) :success)))]]]
+              [:div.max-w-2xl.mx-auto.mt-6.space-y-2.text-base.leading-8
+               [:p.m-0
+                (interpolate-sentence
+                 (t :page/open-all-graphs-desc)
+                 :links
+                 [{:on-click (fn []
+                               (set! (.-href js/window.location) (rfe/href :graphs))
+                               (.reload js/window.location))}])]
+               [:p.m-0
+                (interpolate-sentence
+                 (t :page/open-issue-desc)
+                 :links
+                 [{:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"}])]]]]]]]]]]
      (ui/notification)]))
 
 (rum/defc not-found
