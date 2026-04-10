@@ -41,9 +41,9 @@
     @apply flex;
   }
 
-  /* Square: current layout, 290x15rem card (image area 290x~11rem) */
+  /* Square: 290x290 image area + 64px title row = 354px card height */
   &.ls-cards-square {
-    .ls-card-item { @apply h-[15rem]; }
+    .ls-card-item { @apply h-[354px]; }
     .virtuoso-grid-item { @apply w-[290px]; }
   }
 
