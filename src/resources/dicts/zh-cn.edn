@@ -548,7 +548,7 @@
  :page/open-issue-desc "如果以上故障排除步骤无法解决您的问题，请 {{提交一个 issue}}。"
  :page/open-properties "展开属性"
  :page/rebuild "重建"
- :page/relaunch "重新启动"
+ :page/relaunch "重启"
  :page/relaunch-desc "退出并重新打开应用。"
  :page/scheduled-and-deadline "计划与截止日期"
  :page/search-index "搜索索引"
