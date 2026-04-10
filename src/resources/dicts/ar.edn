@@ -278,6 +278,7 @@
  :ui/apply "Apply"
  :ui/cancel "إلغاء"
  :ui/close "إغلاق"
+ :ui/configure "إعداد"
  :ui/confirm "تأكيد"
  :ui/copy "نسخ"
  :ui/copy-all "Copy all"
@@ -297,6 +298,7 @@
  :ui/image "صورة"
  :ui/label "تسمية"
  :ui/link "رابط"
+ :ui/load-more "تحميل المزيد"
  :ui/loading "جارٍ التحميل"
  :ui/login "تسجيل الدخول"
  :ui/logout "تسجيل الخروج"
@@ -310,6 +312,8 @@
  :ui/remove-background "إزالة الخلفية"
  :ui/run "Run"
  :ui/save "حفظ"
+ :ui/show-less "عرض أقل"
+ :ui/show-more "عرض المزيد"
  :ui/skip "Skip"
  :ui/submit "إرسال"
  :ui/to "To: "
@@ -317,6 +321,7 @@
  :ui/true "صحيح"
  :ui/type "النوع"
  :ui/untitled "بدون عنوان"
+ :ui/use-current-time "استخدام الوقت الحالي"
  :ui/yes "نعم"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "رمز تعبيري غير مدعوم"
 
  ;; Search
+ :search/blank-input "إدخال فارغ"
  :search/full-text-placeholder "بحث في النص الكامل"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "لا توجد نتائج"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "فشل مغادرة الرسم البياني"
  :graph/left "تمت المغادرة"
+ :graph/link-count (fn [n] (str n " " (if (= 1 n) "رابط" "روابط")))
  :graph/link-distance "مسافة الرابط"
  :graph/local-graphs "الرسوم المحلية"
  :graph/n-hops-from-selected-nodes "عدد القفزات من العقد المحددة"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "لا يمكن أن يحتوي اسم الرسم البياني على الأحرف المحجوزة التالية:"
  :graph/nodes "العقد"
  :graph/orphan-pages "صفحات يتيمة"
+ :graph/page-count (fn [n] (str n " " (if (= 1 n) "صفحة" "صفحات")))
  :graph/pause-simulation "إيقاف المحاكاة مؤقتًا"
  :graph/preparing "جارٍ التحضير"
  :graph/refresh-remote-graphs "تحديث الرسوم البيانية البعيدة"
@@ -549,6 +557,7 @@
  :page/the-app "التطبيق"
  :page/try "حاول"
  :page/unfavorite "إزالة من المفضلة"
+ :page/unknown "صفحة غير معروفة"
  :page/updated-at "حُدّث في"
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/cloze "Cloze"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
  :editor.slash/current-time "Current time"
@@ -797,6 +807,7 @@
  :property/name "الاسم"
  :property/name-placeholder "اسم الخاصية"
  :property/no-value "لا يوجد {1}"
+ :property/nodes-with-property "العُقد ذات الخاصية"
  :property/overdue "متأخر"
  :property/private-built-in-not-usable "خاصية مدمجة خاصة لا يمكن استخدامها"
  :property/select-choice "اختر خياراً"
@@ -807,6 +818,8 @@
  :property/set-default-value "Set default value"
  :property/set-icon "تعيين أيقونة"
  :property/set-placeholder "تعيين {1}"
+ :property/set-property "تعيين الخاصية"
+ :property/set-tags "تعيين الوسوم"
  :property/set-value "تعيين القيمة"
  :property/show-as-checkbox-on-node "عرض كمربع اختيار على العقدة"
  :property/show-as-checkbox-on-tagged-nodes "عرض كمربع اختيار على العقد الموسومة"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "يسار الكتلة"
  :property/ui-position-block-right "يمين الكتلة"
  :property/ui-position-properties "الخصائص"
+ :property/unset-property "إلغاء تعيين الخاصية"
  :property/updated "محدّثة"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "عرض المعرض"
  :property.view-type/list "عرض القائمة"
  :property.view-type/table "عرض الجدول"
+
+ ;; Class
+ :class/add-property "إضافة خاصية للوسم"
+ :class/tag-properties-desc "تُورَّث خصائص الوسم إلى جميع العُقد التي تستخدمه. على سبيل المثال، ترث كل عقدة #Task كلاً من 'Status' و'Priority'."
+ :class/tagged-nodes "العُقد الموسومة"
 
  ;; Class built in
  :class.built-in/asset "أصل"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "إضافة استعلام جديد"
+ :flashcard/all-cards "كل البطاقات"
  :flashcard/select-cards "تحديد البطاقات"
  :flashcard/shortcut-tooltip "اختصار: {1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "لإنشاء بطاقة، أضف «{1}» إلى أي كتلة أو استخدم «/cloze» لإنشاء فراغات."
  :flashcard.empty/title "مرحباً بالبطاقات التعليمية"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "مرة أخرى"
+ :flashcard.rating/again-desc "كانت الإجابة خاطئة. وهذا يعني تلقائياً أننا نسينا البطاقة. إنها هفوة في الذاكرة。"
+ :flashcard.rating/easy "سهل"
+ :flashcard.rating/easy-desc "كانت الإجابة صحيحة وتذكرناها بسرعة وبثقة من دون جهد ذهني。"
+ :flashcard.rating/good "جيد"
+ :flashcard.rating/good-desc "كانت الإجابة صحيحة، لكننا احتجنا إلى بعض الجهد الذهني لتذكرها。"
+ :flashcard.rating/hard "صعب"
+ :flashcard.rating/hard-desc "كانت الإجابة صحيحة، لكننا لم نكن واثقين منها أو استغرقنا وقتًا طويلًا لتذكرها."
 
  ;; Flashcard review
  :flashcard.review/finished "تهانينا، لقد راجعت كل بطاقات هذا الاستعلام. إلى اللقاء! 💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "سلة المحذوفات فارغة."
  :storage.recycle/page-deleted-at "تم حذف الصفحة «{1}»"
  :storage.recycle/restore "استعادة"
+ :storage.recycle/retention-desc "تبقى الصفحات والكتل المحذوفة هنا حتى تتم استعادتها أو يتم تنظيفها تلقائياً بعد 60 يوماً."
 
  ;; Account
  :account/authentication "المصادقة"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "عرض المشاكل المعروفة"
  :bug-report.issue/action-title "مشاكل GitHub"
  :bug-report.issue/desc "تحقق مما إذا كانت مشكلتك قد تم الإبلاغ عنها بالفعل"
+ :bug-report.issue/report-link "الإبلاغ عن مشكلة"
  :bug-report.issue/title "المشاكل المعروفة"
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "فتح كصفحة"
  :sidebar.right/resize-handle "فاصل"
  :sidebar.right/toggle "تبديل الشريط الجانبي الأيمن"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "(Dev) Profiler"
+ :sidebar.right.dev/rtc "(Dev) RTC"
+ :sidebar.right.dev/vector-search "(Dev) VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"

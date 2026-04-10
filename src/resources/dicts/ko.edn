@@ -278,6 +278,7 @@
  :ui/apply "Apply"
  :ui/cancel "취소"
  :ui/close "닫기"
+ :ui/configure "구성"
  :ui/confirm "확인"
  :ui/copy "복사"
  :ui/copy-all "Copy all"
@@ -297,6 +298,7 @@
  :ui/image "이미지"
  :ui/label "라벨"
  :ui/link "링크"
+ :ui/load-more "더 불러오기"
  :ui/loading "로딩 중"
  :ui/login "로그인"
  :ui/logout "로그아웃"
@@ -310,6 +312,8 @@
  :ui/remove-background "배경 제거"
  :ui/run "Run"
  :ui/save "저장"
+ :ui/show-less "적게 보기"
+ :ui/show-more "더 보기"
  :ui/skip "Skip"
  :ui/submit "제출"
  :ui/to "To: "
@@ -317,6 +321,7 @@
  :ui/true "참"
  :ui/type "유형"
  :ui/untitled "제목 없음"
+ :ui/use-current-time "현재 시간 사용"
  :ui/yes "네"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "지원되지 않는 리액션 이모지"
 
  ;; Search
+ :search/blank-input "빈 입력"
  :search/full-text-placeholder "전문 검색"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "결과 없음"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "그래프 나가기에 실패했습니다"
  :graph/left "그래프를 나갔습니다"
+ :graph/link-count "{1}링크"
  :graph/link-distance "링크 거리"
  :graph/local-graphs "로컬 그래프"
  :graph/n-hops-from-selected-nodes "선택한 노드에서 N 홉"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "그래프 이름에 다음 예약 문자를 사용할 수 없습니다:"
  :graph/nodes "노드"
  :graph/orphan-pages "고립된 페이지"
+ :graph/page-count "{1}페이지"
  :graph/pause-simulation "시뮬레이션 일시 중지"
  :graph/preparing "준비 중"
  :graph/refresh-remote-graphs "원격 그래프 새로고침"
@@ -549,6 +557,7 @@
  :page/the-app "앱"
  :page/try "시도"
  :page/unfavorite "즐겨찾기에서 삭제"
+ :page/unknown "알 수 없는 페이지"
  :page/updated-at "수정 시간:"
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/cloze "클로즈"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
  :editor.slash/current-time "Current time"
@@ -797,6 +807,7 @@
  :property/name "이름"
  :property/name-placeholder "속성 이름"
  :property/no-value "{1} 없음"
+ :property/nodes-with-property "속성이 있는 노드"
  :property/overdue "기한 초과"
  :property/private-built-in-not-usable "프라이빗 내장 속성은 사용할 수 없습니다"
  :property/select-choice "선택지 선택"
@@ -807,6 +818,8 @@
  :property/set-default-value "Set default value"
  :property/set-icon "아이콘 설정"
  :property/set-placeholder "{1} 설정"
+ :property/set-property "속성 설정"
+ :property/set-tags "태그 설정"
  :property/set-value "값 설정"
  :property/show-as-checkbox-on-node "노드에 체크박스로 표시"
  :property/show-as-checkbox-on-tagged-nodes "태그된 노드에 체크박스로 표시"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "블록 왼쪽"
  :property/ui-position-block-right "블록 오른쪽"
  :property/ui-position-properties "속성"
+ :property/unset-property "속성 해제"
  :property/updated "업데이트되었습니다"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "갤러리 뷰"
  :property.view-type/list "목록 뷰"
  :property.view-type/table "테이블 뷰"
+
+ ;; Class
+ :class/add-property "태그 속성 추가"
+ :class/tag-properties-desc "태그 속성은 해당 태그를 사용하는 모든 노드에 상속됩니다. 예를 들어 각 #Task 노드는 'Status'와 'Priority'를 상속합니다。"
+ :class/tagged-nodes "태그된 노드"
 
  ;; Class built in
  :class.built-in/asset "자산"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "새 쿼리 추가"
+ :flashcard/all-cards "모든 카드"
  :flashcard/select-cards "카드 선택"
  :flashcard/shortcut-tooltip "단축키: {1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "아무 블록에 \"{1}\"을 추가하거나 \"/cloze\"로 빈칸을 만들어 플래시카드를 생성할 수 있습니다."
  :flashcard.empty/title "플래시카드를 만들어 보세요!"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "다시"
+ :flashcard.rating/again-desc "정답을 맞히지 못했습니다. 이는 우리가 이 카드를 잊었다는 뜻입니다. 기억의 공백입니다。"
+ :flashcard.rating/easy "쉬움"
+ :flashcard.rating/easy-desc "정답이었고, 큰 노력 없이 빠르고 자신 있게 떠올릴 수 있었습니다。"
+ :flashcard.rating/good "좋음"
+ :flashcard.rating/good-desc "정답은 맞았지만 떠올리기 위해 어느 정도 정신적인 노력이 필요했습니다。"
+ :flashcard.rating/hard "어려움"
+ :flashcard.rating/hard-desc "정답은 맞았지만 확신이 없었거나 떠올리는 데 너무 오래 걸렸습니다."
 
  ;; Flashcard review
  :flashcard.review/finished "축하합니다! 오늘 복습을 모두 마쳤습니다! 💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "휴지통이 비어 있습니다."
  :storage.recycle/page-deleted-at "페이지가 삭제되었습니다. {1}"
  :storage.recycle/restore "복원"
+ :storage.recycle/retention-desc "삭제된 페이지와 블록은 복원되거나 60일 후 자동으로 정리될 때까지 여기에 남아 있습니다。"
 
  ;; Account
  :account/authentication "인증"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "여러분의 도움으로 Logseq가 더 좋아집니다!"
  :bug-report.issue/action-title "버그 보고서 제출"
  :bug-report.issue/desc "추가 정보 수집 도구를 사용할 수 없는 경우 직접 버그를 보고해 주세요."
+ :bug-report.issue/report-link "문제 보고"
  :bug-report.issue/title "또는..."
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "페이지로 열기"
  :sidebar.right/resize-handle "구분선"
  :sidebar.right/toggle "오른쪽 사이드바 전환"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "（개발）Profiler"
+ :sidebar.right.dev/rtc "（개발）RTC"
+ :sidebar.right.dev/vector-search "（개발）VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"

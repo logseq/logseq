@@ -594,7 +594,7 @@
         create-class? (string/starts-with? @!input "#")
         create-page? (= :page (:source-create item))
         class (when create-class? (get-class-from-input @!input))]
-    (if (and (= (:text item) "Configure tag") (:class item))
+    (if (:class item)
       (state/pub-event! [:dialog/show-block (:class item) {:tag-dialog? true}])
       (p/let [result (cond
                        create-class?
@@ -808,10 +808,10 @@
         can-show-more? (< (count visible-items) (count items))
         show-less #(swap! (::results state) assoc-in [group :show] :less)
         show-more #(swap! (::results state) assoc-in [group :show] :more)]
-    [:div {:class         (if (= title "Create")
+    [:div {:class         (if (= group :create)
                             "border-b border-gray-06 last:border-b-0"
                             "border-b border-gray-06 pb-1 last:border-b-0")}
-     (when-not (= title "Create")
+     (when-not (= group :create)
        [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02 h-8"}
         [:div {:class "font-bold text-gray-11 pl-0.5 cursor-pointer select-none"
                :on-click (fn [_e]
@@ -839,10 +839,10 @@
                         ((if (= show :more) show-less show-more)))}
            (if (= show :more)
              [:div.flex.flex-row.gap-1.items-center
-              "Show less"
+              (t :ui/show-less)
               (shui/shortcut "mod up" {:style :compact})]
              [:div.flex.flex-row.gap-1.items-center
-              "Show more"
+              (t :ui/show-more)
               (shui/shortcut "mod down" {:style :compact})])])])
 
      [:div.search-results
@@ -1298,7 +1298,7 @@
               (result-group state title group-key group-items first-item sidebar?)))
           [:div.flex.flex-col.p-4.opacity-50
            (when-not (string/blank? @*input)
-             "No matched results")]))]
+             (t :search/no-result))]))]
      (when-not sidebar? (hints state))]))
 
 (rum/defc cmdk-modal [props]

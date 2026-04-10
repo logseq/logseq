@@ -291,7 +291,7 @@
            [:div.flex-shrink-0.flex {:style {:margin-top -9
                                              :margin-right -18}}
             (button
-             {:button-props {"aria-label" "Close"}
+             {:button-props {"aria-label" (t :ui/close)}
               :variant :ghost
               :class "hover:bg-transparent hover:text-foreground scale-90"
               :on-click (fn []
@@ -708,7 +708,7 @@
     [:h5.text-error.pb-1 title]
     [:a.text-xs.opacity-50.hover:opacity-80
      {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
-      :target "_blank"} "report issue"]]
+      :target "_blank"} (t :bug-report.issue/report-link)]]
    (when content [:pre.m-0.text-sm (str content)])])
 
 (def component-error
@@ -1064,7 +1064,7 @@
                  (let [value (get-current-hh-mm)]
                    (set! (.-value (gdom/getElement "time-picker")) value)
                    (on-change value)))}
-    "Use current time")])
+    (t :ui/use-current-time))])
 
 (rum/defc nlp-calendar
   [{:keys [selected on-select on-day-click] :as opts}]

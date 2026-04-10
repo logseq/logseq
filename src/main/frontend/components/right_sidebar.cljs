@@ -74,7 +74,7 @@
 (rum/defc search-title < rum/reactive
   [*input]
   (let [input (rum/react *input)
-        input' (if (string/blank? input) "Blank input" input)]
+        input' (if (string/blank? input) (t :search/blank-input) input)]
     [:span.overflow-hidden.text-ellipsis input']))
 
 (rum/defc sidebar-search
@@ -143,16 +143,17 @@
         :shortcut-settings
         [[:.flex.items-center (ui/icon "command" {:class "text-md mr-2"}) (t :help.shortcuts/label)]
          (shortcut-settings)]
+
         :rtc
-        [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) RTC"]
+        [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) (t :sidebar.right.dev/rtc)]
          (rtc-debug-ui/rtc-debug-ui)]
 
         :profiler
-        [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) Profiler"]
+        [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) (t :sidebar.right.dev/profiler)]
          (profiler/profiler)]
 
         :vector-search
-        [[:.flex.items-center (ui/icon "file-search" {:class "text-md mr-2"}) "(Dev) VectorSearch"]
+        [[:.flex.items-center (ui/icon "file-search" {:class "text-md mr-2"}) (t :sidebar.right.dev/vector-search)]
          (vector-search/vector-search-sidebar)]
 
         ["" [:span]])))
@@ -447,18 +448,18 @@
           [:div.text-sm
            [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                                        (state/sidebar-add-block! repo "rtc" :rtc))}
-            "(Dev) RTC"]])
+            (t :sidebar.right.dev/rtc)]])
         (when (state/sub [:ui/developer-mode?])
           [:div.text-sm
            [:button.button.cp__right-sidebar-settings-btn
             {:on-click (fn [_e]
                          (state/sidebar-add-block! repo "vector-search" :vector-search))}
-            "(Dev) vector-search"]])
+            (t :sidebar.right.dev/vector-search)]])
         (when (state/sub [:ui/developer-mode?])
           [:div.text-sm
            [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                                        (state/sidebar-add-block! repo "profiler" :profiler))}
-            "(Dev) Profiler"]])]]
+            (t :sidebar.right.dev/profiler)]])]]
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing.px-2
        (if @*anim-finished?

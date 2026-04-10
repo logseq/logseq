@@ -278,6 +278,7 @@
  :ui/apply "Apply"
  :ui/cancel "Annuler"
  :ui/close "Fermer"
+ :ui/configure "Configurer"
  :ui/confirm "Confirmer"
  :ui/copy "Copier"
  :ui/copy-all "Copy all"
@@ -297,6 +298,7 @@
  :ui/image "image"
  :ui/label "Libellé"
  :ui/link "Lien"
+ :ui/load-more "Charger plus"
  :ui/loading "Chargement"
  :ui/login "Connexion"
  :ui/logout "Déconnexion"
@@ -310,6 +312,8 @@
  :ui/remove-background "Supprimer l'arrière-plan"
  :ui/run "Run"
  :ui/save "Enregistrer"
+ :ui/show-less "Afficher moins"
+ :ui/show-more "Afficher plus"
  :ui/skip "Skip"
  :ui/submit "Soumettre"
  :ui/to "To: "
@@ -317,6 +321,7 @@
  :ui/true "Vrai"
  :ui/type "Type"
  :ui/untitled "Sans titre"
+ :ui/use-current-time "Utiliser l'heure actuelle"
  :ui/yes "Oui"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "Emoji de réaction non supporté"
 
  ;; Search
+ :search/blank-input "Entrée vide"
  :search/full-text-placeholder "Recherche en texte intégral"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "Aucun résultat correspondant"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Échec pour quitter le graphe"
  :graph/left "Graphe quitté"
+ :graph/link-count (fn [n] (str n " " (if (= 1 n) "lien" "liens")))
  :graph/link-distance "Distance des liens"
  :graph/local-graphs "Graphes locaux :"
  :graph/n-hops-from-selected-nodes "N sauts depuis les nœuds sélectionnés"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "Le nom du graphe ne peut pas contenir les caractères réservés suivants :"
  :graph/nodes "Nœuds"
  :graph/orphan-pages "Pages orphelines"
+ :graph/page-count (fn [n] (str n " " (if (= 1 n) "page" "pages")))
  :graph/pause-simulation "Mettre en pause la simulation"
  :graph/preparing "préparation"
  :graph/refresh-remote-graphs "Actualiser les graphes distants"
@@ -549,6 +557,7 @@
  :page/the-app "l'application"
  :page/try "Essayer"
  :page/unfavorite "Retirer la page des favoris"
+ :page/unknown "Page inconnue"
  :page/updated-at "Mise à jour le"
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/cloze "Cloze"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
  :editor.slash/current-time "Current time"
@@ -797,6 +807,7 @@
  :property/name "Nom"
  :property/name-placeholder "Nom de la propriété"
  :property/no-value "Pas de {1}"
+ :property/nodes-with-property "Nœuds avec propriété"
  :property/overdue "En retard"
  :property/private-built-in-not-usable "Propriété intégrée privée non utilisable"
  :property/select-choice "Sélectionner un choix"
@@ -807,6 +818,8 @@
  :property/set-default-value "Set default value"
  :property/set-icon "Définir l'icône"
  :property/set-placeholder "Définir {1}"
+ :property/set-property "Définir la propriété"
+ :property/set-tags "Définir les étiquettes"
  :property/set-value "Définir la valeur"
  :property/show-as-checkbox-on-node "Afficher comme case à cocher sur le nœud"
  :property/show-as-checkbox-on-tagged-nodes "Afficher comme case à cocher sur les nœuds tagués"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "À gauche du bloc"
  :property/ui-position-block-right "À droite du bloc"
  :property/ui-position-properties "Propriétés"
+ :property/unset-property "Retirer la propriété"
  :property/updated "Mis à jour"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "Vue galerie"
  :property.view-type/list "Vue liste"
  :property.view-type/table "Vue tableau"
+
+ ;; Class
+ :class/add-property "Ajouter une propriété d'étiquette"
+ :class/tag-properties-desc "Les propriétés de l'étiquette sont héritées par tous les nœuds qui utilisent cette étiquette. Par exemple, chaque nœud #Task hérite de 'Status' et 'Priority'."
+ :class/tagged-nodes "Nœuds étiquetés"
 
  ;; Class built in
  :class.built-in/asset "Fichier"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "Ajouter une nouvelle requête"
+ :flashcard/all-cards "Toutes les cartes"
  :flashcard/select-cards "Sélectionner les cartes"
  :flashcard/shortcut-tooltip "Raccourci : {1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "Vous pouvez ajouter \"{1}\" à n’importe quel bloc pour le transformer en carte, ou utiliser \"/cloze\" pour ajouter des textes à trous."
  :flashcard.empty/title "C'est le temps de créer une carte mémoire !"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "Encore"
+ :flashcard.rating/again-desc "Nous avons donné une mauvaise réponse. Cela signifie automatiquement que nous avons oublié la carte. C'est un oubli."
+ :flashcard.rating/easy "Facile"
+ :flashcard.rating/easy-desc "La réponse était correcte et nous nous en sommes souvenus rapidement et avec assurance, sans effort mental."
+ :flashcard.rating/good "Bien"
+ :flashcard.rating/good-desc "La réponse était correcte, mais il a fallu un certain effort mental pour nous en souvenir."
+ :flashcard.rating/hard "Difficile"
+ :flashcard.rating/hard-desc "La réponse était correcte, mais nous n'étions pas sûrs de nous ou avons mis trop de temps à nous en souvenir."
 
  ;; Flashcard review
  :flashcard.review/finished "Bravo, vous avez révisé toutes les cartes de cette requête. À la prochaine ! 💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "La corbeille est vide."
  :storage.recycle/page-deleted-at "Page supprimée {1}"
  :storage.recycle/restore "Restaurer"
+ :storage.recycle/retention-desc "Les pages et blocs supprimés restent ici jusqu'à leur restauration ou leur suppression automatique après 60 jours."
 
  ;; Account
  :account/authentication "Authentification"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "Aidez à rendre Logseq meilleur !"
  :bug-report.issue/action-title "Soumettre un signalement de bogue"
  :bug-report.issue/desc "S'il n'y a pas d'outil pour recueillir des informations supplémentaires, veuillez signaler le bogue directement."
+ :bug-report.issue/report-link "Signaler un problème"
  :bug-report.issue/title "Ou…"
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "Ouvrir comme une page"
  :sidebar.right/resize-handle "Poignée de redimensionnement de la barre latérale droite"
  :sidebar.right/toggle "Activer le panneau latéral droit"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "(Dev) Profiler"
+ :sidebar.right.dev/rtc "(Dev) RTC"
+ :sidebar.right.dev/vector-search "(Dev) VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"

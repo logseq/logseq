@@ -208,7 +208,7 @@
              (shui/button {:variant :ghost
                            :class "text-muted-foreground w-full"
                            :on-click (fn [] (route-handler/redirect-to-page! (:block/uuid block)))}
-                          "Load more"))
+                          (t :ui/load-more)))
            (when-not more?
              (when-not hide-add-button?
                (add-button block config)))])))))
@@ -267,11 +267,11 @@
                       (state/pub-event! [:editor/new-property opts]))))}
      (cond
        (ldb/class? page)
-       "Add tag property"
+       (t :class/add-property)
        (ldb/property? page)
-       "Configure"
+       (t :ui/configure)
        :else
-       "Set property"))]])
+       (t :property/set-property)))]])
 
 (rum/defc db-page-title
   [page {:keys [sidebar? journals? container-id tag-dialog?]}]
@@ -370,12 +370,12 @@
             (shui/tabs-trigger
              {:value "tag"
               :class "py-1 text-xs"}
-             "Tagged nodes"))
+             (t :class/tagged-nodes)))
           (when property?
             (shui/tabs-trigger
              {:value "property"
               :class "py-1 text-xs"}
-             "Nodes with property"))
+             (t :property/nodes-with-property)))
           (when property?
             (db-page/configure-property page)))])
 
@@ -659,13 +659,8 @@
             open?
             [:div
              [:p.text-sm.opacity-70.px-4
-              (let [c1 (count (:nodes graph))
-                    s1 (if (> c1 1) "s" "")
-                      ;; c2 (count (:links graph))
-                      ;; s2 (if (> c2 1) "s" "")
-                    ]
-                  ;; (util/format "%d page%s, %d link%s" c1 s1 c2 s2)
-                (util/format "%d page%s" c1 s1))]
+              (let [c1 (count (:nodes graph))]
+                (t :graph/page-count c1))]
              [:div.p-6
                 ;; [:div.flex.items-center.justify-between.mb-2
                 ;;  [:span "Layout"]
@@ -778,12 +773,11 @@
          [:span.font-medium (t :graph/forces)]
          (fn [open?]
            (filter-expand-area
-            open?
-            [:div
-             [:p.text-sm.opacity-70.px-4
-              (let [c2 (count (:links graph))
-                    s2 (if (> c2 1) "s" "")]
-                (util/format "%d link%s" c2 s2))]
+           open?
+           [:div
+            [:p.text-sm.opacity-70.px-4
+              (let [c2 (count (:links graph))]
+                (t :graph/link-count c2))]
              [:div.p-6
               (simulation-switch)
 

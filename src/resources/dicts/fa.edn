@@ -278,6 +278,7 @@
  :ui/apply "Apply"
  :ui/cancel "لغو"
  :ui/close "بستن"
+ :ui/configure "پیکربندی"
  :ui/confirm "تأیید"
  :ui/copy "کپی"
  :ui/copy-all "Copy all"
@@ -297,6 +298,7 @@
  :ui/image "تصویر"
  :ui/label "برچسب"
  :ui/link "پیوند"
+ :ui/load-more "بارگذاری بیشتر"
  :ui/loading "در حال بارگذاری"
  :ui/login "ورود"
  :ui/logout "خروج"
@@ -310,6 +312,8 @@
  :ui/remove-background "حذف پس‌زمینه"
  :ui/run "Run"
  :ui/save "ذخیره"
+ :ui/show-less "نمایش کمتر"
+ :ui/show-more "نمایش بیشتر"
  :ui/skip "Skip"
  :ui/submit "ارسال"
  :ui/to "To: "
@@ -317,6 +321,7 @@
  :ui/true "درست"
  :ui/type "نوع"
  :ui/untitled "بدون عنوان"
+ :ui/use-current-time "استفاده از زمان فعلی"
  :ui/yes "بله"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "ایموجی واکنش پشتیبانی نمی‌شود"
 
  ;; Search
+ :search/blank-input "ورودی خالی"
  :search/full-text-placeholder "جستجوی متن کامل"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "نتیجه‌ای یافت نشد"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "ترک گراف ناموفق بود"
  :graph/left "ترک شد"
+ :graph/link-count "{1} پیوند"
  :graph/link-distance "فاصله پیوند"
  :graph/local-graphs "گراف‌های محلی"
  :graph/n-hops-from-selected-nodes "تعداد گام از گره‌های انتخاب شده"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "نام گراف نمی‌تواند شامل نویسه‌های رزرو شده زیر باشد:"
  :graph/nodes "گره‌ها"
  :graph/orphan-pages "صفحات یتیم"
+ :graph/page-count "{1} صفحه"
  :graph/pause-simulation "توقف شبیه‌سازی"
  :graph/preparing "در حال آماده‌سازی"
  :graph/refresh-remote-graphs "بازخوانی گراف‌های راه دور"
@@ -549,6 +557,7 @@
  :page/the-app "برنامه"
  :page/try "تلاش"
  :page/unfavorite "حذف از علاقه‌مندی‌ها"
+ :page/unknown "صفحه ناشناخته"
  :page/updated-at "به‌روزرسانی شده در"
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/cloze "Cloze"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
  :editor.slash/current-time "Current time"
@@ -797,6 +807,7 @@
  :property/name "نام"
  :property/name-placeholder "نام ویژگی"
  :property/no-value "بدون {1}"
+ :property/nodes-with-property "گره‌های دارای ویژگی"
  :property/overdue "عقب‌افتاده"
  :property/private-built-in-not-usable "ویژگی داخلی خصوصی قابل استفاده نیست"
  :property/select-choice "انتخاب گزینه"
@@ -807,6 +818,8 @@
  :property/set-default-value "Set default value"
  :property/set-icon "تنظیم آیکون"
  :property/set-placeholder "تنظیم {1}"
+ :property/set-property "تنظیم ویژگی"
+ :property/set-tags "تنظیم برچسب‌ها"
  :property/set-value "تنظیم مقدار"
  :property/show-as-checkbox-on-node "نمایش به عنوان چک‌باکس روی گره"
  :property/show-as-checkbox-on-tagged-nodes "نمایش به عنوان چک‌باکس روی گره‌های برچسب‌دار"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "چپ بلوک"
  :property/ui-position-block-right "راست بلوک"
  :property/ui-position-properties "ویژگی‌ها"
+ :property/unset-property "حذف ویژگی"
  :property/updated "به‌روزرسانی شد"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "نمای گالری"
  :property.view-type/list "نمای لیست"
  :property.view-type/table "نمای جدول"
+
+ ;; Class
+ :class/add-property "افزودن ویژگی برچسب"
+ :class/tag-properties-desc "ویژگی‌های برچسب به همهٔ گره‌هایی که از آن برچسب استفاده می‌کنند به ارث می‌رسد. برای مثال، هر گره #Task ویژگی‌های 'Status' و 'Priority' را به ارث می‌برد。"
+ :class/tagged-nodes "گره‌های برچسب‌خورده"
 
  ;; Class built in
  :class.built-in/asset "فایل پیوست"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "افزودن پرس‌وجوی جدید"
+ :flashcard/all-cards "همهٔ کارت‌ها"
  :flashcard/select-cards "انتخاب کارت‌ها"
  :flashcard/shortcut-tooltip "میانبر: {1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "برای ساخت کارت، «{1}» را به هر بلوک اضافه کنید یا از «/cloze» برای ساخت جای‌خالی استفاده کنید."
  :flashcard.empty/title "به فلش‌کارت‌ها خوش آمدید"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "دوباره"
+ :flashcard.rating/again-desc "پاسخ را اشتباه دادیم. این به طور خودکار یعنی کارت را فراموش کرده‌ایم. این یک لغزش حافظه است。"
+ :flashcard.rating/easy "آسان"
+ :flashcard.rating/easy-desc "پاسخ درست بود و بدون تلاش ذهنی، سریع و با اطمینان آن را به یاد آوردیم。"
+ :flashcard.rating/good "خوب"
+ :flashcard.rating/good-desc "پاسخ درست بود، اما برای به خاطر آوردنش کمی تلاش ذهنی لازم بود。"
+ :flashcard.rating/hard "سخت"
+ :flashcard.rating/hard-desc "پاسخ درست بود، اما به آن مطمئن نبودیم یا یادآوری آن خیلی طول کشید."
 
  ;; Flashcard review
  :flashcard.review/finished "تبریک، همه کارت‌های این پرس‌وجو را مرور کردید. تا بعد! 💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "سطل بازیافت خالی است."
  :storage.recycle/page-deleted-at "صفحه «{1}» حذف شد"
  :storage.recycle/restore "بازیابی"
+ :storage.recycle/retention-desc "صفحه‌ها و بلوک‌های حذف‌شده تا زمانی که بازیابی شوند یا پس از ۶۰ روز به‌طور خودکار پاک‌سازی شوند، اینجا می‌مانند。"
 
  ;; Account
  :account/authentication "احراز هویت"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "مشاهده مشکلات شناخته‌شده"
  :bug-report.issue/action-title "مشکلات GitHub"
  :bug-report.issue/desc "بررسی کنید آیا مشکل شما قبلاً گزارش شده است"
+ :bug-report.issue/report-link "گزارش مشکل"
  :bug-report.issue/title "مشکلات شناخته‌شده"
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "باز کردن به عنوان صفحه"
  :sidebar.right/resize-handle "جداکننده"
  :sidebar.right/toggle "تغییر نوار کناری راست"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "(Dev) Profiler"
+ :sidebar.right.dev/rtc "(Dev) RTC"
+ :sidebar.right.dev/vector-search "(Dev) VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
