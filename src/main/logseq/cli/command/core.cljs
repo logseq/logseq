@@ -2,6 +2,7 @@
   "Shared CLI parsing utilities."
   (:require [babashka.cli :as cli]
             [clojure.string :as string]
+            [logseq.cli.output-mode :as output-mode]
             [logseq.cli.style :as style]
             [logseq.common.config :as common-config]))
 
@@ -22,7 +23,7 @@
                 :coerce :long}
    :output {:desc "Output format. Default: human"
             :alias :o
-            :validate #{"human" "json" "edn"}}
+            :validate output-mode/allowed-values}
    :verbose {:desc "Enable verbose debug logging to stderr"
              :alias :v
              :coerce :boolean}
@@ -244,6 +245,12 @@
 
     :else nil))
 
+(defn- valid-leading-global-value?
+  [opt-key value]
+  (case opt-key
+    :output (contains? output-mode/allowed-values value)
+    true))
+
 (defn parse-leading-global-opts
   [args]
   (loop [remaining args
@@ -255,7 +262,9 @@
           (if (contains? global-flag-options opt-key)
             (recur (rest remaining) (assoc opts opt-key true))
             (if-let [value (second remaining)]
-              (recur (drop 2 remaining) (assoc opts opt-key value))
+              (if (valid-leading-global-value? opt-key value)
+                (recur (drop 2 remaining) (assoc opts opt-key value))
+                {:opts opts :args remaining})
               {:opts opts :args (rest remaining)}))
           {:opts opts :args remaining})))))
 

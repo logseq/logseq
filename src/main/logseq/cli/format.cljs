@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [logseq.cli.command.core :as command-core]
+            [logseq.cli.output-mode :as output-mode]
             [logseq.cli.style :as style]
             [logseq.common.util :as common-util]
             ["string-width" :default string-width]))
@@ -954,11 +955,8 @@
   (let [result (-> result
                    normalize-graph-result
                    sanitize-result)
-        format (cond
-                 (= output-format :edn) :edn
-                 (= output-format :json) :json
-                 :else :human)]
-    (case format
+        mode (or (output-mode/parse output-format) :human)]
+    (case mode
       :json (->json result)
       :edn (->edn result)
       (->human result opts))))

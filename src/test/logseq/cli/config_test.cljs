@@ -89,6 +89,15 @@
                                        :output "json"})]
     (is (= :edn (:output-format result)))))
 
+(deftest test-output-format-invalid-values-fallback
+  (let [dir (node-helper/create-tmp-dir)
+        cfg-path (node-path/join dir "cli.edn")
+        _ (fs/writeFileSync cfg-path "{:output-format :edn}")
+        env {"LOGSEQ_CLI_OUTPUT" "yaml"}
+        result (with-env env #(config/resolve-config {:config-path cfg-path
+                                                      :output "xml"}))]
+    (is (= :edn (:output-format result)))))
+
 (deftest test-default-paths
   (let [result (config/resolve-config {})
         expected-config-path (node-path/join (.homedir os) "logseq" "cli.edn")]

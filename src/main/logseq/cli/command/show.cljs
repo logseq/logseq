@@ -6,6 +6,7 @@
             [clojure.walk :as walk]
             [logseq.cli.command.core :as core]
             [logseq.cli.command.id :as id-command]
+            [logseq.cli.output-mode :as output-mode]
             [logseq.cli.server :as cli-server]
             [logseq.cli.style :as style]
             [logseq.cli.transport :as transport]
@@ -999,85 +1000,69 @@
   (p/let [tree-data (attach-property-titles config (:repo action) tree-data)]
     (render-tree-text tree-data action)))
 
+(defn- sanitize-structured-tree
+  [tree-data]
+  (-> tree-data
+      strip-show-internal-data
+      strip-block-uuid))
+
+(defn- structured-show-result
+  [mode data]
+  {:status :ok
+   :data data
+   :output-format mode})
+
+(defn- multi-id-structured-data
+  [results]
+  (mapv (fn [{:keys [ok? tree id error]}]
+          (if ok?
+            (sanitize-structured-tree tree)
+            (multi-id-error-entry id error)))
+        results))
+
 (defn execute-show
   [action config]
-  (-> (p/let [cfg (cli-server/ensure-server! config (:repo action))
-              format (:output-format config)
-              ids (:ids action)
-              multi-id? (:multi-id? action)]
-        (if (and (seq ids) multi-id?)
-          (p/let [results (p/all (map (fn [id]
-                                        (-> (build-tree-data cfg (assoc action :id id))
-                                            (p/then (fn [tree-data]
-                                                      {:ok? true
-                                                       :id id
-                                                       :tree tree-data}))
-                                            (p/catch (fn [error]
-                                                       {:ok? false
-                                                        :id id
-                                                        :error error}))))
-                                      ids))
-                  ok-results (filter :ok? results)
-                  id->tree-ids (into {}
-                                     (map (fn [{:keys [id tree]}]
-                                            [id (collect-tree-ids (:root tree))]))
-                                     ok-results)
-                  contained? (fn [id]
-                               (some (fn [[other-id tree-ids]]
-                                       (and (not= other-id id)
-                                            (contains? tree-ids id)))
-                                     id->tree-ids))
-                  results (vec (remove (fn [{:keys [ok? id]}]
-                                         (and ok? (contained? id)))
-                                       results))
-                  sanitize-tree (fn [tree]
-                                  (-> tree
-                                      strip-show-internal-data
-                                      strip-block-uuid))
-                  render-result (fn [{:keys [ok? tree id error]}]
-                                  (if ok?
-                                    (render-tree-text-with-properties cfg action tree)
-                                    (multi-id-error-message id error)))]
-            (case format
-              :edn
-              {:status :ok
-               :data (mapv (fn [{:keys [ok? tree id error]}]
-                             (if ok?
-                               (sanitize-tree tree)
-                               (multi-id-error-entry id error)))
-                           results)
-               :output-format :edn}
-
-              :json
-              {:status :ok
-               :data (mapv (fn [{:keys [ok? tree id error]}]
-                             (if ok?
-                               (sanitize-tree tree)
-                               (multi-id-error-entry id error)))
-                           results)
-               :output-format :json}
-
-              (p/let [messages (p/all (map render-result results))]
-                {:status :ok
-                 :data {:message (string/join multi-id-delimiter messages)}})))
-          (p/let [tree-data (build-tree-data cfg action)]
-            (case format
-              :edn
-              (let [tree-data (-> tree-data
-                                  strip-show-internal-data
-                                  strip-block-uuid)]
-                {:status :ok
-                 :data tree-data
-                 :output-format :edn})
-
-              :json
-              (let [tree-data (-> tree-data
-                                  strip-show-internal-data
-                                  strip-block-uuid)]
-                {:status :ok
-                 :data tree-data
-                 :output-format :json})
-
-              (p/let [message (render-tree-text-with-properties cfg action tree-data)]
-                {:status :ok
-                 :data {:message message}})))))))
+  (p/let [cfg (cli-server/ensure-server! config (:repo action))
+          mode (output-mode/parse (:output-format config))
+          ids (:ids action)
+          multi-id? (:multi-id? action)]
+    (if (and (seq ids) multi-id?)
+      (p/let [results (p/all (map (fn [id]
+                                    (-> (build-tree-data cfg (assoc action :id id))
+                                        (p/then (fn [tree-data]
+                                                  {:ok? true
+                                                   :id id
+                                                   :tree tree-data}))
+                                        (p/catch (fn [error]
+                                                   {:ok? false
+                                                    :id id
+                                                    :error error}))))
+                                  ids))
+              ok-results (filter :ok? results)
+              id->tree-ids (into {}
+                                 (map (fn [{:keys [id tree]}]
+                                        [id (collect-tree-ids (:root tree))]))
+                                 ok-results)
+              contained? (fn [id]
+                           (some (fn [[other-id tree-ids]]
+                                   (and (not= other-id id)
+                                        (contains? tree-ids id)))
+                                 id->tree-ids))
+              results (vec (remove (fn [{:keys [ok? id]}]
+                                     (and ok? (contained? id)))
+                                   results))
+              render-result (fn [{:keys [ok? tree id error]}]
+                              (if ok?
+                                (render-tree-text-with-properties cfg action tree)
+                                (multi-id-error-message id error)))]
+        (if (output-mode/structured? mode)
+          (structured-show-result mode (multi-id-structured-data results))
+          (p/let [messages (p/all (map render-result results))]
+            {:status :ok
+             :data {:message (string/join multi-id-delimiter messages)}})))
+      (p/let [tree-data (build-tree-data cfg action)]
+        (if (output-mode/structured? mode)
+          (structured-show-result mode (sanitize-structured-tree tree-data))
+          (p/let [message (render-tree-text-with-properties cfg action tree-data)]
+            {:status :ok
+             :data {:message message}}))))))

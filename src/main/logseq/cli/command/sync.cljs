@@ -4,6 +4,7 @@
             [logseq.cli.auth :as cli-auth]
             [logseq.cli.command.core :as core]
             [logseq.cli.config :as cli-config]
+            [logseq.cli.output-mode :as output-mode]
             [logseq.cli.server :as cli-server]
             [logseq.cli.transport :as transport]
             [logseq.common.cognito-config :as cognito-config]
@@ -76,7 +77,6 @@
 (def ^:private sync-start-timeout-ms 10000)
 (def ^:private sync-start-poll-interval-ms 1000)
 (def ^:private sync-download-timeout-ms (* 30 60 1000))
-(def ^:private structured-output-formats #{:json :edn})
 
 (def ^:private sync-start-skipped-states
   #{:inactive :stopped})
@@ -560,7 +560,7 @@
   [action config]
   (if (:progress-explicit? action)
     (true? (:progress action))
-    (not (contains? structured-output-formats (:output-format config)))))
+    (not (output-mode/structured? (:output-format config)))))
 
 (defn- download-progress-message
   [graph-id event-type payload]
