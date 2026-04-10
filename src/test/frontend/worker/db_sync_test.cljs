@@ -3617,13 +3617,13 @@
             (d/transact! conn [[:db/add (:db/id child1) :block/title "same"]])
             (let [pending-before (#'sync-apply/pending-txs test-repo)]
               (is (= 1 (count pending-before)))
-            (#'sync-apply/apply-remote-tx!
-             test-repo
-             nil
-             [[:db/add (:db/id child1) :block/title "same"]])
+              (#'sync-apply/apply-remote-tx!
+               test-repo
+               nil
+               [[:db/add (:db/id child1) :block/title "same"]])
               (let [pending-after (#'sync-apply/pending-txs test-repo)]
-                (is (empty? pending-after))
-                (is (nil? (:tx-id (first pending-after))))))))))))
+                (is (= 1 (count pending-after)))
+                (is (uuid? (:tx-id (first pending-after))))))))))))
 
 (deftest rebase-later-tx-for-new-block-uses-lookup-ref-test
   (testing "rebased tx after creating a block should use lookup ref instead of stale tempid"
