@@ -224,7 +224,7 @@ export function LoginForm() {
             await loadSession()
             return
           default:
-            throw new Error('Unsupported sign-in step: ' + nextStep)
+            throw new Error(`${t('Unsupported sign-in step:')} ${nextStep}`)
         }
       } catch (e) {
         setErrors({ password: { message: (e as Error).message, title: t('Bad Response.') } })
@@ -470,7 +470,7 @@ export function ResetPasswordForm() {
           <div className={'w-full opacity-60 flex justify-end relative h-0 z-[2]'}>
             {countDownNum > 0 ? (
               <span className={'text-sm opacity-50 select-none absolute top-3 right-0'}>
-                {countDownNum}s
+                {countDownNum}{t('COUNTDOWN_SUFFIX')}
               </span>
             ) : (<a onClick={async () => {
               startCountDown()
@@ -613,7 +613,7 @@ export function ConfirmWithCodeForm(
       <span className={'w-full flex justify-end relative h-0 z-10'}>
         {countDownNum > 0 ? (
           <span className={'text-sm opacity-50 select-none absolute -bottom-8'}>
-            {countDownNum}s
+            {countDownNum}{t('COUNTDOWN_SUFFIX')}
           </span>
         ) : <a
           className={'text-sm opacity-50 hover:opacity-80 active:opacity-50 select-none underline absolute -bottom-8'}
