@@ -2015,8 +2015,7 @@
   [:logseq.property.view/gallery-card-dimensions.square
    :logseq.property.view/gallery-card-dimensions.header
    :logseq.property.view/gallery-card-dimensions.capsule
-   :logseq.property.view/gallery-card-dimensions.hero
-   :logseq.property.view/gallery-card-dimensions.logo])
+   :logseq.property.view/gallery-card-dimensions.hero])
 
 (defn- gallery-candidate-label
   "Display label for a gallery-value candidate. The :block/title entity

@@ -468,8 +468,7 @@
             [[:logseq.property.view/gallery-card-dimensions.square "Square"]
              [:logseq.property.view/gallery-card-dimensions.header "Header"]
              [:logseq.property.view/gallery-card-dimensions.capsule "Capsule"]
-             [:logseq.property.view/gallery-card-dimensions.hero "Hero"]
-             [:logseq.property.view/gallery-card-dimensions.logo "Logo"]])
+             [:logseq.property.view/gallery-card-dimensions.hero "Hero"]])
       :properties {:logseq.property/default-value :logseq.property.view/gallery-card-dimensions.square}
       :queryable? true}
 

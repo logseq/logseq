@@ -64,10 +64,4 @@
     .ls-card-item { @apply h-[12rem]; }
     .virtuoso-grid-item { @apply w-[400px]; }
   }
-
-  /* Logo: 16:9 landscape */
-  &.ls-cards-logo {
-    .ls-card-item { @apply h-[15rem]; }
-    .virtuoso-grid-item { @apply w-[313px]; }
-  }
 }
