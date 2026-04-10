@@ -1913,7 +1913,8 @@
         (block-container (assoc config
                                 :id (str (:block/uuid block))
                                 :gallery-view? true
-                                :view? true)
+                                :view? true
+                                :hide-children? true)
                          block)])]))
 
 (rum/defcs gallery-view < rum/static mixins/container-id
