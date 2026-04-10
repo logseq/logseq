@@ -1716,33 +1716,67 @@
             (lazy-item-render rows idx)
             (str "partition-" idx)))))))
 
+(defn- row->db-id
+  [row]
+  (cond (map? row) (:db/id row)
+        (number? row) row
+        :else nil))
+
+(defn- property-values-seq
+  "Normalises a block's property value to a seq: nil -> nil, set/coll -> as-is,
+   single entity -> [v]."
+  [v]
+  (cond
+    (nil? v) nil
+    (set? v) v
+    (sequential? v) v
+    :else [v]))
+
+(defn- gallery-node-property-idents
+  "Returns the db-idents of columns whose property is of type :node."
+  [columns]
+  (->> columns
+       (keep (fn [column]
+               (when-let [p (and (:id column) (db/entity (:id column)))]
+                 (when (= :node (:logseq.property/type p))
+                   (:id column)))))))
+
+(defn- <load-gallery-card-data!
+  "Ensures the gallery's rows and any node-property values they reference
+  are loaded into the local DB so gallery-image-candidate-properties and
+  gallery-card-item can detect asset-valued properties synchronously.
+  Returns a promise that resolves when loading is done (or nil-safe)."
+  [table columns]
+  (let [repo (state/get-current-repo)
+        rows (:rows table)
+        node-prop-idents (gallery-node-property-idents columns)]
+    (p/let [_ (when (seq rows)
+                (db-async/<get-blocks repo (vec rows) {}))
+            referenced-ids (->> rows
+                                (mapcat (fn [row]
+                                          (when-let [block (some-> (row->db-id row) db/entity)]
+                                            (mapcat (fn [prop-ident]
+                                                      (keep :db/id (property-values-seq (get block prop-ident))))
+                                                    node-prop-idents))))
+                                distinct
+                                vec)
+            _ (when (seq referenced-ids)
+                (db-async/<get-blocks repo referenced-ids {}))]
+      nil)))
+
 (defn- gallery-image-candidate-properties
   "Returns a seq of property entities of :node type whose values across
    the current query's rows include at least one Asset block.
    Preserves column order."
   [table columns]
   (let [rows (:rows table)
-        row->entity (fn [row]
-                      (let [id (cond (map? row) (:db/id row)
-                                     (number? row) row
-                                     :else nil)]
-                        (when id (db/entity id))))
-        node-columns (->> columns
-                          (filter (fn [column]
-                                    (when-let [p (and (:id column) (db/entity (:id column)))]
-                                      (= :node (:logseq.property/type p))))))]
-    (->> node-columns
-         (keep (fn [column]
-                 (let [prop-ident (:id column)
-                       has-asset? (reduce
+        node-prop-idents (gallery-node-property-idents columns)]
+    (->> node-prop-idents
+         (keep (fn [prop-ident]
+                 (let [has-asset? (reduce
                                    (fn [_ row]
-                                     (let [block (row->entity row)
-                                           v (get block prop-ident)
-                                           values (cond
-                                                    (nil? v) nil
-                                                    (set? v) v
-                                                    (sequential? v) v
-                                                    :else [v])]
+                                     (let [block (some-> (row->db-id row) db/entity)
+                                           values (property-values-seq (get block prop-ident))]
                                        (if (some ldb/asset? values)
                                          (reduced true)
                                          false)))
@@ -1755,13 +1789,10 @@
    first asset entity in that value (deterministic by :db/id), or nil."
   [block image-property-ident]
   (when (and block image-property-ident)
-    (let [v (get block image-property-ident)
-          values (cond
-                   (nil? v) nil
-                   (set? v) v
-                   (sequential? v) v
-                   :else [v])]
-      (->> values (filter ldb/asset?) (sort-by :db/id) first))))
+    (->> (property-values-seq (get block image-property-ident))
+         (filter ldb/asset?)
+         (sort-by :db/id)
+         first)))
 
 (defn- gallery-dimension-key
   "Returns the short dimension key (e.g. \"square\") for a view entity's
@@ -1772,16 +1803,47 @@
     (or (some-> ident name (string/split #"\.") last)
         "square")))
 
+(defn- block-node-property-referenced-ids
+  "Returns referenced entity ids from node-type properties on the given block."
+  [block node-prop-idents]
+  (->> node-prop-idents
+       (mapcat (fn [prop-ident]
+                 (keep :db/id (property-values-seq (get block prop-ident)))))
+       distinct
+       vec))
+
+(defn- first-asset-property-ident
+  "Finds the first :node property on `block` whose value includes an asset."
+  [block node-prop-idents]
+  (some (fn [prop-ident]
+          (when (some ldb/asset? (property-values-seq (get block prop-ident)))
+            prop-ident))
+        node-prop-idents))
+
 (rum/defc gallery-card-item
   [view-entity block config table]
   (let [columns (:columns table)
         image-prop-entity (:logseq.property.view/gallery-image-property view-entity)
-        fallback (when-not image-prop-entity
-                   (first (gallery-image-candidate-properties table columns)))
-        image-prop-ident (or (:db/ident image-prop-entity) (:db/ident fallback))
+        node-prop-idents (gallery-node-property-idents columns)
+        [refs-loaded? set-refs-loaded!] (hooks/use-state false)
+        image-prop-ident (or (:db/ident image-prop-entity)
+                             (when refs-loaded?
+                               (first-asset-property-ident block node-prop-idents)))
         asset-block (gallery-card-image-block block image-prop-ident)
         asset-cp (state/get-component :block/asset-cp)
         image-layout? (and asset-block asset-cp)]
+    (hooks/use-effect!
+     (fn []
+       (try
+         (let [referenced-ids (block-node-property-referenced-ids block node-prop-idents)]
+           (if (seq referenced-ids)
+             (-> (db-async/<get-blocks (state/get-current-repo) referenced-ids {})
+                 (p/then (fn [_] (set-refs-loaded! true)))
+                 (p/catch (fn [_] (set-refs-loaded! true))))
+             (set-refs-loaded! true)))
+         (catch :default _
+           (set-refs-loaded! true))))
+     [(:db/id block)])
     [:div.ls-card-item.content
      {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))
       :class (if image-layout? "ls-card-image-layout" "ls-card-fallback-layout")}
@@ -1909,16 +1971,30 @@
 
 (rum/defc gallery-settings-config
   [view-entity table columns]
-  (let [candidates (gallery-image-candidate-properties table columns)
+  (let [[loaded? set-loaded!] (hooks/use-state false)
+        candidates (when loaded? (gallery-image-candidate-properties table columns))
         current-image-id (:db/id (:logseq.property.view/gallery-image-property view-entity))
         default-image-id (or (and (some #(= current-image-id (:db/id %)) candidates) current-image-id)
                              (:db/id (first candidates)))
         dimension-ents (keep db/entity gallery-dimension-idents)
         current-dimension-id (or (:db/id (:logseq.property.view/gallery-card-dimensions view-entity))
                                  (:db/id (db/entity :logseq.property.view/gallery-card-dimensions.square)))]
+    (hooks/use-effect!
+     (fn []
+       (try
+         (-> (<load-gallery-card-data! table columns)
+             (p/then (fn [_] (set-loaded! true)))
+             (p/catch (fn [_] (set-loaded! true))))
+         (catch :default _
+           (set-loaded! true))))
+     [])
     [:div.ls-gallery-settings.flex.flex-col.gap-3.p-2.text-sm
      {:style {:min-width 260}}
-     (if (seq candidates)
+     (cond
+       (not loaded?)
+       [:div.text-muted-foreground.px-2.py-1 "Loading…"]
+
+       (seq candidates)
        [:div.flex.flex-row.items-center.justify-between.gap-2
         [:div.text-muted-foreground "Gallery value"]
         (shui/select
@@ -1940,6 +2016,8 @@
               {:key (str (:db/id p))
                :value (str (:db/id p))}
               (or (:block/title p) (name (:db/ident p))))))))]
+
+       :else
        [:div.text-muted-foreground.px-2.py-1
         "No node properties in this view point to assets."])
 
