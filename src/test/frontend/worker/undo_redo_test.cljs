@@ -331,7 +331,7 @@
                (get-in data [:db-sync/inverse-outliner-ops 0 1 0 :block/uuid])))))))
 
 (deftest undo-history-allows-non-semantic-outliner-op-test
-  (testing "non-semantic outliner-op with transact placeholder is skipped by ops-only undo history"
+  (testing "non-semantic outliner-op with transact placeholder is persisted in undo history"
     (worker-undo-redo/clear-history! test-repo)
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [child-uuid]} (seed-page-parent-child!)]
@@ -341,7 +341,14 @@
                     {:client-id "test-client"
                      :outliner-op :restore-recycled
                      :outliner-ops [[:transact nil]]}))
-      (is (empty? (get @worker-undo-redo/*undo-ops test-repo))))))
+      (let [undo-op (last (get @worker-undo-redo/*undo-ops test-repo))
+            data (some #(when (= ::worker-undo-redo/db-transact (first %))
+                          (second %))
+                       undo-op)]
+        (is (some? data))
+        (is (= [[:transact nil]]
+               (:db-sync/forward-outliner-ops data)))
+        (is (nil? (:db-sync/inverse-outliner-ops data)))))))
 
 (deftest undo-history-canonicalizes-insert-block-uuids-test
   (testing "worker undo history uses the created block uuid for insert semantic ops"

@@ -320,19 +320,19 @@
     :class-remove-property
     (apply outliner-property/class-remove-property! conn args)
 
-    :upsert-closed-value ; don't support undo/redo
+    :upsert-closed-value
     (apply outliner-property/upsert-closed-value! conn args)
 
-    :delete-closed-value ; don't support undo/redo
+    :delete-closed-value
     (apply outliner-property/delete-closed-value! conn args)
 
-    :add-existing-values-to-closed-values ; don't support undo/redo
+    :add-existing-values-to-closed-values
     (apply outliner-property/add-existing-values-to-closed-values! conn args)
 
-    :batch-import-edn                   ; don't support undo/redo
+    :batch-import-edn
     (apply import-edn-data conn *result args)
 
-    :transact                           ; don't support undo/redo
+    :transact
     (apply ldb/transact! conn args)
 
     :create-page

@@ -131,6 +131,20 @@
 (defn- bool->int [v] (if v 1 0))
 (defn- int->bool [v] (not (or (nil? v) (= 0 v) (= false v))))
 
+(defn- normalize-op-entries
+  [ops]
+  (let [ops' (some-> ops seq vec)]
+    (cond
+      (nil? ops')
+      nil
+
+      (and (keyword? (first ops'))
+           (vector? (second ops')))
+      [ops']
+
+      :else
+      ops')))
+
 (defn- sqlite-run!
   [^js db sql params]
   (case (detect-sqlite-mode db)
@@ -296,8 +310,12 @@
     (when tx-id
       {:tx-id tx-id
        :outliner-op (str->kw (aget row "outliner_op"))
-       :forward-outliner-ops (sqlite-util/transit-read (aget row "forward_outliner_ops"))
-       :inverse-outliner-ops (sqlite-util/transit-read (aget row "inverse_outliner_ops"))
+       :forward-outliner-ops (or (normalize-op-entries
+                                  (sqlite-util/transit-read (aget row "forward_outliner_ops")))
+                                 [])
+       :inverse-outliner-ops (or (normalize-op-entries
+                                  (sqlite-util/transit-read (aget row "inverse_outliner_ops")))
+                                 [])
        :inferred-outliner-ops? (int->bool (aget row "inferred_outliner_ops"))
        :db-sync/undo-redo (str->kw (aget row "undo_redo"))
        :tx (sqlite-util/transit-read (aget row "normalized_tx_data"))
@@ -316,6 +334,8 @@
                                "select pending, created_at from client_ops where kind = 'tx' and tx_id = ?"
                                [tx-id-str])
           should-inc-pending? (not= 1 (some-> existing (aget "pending")))
+          forward-outliner-ops' (or (normalize-op-entries forward-outliner-ops) [])
+          inverse-outliner-ops' (or (normalize-op-entries inverse-outliner-ops) [])
           created-at' (or (some-> existing (aget "created_at"))
                           created-at
                           (.now js/Date))]
@@ -342,8 +362,8 @@
                     (bool->int failed?)
                     (kw->str outliner-op)
                     (kw->str undo-redo)
-                    (sqlite-util/transit-write (or forward-outliner-ops []))
-                    (sqlite-util/transit-write (or inverse-outliner-ops []))
+                    (sqlite-util/transit-write forward-outliner-ops')
+                    (sqlite-util/transit-write inverse-outliner-ops')
                     (bool->int inferred-outliner-ops?)
                     (sqlite-util/transit-write (or normalized-tx-data []))
                     (sqlite-util/transit-write (or reversed-tx-data []))])
