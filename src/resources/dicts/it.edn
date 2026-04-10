@@ -278,6 +278,7 @@
  :ui/apply "Apply"
  :ui/cancel "Annulla"
  :ui/close "Chiudi"
+ :ui/configure "Configura"
  :ui/confirm "Conferma"
  :ui/copy "Copia"
  :ui/copy-all "Copy all"
@@ -297,6 +298,7 @@
  :ui/image "immagine"
  :ui/label "Etichetta"
  :ui/link "Link"
+ :ui/load-more "Carica altro"
  :ui/loading "Caricamento"
  :ui/login "Accedi"
  :ui/logout "Esci"
@@ -310,6 +312,8 @@
  :ui/remove-background "Rimuovi sfondo"
  :ui/run "Run"
  :ui/save "Salva"
+ :ui/show-less "Mostra meno"
+ :ui/show-more "Mostra altro"
  :ui/skip "Skip"
  :ui/submit "Invia"
  :ui/to "To: "
@@ -317,6 +321,7 @@
  :ui/true "Vero"
  :ui/type "Tipo"
  :ui/untitled "Senza titolo"
+ :ui/use-current-time "Usa l'ora corrente"
  :ui/yes "Sì"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "Emoji di reazione non supportata"
 
  ;; Search
+ :search/blank-input "Input vuoto"
  :search/full-text-placeholder "Ricerca full text"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "Nessun risultato"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Uscita dal grafo fallita"
  :graph/left "Grafo lasciato"
+ :graph/link-count (fn [n] (str n " " (if (= 1 n) "collegamento" "collegamenti")))
  :graph/link-distance "Distanza dei link"
  :graph/local-graphs "Grafi locali:"
  :graph/n-hops-from-selected-nodes "N salti dai nodi selezionati"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "Il nome del grafo non può contenere i seguenti caratteri riservati:"
  :graph/nodes "Nodi"
  :graph/orphan-pages "Pagine orfane"
+ :graph/page-count (fn [n] (str n " " (if (= 1 n) "pagina" "pagine")))
  :graph/pause-simulation "Metti in pausa la simulazione"
  :graph/preparing "preparazione"
  :graph/refresh-remote-graphs "Aggiorna grafi remoti"
@@ -549,6 +557,7 @@
  :page/the-app "l'app"
  :page/try "Prova"
  :page/unfavorite "Rimuovi la pagina dai Preferiti"
+ :page/unknown "Pagina sconosciuta"
  :page/updated-at "Aggiornato alle"
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/cloze "Cloze"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
  :editor.slash/current-time "Current time"
@@ -797,6 +807,7 @@
  :property/name "Nome"
  :property/name-placeholder "Nome della proprietà"
  :property/no-value "Nessun {1}"
+ :property/nodes-with-property "Nodi con proprietà"
  :property/overdue "Scaduto"
  :property/private-built-in-not-usable "Proprietà predefinita privata non utilizzabile"
  :property/select-choice "Seleziona opzione"
@@ -807,6 +818,8 @@
  :property/set-default-value "Set default value"
  :property/set-icon "Imposta icona"
  :property/set-placeholder "Imposta {1}"
+ :property/set-property "Imposta proprietà"
+ :property/set-tags "Imposta tag"
  :property/set-value "Imposta valore"
  :property/show-as-checkbox-on-node "Mostra come casella sul nodo"
  :property/show-as-checkbox-on-tagged-nodes "Mostra come casella sui nodi con tag"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "A sinistra del blocco"
  :property/ui-position-block-right "A destra del blocco"
  :property/ui-position-properties "Proprietà"
+ :property/unset-property "Rimuovi proprietà"
  :property/updated "Aggiornato"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "Vista galleria"
  :property.view-type/list "Vista lista"
  :property.view-type/table "Vista tabella"
+
+ ;; Class
+ :class/add-property "Aggiungi proprietà del tag"
+ :class/tag-properties-desc "Le proprietà del tag sono ereditate da tutti i nodi che usano quel tag. Per esempio, ogni nodo #Task eredita 'Status' e 'Priority'."
+ :class/tagged-nodes "Nodi taggati"
 
  ;; Class built in
  :class.built-in/asset "Risorsa"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "Aggiungi nuova query"
+ :flashcard/all-cards "Tutte le carte"
  :flashcard/select-cards "Seleziona carte"
  :flashcard/shortcut-tooltip "Scorciatoia: {1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "Puoi aggiungere \"{1}\" a qualsiasi blocco per trasformarlo in una carta o attivare \"/cloze\" per aggiungere cloze."
  :flashcard.empty/title "Tempo di creare una carta!"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "Di nuovo"
+ :flashcard.rating/again-desc "Abbiamo sbagliato la risposta. Questo significa automaticamente che abbiamo dimenticato la carta. È una dimenticanza."
+ :flashcard.rating/easy "Facile"
+ :flashcard.rating/easy-desc "La risposta era corretta e l'abbiamo ricordata rapidamente e con sicurezza, senza sforzo mentale."
+ :flashcard.rating/good "Bene"
+ :flashcard.rating/good-desc "La risposta era corretta, ma ci è voluto un po' di sforzo mentale per ricordarla."
+ :flashcard.rating/hard "Difficile"
+ :flashcard.rating/hard-desc "La risposta era corretta, ma non ne eravamo sicuri o ci è voluto troppo tempo per ricordarla."
 
  ;; Flashcard review
  :flashcard.review/finished "Congratulazioni, hai ripassato tutte le carte in questo quiz, alla prossima! 💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "Il cestino è vuoto."
  :storage.recycle/page-deleted-at "Pagina eliminata {1}"
  :storage.recycle/restore "Ripristina"
+ :storage.recycle/retention-desc "Le pagine e i blocchi eliminati restano qui finché non vengono ripristinati o rimossi automaticamente dopo 60 giorni."
 
  ;; Account
  :account/authentication "Autenticazione"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "Aiutaci a migliorare Logseq!"
  :bug-report.issue/action-title "Segnala un difetto"
  :bug-report.issue/desc "Se non puoi raccogliere informazioni aggiuntive, segnala il difetto direttamente."
+ :bug-report.issue/report-link "Segnala problema"
  :bug-report.issue/title "Oppure..."
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "Apri come pagina"
  :sidebar.right/resize-handle "Bordo per ridimensionare il pannello laterale destro"
  :sidebar.right/toggle "Attiva/disattiva pannello laterale destro"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "(Dev) Profiler"
+ :sidebar.right.dev/rtc "(Dev) RTC"
+ :sidebar.right.dev/vector-search "(Dev) VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"

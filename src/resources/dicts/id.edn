@@ -278,6 +278,7 @@
  :ui/apply "Apply"
  :ui/cancel "Batal"
  :ui/close "Tutup"
+ :ui/configure "Konfigurasikan"
  :ui/confirm "Konfirmasi"
  :ui/copy "Salin"
  :ui/copy-all "Copy all"
@@ -297,6 +298,7 @@
  :ui/image "gambar"
  :ui/label "Label"
  :ui/link "Tautan"
+ :ui/load-more "Muat lebih banyak"
  :ui/loading "Memuat"
  :ui/login "Masuk"
  :ui/logout "Keluar"
@@ -310,6 +312,8 @@
  :ui/remove-background "Hapus latar belakang"
  :ui/run "Run"
  :ui/save "Simpan"
+ :ui/show-less "Tampilkan lebih sedikit"
+ :ui/show-more "Tampilkan lebih banyak"
  :ui/skip "Skip"
  :ui/submit "Kirim"
  :ui/to "To: "
@@ -317,6 +321,7 @@
  :ui/true "Benar"
  :ui/type "Tipe"
  :ui/untitled "Tanpa judul"
+ :ui/use-current-time "Gunakan waktu saat ini"
  :ui/yes "Ya"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "Emoji reaksi tidak didukung"
 
  ;; Search
+ :search/blank-input "Input kosong"
  :search/full-text-placeholder "Pencarian teks lengkap"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "Tidak ada hasil yang cocok"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Gagal meninggalkan grafik"
  :graph/left "Ditinggalkan"
+ :graph/link-count "{1} tautan"
  :graph/link-distance "Jarak Tautan"
  :graph/local-graphs "Grafik lokal:"
  :graph/n-hops-from-selected-nodes "N lompatan dari node yang dipilih"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "Nama graf tidak boleh mengandung karakter khusus berikut:"
  :graph/nodes "Node"
  :graph/orphan-pages "Halaman yatim"
+ :graph/page-count "{1} halaman"
  :graph/pause-simulation "Jeda simulasi"
  :graph/preparing "menyiapkan"
  :graph/refresh-remote-graphs "Segarkan graf jarak jauh"
@@ -549,6 +557,7 @@
  :page/the-app "aplikasi"
  :page/try "Coba"
  :page/unfavorite "Hapus dari Favorit"
+ :page/unknown "Halaman tidak dikenal"
  :page/updated-at "Diperbarui pada"
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/cloze "Cloze"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
  :editor.slash/current-time "Current time"
@@ -797,6 +807,7 @@
  :property/name "Nama"
  :property/name-placeholder "Nama properti"
  :property/no-value "Tidak ada {1}"
+ :property/nodes-with-property "Node dengan properti"
  :property/overdue "Terlambat"
  :property/private-built-in-not-usable "Properti bawaan privat tidak dapat digunakan"
  :property/select-choice "Pilih pilihan"
@@ -807,6 +818,8 @@
  :property/set-default-value "Set default value"
  :property/set-icon "Atur ikon"
  :property/set-placeholder "Atur {1}"
+ :property/set-property "Atur properti"
+ :property/set-tags "Atur tag"
  :property/set-value "Atur nilai"
  :property/show-as-checkbox-on-node "Tampilkan sebagai checkbox di node"
  :property/show-as-checkbox-on-tagged-nodes "Tampilkan sebagai checkbox di node bertag"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "Kiri blok"
  :property/ui-position-block-right "Kanan blok"
  :property/ui-position-properties "Properti"
+ :property/unset-property "Hapus properti"
  :property/updated "Diperbarui"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "Tampilan Galeri"
  :property.view-type/list "Tampilan Daftar"
  :property.view-type/table "Tampilan Tabel"
+
+ ;; Class
+ :class/add-property "Tambahkan properti tag"
+ :class/tag-properties-desc "Properti tag diwarisi oleh semua node yang menggunakan tag tersebut. Misalnya, setiap node #Task mewarisi 'Status' dan 'Priority'."
+ :class/tagged-nodes "Node bertag"
 
  ;; Class built in
  :class.built-in/asset "Aset"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "Tambah kueri baru"
+ :flashcard/all-cards "Semua kartu"
  :flashcard/select-cards "Pilih kartu"
  :flashcard/shortcut-tooltip "Pintasan: {1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "Anda dapat menambahkan \"{1}\" ke blok apa pun untuk mengubahnya menjadi kartu atau memicu \"/cloze\" untuk menambahkan beberapa cloze."
  :flashcard.empty/title "Saatnya membuat kartu!"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "Lagi"
+ :flashcard.rating/again-desc "Jawaban kita salah. Ini otomatis berarti kita telah melupakan kartu ini. Ini adalah kelupaan。"
+ :flashcard.rating/easy "Mudah"
+ :flashcard.rating/easy-desc "Jawabannya benar dan kita mengingatnya dengan cepat dan yakin tanpa usaha mental。"
+ :flashcard.rating/good "Baik"
+ :flashcard.rating/good-desc "Jawabannya benar, tetapi perlu sedikit usaha mental untuk mengingatnya。"
+ :flashcard.rating/hard "Sulit"
+ :flashcard.rating/hard-desc "Jawabannya benar, tetapi kita tidak yakin atau membutuhkan waktu terlalu lama untuk mengingatnya."
 
  ;; Flashcard review
  :flashcard.review/finished "Selamat, Anda telah meninjau semua kartu untuk pertanyaan ini, sampai jumpa berikutnya! 💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "Tempat Sampah kosong."
  :storage.recycle/page-deleted-at "Halaman dihapus {1}"
  :storage.recycle/restore "Pulihkan"
+ :storage.recycle/retention-desc "Halaman dan blok yang dihapus tetap di sini sampai dipulihkan atau dibersihkan otomatis setelah 60 hari."
 
  ;; Account
  :account/authentication "Autentikasi"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "Bantu Jadikan Logseq Lebih Baik!"
  :bug-report.issue/action-title "Mengirimkan laporan bug"
  :bug-report.issue/desc "Jika tidak ada alat bantu yang tersedia bagi Anda untuk mengumpulkan informasi tambahan, silakan laporkan bug secara langsung."
+ :bug-report.issue/report-link "Laporkan masalah"
  :bug-report.issue/title "Atau..."
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "Buka sebagai halaman"
  :sidebar.right/resize-handle "Pengatur ukuran bilah sisi kanan"
  :sidebar.right/toggle "Beralih ke bilah sisi kanan"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "(Dev) Profiler"
+ :sidebar.right.dev/rtc "(Dev) RTC"
+ :sidebar.right.dev/vector-search "(Dev) VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"

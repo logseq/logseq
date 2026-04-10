@@ -278,6 +278,7 @@
  :ui/apply "Apply"
  :ui/cancel "キャンセル"
  :ui/close "閉じる"
+ :ui/configure "設定"
  :ui/confirm "確認"
  :ui/copy "コピー"
  :ui/copy-all "Copy all"
@@ -297,6 +298,7 @@
  :ui/image "画像"
  :ui/label "ラベル"
  :ui/link "リンク"
+ :ui/load-more "さらに読み込む"
  :ui/loading "読み込み中"
  :ui/login "ログイン"
  :ui/logout "ログアウト"
@@ -310,6 +312,8 @@
  :ui/remove-background "背景を削除"
  :ui/run "Run"
  :ui/save "保存"
+ :ui/show-less "表示を減らす"
+ :ui/show-more "さらに表示"
  :ui/skip "Skip"
  :ui/submit "送信"
  :ui/to "To: "
@@ -317,6 +321,7 @@
  :ui/true "True"
  :ui/type "タイプ"
  :ui/untitled "無題"
+ :ui/use-current-time "現在の時刻を使う"
  :ui/yes "はい"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "サポートされていないリアクション絵文字"
 
  ;; Search
+ :search/blank-input "空の入力"
  :search/full-text-placeholder "全文検索"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "結果なし"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "グラフの退出に失敗しました"
  :graph/left "グラフを退出しました"
+ :graph/link-count "{1} リンク"
  :graph/link-distance "リンク距離"
  :graph/local-graphs "ローカルグラフ"
  :graph/n-hops-from-selected-nodes "選択ノードからのホップ数"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "グラフ名には以下の予約文字を使用できません："
  :graph/nodes "ノード"
  :graph/orphan-pages "孤立ページ"
+ :graph/page-count "{1} ページ"
  :graph/pause-simulation "シミュレーションを一時停止"
  :graph/preparing "準備中"
  :graph/refresh-remote-graphs "リモートグラフを更新"
@@ -549,6 +557,7 @@
  :page/the-app "アプリ"
  :page/try "試す"
  :page/unfavorite "お気に入りを解除"
+ :page/unknown "不明なページ"
  :page/updated-at "更新日時 "
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/cloze "穴埋め"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
  :editor.slash/current-time "Current time"
@@ -797,6 +807,7 @@
  :property/name "名前"
  :property/name-placeholder "プロパティ名"
  :property/no-value "{1}なし"
+ :property/nodes-with-property "プロパティを持つノード"
  :property/overdue "期限超過"
  :property/private-built-in-not-usable "プライベートな組み込みプロパティは使用できません"
  :property/select-choice "選択肢を選択"
@@ -807,6 +818,8 @@
  :property/set-default-value "Set default value"
  :property/set-icon "アイコンを設定"
  :property/set-placeholder "{1}を設定"
+ :property/set-property "プロパティを設定"
+ :property/set-tags "タグを設定"
  :property/set-value "値を設定"
  :property/show-as-checkbox-on-node "ノードにチェックボックスとして表示"
  :property/show-as-checkbox-on-tagged-nodes "タグ付きノードにチェックボックスとして表示"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "ブロックの左"
  :property/ui-position-block-right "ブロックの右"
  :property/ui-position-properties "プロパティ"
+ :property/unset-property "プロパティを解除"
  :property/updated "更新しました"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "ギャラリービュー"
  :property.view-type/list "リストビュー"
  :property.view-type/table "テーブルビュー"
+
+ ;; Class
+ :class/add-property "タグプロパティを追加"
+ :class/tag-properties-desc "タグのプロパティは、そのタグを使うすべてのノードに継承されます。たとえば、各 #Task ノードは 'Status' と 'Priority' を継承します。"
+ :class/tagged-nodes "タグ付きノード"
 
  ;; Class built in
  :class.built-in/asset "アセット"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "新しいクエリを追加"
+ :flashcard/all-cards "すべてのカード"
  :flashcard/select-cards "カードを選択"
  :flashcard/shortcut-tooltip "ショートカット：{1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "「{1}」を任意のブロックに追加してカードに変えたり、「/cloze」をトリガーしていくつかのクローズを追加したりできます。"
  :flashcard.empty/title "フラッシュカードを作成する時間です！"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "もう一度"
+ :flashcard.rating/again-desc "答えを間違えました。これはそのカードを忘れていたことを意味します。記憶の抜けです。"
+ :flashcard.rating/easy "簡単"
+ :flashcard.rating/easy-desc "答えは正しく、ほとんど努力せずに素早く自信を持って思い出せました。"
+ :flashcard.rating/good "良い"
+ :flashcard.rating/good-desc "答えは正しかったものの、思い出すのに少し頭を使いました。"
+ :flashcard.rating/hard "難しい"
+ :flashcard.rating/hard-desc "答えは正しかったものの、自信がなかった、または思い出すのに時間がかかりすぎました。"
 
  ;; Flashcard review
  :flashcard.review/finished "おめでとうございます、今回のテストの全カードを見直しました。また会いましょう！💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "ごみ箱は空です。"
  :storage.recycle/page-deleted-at "ページが削除されました {1}"
  :storage.recycle/restore "復元"
+ :storage.recycle/retention-desc "削除されたページとブロックは、復元されるか、60 日後に自動でガベージコレクトされるまでここに残ります。"
 
  ;; Account
  :account/authentication "認証"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "あなたのお手伝いでLogseqはより良くなります！"
  :bug-report.issue/action-title "バグ報告を提出する"
  :bug-report.issue/desc "もし追加の情報を収集するツールが使えなかった場合、直接バグを報告してください。"
+ :bug-report.issue/report-link "問題を報告"
  :bug-report.issue/title "もしくは..."
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "ページとして開く"
  :sidebar.right/resize-handle "右サイドバーのサイズ変更"
  :sidebar.right/toggle "右サイドバーを開閉"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "（開発）Profiler"
+ :sidebar.right.dev/rtc "（開発）RTC"
+ :sidebar.right.dev/vector-search "（開発）VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"

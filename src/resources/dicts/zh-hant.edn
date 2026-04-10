@@ -278,6 +278,7 @@
  :ui/apply "Apply"
  :ui/cancel "取消"
  :ui/close "關閉"
+ :ui/configure "設定"
  :ui/confirm "確認"
  :ui/copy "複製"
  :ui/copy-all "Copy all"
@@ -297,6 +298,7 @@
  :ui/image "圖片"
  :ui/label "標籤"
  :ui/link "連結"
+ :ui/load-more "載入更多"
  :ui/loading "載入中..."
  :ui/login "登入"
  :ui/logout "登出"
@@ -310,6 +312,8 @@
  :ui/remove-background "移除背景"
  :ui/run "Run"
  :ui/save "儲存"
+ :ui/show-less "顯示較少"
+ :ui/show-more "顯示更多"
  :ui/skip "Skip"
  :ui/submit "提交"
  :ui/to "To: "
@@ -317,6 +321,7 @@
  :ui/true "是"
  :ui/type "類型"
  :ui/untitled "無標題"
+ :ui/use-current-time "使用目前時間"
  :ui/yes "是"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "不支援該表情回應。"
 
  ;; Search
+ :search/blank-input "空白輸入"
  :search/full-text-placeholder "全文搜尋"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "未找到匹配項"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "離開圖譜失敗。"
  :graph/left "已離開圖譜。"
+ :graph/link-count "{1} 條連結"
  :graph/link-distance "連結距離"
  :graph/local-graphs "本地圖譜"
  :graph/n-hops-from-selected-nodes "距離所選節點 N 步"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "圖譜名稱不能包含以下保留字元："
  :graph/nodes "節點"
  :graph/orphan-pages "孤立頁面"
+ :graph/page-count "{1} 個頁面"
  :graph/pause-simulation "暫停模擬"
  :graph/preparing "正在準備"
  :graph/refresh-remote-graphs "重新整理遠端圖譜"
@@ -549,6 +557,7 @@
  :page/the-app "應用程式"
  :page/try "嘗試"
  :page/unfavorite "從我的最愛移除"
+ :page/unknown "未知頁面"
  :page/updated-at "更新於"
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/cloze "填空"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
  :editor.slash/current-time "Current time"
@@ -797,6 +807,7 @@
  :property/name "屬性名稱"
  :property/name-placeholder "名稱"
  :property/no-value "無 {1}"
+ :property/nodes-with-property "具有屬性的節點"
  :property/overdue "已逾期"
  :property/private-built-in-not-usable "這是私有內建屬性，不能使用。"
  :property/select-choice "選擇一個選項"
@@ -807,6 +818,8 @@
  :property/set-default-value "Set default value"
  :property/set-icon "設定圖示"
  :property/set-placeholder "設定 {1}"
+ :property/set-property "設定屬性"
+ :property/set-tags "設定標籤"
  :property/set-value "設定值"
  :property/show-as-checkbox-on-node "在節點上顯示為核取方塊"
  :property/show-as-checkbox-on-tagged-nodes "在已標記節點上顯示為核取方塊"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "區塊的開頭"
  :property/ui-position-block-right "區塊的結尾"
  :property/ui-position-properties "區塊屬性"
+ :property/unset-property "移除屬性"
  :property/updated "屬性已更新！"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "圖庫檢視"
  :property.view-type/list "清單檢視"
  :property.view-type/table "表格檢視"
+
+ ;; Class
+ :class/add-property "新增標籤屬性"
+ :class/tag-properties-desc "標籤屬性會被所有使用該標籤的節點繼承。例如，每個 #Task 節點都會繼承「Status」與「Priority」。"
+ :class/tagged-nodes "已加標籤的節點"
 
  ;; Class built in
  :class.built-in/asset "素材"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "新增查詢"
+ :flashcard/all-cards "全部卡片"
  :flashcard/select-cards "選擇卡片"
  :flashcard/shortcut-tooltip "快捷鍵：{1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "你可以為任意區塊加入「{1}」將其變成閃卡，或使用「/cloze」加入填空。"
  :flashcard.empty/title "開始複習"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "重來"
+ :flashcard.rating/again-desc "我們答錯了。這通常表示我們已經忘記了這張卡片，是一次記憶失誤。"
+ :flashcard.rating/easy "簡單"
+ :flashcard.rating/easy-desc "答案是對的，而且我們無需費力就能快速且有信心地回想起來。"
+ :flashcard.rating/good "良好"
+ :flashcard.rating/good-desc "答案是對的，但我們花了一些心力才想起來。"
+ :flashcard.rating/hard "困難"
+ :flashcard.rating/hard-desc "答案是對的，但我們沒有把握，花了太久才想起來。"
 
  ;; Flashcard review
  :flashcard.review/finished "恭喜！今天的複習已完成。 💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "資源回收筒是空的。"
  :storage.recycle/page-deleted-at "頁面已刪除 {1}"
  :storage.recycle/restore "還原"
+ :storage.recycle/retention-desc "已刪除的頁面與區塊會保留在這裡，直到被還原或在 60 天後自動垃圾回收。"
 
  ;; Account
  :account/authentication "身份驗證"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "幫助改進 Logseq!"
  :bug-report.issue/action-title "提交錯誤報告"
  :bug-report.issue/desc "如果沒有可用的工具供你收集額外的資訊，請直接報告錯誤。"
+ :bug-report.issue/report-link "回報問題"
  :bug-report.issue/title "或..."
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "以頁面形式開啟"
  :sidebar.right/resize-handle "右側邊欄調整大小"
  :sidebar.right/toggle "切換右側邊欄"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "（開發）Profiler"
+ :sidebar.right.dev/rtc "（開發）RTC"
+ :sidebar.right.dev/vector-search "（開發）VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "開發者工具"

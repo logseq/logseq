@@ -278,6 +278,7 @@
  :ui/apply "Apply"
  :ui/cancel "Скасувати"
  :ui/close "Закрити"
+ :ui/configure "Налаштувати"
  :ui/confirm "Підтвердити"
  :ui/copy "Копіювати"
  :ui/copy-all "Copy all"
@@ -297,6 +298,7 @@
  :ui/image "зображення"
  :ui/label "Мітка"
  :ui/link "Посилання"
+ :ui/load-more "Завантажити ще"
  :ui/loading "Завантаження"
  :ui/login "Увійти"
  :ui/logout "Вийти"
@@ -310,6 +312,8 @@
  :ui/remove-background "Видалити фон"
  :ui/run "Run"
  :ui/save "Зберегти"
+ :ui/show-less "Показати менше"
+ :ui/show-more "Показати більше"
  :ui/skip "Skip"
  :ui/submit "Надіслати"
  :ui/to "To: "
@@ -317,6 +321,7 @@
  :ui/true "Істинно"
  :ui/type "Тип"
  :ui/untitled "Без назви"
+ :ui/use-current-time "Використати поточний час"
  :ui/yes "Так"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "Неподдерживаемый эмодзи реакции"
 
  ;; Search
+ :search/blank-input "Порожнє введення"
  :search/full-text-placeholder "Повнотекстовий пошук"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "Немає результатів"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Не удалось покинуть граф"
  :graph/left "Граф покинут"
+ :graph/link-count (fn [n] (str n " " (if (= 1 n) "посилання" "посилань")))
  :graph/link-distance "Відстань між зв'язками"
  :graph/local-graphs "Локальні графи"
  :graph/n-hops-from-selected-nodes "N кроків від обраних вузлів"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "Назва графа не може містити такі зарезервовані символи:"
  :graph/nodes "Вузли"
  :graph/orphan-pages "Ізольовані сторінки"
+ :graph/page-count (fn [n] (str n " " (if (= 1 n) "сторінка" "сторінок")))
  :graph/pause-simulation "Призупинити симуляцію"
  :graph/preparing "підготовка"
  :graph/refresh-remote-graphs "Оновити віддалені графи"
@@ -549,6 +557,7 @@
  :page/the-app "застосунок"
  :page/try "Спробувати"
  :page/unfavorite "Вилучити сторінку з обраного"
+ :page/unknown "Невідома сторінка"
  :page/updated-at "Оновлено у"
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/cloze "Cloze"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
  :editor.slash/current-time "Current time"
@@ -797,6 +807,7 @@
  :property/name "Назва"
  :property/name-placeholder "Имя властивості"
  :property/no-value "Немає {1}"
+ :property/nodes-with-property "Вузли з властивістю"
  :property/overdue "Прострочено"
  :property/private-built-in-not-usable "Приватное вбудованое властивість недоступно"
  :property/select-choice "Вибрати вариант"
@@ -807,6 +818,8 @@
  :property/set-default-value "Set default value"
  :property/set-icon "Встановити іконка"
  :property/set-placeholder "Встановити {1}"
+ :property/set-property "Установити властивість"
+ :property/set-tags "Установити теги"
  :property/set-value "Встановити значение"
  :property/show-as-checkbox-on-node "Показати как флажок на узле"
  :property/show-as-checkbox-on-tagged-nodes "Показати как флажок на узлах с тегом"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "Слева от блока"
  :property/ui-position-block-right "Справа от блока"
  :property/ui-position-properties "Властивості"
+ :property/unset-property "Прибрати властивість"
  :property/updated "Обновлено"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "Перегляд галереєю"
  :property.view-type/list "Перегляд списком"
  :property.view-type/table "Перегляд таблицею"
+
+ ;; Class
+ :class/add-property "Додати властивість тега"
+ :class/tag-properties-desc "Властивості тега успадковуються всіма вузлами, що використовують цей тег. Наприклад, кожен вузол #Task успадковує 'Status' і 'Priority'."
+ :class/tagged-nodes "Позначені вузли"
 
  ;; Class built in
  :class.built-in/asset "Ресурс"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "Додати новий запит"
+ :flashcard/all-cards "Усі картки"
  :flashcard/select-cards "Обрати картки"
  :flashcard/shortcut-tooltip "Гаряча клавіша: {1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "Ви можете додати «{1}» до будь-якого блоку, щоб перетворити його на картку, або активувати «/cloze», щоб додати кілька пропусків."
  :flashcard.empty/title "Ласкаво просимо до Карток"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "Знову"
+ :flashcard.rating/again-desc "Ми відповіли неправильно. Це автоматично означає, що ми забули картку. Це провал у пам'яті."
+ :flashcard.rating/easy "Легко"
+ :flashcard.rating/easy-desc "Відповідь була правильною, і ми згадали її швидко та впевнено, без розумового зусилля."
+ :flashcard.rating/good "Добре"
+ :flashcard.rating/good-desc "Відповідь була правильною, але знадобилося певне розумове зусилля, щоб її згадати."
+ :flashcard.rating/hard "Важко"
+ :flashcard.rating/hard-desc "Відповідь була правильною, але ми не були в ній упевнені або занадто довго її згадували."
 
  ;; Flashcard review
  :flashcard.review/finished "Готово! 💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "Кошик порожній."
  :storage.recycle/page-deleted-at "Сторінку видалено {1}"
  :storage.recycle/restore "Відновити"
+ :storage.recycle/retention-desc "Видалені сторінки та блоки залишаються тут, доки їх не буде відновлено або автоматично очищено через 60 днів."
 
  ;; Account
  :account/authentication "Автентифікація"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "Просмотреть известные проблемы"
  :bug-report.issue/action-title "Проблемы на GitHub"
  :bug-report.issue/desc "Проверьте, не была ли ваша проблема уже описана"
+ :bug-report.issue/report-link "Повідомити про проблему"
  :bug-report.issue/title "Известные проблемы"
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "Відкрити як сторінку"
  :sidebar.right/resize-handle "Обробник зміни розміру правої бічної панелі"
  :sidebar.right/toggle "Перемкнути праву панель"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "(Dev) Profiler"
+ :sidebar.right.dev/rtc "(Dev) RTC"
+ :sidebar.right.dev/vector-search "(Dev) VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"

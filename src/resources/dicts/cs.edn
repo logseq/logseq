@@ -278,6 +278,7 @@
  :ui/apply "Apply"
  :ui/cancel "Zrušit"
  :ui/close "Zavřít"
+ :ui/configure "Nastavit"
  :ui/confirm "Potvrdit"
  :ui/copy "Kopírovat"
  :ui/copy-all "Copy all"
@@ -297,6 +298,7 @@
  :ui/image "obrázek"
  :ui/label "Štítek"
  :ui/link "Odkaz"
+ :ui/load-more "Načíst více"
  :ui/loading "Načítání"
  :ui/login "Přihlásit se"
  :ui/logout "Odhlásit se"
@@ -310,6 +312,8 @@
  :ui/remove-background "Odstranit pozadí"
  :ui/run "Run"
  :ui/save "Uložit"
+ :ui/show-less "Zobrazit méně"
+ :ui/show-more "Zobrazit více"
  :ui/skip "Skip"
  :ui/submit "Odeslat"
  :ui/to "To: "
@@ -317,6 +321,7 @@
  :ui/true "Ano"
  :ui/type "Typ"
  :ui/untitled "Bez názvu"
+ :ui/use-current-time "Použít aktuální čas"
  :ui/yes "Ano"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "Nepodporovaný emoji reakce"
 
  ;; Search
+ :search/blank-input "Prázdný vstup"
  :search/full-text-placeholder "Fulltextové vyhledávání"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "Žádné výsledky"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Nepodařilo se opustit graf"
  :graph/left "Graf opuštěn"
+ :graph/link-count (fn [n] (str n " " (if (= 1 n) "odkaz" "odkazů")))
  :graph/link-distance "Vzdálenost propojení"
  :graph/local-graphs "Lokální grafy"
  :graph/n-hops-from-selected-nodes "N skoků od vybraných uzlů"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "Název grafu nesmí obsahovat následující vyhrazené znaky:"
  :graph/nodes "Uzly"
  :graph/orphan-pages "Osiřelé stránky"
+ :graph/page-count (fn [n] (str n " " (if (= 1 n) "stránka" "stránek")))
  :graph/pause-simulation "Pozastavit simulaci"
  :graph/preparing "příprava"
  :graph/refresh-remote-graphs "Obnovit vzdálené grafy"
@@ -549,6 +557,7 @@
  :page/the-app "aplikace"
  :page/try "Zkusit"
  :page/unfavorite "Odebrat z oblíbených"
+ :page/unknown "Neznámá stránka"
  :page/updated-at "Aktualizováno v"
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/cloze "Cloze"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
  :editor.slash/current-time "Current time"
@@ -797,6 +807,7 @@
  :property/name "Název"
  :property/name-placeholder "Název vlastnosti"
  :property/no-value "Žádné {1}"
+ :property/nodes-with-property "Uzly s vlastností"
  :property/overdue "Po termínu"
  :property/private-built-in-not-usable "Soukromá vestavěná vlastnost nedostupná"
  :property/select-choice "Vybrat volbu"
@@ -807,6 +818,8 @@
  :property/set-default-value "Set default value"
  :property/set-icon "Nastavit ikonu"
  :property/set-placeholder "Nastavit {1}"
+ :property/set-property "Nastavit vlastnost"
+ :property/set-tags "Nastavit štítky"
  :property/set-value "Nastavit hodnotu"
  :property/show-as-checkbox-on-node "Zobrazit jako zaškrtávací pole na uzlu"
  :property/show-as-checkbox-on-tagged-nodes "Zobrazit jako zaškrtávací pole na uzlech se štítkem"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "Vlevo od bloku"
  :property/ui-position-block-right "Vpravo od bloku"
  :property/ui-position-properties "Vlastnosti"
+ :property/unset-property "Odebrat vlastnost"
  :property/updated "Aktualizováno"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "Galerie"
  :property.view-type/list "Seznam"
  :property.view-type/table "Tabulka"
+
+ ;; Class
+ :class/add-property "Přidat vlastnost tagu"
+ :class/tag-properties-desc "Vlastnosti tagu dědí všechny uzly, které tag používají. Například každý uzel #Task dědí 'Status' a 'Priority'."
+ :class/tagged-nodes "Otagované uzly"
 
  ;; Class built in
  :class.built-in/asset "Soubor"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "Přidat nový dotaz"
+ :flashcard/all-cards "Všechny kartičky"
  :flashcard/select-cards "Vybrat kartičky"
  :flashcard/shortcut-tooltip "Klávesová zkratka: {1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "Můžete přidat „{1}“ k jakémukoli bloku, abyste z něj udělali kartu, nebo spustit „/cloze“ pro přidání některých cloze."
  :flashcard.empty/title "Vítejte v Kartičkách"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "Znovu"
+ :flashcard.rating/again-desc "Odpověď byla špatně. To automaticky znamená, že jsme kartičku zapomněli. Je to výpadek paměti。"
+ :flashcard.rating/easy "Snadné"
+ :flashcard.rating/easy-desc "Odpověď byla správná a vybavili jsme si ji rychle a jistě, bez mentální námahy。"
+ :flashcard.rating/good "Dobré"
+ :flashcard.rating/good-desc "Odpověď byla správná, ale stálo nás určité mentální úsilí si ji vybavit。"
+ :flashcard.rating/hard "Těžké"
+ :flashcard.rating/hard-desc "Odpověď byla správná, ale nebyli jsme si jí jistí nebo nám trvalo příliš dlouho si ji vybavit."
 
  ;; Flashcard review
  :flashcard.review/finished "Hotovo! 💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "Koš je prázdný."
  :storage.recycle/page-deleted-at "Stránka smazána {1}"
  :storage.recycle/restore "Obnovit"
+ :storage.recycle/retention-desc "Smazané stránky a bloky zde zůstávají, dokud nejsou obnoveny nebo automaticky odstraněny po 60 dnech."
 
  ;; Account
  :account/authentication "Ověření"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "Procházet známé problémy"
  :bug-report.issue/action-title "Hlášení na GitHubu"
  :bug-report.issue/desc "Zkontrolujte, zda váš problém nebyl již nahlášen"
+ :bug-report.issue/report-link "Nahlásit problém"
  :bug-report.issue/title "Známé problémy"
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "Otevřít jako stránku"
  :sidebar.right/resize-handle "Nástroj na změnu velikosti pravého postranního panelu"
  :sidebar.right/toggle "Přepnout pravý panel"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "(Dev) Profiler"
+ :sidebar.right.dev/rtc "(Dev) RTC"
+ :sidebar.right.dev/vector-search "(Dev) VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"

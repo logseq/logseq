@@ -278,6 +278,7 @@
  :ui/apply "Apply"
  :ui/cancel "Annuleren"
  :ui/close "Sluiten"
+ :ui/configure "Configureren"
  :ui/confirm "Bevestigen"
  :ui/copy "Kopiëren"
  :ui/copy-all "Copy all"
@@ -297,6 +298,7 @@
  :ui/image "afbeelding"
  :ui/label "Label"
  :ui/link "Link"
+ :ui/load-more "Meer laden"
  :ui/loading "Laden"
  :ui/login "Inloggen"
  :ui/logout "Uitloggen"
@@ -310,6 +312,8 @@
  :ui/remove-background "Achtergrond verwijderen"
  :ui/run "Run"
  :ui/save "Opslaan"
+ :ui/show-less "Minder tonen"
+ :ui/show-more "Meer tonen"
  :ui/skip "Skip"
  :ui/submit "Verzenden"
  :ui/to "To: "
@@ -317,6 +321,7 @@
  :ui/true "Waar"
  :ui/type "Type"
  :ui/untitled "Zonder titel"
+ :ui/use-current-time "Huidige tijd gebruiken"
  :ui/yes "Ja"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "Niet-ondersteunde reactie-emoji"
 
  ;; Search
+ :search/blank-input "Lege invoer"
  :search/full-text-placeholder "Zoeken in volledige tekst"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "Geen resultaten"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Grafiek verlaten mislukt"
  :graph/left "Grafiek verlaten"
+ :graph/link-count (fn [n] (str n " " (if (= 1 n) "link" "links")))
  :graph/link-distance "Linkafstand"
  :graph/local-graphs "Lokale grafieken"
  :graph/n-hops-from-selected-nodes "N stappen van geselecteerde knooppunten"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "Grafieknaam mag de volgende gereserveerde tekens niet bevatten:"
  :graph/nodes "Knooppunten"
  :graph/orphan-pages "Weespagina's"
+ :graph/page-count (fn [n] (str n " " (if (= 1 n) "pagina" "pagina's")))
  :graph/pause-simulation "Simulatie pauzeren"
  :graph/preparing "voorbereiden"
  :graph/refresh-remote-graphs "Externe grafieken vernieuwen"
@@ -549,6 +557,7 @@
  :page/the-app "de app"
  :page/try "Probeer"
  :page/unfavorite "Pagina uit favorieten verwijderen"
+ :page/unknown "Onbekende pagina"
  :page/updated-at "Bijgewerkt op"
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/cloze "Cloze"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
  :editor.slash/current-time "Current time"
@@ -797,6 +807,7 @@
  :property/name "Naam"
  :property/name-placeholder "Eigenschapsnaam"
  :property/no-value "Geen {1}"
+ :property/nodes-with-property "Knooppunten met eigenschap"
  :property/overdue "Achterstallig"
  :property/private-built-in-not-usable "Privé ingebouwde eigenschap is niet bruikbaar"
  :property/select-choice "Keuze selecteren"
@@ -807,6 +818,8 @@
  :property/set-default-value "Set default value"
  :property/set-icon "Pictogram instellen"
  :property/set-placeholder "Stel {1} in"
+ :property/set-property "Eigenschap instellen"
+ :property/set-tags "Tags instellen"
  :property/set-value "Waarde instellen"
  :property/show-as-checkbox-on-node "Als selectievakje op knooppunt tonen"
  :property/show-as-checkbox-on-tagged-nodes "Als selectievakje op getagde knooppunten tonen"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "Links van blok"
  :property/ui-position-block-right "Rechts van blok"
  :property/ui-position-properties "Eigenschappen"
+ :property/unset-property "Eigenschap verwijderen"
  :property/updated "Bijgewerkt"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "Galerijweergave"
  :property.view-type/list "Lijstweergave"
  :property.view-type/table "Tabelweergave"
+
+ ;; Class
+ :class/add-property "Tag-eigenschap toevoegen"
+ :class/tag-properties-desc "Tag-eigenschappen worden geërfd door alle knooppunten die de tag gebruiken. Bijvoorbeeld, elke #Task-knoop erft 'Status' en 'Priority'."
+ :class/tagged-nodes "Getagde knooppunten"
 
  ;; Class built in
  :class.built-in/asset "Bijlage"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "Nieuwe zoekopdracht toevoegen"
+ :flashcard/all-cards "Alle kaarten"
  :flashcard/select-cards "Kaarten selecteren"
  :flashcard/shortcut-tooltip "Sneltoets: {1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "Je kunt \"{1}\" aan elk blok toevoegen om er een kaart van te maken, of \"/cloze\" activeren om wat clozes toe te voegen."
  :flashcard.empty/title "Welkom bij Flashcards"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "Opnieuw"
+ :flashcard.rating/again-desc "We hadden het antwoord fout. Dat betekent automatisch dat we de kaart zijn vergeten. Dit is een geheugenfout。"
+ :flashcard.rating/easy "Makkelijk"
+ :flashcard.rating/easy-desc "Het antwoord was correct en we herinnerden het snel en vol vertrouwen, zonder mentale inspanning。"
+ :flashcard.rating/good "Goed"
+ :flashcard.rating/good-desc "Het antwoord was correct, maar het kostte enige mentale inspanning om het te herinneren。"
+ :flashcard.rating/hard "Moeilijk"
+ :flashcard.rating/hard-desc "Het antwoord was correct, maar we waren er niet zeker van of het duurde te lang om het te herinneren."
 
  ;; Flashcard review
  :flashcard.review/finished "Klaar! 💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "Prullenbak is leeg."
  :storage.recycle/page-deleted-at "Pagina verwijderd {1}"
  :storage.recycle/restore "Herstellen"
+ :storage.recycle/retention-desc "Verwijderde pagina's en blokken blijven hier totdat ze worden hersteld of na 60 dagen automatisch worden opgeschoond."
 
  ;; Account
  :account/authentication "Authenticatie"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "Bekende issues bekijken"
  :bug-report.issue/action-title "GitHub Issues"
  :bug-report.issue/desc "Controleer of uw probleem al gemeld is"
+ :bug-report.issue/report-link "Probleem melden"
  :bug-report.issue/title "Bekende issues"
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "Als pagina openen"
  :sidebar.right/resize-handle "Scheidingslijn"
  :sidebar.right/toggle "Rechter zijbalk in-/uitschakelen"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "(Dev) Profiler"
+ :sidebar.right.dev/rtc "(Dev) RTC"
+ :sidebar.right.dev/vector-search "(Dev) VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"

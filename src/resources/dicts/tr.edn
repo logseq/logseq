@@ -278,6 +278,7 @@
  :ui/apply "Apply"
  :ui/cancel "İptal"
  :ui/close "Kapat"
+ :ui/configure "Yapılandır"
  :ui/confirm "Onayla"
  :ui/copy "Kopyala"
  :ui/copy-all "Copy all"
@@ -297,6 +298,7 @@
  :ui/image "görsel"
  :ui/label "Etiket"
  :ui/link "Bağlantı"
+ :ui/load-more "Daha fazla yükle"
  :ui/loading "Yükleniyor"
  :ui/login "Giriş yap"
  :ui/logout "Çıkış yap"
@@ -310,6 +312,8 @@
  :ui/remove-background "Arka planı kaldır"
  :ui/run "Run"
  :ui/save "Kaydet"
+ :ui/show-less "Daha az göster"
+ :ui/show-more "Daha fazla göster"
  :ui/skip "Skip"
  :ui/submit "Gönder"
  :ui/to "To: "
@@ -317,6 +321,7 @@
  :ui/true "Doğru"
  :ui/type "Tür"
  :ui/untitled "Başlıksız"
+ :ui/use-current-time "Geçerli saati kullan"
  :ui/yes "Evet"
 
  ;; Nav
@@ -362,6 +367,7 @@
  :notification/unsupported-reaction-emoji "Desteklenmeyen tepki emojisi"
 
  ;; Search
+ :search/blank-input "Boş giriş"
  :search/full-text-placeholder "Tam metin araması"
  :search/indices-rebuilt-success "Search indices rebuilt successfully!"
  :search/no-result "Sonuç yok"
@@ -432,6 +438,7 @@
  :graph/leave-confirm-desc "Are you sure you want to leave this graph?"
  :graph/leave-failed "Grafikten ayrılınamadı"
  :graph/left "Grafikten ayrıldı"
+ :graph/link-count "{1} bağlantı"
  :graph/link-distance "Bağlantı Mesafesi"
  :graph/local-graphs "Yerel grafikler"
  :graph/n-hops-from-selected-nodes "Seçilen düğümlerden N atlama"
@@ -439,6 +446,7 @@
  :graph/name-reserved-characters-warning "Grafik adı şu ayrılmış karakterleri içeremez:"
  :graph/nodes "Düğümler"
  :graph/orphan-pages "Yetim sayfalar"
+ :graph/page-count "{1} sayfa"
  :graph/pause-simulation "Simülasyonu duraklat"
  :graph/preparing "hazırlanıyor"
  :graph/refresh-remote-graphs "Uzak grafikleri yenile"
@@ -549,6 +557,7 @@
  :page/the-app "uygulama"
  :page/try "Deneyin"
  :page/unfavorite "Sayfayı sık kullanılanlardan kaldır"
+ :page/unknown "Bilinmeyen sayfa"
  :page/updated-at "Güncellenme Zamanı"
 
  ;; Page conversion
@@ -693,6 +702,7 @@
  :editor.slash/advanced-query-desc "Create an advanced query block"
  :editor.slash/calculator "Calculator"
  :editor.slash/calculator-desc "Insert a calculator"
+ :editor.slash/cloze "Cloze"
  :editor.slash/code-block "Code block"
  :editor.slash/code-block-desc "Insert code block"
  :editor.slash/current-time "Current time"
@@ -797,6 +807,7 @@
  :property/name "Ad"
  :property/name-placeholder "Özellik adı"
  :property/no-value "{1} yok"
+ :property/nodes-with-property "Özelliği olan düğümler"
  :property/overdue "Gecikmiş"
  :property/private-built-in-not-usable "Özel yerleşik özellik kullanılamaz"
  :property/select-choice "Seçenek seç"
@@ -807,6 +818,8 @@
  :property/set-default-value "Set default value"
  :property/set-icon "Simge ayarla"
  :property/set-placeholder "{1} ayarla"
+ :property/set-property "Özelliği ayarla"
+ :property/set-tags "Etiketleri ayarla"
  :property/set-value "Değer ayarla"
  :property/show-as-checkbox-on-node "Düğümde onay kutusu olarak göster"
  :property/show-as-checkbox-on-tagged-nodes "Etiketli düğümlerde onay kutusu olarak göster"
@@ -829,6 +842,7 @@
  :property/ui-position-block-left "Bloğun solunda"
  :property/ui-position-block-right "Bloğun sağında"
  :property/ui-position-properties "Özellikler"
+ :property/unset-property "Özelliği kaldır"
  :property/updated "Güncellendi"
 
  ;; Property built in
@@ -996,6 +1010,11 @@
  :property.view-type/gallery "Galeri Görünümü"
  :property.view-type/list "Liste Görünümü"
  :property.view-type/table "Tablo Görünümü"
+
+ ;; Class
+ :class/add-property "Etiket özelliği ekle"
+ :class/tag-properties-desc "Etiket özellikleri, etiketi kullanan tüm düğümlere miras kalır. Örneğin, her #Task düğümü 'Status' ve 'Priority' özelliklerini miras alır."
+ :class/tagged-nodes "Etiketli düğümler"
 
  ;; Class built in
  :class.built-in/asset "Dosya"
@@ -1195,12 +1214,23 @@
 
  ;; Flashcard
  :flashcard/add-query "Yeni sorgu ekle"
+ :flashcard/all-cards "Tüm kartlar"
  :flashcard/select-cards "Kart seç"
  :flashcard/shortcut-tooltip "Kısayol: {1}"
 
  ;; Flashcard empty
  :flashcard.empty/desc "Herhangi bir bloğa karta dönüştürmek için \"{1}\" ekleyebilir veya bazı cloze'lar eklemek için \"/cloze\" komutunu tetikleyebilirsiniz."
  :flashcard.empty/title "Bilgi Kartlarına Hoş Geldiniz"
+
+ ;; Flashcard rating
+ :flashcard.rating/again "Tekrar"
+ :flashcard.rating/again-desc "Cevabı yanlış verdik. Bu otomatik olarak kartı unuttuğumuz anlamına gelir. Bu bir hafıza kaybıdır。"
+ :flashcard.rating/easy "Kolay"
+ :flashcard.rating/easy-desc "Cevap doğruydu ve hiçbir zihinsel çaba olmadan hızlı ve emin şekilde hatırladık。"
+ :flashcard.rating/good "İyi"
+ :flashcard.rating/good-desc "Cevap doğruydu ama hatırlamak için biraz zihinsel çaba harcadık。"
+ :flashcard.rating/hard "Zor"
+ :flashcard.rating/hard-desc "Cevap doğruydu ama ondan emin değildik ya da hatırlamamız çok uzun sürdü."
 
  ;; Flashcard review
  :flashcard.review/finished "Tamamlandı! 💯"
@@ -1593,6 +1623,7 @@
  :storage.recycle/empty "Geri Dönüşüm boş."
  :storage.recycle/page-deleted-at "Sayfa silindi {1}"
  :storage.recycle/restore "Geri yükle"
+ :storage.recycle/retention-desc "Silinen sayfalar ve bloklar, geri yüklenene veya 60 gün sonra otomatik olarak temizlenene kadar burada kalır."
 
  ;; Account
  :account/authentication "Kimlik Doğrulama"
@@ -1783,6 +1814,7 @@
  :bug-report.issue/action-desc "Bilinen sorunlara göz at"
  :bug-report.issue/action-title "GitHub Sorunları"
  :bug-report.issue/desc "Sorununuzun zaten bildirilip bildirilmediğini kontrol edin"
+ :bug-report.issue/report-link "Sorun bildir"
  :bug-report.issue/title "Bilinen Sorunlar"
 
  ;; Bug report landing copy
@@ -1829,6 +1861,11 @@
  :sidebar.right/open-as-page "Sayfa olarak aç"
  :sidebar.right/resize-handle "Sağ kenar çubuğu yeniden boyutlandırma işleyicisi"
  :sidebar.right/toggle "Sağ paneli aç/kapat"
+
+ ;; Sidebar right
+ :sidebar.right.dev/profiler "(Dev) Profiler"
+ :sidebar.right.dev/rtc "(Dev) RTC"
+ :sidebar.right.dev/vector-search "(Dev) VectorSearch"
 
  ;; Context Menu
  :context-menu/developer-tools "Developer tools"
