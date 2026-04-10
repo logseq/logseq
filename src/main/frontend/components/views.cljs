@@ -1858,21 +1858,13 @@
        vec))
 
 (rum/defc gallery-card-item
-  [view-entity block config table]
+  [view-entity block config table image-prop-ident]
   (let [columns (:columns table)
-        image-prop-entity (:logseq.property.view/gallery-image-property view-entity)
         node-prop-idents (gallery-node-property-idents columns)
         ;; refs-loaded? state is only used to trigger a re-render once
         ;; the effect below has finished loading referenced blocks, so
         ;; gallery-card-image-block can resolve title refs synchronously.
         [_refs-loaded? set-refs-loaded!] (hooks/use-state false)
-        ;; The default (when no gallery-image-property has been chosen) is
-        ;; :block/title, which pulls its asset from inline refs in the
-        ;; block title. This mirrors the pre-`gallery-image-property`
-        ;; behaviour where whatever image was in the block title became
-        ;; the card image.
-        image-prop-ident (or (:db/ident image-prop-entity)
-                             :block/title)
         asset-block (gallery-card-image-block block image-prop-ident)
         asset-cp (state/get-component :block/asset-cp)
         inline-title (state/get-component :block/inline-title)
@@ -1920,7 +1912,12 @@
 (rum/defcs gallery-view < rum/static mixins/container-id
   [state {:keys [config]} table view-entity blocks *scroller-ref]
   (let [config' (assoc config :container-id (:container-id state))
-        dimension-key (gallery-dimension-key view-entity)]
+        dimension-key (gallery-dimension-key view-entity)
+        ;; Resolved at the gallery-view level so switching the gallery
+        ;; image property invalidates the virtuoso item key below and
+        ;; forces card items to re-render with the new ident.
+        image-prop-ident (or (:db/ident (:logseq.property.view/gallery-image-property view-entity))
+                             :block/title)]
     [:div.ls-cards
      {:class (str "ls-cards-" dimension-key)}
      (when (seq blocks)
@@ -1930,11 +1927,11 @@
          :custom-scroll-parent (get-scroll-parent config)
          :skipAnimationFrameInResizeObserver true
          :compute-item-key (fn [idx]
-                             (str (:db/id view-entity) "-card-" idx))
+                             (str (:db/id view-entity) "-" image-prop-ident "-card-" idx))
          :item-content (fn [idx]
                          (lazy-item (:data table) idx {}
                                     (fn [block]
-                                      (gallery-card-item view-entity block config' table))))}))]))
+                                      (gallery-card-item view-entity block config' table image-prop-ident))))}))]))
 
 (defn- run-effects!
   [option {:keys [data]} *scroller-ref gallery? set-ready?]
