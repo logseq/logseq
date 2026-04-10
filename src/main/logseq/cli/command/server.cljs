@@ -7,8 +7,8 @@
 
 (def entries
   [(core/command-entry ["server" "list"] :server-list "List db-worker-node servers" {})
-   (core/command-entry ["server" "status"] :server-status "Show server status for a graph" {}
-                       {:examples ["logseq server status --graph my-graph"]})
+   (core/command-entry ["server" "cleanup"] :server-cleanup "Clean up revision-mismatched CLI-owned db-worker-node servers" {}
+                       {:examples ["logseq server cleanup"]})
    (core/command-entry ["server" "start"] :server-start "Start db-worker-node for a graph" {}
                        {:examples ["logseq server start --graph my-graph"]})
    (core/command-entry ["server" "stop"] :server-stop "Stop db-worker-node for a graph" {}
@@ -23,14 +23,9 @@
     {:ok? true
      :action {:type :server-list}}
 
-    :server-status
-    (if-not (seq repo)
-      {:ok? false
-       :error {:code :missing-repo
-               :message "repo is required for server status"}}
-      {:ok? true
-       :action {:type :server-status
-                :repo repo}})
+    :server-cleanup
+    {:ok? true
+     :action {:type :server-cleanup}}
 
     :server-start
     (if-not (seq repo)
@@ -80,9 +75,9 @@
           revision-mismatch
           (assoc :human {:server-list {:revision-mismatch revision-mismatch}})))))
 
-(defn execute-status
-  [action config]
-  (-> (p/let [result (cli-server/server-status config (:repo action))]
+(defn execute-cleanup
+  [_action config]
+  (-> (p/let [result (cli-server/cleanup-revision-mismatched-servers! config (version/revision))]
         (server-result->response result))))
 
 (defn execute-start

@@ -271,25 +271,6 @@
         (start-server! config repo)
         stop-result))))
 
-(defn server-status
-  [config repo]
-  (let [data-dir (resolve-data-dir config)
-        path (lock-path data-dir repo)
-        lock (read-lock path)]
-    (if-not lock
-      (p/resolved {:ok? true
-                   :data {:repo repo
-                          :status :stopped}})
-      (p/let [ready (ready? lock)]
-        {:ok? true
-         :data {:repo repo
-                :status (if ready :ready :starting)
-                :host (:host lock)
-                :port (:port lock)
-                :pid (:pid lock)
-                :owner-source (lock-owner-source lock)
-                :started-at (:startedAt lock)}}))))
-
 (defn list-servers
   [config]
   (let [data-dir (resolve-data-dir config)
@@ -323,6 +304,62 @@
     (when (seq mismatch-servers)
       {:cli-revision cli-revision
        :servers mismatch-servers})))
+
+(defn- cleanup-target
+  [{:keys [repo pid owner-source revision]}]
+  {:repo repo
+   :pid pid
+   :owner-source owner-source
+   :revision revision})
+
+(defn cleanup-revision-mismatched-servers!
+  [config cli-revision]
+  (p/let [servers (list-servers config)
+          mismatched (->> (or servers [])
+                          (filter (fn [{:keys [revision]}]
+                                    (not= cli-revision revision)))
+                          (vec))
+          eligible (->> mismatched
+                        (filter (fn [{:keys [owner-source]}]
+                                  (= :cli owner-source)))
+                        (vec))
+          skipped-owner-targets (->> mismatched
+                                     (remove (fn [{:keys [owner-source]}]
+                                               (= :cli owner-source)))
+                                     (mapv cleanup-target))
+          stop-results (p/all
+                        (for [server eligible]
+                          (p/let [target (cleanup-target server)
+                                  result (stop-server! (assoc config :owner-source :cli) (:repo server))]
+                            (cond
+                              (:ok? result)
+                              {:status :killed
+                               :target target}
+
+                              (= :server-not-found (get-in result [:error :code]))
+                              {:status :killed
+                               :target target}
+
+                              :else
+                              {:status :failed
+                               :target target
+                               :error (:error result)}))))
+          killed (->> stop-results
+                      (filter (fn [{:keys [status]}] (= :killed status)))
+                      (mapv :target))
+          failed (->> stop-results
+                      (filter (fn [{:keys [status]}] (= :failed status)))
+                      (mapv (fn [{:keys [target error]}]
+                              (assoc target :error error))))]
+    {:ok? true
+     :data {:cli-revision cli-revision
+            :checked (count (or servers []))
+            :mismatched (count mismatched)
+            :eligible (count eligible)
+            :skipped-owner (count skipped-owner-targets)
+            :skipped-owner-targets skipped-owner-targets
+            :killed killed
+            :failed failed}}))
 
 (def ^:private legacy-token-pattern #"(?:\+\+|\+3A\+|%)")
 

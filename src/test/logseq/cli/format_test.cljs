@@ -860,32 +860,42 @@
       (is (not (string/includes? json-result token)))
       (is (not (string/includes? edn-result token))))))
 
-(deftest test-human-output-server-status
-  (testing "server status includes repo, status, host, port"
+(deftest test-human-output-server-cleanup
+  (testing "server cleanup includes counts and failed targets"
     (let [result (format/format-result {:status :ok
-                                        :command :server-status
-                                        :data {:repo "logseq_db_demo-repo"
-                                               :status :ready
-                                               :host "127.0.0.1"
-                                               :port 1234}}
+                                        :command :server-cleanup
+                                        :data {:cli-revision "cli-rev"
+                                               :checked 4
+                                               :mismatched 3
+                                               :eligible 2
+                                               :skipped-owner 1
+                                               :skipped-owner-targets [{:repo "logseq_db_graph-b"
+                                                                        :pid 22
+                                                                        :owner-source :electron
+                                                                        :revision "worker-rev-b"}]
+                                               :killed [{:repo "logseq_db_graph-a"
+                                                         :pid 11
+                                                         :owner-source :cli
+                                                         :revision "worker-rev-a"}]
+                                               :failed [{:repo "logseq_db_graph-c"
+                                                         :pid 33
+                                                         :owner-source :cli
+                                                         :revision nil
+                                                         :error {:code :server-stop-timeout
+                                                                 :message "timed out stopping server"}}]}}
                                        {:output-format nil})]
-      (is (= (str "Server ready: demo-repo\n"
-                  "Host: 127.0.0.1  Port: 1234")
-             result))))
-
-  (testing "server status strips only one leading db prefix and keeps middle substrings"
-    (let [double-prefixed (format/format-result {:status :ok
-                                                 :command :server-status
-                                                 :data {:repo "logseq_db_logseq_db_demo"
-                                                        :status :ready}}
-                                                {:output-format nil})
-          middle-substring (format/format-result {:status :ok
-                                                  :command :server-status
-                                                 :data {:repo "my_logseq_db_notes"
-                                                         :status :ready}}
-                                                 {:output-format nil})]
-      (is (= "Server ready: logseq_db_demo" double-prefixed))
-      (is (= "Server ready: my_logseq_db_notes" middle-substring)))))
+      (is (string/includes? result "Server cleanup summary"))
+      (is (string/includes? result "CLI revision: cli-rev"))
+      (is (string/includes? result "Checked: 4"))
+      (is (string/includes? result "Mismatched: 3"))
+      (is (string/includes? result "Eligible (:cli owner): 2"))
+      (is (string/includes? result "Skipped owner mismatch: 1"))
+      (is (string/includes? result "Killed: 1"))
+      (is (string/includes? result "Failed: 1"))
+      (is (string/includes? result "Skipped owner targets:"))
+      (is (string/includes? result "graph-b"))
+      (is (string/includes? result "Failed targets:"))
+      (is (string/includes? result "server-stop-timeout")))))
 
 (deftest test-json-output-normalizes-graph-fields-with-single-leading-strip-only
   (let [result (format/format-result {:status :ok
