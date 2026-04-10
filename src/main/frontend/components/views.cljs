@@ -1831,6 +1831,7 @@
                                (first-asset-property-ident block node-prop-idents)))
         asset-block (gallery-card-image-block block image-prop-ident)
         asset-cp (state/get-component :block/asset-cp)
+        inline-title (state/get-component :block/inline-title)
         image-layout? (and asset-block asset-cp)]
     (hooks/use-effect!
      (fn []
@@ -1857,7 +1858,12 @@
         [:div.ls-card-title
          {:on-click (fn [_]
                       (route-handler/redirect-to-page! (str (:block/uuid block))))}
-         (or (:block/title block) "")]]
+         (when-let [title (some-> (:block/title block) string/trim not-empty)]
+           (if inline-title
+             (inline-title {:block/uuid (:block/uuid block)
+                            :gallery-view? true}
+                           (-> title string/split-lines first))
+             title))]]
        [:div.-ml-4
         (block-container (assoc config
                                 :id (str (:block/uuid block))
