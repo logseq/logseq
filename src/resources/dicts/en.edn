@@ -1461,7 +1461,7 @@
  :settings.general/theme-dark "dark"
  :settings.general/theme-light "light"
  :settings.general/theme-system "system"
- :settings.general/update-available "Found new release "
+ :settings.general/update-available "Found new release"
  :settings.general/update-error "⚠️ Oops, Something Went Wrong!\nPlease check out the {1}."
 
  ;; Theme
