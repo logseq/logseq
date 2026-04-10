@@ -259,14 +259,6 @@
                                                   :schema {:type :node
                                                            :cardinality :many
                                                            :hide? true}}
-     ;; TODO: Remove deprecated
-     :logseq.property.tldraw/page {:title "Tldraw Page"
-                                   :schema {:type :map
-                                            :hide? true}}
-     ;; TODO: Remove deprecated
-     :logseq.property.tldraw/shape {:title "Tldraw Shape"
-                                    :schema {:type :map
-                                             :hide? true}}
 
      ;; Journal props
      :logseq.property.journal/title-format {:title "Title Format"
