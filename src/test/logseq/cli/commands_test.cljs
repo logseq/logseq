@@ -528,6 +528,12 @@
       (is (true? (:ok? result)))
       (is (= "json" (get-in result [:options :output])))))
 
+  (testing "global output option rejects invalid values"
+    (let [result (commands/parse-args ["--output" "yaml" "graph" "list"])]
+      (is (false? (:ok? result)))
+      (is (= :invalid-options (get-in result [:error :code])))
+      (is (string/includes? (string/lower-case (get-in result [:error :message])) "output"))))
+
   (testing "global profile option defaults to absent"
     (let [result (commands/parse-args ["graph" "list"])]
       (is (true? (:ok? result)))

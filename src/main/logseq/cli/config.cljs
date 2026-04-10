@@ -6,6 +6,7 @@
             ["fs" :as fs]
             ["os" :as os]
             ["path" :as node-path]
+            [logseq.cli.output-mode :as output-mode]
             [logseq.common.graph :as common-graph]))
 
 (defn- parse-int
@@ -30,17 +31,6 @@
 
     :else nil))
 
-(def ^:private output-formats
-  #{:human :json :edn})
-
-(defn- parse-output-format
-  [value]
-  (let [kw (cond
-             (keyword? value) value
-             (string? value) (-> value string/trim string/lower-case keyword)
-             :else nil)]
-    (when (output-formats kw)
-      kw)))
 
 (defn- default-config-path
   []
@@ -105,7 +95,7 @@
       (assoc :logout-timeout-ms (parse-int (gobj/get env "LOGSEQ_CLI_LOGOUT_TIMEOUT_MS")))
 
       (seq (gobj/get env "LOGSEQ_CLI_OUTPUT"))
-      (assoc :output-format (parse-output-format (gobj/get env "LOGSEQ_CLI_OUTPUT")))
+      (assoc :output-format (output-mode/parse (gobj/get env "LOGSEQ_CLI_OUTPUT")))
 
       (seq (gobj/get env "LOGSEQ_CLI_CONFIG"))
       (assoc :config-path (gobj/get env "LOGSEQ_CLI_CONFIG")))))
@@ -126,12 +116,12 @@
                         (:config-path env)
                         (:config-path defaults))
         file-config (or (read-config-file config-path) {})
-        output-format (or (parse-output-format (:output-format opts))
-                          (parse-output-format (:output opts))
-                          (parse-output-format (:output-format env))
-                          (parse-output-format (:output env))
-                          (parse-output-format (:output-format file-config))
-                          (parse-output-format (:output file-config)))
+        output-format (or (output-mode/parse (:output-format opts))
+                          (output-mode/parse (:output opts))
+                          (output-mode/parse (:output-format env))
+                          (output-mode/parse (:output env))
+                          (output-mode/parse (:output-format file-config))
+                          (output-mode/parse (:output file-config)))
         merged (merge defaults file-config env opts {:config-path config-path})
         list-title-max-display-width (or (parse-positive-int (:list-title-max-display-width merged))
                                          list-title-max-display-width-default)]

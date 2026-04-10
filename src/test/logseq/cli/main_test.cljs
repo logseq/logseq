@@ -1,5 +1,6 @@
 (ns logseq.cli.main-test
-  (:require [cljs.test :refer [async deftest is]]
+  (:require [cljs.reader :as reader]
+            [cljs.test :refer [async deftest is]]
             [clojure.string :as string]
             [logseq.cli.commands :as commands]
             [logseq.cli.main :as cli-main]
@@ -23,6 +24,40 @@
                 output (:output result)]
           (is (= 0 (:exit-code result)))
           (is (not (string/includes? output "Commands: list page"))))
+        (p/catch (fn [e]
+                   (is false (str "unexpected error: " e))
+                   (done)))
+        (p/finally done))))
+
+(deftest test-help-output-respects-structured-modes
+  (async done
+    (-> (p/let [json-result (cli-main/run! ["--output" "json" "--help"] {:exit? false})
+                edn-result (cli-main/run! ["--output" "edn" "--help"] {:exit? false})
+                json-output (js->clj (js/JSON.parse (:output json-result)) :keywordize-keys true)
+                edn-output (reader/read-string (:output edn-result))]
+          (is (= 0 (:exit-code json-result)))
+          (is (= 0 (:exit-code edn-result)))
+          (is (= "ok" (:status json-output)))
+          (is (= :ok (:status edn-output)))
+          (is (string/includes? (get-in json-output [:data :message]) "Usage: logseq"))
+          (is (string/includes? (get-in edn-output [:data :message]) "Usage: logseq")))
+        (p/catch (fn [e]
+                   (is false (str "unexpected error: " e))
+                   (done)))
+        (p/finally done))))
+
+(deftest test-parse-error-output-respects-structured-modes
+  (async done
+    (-> (p/let [json-result (cli-main/run! ["--output" "json" "wat"] {:exit? false})
+                edn-result (cli-main/run! ["--output" "edn" "wat"] {:exit? false})
+                json-output (js->clj (js/JSON.parse (:output json-result)) :keywordize-keys true)
+                edn-output (reader/read-string (:output edn-result))]
+          (is (= 1 (:exit-code json-result)))
+          (is (= 1 (:exit-code edn-result)))
+          (is (= "error" (:status json-output)))
+          (is (= :error (:status edn-output)))
+          (is (some? (get-in json-output [:error :message])))
+          (is (some? (get-in edn-output [:error :message]))))
         (p/catch (fn [e]
                    (is false (str "unexpected error: " e))
                    (done)))
