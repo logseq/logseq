@@ -1461,7 +1461,7 @@
  :settings.general/theme-dark "Escuro"
  :settings.general/theme-light "Claro"
  :settings.general/theme-system "Sistema"
- :settings.general/update-available "Nova versão encontrada "
+ :settings.general/update-available "Nova versão encontrada"
  :settings.general/update-error "⚠️ Ops, algo deu errado!\nPor favor, verifique o {1}."
 
  ;; Theme

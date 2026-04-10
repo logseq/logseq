@@ -1461,7 +1461,7 @@
  :settings.general/theme-dark "深色模式"
  :settings.general/theme-light "淺色模式"
  :settings.general/theme-system "跟隨系統"
- :settings.general/update-available "發現新版本 "
+ :settings.general/update-available "發現新版本"
  :settings.general/update-error "⚠️ 哎呀，出了點問題！\n請查看{1}。"
 
  ;; Theme

@@ -1461,7 +1461,7 @@
  :settings.general/theme-dark "gelap"
  :settings.general/theme-light "terang"
  :settings.general/theme-system "sistem"
- :settings.general/update-available "Ditemukan rilis baru "
+ :settings.general/update-available "Ditemukan rilis baru"
  :settings.general/update-error "⚠️ Ups, Ada Sesuatu yang Salah!\nSilakan cek {1}."
 
  ;; Theme
