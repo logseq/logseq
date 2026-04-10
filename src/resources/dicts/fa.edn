@@ -697,6 +697,10 @@
  :editor.document-mode/title "حالت سند"
  :editor.document-mode/toggle-desc "روی `D` کلیک کنید یا {1} را تایپ کنید تا حالت سند تغییر کند"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "افزودن به امروز"
+ :editor.quick-add/title "افزودن سریع"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "Advanced Query"
  :editor.slash/advanced-query-desc "Create an advanced query block"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} انتخاب"
  :property/choose-tag "انتخاب برچسب"
  :property/choose-tags "انتخاب برچسب‌ها"
+ :property/clear-value "پاک کردن"
  :property/configure "پیکربندی"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "ایجاد ویژگی ناموفق بود."
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "مقادیر چندگانه فعال شود؟"
  :property/name "نام"
  :property/name-placeholder "نام ویژگی"
- :property/no-value "بدون {1}"
  :property/nodes-with-property "گره‌های دارای ویژگی"
  :property/overdue "عقب‌افتاده"
  :property/private-built-in-not-usable "ویژگی داخلی خصوصی قابل استفاده نیست"
@@ -1106,6 +1110,7 @@
  :view.table/select-column "انتخاب ستون"
  :view.table/select-order "انتخاب ترتیب"
  :view.table/select-row "انتخاب ردیف"
+ :view.table/selected-count "انتخاب‌شده: {1}"
  :view.table/sort-ascending "صعودی"
  :view.table/sort-descending "نزولی"
  :view.table/sort-groups-by "مرتب‌سازی گروه‌ها بر اساس"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "نوشتن داده نامعتبر."
- :storage/recycle "سطل بازیافت"
- :storage/recycle-readonly "سطل بازیافت (فقط خواندنی)"
  :storage/sqlitedb-error "خطای SQLiteDB: {1}"
  :storage/sqlitedb-import-error "خطای وارد کردن SQLiteDB: {1}"
  :storage/sqlitedb-save-error "خطای ذخیره SQLiteDB: {1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "بلوک «{1}» حذف شد"
  :storage.recycle/empty "سطل بازیافت خالی است."
  :storage.recycle/page-deleted-at "صفحه «{1}» حذف شد"
+ :storage.recycle/readonly "سطل بازیافت (فقط خواندنی)"
  :storage.recycle/restore "بازیابی"
  :storage.recycle/retention-desc "صفحه‌ها و بلوک‌های حذف‌شده تا زمانی که بازیابی شوند یا پس از ۶۰ روز به‌طور خودکار پاک‌سازی شوند، اینجا می‌مانند。"
+ :storage.recycle/title "سطل بازیافت"
 
  ;; Account
  :account/authentication "احراز هویت"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "جستجو"
  :help.handbook/settings "تنظیمات"
  :help.handbook/shortcuts-count "{1} میانبر"
+ :help.handbook/sync "همگام‌سازی"
  :help.handbook/title "راهنما"
  :help.handbook/topics "موضوعات"
  :help.handbook/users-online "کاربران آنلاین"
@@ -1981,8 +1987,9 @@
  :icon/tab-icons "Icons"
 
  ;; Library
- :library/add-existing-pages "Add existing pages to Library"
+ :library/add-existing-pages "افزودن صفحه‌های موجود به کتابخانه"
  :library/add-pages "Add pages"
+ :library/title "کتابخانه"
 
  ;; Shell
  :shell/input-command-title "Input command"

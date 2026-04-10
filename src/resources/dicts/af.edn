@@ -697,6 +697,10 @@
  :editor.document-mode/title "Dokumentmodus"
  :editor.document-mode/toggle-desc "Klik `D` of tik {1} om dokumentmodus te wissel"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "Voeg by vandag"
+ :editor.quick-add/title "Vinnige byvoeging"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "Advanced Query"
  :editor.slash/advanced-query-desc "Create an advanced query block"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} keuses"
  :property/choose-tag "Kies etiket"
  :property/choose-tags "Kies etikette"
+ :property/clear-value "Vee uit"
  :property/configure "Konfigureer"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "Eienskap aanmaken mislukt."
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "Meerdere waarden aktiveer?"
  :property/name "Naam"
  :property/name-placeholder "Eienskapsnaam"
- :property/no-value "Geen {1}"
  :property/nodes-with-property "Nodusse met eienskap"
  :property/overdue "Agterstallig"
  :property/private-built-in-not-usable "Privé ingebouwde eienskap is nie bruikbaar"
@@ -1106,6 +1110,7 @@
  :view.table/select-column "Kolom kies"
  :view.table/select-order "Volgorde kies"
  :view.table/select-row "Rij kies"
+ :view.table/selected-count "Gekies: {1}"
  :view.table/sort-ascending "Oplopend"
  :view.table/sort-descending "Aflopend"
  :view.table/sort-groups-by "Groepen sorteren op"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "Ongeldige gegevensschrijving."
- :storage/recycle "Herwinning"
- :storage/recycle-readonly "Prullenbak (alleen-lezen)"
  :storage/sqlitedb-error "SQLiteDB-fout: {1}"
  :storage/sqlitedb-import-error "SQLiteDB invoerfout: {1}"
  :storage/sqlitedb-save-error "SQLiteDB stoor fout: {1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "Blok uitgevee {1}"
  :storage.recycle/empty "Herwinning is leeg."
  :storage.recycle/page-deleted-at "Bladsy uitgevee {1}"
+ :storage.recycle/readonly "Prullenbak (alleen-lezen)"
  :storage.recycle/restore "Herstel"
  :storage.recycle/retention-desc "Geskrapte bladsye en blokke bly hier totdat hulle herstel word of na 60 dae outomaties opgeskoon word."
+ :storage.recycle/title "Herwinning"
 
  ;; Account
  :account/authentication "Verifikasie"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "Soek"
  :help.handbook/settings "Instellings"
  :help.handbook/shortcuts-count "{1} sneltoetse"
+ :help.handbook/sync "Sinkronisering"
  :help.handbook/title "Handboek"
  :help.handbook/topics "Onderwerpe"
  :help.handbook/users-online "gebruikers aanlyn"
@@ -1981,8 +1987,9 @@
  :icon/tab-icons "Icons"
 
  ;; Library
- :library/add-existing-pages "Add existing pages to Library"
+ :library/add-existing-pages "Voeg bestaande bladsye by Biblioteek"
  :library/add-pages "Add pages"
+ :library/title "Biblioteek"
 
  ;; Shell
  :shell/input-command-title "Input command"

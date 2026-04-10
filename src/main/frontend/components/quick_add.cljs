@@ -1,6 +1,7 @@
 (ns frontend.components.quick-add
   "Quick add"
   (:require [frontend.components.page :as page]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.model :as model]
@@ -47,7 +48,7 @@
                           :on-click (fn [_e]
                                       (editor-handler/quick-add-blocks!))}
                          (when-not mobile? (shui/shortcut ["mod" "e"]))
-                         "Add to today")]]
+                         (t :editor.quick-add/add-to-today))]]
         [:div.ls-quick-add.flex.flex-1.flex-col.w-full.gap-4
          (when-not (util/mobile?)
            [:div.flex.flex-row.justify-between.gap-4.items-center
@@ -55,7 +56,7 @@
                       "pt-4"
                       "border-b pb-4")}
             [:div.font-medium
-             "Quick add"]
+             (t :editor.quick-add/title)]
             add-button])
          (if mobile?
            [:div.w-full.mt-4

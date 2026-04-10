@@ -697,6 +697,10 @@
  :editor.document-mode/title "Režim dokumentu"
  :editor.document-mode/toggle-desc "Klikněte `D` nebo zadejte {1} pro přepnutí režimu dokumentu"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "Přidat na dnešní stránku"
+ :editor.quick-add/title "Rychlé přidání"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "Advanced Query"
  :editor.slash/advanced-query-desc "Create an advanced query block"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} možností"
  :property/choose-tag "Vybrat štítek"
  :property/choose-tags "Vybrat štítky"
+ :property/clear-value "Vymazat"
  :property/configure "Konfigurovat"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "Nepodařilo se vytvořit vlastnost."
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "Zapnout více hodnot?"
  :property/name "Název"
  :property/name-placeholder "Název vlastnosti"
- :property/no-value "Žádné {1}"
  :property/nodes-with-property "Uzly s vlastností"
  :property/overdue "Po termínu"
  :property/private-built-in-not-usable "Soukromá vestavěná vlastnost nedostupná"
@@ -1106,6 +1110,7 @@
  :view.table/select-column "Vybrat sloupec"
  :view.table/select-order "Vybrat pořadí"
  :view.table/select-row "Vybrat řádek"
+ :view.table/selected-count "Vybráno: {1}"
  :view.table/sort-ascending "Vzestupně"
  :view.table/sort-descending "Sestupně"
  :view.table/sort-groups-by "Řadit skupiny podle"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "Neplatný zápis dat."
- :storage/recycle "Koš"
- :storage/recycle-readonly "Koš (pouze pro čtení)"
  :storage/sqlitedb-error "Chyba SQLiteDB: {1}"
  :storage/sqlitedb-import-error "Chyba importu SQLiteDB: {1}"
  :storage/sqlitedb-save-error "Chyba ukládání SQLiteDB: {1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "Blok smazán {1}"
  :storage.recycle/empty "Koš je prázdný."
  :storage.recycle/page-deleted-at "Stránka smazána {1}"
+ :storage.recycle/readonly "Koš (pouze pro čtení)"
  :storage.recycle/restore "Obnovit"
  :storage.recycle/retention-desc "Smazané stránky a bloky zde zůstávají, dokud nejsou obnoveny nebo automaticky odstraněny po 60 dnech."
+ :storage.recycle/title "Koš"
 
  ;; Account
  :account/authentication "Ověření"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "Hledat"
  :help.handbook/settings "Nastavení"
  :help.handbook/shortcuts-count "{1} zkratek"
+ :help.handbook/sync "Synchronizace"
  :help.handbook/title "Příručka"
  :help.handbook/topics "Témata"
  :help.handbook/users-online "uživatelů online"
@@ -1981,8 +1987,9 @@
  :icon/tab-icons "Icons"
 
  ;; Library
- :library/add-existing-pages "Add existing pages to Library"
+ :library/add-existing-pages "Přidat existující stránky do Knihovny"
  :library/add-pages "Add pages"
+ :library/title "Knihovna"
 
  ;; Shell
  :shell/input-command-title "Input command"

@@ -697,6 +697,10 @@
  :editor.document-mode/title "ドキュメントモード"
  :editor.document-mode/toggle-desc "`D`をクリックするか{1}を入力してドキュメントモードを切り替え"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "今日のページに追加"
+ :editor.quick-add/title "クイック追加"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "Advanced Query"
  :editor.slash/advanced-query-desc "Create an advanced query block"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} の選択肢"
  :property/choose-tag "タグを選択"
  :property/choose-tags "タグを選択"
+ :property/clear-value "クリア"
  :property/configure "設定"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "プロパティの作成に失敗しました。"
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "複数値を有効にしますか？"
  :property/name "名前"
  :property/name-placeholder "プロパティ名"
- :property/no-value "{1}なし"
  :property/nodes-with-property "プロパティを持つノード"
  :property/overdue "期限超過"
  :property/private-built-in-not-usable "プライベートな組み込みプロパティは使用できません"
@@ -1106,6 +1110,7 @@
  :view.table/select-column "列を選択"
  :view.table/select-order "順序を選択"
  :view.table/select-row "行を選択"
+ :view.table/selected-count "選択済み: {1}"
  :view.table/sort-ascending "昇順"
  :view.table/sort-descending "降順"
  :view.table/sort-groups-by "グループの並び替え基準"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "無効なデータの書き込みです。"
- :storage/recycle "ごみ箱"
- :storage/recycle-readonly "ごみ箱（読み取り専用）"
  :storage/sqlitedb-error "SQLiteDB エラー: {1}"
  :storage/sqlitedb-import-error "SQLiteDB インポート エラー: {1}"
  :storage/sqlitedb-save-error "SQLiteDB 保存エラー: {1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "ブロックが削除されました {1}"
  :storage.recycle/empty "ごみ箱は空です。"
  :storage.recycle/page-deleted-at "ページが削除されました {1}"
+ :storage.recycle/readonly "ごみ箱（読み取り専用）"
  :storage.recycle/restore "復元"
  :storage.recycle/retention-desc "削除されたページとブロックは、復元されるか、60 日後に自動でガベージコレクトされるまでここに残ります。"
+ :storage.recycle/title "ごみ箱"
 
  ;; Account
  :account/authentication "認証"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "検索"
  :help.handbook/settings "設定"
  :help.handbook/shortcuts-count "{1}個のショートカット"
+ :help.handbook/sync "同期"
  :help.handbook/title "ヘルプ"
  :help.handbook/topics "話題"
  :help.handbook/users-online "オンラインユーザー"
@@ -1981,8 +1987,9 @@
  :icon/tab-icons "Icons"
 
  ;; Library
- :library/add-existing-pages "Add existing pages to Library"
+ :library/add-existing-pages "既存のページをライブラリに追加"
  :library/add-pages "Add pages"
+ :library/title "ライブラリ"
 
  ;; Shell
  :shell/input-command-title "Input command"

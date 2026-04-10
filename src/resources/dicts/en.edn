@@ -697,6 +697,10 @@
  :editor.document-mode/title "Document mode"
  :editor.document-mode/toggle-desc "Click `D` or type {1} to toggle document mode"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "Add to today"
+ :editor.quick-add/title "Quick add"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "Advanced Query"
  :editor.slash/advanced-query-desc "Create an advanced query block"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} choices"
  :property/choose-tag "Choose tag"
  :property/choose-tags "Choose tags"
+ :property/clear-value "Clear"
  :property/configure "Configure property"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "Property failed to create. Please try a different property name."
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "This action cannot be undone. Do you want to change this property to have multiple values?"
  :property/name "Property name"
  :property/name-placeholder "name"
- :property/no-value "No {1}"
  :property/nodes-with-property "Nodes with property"
  :property/overdue "Overdue"
  :property/private-built-in-not-usable "This is a private built-in property that can't be used."
@@ -1106,6 +1110,7 @@
  :view.table/select-column "Select"
  :view.table/select-order "Select order"
  :view.table/select-row "Select row"
+ :view.table/selected-count "Selected: {1}"
  :view.table/sort-ascending "Sort ascending"
  :view.table/sort-descending "Sort descending"
  :view.table/sort-groups-by "Sort groups by"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "Invalid data writing to db!"
- :storage/recycle "Recycle"
- :storage/recycle-readonly "Recycle is read-only."
  :storage/sqlitedb-error "SQLiteDB error: {1}"
  :storage/sqlitedb-import-error "SQLiteDB import error: {1}"
  :storage/sqlitedb-save-error "SQLiteDB save error: {1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "Block deleted {1}"
  :storage.recycle/empty "Recycle is empty."
  :storage.recycle/page-deleted-at "Page deleted {1}"
+ :storage.recycle/readonly "Recycle is read-only."
  :storage.recycle/restore "Restore"
  :storage.recycle/retention-desc "Deleted pages and blocks stay here until restored or automatically garbage collected after 60 days."
+ :storage.recycle/title "Recycle"
 
  ;; Account
  :account/authentication "Authentication"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "Search"
  :help.handbook/settings "Settings"
  :help.handbook/shortcuts-count "{1} shortcuts"
+ :help.handbook/sync "Sync"
  :help.handbook/title "Help"
  :help.handbook/topics "Topics"
  :help.handbook/users-online "users online"
@@ -1983,6 +1989,7 @@
  ;; Library
  :library/add-existing-pages "Add existing pages to Library"
  :library/add-pages "Add pages"
+ :library/title "Library"
 
  ;; Shell
  :shell/input-command-title "Input command"

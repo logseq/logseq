@@ -598,7 +598,7 @@
   [table selected-rows {:keys [on-delete-rows]}]
   (shui/table-actions
    {}
-   [:div (str (count selected-rows) " selected")]
+   [:div (t :view.table/selected-count (count selected-rows))]
    (selection/action-bar
     {:on-cut #(on-delete-rows table selected-rows)
      :selected-blocks selected-rows
@@ -1926,7 +1926,7 @@
                                (t :view/rename))
                               (shui/dropdown-menu-sub-content
                                (when-let [block-container-cp (state/get-component :block/container)]
-                                 (block-container-cp {} view))))
+                                 (block-container-cp {:display-title (display-view-title view)} view))))
                              (shui/dropdown-menu-item
                               {:key "Delete"
                                :on-click (fn []

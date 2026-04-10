@@ -697,6 +697,10 @@
  :editor.document-mode/title "Belge modu"
  :editor.document-mode/toggle-desc "Belge modunu açıp kapatmak için `D`'ye tıklayın veya {1} yazın"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "Bugünkü sayfaya ekle"
+ :editor.quick-add/title "Hızlı ekleme"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "Advanced Query"
  :editor.slash/advanced-query-desc "Create an advanced query block"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} seçimler"
  :property/choose-tag "Etiket seç"
  :property/choose-tags "Etiketleri seç"
+ :property/clear-value "Temizle"
  :property/configure "Yapılandır"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "Özellik oluşturulamadı."
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "Birden fazla değer etkinleştirilsin mi?"
  :property/name "Ad"
  :property/name-placeholder "Özellik adı"
- :property/no-value "{1} yok"
  :property/nodes-with-property "Özelliği olan düğümler"
  :property/overdue "Gecikmiş"
  :property/private-built-in-not-usable "Özel yerleşik özellik kullanılamaz"
@@ -1106,6 +1110,7 @@
  :view.table/select-column "Sütun seç"
  :view.table/select-order "Sıralama seç"
  :view.table/select-row "Satır seç"
+ :view.table/selected-count "Seçildi: {1}"
  :view.table/sort-ascending "Artan"
  :view.table/sort-descending "Azalan"
  :view.table/sort-groups-by "Grupları sırala"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "Geçersiz veri yazımı."
- :storage/recycle "Geri Dönüşüm"
- :storage/recycle-readonly "Çöp kutusu (salt okunur)"
  :storage/sqlitedb-error "SQLiteDB hatası: {1}"
  :storage/sqlitedb-import-error "SQLiteDB içe aktarma hatası: {1}"
  :storage/sqlitedb-save-error "SQLiteDB kaydetme hatası: {1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "Blok silindi {1}"
  :storage.recycle/empty "Geri Dönüşüm boş."
  :storage.recycle/page-deleted-at "Sayfa silindi {1}"
+ :storage.recycle/readonly "Çöp kutusu (salt okunur)"
  :storage.recycle/restore "Geri yükle"
  :storage.recycle/retention-desc "Silinen sayfalar ve bloklar, geri yüklenene veya 60 gün sonra otomatik olarak temizlenene kadar burada kalır."
+ :storage.recycle/title "Geri Dönüşüm"
 
  ;; Account
  :account/authentication "Kimlik Doğrulama"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "Ara"
  :help.handbook/settings "Ayarlar"
  :help.handbook/shortcuts-count "{1} kısayol"
+ :help.handbook/sync "Senkronizasyon"
  :help.handbook/title "El Kitabı"
  :help.handbook/topics "Konular"
  :help.handbook/users-online "çevrimiçi kullanıcı"
@@ -1981,8 +1987,9 @@
  :icon/tab-icons "Icons"
 
  ;; Library
- :library/add-existing-pages "Add existing pages to Library"
+ :library/add-existing-pages "Mevcut sayfaları Kütüphane'ye ekle"
  :library/add-pages "Add pages"
+ :library/title "Kütüphane"
 
  ;; Shell
  :shell/input-command-title "Input command"

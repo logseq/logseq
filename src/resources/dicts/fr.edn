@@ -697,6 +697,10 @@
  :editor.document-mode/title "Mode document"
  :editor.document-mode/toggle-desc "Cliquez sur `D` ou tapez {1} pour basculer le mode document"
 
+ ;; Editor quick add
+ :editor.quick-add/add-to-today "Ajouter à la page du jour"
+ :editor.quick-add/title "Ajout rapide"
+
  ;; Editor slash commands
  :editor.slash/advanced-query "Advanced Query"
  :editor.slash/advanced-query-desc "Create an advanced query block"
@@ -781,6 +785,7 @@
  :property/choices-count "{1} choix"
  :property/choose-tag "Choisir un tag"
  :property/choose-tags "Choisir des tags"
+ :property/clear-value "Effacer"
  :property/configure "Configurer"
  :property/convert-page-to-property "Convert \"{1}\" to property"
  :property/create-error "Échec de la création de la propriété."
@@ -806,7 +811,6 @@
  :property/multiple-values-confirm "Activer les valeurs multiples ?"
  :property/name "Nom"
  :property/name-placeholder "Nom de la propriété"
- :property/no-value "Pas de {1}"
  :property/nodes-with-property "Nœuds avec propriété"
  :property/overdue "En retard"
  :property/private-built-in-not-usable "Propriété intégrée privée non utilisable"
@@ -1106,6 +1110,7 @@
  :view.table/select-column "Sélectionner la colonne"
  :view.table/select-order "Sélectionner l'ordre"
  :view.table/select-row "Sélectionner la ligne"
+ :view.table/selected-count "Sélection : {1}"
  :view.table/sort-ascending "Croissant"
  :view.table/sort-descending "Décroissant"
  :view.table/sort-groups-by "Trier les groupes par"
@@ -1612,8 +1617,6 @@
 
  ;; Storage
  :storage/invalid-data-writing "Écriture de données invalide."
- :storage/recycle "Corbeille"
- :storage/recycle-readonly "Corbeille (lecture seule)"
  :storage/sqlitedb-error "Erreur SQLiteDB : {1}"
  :storage/sqlitedb-import-error "Erreur d'importation SQLiteDB : {1}"
  :storage/sqlitedb-save-error "Erreur de sauvegarde SQLiteDB : {1}"
@@ -1622,8 +1625,10 @@
  :storage.recycle/block-deleted-at "Bloc supprimé {1}"
  :storage.recycle/empty "La corbeille est vide."
  :storage.recycle/page-deleted-at "Page supprimée {1}"
+ :storage.recycle/readonly "Corbeille (lecture seule)"
  :storage.recycle/restore "Restaurer"
  :storage.recycle/retention-desc "Les pages et blocs supprimés restent ici jusqu'à leur restauration ou leur suppression automatique après 60 jours."
+ :storage.recycle/title "Corbeille"
 
  ;; Account
  :account/authentication "Authentification"
@@ -1777,6 +1782,7 @@
  :help.handbook/search-placeholder "Rechercher"
  :help.handbook/settings "Préférences"
  :help.handbook/shortcuts-count "{1} raccourcis"
+ :help.handbook/sync "Synchronisation"
  :help.handbook/title "Aide"
  :help.handbook/topics "Sujets"
  :help.handbook/users-online "utilisateurs en ligne"
@@ -1981,8 +1987,9 @@
  :icon/tab-icons "Icons"
 
  ;; Library
- :library/add-existing-pages "Add existing pages to Library"
+ :library/add-existing-pages "Ajouter des pages existantes à la bibliothèque"
  :library/add-pages "Add pages"
+ :library/title "Bibliothèque"
 
  ;; Shell
  :shell/input-command-title "Input command"
