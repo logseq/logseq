@@ -329,6 +329,80 @@
                           (is false (str "unexpected error: " e))))
                (p/finally done)))))
 
+(deftest cleanup-revision-mismatched-servers-kills-only-cli-owned-targets
+  (async done
+         (let [stop-calls (atom [])]
+           (-> (p/with-redefs [cli-server/list-servers (fn [_]
+                                                         (p/resolved [{:repo "logseq_db_a"
+                                                                       :pid 11
+                                                                       :owner-source :cli
+                                                                       :revision "worker-rev-a"}
+                                                                      {:repo "logseq_db_b"
+                                                                       :pid 22
+                                                                       :owner-source :electron
+                                                                       :revision "worker-rev-b"}
+                                                                      {:repo "logseq_db_c"
+                                                                       :pid 33
+                                                                       :owner-source :cli
+                                                                       :revision "cli-rev"}
+                                                                      {:repo "logseq_db_nil"
+                                                                       :pid 44
+                                                                       :owner-source :cli
+                                                                       :revision nil}]))
+                               cli-server/stop-server! (fn [config repo]
+                                                         (swap! stop-calls conj {:config config
+                                                                                 :repo repo})
+                                                         (p/resolved {:ok? true
+                                                                      :data {:repo repo}}))]
+                 (cli-server/cleanup-revision-mismatched-servers! {:data-dir "/tmp/graphs"} "cli-rev"))
+               (p/then (fn [result]
+                         (is (= true (:ok? result)))
+                         (is (= 4 (get-in result [:data :checked])))
+                         (is (= 3 (get-in result [:data :mismatched])))
+                         (is (= 2 (get-in result [:data :eligible])))
+                         (is (= 1 (get-in result [:data :skipped-owner])))
+                         (is (= ["logseq_db_a" "logseq_db_nil"]
+                                (mapv :repo (get-in result [:data :killed]))))
+                         (is (empty? (get-in result [:data :failed])))
+                         (is (= #{"logseq_db_a" "logseq_db_nil"}
+                                (set (map :repo @stop-calls))))
+                         (is (every? #(= :cli (get-in % [:config :owner-source]))
+                                     @stop-calls))))
+               (p/catch (fn [e]
+                          (is false (str "unexpected error: " e))))
+               (p/finally done)))))
+
+(deftest cleanup-revision-mismatched-servers-reports-failures
+  (async done
+         (-> (p/with-redefs [cli-server/list-servers (fn [_]
+                                                       (p/resolved [{:repo "logseq_db_a"
+                                                                     :pid 11
+                                                                     :owner-source :cli
+                                                                     :revision "worker-rev-a"}
+                                                                    {:repo "logseq_db_b"
+                                                                     :pid 22
+                                                                     :owner-source :cli
+                                                                     :revision "worker-rev-b"}]))
+                             cli-server/stop-server! (fn [_ repo]
+                                                       (p/resolved (if (= "logseq_db_a" repo)
+                                                                     {:ok? true
+                                                                      :data {:repo repo}}
+                                                                     {:ok? false
+                                                                      :error {:code :server-stop-timeout
+                                                                              :message "timed out stopping server"}})))]
+               (cli-server/cleanup-revision-mismatched-servers! {:data-dir "/tmp/graphs"} "cli-rev"))
+             (p/then (fn [result]
+                       (is (= true (:ok? result)))
+                       (is (= ["logseq_db_a"]
+                              (mapv :repo (get-in result [:data :killed]))))
+                       (is (= ["logseq_db_b"]
+                              (mapv :repo (get-in result [:data :failed]))))
+                       (is (= :server-stop-timeout
+                              (get-in result [:data :failed 0 :error :code])))))
+             (p/catch (fn [e]
+                        (is false (str "unexpected error: " e))))
+             (p/finally done))))
+
 (deftest list-graph-items-ignores-non-graph-directories
   (let [data-dir (node-helper/create-tmp-dir "cli-list-graphs-ignore")
         _ (doseq [dir ["alpha"

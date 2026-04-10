@@ -113,7 +113,7 @@ Backup scope note:
 
 Server commands:
 - `server list` - list running db-worker-node servers
-- `server status --graph <name>` - show server status for a graph
+- `server cleanup` - terminate revision-mismatched CLI-owned db-worker-node servers discovered from lock files in the current data-dir
 - `server start --graph <name>` - start db-worker-node for a graph
 - `server stop --graph <name>` - stop db-worker-node for a graph
 - `server restart --graph <name>` - restart db-worker-node for a graph
@@ -169,6 +169,8 @@ Server ownership behavior:
 - `server start` can return `server-start-timeout-orphan` when lock creation times out and orphan matching processes are detected.
 - `server list` human output includes both `OWNER` and `REVISION` columns.
 - `server list` prints a compatibility warning in human output when any server revision string is not exactly equal to the local CLI revision string.
+- `server cleanup` checks discovered servers in the current data-dir, treats `revision != local CLI revision` (including missing revision) as mismatch, and attempts graceful-first termination only for `:owner-source :cli` targets.
+- `server cleanup` structured output includes `checked`, `mismatched`, `eligible`, `skipped-owner`, `killed`, and `failed` summaries.
 - Structured output (`--output json|edn`) includes per-server `revision` data but does not include human warning text.
 
 Sync commands:

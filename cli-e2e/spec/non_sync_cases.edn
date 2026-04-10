@@ -735,16 +735,17 @@
   :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
   :tags [:remove]}
 
- {:id "server-status-json"
+ {:id "server-cleanup-json"
   :setup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json graph create --graph {{graph-arg}} >/dev/null"]
-  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server status --graph {{graph-arg}}"]
+  :cmds ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server cleanup"]
   :expect {:exit 0
            :stdout-json-paths {[:status] "ok"
-                               [:data :repo] "{{graph}}"
-                               [:data :status] "ready"}}
-  :covers {:commands ["server status"]
+                               [:data :mismatched] 0
+                               [:data :eligible] 0
+                               [:data :skipped-owner] 0}}
+  :covers {:commands ["server cleanup"]
            :options {:global ["--config" "--graph" "--data-dir" "--output"]
-                     :server ["--graph"]}}
+                     :server []}}
   :cleanup ["{{cli}} --data-dir {{data-dir-arg}} --config {{config-path-arg}} --output json server stop --graph {{graph-arg}}"]
   :tags [:server]}
 
